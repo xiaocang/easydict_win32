@@ -1,0 +1,107 @@
+name: Bug report
+description: Report an issue
+title: "🐞 Bug Report: Please fill in the title, don't leave it blank"
+labels: ["bug"]
+
+body:
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: "Please confirm the following:"
+      options:
+        - label: Be sure to check out [FAQ](https://github.com/tisfeng/Easydict/wiki/FAQ)
+          required: true
+        - label: I have carefully read the [README](https://github.com/tisfeng/Easydict#readme)
+          required: true
+        - label: I have searched through the [issues](https://github.com/tisfeng/Easydict/issues) page but couldn't find a solution.(Including issue that has been closed)
+          required: true
+        - label: Easydict has been upgraded to the [latest version](https://github.com/tisfeng/Easydict/releases)
+          required: true
+        - label: I understand and agree to the above, and understand that the project maintainer has limited energy, **issues that do not follow the rules may be ignored or closed directly**
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem description
+      description: ｜
+        If the context information is insufficient, the developer will not be able to locate the problem, and the problem will be downgraded or ignored.
+        Describe only one problem per issue. If you have multiple problems, please submit them separately.
+      placeholder: Problem description
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reproducible
+    attributes:
+      label: Is the issue consistently reproducible?
+      multiple: false
+      options:
+        - Reproducible
+        - Non-reproducible
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: |
+        If the issue is reproducible, please provide detailed steps to reproduce it. Otherwise, the developer may not be able to locate the issue.
+        If the issue is intermittent, you can try restarting Easydict, restarting your computer, or uninstalling and reinstalling the application to see if the problem can be resolved 🤔
+        Note: Given the limited resources of the developer, only issues that can be reliably reproduced will be addressed at this time. For non-reproducible issues, they will be simply recorded for future observation.
+      placeholder: Steps to Reproduce
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: |
+        Please provide a screenshot of the problem. If the screenshot is not convenient to describe the problem, please provide a screen recording for the developer to troubleshoot.
+      placeholder: Please provide a screenshot
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Runtime log(zip file)
+      description: "Please provide the runtime log zip file for the developer to troubleshoot: menu icon -> Help -> Export log. (Log directory: `~/Library/Caches/com.izual.Easydict/MMLogs`)"
+      placeholder: Upload runtime log zip file
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: Please describe the result you expect.
+      placeholder: Your expected result
+    validations:
+      required: true
+
+  - type: textarea
+    id: resolution
+    attributes:
+      label: Proposed solution (optional)
+      description: Do you have any proposed solutions or suggestions for this issue?
+      placeholder: Your proposed solution
+
+  - type: input
+    id: device
+    attributes:
+      label: Device type and OS version
+      description: If you encounter an unusual problem, you can provide device type and OS versions to help developers troubleshoot.
+      placeholder: Apple M1 Pro, macOS 14.0
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: PR
+    attributes:
+      label: Are you willing to submit a PR to fix this issue?
+      description: We welcome you to submit a PR to fix this issue. When the developer is short of manpower, submitting a PR is the fastest way to solve the problem. If you are not familiar with objc or Swift you can try ChatGPT, maybe it can help you.
+      options:
+        - label: I'm willing to submit a PR to fix this issue

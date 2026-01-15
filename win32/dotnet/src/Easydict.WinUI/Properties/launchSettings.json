@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Easydict.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Easydict.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

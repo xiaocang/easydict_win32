@@ -1,0 +1,11 @@
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\bin\Debug\net8.0\Easydict.SidecarClient.deps.json
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\bin\Debug\net8.0\Easydict.SidecarClient.dll
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\bin\Debug\net8.0\Easydict.SidecarClient.pdb
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\obj\Debug\net8.0\Easydict.SidecarClient.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\obj\Debug\net8.0\Easydict.SidecarClient.AssemblyInfoInputs.cache
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\obj\Debug\net8.0\Easydict.SidecarClient.AssemblyInfo.cs
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\obj\Debug\net8.0\Easydict.SidecarClient.csproj.CoreCompileInputs.cache
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\obj\Debug\net8.0\Easydict.SidecarClient.dll
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\obj\Debug\net8.0\refint\Easydict.SidecarClient.dll
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\obj\Debug\net8.0\Easydict.SidecarClient.pdb
+C:\Users\johnn\Documents\work\easydict_win32-ag\win32\dotnet\src\Easydict.SidecarClient\obj\Debug\net8.0\ref\Easydict.SidecarClient.dll

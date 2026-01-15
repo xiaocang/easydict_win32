@@ -1,0 +1,48 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<Application
+    x:Class="Easydict.WinUI.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Easydict.WinUI"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Accent Colors -->
+            <Color x:Key="AccentColor">#0078D4</Color>
+            <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+
+            <!-- Status Colors -->
+            <SolidColorBrush x:Key="StatusConnectedBrush" Color="#107C10" />
+            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="#797775" />
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="#D13438" />
+
+            <!-- Card Style -->
+            <Style x:Key="CardStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="16" />
+            </Style>
+
+            <!-- Text Area Style -->
+            <Style x:Key="TranslationTextBoxStyle" TargetType="TextBox">
+                <Setter Property="FontSize" Value="15" />
+                <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="AcceptsReturn" Value="True" />
+                <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+                <Setter Property="Padding" Value="12" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="MinHeight" Value="120" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
+

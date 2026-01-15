@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Easydict.TranslationService</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- HTTP client with resilience -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.*" />
+    <!-- JSON serialization -->
+    <PackageReference Include="System.Text.Json" Version="9.*" />
+    <!-- Memory cache -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.*" />
+    <!-- Dependency injection -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.*" />
+  </ItemGroup>
+
+</Project>

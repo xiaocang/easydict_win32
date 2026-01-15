@@ -1,5 +1,6 @@
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
+using Easydict.WinUI.Services;
 using Windows.ApplicationModel.DataTransfer;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 
@@ -13,6 +14,7 @@ namespace Easydict.WinUI.Views
     {
         private TranslationManager? _translationManager;
         private CancellationTokenSource? _currentQueryCts;
+        private readonly SettingsService _settings = SettingsService.Instance;
 
         public MainPage()
         {
@@ -25,6 +27,9 @@ namespace Easydict.WinUI.Views
             SourceLangComboNarrow.SelectionChanged += (s, e) => SyncComboSelection(SourceLangComboNarrow, SourceLangCombo);
             TargetLangCombo.SelectionChanged += (s, e) => SyncComboSelection(TargetLangCombo, TargetLangComboNarrow);
             TargetLangComboNarrow.SelectionChanged += (s, e) => SyncComboSelection(TargetLangComboNarrow, TargetLangCombo);
+
+            // Subscribe to clipboard events from App
+            App.ClipboardTextReceived += OnClipboardTextReceived;
         }
 
         private static void SyncComboSelection(ComboBox source, ComboBox target)
@@ -38,11 +43,41 @@ namespace Easydict.WinUI.Views
         private void OnPageLoaded(object sender, RoutedEventArgs e)
         {
             InitializeTranslationServices();
+            ApplySettings();
         }
 
         private void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
+            App.ClipboardTextReceived -= OnClipboardTextReceived;
             CleanupResources();
+        }
+
+        private void ApplySettings()
+        {
+            // Apply target language from settings
+            var targetLang = _settings.TargetLanguage;
+            var targetIndex = targetLang switch
+            {
+                "en" => 0,
+                "zh" => 1,
+                "ja" => 2,
+                "ko" => 3,
+                "fr" => 4,
+                "de" => 5,
+                "es" => 6,
+                _ => 1 // Default to Chinese
+            };
+            TargetLangCombo.SelectedIndex = targetIndex;
+        }
+
+        private void OnClipboardTextReceived(string text)
+        {
+            // Auto-translate clipboard text
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                InputTextBox.Text = text;
+                await StartQueryAsync();
+            });
         }
 
         private void InitializeTranslationServices()
@@ -266,6 +301,20 @@ namespace Easydict.WinUI.Views
                     CopyButton.Content = new FontIcon { Glyph = "\uE8C8", FontSize = 14 }; // Copy icon
                 });
             }
+        }
+
+        private void OnSettingsClicked(object sender, RoutedEventArgs e)
+        {
+            Frame.Navigate(typeof(SettingsPage));
+        }
+
+        /// <summary>
+        /// Set text to translate (called from external sources like hotkey).
+        /// </summary>
+        public void SetTextAndTranslate(string text)
+        {
+            InputTextBox.Text = text;
+            _ = StartQueryAsync();
         }
     }
 }

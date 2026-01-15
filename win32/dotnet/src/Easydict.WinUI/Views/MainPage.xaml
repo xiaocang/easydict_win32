@@ -48,6 +48,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
@@ -66,7 +67,8 @@
                 Background="{StaticResource StatusDisconnectedBrush}"
                 CornerRadius="12"
                 Padding="12,6"
-                VerticalAlignment="Center">
+                VerticalAlignment="Center"
+                Margin="0,0,8,0">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Ellipse
                         x:Name="StatusDot"
@@ -81,6 +83,21 @@
                         VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
+
+            <!-- Settings Button -->
+            <Button
+                x:Name="SettingsButton"
+                Grid.Column="2"
+                Click="OnSettingsClicked"
+                ToolTipService.ToolTip="Settings"
+                Background="Transparent"
+                BorderThickness="0"
+                Width="36"
+                Height="36"
+                Padding="0"
+                VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE713;" FontSize="18" />
+            </Button>
         </Grid>
 
         <!-- Wide Layout: Language + Button in one row -->

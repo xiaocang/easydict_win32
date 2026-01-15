@@ -21,7 +21,8 @@ Design document: `win32-ui-ag.md`
 | **0B** | ✅ DONE | .NET SidecarClient library - verified on Windows, all 8 E2E tests passing |
 | **0C** | ✅ DONE | WinUI 3 App Shell + integrate SidecarClient |
 | **1** | ✅ DONE | Real translation path - C# native implementation (Google, DeepL, caching, retry) |
-| **2** | 🔜 NEXT | Native integrations (tray, hotkeys, clipboard, settings) |
+| **2** | ✅ DONE | Native integrations (tray, hotkeys, clipboard, settings) |
+| **3** | 🔜 NEXT | Polish & Distribution (installer, auto-update, performance) |
 
 ---
 
@@ -64,11 +65,15 @@ win32/
     │   │
     │   └── Easydict.WinUI/                # WinUI 3 App
     │       ├── Easydict.WinUI.csproj
-    │       ├── App.xaml / App.xaml.cs
-    │       ├── Themes/
-    │       │   └── Styles.xaml            # Fluent Design styles
+    │       ├── App.xaml / App.xaml.cs     # App entry, service initialization
+    │       ├── Services/
+    │       │   ├── TrayIconService.cs     # ✅ System tray icon (H.NotifyIcon.WinUI)
+    │       │   ├── HotkeyService.cs       # ✅ Global hotkeys (Win32 API)
+    │       │   ├── ClipboardService.cs    # ✅ Clipboard monitoring
+    │       │   └── SettingsService.cs     # ✅ Settings persistence
     │       ├── Views/
-    │       │   └── MainPage.xaml / .cs    # Translation UI (responsive layout)
+    │       │   ├── MainPage.xaml / .cs    # Translation UI (responsive layout)
+    │       │   └── SettingsPage.xaml / .cs # ✅ Settings UI
     │       └── Assets/                    # App icons
     │
     └── e2e/
@@ -126,28 +131,60 @@ Instead of Swift sidecar, we implemented C# native translation services:
 
 ---
 
-## Next Steps (Milestone 2: Native Integrations)
+## Milestone 2 Completed (Native Integrations)
 
-1. **System tray icon**:
-   - Show app in system tray when minimized
-   - Right-click context menu (Translate, Settings, Exit)
-   - Double-click to show/hide window
+All native Windows integrations have been implemented:
 
-2. **Global hotkeys**:
-   - Register global hotkey (e.g., Ctrl+Alt+T) to show translation window
-   - Hotkey to translate selected text
-   - Configurable hotkey combinations
+1. ✅ **System tray icon** (`TrayIconService.cs`):
+   - Shows app in system tray when minimized
+   - Right-click context menu (Show, Translate Clipboard, Settings, Exit)
+   - Left-click to show/restore window
+   - Uses H.NotifyIcon.WinUI package
 
-3. **Clipboard monitoring**:
-   - Optional: auto-translate when text is copied
+2. ✅ **Global hotkeys** (`HotkeyService.cs`):
+   - Ctrl+Alt+T: Show translation window
+   - Ctrl+Alt+D: Translate clipboard text
+   - Uses Win32 RegisterHotKey/UnregisterHotKey
+
+3. ✅ **Clipboard monitoring** (`ClipboardService.cs`):
+   - Optional auto-translate when text is copied
    - Toggle in settings
+   - Uses Windows.ApplicationModel.DataTransfer
 
-4. **Settings page**:
-   - Configure hotkeys
-   - Select default translation service
-   - Enter API keys (DeepL, etc.)
-   - Choose target language preference
-   - Enable/disable clipboard monitoring
+4. ✅ **Settings page** (`SettingsPage.xaml/cs`):
+   - Default translation service selection (Google, DeepL)
+   - Target language preference
+   - DeepL API key configuration
+   - Behavior toggles (Minimize to tray, Clipboard monitoring, Always on top)
+   - Hotkey display (restart required to change)
+   - Persistent storage using ApplicationData
+
+5. ✅ **Window management**:
+   - Minimize to tray on close (configurable)
+   - Always-on-top option
+   - Settings navigation from main page
+
+---
+
+## Next Steps (Milestone 3: Polish & Distribution)
+
+1. **Installer/Distribution**:
+   - MSIX package for Microsoft Store
+   - Standalone installer option
+   - Portable version
+
+2. **Auto-update**:
+   - Check for updates on startup
+   - Download and install updates
+
+3. **Performance**:
+   - Startup time optimization
+   - Memory usage optimization
+
+4. **Additional features**:
+   - OCR/Screenshot translation
+   - More translation services (Bing, Youdao, etc.)
+   - History/Favorites
 
 ---
 

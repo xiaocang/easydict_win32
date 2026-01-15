@@ -1,7 +1,7 @@
-using System.Drawing;
 using H.NotifyIcon;
-using H.NotifyIcon.Core;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Easydict.WinUI.Services;
 
@@ -12,8 +12,18 @@ namespace Easydict.WinUI.Services;
 public sealed class TrayIconService : IDisposable
 {
     private readonly Window _window;
-    private TrayIcon? _trayIcon;
+    private TaskbarIcon? _taskbarIcon;
     private bool _isDisposed;
+
+    /// <summary>
+    /// Event fired when "Translate Clipboard" is clicked.
+    /// </summary>
+    public event Action? OnTranslateClipboard;
+
+    /// <summary>
+    /// Event fired when "Settings" is clicked.
+    /// </summary>
+    public event Action? OnOpenSettings;
 
     public TrayIconService(Window window)
     {
@@ -25,38 +35,50 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public void Initialize()
     {
-        if (_trayIcon != null) return;
+        if (_taskbarIcon != null) return;
 
-        _trayIcon = new TrayIcon
+        _taskbarIcon = new TaskbarIcon
         {
-            ToolTip = "Easydict - Dictionary & Translation",
-            Icon = CreateDefaultIcon(),
-            ContextMenu = CreateContextMenu()
+            ToolTipText = "Easydict - Dictionary & Translation",
+            ContextMenuMode = ContextMenuMode.SecondWindow
         };
 
-        // Double-click to show/restore window
-        _trayIcon.MessageWindow.MouseEventReceived += OnMouseEvent;
+        // Set up context menu
+        var contextMenu = CreateContextMenu();
+        _taskbarIcon.ContextFlyout = contextMenu;
 
-        _trayIcon.Create();
+        // Handle left click to show window
+        _taskbarIcon.LeftClickCommand = new RelayCommand(ShowWindow);
+
+        // Use icon from resources
+        _taskbarIcon.IconSource = new BitmapImage(new Uri("ms-appx:///Assets/Square44x44Logo.scale-200.png"));
     }
 
-    private PopupMenu CreateContextMenu()
+    private MenuFlyout CreateContextMenu()
     {
-        var menu = new PopupMenu();
+        var menu = new MenuFlyout();
 
-        menu.Items.Add(new PopupMenuItem("Show Easydict", (_, _) => ShowWindow()));
-        menu.Items.Add(new PopupMenuSeparator());
-        menu.Items.Add(new PopupMenuItem("Exit", (_, _) => ExitApplication()));
+        var showItem = new MenuFlyoutItem { Text = "Show Easydict" };
+        showItem.Click += (_, _) => ShowWindow();
+        menu.Items.Add(showItem);
+
+        var translateItem = new MenuFlyoutItem { Text = "Translate Clipboard" };
+        translateItem.Click += (_, _) => OnTranslateClipboard?.Invoke();
+        menu.Items.Add(translateItem);
+
+        menu.Items.Add(new MenuFlyoutSeparator());
+
+        var settingsItem = new MenuFlyoutItem { Text = "Settings" };
+        settingsItem.Click += (_, _) => OnOpenSettings?.Invoke();
+        menu.Items.Add(settingsItem);
+
+        menu.Items.Add(new MenuFlyoutSeparator());
+
+        var exitItem = new MenuFlyoutItem { Text = "Exit" };
+        exitItem.Click += (_, _) => ExitApplication();
+        menu.Items.Add(exitItem);
 
         return menu;
-    }
-
-    private void OnMouseEvent(object? sender, MessageWindow.MouseEventReceivedEventArgs e)
-    {
-        if (e.MouseEvent == MouseEvent.IconLeftMouseDoubleClick)
-        {
-            ShowWindow();
-        }
     }
 
     /// <summary>
@@ -76,34 +98,34 @@ public sealed class TrayIconService : IDisposable
         Application.Current.Exit();
     }
 
-    private static Icon CreateDefaultIcon()
-    {
-        // Create a simple colored icon
-        using var bitmap = new Bitmap(32, 32);
-        using var g = Graphics.FromImage(bitmap);
-
-        // Draw a simple "E" shape with gradient background
-        using var brush = new SolidBrush(Color.FromArgb(0, 120, 215)); // Windows blue
-        g.FillEllipse(brush, 2, 2, 28, 28);
-
-        using var textBrush = new SolidBrush(Color.White);
-        using var font = new Font("Segoe UI", 16, FontStyle.Bold);
-        g.DrawString("E", font, textBrush, 6, 4);
-
-        return Icon.FromHandle(bitmap.GetHicon());
-    }
-
     public void Dispose()
     {
         if (_isDisposed) return;
         _isDisposed = true;
 
-        if (_trayIcon != null)
-        {
-            _trayIcon.MessageWindow.MouseEventReceived -= OnMouseEvent;
-            _trayIcon.Dispose();
-            _trayIcon = null;
-        }
+        _taskbarIcon?.Dispose();
+        _taskbarIcon = null;
     }
+}
+
+/// <summary>
+/// Simple relay command for TaskbarIcon commands.
+/// </summary>
+internal sealed class RelayCommand : System.Windows.Input.ICommand
+{
+    private readonly Action _execute;
+
+    public RelayCommand(Action execute)
+    {
+        _execute = execute;
+    }
+
+#pragma warning disable CS0067
+    public event EventHandler? CanExecuteChanged;
+#pragma warning restore CS0067
+
+    public bool CanExecute(object? parameter) => true;
+
+    public void Execute(object? parameter) => _execute();
 }
 

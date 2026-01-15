@@ -39,7 +39,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" MinHeight="100" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="100" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -231,20 +231,31 @@
         </StackPanel>
 
         <!-- Input Card -->
-        <Border Grid.Row="2" Style="{StaticResource CardStyle}">
+        <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="0,0,0,8">
             <Grid Margin="16">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="28" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <TextBlock
-                    Grid.Row="0"
-                    Text="Source Text"
-                    FontSize="13"
-                    FontWeight="SemiBold"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Margin="0,0,0,8" />
+                <!-- Title row with consistent height -->
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock
+                        Grid.Column="0"
+                        Text="Source Text"
+                        FontSize="13"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        VerticalAlignment="Center" />
+
+                    <!-- Placeholder for symmetry (invisible) -->
+                    <Border Grid.Column="1" Width="32" Height="28" />
+                </Grid>
 
                 <TextBox
                     x:Name="InputTextBox"
@@ -253,20 +264,22 @@
                     Style="{StaticResource TranslationTextBoxStyle}"
                     BorderThickness="0"
                     Background="Transparent"
+                    Margin="0,8,0,0"
                     VerticalAlignment="Stretch"
                     HorizontalAlignment="Stretch" />
             </Grid>
         </Border>
 
         <!-- Output Card -->
-        <Border Grid.Row="3" Style="{StaticResource CardStyle}">
+        <Border Grid.Row="3" Style="{StaticResource CardStyle}" Margin="0,8,0,0">
             <Grid Margin="16">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="28" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <Grid Grid.Row="0" Margin="0,0,0,8">
+                <!-- Title row with consistent height -->
+                <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -287,7 +300,9 @@
                         ToolTipService.ToolTip="Copy to clipboard"
                         Background="Transparent"
                         BorderThickness="0"
-                        Padding="8"
+                        Width="32"
+                        Height="28"
+                        Padding="0"
                         VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE8C8;" FontSize="14" />
                     </Button>
@@ -301,6 +316,7 @@
                     IsReadOnly="True"
                     BorderThickness="0"
                     Background="Transparent"
+                    Margin="0,8,0,0"
                     VerticalAlignment="Stretch"
                     HorizontalAlignment="Stretch" />
             </Grid>

@@ -99,3 +99,22 @@ BuildTools/.swiftpm
 *.zip
 *.app
 *.dmg
+
+# Windows / .NET (win32) build outputs
+win32/dotnet/**/.vs/
+win32/dotnet/**/bin/
+win32/dotnet/**/obj/
+win32/dotnet/**/AppPackages/
+win32/dotnet/**/BundleArtifacts/
+win32/dotnet/**/TestResults/
+
+# Common Windows build artifacts (scoped to win32)
+win32/**/*.dll
+win32/**/*.exe
+win32/**/*.pdb
+win32/**/*.ilk
+win32/**/*.obj
+win32/**/*.lib
+win32/**/*.exp
+win32/**/*.cache
+win32/**/*.log

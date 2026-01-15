@@ -20,7 +20,8 @@ Design document: `win32-ui-ag.md`
 | **0A** | ✅ DONE | IPC protocol + JSONL codec + mock service + E2E runner (Python) |
 | **0B** | ✅ DONE | .NET SidecarClient library - verified on Windows, all 8 E2E tests passing |
 | **0C** | ✅ DONE | WinUI 3 App Shell + integrate SidecarClient |
-| **1** | 🔜 NEXT | Real translation path (port Swift services, caching, timeout/retry) |
+| **1** | ✅ DONE | Real translation path - C# native implementation (Google, DeepL, caching, retry) |
+| **2** | 🔜 NEXT | Native integrations (tray, hotkeys, clipboard, settings) |
 
 ---
 
@@ -36,7 +37,7 @@ win32/
 └── dotnet/
     ├── Easydict.Win32.sln     # Solution file
     ├── src/
-    │   ├── Easydict.SidecarClient/
+    │   ├── Easydict.SidecarClient/        # IPC client for sidecar process
     │   │   ├── Easydict.SidecarClient.csproj
     │   │   ├── SidecarClient.cs           # Core client (process mgmt, multiplexing)
     │   │   ├── SidecarClientOptions.cs    # Configuration options
@@ -48,11 +49,26 @@ win32/
     │   │       ├── IpcMessage.cs          # Raw message parser
     │   │       └── JsonLineSerializer.cs  # JSONL serializer
     │   │
-    │   └── Easydict.WinUI/                # ✅ NEW - WinUI 3 App
+    │   ├── Easydict.TranslationService/   # ✅ C# native translation (replaces Swift sidecar)
+    │   │   ├── Easydict.TranslationService.csproj
+    │   │   ├── ITranslationService.cs     # Translation service interface
+    │   │   ├── TranslationManager.cs      # Service orchestration, caching, retry
+    │   │   ├── Models/
+    │   │   │   ├── Language.cs            # Language enum (60+ languages)
+    │   │   │   ├── TranslationRequest.cs  # Request model
+    │   │   │   └── TranslationResult.cs   # Result model (record type)
+    │   │   └── Services/
+    │   │       ├── BaseTranslationService.cs    # Base class with retry logic
+    │   │       ├── GoogleTranslateService.cs    # Google Translate (free API)
+    │   │       └── DeepLService.cs              # DeepL API
+    │   │
+    │   └── Easydict.WinUI/                # WinUI 3 App
     │       ├── Easydict.WinUI.csproj
     │       ├── App.xaml / App.xaml.cs
+    │       ├── Themes/
+    │       │   └── Styles.xaml            # Fluent Design styles
     │       ├── Views/
-    │       │   └── MainPage.xaml / MainPage.xaml.cs  # Translation UI
+    │       │   └── MainPage.xaml / .cs    # Translation UI (responsive layout)
     │       └── Assets/                    # App icons
     │
     └── e2e/
@@ -96,18 +112,42 @@ dotnet run --project e2e/E2E.SidecarClient.csproj
 
 ---
 
-## Next Steps (Milestone 1)
+## Milestone 1 Completed (C# Native Implementation)
 
-1. **Port Swift translation services** to the sidecar:
-   - Replace mock service with real Swift sidecar
-   - Implement actual translation API calls (Google, DeepL, etc.)
-2. **Add caching layer** in Swift service
-3. **Implement timeout/retry rules**
-4. **Add language selection UI**:
-   - Source language dropdown (with auto-detect)
-   - Target language dropdown
-5. **Service selection**:
-   - Allow user to choose translation service
+Instead of Swift sidecar, we implemented C# native translation services:
+
+1. ✅ **TranslationManager** - Service orchestration with caching and retry
+2. ✅ **GoogleTranslateService** - Free Google Translate API (no key required)
+3. ✅ **DeepLService** - DeepL API support (requires API key)
+4. ✅ **Memory caching** - Avoids duplicate translation requests
+5. ✅ **Exponential backoff retry** - Automatic retry on transient failures
+6. ✅ **Language detection** - Auto-detect source language
+7. ✅ **Responsive UI** - Adaptive layout for different window sizes
+
+---
+
+## Next Steps (Milestone 2: Native Integrations)
+
+1. **System tray icon**:
+   - Show app in system tray when minimized
+   - Right-click context menu (Translate, Settings, Exit)
+   - Double-click to show/hide window
+
+2. **Global hotkeys**:
+   - Register global hotkey (e.g., Ctrl+Alt+T) to show translation window
+   - Hotkey to translate selected text
+   - Configurable hotkey combinations
+
+3. **Clipboard monitoring**:
+   - Optional: auto-translate when text is copied
+   - Toggle in settings
+
+4. **Settings page**:
+   - Configure hotkeys
+   - Select default translation service
+   - Enter API keys (DeepL, etc.)
+   - Choose target language preference
+   - Enable/disable clipboard monitoring
 
 ---
 

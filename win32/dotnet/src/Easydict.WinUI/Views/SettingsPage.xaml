@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Easydict.WinUI.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="24" MaxWidth="800">
+            <!-- Header -->
+            <Grid>
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <Button Click="OnBackClick" Style="{StaticResource AccentButtonStyle}" Padding="8">
+                        <FontIcon Glyph="&#xE72B;" FontSize="16" />
+                    </Button>
+                    <TextBlock Text="Settings" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Translation Service -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Translation Service" FontSize="18" FontWeight="SemiBold" />
+                
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <ComboBox x:Name="ServiceCombo" Header="Default Service" Width="200">
+                            <ComboBoxItem Content="Google Translate" Tag="google" />
+                            <ComboBoxItem Content="DeepL" Tag="deepl" />
+                        </ComboBox>
+
+                        <ComboBox x:Name="TargetLangCombo" Header="Target Language" Width="200">
+                            <ComboBoxItem Content="Chinese (Simplified)" Tag="zh" />
+                            <ComboBoxItem Content="English" Tag="en" />
+                            <ComboBoxItem Content="Japanese" Tag="ja" />
+                            <ComboBoxItem Content="Korean" Tag="ko" />
+                            <ComboBoxItem Content="French" Tag="fr" />
+                            <ComboBoxItem Content="German" Tag="de" />
+                            <ComboBoxItem Content="Spanish" Tag="es" />
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- API Keys -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="API Keys" FontSize="18" FontWeight="SemiBold" />
+                
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <PasswordBox x:Name="DeepLKeyBox" Header="DeepL API Key" Width="300" PlaceholderText="Enter your DeepL API key" />
+                        <CheckBox x:Name="DeepLFreeCheck" Content="Use DeepL Free API" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Behavior -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Behavior" FontSize="18" FontWeight="SemiBold" />
+                
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="12">
+                        <ToggleSwitch x:Name="MinimizeToTrayToggle" Header="Minimize to system tray" />
+                        <ToggleSwitch x:Name="ClipboardMonitorToggle" Header="Monitor clipboard for text" />
+                        <ToggleSwitch x:Name="AlwaysOnTopToggle" Header="Always on top" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Hotkeys -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Hotkeys" FontSize="18" FontWeight="SemiBold" />
+                
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <TextBox x:Name="ShowHotkeyBox" Header="Show Window" Width="200" PlaceholderText="Ctrl+Alt+T" />
+                        <TextBox x:Name="TranslateHotkeyBox" Header="Translate Selection" Width="200" PlaceholderText="Ctrl+Alt+D" />
+                        <TextBlock Text="Note: Restart app to apply hotkey changes" 
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- About -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="About" FontSize="18" FontWeight="SemiBold" />
+                
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Easydict for Windows" FontWeight="SemiBold" />
+                        <TextBlock Text="Version 1.0.0" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <HyperlinkButton Content="GitHub Repository" NavigateUri="https://github.com/tisfeng/Easydict" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Save Button -->
+            <Button x:Name="SaveButton" Content="Save Settings" Click="OnSaveClick" 
+                    Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Right" Padding="24,8" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>
+

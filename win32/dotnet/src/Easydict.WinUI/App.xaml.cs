@@ -1,3 +1,4 @@
+using Easydict.WinUI.Services;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Navigation;
@@ -11,6 +12,13 @@ namespace Easydict.WinUI
     public partial class App : Application
     {
         private Window? _window;
+        private TrayIconService? _trayIconService;
+        private AppWindow? _appWindow;
+
+        /// <summary>
+        /// Gets the main window instance.
+        /// </summary>
+        public static Window? MainWindow => ((App)Current)._window;
 
         public App()
         {
@@ -24,8 +32,11 @@ namespace Easydict.WinUI
             // Set window title
             _window.Title = "Easydict";
 
-            // Set window size
-            ConfigureWindow(_window);
+            // Set window size and get AppWindow reference
+            _appWindow = ConfigureWindow(_window);
+
+            // Handle window close to minimize to tray instead
+            _appWindow.Closing += OnWindowClosing;
 
             if (_window.Content is not Frame rootFrame)
             {
@@ -36,9 +47,27 @@ namespace Easydict.WinUI
 
             _ = rootFrame.Navigate(typeof(MainPage), e.Arguments);
             _window.Activate();
+
+            // Initialize system tray icon
+            InitializeTrayIcon();
         }
 
-        private static void ConfigureWindow(Window window)
+        private void InitializeTrayIcon()
+        {
+            if (_window == null) return;
+
+            _trayIconService = new TrayIconService(_window);
+            _trayIconService.Initialize();
+        }
+
+        private void OnWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+        {
+            // Minimize to tray instead of closing
+            args.Cancel = true;
+            _window?.Hide();
+        }
+
+        private static AppWindow ConfigureWindow(Window window)
         {
             var hWnd = WindowNative.GetWindowHandle(window);
             var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
@@ -55,6 +84,8 @@ namespace Easydict.WinUI
                 var centerY = (displayArea.WorkArea.Height - 700) / 2;
                 appWindow.Move(new Windows.Graphics.PointInt32(centerX, centerY));
             }
+
+            return appWindow;
         }
 
         void OnNavigationFailed(object sender, NavigationFailedEventArgs e)

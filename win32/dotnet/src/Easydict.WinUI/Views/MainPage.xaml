@@ -9,7 +9,9 @@
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-    <Grid Padding="24">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <Grid Padding="16">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="LayoutStates">
                 <!-- Wide layout: all controls in one row -->
@@ -38,13 +40,13 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" MinHeight="100" />
-            <RowDefinition Height="*" MinHeight="100" />
+            <RowDefinition Height="*" MinHeight="80" />
+            <RowDefinition Height="*" MinHeight="80" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Grid Grid.Row="0" Margin="0,0,0,16">
+        <Grid Grid.Row="0" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -101,7 +103,7 @@
         </Grid>
 
         <!-- Wide Layout: Language + Button in one row -->
-        <Grid x:Name="ActionBarWide" Grid.Row="1" Margin="0,0,0,12" Visibility="Visible">
+        <Grid x:Name="ActionBarWide" Grid.Row="1" Margin="0,0,0,8" Visibility="Visible">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -172,7 +174,7 @@
         </Grid>
 
         <!-- Narrow Layout: Stacked controls -->
-        <StackPanel x:Name="ActionBarNarrow" Grid.Row="1" Spacing="12" Margin="0,0,0,12" Visibility="Collapsed">
+        <StackPanel x:Name="ActionBarNarrow" Grid.Row="1" Spacing="8" Margin="0,0,0,8" Visibility="Collapsed">
             <!-- Language row -->
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -282,6 +284,9 @@
                     BorderThickness="0"
                     Background="Transparent"
                     Margin="0,8,0,0"
+                    AcceptsReturn="True"
+                    TextWrapping="Wrap"
+                    ScrollViewer.VerticalScrollBarVisibility="Auto"
                     VerticalAlignment="Stretch"
                     HorizontalAlignment="Stretch" />
             </Grid>
@@ -334,13 +339,16 @@
                     BorderThickness="0"
                     Background="Transparent"
                     Margin="0,8,0,0"
+                    AcceptsReturn="True"
+                    TextWrapping="Wrap"
+                    ScrollViewer.VerticalScrollBarVisibility="Auto"
                     VerticalAlignment="Stretch"
                     HorizontalAlignment="Stretch" />
             </Grid>
         </Border>
 
         <!-- Footer -->
-        <Grid Grid.Row="4" Margin="0,12,0,0">
+        <Grid Grid.Row="4" Margin="0,8,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
@@ -364,5 +372,6 @@
                 HorizontalAlignment="Right"
                 VerticalAlignment="Center" />
         </Grid>
-    </Grid>
+        </Grid>
+    </ScrollViewer>
 </Page>

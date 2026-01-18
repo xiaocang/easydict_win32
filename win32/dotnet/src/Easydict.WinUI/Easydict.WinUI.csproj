@@ -15,6 +15,7 @@
         <LangVersion>latest</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Easydict.WinUI</RootNamespace>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
         <!-- App Options -->
         <UseRidGraph>true</UseRidGraph>
@@ -35,13 +36,47 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Content Include="Assets\SplashScreen.scale-200.png" />
-        <Content Include="Assets\LockScreenLogo.scale-200.png" />
-        <Content Include="Assets\Square150x150Logo.scale-200.png" />
+        <!-- Square44x44Logo - All scales for proper DPI support -->
+        <Content Include="Assets\Square44x44Logo.scale-100.png" />
+        <Content Include="Assets\Square44x44Logo.scale-125.png" />
+        <Content Include="Assets\Square44x44Logo.scale-150.png" />
+        <Content Include="Assets\Square44x44Logo.scale-175.png" />
         <Content Include="Assets\Square44x44Logo.scale-200.png" />
         <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
-        <Content Include="Assets\StoreLogo.png" />
+
+        <!-- Square150x150Logo - All scales -->
+        <Content Include="Assets\Square150x150Logo.scale-100.png" />
+        <Content Include="Assets\Square150x150Logo.scale-125.png" />
+        <Content Include="Assets\Square150x150Logo.scale-150.png" />
+        <Content Include="Assets\Square150x150Logo.scale-175.png" />
+        <Content Include="Assets\Square150x150Logo.scale-200.png" />
+
+        <!-- Wide310x150Logo - All scales -->
+        <Content Include="Assets\Wide310x150Logo.scale-100.png" />
+        <Content Include="Assets\Wide310x150Logo.scale-125.png" />
+        <Content Include="Assets\Wide310x150Logo.scale-150.png" />
+        <Content Include="Assets\Wide310x150Logo.scale-175.png" />
         <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+
+        <!-- SplashScreen - All scales -->
+        <Content Include="Assets\SplashScreen.scale-100.png" />
+        <Content Include="Assets\SplashScreen.scale-125.png" />
+        <Content Include="Assets\SplashScreen.scale-150.png" />
+        <Content Include="Assets\SplashScreen.scale-175.png" />
+        <Content Include="Assets\SplashScreen.scale-200.png" />
+
+        <!-- LockScreenLogo - All scales -->
+        <Content Include="Assets\LockScreenLogo.scale-100.png" />
+        <Content Include="Assets\LockScreenLogo.scale-125.png" />
+        <Content Include="Assets\LockScreenLogo.scale-150.png" />
+        <Content Include="Assets\LockScreenLogo.scale-175.png" />
+        <Content Include="Assets\LockScreenLogo.scale-200.png" />
+
+        <!-- Store Logo (unscaled) -->
+        <Content Include="Assets\StoreLogo.png" />
+
+        <!-- Service Icons - All services with scale variants -->
+        <Content Include="Assets\ServiceIcons\*.png" />
     </ItemGroup>
 
     <ItemGroup>

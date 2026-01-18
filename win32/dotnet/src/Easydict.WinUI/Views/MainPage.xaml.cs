@@ -18,7 +18,17 @@ namespace Easydict.WinUI.Views
 
         public MainPage()
         {
-            this.InitializeComponent();
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[MainPage] Constructor starting...");
+                this.InitializeComponent();
+                System.Diagnostics.Debug.WriteLine("[MainPage] InitializeComponent completed");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainPage] InitializeComponent FAILED: {ex}");
+                throw;
+            }
             this.Loaded += OnPageLoaded;
             this.Unloaded += OnPageUnloaded;
 

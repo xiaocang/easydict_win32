@@ -11,6 +11,8 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!-- Easydict Color Theme -->
+                <ResourceDictionary Source="Themes/Colors.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Accent Colors -->

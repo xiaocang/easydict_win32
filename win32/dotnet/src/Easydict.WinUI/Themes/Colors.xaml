@@ -1,0 +1,99 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+        <!-- Light Theme Colors -->
+        <ResourceDictionary x:Key="Light">
+            <!-- Main Colors -->
+            <Color x:Key="MainViewBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="MainBorderColor">#FFFFFF</Color>
+            <Color x:Key="QueryViewBackgroundColor">#F4F4F4</Color>
+            <Color x:Key="QueryTextColor">#262626</Color>
+            <Color x:Key="TitleBarBackgroundColor">#F1F1F1</Color>
+            <Color x:Key="ResultViewBackgroundColor">#F6F6F6</Color>
+            <Color x:Key="ButtonHoverColor">#E2E2E2</Color>
+
+            <!-- Accent Colors -->
+            <Color x:Key="BlueAccentColor">#007AFF</Color>
+            <Color x:Key="BlueTintColor">#1296DB</Color>
+
+            <!-- Settings UI -->
+            <Color x:Key="AddMinusBackgroundColor">#EAEAE9</Color>
+            <Color x:Key="ListBorderColor">#DEDEDE</Color>
+
+            <!-- Brushes -->
+            <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
+            <SolidColorBrush x:Key="MainBorderBrush" Color="{StaticResource MainBorderColor}" />
+            <SolidColorBrush x:Key="QueryViewBackgroundBrush" Color="{StaticResource QueryViewBackgroundColor}" />
+            <SolidColorBrush x:Key="QueryTextBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="{StaticResource TitleBarBackgroundColor}" />
+            <SolidColorBrush x:Key="ResultViewBackgroundBrush" Color="{StaticResource ResultViewBackgroundColor}" />
+            <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHoverColor}" />
+            <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource BlueAccentColor}" />
+            <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
+            <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
+            <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
+        </ResourceDictionary>
+
+        <!-- Dark Theme Colors -->
+        <ResourceDictionary x:Key="Dark">
+            <!-- Main Colors -->
+            <Color x:Key="MainViewBackgroundColor">#232325</Color>
+            <Color x:Key="MainBorderColor">#515253</Color>
+            <Color x:Key="QueryViewBackgroundColor">#303132</Color>
+            <Color x:Key="QueryTextColor">#E0E0E0</Color>
+            <Color x:Key="TitleBarBackgroundColor">#2C2D2E</Color>
+            <Color x:Key="ResultViewBackgroundColor">#303132</Color>
+            <Color x:Key="ButtonHoverColor">#515253</Color>
+
+            <!-- Accent Colors -->
+            <Color x:Key="BlueAccentColor">#007AFF</Color>
+            <Color x:Key="BlueTintColor">#1296DB</Color>
+
+            <!-- Settings UI -->
+            <Color x:Key="AddMinusBackgroundColor">#3B3A3A</Color>
+            <Color x:Key="ListBorderColor">#505050</Color>
+
+            <!-- Brushes -->
+            <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
+            <SolidColorBrush x:Key="MainBorderBrush" Color="{StaticResource MainBorderColor}" />
+            <SolidColorBrush x:Key="QueryViewBackgroundBrush" Color="{StaticResource QueryViewBackgroundColor}" />
+            <SolidColorBrush x:Key="QueryTextBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="{StaticResource TitleBarBackgroundColor}" />
+            <SolidColorBrush x:Key="ResultViewBackgroundBrush" Color="{StaticResource ResultViewBackgroundColor}" />
+            <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHoverColor}" />
+            <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource BlueAccentColor}" />
+            <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
+            <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
+            <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
+        </ResourceDictionary>
+
+        <!-- HighContrast Theme (fallback to Light theme values) -->
+        <ResourceDictionary x:Key="HighContrast">
+            <Color x:Key="MainViewBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="MainBorderColor">#000000</Color>
+            <Color x:Key="QueryViewBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="QueryTextColor">#000000</Color>
+            <Color x:Key="TitleBarBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="ResultViewBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="ButtonHoverColor">#E0E0E0</Color>
+            <Color x:Key="BlueAccentColor">#0000FF</Color>
+            <Color x:Key="BlueTintColor">#0000FF</Color>
+            <Color x:Key="AddMinusBackgroundColor">#E0E0E0</Color>
+            <Color x:Key="ListBorderColor">#000000</Color>
+
+            <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
+            <SolidColorBrush x:Key="MainBorderBrush" Color="{StaticResource MainBorderColor}" />
+            <SolidColorBrush x:Key="QueryViewBackgroundBrush" Color="{StaticResource QueryViewBackgroundColor}" />
+            <SolidColorBrush x:Key="QueryTextBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="{StaticResource TitleBarBackgroundColor}" />
+            <SolidColorBrush x:Key="ResultViewBackgroundBrush" Color="{StaticResource ResultViewBackgroundColor}" />
+            <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHoverColor}" />
+            <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource BlueAccentColor}" />
+            <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
+            <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
+            <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

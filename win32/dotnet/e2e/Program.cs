@@ -23,7 +23,7 @@ allPassed &= await RunTest("Basic health request", async () =>
     Assert(response.IsSuccess, "health should succeed");
     Assert(response.Result.HasValue, "health should have result");
 
-    var result = response.Result.Value;
+    var result = response.Result!.Value;
     Assert(result.TryGetProperty("version", out _), "result should have version");
     Assert(result.TryGetProperty("capabilities", out _), "result should have capabilities");
 });

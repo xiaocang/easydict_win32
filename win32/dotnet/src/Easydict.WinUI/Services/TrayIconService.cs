@@ -50,8 +50,8 @@ public sealed class TrayIconService : IDisposable
         // Handle left click to show window
         _taskbarIcon.LeftClickCommand = new RelayCommand(ShowWindow);
 
-        // Use icon from resources
-        _taskbarIcon.IconSource = new BitmapImage(new Uri("ms-appx:///Assets/Square44x44Logo.scale-200.png"));
+        // Use icon from resources (Windows automatically selects appropriate scale variant)
+        _taskbarIcon.IconSource = new BitmapImage(new Uri("ms-appx:///Assets/Square44x44Logo.png"));
     }
 
     private MenuFlyout CreateContextMenu()

@@ -1,7 +1,11 @@
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
+using Microsoft.UI.Input;
+using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.System;
+using Windows.UI.Core;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 
 namespace Easydict.WinUI.Views
@@ -161,6 +165,54 @@ namespace Easydict.WinUI.Views
         private async void OnTranslateClicked(object sender, RoutedEventArgs e)
         {
             await StartQueryAsync();
+        }
+
+        /// <summary>
+        /// Handle keyboard input in the input text box.
+        /// Enter key triggers translation; Shift+Enter or Ctrl+Enter inserts newline.
+        /// </summary>
+        private async void OnInputTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key != VirtualKey.Enter)
+            {
+                return;
+            }
+
+            try
+            {
+                // Check if XamlRoot and ContentIsland are available
+                if (this.XamlRoot?.ContentIsland == null)
+                {
+                    // Fallback: trigger translation if we can't check modifiers
+                    e.Handled = true;
+                    await StartQueryAsync();
+                    return;
+                }
+
+                // Check if Shift or Ctrl is held down using InputKeyboardSource
+                var keyboardSource = InputKeyboardSource.GetForIsland(this.XamlRoot.ContentIsland);
+                var shiftState = keyboardSource.GetKeyState(VirtualKey.Shift);
+                var ctrlState = keyboardSource.GetKeyState(VirtualKey.Control);
+
+                bool isShiftPressed = shiftState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+                bool isCtrlPressed = ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+
+                // If Shift or Ctrl is held, allow newline (don't handle the event)
+                if (isShiftPressed || isCtrlPressed)
+                {
+                    return; // Let the TextBox handle it normally (insert newline)
+                }
+
+                // Plain Enter: trigger translation
+                e.Handled = true; // Prevent default behavior (inserting newline)
+                await StartQueryAsync();
+            }
+            catch
+            {
+                // Fallback: trigger translation on plain Enter if modifier detection fails
+                e.Handled = true;
+                await StartQueryAsync();
+            }
         }
 
         /// <summary>

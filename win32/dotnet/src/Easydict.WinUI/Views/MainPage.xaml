@@ -288,7 +288,8 @@
                     TextWrapping="Wrap"
                     ScrollViewer.VerticalScrollBarVisibility="Auto"
                     VerticalAlignment="Stretch"
-                    HorizontalAlignment="Stretch" />
+                    HorizontalAlignment="Stretch"
+                    PreviewKeyDown="OnInputTextBoxKeyDown" />
             </Grid>
         </Border>
 

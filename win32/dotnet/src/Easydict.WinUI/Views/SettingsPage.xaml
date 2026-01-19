@@ -44,6 +44,60 @@
                 </Border>
             </StackPanel>
 
+            <!-- Language Preferences -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Language Preferences" FontSize="18" FontWeight="SemiBold" />
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <!-- First Language -->
+                        <ComboBox
+                            x:Name="FirstLanguageCombo"
+                            Header="First Language"
+                            Width="250"
+                            HorizontalAlignment="Left">
+                            <ComboBoxItem Content="🇨🇳 Chinese (Simplified)" Tag="zh" />
+                            <ComboBoxItem Content="🇺🇸 English" Tag="en" />
+                            <ComboBoxItem Content="🇯🇵 Japanese" Tag="ja" />
+                            <ComboBoxItem Content="🇰🇷 Korean" Tag="ko" />
+                            <ComboBoxItem Content="🇫🇷 French" Tag="fr" />
+                            <ComboBoxItem Content="🇩🇪 German" Tag="de" />
+                            <ComboBoxItem Content="🇪🇸 Spanish" Tag="es" />
+                        </ComboBox>
+
+                        <!-- Second Language -->
+                        <ComboBox
+                            x:Name="SecondLanguageCombo"
+                            Header="Second Language"
+                            Width="250"
+                            HorizontalAlignment="Left">
+                            <ComboBoxItem Content="🇺🇸 English" Tag="en" />
+                            <ComboBoxItem Content="🇨🇳 Chinese (Simplified)" Tag="zh" />
+                            <ComboBoxItem Content="🇯🇵 Japanese" Tag="ja" />
+                            <ComboBoxItem Content="🇰🇷 Korean" Tag="ko" />
+                            <ComboBoxItem Content="🇫🇷 French" Tag="fr" />
+                            <ComboBoxItem Content="🇩🇪 German" Tag="de" />
+                            <ComboBoxItem Content="🇪🇸 Spanish" Tag="es" />
+                        </ComboBox>
+
+                        <!-- Explanation -->
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Margin="0,4,0,0">
+                            <Run Text="When detected language matches your First Language, translation target will be your Second Language, and vice versa." />
+                        </TextBlock>
+
+                        <!-- Auto-Select Toggle -->
+                        <ToggleSwitch
+                            x:Name="AutoSelectTargetToggle"
+                            Header="Automatically select target language based on detected source"
+                            IsOn="True" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
             <!-- API Keys -->
             <StackPanel Spacing="12">
                 <TextBlock Text="API Keys" FontSize="18" FontWeight="SemiBold" />

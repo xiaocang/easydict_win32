@@ -31,6 +31,11 @@ public sealed class SettingsService
     public string TargetLanguage { get; set; } = "zh";
     public string SourceLanguage { get; set; } = "auto";
 
+    // Language preference settings (for automatic target language selection)
+    public string FirstLanguage { get; set; } = "zh";   // Simplified Chinese
+    public string SecondLanguage { get; set; } = "en";  // English
+    public bool AutoSelectTargetLanguage { get; set; } = true;
+
     // API Keys
     public string? DeepLApiKey { get; set; }
     public bool DeepLUseFreeApi { get; set; } = true;
@@ -105,6 +110,20 @@ public sealed class SettingsService
         DefaultService = GetValue(nameof(DefaultService), "google");
         TargetLanguage = GetValue(nameof(TargetLanguage), "zh");
         SourceLanguage = GetValue(nameof(SourceLanguage), "auto");
+
+        // Load language preferences
+        FirstLanguage = GetValue(nameof(FirstLanguage), "zh");
+        SecondLanguage = GetValue(nameof(SecondLanguage), "en");
+        AutoSelectTargetLanguage = GetValue(nameof(AutoSelectTargetLanguage), true);
+
+        // Validate: FirstLanguage and SecondLanguage cannot be the same
+        if (FirstLanguage == SecondLanguage)
+        {
+            System.Diagnostics.Debug.WriteLine("[Settings] FirstLanguage == SecondLanguage, resetting to defaults");
+            FirstLanguage = "zh";
+            SecondLanguage = "en";
+        }
+
         DeepLApiKey = GetValue<string?>(nameof(DeepLApiKey), null);
         DeepLUseFreeApi = GetValue(nameof(DeepLUseFreeApi), true);
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
@@ -125,6 +144,12 @@ public sealed class SettingsService
         _settings[nameof(DefaultService)] = DefaultService;
         _settings[nameof(TargetLanguage)] = TargetLanguage;
         _settings[nameof(SourceLanguage)] = SourceLanguage;
+
+        // Save language preferences
+        _settings[nameof(FirstLanguage)] = FirstLanguage;
+        _settings[nameof(SecondLanguage)] = SecondLanguage;
+        _settings[nameof(AutoSelectTargetLanguage)] = AutoSelectTargetLanguage;
+
         _settings[nameof(DeepLApiKey)] = DeepLApiKey ?? string.Empty;
         _settings[nameof(DeepLUseFreeApi)] = DeepLUseFreeApi;
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;

@@ -17,8 +17,11 @@ namespace Easydict.WinUI.Views
     public partial class MainPage : Page
     {
         private TranslationManager? _translationManager;
+        private LanguageDetectionService? _detectionService;
         private CancellationTokenSource? _currentQueryCts;
         private readonly SettingsService _settings = SettingsService.Instance;
+        private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
+        private bool _isManualTargetSelection = false; // Track if user manually selected target
 
         public MainPage()
         {
@@ -57,6 +60,7 @@ namespace Easydict.WinUI.Views
         private void OnPageLoaded(object sender, RoutedEventArgs e)
         {
             InitializeTranslationServices();
+            _detectionService = new LanguageDetectionService(_translationManager!, _settings);
             ApplySettings();
         }
 
@@ -119,8 +123,10 @@ namespace Easydict.WinUI.Views
         {
             _currentQueryCts?.Cancel();
             _currentQueryCts?.Dispose();
+            _detectionService?.Dispose();
             _translationManager?.Dispose();
             _translationManager = null;
+            _detectionService = null;
         }
 
         private void UpdateStatus(bool? connected, string text)
@@ -220,7 +226,7 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private async Task StartQueryAsync()
         {
-            if (_translationManager is null)
+            if (_translationManager is null || _detectionService is null)
             {
                 OutputTextBox.Text = "Service not initialized. Please wait...";
                 InitializeTranslationServices();
@@ -244,12 +250,38 @@ namespace Easydict.WinUI.Views
                 OutputTextBox.Text = "";
                 TimingText.Text = "";
 
-                var targetLanguage = GetTargetLanguage();
+                // Step 1: Detect language
+                var detectedLanguage = await _detectionService.DetectAsync(
+                    inputText,
+                    _currentQueryCts.Token);
 
+                _lastDetectedLanguage = detectedLanguage;
+                UpdateDetectedLanguageDisplay(detectedLanguage);
+
+                // Step 2: Determine target language
+                TranslationLanguage targetLanguage;
+                if (_isManualTargetSelection)
+                {
+                    // User manually selected target language, respect user's choice
+                    targetLanguage = GetTargetLanguage();
+                }
+                else if (_settings.AutoSelectTargetLanguage)
+                {
+                    // Auto-select target language (apply macOS algorithm)
+                    targetLanguage = _detectionService.GetTargetLanguage(detectedLanguage);
+                    UpdateTargetLanguageSelector(targetLanguage);
+                }
+                else
+                {
+                    // Auto-select disabled, use current selection
+                    targetLanguage = GetTargetLanguage();
+                }
+
+                // Step 3: Execute translation
                 var request = new TranslationRequest
                 {
                     Text = inputText,
-                    FromLanguage = TranslationLanguage.Auto,
+                    FromLanguage = detectedLanguage,
                     ToLanguage = targetLanguage
                 };
 
@@ -328,22 +360,83 @@ namespace Easydict.WinUI.Views
 
         private static string GetLanguageDisplayName(TranslationLanguage language)
         {
-            return language switch
+            return language.GetDisplayName();
+        }
+
+        /// <summary>
+        /// Update detected language display label.
+        /// </summary>
+        private void UpdateDetectedLanguageDisplay(TranslationLanguage detected)
+        {
+            if (detected != TranslationLanguage.Auto)
             {
-                TranslationLanguage.SimplifiedChinese => "Chinese (Simplified)",
-                TranslationLanguage.TraditionalChinese => "Chinese (Traditional)",
-                TranslationLanguage.English => "English",
-                TranslationLanguage.Japanese => "Japanese",
-                TranslationLanguage.Korean => "Korean",
-                TranslationLanguage.French => "French",
-                TranslationLanguage.German => "German",
-                TranslationLanguage.Spanish => "Spanish",
-                TranslationLanguage.Russian => "Russian",
-                TranslationLanguage.Portuguese => "Portuguese",
-                TranslationLanguage.Italian => "Italian",
-                TranslationLanguage.Arabic => "Arabic",
-                _ => language.ToString()
-            };
+                var displayName = detected.GetDisplayName();
+                DetectedLanguageText.Text = $"Detected: {displayName}";
+                DetectedLanguageText.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                DetectedLanguageText.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>
+        /// Update target language selector based on detected source.
+        /// </summary>
+        private void UpdateTargetLanguageSelector(TranslationLanguage targetLang)
+        {
+            var targetIndex = LanguageToComboIndex(targetLang);
+
+            // Update both Wide and Narrow layout ComboBoxes without triggering SelectionChanged
+            _isManualTargetSelection = false; // Temporarily disable manual flag
+            TargetLangCombo.SelectedIndex = targetIndex;
+            TargetLangComboNarrow.SelectedIndex = targetIndex;
+        }
+
+        /// <summary>
+        /// Convert Language enum to ComboBox index.
+        /// </summary>
+        private static int LanguageToComboIndex(TranslationLanguage lang) => lang switch
+        {
+            TranslationLanguage.English => 0,
+            TranslationLanguage.SimplifiedChinese => 1,
+            TranslationLanguage.Japanese => 2,
+            TranslationLanguage.Korean => 3,
+            TranslationLanguage.French => 4,
+            TranslationLanguage.German => 5,
+            TranslationLanguage.Spanish => 6,
+            _ => 1 // Default to Chinese
+        };
+
+        /// <summary>
+        /// Handle target language manual selection.
+        /// </summary>
+        private void OnTargetLanguageChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // User manually changed target language
+            _isManualTargetSelection = true;
+        }
+
+        /// <summary>
+        /// Handle language swap button click (similar to macOS's ⌘+T).
+        /// </summary>
+        private void OnSwapLanguagesClicked(object sender, RoutedEventArgs e)
+        {
+            if (_lastDetectedLanguage == TranslationLanguage.Auto)
+            {
+                // No detection result, cannot swap
+                return;
+            }
+
+            // Set target language to detected source language
+            var newTargetIndex = LanguageToComboIndex(_lastDetectedLanguage);
+            TargetLangCombo.SelectedIndex = newTargetIndex;
+            TargetLangComboNarrow.SelectedIndex = newTargetIndex;
+
+            _isManualTargetSelection = true; // Mark as manual selection
+
+            // Note: Since source is always "Auto Detect", we only swap target
+            // If source becomes selectable in the future, add source update here
         }
 
         private void OnCopyClicked(object sender, RoutedEventArgs e)

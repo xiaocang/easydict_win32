@@ -106,6 +106,7 @@
         <Grid x:Name="ActionBarWide" Grid.Row="2" Margin="0,4,0,4" Visibility="Visible">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
@@ -124,18 +125,36 @@
                 <ComboBoxItem Content="Japanese" />
             </ComboBox>
 
+            <!-- Swap Languages Button -->
+            <Button
+                x:Name="SwapLanguageButton"
+                Grid.Column="1"
+                Click="OnSwapLanguagesClicked"
+                Width="36" Height="36"
+                Padding="0"
+                CornerRadius="8"
+                Background="Transparent"
+                BorderThickness="0"
+                ToolTipService.ToolTip="Swap source and target languages"
+                Margin="8,0"
+                VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE8AB;" FontSize="16" />
+            </Button>
+
             <!-- Translate Button (Center) -->
             <Button
                 x:Name="TranslateButton"
-                Grid.Column="1"
+                Grid.Column="2"
                 Click="OnTranslateClicked"
+                Width="40"
                 Height="40"
-                Padding="24,0"
+                Padding="0"
                 CornerRadius="20"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Background="{StaticResource AccentBrush}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                Background="{StaticResource AccentBrush}"
+                ToolTipService.ToolTip="Translate">
+                <Grid>
                     <ProgressRing
                         x:Name="LoadingRing"
                         IsActive="False"
@@ -147,20 +166,16 @@
                         Glyph="&#xE8C1;"
                         FontSize="16"
                         Foreground="White" />
-                    <TextBlock
-                        Text="Translate"
-                        Foreground="White"
-                        FontWeight="SemiBold"
-                        VerticalAlignment="Center" />
-                </StackPanel>
+                </Grid>
             </Button>
 
             <!-- Target Language -->
             <ComboBox
                 x:Name="TargetLangCombo"
-                Grid.Column="2"
+                Grid.Column="3"
                 MinWidth="130"
                 SelectedIndex="1"
+                SelectionChanged="OnTargetLanguageChanged"
                 VerticalAlignment="Center"
                 ToolTipService.ToolTip="Target Language">
                 <ComboBoxItem Content="English" />
@@ -195,19 +210,28 @@
                     <ComboBoxItem Content="Japanese" />
                 </ComboBox>
 
-                <FontIcon
+                <!-- Swap Button (Narrow) -->
+                <Button
+                    x:Name="SwapLanguageButtonNarrow"
                     Grid.Column="1"
-                    Glyph="&#xE8AB;"
-                    FontSize="14"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Click="OnSwapLanguagesClicked"
+                    Width="36" Height="36"
+                    Padding="0"
+                    CornerRadius="8"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    ToolTipService.ToolTip="Swap source and target languages"
                     VerticalAlignment="Center"
-                    Margin="8,0" />
+                    Margin="4,0">
+                    <FontIcon Glyph="&#xE8AB;" FontSize="16" />
+                </Button>
 
                 <ComboBox
                     x:Name="TargetLangComboNarrow"
                     Grid.Column="2"
                     HorizontalAlignment="Stretch"
                     SelectedIndex="1"
+                    SelectionChanged="OnTargetLanguageChanged"
                     ToolTipService.ToolTip="Target Language">
                     <ComboBoxItem Content="English" />
                     <ComboBoxItem Content="Chinese" />
@@ -223,12 +247,14 @@
             <Button
                 x:Name="TranslateButtonNarrow"
                 Click="OnTranslateClicked"
+                Width="40"
                 Height="40"
-                Padding="24,0"
+                Padding="0"
                 CornerRadius="20"
                 HorizontalAlignment="Center"
-                Background="{StaticResource AccentBrush}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                Background="{StaticResource AccentBrush}"
+                ToolTipService.ToolTip="Translate">
+                <Grid>
                     <ProgressRing
                         x:Name="LoadingRingNarrow"
                         IsActive="False"
@@ -240,12 +266,7 @@
                         Glyph="&#xE8C1;"
                         FontSize="16"
                         Foreground="White" />
-                    <TextBlock
-                        Text="Translate"
-                        Foreground="White"
-                        FontWeight="SemiBold"
-                        VerticalAlignment="Center" />
-                </StackPanel>
+                </Grid>
             </Button>
         </StackPanel>
 
@@ -275,6 +296,17 @@
                     <!-- Placeholder for symmetry (invisible) -->
                     <Border Grid.Column="1" Width="32" Height="15" />
                 </Grid>
+
+                <!-- Detected Language Label -->
+                <TextBlock
+                    x:Name="DetectedLanguageText"
+                    Grid.Row="1"
+                    Text=""
+                    FontSize="11"
+                    Foreground="{ThemeResource AccentBrush}"
+                    Margin="4,0,0,0"
+                    VerticalAlignment="Top"
+                    Visibility="Collapsed" />
 
                 <TextBox
                     x:Name="InputTextBox"

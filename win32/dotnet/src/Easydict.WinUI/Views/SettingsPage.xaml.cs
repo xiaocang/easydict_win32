@@ -28,6 +28,11 @@ public sealed partial class SettingsPage : Page
         SelectComboByTag(ServiceCombo, _settings.DefaultService);
         SelectComboByTag(TargetLangCombo, _settings.TargetLanguage);
 
+        // Language preferences
+        SelectComboByTag(FirstLanguageCombo, _settings.FirstLanguage);
+        SelectComboByTag(SecondLanguageCombo, _settings.SecondLanguage);
+        AutoSelectTargetToggle.IsOn = _settings.AutoSelectTargetLanguage;
+
         // API keys
         DeepLKeyBox.Password = _settings.DeepLApiKey ?? string.Empty;
         DeepLFreeCheck.IsChecked = _settings.DeepLUseFreeApi;
@@ -79,6 +84,28 @@ public sealed partial class SettingsPage : Page
         // Save translation settings
         _settings.DefaultService = GetSelectedTag(ServiceCombo) ?? "google";
         _settings.TargetLanguage = GetSelectedTag(TargetLangCombo) ?? "zh";
+
+        // Save language preferences with validation
+        var firstLang = GetSelectedTag(FirstLanguageCombo) ?? "zh";
+        var secondLang = GetSelectedTag(SecondLanguageCombo) ?? "en";
+
+        // Validate: FirstLanguage and SecondLanguage cannot be the same
+        if (firstLang == secondLang)
+        {
+            var errorDialog = new ContentDialog
+            {
+                Title = "Invalid Language Selection",
+                Content = "First Language and Second Language cannot be the same. Please choose different languages.",
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await errorDialog.ShowAsync();
+            return;
+        }
+
+        _settings.FirstLanguage = firstLang;
+        _settings.SecondLanguage = secondLang;
+        _settings.AutoSelectTargetLanguage = AutoSelectTargetToggle.IsOn;
 
         // Save API keys
         var apiKey = DeepLKeyBox.Password;

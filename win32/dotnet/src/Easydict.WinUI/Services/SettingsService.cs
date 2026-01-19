@@ -57,13 +57,13 @@ public sealed class SettingsService
     /// Window width stored in DIPs (Device-Independent Pixels).
     /// Ensures consistent sizing across different DPI monitors.
     /// </summary>
-    public double WindowWidthDips { get; set; } = 290;
+    public double WindowWidthDips { get; set; } = 430;
 
     /// <summary>
     /// Window height stored in DIPs (Device-Independent Pixels).
     /// Ensures consistent sizing across different DPI monitors.
     /// </summary>
-    public double WindowHeightDips { get; set; } = 350;
+    public double WindowHeightDips { get; set; } = 503;
 
     /// <summary>
     /// Legacy property for backwards compatibility.

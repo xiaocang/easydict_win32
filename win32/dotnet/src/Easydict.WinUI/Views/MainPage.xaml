@@ -11,7 +11,7 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
-        <Grid Padding="8">
+        <Grid Padding="4">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="LayoutStates">
                 <!-- Wide layout: all controls in one row -->
@@ -39,9 +39,9 @@
 
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="40" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" MinHeight="50" />
-            <RowDefinition Height="*" MinHeight="50" />
+            <RowDefinition Height="*" MinHeight="40" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -103,7 +103,7 @@
         </Grid>
 
         <!-- Wide Layout: Language + Button in one row -->
-        <Grid x:Name="ActionBarWide" Grid.Row="1" Margin="0,0,0,4" Visibility="Visible">
+        <Grid x:Name="ActionBarWide" Grid.Row="2" Margin="0,4,0,4" Visibility="Visible">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -174,7 +174,7 @@
         </Grid>
 
         <!-- Narrow Layout: Stacked controls -->
-        <StackPanel x:Name="ActionBarNarrow" Grid.Row="1" Spacing="4" Margin="0,0,0,4" Visibility="Collapsed">
+        <StackPanel x:Name="ActionBarNarrow" Grid.Row="2" Spacing="4" Margin="0,4,0,4" Visibility="Collapsed">
             <!-- Language row -->
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -250,10 +250,10 @@
         </StackPanel>
 
         <!-- Input Card -->
-        <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="0,0,0,4">
-            <Grid Margin="8">
+        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,0,0,2">
+            <Grid Margin="4">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="28" />
+                    <RowDefinition Height="15" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -273,7 +273,7 @@
                         VerticalAlignment="Center" />
 
                     <!-- Placeholder for symmetry (invisible) -->
-                    <Border Grid.Column="1" Width="32" Height="28" />
+                    <Border Grid.Column="1" Width="32" Height="15" />
                 </Grid>
 
                 <TextBox
@@ -283,7 +283,7 @@
                     Style="{StaticResource TranslationTextBoxStyle}"
                     BorderThickness="0"
                     Background="Transparent"
-                    Margin="0,8,0,0"
+                    Margin="0,4,0,0"
                     AcceptsReturn="True"
                     TextWrapping="Wrap"
                     ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -294,10 +294,10 @@
         </Border>
 
         <!-- Output Card -->
-        <Border Grid.Row="3" Style="{StaticResource CardStyle}" Margin="0,4,0,0">
-            <Grid Margin="8">
+        <Border Grid.Row="3" Style="{StaticResource CardStyle}" Margin="0,2,0,0">
+            <Grid Margin="4">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="28" />
+                    <RowDefinition Height="15" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -324,7 +324,7 @@
                         Background="Transparent"
                         BorderThickness="0"
                         Width="32"
-                        Height="28"
+                        Height="15"
                         Padding="0"
                         VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE8C8;" FontSize="14" />
@@ -339,7 +339,7 @@
                     IsReadOnly="True"
                     BorderThickness="0"
                     Background="Transparent"
-                    Margin="0,8,0,0"
+                    Margin="0,4,0,0"
                     AcceptsReturn="True"
                     TextWrapping="Wrap"
                     ScrollViewer.VerticalScrollBarVisibility="Auto"

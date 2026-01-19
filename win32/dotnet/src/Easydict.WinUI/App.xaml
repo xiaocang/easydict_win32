@@ -30,7 +30,7 @@
                 <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="8" />
-                <Setter Property="Padding" Value="16" />
+                <Setter Property="Padding" Value="8" />
             </Style>
 
             <!-- Text Area Style -->
@@ -40,9 +40,9 @@
                 <Setter Property="TextWrapping" Value="Wrap" />
                 <Setter Property="AcceptsReturn" Value="True" />
                 <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
-                <Setter Property="Padding" Value="12" />
+                <Setter Property="Padding" Value="8" />
                 <Setter Property="CornerRadius" Value="6" />
-                <Setter Property="MinHeight" Value="120" />
+                <Setter Property="MinHeight" Value="80" />
             </Style>
         </ResourceDictionary>
     </Application.Resources>

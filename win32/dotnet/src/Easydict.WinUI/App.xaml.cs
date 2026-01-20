@@ -79,6 +79,7 @@ namespace Easydict.WinUI
             _hotkeyService.OnShowWindow += OnShowWindowHotkey;
             _hotkeyService.OnTranslateSelection += OnTranslateSelectionHotkey;
             _hotkeyService.OnShowMiniWindow += OnShowMiniWindowHotkey;
+            _hotkeyService.OnShowFixedWindow += OnShowFixedWindowHotkey;
             _hotkeyService.Initialize();
 
             // Initialize clipboard service
@@ -128,6 +129,14 @@ namespace Easydict.WinUI
             _window?.DispatcherQueue.TryEnqueue(() =>
             {
                 MiniWindowService.Instance.Toggle();
+            });
+        }
+
+        private void OnShowFixedWindowHotkey()
+        {
+            _window?.DispatcherQueue.TryEnqueue(() =>
+            {
+                FixedWindowService.Instance.Toggle();
             });
         }
 
@@ -233,6 +242,8 @@ namespace Easydict.WinUI
             _clipboardService?.Dispose();
             _hotkeyService?.Dispose();
             _trayIconService?.Dispose();
+            FixedWindowService.Instance.Dispose();
+            MiniWindowService.Instance.Dispose();
         }
 
         /// <summary>

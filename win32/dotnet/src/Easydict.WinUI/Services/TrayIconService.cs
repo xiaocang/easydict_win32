@@ -102,6 +102,10 @@ public sealed class TrayIconService : IDisposable
         miniWindowItem.Click += (_, _) => MiniWindowService.Instance.Toggle();
         menu.Items.Add(miniWindowItem);
 
+        var fixedWindowItem = new MenuFlyoutItem { Text = "Fixed Window (Ctrl+Alt+F)" };
+        fixedWindowItem.Click += (_, _) => FixedWindowService.Instance.Toggle();
+        menu.Items.Add(fixedWindowItem);
+
         menu.Items.Add(new MenuFlyoutSeparator());
 
         var settingsItem = new MenuFlyoutItem { Text = "Settings" };

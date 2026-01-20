@@ -80,6 +80,19 @@ public sealed class SettingsService
     /// </summary>
     public List<string> MiniWindowEnabledServices { get; set; } = ["google"];
 
+    // Fixed window settings
+    public string ShowFixedWindowHotkey { get; set; } = "Ctrl+Alt+F";
+    public double FixedWindowXDips { get; set; } = 0;
+    public double FixedWindowYDips { get; set; } = 0;
+    public double FixedWindowWidthDips { get; set; } = 320;
+    public double FixedWindowHeightDips { get; set; } = 280;
+
+    /// <summary>
+    /// List of enabled translation services for FixedWindow.
+    /// Each service result is displayed in a collapsible panel.
+    /// </summary>
+    public List<string> FixedWindowEnabledServices { get; set; } = ["google"];
+
     // HTTP Proxy settings
     /// <summary>
     /// Enable HTTP proxy for translation network requests.
@@ -206,6 +219,14 @@ public sealed class SettingsService
         MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
         MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), ["google"]);
 
+        // Fixed window settings
+        ShowFixedWindowHotkey = GetValue(nameof(ShowFixedWindowHotkey), "Ctrl+Alt+F");
+        FixedWindowXDips = GetValue(nameof(FixedWindowXDips), 0.0);
+        FixedWindowYDips = GetValue(nameof(FixedWindowYDips), 0.0);
+        FixedWindowWidthDips = GetValue(nameof(FixedWindowWidthDips), 320.0);
+        FixedWindowHeightDips = GetValue(nameof(FixedWindowHeightDips), 280.0);
+        FixedWindowEnabledServices = GetStringList(nameof(FixedWindowEnabledServices), ["google"]);
+
         // HTTP Proxy settings
         ProxyEnabled = GetValue(nameof(ProxyEnabled), false);
         ProxyUri = GetValue(nameof(ProxyUri), "");
@@ -258,6 +279,14 @@ public sealed class SettingsService
         _settings[nameof(MiniWindowHeightDips)] = MiniWindowHeightDips;
         _settings[nameof(MiniWindowIsPinned)] = MiniWindowIsPinned;
         _settings[nameof(MiniWindowEnabledServices)] = MiniWindowEnabledServices;
+
+        // Fixed window settings
+        _settings[nameof(ShowFixedWindowHotkey)] = ShowFixedWindowHotkey;
+        _settings[nameof(FixedWindowXDips)] = FixedWindowXDips;
+        _settings[nameof(FixedWindowYDips)] = FixedWindowYDips;
+        _settings[nameof(FixedWindowWidthDips)] = FixedWindowWidthDips;
+        _settings[nameof(FixedWindowHeightDips)] = FixedWindowHeightDips;
+        _settings[nameof(FixedWindowEnabledServices)] = FixedWindowEnabledServices;
 
         // HTTP Proxy settings
         _settings[nameof(ProxyEnabled)] = ProxyEnabled;

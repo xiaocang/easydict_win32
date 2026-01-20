@@ -14,6 +14,7 @@ public sealed class HotkeyService : IDisposable
     private const int HOTKEY_ID_SHOW = 1;
     private const int HOTKEY_ID_TRANSLATE_SELECTION = 2;
     private const int HOTKEY_ID_SHOW_MINI = 3;
+    private const int HOTKEY_ID_SHOW_FIXED = 4;
 
     // Modifier keys
     private const uint MOD_ALT = 0x0001;
@@ -25,6 +26,7 @@ public sealed class HotkeyService : IDisposable
     private const uint VK_T = 0x54;  // T key
     private const uint VK_D = 0x44;  // D key
     private const uint VK_M = 0x4D;  // M key
+    private const uint VK_F = 0x46;  // F key
 
     private readonly Window _window;
     private readonly nint _hwnd;
@@ -38,6 +40,7 @@ public sealed class HotkeyService : IDisposable
     public event Action? OnShowWindow;
     public event Action? OnTranslateSelection;
     public event Action? OnShowMiniWindow;
+    public event Action? OnShowFixedWindow;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool RegisterHotKey(nint hWnd, int id, uint fsModifiers, uint vk);
@@ -87,6 +90,10 @@ public sealed class HotkeyService : IDisposable
         var result3 = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_MINI, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_M);
         System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey MINI (Ctrl+Alt+M): {result3}, Error: {Marshal.GetLastWin32Error()}");
 
+        // Register Ctrl+Alt+F to show fixed window
+        var result4 = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_F);
+        System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey FIXED (Ctrl+Alt+F): {result4}, Error: {Marshal.GetLastWin32Error()}");
+
         _isInitialized = true;
         System.Diagnostics.Debug.WriteLine("[Hotkey] Hotkey service initialized.");
     }
@@ -123,6 +130,9 @@ public sealed class HotkeyService : IDisposable
             case HOTKEY_ID_SHOW_MINI:
                 OnShowMiniWindow?.Invoke();
                 break;
+            case HOTKEY_ID_SHOW_FIXED:
+                OnShowFixedWindow?.Invoke();
+                break;
         }
     }
 
@@ -137,6 +147,7 @@ public sealed class HotkeyService : IDisposable
         UnregisterHotKey(_hwnd, HOTKEY_ID_SHOW);
         UnregisterHotKey(_hwnd, HOTKEY_ID_TRANSLATE_SELECTION);
         UnregisterHotKey(_hwnd, HOTKEY_ID_SHOW_MINI);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED);
 
         // Remove window subclass
         if (_subclassProc != null)

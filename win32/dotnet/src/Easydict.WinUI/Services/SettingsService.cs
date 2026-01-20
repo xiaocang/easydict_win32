@@ -52,6 +52,21 @@ public sealed class SettingsService
     // UI settings
     public bool AlwaysOnTop { get; set; } = false;
 
+    // Mini window settings
+    public string ShowMiniWindowHotkey { get; set; } = "Ctrl+Alt+M";
+    public bool MiniWindowAutoClose { get; set; } = true;
+    public double MiniWindowXDips { get; set; } = 0;
+    public double MiniWindowYDips { get; set; } = 0;
+    public double MiniWindowWidthDips { get; set; } = 320;
+    public double MiniWindowHeightDips { get; set; } = 200;
+    public bool MiniWindowIsPinned { get; set; } = false;
+
+    /// <summary>
+    /// List of enabled translation services for MiniWindow.
+    /// Each service result is displayed in a collapsible panel.
+    /// </summary>
+    public List<string> MiniWindowEnabledServices { get; set; } = ["google"];
+
     /// <summary>
     /// Enable DPI-aware window positioning and scaling.
     /// Set to false to revert to legacy behavior if issues occur.
@@ -137,6 +152,16 @@ public sealed class SettingsService
         // Try to load WindowWidthDips first (new format), fallback to WindowWidth (legacy)
         WindowWidthDips = GetValue(nameof(WindowWidthDips), GetValue(nameof(WindowWidth), 600.0));
         WindowHeightDips = GetValue(nameof(WindowHeightDips), GetValue(nameof(WindowHeight), 700.0));
+
+        // Mini window settings
+        ShowMiniWindowHotkey = GetValue(nameof(ShowMiniWindowHotkey), "Ctrl+Alt+M");
+        MiniWindowAutoClose = GetValue(nameof(MiniWindowAutoClose), true);
+        MiniWindowXDips = GetValue(nameof(MiniWindowXDips), 0.0);
+        MiniWindowYDips = GetValue(nameof(MiniWindowYDips), 0.0);
+        MiniWindowWidthDips = GetValue(nameof(MiniWindowWidthDips), 320.0);
+        MiniWindowHeightDips = GetValue(nameof(MiniWindowHeightDips), 200.0);
+        MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
+        MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), ["google"]);
     }
 
     public void Save()
@@ -161,6 +186,16 @@ public sealed class SettingsService
         _settings[nameof(EnableDpiAwareness)] = EnableDpiAwareness;
         _settings[nameof(WindowWidthDips)] = WindowWidthDips;
         _settings[nameof(WindowHeightDips)] = WindowHeightDips;
+
+        // Mini window settings
+        _settings[nameof(ShowMiniWindowHotkey)] = ShowMiniWindowHotkey;
+        _settings[nameof(MiniWindowAutoClose)] = MiniWindowAutoClose;
+        _settings[nameof(MiniWindowXDips)] = MiniWindowXDips;
+        _settings[nameof(MiniWindowYDips)] = MiniWindowYDips;
+        _settings[nameof(MiniWindowWidthDips)] = MiniWindowWidthDips;
+        _settings[nameof(MiniWindowHeightDips)] = MiniWindowHeightDips;
+        _settings[nameof(MiniWindowIsPinned)] = MiniWindowIsPinned;
+        _settings[nameof(MiniWindowEnabledServices)] = MiniWindowEnabledServices;
 
         try
         {
@@ -199,6 +234,35 @@ public sealed class SettingsService
                     return (T)(object)(double)longVal;
                 if (typeof(T) == typeof(bool) && value is bool boolVal)
                     return (T)(object)boolVal;
+            }
+            catch { }
+        }
+        return defaultValue;
+    }
+
+    private List<string> GetStringList(string key, List<string> defaultValue)
+    {
+        if (_settings.TryGetValue(key, out var value) && value != null)
+        {
+            try
+            {
+                if (value is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Array)
+                {
+                    var list = new List<string>();
+                    foreach (var item in jsonElement.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String)
+                        {
+                            list.Add(item.GetString()!);
+                        }
+                    }
+                    return list.Count > 0 ? list : defaultValue;
+                }
+
+                if (value is List<string> stringList)
+                {
+                    return stringList;
+                }
             }
             catch { }
         }

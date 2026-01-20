@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Easydict.WinUI.Views.Controls.ServiceResultItem"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Border
+        Background="{ThemeResource ResultViewBackgroundBrush}"
+        CornerRadius="6"
+        Margin="0,0,0,4">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="30" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header Bar (30 DIPs, matches macOS EZResultViewMiniHeight) -->
+            <Border
+                x:Name="HeaderBar"
+                Grid.Row="0"
+                Background="{ThemeResource TitleBarBackgroundBrush}"
+                CornerRadius="6,6,0,0"
+                PointerPressed="OnHeaderPointerPressed"
+                PointerEntered="OnHeaderPointerEntered"
+                PointerExited="OnHeaderPointerExited">
+                <Grid Padding="8,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Service Icon -->
+                    <Image
+                        x:Name="ServiceIcon"
+                        Grid.Column="0"
+                        Width="16"
+                        Height="16"
+                        Margin="0,0,6,0"
+                        VerticalAlignment="Center" />
+
+                    <!-- Service Name -->
+                    <TextBlock
+                        x:Name="ServiceNameText"
+                        Grid.Column="1"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+
+                    <!-- Status Text (timing/error) -->
+                    <TextBlock
+                        x:Name="StatusText"
+                        Grid.Column="2"
+                        FontSize="10"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="8,0" />
+
+                    <!-- Loading Ring -->
+                    <ProgressRing
+                        x:Name="LoadingIndicator"
+                        Grid.Column="3"
+                        Width="14"
+                        Height="14"
+                        IsActive="False"
+                        Visibility="Collapsed"
+                        Margin="0,0,4,0" />
+
+                    <!-- Error Icon -->
+                    <FontIcon
+                        x:Name="ErrorIcon"
+                        Grid.Column="3"
+                        Glyph="&#xE783;"
+                        FontSize="12"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Visibility="Collapsed"
+                        Margin="0,0,4,0"
+                        ToolTipService.ToolTip="Translation error" />
+
+                    <!-- Expand/Collapse Arrow -->
+                    <FontIcon
+                        x:Name="ArrowIcon"
+                        Grid.Column="4"
+                        Glyph="&#xE70D;"
+                        FontSize="10"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
+            <!-- Content Area (Collapsible) -->
+            <Border
+                x:Name="ContentArea"
+                Grid.Row="1"
+                Padding="8,6,8,8"
+                Visibility="Visible">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Translation Result -->
+                    <TextBlock
+                        x:Name="ResultText"
+                        Grid.Row="0"
+                        TextWrapping="Wrap"
+                        IsTextSelectionEnabled="True"
+                        Foreground="{ThemeResource QueryTextBrush}"
+                        FontSize="13" />
+
+                    <!-- Error Message -->
+                    <TextBlock
+                        x:Name="ErrorText"
+                        Grid.Row="1"
+                        TextWrapping="Wrap"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        FontSize="12"
+                        Visibility="Collapsed" />
+
+                    <!-- Copy Button (bottom right) -->
+                    <Button
+                        x:Name="CopyButton"
+                        Grid.Row="0"
+                        Grid.RowSpan="2"
+                        Click="OnCopyClicked"
+                        ToolTipService.ToolTip="Copy"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Width="24"
+                        Height="24"
+                        Padding="0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Visibility="Collapsed">
+                        <FontIcon x:Name="CopyIcon" Glyph="&#xE8C8;" FontSize="12" />
+                    </Button>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

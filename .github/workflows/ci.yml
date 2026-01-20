@@ -21,15 +21,15 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore Easydict.Win32.sln
+        run: dotnet restore Easydict.Win32.sln -p:Platform=x64
 
       - name: Build
         working-directory: dotnet
-        run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore
+        run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore -p:Platform=x64
 
       - name: Run tests
         working-directory: dotnet
-        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" -p:Platform=x64
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

@@ -1,3 +1,5 @@
+using System.Net;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using Easydict.TranslationService.Models;
@@ -5,6 +7,27 @@ using Easydict.TranslationService.Services;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Easydict.TranslationService;
+
+/// <summary>
+/// Configuration options for TranslationManager.
+/// </summary>
+public class TranslationManagerOptions
+{
+    /// <summary>
+    /// Enable HTTP proxy for outbound requests.
+    /// </summary>
+    public bool ProxyEnabled { get; set; }
+
+    /// <summary>
+    /// Proxy URI (e.g., "http://127.0.0.1:7890").
+    /// </summary>
+    public string? ProxyUri { get; set; }
+
+    /// <summary>
+    /// Bypass proxy for localhost addresses (important for Ollama).
+    /// </summary>
+    public bool ProxyBypassLocal { get; set; } = true;
+}
 
 /// <summary>
 /// Manages translation services with caching, fallback, and retry support.
@@ -18,13 +41,32 @@ public sealed class TranslationManager : IDisposable
 
     private string _defaultServiceId = "google";
 
-    public TranslationManager()
+    public TranslationManager(TranslationManagerOptions? options = null)
     {
         var handler = new HttpClientHandler
         {
             SslProtocols = System.Security.Authentication.SslProtocols.Tls12 |
                            System.Security.Authentication.SslProtocols.Tls13
         };
+
+        // Configure proxy if enabled
+        if (options?.ProxyEnabled == true && !string.IsNullOrWhiteSpace(options.ProxyUri))
+        {
+            if (Uri.TryCreate(options.ProxyUri, UriKind.Absolute, out var proxyUri))
+            {
+                var proxy = new WebProxy(proxyUri)
+                {
+                    BypassProxyOnLocal = options.ProxyBypassLocal
+                };
+                handler.Proxy = proxy;
+                handler.UseProxy = true;
+                System.Diagnostics.Debug.WriteLine($"[TranslationManager] Proxy configured: {proxyUri.Host}:{proxyUri.Port}, BypassLocal={options.ProxyBypassLocal}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[TranslationManager] Invalid proxy URI: {options.ProxyUri}");
+            }
+        }
 
         _httpClient = new HttpClient(handler)
         {
@@ -44,6 +86,11 @@ public sealed class TranslationManager : IDisposable
         // Register default services
         RegisterService(new GoogleTranslateService(_httpClient));
         RegisterService(new DeepLService(_httpClient));
+
+        // Register streaming LLM services
+        RegisterService(new OpenAIService(_httpClient));
+        RegisterService(new OllamaService(_httpClient));
+        RegisterService(new BuiltInAIService(_httpClient));
     }
 
     /// <summary>
@@ -141,6 +188,65 @@ public sealed class TranslationManager : IDisposable
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Check if a service supports streaming.
+    /// </summary>
+    public bool IsStreamingService(string serviceId)
+    {
+        return _services.TryGetValue(serviceId, out var service) &&
+               service is IStreamTranslationService;
+    }
+
+    /// <summary>
+    /// Get a streaming service by ID.
+    /// </summary>
+    public IStreamTranslationService? GetStreamingService(string serviceId)
+    {
+        if (_services.TryGetValue(serviceId, out var service) &&
+            service is IStreamTranslationService streamService)
+        {
+            return streamService;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Stream translate text using the specified or default service.
+    /// Falls back to non-streaming if service doesn't support streaming.
+    /// Note: Streaming bypasses cache for real-time output.
+    /// </summary>
+    public async IAsyncEnumerable<string> TranslateStreamAsync(
+        TranslationRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default,
+        string? serviceId = null)
+    {
+        serviceId ??= _defaultServiceId;
+
+        if (!_services.TryGetValue(serviceId, out var service))
+        {
+            throw new TranslationException($"Unknown service: {serviceId}")
+            {
+                ErrorCode = TranslationErrorCode.Unknown,
+                ServiceId = serviceId
+            };
+        }
+
+        if (service is IStreamTranslationService streamService)
+        {
+            // Use streaming path
+            await foreach (var chunk in streamService.TranslateStreamAsync(request, cancellationToken))
+            {
+                yield return chunk;
+            }
+        }
+        else
+        {
+            // Fallback to non-streaming - yield entire result at once
+            var result = await service.TranslateAsync(request, cancellationToken);
+            yield return result.TranslatedText;
+        }
     }
 
     private static async Task<TranslationResult> TranslateWithRetryAsync(

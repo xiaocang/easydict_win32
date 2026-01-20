@@ -69,7 +69,7 @@ namespace Easydict.WinUI
             var settings = SettingsService.Instance;
 
             // Initialize system tray icon
-            _trayIconService = new TrayIconService(_window);
+            _trayIconService = new TrayIconService(_window, _appWindow);
             _trayIconService.OnTranslateClipboard += OnTrayTranslateClipboard;
             _trayIconService.OnOpenSettings += OnTrayOpenSettings;
             _trayIconService.Initialize();

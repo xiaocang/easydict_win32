@@ -12,6 +12,8 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     private TranslationResult? _result;
     private TranslationException? _error;
     private bool _isLoading;
+    private bool _isStreaming;
+    private string _streamingText = "";
     private bool _isExpanded = true;
     private bool _manuallyToggled;
 
@@ -55,6 +57,39 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     {
         get => _isLoading;
         set => SetField(ref _isLoading, value);
+    }
+
+    /// <summary>
+    /// Whether the service is currently streaming a response.
+    /// </summary>
+    public bool IsStreaming
+    {
+        get => _isStreaming;
+        set
+        {
+            if (SetField(ref _isStreaming, value))
+            {
+                OnPropertyChanged(nameof(StatusText));
+                OnPropertyChanged(nameof(DisplayText));
+                OnPropertyChanged(nameof(ContentVisibility));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Accumulated streaming text (updated during streaming).
+    /// </summary>
+    public string StreamingText
+    {
+        get => _streamingText;
+        set
+        {
+            if (SetField(ref _streamingText, value))
+            {
+                OnPropertyChanged(nameof(DisplayText));
+                OnPropertyChanged(nameof(ContentVisibility));
+            }
+        }
     }
 
     /// <summary>
@@ -106,8 +141,19 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
 
     /// <summary>
     /// The translated text to display (or error message).
+    /// During streaming, shows accumulated streaming text.
     /// </summary>
-    public string DisplayText => Result?.TranslatedText ?? Error?.Message ?? "";
+    public string DisplayText
+    {
+        get
+        {
+            // During streaming, show accumulated text
+            if (IsStreaming && !string.IsNullOrEmpty(StreamingText))
+                return StreamingText;
+
+            return Result?.TranslatedText ?? Error?.Message ?? "";
+        }
+    }
 
     /// <summary>
     /// Arrow glyph based on expand state: ChevronDown when expanded, ChevronRight when collapsed.
@@ -116,8 +162,9 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
 
     /// <summary>
     /// Content visibility based on expand state.
+    /// Also visible during streaming to show incremental results.
     /// </summary>
-    public bool ContentVisibility => IsExpanded && HasResult;
+    public bool ContentVisibility => IsExpanded && (HasResult || (IsStreaming && !string.IsNullOrEmpty(StreamingText)));
 
     /// <summary>
     /// Status text for the result (timing info or error).
@@ -126,6 +173,7 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     {
         get
         {
+            if (IsStreaming) return "Streaming...";
             if (IsLoading) return "Translating...";
             if (Error != null) return "Error";
             if (Result != null)
@@ -169,6 +217,8 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
         Result = null;
         Error = null;
         IsLoading = false;
+        IsStreaming = false;
+        StreamingText = "";
         IsExpanded = true;
         ManuallyToggled = false;
         OnPropertyChanged(nameof(HasResult));

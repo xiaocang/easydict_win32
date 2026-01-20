@@ -33,14 +33,14 @@
     <Application Id="App"
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
-      <uap:VisualElements
+        <uap:VisualElements
         DisplayName="Easydict.WinUI"
         Description="Easydict.WinUI"
         BackgroundColor="transparent"
-        Square150x150Logo="Assets\Square150x150Logo.png"
-        Square44x44Logo="Assets\Square44x44Logo.png">
-        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
-        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+        Square150x150Logo="Assets\Square150x150Logo.scale-100.png"
+        Square44x44Logo="Assets\Square44x44Logo.scale-100.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.scale-100.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.scale-100.png" />
       </uap:VisualElements>
     </Application>
   </Applications>

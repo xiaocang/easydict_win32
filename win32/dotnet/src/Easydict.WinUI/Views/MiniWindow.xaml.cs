@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI;
@@ -190,7 +192,18 @@ public sealed partial class MiniWindow : Window
     {
         try
         {
-            _translationManager = new TranslationManager();
+            // Create TranslationManager with proxy settings
+            var options = new TranslationManagerOptions
+            {
+                ProxyEnabled = _settings.ProxyEnabled,
+                ProxyUri = _settings.ProxyUri,
+                ProxyBypassLocal = _settings.ProxyBypassLocal
+            };
+            _translationManager = new TranslationManager(options);
+
+            // Configure LLM services from settings
+            ConfigureLLMServices();
+
             _translationManager.DefaultServiceId = "google";
             _detectionService = new LanguageDetectionService(_translationManager, _settings);
             StatusText.Text = "Ready";
@@ -200,6 +213,47 @@ public sealed partial class MiniWindow : Window
             System.Diagnostics.Debug.WriteLine($"[MiniWindow] Init error: {ex.Message}");
             StatusText.Text = "Error";
         }
+    }
+
+    /// <summary>
+    /// Configure LLM services (OpenAI, Ollama, BuiltInAI) from settings.
+    /// </summary>
+    private void ConfigureLLMServices()
+    {
+        if (_translationManager is null) return;
+
+        // Configure OpenAI
+        _translationManager.ConfigureService("openai", service =>
+        {
+            if (service is OpenAIService openai)
+            {
+                openai.Configure(
+                    _settings.OpenAIApiKey ?? "",
+                    _settings.OpenAIEndpoint,
+                    _settings.OpenAIModel,
+                    _settings.OpenAITemperature);
+            }
+        });
+
+        // Configure Ollama
+        _translationManager.ConfigureService("ollama", service =>
+        {
+            if (service is OllamaService ollama)
+            {
+                ollama.Configure(
+                    _settings.OllamaEndpoint,
+                    _settings.OllamaModel);
+            }
+        });
+
+        // Configure BuiltIn AI
+        _translationManager.ConfigureService("builtin", service =>
+        {
+            if (service is BuiltInAIService builtin)
+            {
+                builtin.Configure(_settings.BuiltInAIModel);
+            }
+        });
     }
 
     /// <summary>
@@ -224,6 +278,8 @@ public sealed partial class MiniWindow : Window
             ["baidu"] = "Baidu",
             ["youdao"] = "Youdao",
             ["openai"] = "OpenAI",
+            ["ollama"] = "Ollama",
+            ["builtin"] = "Built-in AI",
             ["gemini"] = "Gemini"
         };
 
@@ -420,16 +476,27 @@ public sealed partial class MiniWindow : Window
             {
                 try
                 {
-                    var result = await _translationManager.TranslateAsync(
-                        request, ct, serviceResult.ServiceId);
-
-                    DispatcherQueue.TryEnqueue(() =>
+                    // Check if service supports streaming
+                    if (_translationManager.IsStreamingService(serviceResult.ServiceId))
                     {
-                        serviceResult.Result = result;
-                        serviceResult.IsLoading = false;
-                        serviceResult.ApplyAutoCollapseLogic();
-                        ResizeWindowToContent();
-                    });
+                        // Streaming path for LLM services
+                        await ExecuteStreamingTranslationForServiceAsync(
+                            serviceResult, request, detectedLanguage, targetLanguage, ct);
+                    }
+                    else
+                    {
+                        // Non-streaming path for traditional services
+                        var result = await _translationManager.TranslateAsync(
+                            request, ct, serviceResult.ServiceId);
+
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            serviceResult.Result = result;
+                            serviceResult.IsLoading = false;
+                            serviceResult.ApplyAutoCollapseLogic();
+                            ResizeWindowToContent();
+                        });
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -441,6 +508,7 @@ public sealed partial class MiniWindow : Window
                     {
                         serviceResult.Error = ex;
                         serviceResult.IsLoading = false;
+                        serviceResult.IsStreaming = false;
                         serviceResult.ApplyAutoCollapseLogic();
                         ResizeWindowToContent();
                     });
@@ -455,6 +523,7 @@ public sealed partial class MiniWindow : Window
                             ServiceId = serviceResult.ServiceId
                         };
                         serviceResult.IsLoading = false;
+                        serviceResult.IsStreaming = false;
                         serviceResult.ApplyAutoCollapseLogic();
                         ResizeWindowToContent();
                     });
@@ -482,6 +551,71 @@ public sealed partial class MiniWindow : Window
         {
             SetLoading(false);
         }
+    }
+
+    /// <summary>
+    /// Execute streaming translation for a single service.
+    /// Updates the ServiceQueryResult's StreamingText as chunks arrive.
+    /// </summary>
+    private async Task ExecuteStreamingTranslationForServiceAsync(
+        ServiceQueryResult serviceResult,
+        TranslationRequest request,
+        TranslationLanguage detectedLanguage,
+        TranslationLanguage targetLanguage,
+        CancellationToken ct)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var sb = new StringBuilder();
+        var lastUpdateTime = DateTime.UtcNow;
+        const int throttleMs = 50;
+
+        // Mark as streaming
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            serviceResult.IsLoading = false;
+            serviceResult.IsStreaming = true;
+            serviceResult.StreamingText = "";
+        });
+
+        await foreach (var chunk in _translationManager!.TranslateStreamAsync(
+            request, ct, serviceResult.ServiceId))
+        {
+            sb.Append(chunk);
+
+            // Throttle UI updates
+            var now = DateTime.UtcNow;
+            if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
+            {
+                var currentText = sb.ToString();
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    serviceResult.StreamingText = currentText;
+                    ResizeWindowToContent();
+                });
+                lastUpdateTime = now;
+            }
+        }
+
+        stopwatch.Stop();
+
+        // Final update with complete result
+        var finalText = sb.ToString().Trim();
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            serviceResult.IsStreaming = false;
+            serviceResult.StreamingText = "";
+            serviceResult.Result = new TranslationResult
+            {
+                TranslatedText = finalText,
+                OriginalText = request.Text,
+                DetectedLanguage = detectedLanguage,
+                TargetLanguage = targetLanguage,
+                ServiceName = serviceResult.ServiceDisplayName,
+                TimingMs = stopwatch.ElapsedMilliseconds
+            };
+            serviceResult.ApplyAutoCollapseLogic();
+            ResizeWindowToContent();
+        });
     }
 
     private TranslationLanguage GetTargetLanguage()

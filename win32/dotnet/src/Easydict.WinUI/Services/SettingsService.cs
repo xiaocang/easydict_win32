@@ -40,6 +40,19 @@ public sealed class SettingsService
     public string? DeepLApiKey { get; set; }
     public bool DeepLUseFreeApi { get; set; } = true;
 
+    // OpenAI settings
+    public string? OpenAIApiKey { get; set; }
+    public string OpenAIEndpoint { get; set; } = "https://api.openai.com/v1/chat/completions";
+    public string OpenAIModel { get; set; } = "gpt-4o-mini";
+    public double OpenAITemperature { get; set; } = 0.3;
+
+    // Ollama settings (local LLM)
+    public string OllamaEndpoint { get; set; } = "http://localhost:11434/v1/chat/completions";
+    public string OllamaModel { get; set; } = "llama3.2";
+
+    // Built-in AI settings
+    public string BuiltInAIModel { get; set; } = "llama-3.3-70b-versatile";
+
     // Behavior settings
     public bool MinimizeToTray { get; set; } = true;
     public bool ClipboardMonitoring { get; set; } = false;
@@ -66,6 +79,22 @@ public sealed class SettingsService
     /// Each service result is displayed in a collapsible panel.
     /// </summary>
     public List<string> MiniWindowEnabledServices { get; set; } = ["google"];
+
+    // HTTP Proxy settings
+    /// <summary>
+    /// Enable HTTP proxy for translation network requests.
+    /// </summary>
+    public bool ProxyEnabled { get; set; } = false;
+
+    /// <summary>
+    /// HTTP proxy URI (e.g., "http://127.0.0.1:7890").
+    /// </summary>
+    public string ProxyUri { get; set; } = "";
+
+    /// <summary>
+    /// Bypass proxy for localhost addresses (important for Ollama).
+    /// </summary>
+    public bool ProxyBypassLocal { get; set; } = true;
 
     /// <summary>
     /// Enable DPI-aware window positioning and scaling.
@@ -141,6 +170,20 @@ public sealed class SettingsService
 
         DeepLApiKey = GetValue<string?>(nameof(DeepLApiKey), null);
         DeepLUseFreeApi = GetValue(nameof(DeepLUseFreeApi), true);
+
+        // OpenAI settings
+        OpenAIApiKey = GetValue<string?>(nameof(OpenAIApiKey), null);
+        OpenAIEndpoint = GetValue(nameof(OpenAIEndpoint), "https://api.openai.com/v1/chat/completions");
+        OpenAIModel = GetValue(nameof(OpenAIModel), "gpt-4o-mini");
+        OpenAITemperature = GetValue(nameof(OpenAITemperature), 0.3);
+
+        // Ollama settings
+        OllamaEndpoint = GetValue(nameof(OllamaEndpoint), "http://localhost:11434/v1/chat/completions");
+        OllamaModel = GetValue(nameof(OllamaModel), "llama3.2");
+
+        // Built-in AI settings
+        BuiltInAIModel = GetValue(nameof(BuiltInAIModel), "llama-3.3-70b-versatile");
+
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
@@ -162,6 +205,11 @@ public sealed class SettingsService
         MiniWindowHeightDips = GetValue(nameof(MiniWindowHeightDips), 200.0);
         MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
         MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), ["google"]);
+
+        // HTTP Proxy settings
+        ProxyEnabled = GetValue(nameof(ProxyEnabled), false);
+        ProxyUri = GetValue(nameof(ProxyUri), "");
+        ProxyBypassLocal = GetValue(nameof(ProxyBypassLocal), true);
     }
 
     public void Save()
@@ -177,6 +225,20 @@ public sealed class SettingsService
 
         _settings[nameof(DeepLApiKey)] = DeepLApiKey ?? string.Empty;
         _settings[nameof(DeepLUseFreeApi)] = DeepLUseFreeApi;
+
+        // OpenAI settings
+        _settings[nameof(OpenAIApiKey)] = OpenAIApiKey ?? string.Empty;
+        _settings[nameof(OpenAIEndpoint)] = OpenAIEndpoint;
+        _settings[nameof(OpenAIModel)] = OpenAIModel;
+        _settings[nameof(OpenAITemperature)] = OpenAITemperature;
+
+        // Ollama settings
+        _settings[nameof(OllamaEndpoint)] = OllamaEndpoint;
+        _settings[nameof(OllamaModel)] = OllamaModel;
+
+        // Built-in AI settings
+        _settings[nameof(BuiltInAIModel)] = BuiltInAIModel;
+
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
@@ -196,6 +258,11 @@ public sealed class SettingsService
         _settings[nameof(MiniWindowHeightDips)] = MiniWindowHeightDips;
         _settings[nameof(MiniWindowIsPinned)] = MiniWindowIsPinned;
         _settings[nameof(MiniWindowEnabledServices)] = MiniWindowEnabledServices;
+
+        // HTTP Proxy settings
+        _settings[nameof(ProxyEnabled)] = ProxyEnabled;
+        _settings[nameof(ProxyUri)] = ProxyUri;
+        _settings[nameof(ProxyBypassLocal)] = ProxyBypassLocal;
 
         try
         {

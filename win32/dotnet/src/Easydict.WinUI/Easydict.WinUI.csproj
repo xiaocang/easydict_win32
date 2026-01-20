@@ -33,6 +33,9 @@
         <!-- <PublishSingleFile>true</PublishSingleFile> -->
         <!-- Enable ReadyToRun compilation for faster startup -->
         <PublishReadyToRun>true</PublishReadyToRun>
+
+        <!-- Embed a Win32 icon into the unpackaged EXE (taskbar/dock icon in F5) -->
+        <ApplicationIcon>$(IntermediateOutputPath)AppIcon.ico</ApplicationIcon>
     </PropertyGroup>
 
     <ItemGroup>
@@ -87,6 +90,18 @@
 
         <Manifest Include="$(ApplicationManifest)" />
     </ItemGroup>
+
+    <Target Name="GenerateAppIconIco" BeforeTargets="BeforeBuild">
+        <Exec
+            Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\\..\\scripts\\generate-app-icon-ico.ps1&quot; -SourcePng &quot;$(ProjectDir)Assets\\macos\\white-black-icon.appiconset\\icon_512x512@2x.png&quot; -OutputIco &quot;$(IntermediateOutputPath)AppIcon.ico&quot;" />
+    </Target>
+
+    <Target Name="CopyAppIconIcoToOutput" AfterTargets="Build">
+        <Copy
+            SourceFiles="$(IntermediateOutputPath)AppIcon.ico"
+            DestinationFiles="$(OutDir)AppIcon.ico"
+            SkipUnchangedFiles="true" />
+    </Target>
 
     <!-- 
         Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging

@@ -1,6 +1,8 @@
 using H.NotifyIcon;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Easydict.WinUI.Services;
@@ -12,6 +14,7 @@ namespace Easydict.WinUI.Services;
 public sealed class TrayIconService : IDisposable
 {
     private readonly Window _window;
+    private readonly AppWindow? _appWindow;
     private TaskbarIcon? _taskbarIcon;
     private bool _isDisposed;
 
@@ -25,9 +28,10 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public event Action? OnOpenSettings;
 
-    public TrayIconService(Window window)
+    public TrayIconService(Window window, AppWindow? appWindow)
     {
         _window = window;
+        _appWindow = appWindow;
     }
 
     /// <summary>
@@ -50,8 +54,36 @@ public sealed class TrayIconService : IDisposable
         // Handle left click to show window
         _taskbarIcon.LeftClickCommand = new RelayCommand(ShowWindow);
 
-        // Use icon from resources (Windows automatically selects appropriate scale variant)
-        _taskbarIcon.IconSource = new BitmapImage(new Uri("ms-appx:///Assets/Square44x44Logo.png"));
+        // Use icon from resources; fall back to unpackaged path when running F5 without package identity.
+        _taskbarIcon.IconSource = CreateTrayIconSource();
+    }
+
+    private static ImageSource CreateTrayIconSource()
+    {
+        const string relativeIconPath = "Assets\\Square44x44Logo.targetsize-24_altform-unplated.png";
+
+        // Unpackaged (F5): ms-appx is often unavailable; prefer absolute file path.
+        if (!IsPackagedApp())
+        {
+            var filePath = Path.Combine(AppContext.BaseDirectory, relativeIconPath);
+            return new BitmapImage(new Uri(filePath));
+        }
+
+        // Packaged: use ms-appx.
+        return new BitmapImage(new Uri("ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png"));
+    }
+
+    private static bool IsPackagedApp()
+    {
+        try
+        {
+            _ = Windows.ApplicationModel.Package.Current;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private MenuFlyout CreateContextMenu()
@@ -90,6 +122,8 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public void ShowWindow()
     {
+        // If the window was hidden via AppWindow.Hide(), Activate() alone won't restore it.
+        _appWindow?.Show();
         _window.Activate();
     }
 
@@ -132,4 +166,3 @@ internal sealed class RelayCommand : System.Windows.Input.ICommand
 
     public void Execute(object? parameter) => _execute();
 }
-

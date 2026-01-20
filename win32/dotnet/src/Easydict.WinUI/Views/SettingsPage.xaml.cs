@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -36,6 +37,23 @@ public sealed partial class SettingsPage : Page
         // API keys
         DeepLKeyBox.Password = _settings.DeepLApiKey ?? string.Empty;
         DeepLFreeCheck.IsChecked = _settings.DeepLUseFreeApi;
+
+        // OpenAI settings
+        OpenAIKeyBox.Password = _settings.OpenAIApiKey ?? string.Empty;
+        OpenAIEndpointBox.Text = _settings.OpenAIEndpoint;
+        SelectComboByTag(OpenAIModelCombo, _settings.OpenAIModel);
+
+        // Ollama settings
+        OllamaEndpointBox.Text = _settings.OllamaEndpoint;
+        OllamaModelCombo.Text = _settings.OllamaModel;
+
+        // Built-in AI settings
+        SelectComboByTag(BuiltInModelCombo, _settings.BuiltInAIModel);
+
+        // HTTP Proxy settings
+        ProxyEnabledToggle.IsOn = _settings.ProxyEnabled;
+        ProxyUriBox.Text = _settings.ProxyUri;
+        ProxyBypassLocalToggle.IsOn = _settings.ProxyBypassLocal;
 
         // Behavior
         MinimizeToTrayToggle.IsOn = _settings.MinimizeToTray;
@@ -112,6 +130,47 @@ public sealed partial class SettingsPage : Page
         _settings.DeepLApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
         _settings.DeepLUseFreeApi = DeepLFreeCheck.IsChecked ?? true;
 
+        // Save OpenAI settings
+        var openAIKey = OpenAIKeyBox.Password;
+        _settings.OpenAIApiKey = string.IsNullOrWhiteSpace(openAIKey) ? null : openAIKey;
+        var openAIEndpoint = OpenAIEndpointBox.Text?.Trim();
+        _settings.OpenAIEndpoint = string.IsNullOrWhiteSpace(openAIEndpoint)
+            ? "https://api.openai.com/v1/chat/completions"
+            : openAIEndpoint;
+        _settings.OpenAIModel = GetSelectedTag(OpenAIModelCombo) ?? "gpt-4o-mini";
+
+        // Save Ollama settings
+        var ollamaEndpoint = OllamaEndpointBox.Text?.Trim();
+        _settings.OllamaEndpoint = string.IsNullOrWhiteSpace(ollamaEndpoint)
+            ? "http://localhost:11434/v1/chat/completions"
+            : ollamaEndpoint;
+        _settings.OllamaModel = OllamaModelCombo.Text?.Trim() ?? "llama3.2";
+
+        // Save Built-in AI settings
+        _settings.BuiltInAIModel = GetSelectedTag(BuiltInModelCombo) ?? "llama-3.3-70b-versatile";
+
+        // Save HTTP Proxy settings with validation
+        _settings.ProxyEnabled = ProxyEnabledToggle.IsOn;
+        _settings.ProxyBypassLocal = ProxyBypassLocalToggle.IsOn;
+
+        var proxyUri = ProxyUriBox.Text?.Trim() ?? "";
+        if (_settings.ProxyEnabled && !string.IsNullOrWhiteSpace(proxyUri))
+        {
+            if (!Uri.TryCreate(proxyUri, UriKind.Absolute, out _))
+            {
+                var errorDialog = new ContentDialog
+                {
+                    Title = "Invalid Proxy URL",
+                    Content = "The proxy URL is not valid. Please enter a valid URL (e.g., http://127.0.0.1:7890).",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.XamlRoot
+                };
+                await errorDialog.ShowAsync();
+                return;
+            }
+        }
+        _settings.ProxyUri = proxyUri;
+
         // Save behavior settings
         _settings.MinimizeToTray = MinimizeToTrayToggle.IsOn;
         _settings.ClipboardMonitoring = ClipboardMonitorToggle.IsOn;
@@ -134,10 +193,78 @@ public sealed partial class SettingsPage : Page
         var dialog = new ContentDialog
         {
             Title = "Settings Saved",
-            Content = "Your settings have been saved. Some changes (like hotkeys) require an app restart to take effect.",
+            Content = "Your settings have been saved. Some changes (like hotkeys and proxy) require an app restart to take effect.",
             CloseButtonText = "OK",
             XamlRoot = this.XamlRoot
         };
         await dialog.ShowAsync();
+    }
+
+    /// <summary>
+    /// Refreshes the available Ollama models from the local server.
+    /// </summary>
+    private async void OnRefreshOllamaModels(object sender, RoutedEventArgs e)
+    {
+        RefreshOllamaButton.IsEnabled = false;
+        try
+        {
+            // Extract base URL from endpoint
+            var endpoint = OllamaEndpointBox.Text?.Trim() ?? "http://localhost:11434/v1/chat/completions";
+            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+            {
+                uri = new Uri("http://localhost:11434");
+            }
+            var baseUrl = $"{uri.Scheme}://{uri.Host}:{uri.Port}";
+            var tagsUrl = $"{baseUrl}/api/tags";
+
+            using var httpClient = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var response = await httpClient.GetStringAsync(tagsUrl);
+
+            // Parse JSON response: {"models": [{"name": "llama3.2"}, ...]}
+            using var doc = JsonDocument.Parse(response);
+            if (doc.RootElement.TryGetProperty("models", out var models))
+            {
+                var currentSelection = OllamaModelCombo.Text;
+                OllamaModelCombo.Items.Clear();
+
+                foreach (var model in models.EnumerateArray())
+                {
+                    if (model.TryGetProperty("name", out var nameElement))
+                    {
+                        var name = nameElement.GetString();
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            OllamaModelCombo.Items.Add(new ComboBoxItem { Content = name, Tag = name });
+                        }
+                    }
+                }
+
+                // Restore selection or select first item
+                if (!string.IsNullOrEmpty(currentSelection))
+                {
+                    OllamaModelCombo.Text = currentSelection;
+                }
+                else if (OllamaModelCombo.Items.Count > 0)
+                {
+                    OllamaModelCombo.SelectedIndex = 0;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Settings] Failed to refresh Ollama models: {ex.Message}");
+            var errorDialog = new ContentDialog
+            {
+                Title = "Cannot Connect to Ollama",
+                Content = $"Failed to fetch models from Ollama server. Make sure Ollama is running.\n\nError: {ex.Message}",
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await errorDialog.ShowAsync();
+        }
+        finally
+        {
+            RefreshOllamaButton.IsEnabled = true;
+        }
     }
 }

@@ -29,6 +29,9 @@
                         <ComboBox x:Name="ServiceCombo" Header="Default Service" Width="200">
                             <ComboBoxItem Content="Google Translate" Tag="google" />
                             <ComboBoxItem Content="DeepL" Tag="deepl" />
+                            <ComboBoxItem Content="OpenAI" Tag="openai" />
+                            <ComboBoxItem Content="Ollama" Tag="ollama" />
+                            <ComboBoxItem Content="Built-in AI" Tag="builtin" />
                         </ComboBox>
 
                         <ComboBox x:Name="TargetLangCombo" Header="Target Language" Width="200">
@@ -101,11 +104,77 @@
             <!-- API Keys -->
             <StackPanel Spacing="12">
                 <TextBlock Text="API Keys" FontSize="18" FontWeight="SemiBold" />
-                
+
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="16">
                         <PasswordBox x:Name="DeepLKeyBox" Header="DeepL API Key" Width="300" PlaceholderText="Enter your DeepL API key" />
                         <CheckBox x:Name="DeepLFreeCheck" Content="Use DeepL Free API" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- AI Translation Services -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="AI Translation Services" FontSize="18" FontWeight="SemiBold" />
+
+                <!-- OpenAI -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="OpenAI" FontWeight="SemiBold" FontSize="14" />
+                        <PasswordBox x:Name="OpenAIKeyBox" Header="API Key" Width="300" PlaceholderText="sk-..." />
+                        <TextBox x:Name="OpenAIEndpointBox" Header="Endpoint (optional)" Width="400"
+                                 PlaceholderText="https://api.openai.com/v1/chat/completions" />
+                        <ComboBox x:Name="OpenAIModelCombo" Header="Model" Width="200">
+                            <ComboBoxItem Content="gpt-4o-mini" Tag="gpt-4o-mini" />
+                            <ComboBoxItem Content="gpt-4o" Tag="gpt-4o" />
+                            <ComboBoxItem Content="gpt-4-turbo" Tag="gpt-4-turbo" />
+                            <ComboBoxItem Content="gpt-3.5-turbo" Tag="gpt-3.5-turbo" />
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+
+                <!-- Ollama (Local) -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="Ollama (Local LLM)" FontWeight="SemiBold" FontSize="14" />
+                        <TextBox x:Name="OllamaEndpointBox" Header="Endpoint" Width="400"
+                                 PlaceholderText="http://localhost:11434/v1/chat/completions" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ComboBox x:Name="OllamaModelCombo" Header="Model" Width="200" IsEditable="True" />
+                            <Button x:Name="RefreshOllamaButton" Content="Refresh" Click="OnRefreshOllamaModels"
+                                    VerticalAlignment="Bottom" Padding="12,6" />
+                        </StackPanel>
+                        <TextBlock Text="Ollama must be running locally. Click Refresh to load available models."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Built-in AI -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="Built-in AI" FontWeight="SemiBold" FontSize="14" />
+                        <ComboBox x:Name="BuiltInModelCombo" Header="Model" Width="250">
+                            <ComboBoxItem Content="llama-3.3-70b-versatile" Tag="llama-3.3-70b-versatile" />
+                            <ComboBoxItem Content="llama-3.1-8b-instant" Tag="llama-3.1-8b-instant" />
+                        </ComboBox>
+                        <TextBlock Text="Built-in AI uses Groq cloud service. No API key required."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- HTTP Proxy -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="HTTP Proxy" FontSize="18" FontWeight="SemiBold" />
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <ToggleSwitch x:Name="ProxyEnabledToggle" Header="Use HTTP Proxy" />
+                        <TextBox x:Name="ProxyUriBox" Header="Proxy URL" Width="300"
+                                 PlaceholderText="http://127.0.0.1:7890" />
+                        <ToggleSwitch x:Name="ProxyBypassLocalToggle" Header="Bypass proxy for localhost" IsOn="True" />
+                        <TextBlock Text="Proxy changes take effect after app restart. Localhost bypass ensures Ollama works without proxy."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
             </StackPanel>

@@ -51,9 +51,11 @@ public sealed class LanguageDetectionService : IDisposable
         }
 
         // Don't detect very short text (unreliable)
-        if (text.Length < 4)
+        // CJK characters carry more meaning per character, so use lower threshold
+        var minLength = ContainsCjk(text) ? 2 : 4;
+        if (text.Length < minLength)
         {
-            Debug.WriteLine($"[Detection] Text too short ({text.Length} chars), skipping detection");
+            Debug.WriteLine($"[Detection] Text too short ({text.Length} chars, min={minLength}), skipping detection");
             return Language.Auto;
         }
 
@@ -152,6 +154,31 @@ public sealed class LanguageDetectionService : IDisposable
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(text));
         return Convert.ToHexString(bytes);
+    }
+
+    /// <summary>
+    /// Check if text contains CJK (Chinese, Japanese, Korean) characters.
+    /// CJK characters carry more meaning per character, allowing shorter detection thresholds.
+    /// </summary>
+    private static bool ContainsCjk(string text)
+    {
+        foreach (var c in text)
+        {
+            // CJK Unified Ideographs: U+4E00 - U+9FFF
+            // CJK Extension A: U+3400 - U+4DBF
+            // Hiragana: U+3040 - U+309F
+            // Katakana: U+30A0 - U+30FF
+            // Hangul Syllables: U+AC00 - U+D7AF
+            if ((c >= '\u4E00' && c <= '\u9FFF') ||  // CJK Unified Ideographs
+                (c >= '\u3400' && c <= '\u4DBF') ||  // CJK Extension A
+                (c >= '\u3040' && c <= '\u309F') ||  // Hiragana
+                (c >= '\u30A0' && c <= '\u30FF') ||  // Katakana
+                (c >= '\uAC00' && c <= '\uD7AF'))    // Hangul
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void Dispose()

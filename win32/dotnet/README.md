@@ -1,6 +1,6 @@
-# Easydict for Windows
+# easydict_win32
 
-[![CI](https://github.com/user/easydict/actions/workflows/ci.yml/badge.svg)](https://github.com/user/easydict/actions/workflows/ci.yml)
+[![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml)
 
 ## Introduction
 
@@ -67,14 +67,14 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 ### Download
 
-Download the latest ZIP package from the [Releases](https://github.com/user/easydict/releases) page, extract it, and run `Easydict.WinUI.exe`.
+Download the latest ZIP package from the [Releases](https://github.com/xiaocang/easydict_win32/releases) page, extract it, and run `Easydict.WinUI.exe`.
 
 ### Build from Source
 
 ```powershell
 # Clone repository
-git clone https://github.com/user/easydict.git
-cd easydict/win32/dotnet
+git clone https://github.com/xiaocang/easydict_win32.git
+cd easydict_win32/win32/dotnet
 
 # Build
 dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release

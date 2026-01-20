@@ -159,7 +159,7 @@
             "command": "powershell",
             "args": [
                 "-Command",
-                "Compress-Archive -Path '${workspaceFolder}/publish/x64/*' -DestinationPath '${workspaceFolder}/publish/Easydict-Win32-x64.zip' -Force"
+                "Compress-Archive -Path '${workspaceFolder}/publish/x64/*' -DestinationPath '${workspaceFolder}/publish/easydict_win32-x64.zip' -Force"
             ],
             "dependsOn": "publish-x64",
             "problemMatcher": [],

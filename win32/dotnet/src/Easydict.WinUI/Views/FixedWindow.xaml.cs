@@ -247,6 +247,73 @@ public sealed partial class FixedWindow : Window
                 builtin.Configure(_settings.BuiltInAIModel);
             }
         });
+
+        // Configure DeepSeek
+        _translationManager.ConfigureService("deepseek", service =>
+        {
+            if (service is DeepSeekService deepseek)
+            {
+                deepseek.Configure(
+                    _settings.DeepSeekApiKey ?? "",
+                    model: _settings.DeepSeekModel);
+            }
+        });
+
+        // Configure Groq
+        _translationManager.ConfigureService("groq", service =>
+        {
+            if (service is GroqService groq)
+            {
+                groq.Configure(
+                    _settings.GroqApiKey ?? "",
+                    model: _settings.GroqModel);
+            }
+        });
+
+        // Configure Zhipu
+        _translationManager.ConfigureService("zhipu", service =>
+        {
+            if (service is ZhipuService zhipu)
+            {
+                zhipu.Configure(
+                    _settings.ZhipuApiKey ?? "",
+                    model: _settings.ZhipuModel);
+            }
+        });
+
+        // Configure GitHub Models
+        _translationManager.ConfigureService("github", service =>
+        {
+            if (service is GitHubModelsService github)
+            {
+                github.Configure(
+                    _settings.GitHubModelsToken ?? "",
+                    model: _settings.GitHubModelsModel);
+            }
+        });
+
+        // Configure Custom OpenAI
+        _translationManager.ConfigureService("custom-openai", service =>
+        {
+            if (service is CustomOpenAIService customOpenai)
+            {
+                customOpenai.Configure(
+                    _settings.CustomOpenAIEndpoint,
+                    _settings.CustomOpenAIApiKey,
+                    _settings.CustomOpenAIModel);
+            }
+        });
+
+        // Configure Gemini
+        _translationManager.ConfigureService("gemini", service =>
+        {
+            if (service is GeminiService gemini)
+            {
+                gemini.Configure(
+                    _settings.GeminiApiKey ?? "",
+                    _settings.GeminiModel);
+            }
+        });
     }
 
     /// <summary>
@@ -273,6 +340,11 @@ public sealed partial class FixedWindow : Window
             ["openai"] = "OpenAI",
             ["ollama"] = "Ollama",
             ["builtin"] = "Built-in AI",
+            ["deepseek"] = "DeepSeek",
+            ["groq"] = "Groq",
+            ["zhipu"] = "Zhipu (智谱)",
+            ["github"] = "GitHub Models",
+            ["custom-openai"] = "Custom OpenAI",
             ["gemini"] = "Gemini"
         };
 

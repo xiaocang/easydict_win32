@@ -22,42 +22,6 @@ public sealed class OpenAIService : BaseOpenAIService
         "gpt-3.5-turbo"
     };
 
-    private static readonly IReadOnlyList<Language> OpenAILanguages = new[]
-    {
-        Language.SimplifiedChinese,
-        Language.TraditionalChinese,
-        Language.English,
-        Language.Japanese,
-        Language.Korean,
-        Language.French,
-        Language.Spanish,
-        Language.Portuguese,
-        Language.Italian,
-        Language.German,
-        Language.Russian,
-        Language.Arabic,
-        Language.Dutch,
-        Language.Polish,
-        Language.Vietnamese,
-        Language.Thai,
-        Language.Indonesian,
-        Language.Turkish,
-        Language.Swedish,
-        Language.Danish,
-        Language.Norwegian,
-        Language.Finnish,
-        Language.Greek,
-        Language.Czech,
-        Language.Romanian,
-        Language.Hungarian,
-        Language.Ukrainian,
-        Language.Hebrew,
-        Language.Hindi,
-        Language.Bengali,
-        Language.Tamil,
-        Language.Persian
-    };
-
     private string _endpoint = DefaultEndpoint;
     private string _apiKey = "";
     private string _model = DefaultModel;

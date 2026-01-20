@@ -15,6 +15,45 @@ namespace Easydict.TranslationService.Services;
 public abstract class BaseOpenAIService : BaseTranslationService, IStreamTranslationService
 {
     /// <summary>
+    /// Common set of languages supported by most LLM services.
+    /// </summary>
+    protected static readonly IReadOnlyList<Language> OpenAILanguages = new[]
+    {
+        Language.SimplifiedChinese,
+        Language.TraditionalChinese,
+        Language.English,
+        Language.Japanese,
+        Language.Korean,
+        Language.French,
+        Language.Spanish,
+        Language.Portuguese,
+        Language.Italian,
+        Language.German,
+        Language.Russian,
+        Language.Arabic,
+        Language.Dutch,
+        Language.Polish,
+        Language.Vietnamese,
+        Language.Thai,
+        Language.Indonesian,
+        Language.Turkish,
+        Language.Swedish,
+        Language.Danish,
+        Language.Norwegian,
+        Language.Finnish,
+        Language.Greek,
+        Language.Czech,
+        Language.Romanian,
+        Language.Hungarian,
+        Language.Ukrainian,
+        Language.Hebrew,
+        Language.Hindi,
+        Language.Bengali,
+        Language.Tamil,
+        Language.Persian
+    };
+
+    /// <summary>
     /// System prompt from macOS StreamService.translationSystemPrompt.
     /// Instructs the model to act as a translation expert.
     /// </summary>

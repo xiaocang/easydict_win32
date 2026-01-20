@@ -53,6 +53,31 @@ public sealed class SettingsService
     // Built-in AI settings
     public string BuiltInAIModel { get; set; } = "llama-3.3-70b-versatile";
 
+    // DeepSeek settings
+    public string? DeepSeekApiKey { get; set; }
+    public string DeepSeekModel { get; set; } = "deepseek-chat";
+
+    // Groq settings
+    public string? GroqApiKey { get; set; }
+    public string GroqModel { get; set; } = "llama-3.3-70b-versatile";
+
+    // Zhipu settings
+    public string? ZhipuApiKey { get; set; }
+    public string ZhipuModel { get; set; } = "glm-4-flash-250414";
+
+    // GitHub Models settings
+    public string? GitHubModelsToken { get; set; }
+    public string GitHubModelsModel { get; set; } = "gpt-4.1";
+
+    // Custom OpenAI settings
+    public string CustomOpenAIEndpoint { get; set; } = "";
+    public string? CustomOpenAIApiKey { get; set; }
+    public string CustomOpenAIModel { get; set; } = "gpt-3.5-turbo";
+
+    // Gemini settings
+    public string? GeminiApiKey { get; set; }
+    public string GeminiModel { get; set; } = "gemini-2.5-flash";
+
     // Behavior settings
     public bool MinimizeToTray { get; set; } = true;
     public bool ClipboardMonitoring { get; set; } = false;
@@ -197,6 +222,31 @@ public sealed class SettingsService
         // Built-in AI settings
         BuiltInAIModel = GetValue(nameof(BuiltInAIModel), "llama-3.3-70b-versatile");
 
+        // DeepSeek settings
+        DeepSeekApiKey = GetValue<string?>(nameof(DeepSeekApiKey), null);
+        DeepSeekModel = GetValue(nameof(DeepSeekModel), "deepseek-chat");
+
+        // Groq settings
+        GroqApiKey = GetValue<string?>(nameof(GroqApiKey), null);
+        GroqModel = GetValue(nameof(GroqModel), "llama-3.3-70b-versatile");
+
+        // Zhipu settings
+        ZhipuApiKey = GetValue<string?>(nameof(ZhipuApiKey), null);
+        ZhipuModel = GetValue(nameof(ZhipuModel), "glm-4-flash-250414");
+
+        // GitHub Models settings
+        GitHubModelsToken = GetValue<string?>(nameof(GitHubModelsToken), null);
+        GitHubModelsModel = GetValue(nameof(GitHubModelsModel), "gpt-4.1");
+
+        // Custom OpenAI settings
+        CustomOpenAIEndpoint = GetValue(nameof(CustomOpenAIEndpoint), "");
+        CustomOpenAIApiKey = GetValue<string?>(nameof(CustomOpenAIApiKey), null);
+        CustomOpenAIModel = GetValue(nameof(CustomOpenAIModel), "gpt-3.5-turbo");
+
+        // Gemini settings
+        GeminiApiKey = GetValue<string?>(nameof(GeminiApiKey), null);
+        GeminiModel = GetValue(nameof(GeminiModel), "gemini-2.5-flash");
+
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
@@ -259,6 +309,31 @@ public sealed class SettingsService
 
         // Built-in AI settings
         _settings[nameof(BuiltInAIModel)] = BuiltInAIModel;
+
+        // DeepSeek settings
+        _settings[nameof(DeepSeekApiKey)] = DeepSeekApiKey ?? string.Empty;
+        _settings[nameof(DeepSeekModel)] = DeepSeekModel;
+
+        // Groq settings
+        _settings[nameof(GroqApiKey)] = GroqApiKey ?? string.Empty;
+        _settings[nameof(GroqModel)] = GroqModel;
+
+        // Zhipu settings
+        _settings[nameof(ZhipuApiKey)] = ZhipuApiKey ?? string.Empty;
+        _settings[nameof(ZhipuModel)] = ZhipuModel;
+
+        // GitHub Models settings
+        _settings[nameof(GitHubModelsToken)] = GitHubModelsToken ?? string.Empty;
+        _settings[nameof(GitHubModelsModel)] = GitHubModelsModel;
+
+        // Custom OpenAI settings
+        _settings[nameof(CustomOpenAIEndpoint)] = CustomOpenAIEndpoint;
+        _settings[nameof(CustomOpenAIApiKey)] = CustomOpenAIApiKey ?? string.Empty;
+        _settings[nameof(CustomOpenAIModel)] = CustomOpenAIModel;
+
+        // Gemini settings
+        _settings[nameof(GeminiApiKey)] = GeminiApiKey ?? string.Empty;
+        _settings[nameof(GeminiModel)] = GeminiModel;
 
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;

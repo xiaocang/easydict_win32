@@ -56,6 +56,10 @@ public sealed class TrayIconService : IDisposable
 
         // Use icon from resources; fall back to unpackaged path when running F5 without package identity.
         _taskbarIcon.IconSource = CreateTrayIconSource();
+
+        // Force create the tray icon when created programmatically (not via XAML).
+        // This is required by H.NotifyIcon for the icon to appear in the system tray.
+        _taskbarIcon.ForceCreate();
     }
 
     private static ImageSource CreateTrayIconSource()

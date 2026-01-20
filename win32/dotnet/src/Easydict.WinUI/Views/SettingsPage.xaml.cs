@@ -11,6 +11,7 @@ namespace Easydict.WinUI.Views;
 public sealed partial class SettingsPage : Page
 {
     private readonly SettingsService _settings = SettingsService.Instance;
+    private bool _isLoading = true; // Prevent change detection during initial load
 
     public SettingsPage()
     {
@@ -20,7 +21,55 @@ public sealed partial class SettingsPage : Page
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
     {
+        _isLoading = true;
         LoadSettings();
+        RegisterChangeHandlers();
+        _isLoading = false;
+    }
+
+    /// <summary>
+    /// Register event handlers to detect settings changes.
+    /// </summary>
+    private void RegisterChangeHandlers()
+    {
+        // ComboBox changes
+        ServiceCombo.SelectionChanged += OnSettingChanged;
+        TargetLangCombo.SelectionChanged += OnSettingChanged;
+        FirstLanguageCombo.SelectionChanged += OnSettingChanged;
+        SecondLanguageCombo.SelectionChanged += OnSettingChanged;
+        OpenAIModelCombo.SelectionChanged += OnSettingChanged;
+        OllamaModelCombo.SelectionChanged += OnSettingChanged;
+        BuiltInModelCombo.SelectionChanged += OnSettingChanged;
+
+        // ToggleSwitch changes
+        AutoSelectTargetToggle.Toggled += OnSettingChanged;
+        MinimizeToTrayToggle.Toggled += OnSettingChanged;
+        ClipboardMonitorToggle.Toggled += OnSettingChanged;
+        AlwaysOnTopToggle.Toggled += OnSettingChanged;
+        ProxyEnabledToggle.Toggled += OnSettingChanged;
+        ProxyBypassLocalToggle.Toggled += OnSettingChanged;
+
+        // TextBox/PasswordBox changes
+        DeepLKeyBox.PasswordChanged += OnSettingChanged;
+        OpenAIKeyBox.PasswordChanged += OnSettingChanged;
+        OpenAIEndpointBox.TextChanged += OnSettingChanged;
+        OllamaEndpointBox.TextChanged += OnSettingChanged;
+        ProxyUriBox.TextChanged += OnSettingChanged;
+        ShowHotkeyBox.TextChanged += OnSettingChanged;
+        TranslateHotkeyBox.TextChanged += OnSettingChanged;
+
+        // CheckBox changes
+        DeepLFreeCheck.Checked += OnSettingChanged;
+        DeepLFreeCheck.Unchecked += OnSettingChanged;
+    }
+
+    /// <summary>
+    /// Show the floating save button when any setting changes.
+    /// </summary>
+    private void OnSettingChanged(object sender, object e)
+    {
+        if (_isLoading) return;
+        SaveButton.Visibility = Visibility.Visible;
     }
 
     private void LoadSettings()
@@ -188,6 +237,9 @@ public sealed partial class SettingsPage : Page
 
         // Apply clipboard monitoring immediately
         App.ApplyClipboardMonitoring(_settings.ClipboardMonitoring);
+
+        // Hide the floating save button
+        SaveButton.Visibility = Visibility.Collapsed;
 
         // Show confirmation
         var dialog = new ContentDialog

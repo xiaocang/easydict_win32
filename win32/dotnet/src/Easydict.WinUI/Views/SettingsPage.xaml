@@ -8,8 +8,9 @@
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-    <ScrollViewer Padding="24">
-        <StackPanel Spacing="24" MaxWidth="800">
+    <Grid>
+        <ScrollViewer Padding="24">
+            <StackPanel Spacing="24" MaxWidth="800">
             <!-- Header -->
             <Grid>
                 <StackPanel Orientation="Horizontal" Spacing="12">
@@ -219,10 +220,25 @@
                 </Border>
             </StackPanel>
 
-            <!-- Save Button -->
-            <Button x:Name="SaveButton" Content="Save Settings" Click="OnSaveClick" 
-                    Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Right" Padding="24,8" />
+            <!-- Spacer to make room for floating save button -->
+            <Border Height="80" />
         </StackPanel>
     </ScrollViewer>
+
+    <!-- Floating Save Button (fixed at bottom-right) -->
+    <Button x:Name="SaveButton"
+            Content="Save Settings"
+            Click="OnSaveClick"
+            Style="{StaticResource AccentButtonStyle}"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Margin="0,0,32,32"
+            Padding="24,12"
+            Visibility="Collapsed">
+        <Button.Shadow>
+            <ThemeShadow />
+        </Button.Shadow>
+    </Button>
+</Grid>
 </Page>
 

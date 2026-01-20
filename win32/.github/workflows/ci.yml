@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'win32/dotnet/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'win32/dotnet/**'
+      - '.github/workflows/ci.yml'
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        working-directory: win32/dotnet
+        run: dotnet restore Easydict.Win32.sln
+
+      - name: Build
+        working-directory: win32/dotnet
+        run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore
+
+      - name: Run tests
+        working-directory: win32/dotnet
+        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: win32/dotnet/**/TestResults/*.trx

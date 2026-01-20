@@ -1,0 +1,42 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        working-directory: win32/dotnet
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj
+
+      - name: Build Release
+        working-directory: win32/dotnet
+        run: dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --no-restore
+
+      - name: Publish
+        working-directory: win32/dotnet
+        run: dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --output ./publish --self-contained false
+
+      - name: Create ZIP archive
+        run: Compress-Archive -Path win32/dotnet/publish/* -DestinationPath Easydict-Windows-${{ github.ref_name }}.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: Easydict-Windows-${{ github.ref_name }}.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

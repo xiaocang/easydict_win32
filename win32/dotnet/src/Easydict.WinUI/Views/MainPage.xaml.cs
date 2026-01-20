@@ -1,5 +1,8 @@
+using System.Diagnostics;
+using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Input;
@@ -22,6 +25,7 @@ namespace Easydict.WinUI.Views
         private readonly SettingsService _settings = SettingsService.Instance;
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
         private bool _isManualTargetSelection = false; // Track if user manually selected target
+        private string _lastQueryText = ""; // Track last query text to detect changes
         private bool _isLoaded;
         private bool _suppressTargetLanguageSelectionChanged;
 
@@ -125,19 +129,78 @@ namespace Easydict.WinUI.Views
             {
                 UpdateStatus(null, "Initializing...");
 
-                _translationManager = new TranslationManager();
+                // Create TranslationManager with proxy settings
+                var options = new TranslationManagerOptions
+                {
+                    ProxyEnabled = _settings.ProxyEnabled,
+                    ProxyUri = _settings.ProxyUri,
+                    ProxyBypassLocal = _settings.ProxyBypassLocal
+                };
+                _translationManager = new TranslationManager(options);
 
-                // Set default service to Google (no API key needed)
-                _translationManager.DefaultServiceId = "google";
+                // Configure LLM services from settings
+                ConfigureLLMServices();
+
+                // Set default service from settings
+                var defaultService = _settings.DefaultService;
+                if (_translationManager.Services.ContainsKey(defaultService))
+                {
+                    _translationManager.DefaultServiceId = defaultService;
+                }
+                else
+                {
+                    _translationManager.DefaultServiceId = "google";
+                }
 
                 UpdateStatus(true, "Ready");
-                ServiceText.Text = "Google Translate";
+                ServiceText.Text = _translationManager.Services[_translationManager.DefaultServiceId].DisplayName;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[MainPage] Init error: {ex.Message}");
                 UpdateStatus(false, "Error");
             }
+        }
+
+        /// <summary>
+        /// Configure LLM services (OpenAI, Ollama, BuiltInAI) from settings.
+        /// </summary>
+        private void ConfigureLLMServices()
+        {
+            if (_translationManager is null) return;
+
+            // Configure OpenAI
+            _translationManager.ConfigureService("openai", service =>
+            {
+                if (service is OpenAIService openai)
+                {
+                    openai.Configure(
+                        _settings.OpenAIApiKey ?? "",
+                        _settings.OpenAIEndpoint,
+                        _settings.OpenAIModel,
+                        _settings.OpenAITemperature);
+                }
+            });
+
+            // Configure Ollama
+            _translationManager.ConfigureService("ollama", service =>
+            {
+                if (service is OllamaService ollama)
+                {
+                    ollama.Configure(
+                        _settings.OllamaEndpoint,
+                        _settings.OllamaModel);
+                }
+            });
+
+            // Configure BuiltIn AI
+            _translationManager.ConfigureService("builtin", service =>
+            {
+                if (service is BuiltInAIService builtin)
+                {
+                    builtin.Configure(_settings.BuiltInAIModel);
+                }
+            });
         }
 
         private void CleanupResources()
@@ -260,6 +323,14 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
+            // Reset manual target selection when text changes
+            // This ensures auto-detection works for new input (macOS behavior)
+            if (inputText != _lastQueryText)
+            {
+                _isManualTargetSelection = false;
+                _lastQueryText = inputText;
+            }
+
             // Cancel previous query (like macOS's stopAllService)
             _currentQueryCts?.Cancel();
             _currentQueryCts?.Dispose();
@@ -306,12 +377,24 @@ namespace Easydict.WinUI.Views
                     ToLanguage = targetLanguage
                 };
 
-                var result = await _translationManager.TranslateAsync(
-                    request,
-                    _currentQueryCts.Token);
+                var serviceId = _translationManager.DefaultServiceId;
 
-                // Update UI with result
-                DisplayResult(result);
+                // Check if service supports streaming
+                if (_translationManager.IsStreamingService(serviceId))
+                {
+                    // Streaming path for LLM services
+                    await ExecuteStreamingTranslationAsync(request, serviceId, detectedLanguage);
+                }
+                else
+                {
+                    // Non-streaming path for traditional services
+                    var result = await _translationManager.TranslateAsync(
+                        request,
+                        _currentQueryCts.Token);
+
+                    // Update UI with result
+                    DisplayResult(result);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -338,6 +421,61 @@ namespace Easydict.WinUI.Views
             {
                 SetLoading(false);
             }
+        }
+
+        /// <summary>
+        /// Execute streaming translation for LLM services.
+        /// Shows incremental results as they arrive from the API.
+        /// </summary>
+        private async Task ExecuteStreamingTranslationAsync(
+            TranslationRequest request,
+            string serviceId,
+            TranslationLanguage detectedLanguage)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var sb = new StringBuilder();
+            var lastUpdateTime = DateTime.UtcNow;
+            const int throttleMs = 50; // UI update throttle for smooth rendering
+
+            var serviceName = _translationManager!.Services[serviceId].DisplayName;
+            ServiceText.Text = $"{serviceName} • Streaming...";
+
+            await foreach (var chunk in _translationManager.TranslateStreamAsync(
+                request,
+                _currentQueryCts!.Token,
+                serviceId))
+            {
+                sb.Append(chunk);
+
+                // Throttle UI updates to avoid excessive redraws
+                var now = DateTime.UtcNow;
+                if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
+                {
+                    OutputTextBox.Text = sb.ToString();
+                    lastUpdateTime = now;
+                }
+            }
+
+            stopwatch.Stop();
+
+            // Final update with complete text
+            var finalText = sb.ToString().Trim();
+            OutputTextBox.Text = finalText;
+
+            TimingText.Text = $"⏱ {stopwatch.ElapsedMilliseconds}ms";
+
+            // Update service text with detected language
+            if (detectedLanguage != TranslationLanguage.Auto)
+            {
+                var langName = GetLanguageDisplayName(detectedLanguage);
+                ServiceText.Text = $"{serviceName} • {langName}";
+            }
+            else
+            {
+                ServiceText.Text = serviceName;
+            }
+
+            UpdateStatus(true, "Ready");
         }
 
         /// <summary>
@@ -465,6 +603,12 @@ namespace Easydict.WinUI.Views
 
             // User manually changed target language
             _isManualTargetSelection = true;
+
+            // Re-translate if there's text in the input
+            if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
+            {
+                _ = StartQueryAsync();
+            }
         }
 
         /// <summary>

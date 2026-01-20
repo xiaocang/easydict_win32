@@ -66,6 +66,10 @@ public sealed class TrayIconService : IDisposable
         translateItem.Click += (_, _) => OnTranslateClipboard?.Invoke();
         menu.Items.Add(translateItem);
 
+        var miniWindowItem = new MenuFlyoutItem { Text = "Mini Window (Ctrl+Alt+M)" };
+        miniWindowItem.Click += (_, _) => MiniWindowService.Instance.Toggle();
+        menu.Items.Add(miniWindowItem);
+
         menu.Items.Add(new MenuFlyoutSeparator());
 
         var settingsItem = new MenuFlyoutItem { Text = "Settings" };

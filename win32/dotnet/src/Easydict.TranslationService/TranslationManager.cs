@@ -20,7 +20,13 @@ public sealed class TranslationManager : IDisposable
 
     public TranslationManager()
     {
-        _httpClient = new HttpClient
+        var handler = new HttpClientHandler
+        {
+            SslProtocols = System.Security.Authentication.SslProtocols.Tls12 |
+                           System.Security.Authentication.SslProtocols.Tls13
+        };
+
+        _httpClient = new HttpClient(handler)
         {
             Timeout = TimeSpan.FromSeconds(30)
         };

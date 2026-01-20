@@ -22,6 +22,8 @@ namespace Easydict.WinUI.Views
         private readonly SettingsService _settings = SettingsService.Instance;
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
         private bool _isManualTargetSelection = false; // Track if user manually selected target
+        private bool _isLoaded;
+        private bool _suppressTargetLanguageSelectionChanged;
 
         public MainPage()
         {
@@ -59,6 +61,7 @@ namespace Easydict.WinUI.Views
 
         private void OnPageLoaded(object sender, RoutedEventArgs e)
         {
+            _isLoaded = true;
             InitializeTranslationServices();
             _detectionService = new LanguageDetectionService(_translationManager!, _settings);
             ApplySettings();
@@ -66,6 +69,7 @@ namespace Easydict.WinUI.Views
 
         private void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
+            _isLoaded = false;
             App.ClipboardTextReceived -= OnClipboardTextReceived;
             CleanupResources();
         }
@@ -85,7 +89,24 @@ namespace Easydict.WinUI.Views
                 "es" => 6,
                 _ => 1 // Default to Chinese
             };
-            TargetLangCombo.SelectedIndex = targetIndex;
+            _suppressTargetLanguageSelectionChanged = true;
+            try
+            {
+                if (targetIndex >= 0 && targetIndex < TargetLangCombo.Items.Count)
+                {
+                    TargetLangCombo.SelectedIndex = targetIndex;
+                }
+                if (targetIndex >= 0 && targetIndex < TargetLangComboNarrow.Items.Count)
+                {
+                    TargetLangComboNarrow.SelectedIndex = targetIndex;
+                }
+
+                _isManualTargetSelection = false;
+            }
+            finally
+            {
+                _suppressTargetLanguageSelectionChanged = false;
+            }
         }
 
         private void OnClipboardTextReceived(string text)
@@ -368,6 +389,11 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private void UpdateDetectedLanguageDisplay(TranslationLanguage detected)
         {
+            if (!_isLoaded)
+            {
+                return;
+            }
+
             if (detected != TranslationLanguage.Auto)
             {
                 var displayName = detected.GetDisplayName();
@@ -385,12 +411,31 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private void UpdateTargetLanguageSelector(TranslationLanguage targetLang)
         {
+            if (!_isLoaded)
+            {
+                return;
+            }
+
             var targetIndex = LanguageToComboIndex(targetLang);
 
             // Update both Wide and Narrow layout ComboBoxes without triggering SelectionChanged
-            _isManualTargetSelection = false; // Temporarily disable manual flag
-            TargetLangCombo.SelectedIndex = targetIndex;
-            TargetLangComboNarrow.SelectedIndex = targetIndex;
+            _suppressTargetLanguageSelectionChanged = true;
+            try
+            {
+                _isManualTargetSelection = false; // Temporarily disable manual flag
+                if (targetIndex >= 0 && targetIndex < TargetLangCombo.Items.Count)
+                {
+                    TargetLangCombo.SelectedIndex = targetIndex;
+                }
+                if (targetIndex >= 0 && targetIndex < TargetLangComboNarrow.Items.Count)
+                {
+                    TargetLangComboNarrow.SelectedIndex = targetIndex;
+                }
+            }
+            finally
+            {
+                _suppressTargetLanguageSelectionChanged = false;
+            }
         }
 
         /// <summary>
@@ -413,6 +458,11 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private void OnTargetLanguageChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (!_isLoaded || _suppressTargetLanguageSelectionChanged)
+            {
+                return;
+            }
+
             // User manually changed target language
             _isManualTargetSelection = true;
         }

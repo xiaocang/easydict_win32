@@ -78,6 +78,7 @@ namespace Easydict.WinUI
             _hotkeyService = new HotkeyService(_window);
             _hotkeyService.OnShowWindow += OnShowWindowHotkey;
             _hotkeyService.OnTranslateSelection += OnTranslateSelectionHotkey;
+            _hotkeyService.OnShowMiniWindow += OnShowMiniWindowHotkey;
             _hotkeyService.Initialize();
 
             // Initialize clipboard service
@@ -88,6 +89,11 @@ namespace Easydict.WinUI
 
             // Apply always-on-top setting
             ApplyAlwaysOnTop(settings.AlwaysOnTop);
+
+#if DEBUG
+            // Debug mode: automatically open mini window on startup
+            MiniWindowService.Instance.Show();
+#endif
         }
 
         private void OnShowWindowHotkey()
@@ -115,6 +121,14 @@ namespace Easydict.WinUI
                     }
                 });
             }
+        }
+
+        private void OnShowMiniWindowHotkey()
+        {
+            _window?.DispatcherQueue.TryEnqueue(() =>
+            {
+                MiniWindowService.Instance.Toggle();
+            });
         }
 
         private async void OnTrayTranslateClipboard()

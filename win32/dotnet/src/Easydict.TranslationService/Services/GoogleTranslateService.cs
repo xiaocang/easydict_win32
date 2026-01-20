@@ -79,10 +79,11 @@ public sealed class GoogleTranslateService : BaseTranslationService
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        // The detected language is at [2]
-        if (root.GetArrayLength() > 2 && root[2].ValueKind == JsonValueKind.String)
+        // With dj=1, response is an object with "src" property
+        if (root.TryGetProperty("src", out var srcElement) &&
+            srcElement.ValueKind == JsonValueKind.String)
         {
-            var detectedCode = root[2].GetString() ?? "en";
+            var detectedCode = srcElement.GetString() ?? "en";
             return LanguageCodes.FromIso639(detectedCode);
         }
 

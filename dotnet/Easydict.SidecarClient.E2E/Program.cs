@@ -19,7 +19,7 @@ static int Main(string[] args)
 static async Task<int> MainAsync(string[] args)
 {
     var repoRoot = FindRepoRoot(Environment.CurrentDirectory);
-    var scriptPath = Path.Combine(repoRoot, "win32", "sidecar_mock", "ipc_mock_service.py");
+    var scriptPath = Path.Combine(repoRoot, "sidecar_mock", "ipc_mock_service.py");
     if (!File.Exists(scriptPath))
     {
         throw new FileNotFoundException("Could not locate python mock sidecar service.", scriptPath);
@@ -149,14 +149,14 @@ static string FindRepoRoot(string startDir)
     var current = new DirectoryInfo(startDir);
     for (var i = 0; i < 12 && current is not null; i++)
     {
-        var candidate = Path.Combine(current.FullName, "win32", "sidecar_mock", "ipc_mock_service.py");
+        var candidate = Path.Combine(current.FullName, "sidecar_mock", "ipc_mock_service.py");
         if (File.Exists(candidate))
         {
             return current.FullName;
         }
         current = current.Parent;
     }
-    throw new DirectoryNotFoundException("Could not locate repository root by searching for win32/sidecar_mock/ipc_mock_service.py");
+    throw new DirectoryNotFoundException("Could not locate repository root by searching for sidecar_mock/ipc_mock_service.py");
 }
 
 static (string FileName, List<string> Args) SplitCommandLine(string command)

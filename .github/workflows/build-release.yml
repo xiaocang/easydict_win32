@@ -19,19 +19,19 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore dependencies
-        working-directory: win32/dotnet
+        working-directory: dotnet
         run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj
 
       - name: Build Release
-        working-directory: win32/dotnet
+        working-directory: dotnet
         run: dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --no-restore
 
       - name: Publish
-        working-directory: win32/dotnet
+        working-directory: dotnet
         run: dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --output ./publish --self-contained false
 
       - name: Create ZIP archive
-        run: Compress-Archive -Path win32/dotnet/publish/* -DestinationPath easydict_win32-${{ github.ref_name }}.zip
+        run: Compress-Archive -Path dotnet/publish/* -DestinationPath easydict_win32-${{ github.ref_name }}.zip
 
       - name: Create Release
         uses: softprops/action-gh-release@v1

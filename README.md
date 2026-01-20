@@ -74,58 +74,13 @@ Download the latest ZIP package from the [Releases](https://github.com/xiaocang/
 ```powershell
 # Clone repository
 git clone https://github.com/xiaocang/easydict_win32.git
-cd easydict_win32/win32/dotnet
+cd easydict_win32/dotnet
 
 # Build
 dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release
 
 # Run
 dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
-```
-
-## Development
-
-### Build Commands
-
-```powershell
-# Build Debug
-dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Debug
-
-# Build Release
-dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release
-
-# Run tests
-dotnet test Easydict.Win32.sln
-
-# Publish
-dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj -c Release -o ./publish
-```
-
-### VSCode Tasks
-
-The project includes several VSCode tasks, accessible via `Ctrl+Shift+B` or `Terminal > Run Task`:
-
-- `build` - Build Debug
-- `build-release` - Build Release
-- `test` - Run all tests
-- `test-translation` - Run translation service tests
-- `test-winui` - Run WinUI tests
-- `pack` - Package release build
-
-### Project Structure
-
-```
-win32/dotnet/
-├── src/
-│   ├── Easydict.WinUI/              # Main application
-│   ├── Easydict.TranslationService/ # Translation service library
-│   └── Easydict.SidecarClient/      # IPC client library
-├── tests/
-│   ├── Easydict.TranslationService.Tests/  # Translation service tests
-│   └── Easydict.WinUI.Tests/               # WinUI tests
-└── .github/workflows/
-    ├── ci.yml           # CI workflow (tests)
-    └── build-release.yml # Release workflow
 ```
 
 ## TODO

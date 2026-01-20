@@ -8,6 +8,7 @@
     <IsTestProject>true</IsTestProject>
     <Platform>x64</Platform>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +23,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="6.12.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.*" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.*" />
   </ItemGroup>
 
   <ItemGroup>

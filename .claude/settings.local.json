@@ -39,7 +39,8 @@
       "Bash(pod:*)",
       "Bash(xcbeautify:*)",
       "Bash(pgrep:*)",
-      "Bash(git show:*)"
+      "Bash(git show:*)",
+      "Bash(dotnet build:*)"
     ],
     "deny": [
       "Bash(git add:*)",

@@ -1,5 +1,4 @@
 # AGENTS.md (easydict_win32)
-
 Windows port of Easydict built with .NET 8 + WinUI 3.
 Most work is under `dotnet/`.
 
@@ -14,7 +13,6 @@ Related rule files:
 - No Copilot instructions found (`.github/copilot-instructions.md`).
 
 ## Repository Map
-
 - `dotnet/Easydict.Win32.sln`: solution entry point.
 - `dotnet/src/Easydict.WinUI/`: WinUI app (`net8.0-windows10.0.19041.0`).
 - `dotnet/src/Easydict.TranslationService/`: translation library (`net8.0`).
@@ -22,12 +20,9 @@ Related rule files:
 - `dotnet/tests/*`: xUnit tests (FluentAssertions).
 - `sidecar_mock/`: mock sidecar for local testing.
 
-Platform notes:
-- WinUI projects build/test on Windows runners.
-- `Easydict.TranslationService` + its tests are cross-platform.
+Platform notes: WinUI projects build/test on Windows runners; `Easydict.TranslationService` + its tests are cross-platform.
 
 ## Build / Run
-
 Run commands from `dotnet/` unless noted.
 
 ```bash
@@ -46,59 +41,31 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 # Publish (release artifact)
 dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj -c Release -o ./publish --self-contained false
 ```
-
-Makefile shortcuts (same folder):
-
-```bash
-make build
-make build-debug
-make build-release
-make test
-make test-translation
-make test-winui
-make publish
-```
+Makefile targets (from `dotnet/`): `make build`, `make build-release`, `make test`, `make test-translation`, `make test-winui`, `make publish`.
 
 ## Lint / Formatting
-
 No repo-wide formatter configuration is checked in (no `.editorconfig`).
 Treat compiler + analyzers during `dotnet build` as the primary lint signal.
 
-Useful local checks:
-
-```bash
-# Optional: fail on warnings
-dotnet build Easydict.Win32.sln -c Debug -warnaserror
-
-# Optional: run dotnet-format (only if installed; do not mass-reformat)
-dotnet format Easydict.Win32.sln
-```
+Optional checks (avoid mass reformatting):
+- `dotnet build Easydict.Win32.sln -c Debug -warnaserror`
+- `dotnet format Easydict.Win32.sln` (only if installed)
 
 ## Tests
-
-CI runs on Windows and executes solution-wide tests:
-
 ```bash
+# All tests (matches CI)
 dotnet test Easydict.Win32.sln --no-build --verbosity normal
-```
 
-Run one test project:
+# Run a single test from the solution (handy on CI runners)
+dotnet test Easydict.Win32.sln --filter "FullyQualifiedName~TranslationManagerTests" --no-build
 
-```bash
+# Single project
 dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=minimal"
 dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"
-```
 
-Run a single test (xUnit) using `--filter`:
-
-```bash
-# Discover exact names
+# Single test (xUnit): discover + filter
 dotnet test tests/Easydict.TranslationService.Tests --list-tests
-
-# Single class
 dotnet test tests/Easydict.TranslationService.Tests --filter "FullyQualifiedName~TranslationManagerTests"
-
-# Single method
 dotnet test tests/Easydict.TranslationService.Tests --filter "FullyQualifiedName~GoogleTranslateServiceTests.TranslateAsync_ReturnsTranslatedText"
 ```
 
@@ -107,78 +74,73 @@ Notes:
 - Keep tests hermetic: no real network calls; use mocks (e.g., `MockHttpMessageHandler`).
 
 ## Code Style (Match Existing Code)
+This repo uses modern C# (nullable enabled, file-scoped namespaces, `required`/`init`, raw string literals in tests). Keep changes consistent.
 
-This codebase already uses modern C# patterns (nullable enabled, file-scoped namespaces,
-`required` properties, raw string literals in tests). Keep changes consistent.
+General C# conventions:
+- Files/namespaces: file-scoped namespaces; namespaces follow folders; one primary type per file.
+- Imports: rely on implicit usings; WinUI globals in `dotnet/src/Easydict.WinUI/Imports.cs`; order `System.*` then `Easydict.*` then third-party.
+- Formatting: 4 spaces; braces on new lines; prefer early returns; keep public members before private helpers.
+- Language features: use `var` when the RHS makes the type obvious; prefer `sealed` for classes not meant for inheritance.
+- Types/nullability: annotate `?` correctly; avoid `!`; prefer `IReadOnly*` for exposed collections.
+- Naming: PascalCase public API; camelCase locals/params; `_camelCase` fields; async ends with `Async`.
 
-### Files / Project Structure
+Error handling:
+- Prefer domain exceptions and set context fields:
+  - `TranslationException` with `ErrorCode` and `ServiceId`.
+  - `SidecarException` subclasses for IPC issues.
+- Preserve inner exceptions when wrapping; do not swallow exceptions.
+- Cancellation: `CancellationToken cancellationToken = default` last; do not turn cancellation into a generic error.
 
-- Prefer file-scoped namespaces: `namespace Easydict.X;`.
-- Keep namespaces aligned with folders (`Easydict.TranslationService.Services`, etc.).
-- Prefer one primary type per file; filename matches the type.
-- Put WinUI UI logic in `Views/` and non-UI logic in `Services/`.
+Async/concurrency:
+- Avoid `.Result`/`.Wait()`; prefer `await`.
+- If you must use `TaskCompletionSource`, use `TaskCreationOptions.RunContinuationsAsynchronously`.
+- Use `ConcurrentDictionary`/locks for shared state; avoid racey event invocation.
 
-### Imports
+TranslationService conventions:
+- New services: add under `dotnet/src/Easydict.TranslationService/Services/`.
+- Prefer deriving from `BaseTranslationService` (or `BaseOpenAIService` for OpenAI-compatible streaming).
+- Map failures to `TranslationException` with the right `TranslationErrorCode` (network/timeout/rate-limit/etc.).
+- Respect `TranslationRequest.TimeoutMs` and propagate the provided `CancellationToken`.
+- Streaming services implement `IStreamTranslationService`:
+  - Use `[EnumeratorCancellation] CancellationToken cancellationToken`.
+  - Yield incremental chunks (not the fully-accumulated string).
 
-- `ImplicitUsings` is enabled; add explicit `using` only when needed.
-- WinUI global usings live in `dotnet/src/Easydict.WinUI/Imports.cs`.
-- Ordering for explicit `using` blocks:
-  - `System.*`
-  - `Easydict.*`
-  - third-party (`Microsoft.*`, `Xunit`, `FluentAssertions`, etc.)
-- Separate groups with a single blank line.
+Adding a new translation service (typical checklist):
+- Implement `ITranslationService` (or derive from `BaseTranslationService`).
+- Pick a stable `ServiceId` (lowercase, hyphenated) and a user-facing `DisplayName`.
+- If it's LLM streaming, derive from `BaseOpenAIService` and implement:
+  - `Endpoint`, `ApiKey`, `Model` (and override `RequiresApiKey` if not needed).
+  - `TranslateStreamAsync` if behavior differs from the base implementation.
+- Register the service in `dotnet/src/Easydict.TranslationService/TranslationManager.cs`.
+- Add/adjust settings fields (API keys, endpoints, models) in `dotnet/src/Easydict.WinUI/Services/SettingsService.cs`.
+- Add an icon in `dotnet/src/Easydict.WinUI/Assets/ServiceIcons/` if the UI expects one.
+- Add tests under `dotnet/tests/Easydict.TranslationService.Tests/Services/`.
 
-### Formatting
+HTTP conventions:
+- Reuse the provided `HttpClient`; do not new up clients per request.
+- Prefer `HttpCompletionOption.ResponseHeadersRead` for streaming responses.
+- On non-success HTTP status codes, throw a `TranslationException` with an appropriate `ErrorCode`.
+- Do not log secrets (API keys, auth headers, full request bodies).
 
-- 4-space indent; braces on new lines.
-- Prefer early returns over deep nesting.
-- Prefer object/collection initializers for DTO-like objects.
-- Prefer pattern matching (`is null`, `is not null`) over `== null` when it reads better.
-- Use raw string literals (`"""`) for multi-line JSON in tests.
+SidecarClient conventions:
+- IPC is JSON Lines over stdio; keep messages single-line JSON.
+- Timeouts should throw `SidecarTimeoutException` and include request id.
+- When the process exits, fail outstanding requests promptly.
 
-### Types / Nullability
+WinUI conventions:
+- Keep code-behind thin; put logic into `Services/`.
+- Avoid blocking the UI thread; marshal UI updates to UI thread when needed.
 
-- Nullable reference types are enabled; annotate correctly (`string?`, `Foo?`).
-- Prefer `required` + `init` for request/option models (see `TranslationRequest`).
-- Avoid null-forgiving (`!`) unless you can justify a strong invariant.
-- Prefer `IReadOnlyList<T>`/`IReadOnlyDictionary<K,V>` for exposed collections.
+XAML conventions (keep it boring and consistent):
+- Prefer `x:Name` for elements you access from code-behind.
+- Keep resources/styles close to where they are used; avoid giant global dictionaries.
+- Avoid long event handler chains; push logic into services/viewmodels where possible.
 
-### Naming
+Test conventions:
+- xUnit + FluentAssertions; AAA; small, focused tests.
+- Avoid real HTTP/I/O; prefer mocks/fakes (see `MockHttpMessageHandler`).
 
-- Public API: `PascalCase`.
-- Locals/parameters: `camelCase`.
-- Private fields: `_camelCase`.
-- Async methods: `*Async` and return `Task`/`Task<T>`.
-- Domain conventions: `*Service`, `*Options`, `*Exception`, `*Tests`.
-- Test method naming convention: `Method_Scenario_ExpectedResult`.
-
-### Error Handling
-
-- Use specific exception types and include context.
-  - Translation domain: prefer `TranslationException` + `TranslationErrorCode`.
-  - Sidecar domain: prefer `SidecarException` subclasses (timeout, not running, etc.).
-- Preserve the original exception as `innerException` when wrapping.
-- Do not swallow exceptions silently; if intentionally ignored, add a short comment.
-- Cancellation:
-  - Put `CancellationToken cancellationToken = default` last in the parameter list.
-  - Do not convert cancellation into generic failures unless explicitly required.
-
-### Async / Concurrency
-
-- Avoid blocking calls (`.Result`, `.Wait()`) and sync-over-async.
-- Prefer `TaskCreationOptions.RunContinuationsAsynchronously` with `TaskCompletionSource`.
-- Use `ConcurrentDictionary`/locks for shared state (see `SidecarClient`).
-- Dispose/cleanup resources deterministically (`IDisposable`/`IAsyncDisposable`).
-
-### WinUI Notes
-
-- Keep code-behind thin; prefer services for state and side effects.
-- Do not block UI thread; keep long work async.
-- Marshal UI updates back to UI thread (DispatcherQueue, etc.) when needed.
-
-### Test Style
-
-- Use xUnit + FluentAssertions.
-- Prefer AAA (Arrange/Act/Assert) with small, focused tests.
-- Prefer `Assert.ThrowsAsync<T>` / FluentAssertions async helpers for exception tests.
-- Avoid real I/O and network; use fakes/mocks.
+Diagnostics / hygiene:
+- Prefer `System.Diagnostics.Debug.WriteLine` for ad-hoc debugging; remove noisy logs before merging.
+- Never commit secrets (API keys, tokens). Test inputs should use dummy keys.
+- If you add new settings, ensure defaults are sensible and tests do not depend on user-local files.

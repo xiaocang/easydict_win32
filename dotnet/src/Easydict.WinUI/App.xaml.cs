@@ -49,10 +49,10 @@ namespace Easydict.WinUI
             if (_appWindow != null)
             {
                 WindowIconService.SetWindowIcon(_appWindow);
-            }
 
-            // Handle window close to minimize to tray instead
-            _appWindow.Closing += OnWindowClosing;
+                // Handle window close to minimize to tray instead
+                _appWindow.Closing += OnWindowClosing;
+            }
 
             if (_window.Content is not Frame rootFrame)
             {

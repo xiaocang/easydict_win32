@@ -18,7 +18,7 @@ public sealed class LanguageDetectionService : IDisposable
 {
     private readonly TranslationManager _translationManager;
     private readonly SettingsService _settings;
-    private readonly IMemoryCache _cache;
+    private readonly MemoryCache _cache;
     private readonly MemoryCacheEntryOptions _cacheOptions;
 
     public LanguageDetectionService(TranslationManager translationManager, SettingsService settings)

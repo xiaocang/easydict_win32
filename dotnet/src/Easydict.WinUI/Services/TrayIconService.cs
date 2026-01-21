@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using H.NotifyIcon;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -64,17 +65,64 @@ public sealed class TrayIconService : IDisposable
 
     private static ImageSource CreateTrayIconSource()
     {
-        const string relativeIconPath = "Assets\\Square44x44Logo.targetsize-24_altform-unplated.png";
+        // Primary path: TrayIcon.png from application directory (unpackaged builds)
+        // This file is generated at build time from the same source as AppIcon.ico
+        const string trayIconFileName = "TrayIcon.png";
+        var trayIconPath = Path.Combine(AppContext.BaseDirectory, trayIconFileName);
 
-        // Unpackaged (F5): ms-appx is often unavailable; prefer absolute file path.
-        if (!IsPackagedApp())
+        if (File.Exists(trayIconPath))
         {
-            var filePath = Path.Combine(AppContext.BaseDirectory, relativeIconPath);
-            return new BitmapImage(new Uri(filePath));
+            try
+            {
+                var bitmap = new BitmapImage(new Uri(trayIconPath));
+                Debug.WriteLine($"[TrayIcon] Loaded from primary: {trayIconPath}");
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[TrayIcon] Failed to load from primary: {ex.Message}");
+            }
         }
 
-        // Packaged: use ms-appx.
-        return new BitmapImage(new Uri("ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png"));
+        // Fallback 1: Try Assets folder with ms-appx URI (packaged builds)
+        if (IsPackagedApp())
+        {
+            try
+            {
+                var uri = new Uri("ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png");
+                var bitmap = new BitmapImage(uri);
+                Debug.WriteLine("[TrayIcon] Loaded from packaged assets (ms-appx)");
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[TrayIcon] Failed to load from ms-appx: {ex.Message}");
+            }
+        }
+
+        // Fallback 2: Try Assets folder with file path (unpackaged/F5 debug)
+        const string relativeIconPath = "Assets\\Square44x44Logo.targetsize-24_altform-unplated.png";
+        var fallbackPath = Path.Combine(AppContext.BaseDirectory, relativeIconPath);
+
+        if (File.Exists(fallbackPath))
+        {
+            try
+            {
+                var bitmap = new BitmapImage(new Uri(fallbackPath));
+                Debug.WriteLine($"[TrayIcon] Loaded from fallback: {fallbackPath}");
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[TrayIcon] Failed to load from fallback: {ex.Message}");
+            }
+        }
+
+        // All loading attempts failed - return a placeholder or null
+        Debug.WriteLine("[TrayIcon] All icon loading attempts failed, tray icon will use system default");
+
+        // Return a simple bitmap to avoid null reference - it will show as a default icon
+        return new BitmapImage();
     }
 
     private static bool IsPackagedApp()

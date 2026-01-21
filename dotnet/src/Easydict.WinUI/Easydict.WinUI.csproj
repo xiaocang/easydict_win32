@@ -100,13 +100,17 @@
 
     <Target Name="GenerateAppIconIco" BeforeTargets="BeforeBuild">
         <Exec
-            Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\\..\\scripts\\generate-app-icon-ico.ps1&quot; -SourcePng &quot;$(ProjectDir)Assets\\macos\\white-black-icon.appiconset\\icon_512x512@2x.png&quot; -OutputIco &quot;$(IntermediateOutputPath)AppIcon.ico&quot;" />
+            Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\\..\\scripts\\generate-app-icon-ico.ps1&quot; -SourcePng &quot;$(ProjectDir)Assets\\macos\\white-black-icon.appiconset\\icon_512x512@2x.png&quot; -OutputIco &quot;$(IntermediateOutputPath)AppIcon.ico&quot; -OutputTrayPng &quot;$(IntermediateOutputPath)TrayIcon.png&quot;" />
     </Target>
 
-    <Target Name="CopyAppIconIcoToOutput" AfterTargets="Build">
+    <Target Name="CopyAppIconToOutput" AfterTargets="Build">
         <Copy
             SourceFiles="$(IntermediateOutputPath)AppIcon.ico"
             DestinationFiles="$(OutDir)AppIcon.ico"
+            SkipUnchangedFiles="true" />
+        <Copy
+            SourceFiles="$(IntermediateOutputPath)TrayIcon.png"
+            DestinationFiles="$(OutDir)TrayIcon.png"
             SkipUnchangedFiles="true" />
     </Target>
 

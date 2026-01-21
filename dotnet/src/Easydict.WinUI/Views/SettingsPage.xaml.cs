@@ -148,6 +148,11 @@ public sealed partial class SettingsPage : Page
 
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
+        // Capture original proxy settings to detect changes
+        var originalProxyEnabled = _settings.ProxyEnabled;
+        var originalProxyUri = _settings.ProxyUri;
+        var originalProxyBypassLocal = _settings.ProxyBypassLocal;
+
         // Save translation settings
         _settings.DefaultService = GetSelectedTag(ServiceCombo) ?? "google";
         _settings.TargetLanguage = GetSelectedTag(TargetLangCombo) ?? "zh";
@@ -232,6 +237,20 @@ public sealed partial class SettingsPage : Page
         // Persist to storage
         _settings.Save();
 
+        // If proxy settings changed, recreate manager with new proxy (includes service configuration)
+        // Otherwise, just reconfigure services with new settings (API keys, models, endpoints)
+        var proxyChanged = originalProxyEnabled != _settings.ProxyEnabled ||
+                           originalProxyUri != _settings.ProxyUri ||
+                           originalProxyBypassLocal != _settings.ProxyBypassLocal;
+        if (proxyChanged)
+        {
+            TranslationManagerService.Instance.ReconfigureProxy();
+        }
+        else
+        {
+            TranslationManagerService.Instance.ReconfigureServices();
+        }
+
         // Apply always-on-top setting immediately
         App.ApplyAlwaysOnTop(_settings.AlwaysOnTop);
 
@@ -245,7 +264,7 @@ public sealed partial class SettingsPage : Page
         var dialog = new ContentDialog
         {
             Title = "Settings Saved",
-            Content = "Your settings have been saved. Some changes (like hotkeys and proxy) require an app restart to take effect.",
+            Content = "Your settings have been saved. Hotkey changes require an app restart to take effect.",
             CloseButtonText = "OK",
             XamlRoot = this.XamlRoot
         };

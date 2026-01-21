@@ -16,14 +16,18 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class LanguageDetectionService : IDisposable
 {
-    private readonly TranslationManager _translationManager;
     private readonly SettingsService _settings;
-    private readonly MemoryCache _cache;
+
+    /// <summary>
+    /// Memory cache for detection results.
+    /// Uses IMemoryCache interface for consistency with TranslationManager.
+    /// Cast to MemoryCache when calling Compact() in ClearCache().
+    /// </summary>
+    private readonly IMemoryCache _cache;
     private readonly MemoryCacheEntryOptions _cacheOptions;
 
-    public LanguageDetectionService(TranslationManager translationManager, SettingsService settings)
+    public LanguageDetectionService(SettingsService settings)
     {
-        _translationManager = translationManager ?? throw new ArgumentNullException(nameof(translationManager));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
 
         _cache = new MemoryCache(new MemoryCacheOptions
@@ -70,7 +74,9 @@ public sealed class LanguageDetectionService : IDisposable
         try
         {
             // Use Google Translate service for detection (no API key required)
-            var googleService = _translationManager.Services.TryGetValue("google", out var service)
+            // Acquire handle to prevent manager disposal during detection
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            var googleService = handle.Manager.Services.TryGetValue("google", out var service)
                 ? service
                 : null;
 
@@ -143,7 +149,7 @@ public sealed class LanguageDetectionService : IDisposable
     /// </summary>
     public void ClearCache()
     {
-        _cache.Compact(1.0); // Remove all entries (100% compaction)
+        (_cache as MemoryCache)?.Compact(1.0); // Remove all entries (100% compaction)
         Debug.WriteLine("[Detection] Cache cleared");
     }
 

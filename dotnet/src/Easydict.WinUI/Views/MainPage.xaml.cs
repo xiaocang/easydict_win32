@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
-using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Input;
@@ -19,7 +18,6 @@ namespace Easydict.WinUI.Views
     /// </summary>
     public partial class MainPage : Page
     {
-        private TranslationManager? _translationManager;
         private LanguageDetectionService? _detectionService;
         private CancellationTokenSource? _currentQueryCts;
         private readonly SettingsService _settings = SettingsService.Instance;
@@ -67,7 +65,7 @@ namespace Easydict.WinUI.Views
         {
             _isLoaded = true;
             InitializeTranslationServices();
-            _detectionService = new LanguageDetectionService(_translationManager!, _settings);
+            _detectionService = new LanguageDetectionService(_settings);
             ApplySettings();
         }
 
@@ -129,31 +127,11 @@ namespace Easydict.WinUI.Views
             {
                 UpdateStatus(null, "Initializing...");
 
-                // Create TranslationManager with proxy settings
-                var options = new TranslationManagerOptions
-                {
-                    ProxyEnabled = _settings.ProxyEnabled,
-                    ProxyUri = _settings.ProxyUri,
-                    ProxyBypassLocal = _settings.ProxyBypassLocal
-                };
-                _translationManager = new TranslationManager(options);
+                var manager = TranslationManagerService.Instance.Manager;
 
-                // Configure LLM services from settings
-                ConfigureLLMServices();
-
-                // Set default service from settings
-                var defaultService = _settings.DefaultService;
-                if (_translationManager.Services.ContainsKey(defaultService))
-                {
-                    _translationManager.DefaultServiceId = defaultService;
-                }
-                else
-                {
-                    _translationManager.DefaultServiceId = "google";
-                }
-
+                // DefaultServiceId is now managed centrally by TranslationManagerService
                 UpdateStatus(true, "Ready");
-                ServiceText.Text = _translationManager.Services[_translationManager.DefaultServiceId].DisplayName;
+                ServiceText.Text = manager.Services[manager.DefaultServiceId].DisplayName;
             }
             catch (Exception ex)
             {
@@ -162,123 +140,14 @@ namespace Easydict.WinUI.Views
             }
         }
 
-        /// <summary>
-        /// Configure LLM services (OpenAI, Ollama, BuiltInAI) from settings.
-        /// </summary>
-        private void ConfigureLLMServices()
-        {
-            if (_translationManager is null) return;
-
-            // Configure OpenAI
-            _translationManager.ConfigureService("openai", service =>
-            {
-                if (service is OpenAIService openai)
-                {
-                    openai.Configure(
-                        _settings.OpenAIApiKey ?? "",
-                        _settings.OpenAIEndpoint,
-                        _settings.OpenAIModel,
-                        _settings.OpenAITemperature);
-                }
-            });
-
-            // Configure Ollama
-            _translationManager.ConfigureService("ollama", service =>
-            {
-                if (service is OllamaService ollama)
-                {
-                    ollama.Configure(
-                        _settings.OllamaEndpoint,
-                        _settings.OllamaModel);
-                }
-            });
-
-            // Configure BuiltIn AI
-            _translationManager.ConfigureService("builtin", service =>
-            {
-                if (service is BuiltInAIService builtin)
-                {
-                    builtin.Configure(_settings.BuiltInAIModel);
-                }
-            });
-
-            // Configure DeepSeek
-            _translationManager.ConfigureService("deepseek", service =>
-            {
-                if (service is DeepSeekService deepseek)
-                {
-                    deepseek.Configure(
-                        _settings.DeepSeekApiKey ?? "",
-                        model: _settings.DeepSeekModel);
-                }
-            });
-
-            // Configure Groq
-            _translationManager.ConfigureService("groq", service =>
-            {
-                if (service is GroqService groq)
-                {
-                    groq.Configure(
-                        _settings.GroqApiKey ?? "",
-                        model: _settings.GroqModel);
-                }
-            });
-
-            // Configure Zhipu
-            _translationManager.ConfigureService("zhipu", service =>
-            {
-                if (service is ZhipuService zhipu)
-                {
-                    zhipu.Configure(
-                        _settings.ZhipuApiKey ?? "",
-                        model: _settings.ZhipuModel);
-                }
-            });
-
-            // Configure GitHub Models
-            _translationManager.ConfigureService("github", service =>
-            {
-                if (service is GitHubModelsService github)
-                {
-                    github.Configure(
-                        _settings.GitHubModelsToken ?? "",
-                        model: _settings.GitHubModelsModel);
-                }
-            });
-
-            // Configure Custom OpenAI
-            _translationManager.ConfigureService("custom-openai", service =>
-            {
-                if (service is CustomOpenAIService customOpenai)
-                {
-                    customOpenai.Configure(
-                        _settings.CustomOpenAIEndpoint,
-                        _settings.CustomOpenAIApiKey,
-                        _settings.CustomOpenAIModel);
-                }
-            });
-
-            // Configure Gemini
-            _translationManager.ConfigureService("gemini", service =>
-            {
-                if (service is GeminiService gemini)
-                {
-                    gemini.Configure(
-                        _settings.GeminiApiKey ?? "",
-                        _settings.GeminiModel);
-                }
-            });
-        }
-
         private void CleanupResources()
         {
             _currentQueryCts?.Cancel();
             _currentQueryCts?.Dispose();
             _currentQueryCts = null;
             _detectionService?.Dispose();
-            _translationManager?.Dispose();
-            _translationManager = null;
             _detectionService = null;
+            // Do NOT dispose shared TranslationManager - it's managed by TranslationManagerService
         }
 
         private void UpdateStatus(bool? connected, string text)
@@ -378,7 +247,7 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private async Task StartQueryAsync()
         {
-            if (_translationManager is null || _detectionService is null)
+            if (_detectionService is null)
             {
                 OutputTextBox.Text = "Service not initialized. Please wait...";
                 InitializeTranslationServices();
@@ -445,20 +314,25 @@ namespace Easydict.WinUI.Views
                     ToLanguage = targetLanguage
                 };
 
-                var serviceId = _translationManager.DefaultServiceId;
+                // Acquire handle to prevent manager disposal during translation.
+                // Capture DefaultServiceId atomically with manager to prevent race condition.
+                using var handle = TranslationManagerService.Instance.AcquireHandle();
+                var manager = handle.Manager;
+                var serviceId = manager.DefaultServiceId;
 
                 // Check if service supports streaming
-                if (_translationManager.IsStreamingService(serviceId))
+                if (manager.IsStreamingService(serviceId))
                 {
                     // Streaming path for LLM services
-                    await ExecuteStreamingTranslationAsync(request, serviceId, detectedLanguage);
+                    await ExecuteStreamingTranslationAsync(manager, request, serviceId, detectedLanguage);
                 }
                 else
                 {
                     // Non-streaming path for traditional services
-                    var result = await _translationManager.TranslateAsync(
+                    var result = await manager.TranslateAsync(
                         request,
-                        _currentQueryCts.Token);
+                        _currentQueryCts.Token,
+                        serviceId);
 
                     // Update UI with result
                     DisplayResult(result);
@@ -494,8 +368,10 @@ namespace Easydict.WinUI.Views
         /// <summary>
         /// Execute streaming translation for LLM services.
         /// Shows incremental results as they arrive from the API.
+        /// The caller must provide a manager from an acquired SafeManagerHandle.
         /// </summary>
         private async Task ExecuteStreamingTranslationAsync(
+            TranslationManager manager,
             TranslationRequest request,
             string serviceId,
             TranslationLanguage detectedLanguage)
@@ -505,10 +381,10 @@ namespace Easydict.WinUI.Views
             var lastUpdateTime = DateTime.UtcNow;
             const int throttleMs = 50; // UI update throttle for smooth rendering
 
-            var serviceName = _translationManager!.Services[serviceId].DisplayName;
+            var serviceName = manager.Services[serviceId].DisplayName;
             ServiceText.Text = $"{serviceName} • Streaming...";
 
-            await foreach (var chunk in _translationManager.TranslateStreamAsync(
+            await foreach (var chunk in manager.TranslateStreamAsync(
                 request,
                 _currentQueryCts!.Token,
                 serviceId))

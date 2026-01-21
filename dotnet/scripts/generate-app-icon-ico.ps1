@@ -6,6 +6,9 @@ param(
     [string]$OutputIco,
 
     [Parameter(Mandatory = $false)]
+    [string]$OutputTrayPng,
+
+    [Parameter(Mandatory = $false)]
     [int[]]$Sizes = @(16, 24, 32, 48, 64, 128, 256)
 )
 
@@ -129,6 +132,36 @@ try {
     }
 
     Write-Ico -PngImages $pngImages -ImageSizes $Sizes -Path $outputFull
+
+    # Generate TrayIcon.png if requested
+    if ($PSBoundParameters.ContainsKey('OutputTrayPng') -and -not [string]::IsNullOrWhiteSpace($OutputTrayPng)) {
+        Write-Host "Generating TrayIcon.png..."
+
+        $traySize = 32
+        $trayBitmap = New-Object System.Drawing.Bitmap $traySize, $traySize, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        $trayGraphics = [System.Drawing.Graphics]::FromImage($trayBitmap)
+        try {
+            $trayGraphics.Clear([System.Drawing.Color]::Transparent)
+            $trayGraphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+            $trayGraphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $trayGraphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+            $trayGraphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+
+            $trayGraphics.DrawImage($sourceImage, 0, 0, $traySize, $traySize)
+
+            $trayDir = Split-Path -Parent $OutputTrayPng
+            if (-not [string]::IsNullOrWhiteSpace($trayDir)) {
+                New-Item -ItemType Directory -Force -Path $trayDir | Out-Null
+            }
+
+            $trayBitmap.Save($OutputTrayPng, [System.Drawing.Imaging.ImageFormat]::Png)
+            Write-Host "TrayIcon.png saved to: $OutputTrayPng"
+        }
+        finally {
+            $trayGraphics.Dispose()
+            $trayBitmap.Dispose()
+        }
+    }
 }
 finally {
     $sourceImage.Dispose()

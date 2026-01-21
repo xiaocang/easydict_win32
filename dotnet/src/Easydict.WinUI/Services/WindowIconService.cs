@@ -28,7 +28,7 @@ public static class WindowIconService
             var iconId = GetEmbeddedIconId();
             if (iconId != null)
             {
-                appWindow.SetIcon(iconId);
+                appWindow.SetIcon(iconId.Value);
                 System.Diagnostics.Debug.WriteLine("[Icon] Successfully set icon from embedded resource");
                 return;
             }

@@ -365,6 +365,7 @@ namespace Easydict.WinUI.Views
         /// <summary>
         /// Execute streaming translation for LLM services.
         /// Shows incremental results as they arrive from the API.
+        /// Uses SafeManagerHandle to prevent manager disposal during streaming.
         /// </summary>
         private async Task ExecuteStreamingTranslationAsync(
             TranslationRequest request,
@@ -376,7 +377,10 @@ namespace Easydict.WinUI.Views
             var lastUpdateTime = DateTime.UtcNow;
             const int throttleMs = 50; // UI update throttle for smooth rendering
 
-            var manager = TranslationManagerService.Instance.Manager;
+            // Acquire handle to prevent manager disposal during streaming
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            var manager = handle.Manager;
+
             var serviceName = manager.Services[serviceId].DisplayName;
             ServiceText.Text = $"{serviceName} • Streaming...";
 

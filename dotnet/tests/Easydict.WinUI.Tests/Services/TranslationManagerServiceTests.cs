@@ -145,4 +145,150 @@ public class TranslationManagerServiceTests
         exceptions.Should().BeEmpty("concurrent reconfiguration should not throw exceptions");
         service.Manager.Should().NotBeNull();
     }
+
+    [Fact]
+    public void AcquireHandle_ReturnsValidHandle()
+    {
+        var service = TranslationManagerService.Instance;
+
+        using var handle = service.AcquireHandle();
+
+        handle.Should().NotBeNull();
+        handle.Manager.Should().NotBeNull();
+        handle.Manager.Should().BeSameAs(service.Manager);
+    }
+
+    [Fact]
+    public void SafeHandle_ThrowsWhenAccessedAfterDispose()
+    {
+        var service = TranslationManagerService.Instance;
+        var handle = service.AcquireHandle();
+
+        handle.Dispose();
+
+        var act = () => { var _ = handle.Manager; };
+        act.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public void SafeHandle_PreventsDisposalDuringUse()
+    {
+        var service = TranslationManagerService.Instance;
+
+        // Acquire handle before reconfiguring
+        using var handle = service.AcquireHandle();
+        var managedManager = handle.Manager;
+
+        // Reconfigure proxy (would normally queue old manager for disposal)
+        service.ReconfigureProxy();
+
+        // The handle should still provide access to the original manager
+        // and it should not be disposed
+        var act = () =>
+        {
+            // Access the manager through the handle - should not throw
+            var _ = handle.Manager.Services;
+        };
+        act.Should().NotThrow("manager should not be disposed while handle is held");
+
+        // The current service manager should be the new one
+        service.Manager.Should().NotBeSameAs(managedManager);
+    }
+
+    [Fact]
+    public void AcquireHandle_ThreadSafe_MultipleHandles()
+    {
+        var service = TranslationManagerService.Instance;
+        var exceptions = new List<Exception>();
+        var handles = new List<SafeManagerHandle>();
+        var lockObj = new object();
+
+        // Acquire handles from multiple threads concurrently
+        Parallel.For(0, 50, _ =>
+        {
+            try
+            {
+                var handle = service.AcquireHandle();
+                lock (lockObj)
+                {
+                    handles.Add(handle);
+                }
+            }
+            catch (Exception ex)
+            {
+                lock (lockObj)
+                {
+                    exceptions.Add(ex);
+                }
+            }
+        });
+
+        exceptions.Should().BeEmpty("concurrent handle acquisition should not throw exceptions");
+        handles.Should().HaveCount(50);
+
+        // All handles should reference a valid manager
+        foreach (var handle in handles)
+        {
+            handle.Manager.Should().NotBeNull();
+        }
+
+        // Dispose all handles
+        foreach (var handle in handles)
+        {
+            handle.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ReconfigureProxy_WithActiveHandle_QueuesForDisposal()
+    {
+        var service = TranslationManagerService.Instance;
+
+        // Acquire a handle
+        var handle = service.AcquireHandle();
+        var originalManager = handle.Manager;
+
+        // Reconfigure - old manager should be queued, not disposed
+        service.ReconfigureProxy();
+
+        // Original manager should still be usable through the handle
+        originalManager.Services.Should().NotBeEmpty("manager should not be disposed while handle exists");
+
+        // Release the handle
+        handle.Dispose();
+
+        // The original manager is no longer the current one
+        service.Manager.Should().NotBeSameAs(originalManager);
+    }
+
+    [Fact]
+    public void MultipleHandles_AllPreventDisposal()
+    {
+        var service = TranslationManagerService.Instance;
+
+        // Acquire multiple handles
+        var handle1 = service.AcquireHandle();
+        var handle2 = service.AcquireHandle();
+        var handle3 = service.AcquireHandle();
+
+        var originalManager = handle1.Manager;
+
+        // Reconfigure proxy
+        service.ReconfigureProxy();
+
+        // All handles should still work
+        handle1.Manager.Should().BeSameAs(originalManager);
+        handle2.Manager.Should().BeSameAs(originalManager);
+        handle3.Manager.Should().BeSameAs(originalManager);
+
+        // Dispose handles one by one
+        handle1.Dispose();
+        handle2.Manager.Should().BeSameAs(originalManager); // Still valid
+
+        handle2.Dispose();
+        handle3.Manager.Should().BeSameAs(originalManager); // Still valid
+
+        handle3.Dispose();
+        // Now original manager can be disposed (happens asynchronously)
+    }
 }

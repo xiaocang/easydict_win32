@@ -511,6 +511,7 @@ public sealed partial class MiniWindow : Window
     /// <summary>
     /// Execute streaming translation for a single service.
     /// Updates the ServiceQueryResult's StreamingText as chunks arrive.
+    /// Uses SafeManagerHandle to prevent manager disposal during streaming.
     /// </summary>
     private async Task ExecuteStreamingTranslationForServiceAsync(
         ServiceQueryResult serviceResult,
@@ -532,7 +533,10 @@ public sealed partial class MiniWindow : Window
             serviceResult.StreamingText = "";
         });
 
-        var manager = TranslationManagerService.Instance.Manager;
+        // Acquire handle to prevent manager disposal during streaming
+        using var handle = TranslationManagerService.Instance.AcquireHandle();
+        var manager = handle.Manager;
+
         await foreach (var chunk in manager.TranslateStreamAsync(
             request, ct, serviceResult.ServiceId))
         {

@@ -16,10 +16,15 @@ public sealed class TranslationManagerService : IDisposable
     private readonly SettingsService _settings;
     private readonly object _lock = new object();
 
+    // Reference counting for safe disposal during streaming operations
+    private readonly Dictionary<TranslationManager, int> _handleCounts = new();
+    private readonly List<TranslationManager> _disposalQueue = new();
+
     public static TranslationManagerService Instance => _instance.Value;
 
     /// <summary>
     /// The shared TranslationManager instance.
+    /// For streaming operations, prefer using AcquireHandle() to prevent disposal during use.
     /// </summary>
     public TranslationManager Manager
     {
@@ -29,6 +34,79 @@ public sealed class TranslationManagerService : IDisposable
             {
                 return _translationManager;
             }
+        }
+    }
+
+    /// <summary>
+    /// Acquires a reference-counted handle to the current TranslationManager.
+    /// The manager is guaranteed not to be disposed while any handle is held.
+    /// Use this for streaming operations that may take longer than the disposal delay.
+    /// </summary>
+    /// <returns>A SafeManagerHandle that must be disposed when the operation completes.</returns>
+    public SafeManagerHandle AcquireHandle()
+    {
+        lock (_lock)
+        {
+            var manager = _translationManager;
+
+            if (!_handleCounts.ContainsKey(manager))
+            {
+                _handleCounts[manager] = 0;
+            }
+            _handleCounts[manager]++;
+
+            Debug.WriteLine($"[TranslationManagerService] Handle acquired, count={_handleCounts[manager]}");
+
+            return new SafeManagerHandle(manager, () => ReleaseHandle(manager));
+        }
+    }
+
+    /// <summary>
+    /// Releases a handle to a TranslationManager instance.
+    /// If the manager is queued for disposal and all handles are released, it will be disposed.
+    /// </summary>
+    private void ReleaseHandle(TranslationManager manager)
+    {
+        lock (_lock)
+        {
+            if (_handleCounts.TryGetValue(manager, out var count))
+            {
+                count--;
+                if (count <= 0)
+                {
+                    _handleCounts.Remove(manager);
+                    Debug.WriteLine("[TranslationManagerService] Handle released, count=0");
+
+                    // Check if this manager is queued for disposal
+                    if (_disposalQueue.Contains(manager))
+                    {
+                        _disposalQueue.Remove(manager);
+                        Debug.WriteLine("[TranslationManagerService] Disposing queued manager after last handle release");
+                        DisposeManagerSafely(manager);
+                    }
+                }
+                else
+                {
+                    _handleCounts[manager] = count;
+                    Debug.WriteLine($"[TranslationManagerService] Handle released, count={count}");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Safely disposes a manager, catching any exceptions.
+    /// </summary>
+    private static void DisposeManagerSafely(TranslationManager manager)
+    {
+        try
+        {
+            manager.Dispose();
+            Debug.WriteLine("[TranslationManagerService] Manager disposed successfully");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[TranslationManagerService] Error disposing manager: {ex.Message}");
         }
     }
 
@@ -172,11 +250,14 @@ public sealed class TranslationManagerService : IDisposable
 
     /// <summary>
     /// Recreate the TranslationManager with new proxy settings.
-    /// The old manager is disposed after a delay to allow in-flight operations to complete.
+    /// The old manager is disposed when all active handles are released.
+    /// If no handles are held, disposal happens after a brief delay.
     /// </summary>
     public void ReconfigureProxy()
     {
         TranslationManager? oldManager;
+        bool hasActiveHandles;
+
         lock (_lock)
         {
             var options = new TranslationManagerOptions
@@ -191,25 +272,40 @@ public sealed class TranslationManagerService : IDisposable
             ConfigureServices();
             UpdateDefaultService();
 
+            // Check if the old manager has active handles
+            hasActiveHandles = _handleCounts.TryGetValue(oldManager, out var count) && count > 0;
+
+            if (hasActiveHandles)
+            {
+                // Queue for disposal when all handles are released
+                _disposalQueue.Add(oldManager);
+                Debug.WriteLine($"[TranslationManagerService] Old manager queued for disposal (active handles: {count})");
+            }
+
             Debug.WriteLine("[TranslationManagerService] Proxy reconfigured");
         }
 
-        // Defer disposal to allow in-flight operations to complete.
-        // Proxy changes are rare user actions, so a brief delay is acceptable.
-        if (oldManager != null)
+        // If no active handles, dispose after a brief delay for any non-streaming operations
+        if (oldManager != null && !hasActiveHandles)
         {
             _ = Task.Run(async () =>
             {
-                await Task.Delay(5000);
-                try
+                await Task.Delay(2000); // Shorter delay since streaming ops use handles
+                lock (_lock)
                 {
-                    oldManager.Dispose();
-                    Debug.WriteLine("[TranslationManagerService] Old manager disposed");
+                    // Re-check in case handles were acquired during the delay
+                    if (_handleCounts.TryGetValue(oldManager, out var count) && count > 0)
+                    {
+                        // Handles were acquired, queue for disposal instead
+                        if (!_disposalQueue.Contains(oldManager))
+                        {
+                            _disposalQueue.Add(oldManager);
+                        }
+                        Debug.WriteLine($"[TranslationManagerService] Old manager now has handles ({count}), queuing for disposal");
+                        return;
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[TranslationManagerService] Error disposing old manager: {ex.Message}");
-                }
+                DisposeManagerSafely(oldManager);
             });
         }
     }

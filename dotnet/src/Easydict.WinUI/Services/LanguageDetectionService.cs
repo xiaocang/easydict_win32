@@ -20,9 +20,10 @@ public sealed class LanguageDetectionService : IDisposable
 
     /// <summary>
     /// Memory cache for detection results.
-    /// Uses concrete MemoryCache type (not IMemoryCache) to access Compact() method in ClearCache().
+    /// Uses IMemoryCache interface for consistency with TranslationManager.
+    /// Cast to MemoryCache when calling Compact() in ClearCache().
     /// </summary>
-    private readonly MemoryCache _cache;
+    private readonly IMemoryCache _cache;
     private readonly MemoryCacheEntryOptions _cacheOptions;
 
     public LanguageDetectionService(SettingsService settings)
@@ -148,7 +149,7 @@ public sealed class LanguageDetectionService : IDisposable
     /// </summary>
     public void ClearCache()
     {
-        _cache.Compact(1.0); // Remove all entries (100% compaction)
+        (_cache as MemoryCache)?.Compact(1.0); // Remove all entries (100% compaction)
         Debug.WriteLine("[Detection] Cache cleared");
     }
 

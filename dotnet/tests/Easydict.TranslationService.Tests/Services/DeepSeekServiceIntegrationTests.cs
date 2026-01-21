@@ -30,7 +30,6 @@ public class DeepSeekServiceIntegrationTests : IDisposable
 
     public void Dispose()
     {
-        // DeepSeekService doesn't implement IDisposable - HttpClient is managed separately
         _httpClient.Dispose();
     }
 

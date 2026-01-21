@@ -44,3 +44,8 @@ project.lock.json
 
 # CI debug files
 .ci-debug/
+
+# Local review and package files
+packages-microsoft-prod.deb
+pr-comments.txt
+review.md

@@ -387,8 +387,6 @@ public sealed partial class MiniWindow : Window
         _currentQueryCts = new CancellationTokenSource();
         var ct = _currentQueryCts.Token;
 
-        var manager = TranslationManagerService.Instance.Manager;
-
         try
         {
             SetLoading(true);
@@ -431,19 +429,21 @@ public sealed partial class MiniWindow : Window
             {
                 try
                 {
+                    // Acquire handle once per service to ensure consistent manager instance
+                    using var handle = TranslationManagerService.Instance.AcquireHandle();
+                    var manager = handle.Manager;
+
                     // Check if service supports streaming
                     if (manager.IsStreamingService(serviceResult.ServiceId))
                     {
-                        // Streaming path for LLM services (acquires handle internally)
+                        // Streaming path for LLM services (pass manager to avoid re-acquiring)
                         await ExecuteStreamingTranslationForServiceAsync(
-                            serviceResult, request, detectedLanguage, targetLanguage, ct);
+                            manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
                     }
                     else
                     {
                         // Non-streaming path for traditional services
-                        // Acquire handle to prevent manager disposal during translation
-                        using var handle = TranslationManagerService.Instance.AcquireHandle();
-                        var result = await handle.Manager.TranslateAsync(
+                        var result = await manager.TranslateAsync(
                             request, ct, serviceResult.ServiceId);
 
                         DispatcherQueue.TryEnqueue(() =>
@@ -513,9 +513,10 @@ public sealed partial class MiniWindow : Window
     /// <summary>
     /// Execute streaming translation for a single service.
     /// Updates the ServiceQueryResult's StreamingText as chunks arrive.
-    /// Uses SafeManagerHandle to prevent manager disposal during streaming.
+    /// Manager is passed from caller who already acquired a handle to ensure consistent instance.
     /// </summary>
     private async Task ExecuteStreamingTranslationForServiceAsync(
+        TranslationManager manager,
         ServiceQueryResult serviceResult,
         TranslationRequest request,
         TranslationLanguage detectedLanguage,
@@ -534,10 +535,6 @@ public sealed partial class MiniWindow : Window
             serviceResult.IsStreaming = true;
             serviceResult.StreamingText = "";
         });
-
-        // Acquire handle to prevent manager disposal during streaming
-        using var handle = TranslationManagerService.Instance.AcquireHandle();
-        var manager = handle.Manager;
 
         await foreach (var chunk in manager.TranslateStreamAsync(
             request, ct, serviceResult.ServiceId))

@@ -331,7 +331,8 @@ namespace Easydict.WinUI.Views
                     // Non-streaming path for traditional services
                     var result = await manager.TranslateAsync(
                         request,
-                        _currentQueryCts.Token);
+                        _currentQueryCts.Token,
+                        serviceId);
 
                     // Update UI with result
                     DisplayResult(result);

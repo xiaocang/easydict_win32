@@ -66,13 +66,20 @@ public static class WindowIconService
                 return null;
             }
 
-            // Load icon from resource ID 32512 (standard ApplicationIcon)
-            // This is the resource ID that MSBuild uses when embedding ApplicationIcon
-            const int IDI_APPLICATION = 32512;
-            var hIcon = NativeMethods.LoadIcon(hModule, IDI_APPLICATION);
+            const int CustomIconResourceId = 1;      // MSBuild embeds ApplicationIcon as resource ID 1
+            const int IDI_APPLICATION = 32512;        // System default app icon (fallback)
+
+            // Try custom application icon first
+            var hIcon = NativeMethods.LoadIcon(hModule, CustomIconResourceId);
             if (hIcon == IntPtr.Zero)
             {
-                System.Diagnostics.Debug.WriteLine("[Icon] LoadIcon returned null for resource ID 32512");
+                System.Diagnostics.Debug.WriteLine("[Icon] LoadIcon returned null for resource ID 1 (custom icon). Falling back to IDI_APPLICATION (32512).");
+                hIcon = NativeMethods.LoadIcon(hModule, IDI_APPLICATION);
+            }
+
+            if (hIcon == IntPtr.Zero)
+            {
+                System.Diagnostics.Debug.WriteLine("[Icon] LoadIcon failed for both custom icon (1) and IDI_APPLICATION (32512)");
                 return null;
             }
 
@@ -128,7 +135,8 @@ public static class WindowIconService
         /// <param name="hInstance">Handle to the module containing the icon.</param>
         /// <param name="lpIconName">
         /// The icon resource ID.
-        /// For standard application icon (ApplicationIcon in .csproj), use 32512.
+        /// For custom application icon (ApplicationIcon in .csproj), use 1.
+        /// 32512 (IDI_APPLICATION) is the system default icon and can be used as a fallback.
         /// </param>
         /// <returns>Handle to the icon, or IntPtr.Zero on failure.</returns>
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

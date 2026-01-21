@@ -15,6 +15,8 @@ public sealed class HotkeyService : IDisposable
     private const int HOTKEY_ID_TRANSLATE_SELECTION = 2;
     private const int HOTKEY_ID_SHOW_MINI = 3;
     private const int HOTKEY_ID_SHOW_FIXED = 4;
+    private const int HOTKEY_ID_TOGGLE_MINI = 5;
+    private const int HOTKEY_ID_TOGGLE_FIXED = 6;
 
     // Modifier keys
     private const uint MOD_ALT = 0x0001;
@@ -41,6 +43,8 @@ public sealed class HotkeyService : IDisposable
     public event Action? OnTranslateSelection;
     public event Action? OnShowMiniWindow;
     public event Action? OnShowFixedWindow;
+    public event Action? OnToggleMiniWindow;
+    public event Action? OnToggleFixedWindow;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool RegisterHotKey(nint hWnd, int id, uint fsModifiers, uint vk);
@@ -94,6 +98,14 @@ public sealed class HotkeyService : IDisposable
         var result4 = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_F);
         System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey FIXED (Ctrl+Alt+F): {result4}, Error: {Marshal.GetLastWin32Error()}");
 
+        // Register Ctrl+Alt+Shift+M to toggle mini window
+        var result5 = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_MINI, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, VK_M);
+        System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_MINI (Ctrl+Alt+Shift+M): {result5}, Error: {Marshal.GetLastWin32Error()}");
+
+        // Register Ctrl+Alt+Shift+F to toggle fixed window
+        var result6 = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_FIXED, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, VK_F);
+        System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_FIXED (Ctrl+Alt+Shift+F): {result6}, Error: {Marshal.GetLastWin32Error()}");
+
         _isInitialized = true;
         System.Diagnostics.Debug.WriteLine("[Hotkey] Hotkey service initialized.");
     }
@@ -133,6 +145,12 @@ public sealed class HotkeyService : IDisposable
             case HOTKEY_ID_SHOW_FIXED:
                 OnShowFixedWindow?.Invoke();
                 break;
+            case HOTKEY_ID_TOGGLE_MINI:
+                OnToggleMiniWindow?.Invoke();
+                break;
+            case HOTKEY_ID_TOGGLE_FIXED:
+                OnToggleFixedWindow?.Invoke();
+                break;
         }
     }
 
@@ -148,6 +166,8 @@ public sealed class HotkeyService : IDisposable
         UnregisterHotKey(_hwnd, HOTKEY_ID_TRANSLATE_SELECTION);
         UnregisterHotKey(_hwnd, HOTKEY_ID_SHOW_MINI);
         UnregisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_MINI);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_FIXED);
 
         // Remove window subclass
         if (_subclassProc != null)

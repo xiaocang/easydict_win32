@@ -80,6 +80,8 @@ namespace Easydict.WinUI
             _hotkeyService.OnTranslateSelection += OnTranslateSelectionHotkey;
             _hotkeyService.OnShowMiniWindow += OnShowMiniWindowHotkey;
             _hotkeyService.OnShowFixedWindow += OnShowFixedWindowHotkey;
+            _hotkeyService.OnToggleMiniWindow += OnToggleMiniWindowHotkey;
+            _hotkeyService.OnToggleFixedWindow += OnToggleFixedWindowHotkey;
             _hotkeyService.Initialize();
 
             // Initialize clipboard service
@@ -124,7 +126,57 @@ namespace Easydict.WinUI
             }
         }
 
-        private void OnShowMiniWindowHotkey()
+        private async void OnShowMiniWindowHotkey()
+        {
+            try
+            {
+                // Simulate Ctrl+C to copy selected text
+                var text = await KeyboardSimulator.CopySelectedTextAsync();
+
+                _window?.DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        MiniWindowService.Instance.ShowWithText(text);
+                    }
+                    else
+                    {
+                        MiniWindowService.Instance.Show();
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] OnShowMiniWindowHotkey error: {ex.Message}");
+            }
+        }
+
+        private async void OnShowFixedWindowHotkey()
+        {
+            try
+            {
+                // Simulate Ctrl+C to copy selected text
+                var text = await KeyboardSimulator.CopySelectedTextAsync();
+
+                _window?.DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        FixedWindowService.Instance.ShowWithText(text);
+                    }
+                    else
+                    {
+                        FixedWindowService.Instance.Show();
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] OnShowFixedWindowHotkey error: {ex.Message}");
+            }
+        }
+
+        private void OnToggleMiniWindowHotkey()
         {
             _window?.DispatcherQueue.TryEnqueue(() =>
             {
@@ -132,7 +184,7 @@ namespace Easydict.WinUI
             });
         }
 
-        private void OnShowFixedWindowHotkey()
+        private void OnToggleFixedWindowHotkey()
         {
             _window?.DispatcherQueue.TryEnqueue(() =>
             {

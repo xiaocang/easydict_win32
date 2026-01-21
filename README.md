@@ -56,7 +56,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 | Main Window | Mini Window |
 |-------------|-------------|
-| ![Main Window](screenshot/Snipaste_2026-01-20_19-55-25.png) | ![Mini Window](screenshot/Snipaste_2026-01-19_23-31-38.png) |
+| ![Main Window](screenshot/Snipaste_2026-01-21_22-33-26.png) | ![Mini Window](screenshot/Snipaste_2026-01-21_22-33-57.png) |
 
 ## Installation
 

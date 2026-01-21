@@ -460,6 +460,7 @@ public sealed partial class MiniWindow : Window
     {
         _currentQueryCts?.Cancel();
         _currentQueryCts?.Dispose();
+        _currentQueryCts = null;
         _detectionService?.Dispose();
         _translationManager?.Dispose();
     }

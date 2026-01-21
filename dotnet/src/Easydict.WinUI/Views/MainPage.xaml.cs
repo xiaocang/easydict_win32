@@ -274,6 +274,7 @@ namespace Easydict.WinUI.Views
         {
             _currentQueryCts?.Cancel();
             _currentQueryCts?.Dispose();
+            _currentQueryCts = null;
             _detectionService?.Dispose();
             _translationManager?.Dispose();
             _translationManager = null;

@@ -143,7 +143,7 @@ public sealed class LanguageDetectionService : IDisposable
     /// </summary>
     public void ClearCache()
     {
-        _cache.Dispose();
+        _cache.Compact(1.0); // Remove all entries (100% compaction)
         Debug.WriteLine("[Detection] Cache cleared");
     }
 

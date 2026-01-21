@@ -1,8 +1,6 @@
-using System.Collections.ObjectModel;
 using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
-using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI;
@@ -24,7 +22,6 @@ namespace Easydict.WinUI.Views;
 /// </summary>
 public sealed partial class FixedWindow : Window
 {
-    private TranslationManager? _translationManager;
     private LanguageDetectionService? _detectionService;
     private CancellationTokenSource? _currentQueryCts;
     private readonly SettingsService _settings = SettingsService.Instance;
@@ -188,20 +185,9 @@ public sealed partial class FixedWindow : Window
     {
         try
         {
-            // Create TranslationManager with proxy settings
-            var options = new TranslationManagerOptions
-            {
-                ProxyEnabled = _settings.ProxyEnabled,
-                ProxyUri = _settings.ProxyUri,
-                ProxyBypassLocal = _settings.ProxyBypassLocal
-            };
-            _translationManager = new TranslationManager(options);
-
-            // Configure LLM services from settings
-            ConfigureLLMServices();
-
-            _translationManager.DefaultServiceId = "google";
-            _detectionService = new LanguageDetectionService(_translationManager, _settings);
+            var manager = TranslationManagerService.Instance.Manager;
+            manager.DefaultServiceId = "google";
+            _detectionService = new LanguageDetectionService(manager, _settings);
             StatusText.Text = "Ready";
         }
         catch (Exception ex)
@@ -209,114 +195,6 @@ public sealed partial class FixedWindow : Window
             System.Diagnostics.Debug.WriteLine($"[FixedWindow] Init error: {ex.Message}");
             StatusText.Text = "Error";
         }
-    }
-
-    /// <summary>
-    /// Configure LLM services (OpenAI, Ollama, BuiltInAI) from settings.
-    /// </summary>
-    private void ConfigureLLMServices()
-    {
-        if (_translationManager is null) return;
-
-        // Configure OpenAI
-        _translationManager.ConfigureService("openai", service =>
-        {
-            if (service is OpenAIService openai)
-            {
-                openai.Configure(
-                    _settings.OpenAIApiKey ?? "",
-                    _settings.OpenAIEndpoint,
-                    _settings.OpenAIModel,
-                    _settings.OpenAITemperature);
-            }
-        });
-
-        // Configure Ollama
-        _translationManager.ConfigureService("ollama", service =>
-        {
-            if (service is OllamaService ollama)
-            {
-                ollama.Configure(
-                    _settings.OllamaEndpoint,
-                    _settings.OllamaModel);
-            }
-        });
-
-        // Configure BuiltIn AI
-        _translationManager.ConfigureService("builtin", service =>
-        {
-            if (service is BuiltInAIService builtin)
-            {
-                builtin.Configure(_settings.BuiltInAIModel);
-            }
-        });
-
-        // Configure DeepSeek
-        _translationManager.ConfigureService("deepseek", service =>
-        {
-            if (service is DeepSeekService deepseek)
-            {
-                deepseek.Configure(
-                    _settings.DeepSeekApiKey ?? "",
-                    model: _settings.DeepSeekModel);
-            }
-        });
-
-        // Configure Groq
-        _translationManager.ConfigureService("groq", service =>
-        {
-            if (service is GroqService groq)
-            {
-                groq.Configure(
-                    _settings.GroqApiKey ?? "",
-                    model: _settings.GroqModel);
-            }
-        });
-
-        // Configure Zhipu
-        _translationManager.ConfigureService("zhipu", service =>
-        {
-            if (service is ZhipuService zhipu)
-            {
-                zhipu.Configure(
-                    _settings.ZhipuApiKey ?? "",
-                    model: _settings.ZhipuModel);
-            }
-        });
-
-        // Configure GitHub Models
-        _translationManager.ConfigureService("github", service =>
-        {
-            if (service is GitHubModelsService github)
-            {
-                github.Configure(
-                    _settings.GitHubModelsToken ?? "",
-                    model: _settings.GitHubModelsModel);
-            }
-        });
-
-        // Configure Custom OpenAI
-        _translationManager.ConfigureService("custom-openai", service =>
-        {
-            if (service is CustomOpenAIService customOpenai)
-            {
-                customOpenai.Configure(
-                    _settings.CustomOpenAIEndpoint,
-                    _settings.CustomOpenAIApiKey,
-                    _settings.CustomOpenAIModel);
-            }
-        });
-
-        // Configure Gemini
-        _translationManager.ConfigureService("gemini", service =>
-        {
-            if (service is GeminiService gemini)
-            {
-                gemini.Configure(
-                    _settings.GeminiApiKey ?? "",
-                    _settings.GeminiModel);
-            }
-        });
     }
 
     /// <summary>
@@ -441,7 +319,8 @@ public sealed partial class FixedWindow : Window
         _currentQueryCts?.Dispose();
         _currentQueryCts = null;
         _detectionService?.Dispose();
-        _translationManager?.Dispose();
+        _detectionService = null;
+        // Do NOT dispose shared TranslationManager - it's managed by TranslationManagerService
     }
 
     private void SetLoading(bool loading)
@@ -454,7 +333,7 @@ public sealed partial class FixedWindow : Window
 
     private async Task StartQueryAsync()
     {
-        if (_translationManager is null || _detectionService is null)
+        if (_detectionService is null)
         {
             StatusText.Text = "Service not initialized";
             InitializeTranslationServices();
@@ -471,6 +350,8 @@ public sealed partial class FixedWindow : Window
         _currentQueryCts?.Dispose();
         _currentQueryCts = new CancellationTokenSource();
         var ct = _currentQueryCts.Token;
+
+        var manager = TranslationManagerService.Instance.Manager;
 
         try
         {
@@ -515,7 +396,7 @@ public sealed partial class FixedWindow : Window
                 try
                 {
                     // Check if service supports streaming
-                    if (_translationManager.IsStreamingService(serviceResult.ServiceId))
+                    if (manager.IsStreamingService(serviceResult.ServiceId))
                     {
                         // Streaming path for LLM services
                         await ExecuteStreamingTranslationForServiceAsync(
@@ -524,7 +405,7 @@ public sealed partial class FixedWindow : Window
                     else
                     {
                         // Non-streaming path for traditional services
-                        var result = await _translationManager.TranslateAsync(
+                        var result = await manager.TranslateAsync(
                             request, ct, serviceResult.ServiceId);
 
                         DispatcherQueue.TryEnqueue(() =>
@@ -615,7 +496,8 @@ public sealed partial class FixedWindow : Window
             serviceResult.StreamingText = "";
         });
 
-        await foreach (var chunk in _translationManager!.TranslateStreamAsync(
+        var manager = TranslationManagerService.Instance.Manager;
+        await foreach (var chunk in manager.TranslateStreamAsync(
             request, ct, serviceResult.ServiceId))
         {
             sb.Append(chunk);

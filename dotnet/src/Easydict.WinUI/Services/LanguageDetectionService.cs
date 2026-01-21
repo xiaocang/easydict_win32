@@ -16,14 +16,23 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class LanguageDetectionService : IDisposable
 {
-    private readonly TranslationManager _translationManager;
     private readonly SettingsService _settings;
+
+    /// <summary>
+    /// Memory cache for detection results.
+    /// Uses concrete MemoryCache type (not IMemoryCache) to access Compact() method in ClearCache().
+    /// </summary>
     private readonly MemoryCache _cache;
     private readonly MemoryCacheEntryOptions _cacheOptions;
 
-    public LanguageDetectionService(TranslationManager translationManager, SettingsService settings)
+    /// <summary>
+    /// Gets the TranslationManager on-demand from the singleton service.
+    /// This ensures we always use the current manager instance, even after proxy reconfiguration.
+    /// </summary>
+    private TranslationManager Manager => TranslationManagerService.Instance.Manager;
+
+    public LanguageDetectionService(SettingsService settings)
     {
-        _translationManager = translationManager ?? throw new ArgumentNullException(nameof(translationManager));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
 
         _cache = new MemoryCache(new MemoryCacheOptions
@@ -70,7 +79,7 @@ public sealed class LanguageDetectionService : IDisposable
         try
         {
             // Use Google Translate service for detection (no API key required)
-            var googleService = _translationManager.Services.TryGetValue("google", out var service)
+            var googleService = Manager.Services.TryGetValue("google", out var service)
                 ? service
                 : null;
 

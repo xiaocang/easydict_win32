@@ -192,8 +192,7 @@ public sealed partial class MiniWindow : Window
     {
         try
         {
-            var manager = TranslationManagerService.Instance.Manager;
-            _detectionService = new LanguageDetectionService(manager, _settings);
+            _detectionService = new LanguageDetectionService(_settings);
             StatusText.Text = "Ready";
         }
         catch (Exception ex)

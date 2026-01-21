@@ -172,9 +172,11 @@ public sealed class TranslationManagerService : IDisposable
 
     /// <summary>
     /// Recreate the TranslationManager with new proxy settings.
+    /// The old manager is disposed after a delay to allow in-flight operations to complete.
     /// </summary>
     public void ReconfigureProxy()
     {
+        TranslationManager? oldManager;
         lock (_lock)
         {
             var options = new TranslationManagerOptions
@@ -184,13 +186,31 @@ public sealed class TranslationManagerService : IDisposable
                 ProxyBypassLocal = _settings.ProxyBypassLocal
             };
 
-            var oldManager = _translationManager;
+            oldManager = _translationManager;
             _translationManager = new TranslationManager(options);
             ConfigureServices();
             UpdateDefaultService();
-            oldManager?.Dispose();
 
             Debug.WriteLine("[TranslationManagerService] Proxy reconfigured");
+        }
+
+        // Defer disposal to allow in-flight operations to complete.
+        // Proxy changes are rare user actions, so a brief delay is acceptable.
+        if (oldManager != null)
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(5000);
+                try
+                {
+                    oldManager.Dispose();
+                    Debug.WriteLine("[TranslationManagerService] Old manager disposed");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[TranslationManagerService] Error disposing old manager: {ex.Message}");
+                }
+            });
         }
     }
 

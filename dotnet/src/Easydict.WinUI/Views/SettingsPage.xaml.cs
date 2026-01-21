@@ -237,16 +237,18 @@ public sealed partial class SettingsPage : Page
         // Persist to storage
         _settings.Save();
 
-        // Reconfigure translation services with new settings (API keys, models, endpoints)
-        TranslationManagerService.Instance.ReconfigureServices();
-
-        // If proxy settings changed, recreate manager with new proxy
+        // If proxy settings changed, recreate manager with new proxy (includes service configuration)
+        // Otherwise, just reconfigure services with new settings (API keys, models, endpoints)
         var proxyChanged = originalProxyEnabled != _settings.ProxyEnabled ||
                            originalProxyUri != _settings.ProxyUri ||
                            originalProxyBypassLocal != _settings.ProxyBypassLocal;
         if (proxyChanged)
         {
             TranslationManagerService.Instance.ReconfigureProxy();
+        }
+        else
+        {
+            TranslationManagerService.Instance.ReconfigureServices();
         }
 
         // Apply always-on-top setting immediately

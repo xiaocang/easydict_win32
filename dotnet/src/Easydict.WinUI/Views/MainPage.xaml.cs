@@ -65,7 +65,7 @@ namespace Easydict.WinUI.Views
         {
             _isLoaded = true;
             InitializeTranslationServices();
-            _detectionService = new LanguageDetectionService(TranslationManagerService.Instance.Manager, _settings);
+            _detectionService = new LanguageDetectionService(_settings);
             ApplySettings();
         }
 

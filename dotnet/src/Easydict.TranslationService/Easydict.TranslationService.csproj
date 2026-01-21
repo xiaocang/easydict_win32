@@ -19,4 +19,8 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\EncryptedSecrets.json" />
+  </ItemGroup>
+
 </Project>

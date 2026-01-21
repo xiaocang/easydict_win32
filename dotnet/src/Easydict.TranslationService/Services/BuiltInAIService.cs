@@ -1,4 +1,5 @@
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Security;
 
 namespace Easydict.TranslationService.Services;
 
@@ -10,15 +11,6 @@ namespace Easydict.TranslationService.Services;
 /// </summary>
 public sealed class BuiltInAIService : BaseOpenAIService
 {
-    // Built-in configuration
-    // Groq provides free API access with generous rate limits
-    // Key can be overridden via environment variable EASYDICT_GROQ_API_KEY
-    private const string BuiltInEndpoint = "https://api.groq.com/openai/v1/chat/completions";
-
-    // Embedded Groq API key (free tier)
-    // To get your own key: https://console.groq.com/keys
-    private const string EmbeddedApiKey = "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";
-
     private const string DefaultModel = "llama-3.3-70b-versatile";
 
     /// <summary>
@@ -63,18 +55,24 @@ public sealed class BuiltInAIService : BaseOpenAIService
     public override bool IsConfigured => !string.IsNullOrEmpty(GetApiKey());
     public override IReadOnlyList<Language> SupportedLanguages => BuiltInLanguages;
 
-    public override string Endpoint => BuiltInEndpoint;
+    public override string Endpoint => SecretKeyManager.GetSecret("builtInAIEndpoint") ?? "";
     public override string ApiKey => GetApiKey();
     public override string Model => _model;
 
     /// <summary>
-    /// Get API key from environment variable or fall back to embedded key.
+    /// Get API key from environment variable or fall back to encrypted embedded key.
     /// </summary>
     private static string GetApiKey()
     {
         // Allow override via environment variable for development/deployment
         var envKey = Environment.GetEnvironmentVariable("EASYDICT_GROQ_API_KEY");
-        return !string.IsNullOrEmpty(envKey) ? envKey : EmbeddedApiKey;
+        if (!string.IsNullOrEmpty(envKey))
+        {
+            return envKey;
+        }
+
+        // Fall back to encrypted embedded key
+        return SecretKeyManager.GetSecret("builtInAIAPIKey") ?? "";
     }
 
     /// <summary>

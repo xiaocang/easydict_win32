@@ -43,7 +43,6 @@
       "Bash(dotnet build:*)"
     ],
     "deny": [
-      "Bash(git add:*)",
       "Bash(git push:*)",
       "Bash(git commit --all:*)",
       "Bash(xcodebuild:*)"

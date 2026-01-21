@@ -434,14 +434,16 @@ public sealed partial class MiniWindow : Window
                     // Check if service supports streaming
                     if (manager.IsStreamingService(serviceResult.ServiceId))
                     {
-                        // Streaming path for LLM services
+                        // Streaming path for LLM services (acquires handle internally)
                         await ExecuteStreamingTranslationForServiceAsync(
                             serviceResult, request, detectedLanguage, targetLanguage, ct);
                     }
                     else
                     {
                         // Non-streaming path for traditional services
-                        var result = await manager.TranslateAsync(
+                        // Acquire handle to prevent manager disposal during translation
+                        using var handle = TranslationManagerService.Instance.AcquireHandle();
+                        var result = await handle.Manager.TranslateAsync(
                             request, ct, serviceResult.ServiceId);
 
                         DispatcherQueue.TryEnqueue(() =>

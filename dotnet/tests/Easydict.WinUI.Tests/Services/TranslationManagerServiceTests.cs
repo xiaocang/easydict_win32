@@ -291,4 +291,106 @@ public class TranslationManagerServiceTests
         handle3.Dispose();
         // Now original manager can be disposed (happens asynchronously)
     }
+
+    [Fact]
+    public void ReconfigureProxy_DuringSimulatedStreaming_ManagerRemainsValid()
+    {
+        var service = TranslationManagerService.Instance;
+
+        // Simulate a long-running streaming operation by holding a handle
+        using var handle = service.AcquireHandle();
+        var originalManager = handle.Manager;
+
+        // Perform multiple proxy reconfigurations while "streaming"
+        for (int i = 0; i < 3; i++)
+        {
+            service.ReconfigureProxy();
+        }
+
+        // The handle should still provide access to the original manager
+        // and the manager should still be functional
+        var act = () =>
+        {
+            handle.Manager.Services.Should().NotBeEmpty();
+            handle.Manager.Should().BeSameAs(originalManager);
+        };
+        act.Should().NotThrow("manager should remain valid during simulated streaming");
+
+        // Current service manager should be the latest reconfigured one
+        service.Manager.Should().NotBeSameAs(originalManager);
+    }
+
+    [Fact]
+    public void ReconfigureProxy_ConcurrentWithAcquireHandle_NoExceptions()
+    {
+        var service = TranslationManagerService.Instance;
+        var exceptions = new List<Exception>();
+        var handles = new List<SafeManagerHandle>();
+        var lockObj = new object();
+        var startBarrier = new Barrier(20); // 10 handle acquirers + 10 reconfigurators
+
+        // Run acquire handle and reconfigure proxy concurrently
+        var tasks = new List<Task>();
+
+        // Tasks that acquire handles
+        for (int i = 0; i < 10; i++)
+        {
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    startBarrier.SignalAndWait();
+                    var handle = service.AcquireHandle();
+                    lock (lockObj)
+                    {
+                        handles.Add(handle);
+                    }
+                    // Simulate some work
+                    Thread.Sleep(10);
+                    handle.Manager.Services.Should().NotBeEmpty();
+                }
+                catch (Exception ex)
+                {
+                    lock (lockObj)
+                    {
+                        exceptions.Add(ex);
+                    }
+                }
+            }));
+        }
+
+        // Tasks that reconfigure proxy
+        for (int i = 0; i < 10; i++)
+        {
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    startBarrier.SignalAndWait();
+                    service.ReconfigureProxy();
+                }
+                catch (Exception ex)
+                {
+                    lock (lockObj)
+                    {
+                        exceptions.Add(ex);
+                    }
+                }
+            }));
+        }
+
+        Task.WaitAll(tasks.ToArray());
+
+        exceptions.Should().BeEmpty("concurrent handle acquisition and proxy reconfiguration should not throw");
+
+        // Dispose all acquired handles
+        foreach (var handle in handles)
+        {
+            handle.Dispose();
+        }
+
+        // Service should still work after all the concurrent operations
+        service.Manager.Should().NotBeNull();
+        service.Manager.Services.Should().NotBeEmpty();
+    }
 }

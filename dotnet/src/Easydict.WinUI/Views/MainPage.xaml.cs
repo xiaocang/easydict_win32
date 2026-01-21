@@ -273,8 +273,6 @@ namespace Easydict.WinUI.Views
             _currentQueryCts?.Dispose();
             _currentQueryCts = new CancellationTokenSource();
 
-            var manager = TranslationManagerService.Instance.Manager;
-
             try
             {
                 SetLoading(true);
@@ -316,13 +314,17 @@ namespace Easydict.WinUI.Views
                     ToLanguage = targetLanguage
                 };
 
+                // Acquire handle to prevent manager disposal during translation.
+                // Capture DefaultServiceId atomically with manager to prevent race condition.
+                using var handle = TranslationManagerService.Instance.AcquireHandle();
+                var manager = handle.Manager;
                 var serviceId = manager.DefaultServiceId;
 
                 // Check if service supports streaming
                 if (manager.IsStreamingService(serviceId))
                 {
                     // Streaming path for LLM services
-                    await ExecuteStreamingTranslationAsync(request, serviceId, detectedLanguage);
+                    await ExecuteStreamingTranslationAsync(manager, request, serviceId, detectedLanguage);
                 }
                 else
                 {
@@ -365,9 +367,10 @@ namespace Easydict.WinUI.Views
         /// <summary>
         /// Execute streaming translation for LLM services.
         /// Shows incremental results as they arrive from the API.
-        /// Uses SafeManagerHandle to prevent manager disposal during streaming.
+        /// The caller must provide a manager from an acquired SafeManagerHandle.
         /// </summary>
         private async Task ExecuteStreamingTranslationAsync(
+            TranslationManager manager,
             TranslationRequest request,
             string serviceId,
             TranslationLanguage detectedLanguage)
@@ -376,10 +379,6 @@ namespace Easydict.WinUI.Views
             var sb = new StringBuilder();
             var lastUpdateTime = DateTime.UtcNow;
             const int throttleMs = 50; // UI update throttle for smooth rendering
-
-            // Acquire handle to prevent manager disposal during streaming
-            using var handle = TranslationManagerService.Instance.AcquireHandle();
-            var manager = handle.Manager;
 
             var serviceName = manager.Services[serviceId].DisplayName;
             ServiceText.Text = $"{serviceName} • Streaming...";

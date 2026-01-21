@@ -25,12 +25,6 @@ public sealed class LanguageDetectionService : IDisposable
     private readonly MemoryCache _cache;
     private readonly MemoryCacheEntryOptions _cacheOptions;
 
-    /// <summary>
-    /// Gets the TranslationManager on-demand from the singleton service.
-    /// This ensures we always use the current manager instance, even after proxy reconfiguration.
-    /// </summary>
-    private TranslationManager Manager => TranslationManagerService.Instance.Manager;
-
     public LanguageDetectionService(SettingsService settings)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -79,7 +73,9 @@ public sealed class LanguageDetectionService : IDisposable
         try
         {
             // Use Google Translate service for detection (no API key required)
-            var googleService = Manager.Services.TryGetValue("google", out var service)
+            // Acquire handle to prevent manager disposal during detection
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            var googleService = handle.Manager.Services.TryGetValue("google", out var service)
                 ? service
                 : null;
 

@@ -10,7 +10,9 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class TranslationManagerService : IDisposable
 {
-    private static readonly Lazy<TranslationManagerService> _instance = new(() => new TranslationManagerService());
+    // Use PublicationOnly to allow retry on initialization failure instead of caching exception forever
+    private static readonly Lazy<TranslationManagerService> _instance =
+        new(() => new TranslationManagerService(), LazyThreadSafetyMode.PublicationOnly);
 
     private TranslationManager _translationManager;
     private readonly SettingsService _settings;

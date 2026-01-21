@@ -50,7 +50,9 @@
         <Content Include="Assets\Square44x44Logo.scale-150.png" />
         <Content Include="Assets\Square44x44Logo.scale-175.png" />
         <Content Include="Assets\Square44x44Logo.scale-200.png" />
-        <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+        <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
 
         <!-- Square150x150Logo - All scales -->
         <Content Include="Assets\Square150x150Logo.scale-100.png" />

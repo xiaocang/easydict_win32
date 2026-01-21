@@ -81,6 +81,9 @@ public sealed partial class MiniWindow : Window
     {
         if (_appWindow == null) return;
 
+        // Set window icon
+        WindowIconService.SetWindowIcon(_appWindow);
+
         // Get presenter for window behavior control
         _presenter = _appWindow.Presenter as OverlappedPresenter;
         if (_presenter != null)

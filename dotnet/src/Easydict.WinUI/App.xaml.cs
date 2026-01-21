@@ -45,6 +45,12 @@ namespace Easydict.WinUI
             // Set window size and get AppWindow reference
             _appWindow = ConfigureWindow(_window);
 
+            // Set window icon for unpackaged scenarios
+            if (_appWindow != null)
+            {
+                WindowIconService.SetWindowIcon(_appWindow);
+            }
+
             // Handle window close to minimize to tray instead
             _appWindow.Closing += OnWindowClosing;
 

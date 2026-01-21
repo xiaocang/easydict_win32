@@ -41,3 +41,6 @@ project.lock.json
 .tmp/
 *.tmp
 *~
+
+# CI debug files
+.ci-debug/

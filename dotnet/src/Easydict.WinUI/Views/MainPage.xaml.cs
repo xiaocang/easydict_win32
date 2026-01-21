@@ -129,17 +129,7 @@ namespace Easydict.WinUI.Views
 
                 var manager = TranslationManagerService.Instance.Manager;
 
-                // Set default service from settings
-                var defaultService = _settings.DefaultService;
-                if (manager.Services.ContainsKey(defaultService))
-                {
-                    manager.DefaultServiceId = defaultService;
-                }
-                else
-                {
-                    manager.DefaultServiceId = "google";
-                }
-
+                // DefaultServiceId is now managed centrally by TranslationManagerService
                 UpdateStatus(true, "Ready");
                 ServiceText.Text = manager.Services[manager.DefaultServiceId].DisplayName;
             }

@@ -12,15 +12,25 @@ public sealed class TranslationManagerService : IDisposable
 {
     private static readonly Lazy<TranslationManagerService> _instance = new(() => new TranslationManagerService());
 
-    private readonly TranslationManager _translationManager;
+    private TranslationManager _translationManager;
     private readonly SettingsService _settings;
+    private readonly object _lock = new object();
 
     public static TranslationManagerService Instance => _instance.Value;
 
     /// <summary>
     /// The shared TranslationManager instance.
     /// </summary>
-    public TranslationManager Manager => _translationManager;
+    public TranslationManager Manager
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _translationManager;
+            }
+        }
+    }
 
     private TranslationManagerService()
     {
@@ -35,6 +45,7 @@ public sealed class TranslationManagerService : IDisposable
 
         _translationManager = new TranslationManager(options);
         ConfigureServices();
+        UpdateDefaultService();
 
         Debug.WriteLine("[TranslationManagerService] Initialized");
     }
@@ -152,7 +163,48 @@ public sealed class TranslationManagerService : IDisposable
     /// </summary>
     public void ReconfigureServices()
     {
-        ConfigureServices();
+        lock (_lock)
+        {
+            ConfigureServices();
+            UpdateDefaultService();
+        }
+    }
+
+    /// <summary>
+    /// Recreate the TranslationManager with new proxy settings.
+    /// </summary>
+    public void ReconfigureProxy()
+    {
+        lock (_lock)
+        {
+            var options = new TranslationManagerOptions
+            {
+                ProxyEnabled = _settings.ProxyEnabled,
+                ProxyUri = _settings.ProxyUri,
+                ProxyBypassLocal = _settings.ProxyBypassLocal
+            };
+
+            var oldManager = _translationManager;
+            _translationManager = new TranslationManager(options);
+            ConfigureServices();
+            UpdateDefaultService();
+            oldManager?.Dispose();
+
+            Debug.WriteLine("[TranslationManagerService] Proxy reconfigured");
+        }
+    }
+
+    /// <summary>
+    /// Update the default service ID from settings.
+    /// </summary>
+    private void UpdateDefaultService()
+    {
+        var defaultService = _settings.DefaultService;
+        if (_translationManager.Services.ContainsKey(defaultService))
+        {
+            _translationManager.DefaultServiceId = defaultService;
+        }
+        // else keeps default "google" from TranslationManager constructor
     }
 
     public void Dispose()

@@ -193,7 +193,6 @@ public sealed partial class MiniWindow : Window
         try
         {
             var manager = TranslationManagerService.Instance.Manager;
-            manager.DefaultServiceId = "google";
             _detectionService = new LanguageDetectionService(manager, _settings);
             StatusText.Text = "Ready";
         }

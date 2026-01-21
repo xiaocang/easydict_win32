@@ -9,6 +9,7 @@ namespace Easydict.WinUI.Tests.Services;
 /// Note: SettingsService is a singleton that loads from file on construction.
 /// These tests verify property behavior and defaults using the singleton instance.
 /// </summary>
+[Trait("Category", "WinUI")]
 public class SettingsServiceTests
 {
     private readonly SettingsService _settings;

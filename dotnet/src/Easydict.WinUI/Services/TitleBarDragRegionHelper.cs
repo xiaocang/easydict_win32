@@ -21,8 +21,14 @@ public sealed class TitleBarDragRegionHelper : IDisposable
     private readonly FrameworkElement[] _passthroughElements;
     private readonly string _windowName;
     private FrameworkElement? _contentElement;
-    private bool _isLoaded;
-    private bool _isDisposed;
+    private volatile bool _isLoaded;
+    private volatile bool _isDisposed;
+
+    /// <summary>
+    /// Throttle interval for SizeChanged events to avoid excessive updates during resize.
+    /// </summary>
+    private const int ThrottleIntervalMs = 16; // ~60fps
+    private DateTime _lastUpdateTime = DateTime.MinValue;
 
     /// <summary>
     /// Creates a new TitleBarDragRegionHelper.
@@ -52,27 +58,43 @@ public sealed class TitleBarDragRegionHelper : IDisposable
     /// </summary>
     public void Initialize()
     {
-        if (_window.Content is FrameworkElement content)
+        if (_window.Content is not FrameworkElement content)
         {
-            _contentElement = content;
-            content.Loaded += OnContentLoaded;
-            content.SizeChanged += OnContentSizeChanged;
+            System.Diagnostics.Debug.WriteLine($"[{_windowName}] Initialize: Window.Content is not a FrameworkElement, drag regions will not be set up.");
+            return;
+        }
+
+        _contentElement = content;
+        content.Loaded += OnContentLoaded;
+        content.SizeChanged += OnContentSizeChanged;
+
+        // If content is already loaded, manually trigger the update
+        if (content.IsLoaded)
+        {
+            _isLoaded = true;
+            UpdateDragRegions();
         }
     }
 
     /// <summary>
-    /// Cleans up event handlers. Call this during window cleanup.
+    /// Cleans up event handlers. This is called automatically by Dispose(),
+    /// but can be called explicitly if needed before disposal.
+    /// Safe to call multiple times.
     /// </summary>
     public void Cleanup()
     {
-        if (_contentElement != null)
+        var content = Interlocked.Exchange(ref _contentElement, null);
+        if (content != null)
         {
-            _contentElement.Loaded -= OnContentLoaded;
-            _contentElement.SizeChanged -= OnContentSizeChanged;
-            _contentElement = null;
+            content.Loaded -= OnContentLoaded;
+            content.SizeChanged -= OnContentSizeChanged;
         }
     }
 
+    /// <summary>
+    /// Disposes of the helper and cleans up event handlers.
+    /// Safe to call multiple times from multiple threads.
+    /// </summary>
     public void Dispose()
     {
         if (_isDisposed) return;
@@ -88,7 +110,17 @@ public sealed class TitleBarDragRegionHelper : IDisposable
 
     private void OnContentSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (_isLoaded) UpdateDragRegions();
+        if (!_isLoaded || _isDisposed) return;
+
+        // Throttle updates to avoid performance issues during rapid resize
+        var now = DateTime.UtcNow;
+        if ((now - _lastUpdateTime).TotalMilliseconds < ThrottleIntervalMs)
+        {
+            return;
+        }
+        _lastUpdateTime = now;
+
+        UpdateDragRegions();
     }
 
     /// <summary>
@@ -102,6 +134,12 @@ public sealed class TitleBarDragRegionHelper : IDisposable
         try
         {
             var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(_appWindow.Id);
+            if (nonClientInputSrc == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[{_windowName}] UpdateDragRegions: GetForWindowId returned null");
+                return;
+            }
+
             var scale = DpiHelper.GetScaleFactorForWindow(WindowNative.GetWindowHandle(_window));
 
             // Set the title bar region as the Caption (draggable) area
@@ -115,24 +153,16 @@ public sealed class TitleBarDragRegionHelper : IDisposable
             }
 
             // Collect interactive controls that need passthrough
-            var passthroughRects = new List<RectInt32>();
-
-            foreach (var element in _passthroughElements)
-            {
-                if (element.ActualWidth > 0 && element.ActualHeight > 0)
-                {
-                    var rect = GetScaledBoundsForElement(element, scale);
-                    if (rect.Width > 0 && rect.Height > 0)
-                    {
-                        passthroughRects.Add(rect);
-                    }
-                }
-            }
+            var passthroughRects = _passthroughElements
+                .Where(element => element.ActualWidth > 0 && element.ActualHeight > 0)
+                .Select(element => GetScaledBoundsForElement(element, scale))
+                .Where(rect => rect.Width > 0 && rect.Height > 0)
+                .ToArray();
 
             // Set the passthrough regions - these areas will be clickable instead of draggable
-            if (passthroughRects.Count > 0)
+            if (passthroughRects.Length > 0)
             {
-                nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, passthroughRects.ToArray());
+                nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, passthroughRects);
             }
         }
         catch (Exception ex)
@@ -157,7 +187,7 @@ public sealed class TitleBarDragRegionHelper : IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[{_windowName}] GetScaledBoundsForElement error: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[{_windowName}] GetScaledBoundsForElement error for {element.Name}: {ex.Message}");
             return default;
         }
     }

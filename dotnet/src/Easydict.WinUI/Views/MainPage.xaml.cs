@@ -31,6 +31,11 @@ namespace Easydict.WinUI.Views
         private volatile bool _isClosing;
         private bool _suppressTargetLanguageSelectionChanged;
 
+        /// <summary>
+        /// Maximum time to wait for in-flight query to complete during cleanup.
+        /// </summary>
+        private const int QueryShutdownTimeoutSeconds = 2;
+
         public MainPage()
         {
             try
@@ -185,7 +190,7 @@ namespace Easydict.WinUI.Views
             bool waitSucceeded = true;
             try
             {
-                await task.WaitAsync(TimeSpan.FromSeconds(2));
+                await task.WaitAsync(TimeSpan.FromSeconds(QueryShutdownTimeoutSeconds));
             }
             catch (OperationCanceledException)
             {

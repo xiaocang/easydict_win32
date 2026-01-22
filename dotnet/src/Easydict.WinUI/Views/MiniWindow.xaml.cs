@@ -39,6 +39,11 @@ public sealed partial class MiniWindow : Window
     private bool _userChangedTargetLanguage;
     private bool _suppressTargetLanguageSelectionChanged;
 
+    /// <summary>
+    /// Maximum time to wait for in-flight query to complete during cleanup.
+    /// </summary>
+    private const int QueryShutdownTimeoutSeconds = 2;
+
     public MiniWindow()
     {
         this.InitializeComponent();
@@ -364,7 +369,7 @@ public sealed partial class MiniWindow : Window
         bool waitSucceeded = true;
         try
         {
-            await task.WaitAsync(TimeSpan.FromSeconds(2));
+            await task.WaitAsync(TimeSpan.FromSeconds(QueryShutdownTimeoutSeconds));
         }
         catch (OperationCanceledException)
         {

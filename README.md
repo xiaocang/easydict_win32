@@ -29,11 +29,11 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Zhipu AI
   - GitHub Models (free)
   - Doubao (ByteDance LLM, streaming)
-  - Ollama (local LLM service)
-  - BuiltIn AI (free cloud LLM)
   - Caiyun (彩云小译)
   - NiuTrans (小牛翻译, 450+ languages)
   - Linguee Dictionary (with context examples)
+  - Ollama (local LLM, default: llama3.2)
+  - BuiltIn AI (free, powered by Groq)
   - Custom OpenAI-compatible services
 
 - **LLM Streaming Translation** - Real-time display of translation results
@@ -46,7 +46,10 @@ While the feature set is not yet complete compared to the macOS version, this po
 - **Global Hotkeys**
   - `Ctrl+Alt+T` - Show/hide main window
   - `Ctrl+Alt+D` - Translate clipboard content
-  - `Ctrl+Alt+M` - Show/hide mini window
+  - `Ctrl+Alt+M` - Show mini window (copies selection and translates when available)
+  - `Ctrl+Alt+F` - Show fixed window
+  - `Ctrl+Alt+Shift+M` - Toggle mini window visibility
+  - `Ctrl+Alt+Shift+F` - Toggle fixed window visibility
 
 - **System Tray** - Minimize to tray, run in background
 
@@ -100,7 +103,6 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - [x] ~~**NiuTrans**~~ - 小牛翻译 (450+ languages) ✅ **Implemented**
 - [x] ~~**Linguee Dictionary**~~ - Dictionary with context examples ✅ **Implemented**
 - [ ] **TTS (Text-to-Speech)** - Windows Speech Synthesis API
-- [ ] **Selection Translation** - Auto-detect selected text
 
 ### Medium Priority
 
@@ -112,7 +114,6 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
   - [ ] Text Summarization
 
 - [ ] **More Hotkeys**
-  - [ ] Selection translation hotkey
   - [ ] Polish and replace
   - [ ] Translate and replace
 
@@ -130,9 +131,9 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Translation Services | 25+ | 15 |
 | OCR Screenshot Translation | Yes | No |
 | TTS | Yes | Planned |
-| Selection Translation | Yes | Planned |
+| Selection Translation | Yes | Yes |
 | Window Types | 3 | 3 |
-| Global Hotkeys | 10+ | 3 |
+| Global Hotkeys | 10+ | 6 |
 | LLM Streaming | Yes | Yes |
 
 ## License

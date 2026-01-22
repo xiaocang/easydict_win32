@@ -25,6 +25,7 @@ public sealed class LanguageDetectionService : IDisposable
     /// </summary>
     private readonly IMemoryCache _cache;
     private readonly MemoryCacheEntryOptions _cacheOptions;
+    private int _disposed;
 
     public LanguageDetectionService(SettingsService settings)
     {
@@ -49,6 +50,11 @@ public sealed class LanguageDetectionService : IDisposable
     /// <returns>Detected language, or Language.Auto if detection fails.</returns>
     public async Task<Language> DetectAsync(string text, CancellationToken cancellationToken = default)
     {
+        if (IsDisposed())
+        {
+            return Language.Auto;
+        }
+
         if (string.IsNullOrWhiteSpace(text))
         {
             return Language.Auto;
@@ -63,12 +69,19 @@ public sealed class LanguageDetectionService : IDisposable
             return Language.Auto;
         }
 
-        // Check cache
+        // Check cache (guard against disposed cache)
         var cacheKey = GetCacheKey(text);
-        if (_cache.TryGetValue(cacheKey, out Language cached))
+        try
         {
-            Debug.WriteLine($"[Detection] Cache hit: {cached}");
-            return cached;
+            if (_cache.TryGetValue(cacheKey, out Language cached))
+            {
+                Debug.WriteLine($"[Detection] Cache hit: {cached}");
+                return cached;
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            return Language.Auto;
         }
 
         try
@@ -88,8 +101,15 @@ public sealed class LanguageDetectionService : IDisposable
 
             var detected = await googleService.DetectLanguageAsync(text, cancellationToken);
 
-            // Cache the result
-            _cache.Set(cacheKey, detected, _cacheOptions);
+            // Cache the result (ignore if cache was disposed)
+            try
+            {
+                _cache.Set(cacheKey, detected, _cacheOptions);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Swallow; service is being disposed
+            }
 
             Debug.WriteLine($"[Detection] Detected language: {detected.GetDisplayName()}");
             return detected;
@@ -149,8 +169,20 @@ public sealed class LanguageDetectionService : IDisposable
     /// </summary>
     public void ClearCache()
     {
-        (_cache as MemoryCache)?.Compact(1.0); // Remove all entries (100% compaction)
-        Debug.WriteLine("[Detection] Cache cleared");
+        if (IsDisposed())
+        {
+            return;
+        }
+
+        try
+        {
+            (_cache as MemoryCache)?.Compact(1.0); // Remove all entries (100% compaction)
+            Debug.WriteLine("[Detection] Cache cleared");
+        }
+        catch (ObjectDisposedException)
+        {
+            // Ignore if cache is already disposed
+        }
     }
 
     /// <summary>
@@ -189,6 +221,13 @@ public sealed class LanguageDetectionService : IDisposable
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
+
         _cache.Dispose();
     }
+
+    private bool IsDisposed() => Interlocked.CompareExchange(ref _disposed, 0, 0) == 1;
 }

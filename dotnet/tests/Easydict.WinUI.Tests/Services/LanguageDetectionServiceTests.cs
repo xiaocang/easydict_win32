@@ -164,4 +164,30 @@ public class LanguageDetectionServiceTests : IDisposable
 
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public async Task DetectAsync_AfterDispose_ReturnsAutoAndDoesNotThrow()
+    {
+        using var service = new LanguageDetectionService(_settings);
+
+        service.Dispose();
+
+        var act = async () => await service.DetectAsync("hello");
+
+        await act.Should().NotThrowAsync();
+        var result = await service.DetectAsync("hello");
+        result.Should().Be(Language.Auto);
+    }
+
+    [Fact]
+    public void ClearCache_AfterDispose_DoesNotThrow()
+    {
+        using var service = new LanguageDetectionService(_settings);
+
+        service.Dispose();
+
+        var act = () => service.ClearCache();
+
+        act.Should().NotThrow();
+    }
 }

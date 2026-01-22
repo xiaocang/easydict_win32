@@ -313,9 +313,7 @@ public sealed partial class FixedWindow : Window
 
     private void CleanupResources()
     {
-        _currentQueryCts?.Cancel();
-        _currentQueryCts?.Dispose();
-        _currentQueryCts = null;
+        CancelAndDisposeCurrentCts();
         _detectionService?.Dispose();
         _detectionService = null;
         // Do NOT dispose shared TranslationManager - it's managed by TranslationManagerService
@@ -344,8 +342,7 @@ public sealed partial class FixedWindow : Window
             return;
         }
 
-        _currentQueryCts?.Cancel();
-        _currentQueryCts?.Dispose();
+        CancelAndDisposeCurrentCts();
         _currentQueryCts = new CancellationTokenSource();
         var ct = _currentQueryCts.Token;
 
@@ -469,6 +466,7 @@ public sealed partial class FixedWindow : Window
         finally
         {
             SetLoading(false);
+            CancelAndDisposeCurrentCts();
         }
     }
 
@@ -697,4 +695,24 @@ public sealed partial class FixedWindow : Window
     /// Check if window is currently visible.
     /// </summary>
     public bool IsVisible => _appWindow?.IsVisible ?? false;
+
+    private void CancelAndDisposeCurrentCts()
+    {
+        var cts = Interlocked.Exchange(ref _currentQueryCts, null);
+        if (cts == null)
+        {
+            return;
+        }
+
+        try
+        {
+            cts.Cancel();
+        }
+        catch
+        {
+            // Ignore cancellation exceptions during cleanup
+        }
+
+        cts.Dispose();
+    }
 }

@@ -142,9 +142,7 @@ namespace Easydict.WinUI.Views
 
         private void CleanupResources()
         {
-            _currentQueryCts?.Cancel();
-            _currentQueryCts?.Dispose();
-            _currentQueryCts = null;
+            CancelAndDisposeCurrentCts();
             _detectionService?.Dispose();
             _detectionService = null;
             // Do NOT dispose shared TranslationManager - it's managed by TranslationManagerService
@@ -269,9 +267,9 @@ namespace Easydict.WinUI.Views
             }
 
             // Cancel previous query (like macOS's stopAllService)
-            _currentQueryCts?.Cancel();
-            _currentQueryCts?.Dispose();
+            CancelAndDisposeCurrentCts();
             _currentQueryCts = new CancellationTokenSource();
+            var ct = _currentQueryCts.Token;
 
             try
             {
@@ -282,7 +280,7 @@ namespace Easydict.WinUI.Views
                 // Step 1: Detect language
                 var detectedLanguage = await _detectionService.DetectAsync(
                     inputText,
-                    _currentQueryCts.Token);
+                    ct);
 
                 _lastDetectedLanguage = detectedLanguage;
                 UpdateDetectedLanguageDisplay(detectedLanguage);
@@ -324,14 +322,14 @@ namespace Easydict.WinUI.Views
                 if (manager.IsStreamingService(serviceId))
                 {
                     // Streaming path for LLM services
-                    await ExecuteStreamingTranslationAsync(manager, request, serviceId, detectedLanguage);
+                    await ExecuteStreamingTranslationAsync(manager, request, serviceId, detectedLanguage, ct);
                 }
                 else
                 {
                     // Non-streaming path for traditional services
                     var result = await manager.TranslateAsync(
                         request,
-                        _currentQueryCts.Token,
+                        ct,
                         serviceId);
 
                     // Update UI with result
@@ -362,6 +360,7 @@ namespace Easydict.WinUI.Views
             finally
             {
                 SetLoading(false);
+                CancelAndDisposeCurrentCts();
             }
         }
 
@@ -374,7 +373,8 @@ namespace Easydict.WinUI.Views
             TranslationManager manager,
             TranslationRequest request,
             string serviceId,
-            TranslationLanguage detectedLanguage)
+            TranslationLanguage detectedLanguage,
+            CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
             var sb = new StringBuilder();
@@ -386,7 +386,7 @@ namespace Easydict.WinUI.Views
 
             await foreach (var chunk in manager.TranslateStreamAsync(
                 request,
-                _currentQueryCts!.Token,
+                cancellationToken,
                 serviceId))
             {
                 sb.Append(chunk);
@@ -608,6 +608,26 @@ namespace Easydict.WinUI.Views
         {
             InputTextBox.Text = text;
             _ = StartQueryAsync();
+        }
+
+        private void CancelAndDisposeCurrentCts()
+        {
+            var cts = Interlocked.Exchange(ref _currentQueryCts, null);
+            if (cts == null)
+            {
+                return;
+            }
+
+            try
+            {
+                cts.Cancel();
+            }
+            catch
+            {
+                // Ignore cancellation exceptions during cleanup
+            }
+
+            cts.Dispose();
         }
     }
 }

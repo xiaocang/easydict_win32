@@ -821,7 +821,7 @@ public sealed partial class MiniWindow : Window
     {
         _userChangedTargetLanguage = false; // Reset for new external input
         InputTextBox.Text = text;
-        StartQueryTrackedAsync();
+        _ = StartQueryTrackedAsync();
     }
 
     /// <summary>

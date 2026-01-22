@@ -153,7 +153,7 @@ public sealed class CaiyunService : BaseTranslationService
         {
             Language.Auto => "auto",
             Language.SimplifiedChinese => "zh",
-            Language.TraditionalChinese => "zh",
+            Language.TraditionalChinese => "zh-Hant",
             Language.English => "en",
             Language.Japanese => "ja",
             Language.Korean => "ko",

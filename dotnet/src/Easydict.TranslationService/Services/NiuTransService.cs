@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Easydict.TranslationService.Models;
@@ -8,12 +6,12 @@ namespace Easydict.TranslationService.Services;
 
 /// <summary>
 /// NiuTrans (小牛翻译) neural machine translation service.
-/// Supports 450+ languages with HMAC-SHA256 authentication.
+/// Supports 450+ languages with simple API key authentication.
 /// </summary>
 public sealed class NiuTransService : BaseTranslationService
 {
-    private const string Endpoint = "https://ntrans.xfyun.cn/v1/trans";
-    private const string Host = "ntrans.xfyun.cn";
+    private const string Endpoint = "https://api.niutrans.com/NiuTransServer/translation";
+    private const int MaxTextLength = 5000;
 
     private static readonly IReadOnlyList<Language> NiuTransLanguages = new[]
     {
@@ -94,95 +92,66 @@ public sealed class NiuTransService : BaseTranslationService
             };
         }
 
+        if (request.Text.Length > MaxTextLength)
+        {
+            throw new TranslationException($"Text exceeds maximum length of {MaxTextLength} characters")
+            {
+                ErrorCode = TranslationErrorCode.TextTooLong,
+                ServiceId = ServiceId
+            };
+        }
+
         var fromCode = GetLanguageCode(request.FromLanguage);
         var toCode = GetLanguageCode(request.ToLanguage);
 
         // Build request body
         var requestBody = new
         {
+            apikey = _apiKey,
+            src_text = request.Text,
             from = fromCode,
             to = toCode,
-            src_text = request.Text,
-            source = "text"
+            source = "Easydict"
         };
 
         var json = JsonSerializer.Serialize(requestBody);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        // Calculate HMAC signature
-        var date = DateTime.UtcNow.ToString("R", CultureInfo.InvariantCulture); // RFC1123 format
-        var requestLine = "POST /v1/trans HTTP/1.1";
-        var digest = CalculateSHA256Digest(json);
-        var signature = GenerateHMACSignature(Host, date, requestLine, digest, _apiKey);
-
-        // Build request with HMAC headers
-        var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
-        {
-            Content = content
-        };
-        httpRequest.Headers.TryAddWithoutValidation("Date", date);
-        httpRequest.Headers.TryAddWithoutValidation("Digest", $"SHA-256={digest}");
-        httpRequest.Headers.TryAddWithoutValidation("Authorization", signature);
-
-        var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorCode = response.StatusCode switch
-            {
-                System.Net.HttpStatusCode.Unauthorized => TranslationErrorCode.InvalidApiKey,
-                System.Net.HttpStatusCode.Forbidden => TranslationErrorCode.InvalidApiKey,
-                System.Net.HttpStatusCode.TooManyRequests => TranslationErrorCode.RateLimited,
-                _ => TranslationErrorCode.ServiceUnavailable
-            };
-
-            throw new TranslationException($"NiuTrans API returned {response.StatusCode}")
-            {
-                ErrorCode = errorCode,
-                ServiceId = ServiceId
-            };
-        }
-
+        var response = await HttpClient.PostAsync(Endpoint, content, cancellationToken);
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var result = ParseNiuTransResponse(responseJson, request.Text);
 
         return result;
     }
 
-    /// <summary>
-    /// Calculate SHA-256 digest of the request body.
-    /// </summary>
-    private static string CalculateSHA256Digest(string body)
-    {
-        using var sha256 = SHA256.Create();
-        var bytes = Encoding.UTF8.GetBytes(body);
-        var hash = sha256.ComputeHash(bytes);
-        return Convert.ToBase64String(hash);
-    }
-
-    /// <summary>
-    /// Generate HMAC-SHA256 signature for NiuTrans authentication.
-    /// </summary>
-    private static string GenerateHMACSignature(string host, string date, string requestLine, string digest, string apiKey)
-    {
-        // Construct canonical string
-        var canonicalString = $"host: {host}\ndate: {date}\n{requestLine}\ndigest: SHA-256={digest}";
-
-        // Calculate HMAC-SHA256
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(apiKey));
-        var signatureBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(canonicalString));
-        var signatureBase64 = Convert.ToBase64String(signatureBytes);
-
-        // Build Authorization header
-        var authorization = $"algorithm=\"hmac-sha256\", headers=\"host date request-line digest\", signature=\"{signatureBase64}\"";
-
-        return authorization;
-    }
-
     private TranslationResult ParseNiuTransResponse(string json, string originalText)
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+
+        // Check for error first
+        if (root.TryGetProperty("error_code", out var errorCodeProp))
+        {
+            var errorCode = errorCodeProp.GetString() ?? "";
+            var errorMsg = root.TryGetProperty("error_msg", out var errorMsgProp)
+                ? errorMsgProp.GetString() ?? "Unknown error"
+                : "Unknown error";
+
+            var translationErrorCode = errorCode switch
+            {
+                "13002" => TranslationErrorCode.InvalidApiKey, // apikey is empty
+                "13003" => TranslationErrorCode.InvalidApiKey, // apikey is invalid
+                "13004" => TranslationErrorCode.RateLimited,   // balance insufficient
+                "13005" => TranslationErrorCode.TextTooLong,   // text too long
+                _ => TranslationErrorCode.ServiceUnavailable
+            };
+
+            throw new TranslationException($"NiuTrans API error: {errorMsg} (code: {errorCode})")
+            {
+                ErrorCode = translationErrorCode,
+                ServiceId = ServiceId
+            };
+        }
 
         // Extract translated text
         var translatedText = originalText;
@@ -209,7 +178,7 @@ public sealed class NiuTransService : BaseTranslationService
         {
             Language.Auto => "auto",
             Language.SimplifiedChinese => "zh",
-            Language.TraditionalChinese => "zh",
+            Language.TraditionalChinese => "cht",
             Language.English => "en",
             Language.Japanese => "ja",
             Language.Korean => "ko",

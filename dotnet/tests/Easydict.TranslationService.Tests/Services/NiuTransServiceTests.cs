@@ -129,66 +129,11 @@ public class NiuTransServiceTests
         // Assert
         var requestBody = _mockHandler.LastRequestBody;
         requestBody.Should().NotBeNull();
+        requestBody.Should().Contain("\"apikey\":\"test-key\"");
         requestBody.Should().Contain("\"src_text\":\"Hello\"");
         requestBody.Should().Contain("\"from\":\"en\"");
         requestBody.Should().Contain("\"to\":\"es\"");
-    }
-
-    [Fact]
-    public async Task TranslateAsync_IncludesHMACAuthorizationHeader()
-    {
-        // Arrange
-        _service.Configure("test-api-key");
-        var niutransResponse = """{"tgt_text": "测试"}""";
-        _mockHandler.EnqueueJsonResponse(niutransResponse);
-
-        var request = new TranslationRequest
-        {
-            Text = "Test",
-            FromLanguage = Language.English,
-            ToLanguage = Language.SimplifiedChinese
-        };
-
-        // Act
-        await _service.TranslateAsync(request);
-
-        // Assert
-        var sentRequest = _mockHandler.LastRequest;
-        sentRequest.Should().NotBeNull();
-        
-        // Verify Authorization header exists with HMAC signature
-        sentRequest!.Headers.Should().ContainSingle(h => h.Key == "Authorization");
-        var authHeader = sentRequest.Headers.GetValues("Authorization").First();
-        authHeader.Should().Contain("algorithm=\"hmac-sha256\"");
-        authHeader.Should().Contain("headers=\"host date request-line digest\"");
-        authHeader.Should().Contain("signature=");
-    }
-
-    [Fact]
-    public async Task TranslateAsync_IncludesDigestHeader()
-    {
-        // Arrange
-        _service.Configure("test-api-key");
-        var niutransResponse = """{"tgt_text": "测试"}""";
-        _mockHandler.EnqueueJsonResponse(niutransResponse);
-
-        var request = new TranslationRequest
-        {
-            Text = "Test",
-            ToLanguage = Language.SimplifiedChinese
-        };
-
-        // Act
-        await _service.TranslateAsync(request);
-
-        // Assert
-        var sentRequest = _mockHandler.LastRequest;
-        sentRequest.Should().NotBeNull();
-        
-        // Verify Digest header exists (SHA-256 hash of request body)
-        sentRequest!.Headers.Should().ContainSingle(h => h.Key == "Digest");
-        var digestHeader = sentRequest.Headers.GetValues("Digest").First();
-        digestHeader.Should().StartWith("SHA-256=");
+        requestBody.Should().Contain("\"source\":\"Easydict\"");
     }
 
     [Fact]
@@ -214,7 +159,15 @@ public class NiuTransServiceTests
     {
         // Arrange
         _service.Configure("invalid-key");
-        _mockHandler.EnqueueErrorResponse(HttpStatusCode.Unauthorized, "Invalid signature");
+        var errorResponse = """
+            {
+                "error_code": "13003",
+                "error_msg": "apikey is invalid",
+                "from": "en",
+                "to": "zh"
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(errorResponse);
 
         var request = new TranslationRequest
         {
@@ -227,6 +180,7 @@ public class NiuTransServiceTests
             () => _service.TranslateAsync(request));
 
         exception.ErrorCode.Should().Be(TranslationErrorCode.InvalidApiKey);
+        exception.Message.Should().Contain("apikey is invalid");
     }
 
     [Fact]
@@ -234,7 +188,15 @@ public class NiuTransServiceTests
     {
         // Arrange
         _service.Configure("test-key");
-        _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
+        var errorResponse = """
+            {
+                "error_code": "13004",
+                "error_msg": "balance insufficient",
+                "from": "en",
+                "to": "zh"
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(errorResponse);
 
         var request = new TranslationRequest
         {
@@ -247,6 +209,7 @@ public class NiuTransServiceTests
             () => _service.TranslateAsync(request));
 
         exception.ErrorCode.Should().Be(TranslationErrorCode.RateLimited);
+        exception.Message.Should().Contain("balance insufficient");
     }
 
     [Fact]
@@ -270,6 +233,31 @@ public class NiuTransServiceTests
         // Assert
         var requestBody = _mockHandler.LastRequestBody;
         requestBody.Should().Contain("\"from\":\"auto\"");
+    }
+
+    [Theory]
+    [InlineData(Language.SimplifiedChinese, "zh")]
+    [InlineData(Language.TraditionalChinese, "cht")]
+    public async Task TranslateAsync_UsesCorrectChineseLanguageCode(Language targetLang, string expectedCode)
+    {
+        // Arrange
+        _service.Configure("test-key");
+        var niutransResponse = """{"tgt_text": "你好"}""";
+        _mockHandler.EnqueueJsonResponse(niutransResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.English,
+            ToLanguage = targetLang
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        var requestBody = _mockHandler.LastRequestBody;
+        requestBody.Should().Contain($"\"to\":\"{expectedCode}\"");
     }
 
     [Fact]

@@ -180,6 +180,31 @@ public class CaiyunServiceTests
         requestBody.Should().Contain("\"request_id\":");
     }
 
+    [Theory]
+    [InlineData(Language.SimplifiedChinese, "en2zh")]
+    [InlineData(Language.TraditionalChinese, "en2zh-Hant")]
+    public async Task TranslateAsync_UsesCorrectChineseTransType(Language toLang, string expectedTransType)
+    {
+        // Arrange
+        _service.Configure("test-key");
+        var caiyunResponse = """{"target": ["你好"]}""";
+        _mockHandler.EnqueueJsonResponse(caiyunResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.English,
+            ToLanguage = toLang
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        var requestBody = _mockHandler.LastRequestBody;
+        requestBody.Should().Contain($"\"trans_type\":\"{expectedTransType}\"");
+    }
+
     [Fact]
     public async Task TranslateAsync_ThrowsWhenNotConfigured()
     {

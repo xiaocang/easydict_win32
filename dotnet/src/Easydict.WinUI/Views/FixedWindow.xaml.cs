@@ -9,8 +9,6 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Windows.Foundation;
 using Windows.Graphics;
 using Windows.System;
 using WinRT.Interop;
@@ -39,7 +37,7 @@ public sealed partial class FixedWindow : Window
     private volatile bool _isClosing;
     private bool _userChangedTargetLanguage;
     private bool _suppressTargetLanguageSelectionChanged;
-    private FrameworkElement? _contentElement;
+    private TitleBarDragRegionHelper? _titleBarHelper;
 
     /// <summary>
     /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -76,95 +74,19 @@ public sealed partial class FixedWindow : Window
         // Track when content is loaded for safe UI operations
         if (this.Content is FrameworkElement content)
         {
-            _contentElement = content;
-            content.Loaded += OnContentLoaded;
-            content.SizeChanged += OnContentSizeChanged;
+            content.Loaded += (s, e) => _isLoaded = true;
         }
-    }
 
-    private void OnContentLoaded(object sender, RoutedEventArgs e)
-    {
-        _isLoaded = true;
-        // Set up passthrough regions for interactive controls in title bar
-        UpdateTitleBarDragRegions();
-    }
-
-    private void OnContentSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        // Recalculate drag regions when window size changes
-        if (_isLoaded) UpdateTitleBarDragRegions();
-    }
-
-    /// <summary>
-    /// Sets up drag and passthrough regions for the custom title bar.
-    /// In unpackaged WinUI 3 apps, SetTitleBar() doesn't work reliably.
-    /// Instead, we use InputNonClientPointerSource to define:
-    /// - Caption regions: areas that act as draggable title bar
-    /// - Passthrough regions: areas that receive pointer input (buttons, etc.)
-    /// </summary>
-    private void UpdateTitleBarDragRegions()
-    {
-        if (_appWindow == null || !_isLoaded) return;
-
-        try
+        // Set up title bar drag regions for unpackaged WinUI 3 apps
+        if (_appWindow != null)
         {
-            var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(_appWindow.Id);
-            var scale = DpiHelper.GetScaleFactorForWindow(WindowNative.GetWindowHandle(this));
-
-            // Set the TitleBarRegion grid as the Caption (draggable) area
-            if (TitleBarRegion.ActualWidth > 0 && TitleBarRegion.ActualHeight > 0)
-            {
-                var captionRect = GetScaledBoundsForElement(TitleBarRegion, scale);
-                if (captionRect.Width > 0 && captionRect.Height > 0)
-                {
-                    nonClientInputSrc.SetRegionRects(NonClientRegionKind.Caption, new[] { captionRect });
-                }
-            }
-
-            // Collect interactive controls that need passthrough (buttons in title bar)
-            var passthroughRects = new List<RectInt32>();
-
-            // CloseButton (FixedWindow only has close button, no pin button)
-            if (CloseButton.ActualWidth > 0 && CloseButton.ActualHeight > 0)
-            {
-                var rect = GetScaledBoundsForElement(CloseButton, scale);
-                if (rect.Width > 0 && rect.Height > 0)
-                    passthroughRects.Add(rect);
-            }
-
-            // Set the passthrough regions - these areas will be clickable instead of draggable
-            if (passthroughRects.Count > 0)
-            {
-                nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, passthroughRects.ToArray());
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[FixedWindow] UpdateTitleBarDragRegions error: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Gets the bounds of a UIElement in physical pixels, scaled for DPI.
-    /// </summary>
-    private RectInt32 GetScaledBoundsForElement(FrameworkElement element, double scale)
-    {
-        try
-        {
-            GeneralTransform transform = element.TransformToVisual(null);
-            Rect bounds = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
-
-            return new RectInt32(
-                (int)Math.Round(bounds.X * scale),
-                (int)Math.Round(bounds.Y * scale),
-                (int)Math.Round(bounds.Width * scale),
-                (int)Math.Round(bounds.Height * scale)
-            );
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[FixedWindow] GetScaledBoundsForElement error: {ex.Message}");
-            return default;
+            _titleBarHelper = new TitleBarDragRegionHelper(
+                this,
+                _appWindow,
+                TitleBarRegion,
+                new FrameworkElement[] { CloseButton },
+                "FixedWindow");
+            _titleBarHelper.Initialize();
         }
     }
 
@@ -425,13 +347,9 @@ public sealed partial class FixedWindow : Window
 
     private async Task CleanupResourcesAsync()
     {
-        // Unregister event handlers to prevent memory leaks
-        if (_contentElement != null)
-        {
-            _contentElement.Loaded -= OnContentLoaded;
-            _contentElement.SizeChanged -= OnContentSizeChanged;
-            _contentElement = null;
-        }
+        // Clean up title bar drag region helper
+        _titleBarHelper?.Dispose();
+        _titleBarHelper = null;
 
         CancelCurrentQuery();
 

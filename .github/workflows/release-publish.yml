@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_NOLOGO: true
@@ -26,18 +29,26 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Extract version from tag
+      - name: Validate and extract version from tag
         id: version
         shell: bash
         run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # Validate tag format (must be v followed by semver)
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Tag '$TAG' does not match expected format (vX.Y.Z or vX.Y.Z-suffix)"
+            exit 1
+          fi
+
           # Remove 'v' prefix from tag (v1.0.0 -> 1.0.0)
-          VERSION=${GITHUB_REF_NAME#v}
+          VERSION="${TAG#v}"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }}
 
       - name: Publish WinUI App
         working-directory: dotnet
@@ -46,9 +57,9 @@ jobs:
             --configuration Release `
             --runtime win-${{ matrix.platform }} `
             --self-contained true `
+            --no-restore `
             --output ./publish/${{ matrix.platform }} `
-            -p:Version=${{ steps.version.outputs.VERSION }} `
-            -p:Platform=${{ matrix.platform }}
+            -p:Version=${{ steps.version.outputs.VERSION }}
 
       - name: Create ZIP archive
         shell: pwsh
@@ -59,8 +70,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4
@@ -75,6 +84,8 @@ jobs:
     needs: publish-app
 
     steps:
+      # Note: WinGet submission targets x64 only as it's the most common architecture.
+      # x86 and arm64 builds are available in GitHub Releases for manual download.
       - name: Submit to WinGet
         uses: vedantmgoyal2009/winget-releaser@v2
         with:

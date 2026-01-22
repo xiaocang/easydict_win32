@@ -6,6 +6,21 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <RootNamespace>Easydict.TranslationService</RootNamespace>
+
+    <!-- NuGet Package Metadata -->
+    <PackageId>Easydict.TranslationService</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Easydict Contributors</Authors>
+    <Description>Translation service library supporting multiple providers (Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, etc.) with LLM streaming translation support.</Description>
+    <PackageTags>translation;dictionary;google-translate;deepl;openai;gemini;llm</PackageTags>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/xiaocang/easydict_win32</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/xiaocang/easydict_win32</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,6 +36,10 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\EncryptedSecrets.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,129 @@
+name: NuGet Publish
+
+on:
+  release:
+    types: [published]
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  publish-libraries:
+    name: Publish Libraries to NuGet
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Remove 'v' prefix from tag (v1.0.0 -> 1.0.0)
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Restore dependencies
+        working-directory: dotnet
+        run: dotnet restore Easydict.Win32.sln
+
+      - name: Build and Pack TranslationService
+        working-directory: dotnet
+        run: |
+          dotnet pack src/Easydict.TranslationService/Easydict.TranslationService.csproj \
+            --configuration Release \
+            --output ./nupkgs \
+            -p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: Build and Pack SidecarClient
+        working-directory: dotnet
+        run: |
+          dotnet pack src/Easydict.SidecarClient/Easydict.SidecarClient.csproj \
+            --configuration Release \
+            --output ./nupkgs \
+            -p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: List packages
+        run: ls -la dotnet/nupkgs/
+
+      - name: Publish to NuGet.org
+        working-directory: dotnet
+        run: |
+          dotnet nuget push ./nupkgs/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      - name: Upload packages as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: dotnet/nupkgs/
+          retention-days: 30
+
+  publish-app:
+    name: Publish WinUI Application
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        platform: [x64, x86, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          # Remove 'v' prefix from tag (v1.0.0 -> 1.0.0)
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Restore dependencies
+        working-directory: dotnet
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj
+
+      - name: Publish WinUI App
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --output ./publish/${{ matrix.platform }} `
+            -p:Version=${{ steps.version.outputs.VERSION }} `
+            -p:Platform=${{ matrix.platform }}
+
+      - name: Create ZIP archive
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dotnet/publish/${{ matrix.platform }}/* -DestinationPath easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easydict-${{ matrix.platform }}
+          path: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          retention-days: 30

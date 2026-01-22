@@ -9,6 +9,8 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 using Windows.Graphics;
 using Windows.System;
 using WinRT.Interop;
@@ -73,7 +75,89 @@ public sealed partial class FixedWindow : Window
         // Track when content is loaded for safe UI operations
         if (this.Content is FrameworkElement content)
         {
-            content.Loaded += (s, e) => _isLoaded = true;
+            content.Loaded += (s, e) =>
+            {
+                _isLoaded = true;
+                // Set up passthrough regions for interactive controls in title bar
+                UpdateTitleBarDragRegions();
+            };
+            content.SizeChanged += (s, e) =>
+            {
+                // Recalculate drag regions when window size changes
+                if (_isLoaded) UpdateTitleBarDragRegions();
+            };
+        }
+    }
+
+    /// <summary>
+    /// Sets up drag and passthrough regions for the custom title bar.
+    /// In unpackaged WinUI 3 apps, SetTitleBar() doesn't work reliably.
+    /// Instead, we use InputNonClientPointerSource to define:
+    /// - Caption regions: areas that act as draggable title bar
+    /// - Passthrough regions: areas that receive pointer input (buttons, etc.)
+    /// </summary>
+    private void UpdateTitleBarDragRegions()
+    {
+        if (_appWindow == null || !_isLoaded) return;
+
+        try
+        {
+            var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(_appWindow.Id);
+            var scale = DpiHelper.GetScaleFactorForWindow(WindowNative.GetWindowHandle(this));
+
+            // Set the TitleBarRegion grid as the Caption (draggable) area
+            if (TitleBarRegion.ActualWidth > 0 && TitleBarRegion.ActualHeight > 0)
+            {
+                var captionRect = GetScaledBoundsForElement(TitleBarRegion, scale);
+                if (captionRect.Width > 0 && captionRect.Height > 0)
+                {
+                    nonClientInputSrc.SetRegionRects(NonClientRegionKind.Caption, new[] { captionRect });
+                }
+            }
+
+            // Collect interactive controls that need passthrough (buttons in title bar)
+            var passthroughRects = new List<RectInt32>();
+
+            // CloseButton (FixedWindow only has close button, no pin button)
+            if (CloseButton.ActualWidth > 0)
+            {
+                var rect = GetScaledBoundsForElement(CloseButton, scale);
+                if (rect.Width > 0 && rect.Height > 0)
+                    passthroughRects.Add(rect);
+            }
+
+            // Set the passthrough regions - these areas will be clickable instead of draggable
+            if (passthroughRects.Count > 0)
+            {
+                nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, passthroughRects.ToArray());
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FixedWindow] UpdateTitleBarDragRegions error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Gets the bounds of a UIElement in physical pixels, scaled for DPI.
+    /// </summary>
+    private RectInt32 GetScaledBoundsForElement(FrameworkElement element, double scale)
+    {
+        try
+        {
+            GeneralTransform transform = element.TransformToVisual(null);
+            Rect bounds = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+
+            return new RectInt32(
+                (int)Math.Round(bounds.X * scale),
+                (int)Math.Round(bounds.Y * scale),
+                (int)Math.Round(bounds.Width * scale),
+                (int)Math.Round(bounds.Height * scale)
+            );
+        }
+        catch
+        {
+            return default;
         }
     }
 
@@ -102,8 +186,9 @@ public sealed partial class FixedWindow : Window
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
 
-        // Set the header grid as the draggable title bar region
-        this.SetTitleBar(TitleBarRegion);
+        // Note: SetTitleBar() doesn't work reliably in unpackaged WinUI 3 apps.
+        // We use InputNonClientPointerSource.SetRegionRects() instead to define
+        // passthrough regions for interactive controls. The rest becomes draggable.
 
         // Set window size from Fixed Window settings
         var scale = DpiHelper.GetScaleFactorForWindow(WindowNative.GetWindowHandle(this));

@@ -46,13 +46,6 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
 
-          # Check if this is a pre-release version
-          if [[ "$TAG" =~ -[a-zA-Z] ]]; then
-            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
-          else
-            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Restore dependencies
         working-directory: dotnet
         run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }}
@@ -76,6 +69,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          generate_release_notes: true
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4
@@ -84,30 +78,20 @@ jobs:
           path: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
           retention-days: 30
 
-    outputs:
-      is_prerelease: ${{ steps.version.outputs.IS_PRERELEASE }}
-
   publish-winget:
     name: Publish to WinGet
     runs-on: windows-latest
     needs: publish-app
-    # Skip WinGet submission for pre-release versions (alpha, beta, rc, etc.)
-    if: needs.publish-app.outputs.is_prerelease == 'false'
+    # Skip WinGet submission for pre-release versions
+    # Uses GitHub's release.prerelease flag for reliable detection
+    if: ${{ !github.event.release.prerelease }}
 
     steps:
-      - name: Check WINGET_TOKEN secret
-        shell: bash
-        run: |
-          if [ -z "${{ secrets.WINGET_TOKEN }}" ]; then
-            echo "Error: WINGET_TOKEN secret is not configured."
-            echo "Please create a GitHub PAT with public_repo scope at:"
-            echo "https://github.com/settings/tokens"
-            echo "Then add it as a repository secret named WINGET_TOKEN."
-            exit 1
-          fi
-
       # Note: WinGet submission targets x64 only as it's the most common architecture.
       # x86 and arm64 builds are available in GitHub Releases for manual download.
+      # WINGET_TOKEN requires a GitHub PAT with public_repo scope.
+      # Create at: https://github.com/settings/tokens
+      # Then add as repository secret: Settings > Secrets > Actions > New repository secret
       - name: Submit to WinGet
         uses: vedantmgoyal2009/winget-releaser@v2
         with:

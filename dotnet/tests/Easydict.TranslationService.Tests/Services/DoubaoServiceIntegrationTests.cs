@@ -101,20 +101,36 @@ public class DoubaoServiceIntegrationTests : IDisposable
             "streamed translation should contain Chinese characters");
     }
 
+    [SkippableFact]
+    public async Task TranslateAsync_EnglishToTraditionalChinese_ReturnsTraditionalChineseTranslation()
+    {
+        Skip.If(string.IsNullOrEmpty(_apiKey), "DOUBAO_API_KEY not set");
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello, world!",
+            FromLanguage = Language.English,
+            ToLanguage = Language.TraditionalChinese
+        };
+
+        var result = await _service.TranslateAsync(request);
+
+        result.Should().NotBeNull();
+        result.TranslatedText.Should().NotBeNullOrWhiteSpace();
+        // Verify the result contains Chinese characters
+        result.TranslatedText.Should().MatchRegex(@"[\u4e00-\u9fff]+",
+            "translation should contain Traditional Chinese characters");
+    }
+
     [Fact]
-    public void Configure_SetsApiKeyAndEndpoint()
+    public void Configure_SetsApiKey()
     {
         var service = new DoubaoService(_httpClient);
         var testApiKey = "test-api-key";
-        var testEndpoint = "https://test.example.com/v1/chat/completions";
-        var testModel = "doubao-seed-1-6-250615";
 
-        service.Configure(testApiKey, testEndpoint, testModel);
+        service.Configure(testApiKey);
 
         service.IsConfigured.Should().BeTrue();
-        service.ApiKey.Should().Be(testApiKey);
-        service.Endpoint.Should().Be(testEndpoint);
-        service.Model.Should().Be(testModel);
     }
 
     [Fact]
@@ -124,5 +140,11 @@ public class DoubaoServiceIntegrationTests : IDisposable
         _service.DisplayName.Should().Be("Doubao");
         _service.RequiresApiKey.Should().BeTrue();
         _service.IsStreaming.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SupportedLanguages_ContainsTraditionalChinese()
+    {
+        _service.SupportedLanguages.Should().Contain(Language.TraditionalChinese);
     }
 }

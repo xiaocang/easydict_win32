@@ -21,16 +21,16 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **Multiple Translation Services**
   - Google Translate (free, no API key required)
-  - DeepL (supports Free/Pro API)
+  - DeepL (supports Free/Pro API, Traditional Chinese supported)
   - OpenAI (GPT-4o, GPT-4o-mini, etc.)
-  - Gemini (Google AI)
+  - Gemini (Google AI, including Gemini 2.5/3.0 models)
   - DeepSeek
   - Groq (fast LLM inference)
   - Zhipu AI
   - GitHub Models (free)
-  - Doubao (ByteDance LLM, streaming)
-  - Caiyun (彩云小译)
-  - NiuTrans (小牛翻译, 450+ languages)
+  - Doubao (ByteDance translation-specialized model)
+  - Caiyun (彩云小译, Traditional Chinese supported)
+  - NiuTrans (小牛翻译, 450+ languages, Traditional Chinese supported)
   - Linguee Dictionary (with context examples)
   - Ollama (local LLM, default: llama3.2)
   - BuiltIn AI (free, powered by Groq)
@@ -92,12 +92,34 @@ dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release
 dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ```
 
+## Recent Updates
+
+### January 2026
+
+**Translation Service Improvements:**
+
+- **Gemini Service** - Added 4 new models:
+  - `gemini-2.5-flash-lite` (lightweight, 500 RPD free tier)
+  - `gemini-2.5-pro` (advanced model)
+  - `gemini-3-flash-preview` (latest preview)
+  - `gemini-3-pro-preview` (latest pro preview)
+
+- **DeepL Service** - Added Traditional Chinese support
+  - Both API and web translation modes now support Traditional Chinese
+  - Proper `ZH-HANT` language code mapping
+
+- **Doubao Service** - Complete rewrite with correct API
+  - Now uses ByteDance's specialized translation API (`/api/v3/responses`)
+  - Translation-specific model: `doubao-seed-translation-250915`
+  - Improved streaming support with proper SSE event parsing
+  - Added Traditional Chinese support with `zh-Hant` language code
+
+- **Google Translate** - Hebrew language support verified and working correctly
+
 ## TODO
 
 ### High Priority
 
-- [x] ~~**Ollama Support**~~ - Local LLM service (localhost:11434) ✅ **Implemented**
-- [x] ~~**BuiltIn AI**~~ - Built-in free translation service ✅ **Implemented**
 - [x] ~~**Doubao**~~ - ByteDance LLM service ✅ **Implemented**
 - [x] ~~**Caiyun**~~ - 彩云小译 ✅ **Implemented**
 - [x] ~~**NiuTrans**~~ - 小牛翻译 (450+ languages) ✅ **Implemented**
@@ -135,6 +157,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Window Types | 3 | 3 |
 | Global Hotkeys | 10+ | 6 |
 | LLM Streaming | Yes | Yes |
+| Traditional Chinese | Yes | Yes |
 
 ## License
 

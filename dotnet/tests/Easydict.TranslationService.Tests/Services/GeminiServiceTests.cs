@@ -77,6 +77,13 @@ public class GeminiServiceTests
     [Fact]
     public void AvailableModels_ContainsExpectedModels()
     {
+        // New models
+        GeminiService.AvailableModels.Should().Contain("gemini-2.5-flash-lite");
+        GeminiService.AvailableModels.Should().Contain("gemini-2.5-pro");
+        GeminiService.AvailableModels.Should().Contain("gemini-3-flash-preview");
+        GeminiService.AvailableModels.Should().Contain("gemini-3-pro-preview");
+
+        // Legacy models still supported
         GeminiService.AvailableModels.Should().Contain("gemini-2.5-flash");
         GeminiService.AvailableModels.Should().Contain("gemini-2.0-flash");
         GeminiService.AvailableModels.Should().Contain("gemini-1.5-flash");

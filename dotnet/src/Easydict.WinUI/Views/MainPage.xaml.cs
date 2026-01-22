@@ -19,12 +19,16 @@ namespace Easydict.WinUI.Views
     public partial class MainPage : Page
     {
         private LanguageDetectionService? _detectionService;
+        // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
+        // Other code may Cancel() but must NOT Dispose().
         private CancellationTokenSource? _currentQueryCts;
+        private Task? _currentQueryTask;
         private readonly SettingsService _settings = SettingsService.Instance;
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
         private bool _isManualTargetSelection = false; // Track if user manually selected target
         private string _lastQueryText = ""; // Track last query text to detect changes
         private bool _isLoaded;
+        private volatile bool _isClosing;
         private bool _suppressTargetLanguageSelectionChanged;
 
         public MainPage()
@@ -63,17 +67,30 @@ namespace Easydict.WinUI.Views
 
         private void OnPageLoaded(object sender, RoutedEventArgs e)
         {
+            _isClosing = false;
             _isLoaded = true;
             InitializeTranslationServices();
-            _detectionService = new LanguageDetectionService(_settings);
+            if (_detectionService is null)
+            {
+                _detectionService = new LanguageDetectionService(_settings);
+            }
+            SetLoading(false);
             ApplySettings();
         }
 
-        private void OnPageUnloaded(object sender, RoutedEventArgs e)
+        private async void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
-            _isLoaded = false;
-            App.ClipboardTextReceived -= OnClipboardTextReceived;
-            CleanupResources();
+            try
+            {
+                _isLoaded = false;
+                _isClosing = true;
+                App.ClipboardTextReceived -= OnClipboardTextReceived;
+                await CleanupResourcesAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainPage] OnPageUnloaded error: {ex}");
+            }
         }
 
         private void ApplySettings()
@@ -113,11 +130,20 @@ namespace Easydict.WinUI.Views
 
         private void OnClipboardTextReceived(string text)
         {
+            if (_isClosing)
+            {
+                return;
+            }
+
             // Auto-translate clipboard text
             DispatcherQueue.TryEnqueue(async () =>
             {
+                if (_isClosing)
+                {
+                    return;
+                }
                 InputTextBox.Text = text;
-                await StartQueryAsync();
+                await StartQueryTrackedAsync();
             });
         }
 
@@ -140,11 +166,42 @@ namespace Easydict.WinUI.Views
             }
         }
 
-        private void CleanupResources()
+        private async Task CleanupResourcesAsync()
         {
-            CancelAndDisposeCurrentCts();
-            _detectionService?.Dispose();
-            _detectionService = null;
+            CancelCurrentQuery();
+
+            // Wait for in-flight query to complete (non-blocking with timeout)
+            var task = _currentQueryTask;
+            bool waitSucceeded = true;
+            if (task != null && !task.IsCompleted)
+            {
+                try
+                {
+                    await task.WaitAsync(TimeSpan.FromSeconds(2));
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected if task was cancelled - wait succeeded (task completed via cancellation)
+                }
+                catch (TimeoutException)
+                {
+                    // Timeout - task is still running, do NOT dispose resources
+                    waitSucceeded = false;
+                }
+                catch (Exception)
+                {
+                    // Task faulted - treat as completed (faulted tasks are done)
+                    // Continue with dispose
+                }
+            }
+            _currentQueryTask = null;
+
+            // Only dispose if wait succeeded (task completed or was cancelled)
+            if (waitSucceeded)
+            {
+                _detectionService?.Dispose();
+                _detectionService = null;
+            }
             // Do NOT dispose shared TranslationManager - it's managed by TranslationManagerService
         }
 
@@ -168,6 +225,8 @@ namespace Easydict.WinUI.Views
 
         private void SetLoading(bool loading)
         {
+            if (_isClosing) return;
+
             // Update both Wide and Narrow buttons
             TranslateButton.IsEnabled = !loading;
             TranslateButtonNarrow.IsEnabled = !loading;
@@ -189,7 +248,7 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private async void OnTranslateClicked(object sender, RoutedEventArgs e)
         {
-            await StartQueryAsync();
+            await StartQueryTrackedAsync();
         }
 
         /// <summary>
@@ -210,7 +269,7 @@ namespace Easydict.WinUI.Views
                 {
                     // Fallback: trigger translation if we can't check modifiers
                     e.Handled = true;
-                    await StartQueryAsync();
+                    await StartQueryTrackedAsync();
                     return;
                 }
 
@@ -230,13 +289,13 @@ namespace Easydict.WinUI.Views
 
                 // Plain Enter: trigger translation
                 e.Handled = true; // Prevent default behavior (inserting newline)
-                await StartQueryAsync();
+                await StartQueryTrackedAsync();
             }
             catch
             {
                 // Fallback: trigger translation on plain Enter if modifier detection fails
                 e.Handled = true;
-                await StartQueryAsync();
+                await StartQueryTrackedAsync();
             }
         }
 
@@ -245,12 +304,20 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private async Task StartQueryAsync()
         {
+            if (_isClosing)
+            {
+                return;
+            }
+
             if (_detectionService is null)
             {
                 OutputTextBox.Text = "Service not initialized. Please wait...";
                 InitializeTranslationServices();
                 return;
             }
+
+            // Capture service locally to avoid races if cleanup nulls the field
+            var detectionService = _detectionService;
 
             var inputText = InputTextBox.Text?.Trim();
             if (string.IsNullOrEmpty(inputText))
@@ -279,20 +346,20 @@ namespace Easydict.WinUI.Views
                 {
                     // Ignore cancellation exceptions during cleanup
                 }
-
-                previousCts.Dispose();
+                // Don't dispose - let the query's finally block dispose it
             }
 
             var ct = currentCts.Token;
 
             try
             {
+                if (_isClosing) return;
                 SetLoading(true);
                 OutputTextBox.Text = "";
                 TimingText.Text = "";
 
                 // Step 1: Detect language
-                var detectedLanguage = await _detectionService.DetectAsync(
+                var detectedLanguage = await detectionService.DetectAsync(
                     inputText,
                     ct);
 
@@ -309,7 +376,7 @@ namespace Easydict.WinUI.Views
                 else if (_settings.AutoSelectTargetLanguage)
                 {
                     // Auto-select target language (apply macOS algorithm)
-                    targetLanguage = _detectionService.GetTargetLanguage(detectedLanguage);
+                    targetLanguage = detectionService.GetTargetLanguage(detectedLanguage);
                     UpdateTargetLanguageSelector(targetLanguage);
                 }
                 else
@@ -356,27 +423,59 @@ namespace Easydict.WinUI.Views
             }
             catch (TranslationException ex)
             {
-                OutputTextBox.Text = ex.ErrorCode switch
+                if (!_isClosing)
                 {
-                    TranslationErrorCode.NetworkError => "Network error. Please check your connection.",
-                    TranslationErrorCode.Timeout => "Request timed out. Please try again.",
-                    TranslationErrorCode.RateLimited => "Rate limited. Please wait a moment.",
-                    TranslationErrorCode.InvalidApiKey => "Invalid API key configuration.",
-                    _ => $"Translation failed: {ex.Message}"
-                };
-                UpdateStatus(false, "Error");
+                    OutputTextBox.Text = ex.ErrorCode switch
+                    {
+                        TranslationErrorCode.NetworkError => "Network error. Please check your connection.",
+                        TranslationErrorCode.Timeout => "Request timed out. Please try again.",
+                        TranslationErrorCode.RateLimited => "Rate limited. Please wait a moment.",
+                        TranslationErrorCode.InvalidApiKey => "Invalid API key configuration.",
+                        _ => $"Translation failed: {ex.Message}"
+                    };
+                    UpdateStatus(false, "Error");
+                }
             }
             catch (Exception ex)
             {
-                OutputTextBox.Text = $"Error: {ex.Message}";
-                UpdateStatus(false, "Error");
+                if (!_isClosing)
+                {
+                    OutputTextBox.Text = $"Error: {ex.Message}";
+                    UpdateStatus(false, "Error");
+                }
             }
             finally
             {
-                SetLoading(false);
+                if (!_isClosing) SetLoading(false);
                 Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
                 currentCts.Dispose();
             }
+        }
+
+        /// <summary>
+        /// Wrapper that always tracks the query task before returning.
+        /// Avoids "downgrading" from a running real task to a no-op completed task.
+        /// </summary>
+        private Task StartQueryTrackedAsync()
+        {
+            var oldTask = _currentQueryTask;
+            var newTask = StartQueryAsync();
+            Task trackedTask;
+
+            // Only update _currentQueryTask if:
+            // - newTask is still running (it's a real query), OR
+            // - oldTask is null or already completed (nothing valuable to preserve)
+            if (!newTask.IsCompleted || oldTask == null || oldTask.IsCompleted)
+            {
+                _currentQueryTask = newTask;
+                trackedTask = newTask;
+            }
+            else
+            {
+                trackedTask = oldTask;
+            }
+
+            return trackedTask;
         }
 
         /// <summary>
@@ -397,6 +496,7 @@ namespace Easydict.WinUI.Views
             const int throttleMs = 50; // UI update throttle for smooth rendering
 
             var serviceName = manager.Services[serviceId].DisplayName;
+            if (_isClosing) return;
             ServiceText.Text = $"{serviceName} • Streaming...";
 
             await foreach (var chunk in manager.TranslateStreamAsync(
@@ -410,12 +510,15 @@ namespace Easydict.WinUI.Views
                 var now = DateTime.UtcNow;
                 if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
                 {
+                    if (_isClosing) return;
                     OutputTextBox.Text = sb.ToString();
                     lastUpdateTime = now;
                 }
             }
 
             stopwatch.Stop();
+
+            if (_isClosing) return;
 
             // Final update with complete text
             var finalText = sb.ToString().Trim();
@@ -566,7 +669,7 @@ namespace Easydict.WinUI.Views
             // Re-translate if there's text in the input
             if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
             {
-                _ = StartQueryAsync();
+                StartQueryTrackedAsync();
             }
         }
 
@@ -622,10 +725,10 @@ namespace Easydict.WinUI.Views
         public void SetTextAndTranslate(string text)
         {
             InputTextBox.Text = text;
-            _ = StartQueryAsync();
+            StartQueryTrackedAsync();
         }
 
-        private void CancelAndDisposeCurrentCts()
+        private void CancelCurrentQuery()
         {
             var cts = Interlocked.Exchange(ref _currentQueryCts, null);
             if (cts == null)
@@ -641,8 +744,7 @@ namespace Easydict.WinUI.Views
             {
                 // Ignore cancellation exceptions during cleanup
             }
-
-            cts.Dispose();
+            // Don't dispose - let the query's finally block dispose it
         }
     }
 }

@@ -266,10 +266,24 @@ namespace Easydict.WinUI.Views
                 _lastQueryText = inputText;
             }
 
-            // Cancel previous query (like macOS's stopAllService)
-            CancelAndDisposeCurrentCts();
-            _currentQueryCts = new CancellationTokenSource();
-            var ct = _currentQueryCts.Token;
+            var currentCts = new CancellationTokenSource();
+            var previousCts = Interlocked.Exchange(ref _currentQueryCts, currentCts);
+
+            if (previousCts != null)
+            {
+                try
+                {
+                    previousCts.Cancel();
+                }
+                catch
+                {
+                    // Ignore cancellation exceptions during cleanup
+                }
+
+                previousCts.Dispose();
+            }
+
+            var ct = currentCts.Token;
 
             try
             {
@@ -360,7 +374,8 @@ namespace Easydict.WinUI.Views
             finally
             {
                 SetLoading(false);
-                CancelAndDisposeCurrentCts();
+                Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
+                currentCts.Dispose();
             }
         }
 

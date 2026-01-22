@@ -342,9 +342,24 @@ public sealed partial class FixedWindow : Window
             return;
         }
 
-        CancelAndDisposeCurrentCts();
-        _currentQueryCts = new CancellationTokenSource();
-        var ct = _currentQueryCts.Token;
+        var currentCts = new CancellationTokenSource();
+        var previousCts = Interlocked.Exchange(ref _currentQueryCts, currentCts);
+
+        if (previousCts != null)
+        {
+            try
+            {
+                previousCts.Cancel();
+            }
+            catch
+            {
+                // Ignore cancellation exceptions during cleanup
+            }
+
+            previousCts.Dispose();
+        }
+
+        var ct = currentCts.Token;
 
         try
         {
@@ -466,7 +481,8 @@ public sealed partial class FixedWindow : Window
         finally
         {
             SetLoading(false);
-            CancelAndDisposeCurrentCts();
+            Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
+            currentCts.Dispose();
         }
     }
 

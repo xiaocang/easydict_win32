@@ -103,6 +103,9 @@ public sealed partial class MiniWindow : Window
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
 
+        // Set the header grid as the draggable title bar region
+        this.SetTitleBar(TitleBarRegion);
+
         // Set window size
         var scale = DpiHelper.GetScaleFactorForWindow(WindowNative.GetWindowHandle(this));
         var widthPx = DpiHelper.DipsToPhysicalPixels(_settings.MiniWindowWidthDips, scale);

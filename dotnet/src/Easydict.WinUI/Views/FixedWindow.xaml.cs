@@ -102,6 +102,9 @@ public sealed partial class FixedWindow : Window
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
 
+        // Set the header grid as the draggable title bar region
+        this.SetTitleBar(TitleBarRegion);
+
         // Set window size from Fixed Window settings
         var scale = DpiHelper.GetScaleFactorForWindow(WindowNative.GetWindowHandle(this));
         var widthPx = DpiHelper.DipsToPhysicalPixels(_settings.FixedWindowWidthDips, scale);

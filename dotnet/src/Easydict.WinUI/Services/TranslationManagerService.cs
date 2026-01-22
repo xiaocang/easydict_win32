@@ -135,6 +135,17 @@ public sealed class TranslationManagerService : IDisposable
     /// </summary>
     private void ConfigureServices()
     {
+        // Configure DeepL
+        _translationManager.ConfigureService("deepl", service =>
+        {
+            if (service is DeepLService deepl)
+            {
+                deepl.Configure(
+                    _settings.DeepLApiKey,
+                    useWebFirst: _settings.DeepLUseFreeApi);
+            }
+        });
+
         // Configure OpenAI
         _translationManager.ConfigureService("openai", service =>
         {

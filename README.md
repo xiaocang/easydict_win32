@@ -28,6 +28,8 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Groq (fast LLM inference)
   - Zhipu AI
   - GitHub Models (free)
+  - Ollama (local LLM, default: llama3.2)
+  - BuiltIn AI (free, powered by Groq)
   - Custom OpenAI-compatible services
 
 - **LLM Streaming Translation** - Real-time display of translation results
@@ -40,7 +42,10 @@ While the feature set is not yet complete compared to the macOS version, this po
 - **Global Hotkeys**
   - `Ctrl+Alt+T` - Show/hide main window
   - `Ctrl+Alt+D` - Translate clipboard content
-  - `Ctrl+Alt+M` - Show/hide mini window
+  - `Ctrl+Alt+M` - Show mini window (copies selection and translates when available)
+  - `Ctrl+Alt+F` - Show fixed window
+  - `Ctrl+Alt+Shift+M` - Toggle mini window visibility
+  - `Ctrl+Alt+Shift+F` - Toggle fixed window visibility
 
 - **System Tray** - Minimize to tray, run in background
 
@@ -87,10 +92,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ### High Priority
 
-- [ ] **Ollama Support** - Local LLM service (localhost:11434)
-- [ ] **BuiltIn AI** - Built-in free translation service
 - [ ] **TTS (Text-to-Speech)** - Windows Speech Synthesis API
-- [ ] **Selection Translation** - Auto-detect selected text
 
 ### Medium Priority
 
@@ -106,7 +108,6 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
   - [ ] Text Summarization
 
 - [ ] **More Hotkeys**
-  - [ ] Selection translation hotkey
   - [ ] Polish and replace
   - [ ] Translate and replace
 
@@ -121,12 +122,12 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | Feature | macOS | Windows |
 |---------|-------|---------|
-| Translation Services | 25+ | 10 |
+| Translation Services | 25+ | 11 |
 | OCR Screenshot Translation | Yes | No |
 | TTS | Yes | Planned |
-| Selection Translation | Yes | Planned |
+| Selection Translation | Yes | Yes |
 | Window Types | 3 | 3 |
-| Global Hotkeys | 10+ | 3 |
+| Global Hotkeys | 10+ | 6 |
 | LLM Streaming | Yes | Yes |
 
 ## License

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using System.Web;
 using Easydict.TranslationService.Models;
@@ -105,17 +106,22 @@ public sealed class GoogleTranslateService : BaseTranslationService
         var root = doc.RootElement;
 
         // Extract translated text from sentences array
-        var translatedText = "";
+        var sb = new StringBuilder();
         if (root.TryGetProperty("sentences", out var sentences))
         {
             foreach (var sentence in sentences.EnumerateArray())
             {
                 if (sentence.TryGetProperty("trans", out var trans))
                 {
-                    translatedText += trans.GetString();
+                    var part = trans.GetString();
+                    if (!string.IsNullOrEmpty(part))
+                    {
+                        sb.Append(part);
+                    }
                 }
             }
         }
+        var translatedText = sb.ToString();
 
         // Get detected source language
         var detectedLang = Language.Auto;

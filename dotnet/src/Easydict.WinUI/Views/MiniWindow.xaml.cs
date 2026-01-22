@@ -40,6 +40,7 @@ public sealed partial class MiniWindow : Window
     private bool _isLoaded;
     private bool _userChangedTargetLanguage;
     private bool _suppressTargetLanguageSelectionChanged;
+    private FrameworkElement? _contentElement;
 
     /// <summary>
     /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -77,18 +78,23 @@ public sealed partial class MiniWindow : Window
         // Track when content is loaded for safe UI operations
         if (this.Content is FrameworkElement content)
         {
-            content.Loaded += (s, e) =>
-            {
-                _isLoaded = true;
-                // Set up passthrough regions for interactive controls in title bar
-                UpdateTitleBarDragRegions();
-            };
-            content.SizeChanged += (s, e) =>
-            {
-                // Recalculate drag regions when window size changes
-                if (_isLoaded) UpdateTitleBarDragRegions();
-            };
+            _contentElement = content;
+            content.Loaded += OnContentLoaded;
+            content.SizeChanged += OnContentSizeChanged;
         }
+    }
+
+    private void OnContentLoaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = true;
+        // Set up passthrough regions for interactive controls in title bar
+        UpdateTitleBarDragRegions();
+    }
+
+    private void OnContentSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // Recalculate drag regions when window size changes
+        if (_isLoaded) UpdateTitleBarDragRegions();
     }
 
     /// <summary>
@@ -121,7 +127,7 @@ public sealed partial class MiniWindow : Window
             var passthroughRects = new List<RectInt32>();
 
             // PinButton
-            if (PinButton.ActualWidth > 0)
+            if (PinButton.ActualWidth > 0 && PinButton.ActualHeight > 0)
             {
                 var rect = GetScaledBoundsForElement(PinButton, scale);
                 if (rect.Width > 0 && rect.Height > 0)
@@ -129,7 +135,7 @@ public sealed partial class MiniWindow : Window
             }
 
             // CloseButton
-            if (CloseButton.ActualWidth > 0)
+            if (CloseButton.ActualWidth > 0 && CloseButton.ActualHeight > 0)
             {
                 var rect = GetScaledBoundsForElement(CloseButton, scale);
                 if (rect.Width > 0 && rect.Height > 0)
@@ -165,8 +171,9 @@ public sealed partial class MiniWindow : Window
                 (int)Math.Round(bounds.Height * scale)
             );
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[MiniWindow] GetScaledBoundsForElement error: {ex.Message}");
             return default;
         }
     }
@@ -448,6 +455,14 @@ public sealed partial class MiniWindow : Window
 
     private async Task CleanupResourcesAsync()
     {
+        // Unregister event handlers to prevent memory leaks
+        if (_contentElement != null)
+        {
+            _contentElement.Loaded -= OnContentLoaded;
+            _contentElement.SizeChanged -= OnContentSizeChanged;
+            _contentElement = null;
+        }
+
         CancelCurrentQuery();
 
         var task = _currentQueryTask;

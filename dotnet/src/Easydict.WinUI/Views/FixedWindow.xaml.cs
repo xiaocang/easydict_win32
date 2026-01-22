@@ -23,7 +23,10 @@ namespace Easydict.WinUI.Views;
 public sealed partial class FixedWindow : Window
 {
     private LanguageDetectionService? _detectionService;
+    // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
+    // Other code may Cancel() but must NOT Dispose().
     private CancellationTokenSource? _currentQueryCts;
+    private Task? _currentQueryTask;
     private readonly SettingsService _settings = SettingsService.Instance;
     private readonly List<ServiceQueryResult> _serviceResults = new();
     private readonly List<ServiceResultItem> _resultControls = new();
@@ -31,6 +34,7 @@ public sealed partial class FixedWindow : Window
     private AppWindow? _appWindow;
     private OverlappedPresenter? _presenter;
     private bool _isLoaded;
+    private volatile bool _isClosing;
     private bool _userChangedTargetLanguage;
     private bool _suppressTargetLanguageSelectionChanged;
 
@@ -260,10 +264,18 @@ public sealed partial class FixedWindow : Window
         DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
     }
 
-    private void OnWindowClosed(object sender, WindowEventArgs args)
+    private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
-        SaveWindowPosition();
-        CleanupResources();
+        try
+        {
+            _isClosing = true;
+            SaveWindowPosition();
+            await CleanupResourcesAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FixedWindow] OnWindowClosed error: {ex}");
+        }
     }
 
     /// <summary>
@@ -311,30 +323,71 @@ public sealed partial class FixedWindow : Window
         }
     }
 
-    private void CleanupResources()
+    private async Task CleanupResourcesAsync()
     {
-        CancelAndDisposeCurrentCts();
-        _detectionService?.Dispose();
-        _detectionService = null;
+        CancelCurrentQuery();
+
+        // Wait for in-flight query to complete (non-blocking with timeout)
+        var task = _currentQueryTask;
+        bool waitSucceeded = true;
+        if (task != null && !task.IsCompleted)
+        {
+            try
+            {
+                await task.WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected if task was cancelled - wait succeeded (task completed via cancellation)
+            }
+            catch (TimeoutException)
+            {
+                // Timeout - task is still running, do NOT dispose resources
+                waitSucceeded = false;
+            }
+            catch (Exception)
+            {
+                // Task faulted - treat as completed (faulted tasks are done)
+                // Continue with dispose
+            }
+        }
+        _currentQueryTask = null;
+
+        // Only dispose if wait succeeded (task completed or was cancelled)
+        if (waitSucceeded)
+        {
+            _detectionService?.Dispose();
+            _detectionService = null;
+        }
         // Do NOT dispose shared TranslationManager - it's managed by TranslationManagerService
     }
 
     private void SetLoading(bool loading)
     {
+        if (_isClosing) return;
+
         TranslateButton.IsEnabled = !loading;
         LoadingRing.IsActive = loading;
         LoadingRing.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
         TranslateIcon.Visibility = loading ? Visibility.Collapsed : Visibility.Visible;
     }
-
+    
     private async Task StartQueryAsync()
     {
+        if (_isClosing)
+        {
+            return;
+        }
+
         if (_detectionService is null)
         {
             StatusText.Text = "Service not initialized";
             InitializeTranslationServices();
             return;
         }
+
+        // Capture service locally to avoid races if cleanup nulls the field
+        var detectionService = _detectionService;
 
         var inputText = InputTextBox.Text?.Trim();
         if (string.IsNullOrEmpty(inputText))
@@ -355,8 +408,7 @@ public sealed partial class FixedWindow : Window
             {
                 // Ignore cancellation exceptions during cleanup
             }
-
-            previousCts.Dispose();
+            // Don't dispose - let the query's finally block dispose it
         }
 
         var ct = currentCts.Token;
@@ -373,7 +425,7 @@ public sealed partial class FixedWindow : Window
             }
 
             // Detect language
-            var detectedLanguage = await _detectionService.DetectAsync(inputText, ct);
+            var detectedLanguage = await detectionService.DetectAsync(inputText, ct);
 
             _lastDetectedLanguage = detectedLanguage;
             UpdateDetectedLanguageDisplay(detectedLanguage);
@@ -382,7 +434,7 @@ public sealed partial class FixedWindow : Window
             TranslationLanguage targetLanguage;
             if (_settings.AutoSelectTargetLanguage && !_userChangedTargetLanguage)
             {
-                targetLanguage = _detectionService.GetTargetLanguage(detectedLanguage);
+                targetLanguage = detectionService.GetTargetLanguage(detectedLanguage);
                 UpdateTargetLanguageSelector(targetLanguage);
             }
             else
@@ -422,6 +474,7 @@ public sealed partial class FixedWindow : Window
 
                         DispatcherQueue.TryEnqueue(() =>
                         {
+                            if (_isClosing) return;
                             serviceResult.Result = result;
                             serviceResult.IsLoading = false;
                             serviceResult.ApplyAutoCollapseLogic();
@@ -437,6 +490,7 @@ public sealed partial class FixedWindow : Window
                 {
                     DispatcherQueue.TryEnqueue(() =>
                     {
+                        if (_isClosing) return;
                         serviceResult.Error = ex;
                         serviceResult.IsLoading = false;
                         serviceResult.IsStreaming = false;
@@ -448,6 +502,7 @@ public sealed partial class FixedWindow : Window
                 {
                     DispatcherQueue.TryEnqueue(() =>
                     {
+                        if (_isClosing) return;
                         serviceResult.Error = new TranslationException(ex.Message)
                         {
                             ErrorCode = TranslationErrorCode.Unknown,
@@ -480,10 +535,36 @@ public sealed partial class FixedWindow : Window
         }
         finally
         {
-            SetLoading(false);
+            if (!_isClosing) SetLoading(false);
             Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
             currentCts.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Wrapper that always tracks the query task before returning.
+    /// Avoids "downgrading" from a running real task to a no-op completed task.
+    /// </summary>
+    private Task StartQueryTrackedAsync()
+    {
+        var oldTask = _currentQueryTask;
+        var newTask = StartQueryAsync();
+        Task trackedTask;
+
+        // Only update _currentQueryTask if:
+        // - newTask is still running (it's a real query), OR
+        // - oldTask is null or already completed (nothing valuable to preserve)
+        if (!newTask.IsCompleted || oldTask == null || oldTask.IsCompleted)
+        {
+            _currentQueryTask = newTask;
+            trackedTask = newTask;
+        }
+        else
+        {
+            trackedTask = oldTask;
+        }
+
+        return trackedTask;
     }
 
     /// <summary>
@@ -507,6 +588,7 @@ public sealed partial class FixedWindow : Window
         // Mark as streaming
         DispatcherQueue.TryEnqueue(() =>
         {
+            if (_isClosing) return;
             serviceResult.IsLoading = false;
             serviceResult.IsStreaming = true;
             serviceResult.StreamingText = "";
@@ -524,6 +606,7 @@ public sealed partial class FixedWindow : Window
                 var currentText = sb.ToString();
                 DispatcherQueue.TryEnqueue(() =>
                 {
+                    if (_isClosing) return;
                     serviceResult.StreamingText = currentText;
                     ResizeWindowToContent();
                 });
@@ -537,6 +620,7 @@ public sealed partial class FixedWindow : Window
         var finalText = sb.ToString().Trim();
         DispatcherQueue.TryEnqueue(() =>
         {
+            if (_isClosing) return;
             serviceResult.IsStreaming = false;
             serviceResult.StreamingText = "";
             serviceResult.Result = new TranslationResult
@@ -623,7 +707,7 @@ public sealed partial class FixedWindow : Window
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)
     {
-        await StartQueryAsync();
+        await StartQueryTrackedAsync();
     }
 
     private async void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
@@ -654,7 +738,7 @@ public sealed partial class FixedWindow : Window
         }
 
         e.Handled = true;
-        await StartQueryAsync();
+        await StartQueryTrackedAsync();
     }
 
     private void OnSwapClicked(object sender, RoutedEventArgs e)
@@ -685,7 +769,7 @@ public sealed partial class FixedWindow : Window
     {
         _userChangedTargetLanguage = false; // Reset for new external input
         InputTextBox.Text = text;
-        _ = StartQueryAsync();
+        StartQueryTrackedAsync();
     }
 
     /// <summary>
@@ -712,7 +796,7 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     public bool IsVisible => _appWindow?.IsVisible ?? false;
 
-    private void CancelAndDisposeCurrentCts()
+    private void CancelCurrentQuery()
     {
         var cts = Interlocked.Exchange(ref _currentQueryCts, null);
         if (cts == null)
@@ -728,7 +812,6 @@ public sealed partial class FixedWindow : Window
         {
             // Ignore cancellation exceptions during cleanup
         }
-
-        cts.Dispose();
+        // Don't dispose - let the query's finally block dispose it
     }
 }

@@ -99,6 +99,12 @@ public sealed class TranslationManager : IDisposable
         RegisterService(new GitHubModelsService(_httpClient));
         RegisterService(new CustomOpenAIService(_httpClient));
         RegisterService(new GeminiService(_httpClient));
+
+        // Register new translation services (Phase 3)
+        RegisterService(new DoubaoService(_httpClient));
+        RegisterService(new CaiyunService(_httpClient));
+        RegisterService(new NiuTransService(_httpClient));
+        RegisterService(new LingueeService(_httpClient));
     }
 
     /// <summary>

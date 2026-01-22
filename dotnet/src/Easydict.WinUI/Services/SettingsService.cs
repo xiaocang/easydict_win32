@@ -78,6 +78,19 @@ public sealed class SettingsService
     public string? GeminiApiKey { get; set; }
     public string GeminiModel { get; set; } = "gemini-2.5-flash";
 
+    // Doubao settings
+    public string? DoubaoApiKey { get; set; }
+    public string DoubaoEndpoint { get; set; } = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
+    public string DoubaoModel { get; set; } = "doubao-seed-1-8-251215";
+
+    // Caiyun settings
+    public string? CaiyunApiKey { get; set; }
+
+    // NiuTrans settings
+    public string? NiuTransApiKey { get; set; }
+
+    // Linguee settings (no API key needed)
+
     // Behavior settings
     public bool MinimizeToTray { get; set; } = true;
     public bool ClipboardMonitoring { get; set; } = false;

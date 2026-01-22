@@ -28,6 +28,12 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Groq (fast LLM inference)
   - Zhipu AI
   - GitHub Models (free)
+  - Doubao (ByteDance LLM, streaming)
+  - Ollama (local LLM service)
+  - BuiltIn AI (free cloud LLM)
+  - Caiyun (彩云小译)
+  - NiuTrans (小牛翻译, 450+ languages)
+  - Linguee Dictionary (with context examples)
   - Custom OpenAI-compatible services
 
 - **LLM Streaming Translation** - Real-time display of translation results
@@ -87,19 +93,19 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ### High Priority
 
-- [ ] **Ollama Support** - Local LLM service (localhost:11434)
-- [ ] **BuiltIn AI** - Built-in free translation service
+- [x] ~~**Ollama Support**~~ - Local LLM service (localhost:11434) ✅ **Implemented**
+- [x] ~~**BuiltIn AI**~~ - Built-in free translation service ✅ **Implemented**
+- [x] ~~**Doubao**~~ - ByteDance LLM service ✅ **Implemented**
+- [x] ~~**Caiyun**~~ - 彩云小译 ✅ **Implemented**
+- [x] ~~**NiuTrans**~~ - 小牛翻译 (450+ languages) ✅ **Implemented**
+- [x] ~~**Linguee Dictionary**~~ - Dictionary with context examples ✅ **Implemented**
 - [ ] **TTS (Text-to-Speech)** - Windows Speech Synthesis API
 - [ ] **Selection Translation** - Auto-detect selected text
 
 ### Medium Priority
 
 - [ ] **More Translation Services**
-  - [ ] Caiyun
-  - [ ] Volcano
-  - [ ] NiuTrans
-  - [ ] Doubao
-  - [ ] Linguee Dictionary
+  - [ ] Volcano (ByteDance, may overlap with Doubao)
 
 - [ ] **AI Tools**
   - [ ] Text Polishing
@@ -121,7 +127,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | Feature | macOS | Windows |
 |---------|-------|---------|
-| Translation Services | 25+ | 10 |
+| Translation Services | 25+ | 15 |
 | OCR Screenshot Translation | Yes | No |
 | TTS | Yes | Planned |
 | Selection Translation | Yes | Planned |

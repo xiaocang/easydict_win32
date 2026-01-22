@@ -779,7 +779,7 @@ public sealed partial class FixedWindow : Window
     {
         _userChangedTargetLanguage = false; // Reset for new external input
         InputTextBox.Text = text;
-        StartQueryTrackedAsync();
+        _ = StartQueryTrackedAsync();
     }
 
     /// <summary>

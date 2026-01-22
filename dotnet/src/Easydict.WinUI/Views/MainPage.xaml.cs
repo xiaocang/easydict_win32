@@ -681,7 +681,7 @@ namespace Easydict.WinUI.Views
             // Re-translate if there's text in the input
             if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
             {
-                StartQueryTrackedAsync();
+                _ = StartQueryTrackedAsync();
             }
         }
 
@@ -737,7 +737,7 @@ namespace Easydict.WinUI.Views
         public void SetTextAndTranslate(string text)
         {
             InputTextBox.Text = text;
-            StartQueryTrackedAsync();
+            _ = StartQueryTrackedAsync();
         }
 
         /// <summary>

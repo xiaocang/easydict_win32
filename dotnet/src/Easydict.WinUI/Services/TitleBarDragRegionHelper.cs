@@ -22,13 +22,13 @@ public sealed class TitleBarDragRegionHelper : IDisposable
     private readonly string _windowName;
     private FrameworkElement? _contentElement;
     private volatile bool _isLoaded;
-    private volatile bool _isDisposed;
+    private int _isDisposed; // 0 = false, 1 = true; use int for Interlocked
 
     /// <summary>
     /// Throttle interval for SizeChanged events to avoid excessive updates during resize.
     /// </summary>
-    private const int ThrottleIntervalMs = 16; // ~60fps
-    private DateTime _lastUpdateTime = DateTime.MinValue;
+    private const long ThrottleIntervalTicks = 16 * TimeSpan.TicksPerMillisecond; // ~60fps
+    private long _lastUpdateTicks; // Use ticks for atomic Interlocked operations
 
     /// <summary>
     /// Creates a new TitleBarDragRegionHelper.
@@ -97,8 +97,11 @@ public sealed class TitleBarDragRegionHelper : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed) return;
-        _isDisposed = true;
+        // Atomically check and set _isDisposed to prevent race conditions
+        if (Interlocked.CompareExchange(ref _isDisposed, 1, 0) != 0)
+        {
+            return; // Already disposed by another thread
+        }
         Cleanup();
     }
 
@@ -110,15 +113,18 @@ public sealed class TitleBarDragRegionHelper : IDisposable
 
     private void OnContentSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (!_isLoaded || _isDisposed) return;
+        if (!_isLoaded || _isDisposed != 0) return;
 
         // Throttle updates to avoid performance issues during rapid resize
-        var now = DateTime.UtcNow;
-        if ((now - _lastUpdateTime).TotalMilliseconds < ThrottleIntervalMs)
+        // Use Interlocked for thread-safe timestamp comparison and update
+        var nowTicks = DateTime.UtcNow.Ticks;
+        var lastTicks = Interlocked.Read(ref _lastUpdateTicks);
+        if (nowTicks - lastTicks < ThrottleIntervalTicks)
         {
             return;
         }
-        _lastUpdateTime = now;
+        // Atomically update the timestamp; if another thread beat us, that's fine
+        Interlocked.Exchange(ref _lastUpdateTicks, nowTicks);
 
         UpdateDragRegions();
     }
@@ -129,7 +135,7 @@ public sealed class TitleBarDragRegionHelper : IDisposable
     /// </summary>
     public void UpdateDragRegions()
     {
-        if (_isDisposed || !_isLoaded) return;
+        if (_isDisposed != 0 || !_isLoaded) return;
 
         try
         {

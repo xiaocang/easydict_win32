@@ -74,7 +74,7 @@ jobs:
       - name: Upload as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: easydict-${{ matrix.platform }}
+          name: easydict_win32-${{ matrix.platform }}
           path: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
           retention-days: 30
 
@@ -86,9 +86,11 @@ jobs:
     steps:
       # Note: WinGet submission targets x64 only as it's the most common architecture.
       # x86 and arm64 builds are available in GitHub Releases for manual download.
+      # WINGET_TOKEN requires a GitHub PAT with public_repo scope.
+      # Create at: https://github.com/settings/tokens
       - name: Submit to WinGet
         uses: vedantmgoyal2009/winget-releaser@v2
         with:
           identifier: xiaocang.EasydictWin32
-          installers-regex: 'easydict_win32-.*-x64\.zip$'
+          installers-regex: 'easydict_win32-v[0-9]+\.[0-9]+\.[0-9]+-x64\.zip$'
           token: ${{ secrets.WINGET_TOKEN }}

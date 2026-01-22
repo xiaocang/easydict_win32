@@ -349,37 +349,48 @@ public sealed partial class MiniWindow : Window
     {
         CancelCurrentQuery();
 
-        // Wait for in-flight query to complete (non-blocking with timeout)
         var task = _currentQueryTask;
-        bool waitSucceeded = true;
-        if (task != null && !task.IsCompleted)
-        {
-            try
-            {
-                await task.WaitAsync(TimeSpan.FromSeconds(2));
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected if task was cancelled - wait succeeded (task completed via cancellation)
-            }
-            catch (TimeoutException)
-            {
-                // Timeout - task is still running, do NOT dispose resources
-                waitSucceeded = false;
-            }
-            catch (Exception)
-            {
-                // Task faulted - treat as completed (faulted tasks are done)
-                // Continue with dispose
-            }
-        }
-        _currentQueryTask = null;
+        var detectionService = _detectionService;  // Capture before nulling
 
-        // Only dispose if wait succeeded (task completed or was cancelled)
+        _currentQueryTask = null;
+        _detectionService = null;  // Clear immediately to prevent re-use
+
+        if (task == null || task.IsCompleted)
+        {
+            detectionService?.Dispose();
+            return;
+        }
+
+        bool waitSucceeded = true;
+        try
+        {
+            await task.WaitAsync(TimeSpan.FromSeconds(2));
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected - task completed via cancellation
+        }
+        catch (TimeoutException)
+        {
+            waitSucceeded = false;
+        }
+        catch (Exception)
+        {
+            // Task faulted - treat as completed
+        }
+
         if (waitSucceeded)
         {
-            _detectionService?.Dispose();
-            _detectionService = null;
+            detectionService?.Dispose();
+        }
+        else
+        {
+            // Schedule deferred disposal when task eventually completes
+            _ = task.ContinueWith(
+                _ => detectionService?.Dispose(),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
         // Do NOT dispose shared TranslationManager - it's managed by TranslationManagerService
     }
@@ -431,7 +442,7 @@ public sealed partial class MiniWindow : Window
             return;
         }
 
-        var currentCts = new CancellationTokenSource();
+        using var currentCts = new CancellationTokenSource();
         var previousCts = Interlocked.Exchange(ref _currentQueryCts, currentCts);
 
         if (previousCts != null)
@@ -573,7 +584,6 @@ public sealed partial class MiniWindow : Window
         {
             if (!_isClosing) SetLoading(false);
             Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
-            currentCts.Dispose();
         }
     }
 
@@ -839,6 +849,9 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     public bool IsVisible => _appWindow?.IsVisible ?? false;
 
+    /// <summary>
+    /// Cancel the current query's CTS without disposing it; disposal happens in StartQueryAsync's finally.
+    /// </summary>
     private void CancelCurrentQuery()
     {
         var cts = Interlocked.Exchange(ref _currentQueryCts, null);

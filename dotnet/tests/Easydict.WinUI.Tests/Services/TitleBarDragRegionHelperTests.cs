@@ -363,6 +363,57 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
+    [Fact]
+    public void Initialize_CalledMultipleTimes_DoesNotThrow()
+    {
+        // Arrange
+        var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
+        var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
+
+        // Act - Call Initialize multiple times
+        var act = () =>
+        {
+            helper.Initialize();
+            helper.Initialize();
+            helper.Initialize();
+        };
+
+        // Assert - Should not throw, subsequent calls are ignored
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Initialize_AfterDispose_DoesNotThrow()
+    {
+        // Arrange
+        var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
+        var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
+        helper.Initialize();
+        helper.Dispose();
+
+        // Act - Try to initialize after disposal
+        var act = () => helper.Initialize();
+
+        // Assert - Should not throw, just return early
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Initialize_AfterCleanup_CanReinitialize()
+    {
+        // Arrange
+        var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
+        var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
+        helper.Initialize();
+        helper.Cleanup();
+
+        // Act - Re-initialize after cleanup
+        var act = () => helper.Initialize();
+
+        // Assert - Should not throw, re-initialization is allowed after cleanup
+        act.Should().NotThrow();
+    }
+
     // Helper methods
 
     private Window CreateTestWindow()

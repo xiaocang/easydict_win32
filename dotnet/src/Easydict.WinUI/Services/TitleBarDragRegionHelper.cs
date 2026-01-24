@@ -23,6 +23,7 @@ public sealed class TitleBarDragRegionHelper : IDisposable
     private FrameworkElement? _contentElement;
     private volatile bool _isLoaded;
     private int _isDisposed; // 0 = false, 1 = true; use int for Interlocked
+    private bool _isInitialized;
 
     /// <summary>
     /// Throttle interval for SizeChanged events to avoid excessive updates during resize.
@@ -58,6 +59,20 @@ public sealed class TitleBarDragRegionHelper : IDisposable
     /// </summary>
     public void Initialize()
     {
+        // Guard: prevent duplicate initialization
+        if (_isInitialized)
+        {
+            System.Diagnostics.Debug.WriteLine($"[{_windowName}] Initialize: Already initialized, skipping.");
+            return;
+        }
+
+        // Guard: prevent initialization after disposal
+        if (_isDisposed != 0)
+        {
+            System.Diagnostics.Debug.WriteLine($"[{_windowName}] Initialize: Cannot initialize after disposal.");
+            return;
+        }
+
         if (_window.Content is not FrameworkElement content)
         {
             System.Diagnostics.Debug.WriteLine($"[{_windowName}] Initialize: Window.Content is not a FrameworkElement, drag regions will not be set up.");
@@ -74,6 +89,10 @@ public sealed class TitleBarDragRegionHelper : IDisposable
             _isLoaded = true;
             UpdateDragRegions();
         }
+
+        // Mark as initialized only after successful handler registration
+        _isInitialized = true;
+        System.Diagnostics.Debug.WriteLine($"[{_windowName}] Initialize: Initialized successfully.");
     }
 
     /// <summary>
@@ -89,6 +108,9 @@ public sealed class TitleBarDragRegionHelper : IDisposable
             content.Loaded -= OnContentLoaded;
             content.SizeChanged -= OnContentSizeChanged;
         }
+
+        // Reset initialization flag to allow re-initialization after cleanup
+        _isInitialized = false;
     }
 
     /// <summary>

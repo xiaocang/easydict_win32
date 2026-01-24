@@ -145,7 +145,7 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
         };
 
         var json = JsonSerializer.Serialize(requestBody);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _endpoint);
         httpRequest.Content = content;

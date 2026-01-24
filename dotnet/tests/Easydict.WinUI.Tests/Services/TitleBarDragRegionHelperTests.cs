@@ -1,5 +1,6 @@
 using Easydict.WinUI.Services;
 using FluentAssertions;
+using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;

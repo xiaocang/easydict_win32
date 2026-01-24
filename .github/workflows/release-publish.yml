@@ -87,6 +87,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          generate_release_notes: true
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4

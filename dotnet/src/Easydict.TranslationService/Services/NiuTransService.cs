@@ -119,6 +119,23 @@ public sealed class NiuTransService : BaseTranslationService
 
         using var response = await HttpClient.PostAsync(Endpoint, content, cancellationToken);
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorCode = response.StatusCode switch
+            {
+                System.Net.HttpStatusCode.Unauthorized => TranslationErrorCode.InvalidApiKey,
+                System.Net.HttpStatusCode.TooManyRequests => TranslationErrorCode.RateLimited,
+                _ => TranslationErrorCode.ServiceUnavailable
+            };
+
+            throw new TranslationException($"NiuTrans API request failed: {response.StatusCode}")
+            {
+                ErrorCode = errorCode,
+                ServiceId = ServiceId
+            };
+        }
+
         var result = ParseNiuTransResponse(responseJson, request.Text, request.ToLanguage);
 
         return result;

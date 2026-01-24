@@ -123,7 +123,6 @@ public class CaiyunServiceTests
         await _service.TranslateAsync(request);
 
         // Assert
-        var sentRequest = _mockHandler.LastRequest;
         var requestBody = _mockHandler.LastRequestBody;
         requestBody.Should().Contain("\"trans_type\":\"auto2zh\"");
     }

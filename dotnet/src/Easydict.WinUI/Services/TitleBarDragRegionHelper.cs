@@ -45,11 +45,11 @@ public sealed class TitleBarDragRegionHelper : IDisposable
         FrameworkElement[] passthroughElements,
         string windowName = "Window")
     {
-        _window = window;
-        _appWindow = appWindow;
-        _titleBarRegion = titleBarRegion;
-        _passthroughElements = passthroughElements;
-        _windowName = windowName;
+        _window = window ?? throw new ArgumentNullException(nameof(window));
+        _appWindow = appWindow ?? throw new ArgumentNullException(nameof(appWindow));
+        _titleBarRegion = titleBarRegion ?? throw new ArgumentNullException(nameof(titleBarRegion));
+        _passthroughElements = passthroughElements ?? throw new ArgumentNullException(nameof(passthroughElements));
+        _windowName = windowName ?? throw new ArgumentNullException(nameof(windowName));
     }
 
     /// <summary>
@@ -165,11 +165,9 @@ public sealed class TitleBarDragRegionHelper : IDisposable
                 .Where(rect => rect.Width > 0 && rect.Height > 0)
                 .ToArray();
 
-            // Set the passthrough regions - these areas will be clickable instead of draggable
-            if (passthroughRects.Length > 0)
-            {
-                nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, passthroughRects);
-            }
+            // Set the passthrough regions - these areas will be clickable instead of draggable.
+            // Always call SetRegionRects to ensure old regions are cleared when empty.
+            nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, passthroughRects);
         }
         catch (Exception ex)
         {
@@ -193,7 +191,9 @@ public sealed class TitleBarDragRegionHelper : IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[{_windowName}] GetScaledBoundsForElement error for {element.Name}: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine(
+                $"[{_windowName}] GetScaledBoundsForElement: TransformToVisual or TransformBounds failed " +
+                $"for element '{element?.Name ?? element?.ToString()}' with scale {scale}. Exception: {ex}");
             return default;
         }
     }

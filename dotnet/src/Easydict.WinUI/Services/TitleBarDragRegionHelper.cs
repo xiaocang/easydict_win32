@@ -171,6 +171,7 @@ public sealed class TitleBarDragRegionHelper : IDisposable
             var scale = DpiHelper.GetScaleFactorForWindow(WindowNative.GetWindowHandle(_window));
 
             // Set the title bar region as the Caption (draggable) area
+            // Always call SetRegionRects to ensure old regions are cleared when dimensions become zero
             if (_titleBarRegion.ActualWidth > 0 && _titleBarRegion.ActualHeight > 0)
             {
                 var captionRect = GetScaledBoundsForElement(_titleBarRegion, scale);
@@ -178,6 +179,14 @@ public sealed class TitleBarDragRegionHelper : IDisposable
                 {
                     nonClientInputSrc.SetRegionRects(NonClientRegionKind.Caption, new[] { captionRect });
                 }
+                else
+                {
+                    nonClientInputSrc.SetRegionRects(NonClientRegionKind.Caption, Array.Empty<RectInt32>());
+                }
+            }
+            else
+            {
+                nonClientInputSrc.SetRegionRects(NonClientRegionKind.Caption, Array.Empty<RectInt32>());
             }
 
             // Collect interactive controls that need passthrough
@@ -215,7 +224,7 @@ public sealed class TitleBarDragRegionHelper : IDisposable
         {
             System.Diagnostics.Debug.WriteLine(
                 $"[{_windowName}] GetScaledBoundsForElement: TransformToVisual or TransformBounds failed " +
-                $"for element '{element?.Name ?? element?.ToString()}' with scale {scale}. Exception: {ex}");
+                $"for element '{element?.Name ?? element?.GetType().FullName ?? "null"}' with scale {scale}. Exception: {ex}");
             return default;
         }
     }

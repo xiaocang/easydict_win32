@@ -23,7 +23,7 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Google Translate (free, no API key required)
   - DeepL (supports Free/Pro API, Traditional Chinese supported)
   - OpenAI (GPT-4o, GPT-4o-mini, etc.)
-  - Gemini (Google AI, including Gemini 2.5/3.0 models)
+  - Gemini (Google AI, including Gemini 2.5 models)
   - DeepSeek
   - Groq (fast LLM inference)
   - Zhipu AI
@@ -101,8 +101,8 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - **Gemini Service** - Added 4 new models:
   - `gemini-2.5-flash-lite` (lightweight, 500 RPD free tier)
   - `gemini-2.5-pro` (advanced model)
-  - `gemini-3-flash-preview` (latest preview)
-  - `gemini-3-pro-preview` (latest pro preview)
+  - `gemini-2.0-flash` (Gemini 2.0 Flash)
+  - `gemini-exp-1206` (Gemini experimental model)
 
 - **DeepL Service** - Added Traditional Chinese support
   - Both API and web translation modes now support Traditional Chinese

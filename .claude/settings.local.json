@@ -40,11 +40,7 @@
       "Bash(xcbeautify:*)",
       "Bash(pgrep:*)",
       "Bash(git show:*)",
-      "Bash(dotnet build:*)",
-      "WebFetch(domain:open.caiyunapp.com)",
-      "Bash(git -C /home/jiahao/work/easydict_win32 ls-files)",
-      "Bash(git -C /home/jiahao/work/easydict_win32 ls-files:*)",
-      "Bash(dotnet.exe test:*)"
+      "Bash(dotnet build:*)"
     ],
     "deny": [
       "Bash(git push:*)",

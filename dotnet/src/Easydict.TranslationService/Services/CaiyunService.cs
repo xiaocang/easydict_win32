@@ -80,16 +80,16 @@ public sealed class CaiyunService : BaseTranslationService
         };
 
         var json = JsonSerializer.Serialize(requestBody);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         // Add X-Authorization header
-        var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
         {
             Content = content
         };
         httpRequest.Headers.Add("X-Authorization", $"token {_apiKey}");
 
-        var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
+        using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -109,12 +109,12 @@ public sealed class CaiyunService : BaseTranslationService
         }
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        var result = ParseCaiyunResponse(responseJson, request.Text);
+        var result = ParseCaiyunResponse(responseJson, request.Text, request.ToLanguage);
 
         return result;
     }
 
-    private TranslationResult ParseCaiyunResponse(string json, string originalText)
+    private TranslationResult ParseCaiyunResponse(string json, string originalText, Language targetLanguage)
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -140,7 +140,7 @@ public sealed class CaiyunService : BaseTranslationService
             TranslatedText = translatedText,
             OriginalText = originalText,
             DetectedLanguage = Language.Auto,
-            TargetLanguage = Language.Auto,
+            TargetLanguage = targetLanguage,
             ServiceName = DisplayName,
             TimingMs = 0,
             FromCache = false

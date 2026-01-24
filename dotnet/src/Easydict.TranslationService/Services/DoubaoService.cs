@@ -95,6 +95,8 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
         {
             TranslatedText = translatedText,
             OriginalText = request.Text,
+            DetectedLanguage = request.FromLanguage,
+            TargetLanguage = request.ToLanguage,
             ServiceName = DisplayName
         };
     }
@@ -107,7 +109,8 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
         {
             throw new TranslationException("Service not configured. Please provide an API key.")
             {
-                ErrorCode = TranslationErrorCode.InvalidApiKey
+                ErrorCode = TranslationErrorCode.InvalidApiKey,
+                ServiceId = ServiceId
             };
         }
 
@@ -157,40 +160,48 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
         {
             throw new TranslationException($"Network error: {ex.Message}", ex)
             {
-                ErrorCode = TranslationErrorCode.NetworkError
+                ErrorCode = TranslationErrorCode.NetworkError,
+                ServiceId = ServiceId
             };
         }
 
-        // Handle error status codes
-        if (!response.IsSuccessStatusCode)
+        using (response)
         {
-            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw response.StatusCode switch
+            // Handle error status codes
+            if (!response.IsSuccessStatusCode)
             {
-                HttpStatusCode.Unauthorized => new TranslationException("Invalid API key or authentication failed.")
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                throw response.StatusCode switch
                 {
-                    ErrorCode = TranslationErrorCode.InvalidApiKey
-                },
-                HttpStatusCode.TooManyRequests => new TranslationException("Rate limit exceeded. Please try again later.")
-                {
-                    ErrorCode = TranslationErrorCode.RateLimited
-                },
-                HttpStatusCode.InternalServerError or HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable => new TranslationException($"Server error: {response.StatusCode}")
-                {
-                    ErrorCode = TranslationErrorCode.ServiceUnavailable
-                },
-                _ => new TranslationException($"API request failed with status {response.StatusCode}: {errorBody}")
-                {
-                    ErrorCode = TranslationErrorCode.InvalidResponse
-                }
-            };
-        }
+                    HttpStatusCode.Unauthorized => new TranslationException("Invalid API key or authentication failed.")
+                    {
+                        ErrorCode = TranslationErrorCode.InvalidApiKey,
+                        ServiceId = ServiceId
+                    },
+                    HttpStatusCode.TooManyRequests => new TranslationException("Rate limit exceeded. Please try again later.")
+                    {
+                        ErrorCode = TranslationErrorCode.RateLimited,
+                        ServiceId = ServiceId
+                    },
+                    HttpStatusCode.InternalServerError or HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable => new TranslationException($"Server error: {response.StatusCode}")
+                    {
+                        ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                        ServiceId = ServiceId
+                    },
+                    _ => new TranslationException($"API request failed with status {response.StatusCode}: {errorBody}")
+                    {
+                        ErrorCode = TranslationErrorCode.InvalidResponse,
+                        ServiceId = ServiceId
+                    }
+                };
+            }
 
-        // Parse SSE stream
-        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await foreach (var chunk in ParseDoubaoStreamAsync(stream, cancellationToken))
-        {
-            yield return chunk;
+            // Parse SSE stream
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            await foreach (var chunk in ParseDoubaoStreamAsync(stream, cancellationToken))
+            {
+                yield return chunk;
+            }
         }
     }
 

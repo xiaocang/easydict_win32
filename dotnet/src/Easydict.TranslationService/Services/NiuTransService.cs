@@ -115,16 +115,16 @@ public sealed class NiuTransService : BaseTranslationService
         };
 
         var json = JsonSerializer.Serialize(requestBody);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var response = await HttpClient.PostAsync(Endpoint, content, cancellationToken);
+        using var response = await HttpClient.PostAsync(Endpoint, content, cancellationToken);
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        var result = ParseNiuTransResponse(responseJson, request.Text);
+        var result = ParseNiuTransResponse(responseJson, request.Text, request.ToLanguage);
 
         return result;
     }
 
-    private TranslationResult ParseNiuTransResponse(string json, string originalText)
+    private TranslationResult ParseNiuTransResponse(string json, string originalText, Language targetLanguage)
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -165,7 +165,7 @@ public sealed class NiuTransService : BaseTranslationService
             TranslatedText = translatedText,
             OriginalText = originalText,
             DetectedLanguage = Language.Auto,
-            TargetLanguage = Language.Auto,
+            TargetLanguage = targetLanguage,
             ServiceName = DisplayName,
             TimingMs = 0,
             FromCache = false

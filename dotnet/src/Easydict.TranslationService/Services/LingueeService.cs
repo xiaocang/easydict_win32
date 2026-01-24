@@ -57,7 +57,7 @@ public sealed class LingueeService : BaseTranslationService
         // Build URL with query parameters
         var url = $"{BaseUrl}?query={Uri.EscapeDataString(request.Text)}&src={fromCode}&dst={toCode}";
 
-        var response = await HttpClient.GetAsync(url, cancellationToken);
+        using var response = await HttpClient.GetAsync(url, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -71,12 +71,12 @@ public sealed class LingueeService : BaseTranslationService
         }
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        var result = ParseLingueeResponse(json, request.Text);
+        var result = ParseLingueeResponse(json, request.Text, request.ToLanguage);
 
         return result;
     }
 
-    private TranslationResult ParseLingueeResponse(string json, string originalText)
+    private TranslationResult ParseLingueeResponse(string json, string originalText, Language targetLanguage)
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -117,7 +117,7 @@ public sealed class LingueeService : BaseTranslationService
             TranslatedText = translatedText,
             OriginalText = originalText,
             DetectedLanguage = Language.Auto,
-            TargetLanguage = Language.Auto,
+            TargetLanguage = targetLanguage,
             ServiceName = DisplayName,
             TimingMs = 0,
             FromCache = false,

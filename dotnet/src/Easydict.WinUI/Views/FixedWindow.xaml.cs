@@ -813,6 +813,7 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     public void ShowAndActivate()
     {
+        _isClosing = false;
         _appWindow?.Show();
         this.Activate();
         InputTextBox.Focus(FocusState.Programmatic);

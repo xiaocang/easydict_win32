@@ -1,0 +1,119 @@
+name: Release and Publish
+
+# This workflow triggers when a GitHub Release is published.
+# Release process:
+#   1. Create a new tag: git tag v1.0.0 && git push origin v1.0.0
+#   2. Go to GitHub > Releases > "Draft a new release"
+#   3. Select the tag and publish the release
+#   4. This workflow builds and uploads artifacts automatically
+#
+# For pre-release versions (v1.0.0-beta.1):
+#   - Check "Set as a pre-release" when publishing
+#   - WinGet submission will be skipped automatically
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  publish-app:
+    name: Build and Publish Application
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1  # Serialize uploads to avoid race conditions
+      matrix:
+        platform: [x64, x86, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Validate and extract version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # Validate tag format (must be v followed by semver)
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Tag '$TAG' does not match expected format (vX.Y.Z or vX.Y.Z-suffix)"
+            exit 1
+          fi
+
+          # Remove 'v' prefix from tag (v1.0.0 -> 1.0.0)
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Restore dependencies
+        working-directory: dotnet
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }}
+
+      # Self-contained deployment: includes .NET runtime for standalone execution
+      # This matches the project's <SelfContained>true</SelfContained> setting
+      - name: Publish WinUI App
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --no-restore `
+            --output ./publish/${{ matrix.platform }} `
+            -p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: Create ZIP archive
+        shell: pwsh
+        run: |
+          # Exclude debug symbols (.pdb) to reduce artifact size
+          $source = "dotnet/publish/${{ matrix.platform }}"
+          $destination = "easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip"
+          Get-ChildItem -Path $source -Exclude "*.pdb" | Compress-Archive -DestinationPath $destination
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          generate_release_notes: ${{ matrix.platform == 'x64' }}
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}
+          path: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          retention-days: 30
+
+  publish-winget:
+    name: Publish to WinGet
+    runs-on: windows-latest
+    needs: publish-app
+    # Skip WinGet submission for pre-release versions
+    # Uses GitHub's release.prerelease flag for reliable detection
+    if: ${{ !github.event.release.prerelease }}
+
+    steps:
+      # Note: WinGet submission targets x64 only as it's the most common architecture.
+      # x86 and arm64 builds are available in GitHub Releases for manual download.
+      # WINGET_TOKEN requires a GitHub PAT with public_repo scope.
+      # Create at: https://github.com/settings/tokens
+      # Then add as repository secret: Settings > Secrets > Actions > New repository secret
+      - name: Submit to WinGet
+        uses: vedantmgoyal2009/winget-releaser@v2
+        with:
+          identifier: xiaocang.EasydictWin32
+          installers-regex: 'easydict_win32-v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?-x64\.zip$'
+          token: ${{ secrets.WINGET_TOKEN }}

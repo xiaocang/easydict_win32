@@ -50,12 +50,15 @@ jobs:
         working-directory: dotnet
         run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }}
 
+      # Self-contained deployment: includes .NET runtime for standalone execution
+      # This matches the project's <SelfContained>true</SelfContained> setting
       - name: Publish WinUI App
         working-directory: dotnet
         run: |
           dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
             --configuration Release `
             --runtime win-${{ matrix.platform }} `
+            --self-contained true `
             --no-restore `
             --output ./publish/${{ matrix.platform }} `
             -p:Version=${{ steps.version.outputs.VERSION }}
@@ -96,5 +99,5 @@ jobs:
         uses: vedantmgoyal2009/winget-releaser@v2
         with:
           identifier: xiaocang.EasydictWin32
-          installers-regex: 'easydict_win32-v[0-9]+\.[0-9]+\.[0-9]+-x64\.zip$'
+          installers-regex: 'easydict_win32-v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?-x64\.zip$'
           token: ${{ secrets.WINGET_TOKEN }}

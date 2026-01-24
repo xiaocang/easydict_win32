@@ -28,6 +28,7 @@ jobs:
     name: Build and Publish Application
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
         platform: [x64, x86, arm64]
 

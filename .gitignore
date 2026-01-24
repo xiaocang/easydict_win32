@@ -50,3 +50,5 @@ packages-microsoft-prod.deb
 pr-comments.txt
 review.md
 .claude/settings.local.json
+
+CLAUDE.md

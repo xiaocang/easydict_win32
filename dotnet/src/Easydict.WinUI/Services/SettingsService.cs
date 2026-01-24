@@ -78,6 +78,19 @@ public sealed class SettingsService
     public string? GeminiApiKey { get; set; }
     public string GeminiModel { get; set; } = "gemini-2.5-flash";
 
+    // Doubao settings
+    public string? DoubaoApiKey { get; set; }
+    public string DoubaoEndpoint { get; set; } = "https://ark.cn-beijing.volces.com/api/v3/responses";
+    public string DoubaoModel { get; set; } = "doubao-seed-translation-250915";
+
+    // Caiyun settings
+    public string? CaiyunApiKey { get; set; }
+
+    // NiuTrans settings
+    public string? NiuTransApiKey { get; set; }
+
+    // Linguee settings (no API key needed)
+
     // Behavior settings
     public bool MinimizeToTray { get; set; } = true;
     public bool ClipboardMonitoring { get; set; } = false;
@@ -247,6 +260,17 @@ public sealed class SettingsService
         GeminiApiKey = GetValue<string?>(nameof(GeminiApiKey), null);
         GeminiModel = GetValue(nameof(GeminiModel), "gemini-2.5-flash");
 
+        // Doubao settings
+        DoubaoApiKey = GetValue<string?>(nameof(DoubaoApiKey), null);
+        DoubaoEndpoint = GetValue(nameof(DoubaoEndpoint), "https://ark.cn-beijing.volces.com/api/v3/responses");
+        DoubaoModel = GetValue(nameof(DoubaoModel), "doubao-seed-translation-250915");
+
+        // Caiyun settings
+        CaiyunApiKey = GetValue<string?>(nameof(CaiyunApiKey), null);
+
+        // NiuTrans settings
+        NiuTransApiKey = GetValue<string?>(nameof(NiuTransApiKey), null);
+
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
@@ -334,6 +358,17 @@ public sealed class SettingsService
         // Gemini settings
         _settings[nameof(GeminiApiKey)] = GeminiApiKey ?? string.Empty;
         _settings[nameof(GeminiModel)] = GeminiModel;
+
+        // Doubao settings
+        _settings[nameof(DoubaoApiKey)] = DoubaoApiKey ?? string.Empty;
+        _settings[nameof(DoubaoEndpoint)] = DoubaoEndpoint;
+        _settings[nameof(DoubaoModel)] = DoubaoModel;
+
+        // Caiyun settings
+        _settings[nameof(CaiyunApiKey)] = CaiyunApiKey ?? string.Empty;
+
+        // NiuTrans settings
+        _settings[nameof(NiuTransApiKey)] = NiuTransApiKey ?? string.Empty;
 
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;

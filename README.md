@@ -21,13 +21,17 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **Multiple Translation Services**
   - Google Translate (free, no API key required)
-  - DeepL (supports Free/Pro API)
+  - DeepL (supports Free/Pro API, Traditional Chinese supported)
   - OpenAI (GPT-4o, GPT-4o-mini, etc.)
-  - Gemini (Google AI)
+  - Gemini (Google AI, including Gemini 2.5 models)
   - DeepSeek
   - Groq (fast LLM inference)
   - Zhipu AI
   - GitHub Models (free)
+  - Doubao (ByteDance translation-specialized model)
+  - Caiyun (彩云小译, Traditional Chinese supported)
+  - NiuTrans (小牛翻译, 450+ languages, Traditional Chinese supported)
+  - Linguee Dictionary (with context examples)
   - Ollama (local LLM, default: llama3.2)
   - BuiltIn AI (free, powered by Groq)
   - Custom OpenAI-compatible services
@@ -88,20 +92,44 @@ dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release
 dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ```
 
+## Recent Updates
+
+### January 2026
+
+**Translation Service Improvements:**
+
+- **Gemini Service** - Added 4 new models:
+  - `gemini-2.5-flash-lite` (lightweight, 500 RPD free tier)
+  - `gemini-2.5-pro` (advanced model)
+  - `gemini-3-flash-preview` (Gemini 3 Flash preview)
+  - `gemini-3-pro-preview` (Gemini 3 Pro preview)
+
+- **DeepL Service** - Added Traditional Chinese support
+  - Both API and web translation modes now support Traditional Chinese
+  - Proper `ZH-HANT` language code mapping
+
+- **Doubao Service** - Complete rewrite with correct API
+  - Now uses ByteDance's specialized translation API (`/api/v3/responses`)
+  - Translation-specific model: `doubao-seed-translation-250915`
+  - Improved streaming support with proper SSE event parsing
+  - Added Traditional Chinese support with `zh-Hant` language code
+
+- **Google Translate** - Hebrew language support verified and working correctly
+
 ## TODO
 
 ### High Priority
 
+- [x] ~~**Doubao**~~ - ByteDance LLM service ✅ **Implemented**
+- [x] ~~**Caiyun**~~ - 彩云小译 ✅ **Implemented**
+- [x] ~~**NiuTrans**~~ - 小牛翻译 (450+ languages) ✅ **Implemented**
+- [x] ~~**Linguee Dictionary**~~ - Dictionary with context examples ✅ **Implemented**
 - [ ] **TTS (Text-to-Speech)** - Windows Speech Synthesis API
 
 ### Medium Priority
 
 - [ ] **More Translation Services**
-  - [ ] Caiyun
-  - [ ] Volcano
-  - [ ] NiuTrans
-  - [ ] Doubao
-  - [ ] Linguee Dictionary
+  - [ ] Volcano (ByteDance, may overlap with Doubao)
 
 - [ ] **AI Tools**
   - [ ] Text Polishing
@@ -122,13 +150,14 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | Feature | macOS | Windows |
 |---------|-------|---------|
-| Translation Services | 25+ | 11 |
+| Translation Services | 25+ | 15 |
 | OCR Screenshot Translation | Yes | No |
 | TTS | Yes | Planned |
 | Selection Translation | Yes | Yes |
 | Window Types | 3 | 3 |
 | Global Hotkeys | 10+ | 6 |
 | LLM Streaming | Yes | Yes |
+| Traditional Chinese | Yes | Yes |
 
 ## License
 

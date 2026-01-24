@@ -246,6 +246,38 @@ public sealed class TranslationManagerService : IDisposable
             }
         });
 
+        // Configure Doubao
+        _translationManager.ConfigureService("doubao", service =>
+        {
+            if (service is DoubaoService doubao)
+            {
+                doubao.Configure(
+                    _settings.DoubaoApiKey ?? "",
+                    _settings.DoubaoEndpoint,
+                    _settings.DoubaoModel);
+            }
+        });
+
+        // Configure Caiyun
+        _translationManager.ConfigureService("caiyun", service =>
+        {
+            if (service is CaiyunService caiyun)
+            {
+                caiyun.Configure(_settings.CaiyunApiKey ?? "");
+            }
+        });
+
+        // Configure NiuTrans
+        _translationManager.ConfigureService("niutrans", service =>
+        {
+            if (service is NiuTransService niutrans)
+            {
+                niutrans.Configure(_settings.NiuTransApiKey ?? "");
+            }
+        });
+
+        // Linguee doesn't need configuration (no API key)
+
         Debug.WriteLine("[TranslationManagerService] Services configured");
     }
 

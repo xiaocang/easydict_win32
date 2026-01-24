@@ -25,7 +25,7 @@ public sealed class DeepLService : BaseTranslationService
 
     private static readonly IReadOnlyList<Language> DeepLLanguages =
     [
-        Language.SimplifiedChinese, Language.English, Language.Japanese,
+        Language.SimplifiedChinese, Language.TraditionalChinese, Language.English, Language.Japanese,
         Language.Korean, Language.French, Language.Spanish, Language.Portuguese,
         Language.Italian, Language.German, Language.Russian, Language.Dutch,
         Language.Polish, Language.Bulgarian, Language.Czech, Language.Danish,
@@ -390,6 +390,7 @@ public sealed class DeepLService : BaseTranslationService
     private static string GetDeepLLanguageCode(Language language) => language switch
     {
         Language.SimplifiedChinese => "ZH",
+        Language.TraditionalChinese => "ZH-HANT",
         Language.English => "EN",
         Language.Japanese => "JA",
         Language.Korean => "KO",
@@ -422,7 +423,7 @@ public sealed class DeepLService : BaseTranslationService
     private static string GetDeepLWebLanguageCode(Language language) => language switch
     {
         Language.SimplifiedChinese => "ZH",
-        Language.TraditionalChinese => "ZH",
+        Language.TraditionalChinese => "ZH-HANT",
         Language.English => "EN",
         Language.Japanese => "JA",
         Language.Korean => "KO",

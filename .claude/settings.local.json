@@ -40,7 +40,11 @@
       "Bash(xcbeautify:*)",
       "Bash(pgrep:*)",
       "Bash(git show:*)",
-      "Bash(dotnet build:*)"
+      "Bash(dotnet build:*)",
+      "Bash(powershell -Command \"& ''C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe'' api repos/{owner}/{repo}/pulls/7/comments\")",
+      "Bash(powershell -Command \"& ''C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe'' api ''repos/xiaocang/easydict_win32/pulls/7/comments'' --jq ''.[] | {path: .path, line: .line, body: .body}''\")",
+      "Bash(dotnet test:*)",
+      "Bash(gh api:*)"
     ],
     "deny": [
       "Bash(git push:*)",

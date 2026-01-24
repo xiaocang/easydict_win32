@@ -1,5 +1,16 @@
 name: Release and Publish
 
+# This workflow triggers when a GitHub Release is published.
+# Release process:
+#   1. Create a new tag: git tag v1.0.0 && git push origin v1.0.0
+#   2. Go to GitHub > Releases > "Draft a new release"
+#   3. Select the tag and publish the release
+#   4. This workflow builds and uploads artifacts automatically
+#
+# For pre-release versions (v1.0.0-beta.1):
+#   - Check "Set as a pre-release" when publishing
+#   - WinGet submission will be skipped automatically
+
 on:
   release:
     types: [published]

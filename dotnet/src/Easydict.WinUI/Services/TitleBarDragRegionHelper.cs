@@ -96,9 +96,16 @@ public sealed class TitleBarDragRegionHelper : IDisposable
     }
 
     /// <summary>
-    /// Cleans up event handlers. This is called automatically by Dispose(),
-    /// but can be called explicitly if needed before disposal.
-    /// Safe to call multiple times.
+    /// Cleans up event handlers and resets initialization state.
+    ///
+    /// This method is automatically called by Dispose(), so manual calls are optional
+    /// if you're using the Dispose pattern. However, calling both is safe.
+    ///
+    /// After calling Cleanup (without Dispose), you can call Initialize() again to
+    /// re-register event handlers. This allows reusing the helper instance.
+    ///
+    /// Safe to call multiple times - subsequent calls are no-ops once event handlers
+    /// have been removed.
     /// </summary>
     public void Cleanup()
     {

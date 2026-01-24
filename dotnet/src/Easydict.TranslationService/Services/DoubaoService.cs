@@ -156,7 +156,7 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
         {
             response = await HttpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
             throw new TranslationException($"Network error: {ex.Message}", ex)
             {

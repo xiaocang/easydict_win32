@@ -101,8 +101,8 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - **Gemini Service** - Added 4 new models:
   - `gemini-2.5-flash-lite` (lightweight, 500 RPD free tier)
   - `gemini-2.5-pro` (advanced model)
-  - `gemini-2.0-flash` (Gemini 2.0 Flash)
-  - `gemini-exp-1206` (Gemini experimental model)
+  - `gemini-3-flash-preview` (Gemini 3 Flash preview)
+  - `gemini-3-pro-preview` (Gemini 3 Pro preview)
 
 - **DeepL Service** - Added Traditional Chinese support
   - Both API and web translation modes now support Traditional Chinese

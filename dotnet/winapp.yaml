@@ -1,0 +1,62 @@
+# WinApp CLI Configuration for Easydict Win32
+# Documentation: https://github.com/microsoft/winappCli
+
+# Application metadata
+app:
+  name: Easydict
+  displayName: Easydict
+  description: Cross-platform dictionary and translation app
+  publisher: CN=xiaocang
+  publisherDisplayName: xiaocang
+  version: 0.1.0
+
+# Package identity for MSIX
+identity:
+  name: xiaocang.Easydict
+  publisher: CN=xiaocang
+
+# SDK dependencies
+packages:
+  - Microsoft.WindowsAppSDK: 1.*
+  - Microsoft.Windows.SDK.BuildTools: 10.*
+
+# Build configuration
+build:
+  # Project file path
+  project: src/Easydict.WinUI/Easydict.WinUI.csproj
+  # Output directory for build artifacts
+  outputDir: ./publish
+  # Build configuration
+  configuration: Release
+  # Target platforms
+  platforms:
+    - x64
+    - x86
+    - arm64
+
+# MSIX packaging configuration
+msix:
+  # Output directory for MSIX packages
+  outputDir: ./msix
+  # Package manifest
+  manifest: src/Easydict.WinUI/Package.appxmanifest
+  # Assets directory
+  assets: src/Easydict.WinUI/Assets
+  # Certificate configuration (for CI/CD, use environment variables)
+  certificate:
+    # For local development, generate with: winapp cert generate
+    # For CI/CD, use secrets: MSIX_CERTIFICATE_BASE64 and MSIX_CERTIFICATE_PASSWORD
+    thumbprint: ${MSIX_CERT_THUMBPRINT}
+  # Package options
+  options:
+    # Include .NET runtime in package
+    selfContained: true
+    # Enable ReadyToRun compilation
+    readyToRun: true
+    # Exclude debug symbols
+    excludePdb: true
+
+# Capabilities required by the app
+capabilities:
+  - runFullTrust
+  - internetClient

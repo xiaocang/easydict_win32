@@ -1,51 +1,69 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap rescap">
+  IgnorableNamespaces="uap uap5 rescap">
 
   <Identity
-    Name="7ec29511-d845-41cd-a3c5-27d2606557a1"
-    Publisher="CN=User Name"
-    Version="0.1.0.0" />
+    Name="xiaocang.Easydict"
+    Publisher="CN=xiaocang"
+    Version="0.1.0.0"
+    ProcessorArchitecture="neutral" />
 
   <mp:PhoneIdentity PhoneProductId="7ec29511-d845-41cd-a3c5-27d2606557a1" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>Easydict.WinUI</DisplayName>
-    <PublisherDisplayName>User Name</PublisherDisplayName>
+    <DisplayName>Easydict</DisplayName>
+    <PublisherDisplayName>xiaocang</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Cross-platform dictionary and translation app for Windows</Description>
   </Properties>
 
   <Dependencies>
-    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
   </Dependencies>
 
   <Resources>
-    <Resource Language="x-generate"/>
+    <Resource Language="en-US"/>
+    <Resource Language="zh-CN"/>
   </Resources>
 
   <Applications>
     <Application Id="App"
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
-        <uap:VisualElements
-        DisplayName="Easydict.WinUI"
-        Description="Easydict.WinUI"
+      <uap:VisualElements
+        DisplayName="Easydict"
+        Description="Cross-platform dictionary and translation app"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.scale-100.png"
         Square44x44Logo="Assets\Square44x44Logo.scale-100.png">
-        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.scale-100.png" />
+        <uap:DefaultTile
+          Wide310x150Logo="Assets\Wide310x150Logo.scale-100.png"
+          ShortName="Easydict" />
         <uap:SplashScreen Image="Assets\SplashScreen.scale-100.png" />
       </uap:VisualElements>
+
+      <!-- Protocol activation for easydict:// URLs -->
+      <Extensions>
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="easydict">
+            <uap:DisplayName>Easydict Protocol</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+      </Extensions>
     </Application>
   </Applications>
 
   <Capabilities>
+    <!-- Full trust for Win32 interop -->
     <rescap:Capability Name="runFullTrust" />
+    <!-- Internet access for translation services -->
+    <Capability Name="internetClient" />
   </Capabilities>
 </Package>

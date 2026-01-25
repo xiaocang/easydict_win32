@@ -26,6 +26,16 @@ public sealed partial class MiniWindow : Window
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
     private LanguageDetectionService? _detectionService;
     // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
     // Other code may Cancel() but must NOT Dispose().
@@ -140,7 +150,7 @@ public sealed partial class MiniWindow : Window
     }
 
     /// <summary>
-    /// Position window based on saved position or center on screen.
+    /// Position window based on saved position or top-right corner of current screen.
     /// </summary>
     private void PositionWindow()
     {
@@ -158,14 +168,19 @@ public sealed partial class MiniWindow : Window
         }
         else
         {
-            // Center on primary display
-            var displayArea = DisplayArea.Primary;
+            // Position at top-right corner of the screen where cursor is located
+            GetCursorPos(out var cursorPos);
+            var displayArea = DisplayArea.GetFromPoint(
+                new PointInt32(cursorPos.X, cursorPos.Y),
+                DisplayAreaFallback.Primary);
+
             if (displayArea != null)
             {
                 var workArea = displayArea.WorkArea;
                 var windowSize = _appWindow.Size;
-                var x = (workArea.Width - windowSize.Width) / 2 + workArea.X;
-                var y = (workArea.Height - windowSize.Height) / 2 + workArea.Y;
+                var margin = 20; // 20 pixels margin from edge
+                var x = workArea.X + workArea.Width - windowSize.Width - margin;
+                var y = workArea.Y + margin;
                 _appWindow.Move(new PointInt32(x, y));
             }
         }

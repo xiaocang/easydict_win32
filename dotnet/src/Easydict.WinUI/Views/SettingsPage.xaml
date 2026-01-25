@@ -24,15 +24,25 @@
             <!-- Translation Service -->
             <StackPanel Spacing="12">
                 <TextBlock Text="Translation Service" FontSize="18" FontWeight="SemiBold" />
-                
+
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="16">
-                        <ComboBox x:Name="ServiceCombo" Header="Default Service" Width="200">
+                        <ComboBox x:Name="ServiceCombo" Header="Default Service" Width="250">
                             <ComboBoxItem Content="Google Translate" Tag="google" />
                             <ComboBoxItem Content="DeepL" Tag="deepl" />
                             <ComboBoxItem Content="OpenAI" Tag="openai" />
-                            <ComboBoxItem Content="Ollama" Tag="ollama" />
+                            <ComboBoxItem Content="Ollama (Local)" Tag="ollama" />
                             <ComboBoxItem Content="Built-in AI" Tag="builtin" />
+                            <ComboBoxItem Content="DeepSeek" Tag="deepseek" />
+                            <ComboBoxItem Content="Groq" Tag="groq" />
+                            <ComboBoxItem Content="Zhipu (智谱)" Tag="zhipu" />
+                            <ComboBoxItem Content="GitHub Models" Tag="github" />
+                            <ComboBoxItem Content="Gemini" Tag="gemini" />
+                            <ComboBoxItem Content="Custom OpenAI" Tag="custom-openai" />
+                            <ComboBoxItem Content="Doubao (豆包)" Tag="doubao" />
+                            <ComboBoxItem Content="Caiyun (彩云)" Tag="caiyun" />
+                            <ComboBoxItem Content="NiuTrans (小牛)" Tag="niutrans" />
+                            <ComboBoxItem Content="Linguee Dictionary" Tag="linguee" />
                         </ComboBox>
 
                         <ComboBox x:Name="TargetLangCombo" Header="Target Language" Width="200">
@@ -102,44 +112,163 @@
                 </Border>
             </StackPanel>
 
-            <!-- API Keys -->
+            <!-- Service Configuration -->
             <StackPanel Spacing="12">
-                <TextBlock Text="API Keys" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="Service Configuration" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="Configure API keys, endpoints, and models for each translation service."
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <PasswordBox x:Name="DeepLKeyBox" Header="DeepL API Key" Width="300" PlaceholderText="Enter your DeepL API key" />
-                        <CheckBox x:Name="DeepLFreeCheck" Content="Use DeepL Free API" />
+                <!-- DeepL -->
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="DeepL" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <PasswordBox x:Name="DeepLKeyBox" Header="API Key (Optional)" Width="350" PlaceholderText="Enter your DeepL API key" HorizontalAlignment="Left" />
+                        <CheckBox x:Name="DeepLFreeCheck" Content="Use Free API (no API key required for web translation)" />
+                        <TextBlock Text="Leave API key empty to use free web translation. Pro API key gives higher limits."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- AI Translation Services -->
-            <StackPanel Spacing="12">
-                <TextBlock Text="AI Translation Services" FontSize="18" FontWeight="SemiBold" />
+                </Expander>
 
                 <!-- OpenAI -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <TextBlock Text="OpenAI" FontWeight="SemiBold" FontSize="14" />
-                        <PasswordBox x:Name="OpenAIKeyBox" Header="API Key" Width="300" PlaceholderText="sk-..." />
-                        <TextBox x:Name="OpenAIEndpointBox" Header="Endpoint (optional)" Width="400"
-                                 PlaceholderText="https://api.openai.com/v1/chat/completions" />
-                        <ComboBox x:Name="OpenAIModelCombo" Header="Model" Width="200">
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="OpenAI" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <PasswordBox x:Name="OpenAIKeyBox" Header="API Key" Width="350" PlaceholderText="sk-..." HorizontalAlignment="Left" />
+                        <TextBox x:Name="OpenAIEndpointBox" Header="Endpoint (Optional)" Width="450"
+                                 PlaceholderText="https://api.openai.com/v1/chat/completions" HorizontalAlignment="Left" />
+                        <ComboBox x:Name="OpenAIModelCombo" Header="Model" Width="280" IsEditable="True">
                             <ComboBoxItem Content="gpt-4o-mini" Tag="gpt-4o-mini" />
                             <ComboBoxItem Content="gpt-4o" Tag="gpt-4o" />
                             <ComboBoxItem Content="gpt-4-turbo" Tag="gpt-4-turbo" />
                             <ComboBoxItem Content="gpt-3.5-turbo" Tag="gpt-3.5-turbo" />
                         </ComboBox>
+                        <TextBlock Text="You can type a custom model name directly."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
-                </Border>
+                </Expander>
+
+                <!-- DeepSeek -->
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="DeepSeek" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <PasswordBox x:Name="DeepSeekKeyBox" Header="API Key" Width="350" PlaceholderText="sk-..." HorizontalAlignment="Left" />
+                        <ComboBox x:Name="DeepSeekModelCombo" Header="Model" Width="280" IsEditable="True">
+                            <ComboBoxItem Content="deepseek-chat" Tag="deepseek-chat" />
+                            <ComboBoxItem Content="deepseek-reasoner" Tag="deepseek-reasoner" />
+                        </ComboBox>
+                        <TextBlock Text="Get your API key from platform.deepseek.com. You can type a custom model name."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- Groq -->
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="Groq" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <PasswordBox x:Name="GroqKeyBox" Header="API Key" Width="350" PlaceholderText="gsk_..." HorizontalAlignment="Left" />
+                        <ComboBox x:Name="GroqModelCombo" Header="Model" Width="280" IsEditable="True">
+                            <ComboBoxItem Content="llama-3.3-70b-versatile" Tag="llama-3.3-70b-versatile" />
+                            <ComboBoxItem Content="llama-3.1-8b-instant" Tag="llama-3.1-8b-instant" />
+                            <ComboBoxItem Content="gemma2-9b-it" Tag="gemma2-9b-it" />
+                            <ComboBoxItem Content="mixtral-8x7b-32768" Tag="mixtral-8x7b-32768" />
+                        </ComboBox>
+                        <TextBlock Text="Groq provides fast inference. Get your API key from console.groq.com. You can type a custom model name."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- Zhipu (智谱) -->
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="Zhipu (智谱)" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <PasswordBox x:Name="ZhipuKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Zhipu API key" HorizontalAlignment="Left" />
+                        <ComboBox x:Name="ZhipuModelCombo" Header="Model" Width="280" IsEditable="True">
+                            <ComboBoxItem Content="glm-4-flash-250414" Tag="glm-4-flash-250414" />
+                            <ComboBoxItem Content="glm-4.5-flash" Tag="glm-4.5-flash" />
+                            <ComboBoxItem Content="glm-4.7" Tag="glm-4.7" />
+                            <ComboBoxItem Content="glm-4.5-air" Tag="glm-4.5-air" />
+                        </ComboBox>
+                        <TextBlock Text="Get your API key from open.bigmodel.cn. You can type a custom model name."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- GitHub Models -->
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="GitHub Models" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <PasswordBox x:Name="GitHubModelsTokenBox" Header="GitHub Token" Width="350" PlaceholderText="ghp_..." HorizontalAlignment="Left" />
+                        <ComboBox x:Name="GitHubModelsModelCombo" Header="Model" Width="280" IsEditable="True">
+                            <ComboBoxItem Content="gpt-4.1" Tag="gpt-4.1" />
+                            <ComboBoxItem Content="gpt-4.1-mini" Tag="gpt-4.1-mini" />
+                            <ComboBoxItem Content="gpt-4.1-nano" Tag="gpt-4.1-nano" />
+                            <ComboBoxItem Content="gpt-4o" Tag="gpt-4o" />
+                            <ComboBoxItem Content="gpt-4o-mini" Tag="gpt-4o-mini" />
+                            <ComboBoxItem Content="deepseek-v3-0324" Tag="deepseek-v3-0324" />
+                        </ComboBox>
+                        <TextBlock Text="Use your GitHub personal access token. Get one from github.com/settings/tokens. You can type a custom model name."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- Gemini -->
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="Gemini" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <PasswordBox x:Name="GeminiKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Gemini API key" HorizontalAlignment="Left" />
+                        <ComboBox x:Name="GeminiModelCombo" Header="Model" Width="280" IsEditable="True">
+                            <ComboBoxItem Content="gemini-2.5-flash" Tag="gemini-2.5-flash" />
+                            <ComboBoxItem Content="gemini-2.5-flash-lite" Tag="gemini-2.5-flash-lite" />
+                            <ComboBoxItem Content="gemini-2.5-pro" Tag="gemini-2.5-pro" />
+                            <ComboBoxItem Content="gemini-2.0-flash" Tag="gemini-2.0-flash" />
+                            <ComboBoxItem Content="gemini-1.5-flash" Tag="gemini-1.5-flash" />
+                            <ComboBoxItem Content="gemini-1.5-pro" Tag="gemini-1.5-pro" />
+                            <ComboBoxItem Content="gemini-3-flash-preview" Tag="gemini-3-flash-preview" />
+                            <ComboBoxItem Content="gemini-3-pro-preview" Tag="gemini-3-pro-preview" />
+                        </ComboBox>
+                        <TextBlock Text="Get your API key from aistudio.google.com. You can type a custom model name."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- Custom OpenAI Compatible -->
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="Custom OpenAI Compatible" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <TextBox x:Name="CustomOpenAIEndpointBox" Header="Endpoint (Required)" Width="450"
+                                 PlaceholderText="https://your-api.example.com/v1/chat/completions" HorizontalAlignment="Left" />
+                        <PasswordBox x:Name="CustomOpenAIKeyBox" Header="API Key (Optional)" Width="350" PlaceholderText="Enter API key if required" HorizontalAlignment="Left" />
+                        <TextBox x:Name="CustomOpenAIModelBox" Header="Model" Width="200"
+                                 PlaceholderText="gpt-3.5-turbo" HorizontalAlignment="Left" />
+                        <TextBlock Text="Configure any OpenAI-compatible API endpoint (e.g., local LLM servers, other AI providers)."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
 
                 <!-- Ollama (Local) -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <TextBlock Text="Ollama (Local LLM)" FontWeight="SemiBold" FontSize="14" />
-                        <TextBox x:Name="OllamaEndpointBox" Header="Endpoint" Width="400"
-                                 PlaceholderText="http://localhost:11434/v1/chat/completions" />
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="Ollama (Local LLM)" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <TextBox x:Name="OllamaEndpointBox" Header="Endpoint" Width="450"
+                                 PlaceholderText="http://localhost:11434/v1/chat/completions" HorizontalAlignment="Left" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <ComboBox x:Name="OllamaModelCombo" Header="Model" Width="200" IsEditable="True" />
                             <Button x:Name="RefreshOllamaButton" Content="Refresh" Click="OnRefreshOllamaModels"
@@ -148,18 +277,71 @@
                         <TextBlock Text="Ollama must be running locally. Click Refresh to load available models."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
-                </Border>
+                </Expander>
 
                 <!-- Built-in AI -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <TextBlock Text="Built-in AI" FontWeight="SemiBold" FontSize="14" />
-                        <ComboBox x:Name="BuiltInModelCombo" Header="Model" Width="250">
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="Built-in AI" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <ComboBox x:Name="BuiltInModelCombo" Header="Model" Width="280" IsEditable="True">
                             <ComboBoxItem Content="llama-3.3-70b-versatile" Tag="llama-3.3-70b-versatile" />
                             <ComboBoxItem Content="llama-3.1-8b-instant" Tag="llama-3.1-8b-instant" />
+                            <ComboBoxItem Content="gemma2-9b-it" Tag="gemma2-9b-it" />
+                            <ComboBoxItem Content="mixtral-8x7b-32768" Tag="mixtral-8x7b-32768" />
                         </ComboBox>
-                        <TextBlock Text="Built-in AI uses Groq cloud service. No API key required."
+                        <TextBlock Text="Built-in AI uses Groq cloud service. No API key required. You can type a custom model name."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- Doubao (豆包) -->
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="Doubao (豆包)" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <PasswordBox x:Name="DoubaoKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Doubao API key" HorizontalAlignment="Left" />
+                        <TextBox x:Name="DoubaoEndpointBox" Header="Endpoint" Width="450"
+                                 PlaceholderText="https://ark.cn-beijing.volces.com/api/v3/responses" HorizontalAlignment="Left" />
+                        <TextBox x:Name="DoubaoModelBox" Header="Model" Width="300"
+                                 PlaceholderText="doubao-seed-translation-250915" HorizontalAlignment="Left" />
+                        <TextBlock Text="ByteDance's Doubao translation service. Get your API key from console.volcengine.com"
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- Caiyun (彩云小译) -->
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="Caiyun (彩云小译)" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <PasswordBox x:Name="CaiyunKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Caiyun API key" HorizontalAlignment="Left" />
+                        <TextBlock Text="Get your API key from fanyi.caiyunapp.com"
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- NiuTrans (小牛翻译) -->
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="NiuTrans (小牛翻译)" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="12" Padding="0,8">
+                        <PasswordBox x:Name="NiuTransKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your NiuTrans API key" HorizontalAlignment="Left" />
+                        <TextBlock Text="NiuTrans supports 450+ language pairs. Get your API key from niutrans.com"
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- Google Translate & Linguee (No configuration needed) -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Free Services (No Configuration Required)" FontWeight="SemiBold" />
+                        <TextBlock Text="Google Translate and Linguee Dictionary work out of the box without API keys."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -183,7 +365,7 @@
             <!-- Behavior -->
             <StackPanel Spacing="12">
                 <TextBlock Text="Behavior" FontSize="18" FontWeight="SemiBold" />
-                
+
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
                         <ToggleSwitch x:Name="MinimizeToTrayToggle" Header="Minimize to system tray" />
@@ -196,12 +378,12 @@
             <!-- Hotkeys -->
             <StackPanel Spacing="12">
                 <TextBlock Text="Hotkeys" FontSize="18" FontWeight="SemiBold" />
-                
+
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="16">
                         <TextBox x:Name="ShowHotkeyBox" Header="Show Window" Width="200" PlaceholderText="Ctrl+Alt+T" />
                         <TextBox x:Name="TranslateHotkeyBox" Header="Translate Selection" Width="200" PlaceholderText="Ctrl+Alt+D" />
-                        <TextBlock Text="Note: Restart app to apply hotkey changes" 
+                        <TextBlock Text="Note: Restart app to apply hotkey changes"
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </Border>
@@ -210,7 +392,7 @@
             <!-- About -->
             <StackPanel Spacing="12">
                 <TextBlock Text="About" FontSize="18" FontWeight="SemiBold" />
-                
+
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">
                         <TextBlock Text="Easydict for Windows" FontWeight="SemiBold" />

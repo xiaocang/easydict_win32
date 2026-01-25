@@ -1,5 +1,9 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using FlaUI.Core.AutomationElements;
 using FlaUI.UIA3;
+using Microsoft.UI.Dispatching;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace Easydict.WinUI.Services;
 
@@ -9,16 +13,90 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public static class TextSelectionService
 {
+    // PInvoke declarations
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    // INPUT struct must be 40 bytes on 64-bit Windows
+    // The union must be at offset 8 for proper alignment
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    private struct INPUT
+    {
+        [FieldOffset(0)] public uint type;
+        [FieldOffset(8)] public InputUnion U;
+    }
+
+    // Union must be 32 bytes (size of MOUSEINPUT, the largest member)
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct InputUnion
+    {
+        [FieldOffset(0)] public KEYBDINPUT ki;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KEYBDINPUT
+    {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    private const uint INPUT_KEYBOARD = 1;
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const ushort VK_CONTROL = 0x11;
+    private const ushort VK_C = 0x43;
+
+    // Known Electron app process names
+    private static readonly HashSet<string> ElectronProcessNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "code", "code - insiders",  // VSCode
+        "slack", "discord", "teams",
+        "notion", "obsidian", "postman",
+        "figma", "spotify", "whatsapp",
+        "signal", "telegram desktop",
+    };
+
     private static readonly UIA3Automation _automation = new();
     private static readonly object _automationLock = new();
 
     /// <summary>
     /// Gets the currently selected text using UI Automation API.
-    /// Returns null if no text is selected or if UIA fails (does NOT fall back to clipboard).
+    /// For Electron apps, uses clipboard method (Ctrl+C) as fallback since they don't support TextPattern.
+    /// Returns null if no text is selected or if all methods fail.
     /// </summary>
-    public static Task<string?> GetSelectedTextAsync()
+    public static async Task<string?> GetSelectedTextAsync()
     {
-        return Task.Run(() =>
+        // For Electron apps, use clipboard method first since UIA doesn't work reliably
+        if (IsElectronApp())
+        {
+            Debug.WriteLine("[TextSelectionService] Detected Electron app, using clipboard method");
+            var clipboardText = await GetSelectedTextViaClipboardAsync();
+            if (!string.IsNullOrWhiteSpace(clipboardText))
+            {
+                Debug.WriteLine($"[TextSelectionService] Got {clipboardText.Length} chars via clipboard");
+                return clipboardText;
+            }
+        }
+
+        // Use UIA for non-Electron apps (or as fallback if clipboard failed)
+        return await Task.Run(() =>
         {
             try
             {
@@ -28,17 +106,17 @@ public static class TextSelectionService
                     var text = GetSelectedTextViaUIA();
                     if (!string.IsNullOrWhiteSpace(text))
                     {
-                        System.Diagnostics.Debug.WriteLine($"[TextSelectionService] Got {text.Length} chars via UIA");
+                        Debug.WriteLine($"[TextSelectionService] Got {text.Length} chars via UIA");
                         return text;
                     }
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[TextSelectionService] UIA failed: {ex.Message}");
+                Debug.WriteLine($"[TextSelectionService] UIA failed: {ex.Message}");
             }
 
-            // UIA failed or no selection - return null, do NOT fall back to clipboard
+            // UIA failed or no selection - return null
             return null;
         });
     }
@@ -50,7 +128,7 @@ public static class TextSelectionService
             var focused = _automation.FocusedElement();
             if (focused == null)
             {
-                System.Diagnostics.Debug.WriteLine("[TextSelectionService] No focused element");
+                Debug.WriteLine("[TextSelectionService] No focused element");
                 return null;
             }
 
@@ -61,12 +139,12 @@ public static class TextSelectionService
                 return text;
             }
 
-            System.Diagnostics.Debug.WriteLine("[TextSelectionService] No text pattern available or no selection");
+            Debug.WriteLine("[TextSelectionService] No text pattern available or no selection");
             return null;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[TextSelectionService] GetFocusedElement failed: {ex.Message}");
+            Debug.WriteLine($"[TextSelectionService] GetFocusedElement failed: {ex.Message}");
             return null;
         }
     }
@@ -92,7 +170,7 @@ public static class TextSelectionService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[TextSelectionService] TextPattern failed: {ex.Message}");
+            Debug.WriteLine($"[TextSelectionService] TextPattern failed: {ex.Message}");
         }
 
         try
@@ -114,9 +192,236 @@ public static class TextSelectionService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[TextSelectionService] TextPattern2 failed: {ex.Message}");
+            Debug.WriteLine($"[TextSelectionService] TextPattern2 failed: {ex.Message}");
         }
 
         return null;
     }
+
+    /// <summary>
+    /// Checks if the foreground window belongs to an Electron app.
+    /// </summary>
+    private static bool IsElectronApp()
+    {
+        try
+        {
+            var hWnd = GetForegroundWindow();
+            if (hWnd == IntPtr.Zero) return false;
+
+            if (GetWindowThreadProcessId(hWnd, out uint processId) == 0) return false;
+
+            var process = Process.GetProcessById((int)processId);
+            return ElectronProcessNames.Contains(process.ProcessName);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets selected text using clipboard method (Ctrl+C).
+    /// Saves and restores original clipboard content.
+    /// </summary>
+    private static async Task<string?> GetSelectedTextViaClipboardAsync()
+    {
+        try
+        {
+            // Capture the foreground window FIRST before any UI operations
+            var targetWindow = GetForegroundWindow();
+            Debug.WriteLine($"[TextSelectionService] Target window handle: {targetWindow}");
+
+            var dispatcherQueue = App.MainWindow?.DispatcherQueue;
+            if (dispatcherQueue == null)
+            {
+                Debug.WriteLine("[TextSelectionService] DispatcherQueue not available");
+                return null;
+            }
+
+            // 1. Save current clipboard content
+            string? originalClipboard = null;
+            var saveResult = dispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    var dataPackage = Clipboard.GetContent();
+                    if (dataPackage.Contains(StandardDataFormats.Text))
+                    {
+                        originalClipboard = dataPackage.GetTextAsync().AsTask().GetAwaiter().GetResult();
+                        Debug.WriteLine($"[TextSelectionService] Original clipboard: '{originalClipboard?.Substring(0, Math.Min(50, originalClipboard?.Length ?? 0))}...'");
+                    }
+                    else
+                    {
+                        Debug.WriteLine("[TextSelectionService] Original clipboard has no text");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[TextSelectionService] Failed to save clipboard: {ex.Message}");
+                }
+            });
+
+            if (!saveResult)
+            {
+                Debug.WriteLine("[TextSelectionService] Failed to enqueue clipboard save operation");
+                return null;
+            }
+
+            // Wait for clipboard save to complete
+            await Task.Delay(30);
+
+            // 2. Clear clipboard first to detect if copy actually happens
+            dispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    Clipboard.Clear();
+                    Debug.WriteLine("[TextSelectionService] Clipboard cleared");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[TextSelectionService] Failed to clear clipboard: {ex.Message}");
+                }
+            });
+            await Task.Delay(30);
+
+            // 3. Attach to target thread and send Ctrl+C
+            if (targetWindow != IntPtr.Zero)
+            {
+                GetWindowThreadProcessId(targetWindow, out uint _);
+                var targetThreadId = GetWindowThreadProcessId(targetWindow, out _);
+                var currentThreadId = GetCurrentThreadId();
+
+                Debug.WriteLine($"[TextSelectionService] Current thread: {currentThreadId}, Target thread: {targetThreadId}");
+
+                // Attach input threads
+                bool attached = false;
+                if (targetThreadId != currentThreadId && targetThreadId != 0)
+                {
+                    attached = AttachThreadInput(currentThreadId, targetThreadId, true);
+                    Debug.WriteLine($"[TextSelectionService] AttachThreadInput result: {attached}");
+                }
+
+                var focusResult = SetForegroundWindow(targetWindow);
+                Debug.WriteLine($"[TextSelectionService] SetForegroundWindow result: {focusResult}");
+                await Task.Delay(50); // Wait for focus to settle
+
+                SendCtrlC();
+                await Task.Delay(150); // Wait for copy to complete (150ms for reliability with modern apps)
+
+                // Detach input threads
+                if (attached)
+                {
+                    AttachThreadInput(currentThreadId, targetThreadId, false);
+                }
+            }
+            else
+            {
+                SendCtrlC();
+                await Task.Delay(150);
+            }
+
+            // 3. Read copied text from clipboard
+            string? selectedText = null;
+            var readResult = dispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    var dataPackage = Clipboard.GetContent();
+                    if (dataPackage.Contains(StandardDataFormats.Text))
+                    {
+                        selectedText = dataPackage.GetTextAsync().AsTask().GetAwaiter().GetResult();
+                        Debug.WriteLine($"[TextSelectionService] After SendCtrlC clipboard: '{selectedText?.Substring(0, Math.Min(50, selectedText?.Length ?? 0))}...'");
+                    }
+                    else
+                    {
+                        Debug.WriteLine("[TextSelectionService] After SendCtrlC clipboard has no text");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[TextSelectionService] Failed to read clipboard: {ex.Message}");
+                }
+            });
+
+            if (!readResult)
+            {
+                Debug.WriteLine("[TextSelectionService] Failed to enqueue clipboard read operation");
+                return null;
+            }
+
+            // Wait for clipboard read to complete
+            await Task.Delay(30);
+
+            Debug.WriteLine($"[TextSelectionService] Clipboard changed: {originalClipboard != selectedText}");
+
+            // 4. Restore original clipboard content if different
+            if (originalClipboard != null && originalClipboard != selectedText)
+            {
+                dispatcherQueue.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        var dataPackage = new DataPackage();
+                        dataPackage.SetText(originalClipboard);
+                        Clipboard.SetContent(dataPackage);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[TextSelectionService] Failed to restore clipboard: {ex.Message}");
+                    }
+                });
+            }
+
+            return selectedText;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[TextSelectionService] Clipboard method failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Sends Ctrl+C keystroke to copy selected text using SendInput API.
+    /// SendInput is the modern replacement for keybd_event and works reliably
+    /// with modern applications including Electron apps like VSCode.
+    /// </summary>
+    private static void SendCtrlC()
+    {
+        Debug.WriteLine("[TextSelectionService] SendCtrlC() called");
+
+        var inputs = new INPUT[4];
+
+        // Ctrl down
+        inputs[0].type = INPUT_KEYBOARD;
+        inputs[0].U.ki.wVk = VK_CONTROL;
+
+        // C down
+        inputs[1].type = INPUT_KEYBOARD;
+        inputs[1].U.ki.wVk = VK_C;
+
+        // C up
+        inputs[2].type = INPUT_KEYBOARD;
+        inputs[2].U.ki.wVk = VK_C;
+        inputs[2].U.ki.dwFlags = KEYEVENTF_KEYUP;
+
+        // Ctrl up
+        inputs[3].type = INPUT_KEYBOARD;
+        inputs[3].U.ki.wVk = VK_CONTROL;
+        inputs[3].U.ki.dwFlags = KEYEVENTF_KEYUP;
+
+        var inputSize = Marshal.SizeOf<INPUT>();
+        Debug.WriteLine($"[TextSelectionService] INPUT struct size: {inputSize}");
+
+        uint result = SendInput(4, inputs, inputSize);
+        Debug.WriteLine($"[TextSelectionService] SendInput returned: {result} (expected 4)");
+
+        if (result != 4)
+        {
+            var error = Marshal.GetLastWin32Error();
+            Debug.WriteLine($"[TextSelectionService] SendInput error code: {error}");
+        }
+    }
+
 }

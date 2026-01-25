@@ -10,6 +10,7 @@ namespace Easydict.WinUI.Services;
 public static class TextSelectionService
 {
     private static readonly UIA3Automation _automation = new();
+    private static readonly object _automationLock = new();
 
     /// <summary>
     /// Gets the currently selected text using UI Automation API.
@@ -21,11 +22,15 @@ public static class TextSelectionService
         {
             try
             {
-                var text = GetSelectedTextViaUIA();
-                if (!string.IsNullOrWhiteSpace(text))
+                // Lock to ensure thread-safe access to shared _automation instance
+                lock (_automationLock)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[TextSelectionService] Got {text.Length} chars via UIA");
-                    return text;
+                    var text = GetSelectedTextViaUIA();
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TextSelectionService] Got {text.Length} chars via UIA");
+                        return text;
+                    }
                 }
             }
             catch (Exception ex)

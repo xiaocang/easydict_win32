@@ -29,6 +29,9 @@ public sealed partial class MiniWindow : Window
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT lpPoint);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT
     {
@@ -170,24 +173,23 @@ public sealed partial class MiniWindow : Window
         {
             // Position at top-right corner of the screen where cursor is located
             var gotCursorPos = GetCursorPos(out var cursorPos);
-            DisplayArea displayArea;
-            if (gotCursorPos)
-            {
-                displayArea = DisplayArea.GetFromPoint(
+
+            // Use cursor position when available; otherwise fall back to display containing current window
+            var displayArea = gotCursorPos
+                ? DisplayArea.GetFromPoint(
                     new PointInt32(cursorPos.X, cursorPos.Y),
-                    DisplayAreaFallback.Primary);
-            }
-            else
-            {
-                // GetCursorPos failed, fallback to display containing current window
-                displayArea = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
-            }
+                    DisplayAreaFallback.Primary)
+                : DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
 
             if (displayArea != null)
             {
                 var workArea = displayArea.WorkArea;
                 var windowSize = _appWindow.Size;
-                var margin = 20; // 20 pixels margin from edge
+
+                // Use DIP-aware margin (20 DIPs) for consistent appearance across DPI settings
+                const int marginDips = 20;
+                var margin = (int)DpiHelper.DipsToPhysicalPixels(marginDips, scale);
+
                 var x = workArea.X + workArea.Width - windowSize.Width - margin;
                 var y = workArea.Y + margin;
 
@@ -339,6 +341,8 @@ public sealed partial class MiniWindow : Window
             var timeSinceShow = DateTime.UtcNow - _lastShowTime;
             if (timeSinceShow.TotalMilliseconds < 500)
             {
+                // Schedule a delayed check to handle the case where focus doesn't return
+                ScheduleDelayedAutoClose();
                 return;
             }
 
@@ -349,6 +353,34 @@ public sealed partial class MiniWindow : Window
                 HideWindow();
             }
         }
+    }
+
+    /// <summary>
+    /// Schedule a delayed auto-close check for when the grace period expires.
+    /// </summary>
+    private void ScheduleDelayedAutoClose()
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            // Wait for the remainder of the grace period
+            var timeSinceShow = DateTime.UtcNow - _lastShowTime;
+            var remainingMs = 500 - timeSinceShow.TotalMilliseconds;
+            if (remainingMs > 0)
+            {
+                await Task.Delay((int)remainingMs);
+            }
+
+            // Check if window is still deactivated and should auto-close
+            if (!_isPinned && _settings.MiniWindowAutoClose && !_isClosing && _appWindow?.IsVisible == true)
+            {
+                // Only hide if we're still not the foreground window
+                var hWnd = WindowNative.GetWindowHandle(this);
+                if (GetForegroundWindow() != hWnd)
+                {
+                    HideWindow();
+                }
+            }
+        });
     }
 
     private async void OnWindowClosed(object sender, WindowEventArgs args)

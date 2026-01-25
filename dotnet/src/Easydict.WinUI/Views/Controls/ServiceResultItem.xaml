@@ -10,7 +10,9 @@
     <Border
         Background="{ThemeResource ResultViewBackgroundBrush}"
         CornerRadius="6"
-        Margin="0,0,0,4">
+        Margin="0,0,0,4"
+        PointerEntered="OnControlPointerEntered"
+        PointerExited="OnControlPointerExited">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="30" />
@@ -24,8 +26,8 @@
                 Background="{ThemeResource TitleBarBackgroundBrush}"
                 CornerRadius="6,6,0,0"
                 PointerPressed="OnHeaderPointerPressed"
-                PointerEntered="OnHeaderPointerEntered"
-                PointerExited="OnHeaderPointerExited">
+                PointerEntered="OnHeaderBarPointerEntered"
+                PointerExited="OnHeaderBarPointerExited">
                 <Grid Padding="8,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />

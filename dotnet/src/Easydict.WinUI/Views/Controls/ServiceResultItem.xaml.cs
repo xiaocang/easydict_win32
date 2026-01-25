@@ -141,11 +141,9 @@ public sealed partial class ServiceResultItem : UserControl
         }
     }
 
-    private void OnHeaderPointerEntered(object sender, PointerRoutedEventArgs e)
+    private void OnControlPointerEntered(object sender, PointerRoutedEventArgs e)
     {
         _isHovering = true;
-        HeaderBar.Background = (Brush)Application.Current.Resources["ButtonHoverBrush"];
-        ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
 
         if (_serviceResult?.Result != null && _serviceResult.IsExpanded)
         {
@@ -153,12 +151,24 @@ public sealed partial class ServiceResultItem : UserControl
         }
     }
 
-    private void OnHeaderPointerExited(object sender, PointerRoutedEventArgs e)
+    private void OnControlPointerExited(object sender, PointerRoutedEventArgs e)
     {
         _isHovering = false;
         HeaderBar.Background = (Brush)Application.Current.Resources["TitleBarBackgroundBrush"];
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         CopyButton.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnHeaderBarPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        HeaderBar.Background = (Brush)Application.Current.Resources["ButtonHoverBrush"];
+        ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
+    }
+
+    private void OnHeaderBarPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        HeaderBar.Background = (Brush)Application.Current.Resources["TitleBarBackgroundBrush"];
+        ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     }
 
     private void OnCopyClicked(object sender, RoutedEventArgs e)

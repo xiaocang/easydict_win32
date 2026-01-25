@@ -158,8 +158,7 @@
         <!-- Multi-Service Results -->
         <ScrollViewer
             Grid.Row="4"
-            VerticalScrollBarVisibility="Auto"
-            MaxHeight="300">
+            VerticalScrollBarVisibility="Auto">
             <ItemsControl x:Name="ResultsPanel">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>

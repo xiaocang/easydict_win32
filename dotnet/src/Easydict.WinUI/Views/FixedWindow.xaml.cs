@@ -359,11 +359,15 @@ public sealed partial class FixedWindow : Window
     {
         if (_resizePending) return;
         _resizePending = true;
-        DispatcherQueue.TryEnqueue(() =>
+        if (!DispatcherQueue.TryEnqueue(() =>
         {
             _resizePending = false;
             ResizeWindowToContent();
-        });
+        }))
+        {
+            // If dispatcher is shutting down, allow future resize attempts
+            _resizePending = false;
+        }
     }
 
     private async Task CleanupResourcesAsync()

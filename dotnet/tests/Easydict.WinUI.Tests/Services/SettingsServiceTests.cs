@@ -249,6 +249,13 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void MainWindowEnabledServices_HasDefaultValue()
+    {
+        _settings.MainWindowEnabledServices.Should().NotBeNull();
+        _settings.MainWindowEnabledServices.Should().NotBeEmpty();
+    }
+
+    [Fact]
     public void MiniWindowDimensions_ArePositive()
     {
         _settings.MiniWindowWidthDips.Should().BeGreaterThan(0);

@@ -3,9 +3,9 @@ using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Views.Controls;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Input;
-using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
 using Windows.UI.Core;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
@@ -15,6 +15,7 @@ namespace Easydict.WinUI.Views
     /// <summary>
     /// Main translation page with Fluent Design.
     /// Follows macOS Easydict's user interaction patterns.
+    /// Supports multiple translation services displayed simultaneously.
     /// </summary>
     public partial class MainPage : Page
     {
@@ -24,6 +25,7 @@ namespace Easydict.WinUI.Views
         private CancellationTokenSource? _currentQueryCts;
         private Task? _currentQueryTask;
         private readonly SettingsService _settings = SettingsService.Instance;
+        private readonly List<ServiceQueryResult> _serviceResults = new();
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
         private bool _isManualTargetSelection = false; // Track if user manually selected target
         private string _lastQueryText = ""; // Track last query text to detect changes
@@ -81,6 +83,9 @@ namespace Easydict.WinUI.Views
             }
             SetLoading(false);
             ApplySettings();
+
+            // Initialize service result controls based on enabled services
+            InitializeServiceResults();
         }
 
         private async void OnPageUnloaded(object sender, RoutedEventArgs e)
@@ -162,13 +167,70 @@ namespace Easydict.WinUI.Views
 
                 // DefaultServiceId is now managed centrally by TranslationManagerService
                 UpdateStatus(true, "Ready");
-                ServiceText.Text = manager.Services[manager.DefaultServiceId].DisplayName;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[MainPage] Init error: {ex.Message}");
                 UpdateStatus(false, "Error");
             }
+        }
+
+        /// <summary>
+        /// Initialize service result controls based on enabled services.
+        /// </summary>
+        private void InitializeServiceResults()
+        {
+            _serviceResults.Clear();
+            ResultsPanel.Items.Clear();
+
+            // Get enabled services from settings
+            var enabledServices = _settings.MainWindowEnabledServices;
+
+            // If no services are enabled, show placeholder with guidance
+            if (enabledServices.Count == 0)
+            {
+                PlaceholderText.Text = "No translation services enabled. Go to Settings to enable services.";
+                PlaceholderText.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // Get display names from TranslationManager (single source of truth)
+            var manager = TranslationManagerService.Instance.Manager;
+
+            foreach (var serviceId in enabledServices)
+            {
+                // Use service-provided DisplayName, fallback to serviceId if not found
+                var displayName = manager.Services.TryGetValue(serviceId, out var service)
+                    ? service.DisplayName
+                    : serviceId;
+
+                var result = new ServiceQueryResult
+                {
+                    ServiceId = serviceId,
+                    ServiceDisplayName = displayName
+                };
+
+                var control = new ServiceResultItem
+                {
+                    ServiceResult = result
+                };
+                control.CollapseToggled += OnServiceCollapseToggled;
+
+                _serviceResults.Add(result);
+                ResultsPanel.Items.Add(control);
+            }
+
+            // Hide placeholder since we have services
+            PlaceholderText.Text = "Translation will appear here...";
+            PlaceholderText.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Handle collapse/expand toggle from a service result item.
+        /// </summary>
+        private void OnServiceCollapseToggled(object? sender, ServiceQueryResult result)
+        {
+            // Optional: could trigger layout update if needed
         }
 
         private async Task CleanupResourcesAsync()
@@ -316,7 +378,8 @@ namespace Easydict.WinUI.Views
         }
 
         /// <summary>
-        /// Start a new translation query (similar to macOS's startQueryText:).
+        /// Start a new translation query for all enabled services.
+        /// Executes translations in parallel for multiple services.
         /// </summary>
         private async Task StartQueryAsync()
         {
@@ -327,7 +390,7 @@ namespace Easydict.WinUI.Views
 
             if (_detectionService is null)
             {
-                OutputTextBox.Text = "Service not initialized. Please wait...";
+                StatusSummaryText.Text = "Service not initialized. Please wait...";
                 InitializeTranslationServices();
                 return;
             }
@@ -338,6 +401,13 @@ namespace Easydict.WinUI.Views
             var inputText = InputTextBox.Text?.Trim();
             if (string.IsNullOrEmpty(inputText))
             {
+                return;
+            }
+
+            // Early return if no services are enabled
+            if (_serviceResults.Count == 0)
+            {
+                StatusSummaryText.Text = "No services enabled. Go to Settings to enable services.";
                 return;
             }
 
@@ -371,8 +441,16 @@ namespace Easydict.WinUI.Views
             {
                 if (_isClosing) return;
                 SetLoading(true);
-                OutputTextBox.Text = "";
-                TimingText.Text = "";
+
+                // Reset all service results
+                foreach (var result in _serviceResults)
+                {
+                    result.Reset();
+                    result.IsLoading = true;
+                }
+
+                // Hide placeholder
+                PlaceholderText.Visibility = Visibility.Collapsed;
 
                 // Step 1: Detect language
                 var detectedLanguage = await detectionService.DetectAsync(
@@ -401,7 +479,7 @@ namespace Easydict.WinUI.Views
                     targetLanguage = GetTargetLanguage();
                 }
 
-                // Step 3: Execute translation
+                // Step 3: Execute translation for each enabled service in parallel
                 var request = new TranslationRequest
                 {
                     Text = inputText,
@@ -409,57 +487,123 @@ namespace Easydict.WinUI.Views
                     ToLanguage = targetLanguage
                 };
 
-                // Acquire handle to prevent manager disposal during translation.
-                // Capture DefaultServiceId atomically with manager to prevent race condition.
-                using var handle = TranslationManagerService.Instance.AcquireHandle();
-                var manager = handle.Manager;
-                var serviceId = manager.DefaultServiceId;
-
-                // Check if service supports streaming
-                if (manager.IsStreamingService(serviceId))
+                // Task returns: true = success, false = error, null = cancelled
+                var tasks = _serviceResults.Select(async serviceResult =>
                 {
-                    // Streaming path for LLM services
-                    await ExecuteStreamingTranslationAsync(manager, request, serviceId, detectedLanguage, ct);
-                }
-                else
-                {
-                    // Non-streaming path for traditional services
-                    var result = await manager.TranslateAsync(
-                        request,
-                        ct,
-                        serviceId);
+                    try
+                    {
+                        // Acquire handle once per service to ensure consistent manager instance
+                        using var handle = TranslationManagerService.Instance.AcquireHandle();
+                        var manager = handle.Manager;
 
+                        // Check if service supports streaming
+                        if (manager.IsStreamingService(serviceResult.ServiceId))
+                        {
+                            // Streaming path for LLM services
+                            await ExecuteStreamingTranslationForServiceAsync(
+                                manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                        }
+                        else
+                        {
+                            // Non-streaming path for traditional services
+                            var result = await manager.TranslateAsync(
+                                request, ct, serviceResult.ServiceId);
+
+                            DispatcherQueue.TryEnqueue(() =>
+                            {
+                                if (_isClosing) return;
+                                serviceResult.Result = result;
+                                serviceResult.IsLoading = false;
+                                serviceResult.ApplyAutoCollapseLogic();
+                            });
+                        }
+
+                        return (bool?)true; // Success
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Ensure UI state is reset when the operation is cancelled
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (_isClosing) return;
+                            serviceResult.IsLoading = false;
+                            serviceResult.IsStreaming = false;
+                        });
+                        return (bool?)null; // Cancelled, don't count
+                    }
+                    catch (TranslationException ex)
+                    {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (_isClosing) return;
+                            serviceResult.Error = ex;
+                            serviceResult.IsLoading = false;
+                            serviceResult.IsStreaming = false;
+                            serviceResult.ApplyAutoCollapseLogic();
+                        });
+                        return (bool?)false; // Error
+                    }
+                    catch (Exception ex)
+                    {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (_isClosing) return;
+                            serviceResult.Error = new TranslationException(ex.Message)
+                            {
+                                ErrorCode = TranslationErrorCode.Unknown,
+                                ServiceId = serviceResult.ServiceId
+                            };
+                            serviceResult.IsLoading = false;
+                            serviceResult.IsStreaming = false;
+                            serviceResult.ApplyAutoCollapseLogic();
+                        });
+                        return (bool?)false; // Error
+                    }
+                });
+
+                var taskResults = await Task.WhenAll(tasks);
+
+                // Compute counts from task return values (accurate regardless of DispatcherQueue timing)
+                var successCount = taskResults.Count(r => r == true);
+                var errorCount = taskResults.Count(r => r == false);
+
+                // Update status on UI thread
+                DispatcherQueue.TryEnqueue(() =>
+                {
                     if (_isClosing) return;
 
-                    // Update UI with result
-                    DisplayResult(result);
-                }
+                    // Set status based on aggregated outcomes
+                    if (successCount > 0)
+                    {
+                        StatusSummaryText.Text = $"{successCount} service(s) completed";
+                        UpdateStatus(true, "Ready");
+                    }
+                    else if (errorCount > 0)
+                    {
+                        StatusSummaryText.Text = "Translation failed";
+                        UpdateStatus(false, "Error");
+                    }
+                    else
+                    {
+                        StatusSummaryText.Text = "";
+                        UpdateStatus(true, "Ready");
+                    }
+                });
             }
             catch (OperationCanceledException)
             {
-                // Query was cancelled, ignore
-            }
-            catch (TranslationException ex)
-            {
-                if (!_isClosing)
-                {
-                    OutputTextBox.Text = ex.ErrorCode switch
-                    {
-                        TranslationErrorCode.NetworkError => "Network error. Please check your connection.",
-                        TranslationErrorCode.Timeout => "Request timed out. Please try again.",
-                        TranslationErrorCode.RateLimited => "Rate limited. Please wait a moment.",
-                        TranslationErrorCode.InvalidApiKey => "Invalid API key configuration.",
-                        _ => $"Translation failed: {ex.Message}"
-                    };
-                    UpdateStatus(false, "Error");
-                }
+                // Query was cancelled - reset all service results that may be stuck in loading state
+                ResetAllServiceResultsLoadingState();
             }
             catch (Exception ex)
             {
                 if (!_isClosing)
                 {
-                    OutputTextBox.Text = $"Error: {ex.Message}";
+                    StatusSummaryText.Text = $"Error: {ex.Message}";
                     UpdateStatus(false, "Error");
+
+                    // Reset all service results that may be stuck in loading state
+                    ResetAllServiceResultsLoadingState();
                 }
             }
             finally
@@ -496,89 +640,103 @@ namespace Easydict.WinUI.Views
         }
 
         /// <summary>
-        /// Execute streaming translation for LLM services.
-        /// Shows incremental results as they arrive from the API.
-        /// The caller must provide a manager from an acquired SafeManagerHandle.
+        /// Reset all service results to clear loading/streaming state.
+        /// Called when an exception occurs before per-service tasks can handle cleanup.
         /// </summary>
-        private async Task ExecuteStreamingTranslationAsync(
+        private void ResetAllServiceResultsLoadingState()
+        {
+            foreach (var serviceResult in _serviceResults)
+            {
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = false;
+                serviceResult.StreamingText = "";
+            }
+        }
+
+        /// <summary>
+        /// Execute streaming translation for a single service.
+        /// Updates the ServiceQueryResult's StreamingText as chunks arrive.
+        /// Manager is passed from caller who already acquired a handle to ensure consistent instance.
+        /// </summary>
+        private async Task ExecuteStreamingTranslationForServiceAsync(
             TranslationManager manager,
+            ServiceQueryResult serviceResult,
             TranslationRequest request,
-            string serviceId,
             TranslationLanguage detectedLanguage,
-            CancellationToken cancellationToken)
+            TranslationLanguage targetLanguage,
+            CancellationToken ct)
         {
             var stopwatch = Stopwatch.StartNew();
             var sb = new StringBuilder();
             var lastUpdateTime = DateTime.UtcNow;
-            const int throttleMs = 50; // UI update throttle for smooth rendering
+            const int throttleMs = 50;
 
-            var serviceName = manager.Services[serviceId].DisplayName;
-            if (_isClosing) return;
-            ServiceText.Text = $"{serviceName} • Streaming...";
+            // Mark as streaming
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = true;
+                serviceResult.StreamingText = "";
+            });
 
             await foreach (var chunk in manager.TranslateStreamAsync(
-                request,
-                cancellationToken,
-                serviceId))
+                request, ct, serviceResult.ServiceId))
             {
                 sb.Append(chunk);
 
-                // Throttle UI updates to avoid excessive redraws
+                // Throttle UI updates
                 var now = DateTime.UtcNow;
                 if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
                 {
-                    if (_isClosing) return;
-                    OutputTextBox.Text = sb.ToString();
+                    var currentText = sb.ToString();
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        serviceResult.StreamingText = currentText;
+                    });
                     lastUpdateTime = now;
                 }
             }
 
             stopwatch.Stop();
 
-            if (_isClosing) return;
-
-            // Final update with complete text
-            var finalText = sb.ToString().Trim();
-            OutputTextBox.Text = finalText;
-
-            TimingText.Text = $"⏱ {stopwatch.ElapsedMilliseconds}ms";
-
-            // Update service text with detected language
-            if (detectedLanguage != TranslationLanguage.Auto)
+            // Final update with complete result (apply same cleanup as non-streaming path)
+            var finalText = CleanupStreamingResult(sb.ToString());
+            DispatcherQueue.TryEnqueue(() =>
             {
-                var langName = GetLanguageDisplayName(detectedLanguage);
-                ServiceText.Text = $"{serviceName} • {langName}";
-            }
-            else
-            {
-                ServiceText.Text = serviceName;
-            }
-
-            UpdateStatus(true, "Ready");
+                if (_isClosing) return;
+                serviceResult.IsStreaming = false;
+                serviceResult.StreamingText = "";
+                serviceResult.Result = new TranslationResult
+                {
+                    TranslatedText = finalText,
+                    OriginalText = request.Text,
+                    DetectedLanguage = detectedLanguage,
+                    TargetLanguage = targetLanguage,
+                    ServiceName = serviceResult.ServiceDisplayName,
+                    TimingMs = stopwatch.ElapsedMilliseconds
+                };
+                serviceResult.ApplyAutoCollapseLogic();
+            });
         }
 
         /// <summary>
-        /// Display translation result (like macOS's updateCellWithResult:).
+        /// Clean up streaming result text, applying the same normalization as non-streaming translations.
+        /// Removes common artifacts like surrounding quotes and extra whitespace.
         /// </summary>
-        private void DisplayResult(TranslationResult result)
+        private static string CleanupStreamingResult(string text)
         {
-            OutputTextBox.Text = result.TranslatedText;
+            var result = text.Trim();
 
-            var timingInfo = result.FromCache ? "cached" : $"{result.TimingMs}ms";
-            TimingText.Text = $"⏱ {timingInfo}";
-
-            // Show detected language if auto-detected
-            if (result.DetectedLanguage != TranslationLanguage.Auto)
+            // Remove surrounding quotes if present (LLMs sometimes wrap translations in quotes)
+            if (result.Length >= 2 &&
+                result.StartsWith('"') && result.EndsWith('"'))
             {
-                var langName = GetLanguageDisplayName(result.DetectedLanguage);
-                ServiceText.Text = $"{result.ServiceName} • {langName}";
-            }
-            else
-            {
-                ServiceText.Text = result.ServiceName;
+                result = result[1..^1].Trim();
             }
 
-            UpdateStatus(true, "Ready");
+            return result;
         }
 
         private TranslationLanguage GetTargetLanguage()
@@ -594,11 +752,6 @@ namespace Easydict.WinUI.Views
                 6 => TranslationLanguage.Spanish,
                 _ => TranslationLanguage.SimplifiedChinese
             };
-        }
-
-        private static string GetLanguageDisplayName(TranslationLanguage language)
-        {
-            return language.GetDisplayName();
         }
 
         /// <summary>
@@ -710,25 +863,6 @@ namespace Easydict.WinUI.Views
 
             // Note: Since source is always "Auto Detect", we only swap target
             // If source becomes selectable in the future, add source update here
-        }
-
-        private void OnCopyClicked(object sender, RoutedEventArgs e)
-        {
-            var text = OutputTextBox.Text;
-            if (!string.IsNullOrEmpty(text))
-            {
-                var dataPackage = new DataPackage();
-                dataPackage.SetText(text);
-                Clipboard.SetContent(dataPackage);
-
-                // Brief visual feedback
-                CopyButton.Content = new FontIcon { Glyph = "\uE8FB", FontSize = 14 }; // Checkmark
-                DispatcherQueue.TryEnqueue(async () =>
-                {
-                    await Task.Delay(1500);
-                    CopyButton.Content = new FontIcon { Glyph = "\uE8C8", FontSize = 14 }; // Copy icon
-                });
-            }
         }
 
         private void OnSettingsClicked(object sender, RoutedEventArgs e)

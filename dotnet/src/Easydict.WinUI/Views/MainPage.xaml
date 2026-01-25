@@ -325,58 +325,44 @@
             </Grid>
         </Border>
 
-        <!-- Output Card -->
+        <!-- Output Area: Multiple Service Results -->
         <Border Grid.Row="3" Style="{StaticResource CardStyle}" Margin="0,2,0,0">
             <Grid Margin="4">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="15" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Title row with consistent height -->
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                <!-- Title row -->
+                <TextBlock
+                    Grid.Row="0"
+                    Text="Translation Results"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Margin="4,0,0,4" />
 
-                    <TextBlock
-                        Grid.Column="0"
-                        Text="Translation"
-                        FontSize="13"
-                        FontWeight="SemiBold"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        VerticalAlignment="Center" />
-
-                    <Button
-                        x:Name="CopyButton"
-                        Grid.Column="1"
-                        Click="OnCopyClicked"
-                        ToolTipService.ToolTip="Copy to clipboard"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Width="32"
-                        Height="15"
-                        Padding="0"
-                        VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE8C8;" FontSize="14" />
-                    </Button>
-                </Grid>
-
-                <TextBox
-                    x:Name="OutputTextBox"
+                <!-- Service Results ItemsControl -->
+                <ItemsControl
+                    x:Name="ResultsPanel"
                     Grid.Row="1"
-                    PlaceholderText="Translation will appear here..."
-                    Style="{StaticResource TranslationTextBoxStyle}"
-                    IsReadOnly="True"
-                    BorderThickness="0"
-                    Background="Transparent"
-                    Margin="0,4,0,0"
-                    AcceptsReturn="True"
-                    TextWrapping="Wrap"
-                    ScrollViewer.VerticalScrollBarVisibility="Auto"
-                    VerticalAlignment="Stretch"
-                    HorizontalAlignment="Stretch" />
+                    VerticalAlignment="Stretch">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Vertical" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+
+                <!-- Placeholder when no results -->
+                <TextBlock
+                    x:Name="PlaceholderText"
+                    Grid.Row="1"
+                    Text="Translation will appear here..."
+                    FontSize="13"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Margin="8,8,0,0"
+                    Visibility="Visible" />
             </Grid>
         </Border>
 
@@ -384,25 +370,16 @@
         <Grid Grid.Row="4" Margin="0,4,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <TextBlock
-                x:Name="TimingText"
+                x:Name="StatusSummaryText"
                 Grid.Column="0"
                 Text=""
                 FontSize="12"
                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                 HorizontalAlignment="Left"
-                VerticalAlignment="Center" />
-
-            <TextBlock
-                x:Name="ServiceText"
-                Grid.Column="1"
-                Text=""
-                FontSize="12"
-                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                HorizontalAlignment="Right"
                 VerticalAlignment="Center" />
         </Grid>
         </Grid>

@@ -10,6 +10,15 @@ name: Release and Publish
 # For pre-release versions (v1.0.0-beta.1):
 #   - Check "Set as a pre-release" when publishing
 #   - WinGet submission will be skipped automatically
+#
+# MSIX Signing:
+#   For production releases, configure a stable signing certificate:
+#   1. Generate a code signing certificate (or purchase from a CA)
+#   2. Export to PFX and base64 encode: base64 -w 0 cert.pfx > cert.b64
+#   3. Add secrets in GitHub: Settings > Secrets > Actions
+#      - MSIX_CERTIFICATE_BASE64: The base64-encoded PFX file
+#      - MSIX_CERTIFICATE_PASSWORD: The PFX password
+#   If secrets are not configured, a self-signed certificate will be used.
 
 on:
   release:
@@ -24,8 +33,9 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
-  publish-app:
-    name: Build and Publish Application
+  # Build and package MSIX using winapp CLI
+  publish-msix:
+    name: Build MSIX Package
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -41,6 +51,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
+      - name: Setup WinApp CLI
+        uses: microsoft/setup-WinAppCli@v0.1
 
       - name: Validate and extract version from tag
         id: version
@@ -59,12 +72,23 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
 
+          # Create MSIX-compatible version (must be X.Y.Z.0 format)
+          MSIX_VERSION="${VERSION}"
+          # If version has suffix like -beta.1, strip it for MSIX
+          MSIX_VERSION=$(echo "$MSIX_VERSION" | sed 's/-.*$//')
+          # Ensure 4-part version by counting dots
+          IFS='.' read -r -a parts <<< "$MSIX_VERSION"
+          if [[ ${#parts[@]} -eq 3 ]]; then
+            MSIX_VERSION="${MSIX_VERSION}.0"
+          fi
+          echo "MSIX_VERSION=$MSIX_VERSION" >> $GITHUB_OUTPUT
+          echo "MSIX version: $MSIX_VERSION"
+
       - name: Restore dependencies
         working-directory: dotnet
         run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }}
 
-      # Self-contained deployment: includes .NET runtime for standalone execution
-      # This matches the project's <SelfContained>true</SelfContained> setting
+      # Build and publish the application
       - name: Publish WinUI App
         working-directory: dotnet
         run: |
@@ -74,33 +98,127 @@ jobs:
             --self-contained true `
             --no-restore `
             --output ./publish/${{ matrix.platform }} `
-            -p:Version=${{ steps.version.outputs.VERSION }}
+            -p:Version=${{ steps.version.outputs.VERSION }} `
+            -p:Platform=${{ matrix.platform }} `
+            -p:PublishTrimmed=false
 
+      # Setup signing certificate (use stable cert from secrets if available)
+      - name: Setup signing certificate
+        id: cert
+        shell: pwsh
+        env:
+          MSIX_CERT_BASE64: ${{ secrets.MSIX_CERTIFICATE_BASE64 }}
+          MSIX_CERT_PASSWORD: ${{ secrets.MSIX_CERTIFICATE_PASSWORD }}
+        run: |
+          $certPath = "${{ github.workspace }}\signing.pfx"
+
+          if ($env:MSIX_CERT_BASE64 -and $env:MSIX_CERT_PASSWORD) {
+            # Use stable certificate from secrets
+            Write-Host "Using stable signing certificate from secrets"
+            $certBytes = [Convert]::FromBase64String($env:MSIX_CERT_BASE64)
+            [IO.File]::WriteAllBytes($certPath, $certBytes)
+            $certPassword = $env:MSIX_CERT_PASSWORD
+          } else {
+            # Generate self-signed certificate as fallback
+            Write-Host "No stable certificate configured, generating self-signed certificate"
+            $certPassword = [System.Guid]::NewGuid().ToString()
+
+            $cert = New-SelfSignedCertificate `
+              -Type Custom `
+              -Subject "CN=xiaocang" `
+              -KeyUsage DigitalSignature `
+              -FriendlyName "Easydict Development Certificate" `
+              -CertStoreLocation "Cert:\CurrentUser\My" `
+              -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+
+            $certPasswordSecure = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
+            Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $certPasswordSecure | Out-Null
+          }
+
+          # Mask password to prevent it from appearing in logs
+          Write-Host "::add-mask::$certPassword"
+
+          # Output certificate path and password for subsequent steps
+          echo "CERT_PATH=$certPath" >> $env:GITHUB_OUTPUT
+          echo "CERT_PASSWORD=$certPassword" >> $env:GITHUB_OUTPUT
+
+      # Update manifest version
+      - name: Update manifest version
+        shell: pwsh
+        run: |
+          $manifestPath = "dotnet/src/Easydict.WinUI/Package.appxmanifest"
+          $content = Get-Content $manifestPath -Raw
+          $content = $content -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"${{ steps.version.outputs.MSIX_VERSION }}`""
+          $content = $content -replace 'ProcessorArchitecture="neutral"', "ProcessorArchitecture=`"${{ matrix.platform }}`""
+          Set-Content $manifestPath $content
+
+      # Create MSIX package using winapp CLI
+      - name: Create MSIX package
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          # Create MSIX output directory
+          New-Item -ItemType Directory -Force -Path ./msix
+
+          # Package the application
+          winapp pack `
+            --input ./publish/${{ matrix.platform }} `
+            --output ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix `
+            --manifest src/Easydict.WinUI/Package.appxmanifest `
+            --verbose
+
+      # Sign the MSIX package
+      - name: Sign MSIX package
+        working-directory: dotnet
+        shell: pwsh
+        env:
+          SIGN_CERT_PASSWORD: ${{ steps.cert.outputs.CERT_PASSWORD }}
+        run: |
+          winapp sign `
+            --input ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix `
+            --certificate "${{ steps.cert.outputs.CERT_PATH }}" `
+            --password "$env:SIGN_CERT_PASSWORD" `
+            --verbose
+
+      # Also create ZIP archive for portable distribution
       - name: Create ZIP archive
         shell: pwsh
         run: |
-          # Exclude debug symbols (.pdb) to reduce artifact size
           $source = "dotnet/publish/${{ matrix.platform }}"
           $destination = "easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip"
-          Get-ChildItem -Path $source -Exclude "*.pdb" | Compress-Archive -DestinationPath $destination
+          $tempDir = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP\zip-staging" -Force
 
-      - name: Upload to Release
+          # Copy all files to temp directory, then remove PDBs recursively
+          Copy-Item -Path "$source\*" -Destination $tempDir -Recurse
+          Get-ChildItem -Path $tempDir -Filter "*.pdb" -Recurse | Remove-Item -Force
+
+          # Create ZIP from temp directory (ensures relative paths in archive)
+          Compress-Archive -Path "$tempDir\*" -DestinationPath $destination
+
+          # Cleanup temp directory
+          Remove-Item -Path $tempDir -Recurse -Force
+
+      - name: Upload MSIX to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          files: |
+            dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix
+            easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
           generate_release_notes: ${{ matrix.platform == 'x64' }}
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}
-          path: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          name: easydict-${{ github.ref_name }}-${{ matrix.platform }}
+          path: |
+            dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix
+            easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
           retention-days: 30
 
   publish-winget:
     name: Publish to WinGet
     runs-on: windows-latest
-    needs: publish-app
+    needs: publish-msix
     # Skip WinGet submission for pre-release versions
     # Uses GitHub's release.prerelease flag for reliable detection
     if: ${{ !github.event.release.prerelease }}

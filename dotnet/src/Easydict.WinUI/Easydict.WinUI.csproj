@@ -117,6 +117,17 @@
             SkipUnchangedFiles="true" />
     </Target>
 
+    <Target Name="CopyAppIconToPublish" AfterTargets="Publish">
+        <Copy
+            SourceFiles="$(IntermediateOutputPath)AppIcon.ico"
+            DestinationFiles="$(PublishDir)AppIcon.ico"
+            SkipUnchangedFiles="true" />
+        <Copy
+            SourceFiles="$(IntermediateOutputPath)TrayIcon.png"
+            DestinationFiles="$(PublishDir)TrayIcon.png"
+            SkipUnchangedFiles="true" />
+    </Target>
+
     <!-- 
         Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
         Tools extension to be activated for this project even if the Windows App SDK Nuget

@@ -1,0 +1,68 @@
+# WinApp CLI Configuration for Easydict Win32
+# Documentation: https://github.com/microsoft/winappCli
+
+# Application metadata
+app:
+  name: Easydict
+  displayName: Easydict
+  description: Cross-platform dictionary and translation app
+  publisher: CN=xiaocang
+  publisherDisplayName: xiaocang
+  version: 0.1.0.0
+
+# Package identity for MSIX
+identity:
+  name: xiaocang.Easydict
+  publisher: CN=xiaocang
+
+# SDK dependencies
+packages:
+  - Microsoft.WindowsAppSDK: 1.*
+  - Microsoft.Windows.SDK.BuildTools: 10.*
+
+# Build configuration
+build:
+  # Project file path
+  project: src/Easydict.WinUI/Easydict.WinUI.csproj
+  # Output directory for build artifacts
+  outputDir: ./publish
+  # Build configuration
+  configuration: Release
+  # Target platforms
+  platforms:
+    - x64
+    - x86
+    - arm64
+
+# MSIX packaging configuration
+msix:
+  # Output directory for MSIX packages
+  outputDir: ./msix
+  # Package manifest
+  manifest: src/Easydict.WinUI/Package.appxmanifest
+  # Assets directory
+  assets: src/Easydict.WinUI/Assets
+  # Certificate configuration
+  certificate:
+    # For local development:
+    #   1. Generate: make cert-generate CERT_PASSWORD=yourpassword
+    #   2. Install:  make cert-install CERT_PASSWORD=yourpassword (requires admin)
+    #   3. Sign:     make sign CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword MSIX=./msix/Easydict-x64.msix
+    #
+    # For CI/CD (GitHub Actions):
+    #   - Certificates are auto-generated per build for code signing
+    #   - No secrets required for self-signed development certificates
+    path: ./certs/dev.pfx
+  # Package options
+  options:
+    # Include .NET runtime in package
+    selfContained: true
+    # Enable ReadyToRun compilation
+    readyToRun: true
+    # Exclude debug symbols
+    excludePdb: true
+
+# Capabilities required by the app
+capabilities:
+  - runFullTrust
+  - internetClient

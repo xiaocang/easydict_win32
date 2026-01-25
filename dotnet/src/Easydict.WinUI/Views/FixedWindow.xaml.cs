@@ -38,6 +38,7 @@ public sealed partial class FixedWindow : Window
     private bool _userChangedTargetLanguage;
     private bool _suppressTargetLanguageSelectionChanged;
     private TitleBarDragRegionHelper? _titleBarHelper;
+    private bool _resizePending;
 
     /// <summary>
     /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -351,6 +352,20 @@ public sealed partial class FixedWindow : Window
         }
     }
 
+    /// <summary>
+    /// Request a coalesced resize to prevent multiple queued resize calls.
+    /// </summary>
+    private void RequestResize()
+    {
+        if (_resizePending) return;
+        _resizePending = true;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _resizePending = false;
+            ResizeWindowToContent();
+        });
+    }
+
     private async Task CleanupResourcesAsync()
     {
         // Clean up title bar drag region helper
@@ -521,8 +536,8 @@ public sealed partial class FixedWindow : Window
                             serviceResult.Result = result;
                             serviceResult.IsLoading = false;
                             serviceResult.ApplyAutoCollapseLogic();
-                            // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
-                            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+                            // Coalesced resize so ServiceResultItem.UpdateUI() completes first
+                            RequestResize();
                         });
                     }
                 }

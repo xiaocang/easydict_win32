@@ -57,6 +57,7 @@ public sealed partial class MiniWindow : Window
     private bool _suppressTargetLanguageSelectionChanged;
     private TitleBarDragRegionHelper? _titleBarHelper;
     private DateTime _lastShowTime = DateTime.MinValue;
+    private bool _resizePending;
 
     /// <summary>
     /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -362,23 +363,30 @@ public sealed partial class MiniWindow : Window
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
-            // Wait for the remainder of the grace period
-            var timeSinceShow = DateTime.UtcNow - _lastShowTime;
-            var remainingMs = 500 - timeSinceShow.TotalMilliseconds;
-            if (remainingMs > 0)
+            try
             {
-                await Task.Delay((int)remainingMs);
-            }
-
-            // Check if window is still deactivated and should auto-close
-            if (!_isPinned && _settings.MiniWindowAutoClose && !_isClosing && _appWindow?.IsVisible == true)
-            {
-                // Only hide if we're still not the foreground window
-                var hWnd = WindowNative.GetWindowHandle(this);
-                if (GetForegroundWindow() != hWnd)
+                // Wait for the remainder of the grace period
+                var timeSinceShow = DateTime.UtcNow - _lastShowTime;
+                var remainingMs = 500 - timeSinceShow.TotalMilliseconds;
+                if (remainingMs > 0)
                 {
-                    HideWindow();
+                    await Task.Delay((int)remainingMs);
                 }
+
+                // Check if window is still deactivated and should auto-close
+                if (!_isPinned && _settings.MiniWindowAutoClose && !_isClosing && _appWindow?.IsVisible == true)
+                {
+                    // Only hide if we're still not the foreground window
+                    var hWnd = WindowNative.GetWindowHandle(this);
+                    if (GetForegroundWindow() != hWnd)
+                    {
+                        HideWindow();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"MiniWindow: ScheduleDelayedAutoClose error: {ex.Message}");
             }
         });
     }
@@ -446,6 +454,20 @@ public sealed partial class MiniWindow : Window
         {
             System.Diagnostics.Debug.WriteLine($"[MiniWindow] ResizeWindowToContent error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Request a coalesced resize to prevent multiple queued resize calls.
+    /// </summary>
+    private void RequestResize()
+    {
+        if (_resizePending) return;
+        _resizePending = true;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _resizePending = false;
+            ResizeWindowToContent();
+        });
     }
 
     private async Task CleanupResourcesAsync()
@@ -632,8 +654,8 @@ public sealed partial class MiniWindow : Window
                             serviceResult.Result = result;
                             serviceResult.IsLoading = false;
                             serviceResult.ApplyAutoCollapseLogic();
-                            // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
-                            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+                            // Coalesced resize so ServiceResultItem.UpdateUI() completes first
+                            RequestResize();
                         });
                     }
                 }

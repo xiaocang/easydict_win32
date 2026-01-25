@@ -301,7 +301,7 @@
                                  PlaceholderText="https://ark.cn-beijing.volces.com/api/v3/responses" HorizontalAlignment="Left" />
                         <TextBox x:Name="DoubaoModelBox" Header="Model" Width="300"
                                  PlaceholderText="doubao-seed-translation-250915" HorizontalAlignment="Left" />
-                        <TextBlock Text="ByteDance's Doubao translation service. Get API key from console.volcengine.com"
+                        <TextBlock Text="ByteDance's Doubao translation service. Get your API key from console.volcengine.com"
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Expander>

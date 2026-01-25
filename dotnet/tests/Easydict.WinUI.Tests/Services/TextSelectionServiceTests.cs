@@ -55,9 +55,9 @@ public class TextSelectionServiceTests
     public async Task GetSelectedTextAsync_CanBeCalledMultipleTimes()
     {
         // Service should be reusable across multiple calls
-        var result1 = await TextSelectionService.GetSelectedTextAsync();
-        var result2 = await TextSelectionService.GetSelectedTextAsync();
-        var result3 = await TextSelectionService.GetSelectedTextAsync();
+        _ = await TextSelectionService.GetSelectedTextAsync();
+        _ = await TextSelectionService.GetSelectedTextAsync();
+        _ = await TextSelectionService.GetSelectedTextAsync();
 
         // All calls should complete without throwing
         // Results may be null (expected in test environment)

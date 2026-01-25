@@ -110,27 +110,27 @@ public sealed partial class SettingsPage : Page
         // OpenAI settings
         OpenAIKeyBox.Password = _settings.OpenAIApiKey ?? string.Empty;
         OpenAIEndpointBox.Text = _settings.OpenAIEndpoint;
-        SelectComboByTag(OpenAIModelCombo, _settings.OpenAIModel);
+        SetEditableComboValue(OpenAIModelCombo, _settings.OpenAIModel);
 
         // DeepSeek settings
         DeepSeekKeyBox.Password = _settings.DeepSeekApiKey ?? string.Empty;
-        SelectComboByTag(DeepSeekModelCombo, _settings.DeepSeekModel);
+        SetEditableComboValue(DeepSeekModelCombo, _settings.DeepSeekModel);
 
         // Groq settings
         GroqKeyBox.Password = _settings.GroqApiKey ?? string.Empty;
-        SelectComboByTag(GroqModelCombo, _settings.GroqModel);
+        SetEditableComboValue(GroqModelCombo, _settings.GroqModel);
 
         // Zhipu settings
         ZhipuKeyBox.Password = _settings.ZhipuApiKey ?? string.Empty;
-        SelectComboByTag(ZhipuModelCombo, _settings.ZhipuModel);
+        SetEditableComboValue(ZhipuModelCombo, _settings.ZhipuModel);
 
         // GitHub Models settings
         GitHubModelsTokenBox.Password = _settings.GitHubModelsToken ?? string.Empty;
-        SelectComboByTag(GitHubModelsModelCombo, _settings.GitHubModelsModel);
+        SetEditableComboValue(GitHubModelsModelCombo, _settings.GitHubModelsModel);
 
         // Gemini settings
         GeminiKeyBox.Password = _settings.GeminiApiKey ?? string.Empty;
-        SelectComboByTag(GeminiModelCombo, _settings.GeminiModel);
+        SetEditableComboValue(GeminiModelCombo, _settings.GeminiModel);
 
         // Custom OpenAI settings
         CustomOpenAIEndpointBox.Text = _settings.CustomOpenAIEndpoint;
@@ -142,7 +142,7 @@ public sealed partial class SettingsPage : Page
         OllamaModelCombo.Text = _settings.OllamaModel;
 
         // Built-in AI settings
-        SelectComboByTag(BuiltInModelCombo, _settings.BuiltInAIModel);
+        SetEditableComboValue(BuiltInModelCombo, _settings.BuiltInAIModel);
 
         // Doubao settings
         DoubaoKeyBox.Password = _settings.DoubaoApiKey ?? string.Empty;
@@ -192,6 +192,45 @@ public sealed partial class SettingsPage : Page
             return item.Tag?.ToString();
         }
         return null;
+    }
+
+    /// <summary>
+    /// Gets the value from an editable ComboBox. Returns the typed text if available,
+    /// otherwise returns the selected item's tag.
+    /// </summary>
+    private static string GetEditableComboValue(ComboBox combo, string defaultValue)
+    {
+        // For editable ComboBox, prefer Text (user-typed value)
+        var text = combo.Text?.Trim();
+        if (!string.IsNullOrEmpty(text))
+        {
+            return text;
+        }
+        // Fall back to selected item's tag
+        if (combo.SelectedItem is ComboBoxItem item && item.Tag != null)
+        {
+            return item.Tag.ToString() ?? defaultValue;
+        }
+        return defaultValue;
+    }
+
+    /// <summary>
+    /// Sets the value for an editable ComboBox. If the value matches a dropdown item,
+    /// selects it. Otherwise, sets the Text property for custom values.
+    /// </summary>
+    private static void SetEditableComboValue(ComboBox combo, string value)
+    {
+        // Try to find matching item in dropdown
+        for (int i = 0; i < combo.Items.Count; i++)
+        {
+            if (combo.Items[i] is ComboBoxItem item && item.Tag?.ToString() == value)
+            {
+                combo.SelectedIndex = i;
+                return;
+            }
+        }
+        // Custom value - set Text directly
+        combo.Text = value;
     }
 
     private void OnBackClick(object sender, RoutedEventArgs e)
@@ -247,32 +286,32 @@ public sealed partial class SettingsPage : Page
         _settings.OpenAIEndpoint = string.IsNullOrWhiteSpace(openAIEndpoint)
             ? "https://api.openai.com/v1/chat/completions"
             : openAIEndpoint;
-        _settings.OpenAIModel = GetSelectedTag(OpenAIModelCombo) ?? "gpt-4o-mini";
+        _settings.OpenAIModel = GetEditableComboValue(OpenAIModelCombo, "gpt-4o-mini");
 
         // Save DeepSeek settings
         var deepSeekKey = DeepSeekKeyBox.Password;
         _settings.DeepSeekApiKey = string.IsNullOrWhiteSpace(deepSeekKey) ? null : deepSeekKey;
-        _settings.DeepSeekModel = GetSelectedTag(DeepSeekModelCombo) ?? "deepseek-chat";
+        _settings.DeepSeekModel = GetEditableComboValue(DeepSeekModelCombo, "deepseek-chat");
 
         // Save Groq settings
         var groqKey = GroqKeyBox.Password;
         _settings.GroqApiKey = string.IsNullOrWhiteSpace(groqKey) ? null : groqKey;
-        _settings.GroqModel = GetSelectedTag(GroqModelCombo) ?? "llama-3.3-70b-versatile";
+        _settings.GroqModel = GetEditableComboValue(GroqModelCombo, "llama-3.3-70b-versatile");
 
         // Save Zhipu settings
         var zhipuKey = ZhipuKeyBox.Password;
         _settings.ZhipuApiKey = string.IsNullOrWhiteSpace(zhipuKey) ? null : zhipuKey;
-        _settings.ZhipuModel = GetSelectedTag(ZhipuModelCombo) ?? "glm-4-flash-250414";
+        _settings.ZhipuModel = GetEditableComboValue(ZhipuModelCombo, "glm-4-flash-250414");
 
         // Save GitHub Models settings
         var githubToken = GitHubModelsTokenBox.Password;
         _settings.GitHubModelsToken = string.IsNullOrWhiteSpace(githubToken) ? null : githubToken;
-        _settings.GitHubModelsModel = GetSelectedTag(GitHubModelsModelCombo) ?? "gpt-4.1";
+        _settings.GitHubModelsModel = GetEditableComboValue(GitHubModelsModelCombo, "gpt-4.1");
 
         // Save Gemini settings
         var geminiKey = GeminiKeyBox.Password;
         _settings.GeminiApiKey = string.IsNullOrWhiteSpace(geminiKey) ? null : geminiKey;
-        _settings.GeminiModel = GetSelectedTag(GeminiModelCombo) ?? "gemini-2.5-flash";
+        _settings.GeminiModel = GetEditableComboValue(GeminiModelCombo, "gemini-2.5-flash");
 
         // Save Custom OpenAI settings
         var customEndpoint = CustomOpenAIEndpointBox.Text?.Trim() ?? "";
@@ -290,7 +329,7 @@ public sealed partial class SettingsPage : Page
         _settings.OllamaModel = OllamaModelCombo.Text?.Trim() ?? "llama3.2";
 
         // Save Built-in AI settings
-        _settings.BuiltInAIModel = GetSelectedTag(BuiltInModelCombo) ?? "llama-3.3-70b-versatile";
+        _settings.BuiltInAIModel = GetEditableComboValue(BuiltInModelCombo, "llama-3.3-70b-versatile");
 
         // Save Doubao settings
         var doubaoKey = DoubaoKeyBox.Password;

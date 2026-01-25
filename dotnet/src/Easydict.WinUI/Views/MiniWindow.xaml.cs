@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
@@ -22,6 +23,9 @@ namespace Easydict.WinUI.Views;
 /// </summary>
 public sealed partial class MiniWindow : Window
 {
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
     private LanguageDetectionService? _detectionService;
     // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
     // Other code may Cancel() but must NOT Dispose().
@@ -39,6 +43,7 @@ public sealed partial class MiniWindow : Window
     private bool _userChangedTargetLanguage;
     private bool _suppressTargetLanguageSelectionChanged;
     private TitleBarDragRegionHelper? _titleBarHelper;
+    private DateTime _lastShowTime = DateTime.MinValue;
 
     /// <summary>
     /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -299,6 +304,15 @@ public sealed partial class MiniWindow : Window
     {
         if (args.WindowActivationState == WindowActivationState.Deactivated)
         {
+            // Grace period: don't auto-close within 500ms of showing
+            // This prevents a race condition where the window is hidden immediately
+            // after being shown due to Windows returning focus to the previous app
+            var timeSinceShow = DateTime.UtcNow - _lastShowTime;
+            if (timeSinceShow.TotalMilliseconds < 500)
+            {
+                return;
+            }
+
             // Window lost focus
             if (!_isPinned && _settings.MiniWindowAutoClose && !_isClosing)
             {
@@ -856,7 +870,13 @@ public sealed partial class MiniWindow : Window
     public void ShowAndActivate()
     {
         _isClosing = false;
+        _lastShowTime = DateTime.UtcNow;
         _appWindow?.Show();
+
+        // Use Win32 SetForegroundWindow to forcefully bring window to front
+        var hWnd = WindowNative.GetWindowHandle(this);
+        SetForegroundWindow(hWnd);
+
         this.Activate();
         InputTextBox.Focus(FocusState.Programmatic);
     }

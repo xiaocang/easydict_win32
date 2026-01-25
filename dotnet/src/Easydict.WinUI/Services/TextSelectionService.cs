@@ -78,7 +78,8 @@ public static class TextSelectionService
 
     /// <summary>
     /// Gets the currently selected text using UI Automation API.
-    /// For Electron apps, uses clipboard method (Ctrl+C) as fallback since they don't support TextPattern.
+    /// For Electron apps, uses clipboard method (Ctrl+C) first since they don't support TextPattern,
+    /// with UIA as a fallback. For other apps, uses UIA directly.
     /// Returns null if no text is selected or if all methods fail.
     /// </summary>
     public static async Task<string?> GetSelectedTextAsync()
@@ -210,7 +211,7 @@ public static class TextSelectionService
 
             if (GetWindowThreadProcessId(hWnd, out uint processId) == 0) return false;
 
-            var process = Process.GetProcessById((int)processId);
+            using var process = Process.GetProcessById((int)processId);
             return ElectronProcessNames.Contains(process.ProcessName);
         }
         catch
@@ -231,7 +232,13 @@ public static class TextSelectionService
             var targetWindow = GetForegroundWindow();
             Debug.WriteLine($"[TextSelectionService] Target window handle: {targetWindow}");
 
-            var dispatcherQueue = App.MainWindow?.DispatcherQueue;
+            if (App.MainWindow == null)
+            {
+                Debug.WriteLine("[TextSelectionService] MainWindow not available");
+                return null;
+            }
+
+            var dispatcherQueue = App.MainWindow.DispatcherQueue;
             if (dispatcherQueue == null)
             {
                 Debug.WriteLine("[TextSelectionService] DispatcherQueue not available");
@@ -288,7 +295,6 @@ public static class TextSelectionService
             // 3. Attach to target thread and send Ctrl+C
             if (targetWindow != IntPtr.Zero)
             {
-                GetWindowThreadProcessId(targetWindow, out uint _);
                 var targetThreadId = GetWindowThreadProcessId(targetWindow, out _);
                 var currentThreadId = GetCurrentThreadId();
 
@@ -321,7 +327,7 @@ public static class TextSelectionService
                 await Task.Delay(150);
             }
 
-            // 3. Read copied text from clipboard
+            // 4. Read copied text from clipboard
             string? selectedText = null;
             var readResult = dispatcherQueue.TryEnqueue(() =>
             {
@@ -355,16 +361,28 @@ public static class TextSelectionService
 
             Debug.WriteLine($"[TextSelectionService] Clipboard changed: {originalClipboard != selectedText}");
 
-            // 4. Restore original clipboard content if different
-            if (originalClipboard != null && originalClipboard != selectedText)
+            // 5. Restore original clipboard content
+            // If original had text and it's different from what we copied, restore it
+            // If original was empty (null) and copy succeeded, clear clipboard to restore empty state
+            var shouldRestore = (originalClipboard != null && originalClipboard != selectedText) ||
+                                (originalClipboard == null && selectedText != null);
+            if (shouldRestore)
             {
                 dispatcherQueue.TryEnqueue(() =>
                 {
                     try
                     {
-                        var dataPackage = new DataPackage();
-                        dataPackage.SetText(originalClipboard);
-                        Clipboard.SetContent(dataPackage);
+                        if (originalClipboard != null)
+                        {
+                            var dataPackage = new DataPackage();
+                            dataPackage.SetText(originalClipboard);
+                            Clipboard.SetContent(dataPackage);
+                        }
+                        else
+                        {
+                            // Original clipboard was empty, restore to empty state
+                            Clipboard.Clear();
+                        }
                     }
                     catch (Exception ex)
                     {

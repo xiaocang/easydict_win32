@@ -12,6 +12,7 @@ public sealed partial class SettingsPage : Page
 {
     private readonly SettingsService _settings = SettingsService.Instance;
     private bool _isLoading = true; // Prevent change detection during initial load
+    private bool _handlersRegistered; // Guard to prevent duplicate event handler registration
 
     public SettingsPage()
     {
@@ -23,7 +24,11 @@ public sealed partial class SettingsPage : Page
     {
         _isLoading = true;
         LoadSettings();
-        RegisterChangeHandlers();
+        if (!_handlersRegistered)
+        {
+            RegisterChangeHandlers();
+            _handlersRegistered = true;
+        }
         _isLoading = false;
     }
 
@@ -81,6 +86,23 @@ public sealed partial class SettingsPage : Page
         // CheckBox changes
         DeepLFreeCheck.Checked += OnSettingChanged;
         DeepLFreeCheck.Unchecked += OnSettingChanged;
+
+        // Service selection checkboxes for each window
+        RegisterServiceCheckBoxHandlers(MainWindowServicesPanel);
+        RegisterServiceCheckBoxHandlers(MiniWindowServicesPanel);
+        RegisterServiceCheckBoxHandlers(FixedWindowServicesPanel);
+    }
+
+    /// <summary>
+    /// Register change handlers for all checkboxes in a panel.
+    /// </summary>
+    private void RegisterServiceCheckBoxHandlers(StackPanel panel)
+    {
+        foreach (var checkBox in panel.Children.OfType<CheckBox>())
+        {
+            checkBox.Checked += OnSettingChanged;
+            checkBox.Unchecked += OnSettingChanged;
+        }
     }
 
     /// <summary>
@@ -168,6 +190,23 @@ public sealed partial class SettingsPage : Page
         // Hotkeys
         ShowHotkeyBox.Text = _settings.ShowWindowHotkey;
         TranslateHotkeyBox.Text = _settings.TranslateSelectionHotkey;
+
+        // Enabled services for each window
+        LoadServiceCheckboxes(MainWindowServicesPanel, _settings.MainWindowEnabledServices);
+        LoadServiceCheckboxes(MiniWindowServicesPanel, _settings.MiniWindowEnabledServices);
+        LoadServiceCheckboxes(FixedWindowServicesPanel, _settings.FixedWindowEnabledServices);
+    }
+
+    /// <summary>
+    /// Load enabled services into checkboxes for a window panel.
+    /// </summary>
+    private static void LoadServiceCheckboxes(StackPanel panel, List<string> enabledServices)
+    {
+        foreach (var checkBox in panel.Children.OfType<CheckBox>().Where(cb => cb.Tag is string))
+        {
+            var serviceId = (string)checkBox.Tag!;
+            checkBox.IsChecked = enabledServices.Contains(serviceId);
+        }
     }
 
     private static void SelectComboByTag(ComboBox combo, string tag)
@@ -382,6 +421,16 @@ public sealed partial class SettingsPage : Page
         _settings.ShowWindowHotkey = ShowHotkeyBox.Text;
         _settings.TranslateSelectionHotkey = TranslateHotkeyBox.Text;
 
+        // Save enabled services for each window
+        _settings.MainWindowEnabledServices = GetEnabledServicesFromPanel(MainWindowServicesPanel);
+        _settings.MiniWindowEnabledServices = GetEnabledServicesFromPanel(MiniWindowServicesPanel);
+        _settings.FixedWindowEnabledServices = GetEnabledServicesFromPanel(FixedWindowServicesPanel);
+
+        // Validate that at least one service is enabled for each window (updates UI too)
+        EnsureDefaultServiceEnabled(MainWindowServicesPanel, _settings.MainWindowEnabledServices);
+        EnsureDefaultServiceEnabled(MiniWindowServicesPanel, _settings.MiniWindowEnabledServices);
+        EnsureDefaultServiceEnabled(FixedWindowServicesPanel, _settings.FixedWindowEnabledServices);
+
         // Persist to storage
         _settings.Save();
 
@@ -484,6 +533,39 @@ public sealed partial class SettingsPage : Page
         finally
         {
             RefreshOllamaButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Get list of enabled services from a panel's checkboxes.
+    /// </summary>
+    private static List<string> GetEnabledServicesFromPanel(StackPanel panel)
+    {
+        return panel.Children
+            .OfType<CheckBox>()
+            .Where(cb => cb.Tag is string && cb.IsChecked == true)
+            .Select(cb => (string)cb.Tag!)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Ensure at least Google is checked when the panel has no services selected.
+    /// Updates both the settings and the UI checkbox.
+    /// </summary>
+    private static void EnsureDefaultServiceEnabled(StackPanel panel, List<string> services)
+    {
+        if (services.Count > 0) return;
+
+        services.Add("google");
+
+        // Also update the UI to reflect this default
+        var googleCheckBox = panel.Children
+            .OfType<CheckBox>()
+            .FirstOrDefault(cb => cb.Tag as string == "google");
+
+        if (googleCheckBox != null)
+        {
+            googleCheckBox.IsChecked = true;
         }
     }
 }

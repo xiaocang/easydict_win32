@@ -234,30 +234,14 @@ public sealed partial class FixedWindow : Window
         // Get enabled services from Fixed Window settings
         var enabledServices = _settings.FixedWindowEnabledServices;
 
-        // Service display names mapping
-        var serviceNames = new Dictionary<string, string>
-        {
-            ["google"] = "Google Translate",
-            ["deepl"] = "DeepL",
-            ["bing"] = "Microsoft Bing",
-            ["apple"] = "Apple Translate",
-            ["baidu"] = "Baidu",
-            ["youdao"] = "Youdao",
-            ["openai"] = "OpenAI",
-            ["ollama"] = "Ollama",
-            ["builtin"] = "Built-in AI",
-            ["deepseek"] = "DeepSeek",
-            ["groq"] = "Groq",
-            ["zhipu"] = "Zhipu (智谱)",
-            ["github"] = "GitHub Models",
-            ["custom-openai"] = "Custom OpenAI",
-            ["gemini"] = "Gemini"
-        };
+        // Get display names from TranslationManager (single source of truth)
+        var manager = TranslationManagerService.Instance.Manager;
 
         foreach (var serviceId in enabledServices)
         {
-            var displayName = serviceNames.TryGetValue(serviceId, out var name)
-                ? name
+            // Use service-provided DisplayName, fallback to serviceId if not found
+            var displayName = manager.Services.TryGetValue(serviceId, out var service)
+                ? service.DisplayName
                 : serviceId;
 
             var result = new ServiceQueryResult

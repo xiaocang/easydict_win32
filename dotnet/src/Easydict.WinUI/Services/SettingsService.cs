@@ -118,6 +118,12 @@ public sealed class SettingsService
     /// </summary>
     public List<string> MiniWindowEnabledServices { get; set; } = ["google"];
 
+    /// <summary>
+    /// List of enabled translation services for MainWindow.
+    /// Each service result is displayed in a collapsible panel.
+    /// </summary>
+    public List<string> MainWindowEnabledServices { get; set; } = ["google"];
+
     // Fixed window settings
     public string ShowFixedWindowHotkey { get; set; } = "Ctrl+Alt+F";
     public double FixedWindowXDips { get; set; } = 0;
@@ -292,6 +298,7 @@ public sealed class SettingsService
         MiniWindowHeightDips = GetValue(nameof(MiniWindowHeightDips), 200.0);
         MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
         MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), ["google"]);
+        MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), ["google"]);
 
         // Fixed window settings
         ShowFixedWindowHotkey = GetValue(nameof(ShowFixedWindowHotkey), "Ctrl+Alt+F");
@@ -389,6 +396,7 @@ public sealed class SettingsService
         _settings[nameof(MiniWindowHeightDips)] = MiniWindowHeightDips;
         _settings[nameof(MiniWindowIsPinned)] = MiniWindowIsPinned;
         _settings[nameof(MiniWindowEnabledServices)] = MiniWindowEnabledServices;
+        _settings[nameof(MainWindowEnabledServices)] = MainWindowEnabledServices;
 
         // Fixed window settings
         _settings[nameof(ShowFixedWindowHotkey)] = ShowFixedWindowHotkey;

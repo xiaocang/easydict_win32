@@ -285,14 +285,10 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         var result = text.Trim();
 
         // Remove surrounding quotes if present
-        if (result.Length >= 2)
+        if (result.Length >= 2 &&
+            result.StartsWith('"') && result.EndsWith('"'))
         {
-            if ((result.StartsWith('"') && result.EndsWith('"')) ||
-                (result.StartsWith('\"') && result.EndsWith('\"')) ||
-                (result.StartsWith('"') && result.EndsWith('"')))
-            {
-                result = result[1..^1].Trim();
-            }
+            result = result[1..^1].Trim();
         }
 
         return result;

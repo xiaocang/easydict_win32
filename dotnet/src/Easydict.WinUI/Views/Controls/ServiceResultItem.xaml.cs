@@ -17,6 +17,8 @@ public sealed partial class ServiceResultItem : UserControl
 {
     private ServiceQueryResult? _serviceResult;
     private bool _isHovering;
+    private string? _cachedServiceId;
+    private BitmapImage? _cachedIcon;
 
     /// <summary>
     /// Event raised when the expand/collapse state is toggled.
@@ -67,15 +69,23 @@ public sealed partial class ServiceResultItem : UserControl
         // Service info
         ServiceNameText.Text = _serviceResult.ServiceDisplayName;
 
-        // Try to load service icon
-        try
+        // Load service icon only when ServiceId changes (avoid repeated allocations during streaming)
+        if (_cachedServiceId != _serviceResult.ServiceId)
         {
-            ServiceIcon.Source = new BitmapImage(new Uri(_serviceResult.ServiceIconPath));
-        }
-        catch
-        {
-            // Icon not found, hide it
-            ServiceIcon.Visibility = Visibility.Collapsed;
+            _cachedServiceId = _serviceResult.ServiceId;
+            try
+            {
+                _cachedIcon = new BitmapImage(new Uri(_serviceResult.ServiceIconPath));
+                ServiceIcon.Source = _cachedIcon;
+                ServiceIcon.Visibility = Visibility.Visible;
+            }
+            catch
+            {
+                // Icon not found, hide it and release previous image reference
+                _cachedIcon = null;
+                ServiceIcon.Source = null;
+                ServiceIcon.Visibility = Visibility.Collapsed;
+            }
         }
 
         // Loading state
@@ -92,15 +102,26 @@ public sealed partial class ServiceResultItem : UserControl
         // Arrow direction
         ArrowIcon.Glyph = _serviceResult.ArrowGlyph;
 
-        // Content visibility
-        var showContent = _serviceResult.IsExpanded && _serviceResult.HasResult;
+        // Content visibility: show during streaming (even if text is empty) or when result available
+        var showContent = _serviceResult.IsExpanded &&
+            (_serviceResult.HasResult || _serviceResult.IsStreaming);
         ContentArea.Visibility = showContent ? Visibility.Visible : Visibility.Collapsed;
 
         // Update header corner radius based on expand state
         HeaderBar.CornerRadius = showContent ? new CornerRadius(6, 6, 0, 0) : new CornerRadius(6);
 
-        // Result text
-        if (_serviceResult.Result != null)
+        // Result text - handle streaming state
+        if (_serviceResult.IsStreaming)
+        {
+            // Show streaming text or placeholder while waiting for first chunk
+            ResultText.Text = string.IsNullOrEmpty(_serviceResult.StreamingText)
+                ? "Waiting for response..."
+                : _serviceResult.StreamingText;
+            ResultText.Visibility = Visibility.Visible;
+            ErrorText.Visibility = Visibility.Collapsed;
+            CopyButton.Visibility = Visibility.Collapsed; // Don't show copy during streaming
+        }
+        else if (_serviceResult.Result != null)
         {
             ResultText.Text = _serviceResult.Result.TranslatedText;
             ResultText.Visibility = Visibility.Visible;

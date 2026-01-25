@@ -158,10 +158,18 @@ jobs:
       - name: Create ZIP archive
         shell: pwsh
         run: |
-          # Exclude debug symbols (.pdb) to reduce artifact size
           $source = "dotnet/publish/${{ matrix.platform }}"
           $destination = "easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip"
-          Get-ChildItem -Path $source -Exclude "*.pdb" | Compress-Archive -DestinationPath $destination
+          $tempDir = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP\zip-staging" -Force
+
+          # Copy files excluding .pdb to temp directory
+          Get-ChildItem -Path $source -Exclude "*.pdb" | Copy-Item -Destination $tempDir -Recurse
+
+          # Create ZIP from temp directory (ensures relative paths in archive)
+          Compress-Archive -Path "$tempDir\*" -DestinationPath $destination
+
+          # Cleanup temp directory
+          Remove-Item -Path $tempDir -Recurse -Force
 
       - name: Upload MSIX to Release
         uses: softprops/action-gh-release@v1

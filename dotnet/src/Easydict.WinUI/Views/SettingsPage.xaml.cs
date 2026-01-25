@@ -40,6 +40,11 @@ public sealed partial class SettingsPage : Page
         OpenAIModelCombo.SelectionChanged += OnSettingChanged;
         OllamaModelCombo.SelectionChanged += OnSettingChanged;
         BuiltInModelCombo.SelectionChanged += OnSettingChanged;
+        DeepSeekModelCombo.SelectionChanged += OnSettingChanged;
+        GroqModelCombo.SelectionChanged += OnSettingChanged;
+        ZhipuModelCombo.SelectionChanged += OnSettingChanged;
+        GitHubModelsModelCombo.SelectionChanged += OnSettingChanged;
+        GeminiModelCombo.SelectionChanged += OnSettingChanged;
 
         // ToggleSwitch changes
         AutoSelectTargetToggle.Toggled += OnSettingChanged;
@@ -49,7 +54,7 @@ public sealed partial class SettingsPage : Page
         ProxyEnabledToggle.Toggled += OnSettingChanged;
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
 
-        // TextBox/PasswordBox changes
+        // TextBox/PasswordBox changes - existing
         DeepLKeyBox.PasswordChanged += OnSettingChanged;
         OpenAIKeyBox.PasswordChanged += OnSettingChanged;
         OpenAIEndpointBox.TextChanged += OnSettingChanged;
@@ -57,6 +62,21 @@ public sealed partial class SettingsPage : Page
         ProxyUriBox.TextChanged += OnSettingChanged;
         ShowHotkeyBox.TextChanged += OnSettingChanged;
         TranslateHotkeyBox.TextChanged += OnSettingChanged;
+
+        // TextBox/PasswordBox changes - new services
+        DeepSeekKeyBox.PasswordChanged += OnSettingChanged;
+        GroqKeyBox.PasswordChanged += OnSettingChanged;
+        ZhipuKeyBox.PasswordChanged += OnSettingChanged;
+        GitHubModelsTokenBox.PasswordChanged += OnSettingChanged;
+        GeminiKeyBox.PasswordChanged += OnSettingChanged;
+        CustomOpenAIEndpointBox.TextChanged += OnSettingChanged;
+        CustomOpenAIKeyBox.PasswordChanged += OnSettingChanged;
+        CustomOpenAIModelBox.TextChanged += OnSettingChanged;
+        DoubaoKeyBox.PasswordChanged += OnSettingChanged;
+        DoubaoEndpointBox.TextChanged += OnSettingChanged;
+        DoubaoModelBox.TextChanged += OnSettingChanged;
+        CaiyunKeyBox.PasswordChanged += OnSettingChanged;
+        NiuTransKeyBox.PasswordChanged += OnSettingChanged;
 
         // CheckBox changes
         DeepLFreeCheck.Checked += OnSettingChanged;
@@ -83,7 +103,7 @@ public sealed partial class SettingsPage : Page
         SelectComboByTag(SecondLanguageCombo, _settings.SecondLanguage);
         AutoSelectTargetToggle.IsOn = _settings.AutoSelectTargetLanguage;
 
-        // API keys
+        // DeepL settings
         DeepLKeyBox.Password = _settings.DeepLApiKey ?? string.Empty;
         DeepLFreeCheck.IsChecked = _settings.DeepLUseFreeApi;
 
@@ -92,12 +112,48 @@ public sealed partial class SettingsPage : Page
         OpenAIEndpointBox.Text = _settings.OpenAIEndpoint;
         SelectComboByTag(OpenAIModelCombo, _settings.OpenAIModel);
 
+        // DeepSeek settings
+        DeepSeekKeyBox.Password = _settings.DeepSeekApiKey ?? string.Empty;
+        SelectComboByTag(DeepSeekModelCombo, _settings.DeepSeekModel);
+
+        // Groq settings
+        GroqKeyBox.Password = _settings.GroqApiKey ?? string.Empty;
+        SelectComboByTag(GroqModelCombo, _settings.GroqModel);
+
+        // Zhipu settings
+        ZhipuKeyBox.Password = _settings.ZhipuApiKey ?? string.Empty;
+        SelectComboByTag(ZhipuModelCombo, _settings.ZhipuModel);
+
+        // GitHub Models settings
+        GitHubModelsTokenBox.Password = _settings.GitHubModelsToken ?? string.Empty;
+        SelectComboByTag(GitHubModelsModelCombo, _settings.GitHubModelsModel);
+
+        // Gemini settings
+        GeminiKeyBox.Password = _settings.GeminiApiKey ?? string.Empty;
+        SelectComboByTag(GeminiModelCombo, _settings.GeminiModel);
+
+        // Custom OpenAI settings
+        CustomOpenAIEndpointBox.Text = _settings.CustomOpenAIEndpoint;
+        CustomOpenAIKeyBox.Password = _settings.CustomOpenAIApiKey ?? string.Empty;
+        CustomOpenAIModelBox.Text = _settings.CustomOpenAIModel;
+
         // Ollama settings
         OllamaEndpointBox.Text = _settings.OllamaEndpoint;
         OllamaModelCombo.Text = _settings.OllamaModel;
 
         // Built-in AI settings
         SelectComboByTag(BuiltInModelCombo, _settings.BuiltInAIModel);
+
+        // Doubao settings
+        DoubaoKeyBox.Password = _settings.DoubaoApiKey ?? string.Empty;
+        DoubaoEndpointBox.Text = _settings.DoubaoEndpoint;
+        DoubaoModelBox.Text = _settings.DoubaoModel;
+
+        // Caiyun settings
+        CaiyunKeyBox.Password = _settings.CaiyunApiKey ?? string.Empty;
+
+        // NiuTrans settings
+        NiuTransKeyBox.Password = _settings.NiuTransApiKey ?? string.Empty;
 
         // HTTP Proxy settings
         ProxyEnabledToggle.IsOn = _settings.ProxyEnabled;
@@ -179,9 +235,9 @@ public sealed partial class SettingsPage : Page
         _settings.SecondLanguage = secondLang;
         _settings.AutoSelectTargetLanguage = AutoSelectTargetToggle.IsOn;
 
-        // Save API keys
-        var apiKey = DeepLKeyBox.Password;
-        _settings.DeepLApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
+        // Save DeepL settings
+        var deepLKey = DeepLKeyBox.Password;
+        _settings.DeepLApiKey = string.IsNullOrWhiteSpace(deepLKey) ? null : deepLKey;
         _settings.DeepLUseFreeApi = DeepLFreeCheck.IsChecked ?? true;
 
         // Save OpenAI settings
@@ -193,6 +249,39 @@ public sealed partial class SettingsPage : Page
             : openAIEndpoint;
         _settings.OpenAIModel = GetSelectedTag(OpenAIModelCombo) ?? "gpt-4o-mini";
 
+        // Save DeepSeek settings
+        var deepSeekKey = DeepSeekKeyBox.Password;
+        _settings.DeepSeekApiKey = string.IsNullOrWhiteSpace(deepSeekKey) ? null : deepSeekKey;
+        _settings.DeepSeekModel = GetSelectedTag(DeepSeekModelCombo) ?? "deepseek-chat";
+
+        // Save Groq settings
+        var groqKey = GroqKeyBox.Password;
+        _settings.GroqApiKey = string.IsNullOrWhiteSpace(groqKey) ? null : groqKey;
+        _settings.GroqModel = GetSelectedTag(GroqModelCombo) ?? "llama-3.3-70b-versatile";
+
+        // Save Zhipu settings
+        var zhipuKey = ZhipuKeyBox.Password;
+        _settings.ZhipuApiKey = string.IsNullOrWhiteSpace(zhipuKey) ? null : zhipuKey;
+        _settings.ZhipuModel = GetSelectedTag(ZhipuModelCombo) ?? "glm-4-flash-250414";
+
+        // Save GitHub Models settings
+        var githubToken = GitHubModelsTokenBox.Password;
+        _settings.GitHubModelsToken = string.IsNullOrWhiteSpace(githubToken) ? null : githubToken;
+        _settings.GitHubModelsModel = GetSelectedTag(GitHubModelsModelCombo) ?? "gpt-4.1";
+
+        // Save Gemini settings
+        var geminiKey = GeminiKeyBox.Password;
+        _settings.GeminiApiKey = string.IsNullOrWhiteSpace(geminiKey) ? null : geminiKey;
+        _settings.GeminiModel = GetSelectedTag(GeminiModelCombo) ?? "gemini-2.5-flash";
+
+        // Save Custom OpenAI settings
+        var customEndpoint = CustomOpenAIEndpointBox.Text?.Trim() ?? "";
+        _settings.CustomOpenAIEndpoint = customEndpoint;
+        var customKey = CustomOpenAIKeyBox.Password;
+        _settings.CustomOpenAIApiKey = string.IsNullOrWhiteSpace(customKey) ? null : customKey;
+        var customModel = CustomOpenAIModelBox.Text?.Trim();
+        _settings.CustomOpenAIModel = string.IsNullOrWhiteSpace(customModel) ? "gpt-3.5-turbo" : customModel;
+
         // Save Ollama settings
         var ollamaEndpoint = OllamaEndpointBox.Text?.Trim();
         _settings.OllamaEndpoint = string.IsNullOrWhiteSpace(ollamaEndpoint)
@@ -202,6 +291,26 @@ public sealed partial class SettingsPage : Page
 
         // Save Built-in AI settings
         _settings.BuiltInAIModel = GetSelectedTag(BuiltInModelCombo) ?? "llama-3.3-70b-versatile";
+
+        // Save Doubao settings
+        var doubaoKey = DoubaoKeyBox.Password;
+        _settings.DoubaoApiKey = string.IsNullOrWhiteSpace(doubaoKey) ? null : doubaoKey;
+        var doubaoEndpoint = DoubaoEndpointBox.Text?.Trim();
+        _settings.DoubaoEndpoint = string.IsNullOrWhiteSpace(doubaoEndpoint)
+            ? "https://ark.cn-beijing.volces.com/api/v3/responses"
+            : doubaoEndpoint;
+        var doubaoModel = DoubaoModelBox.Text?.Trim();
+        _settings.DoubaoModel = string.IsNullOrWhiteSpace(doubaoModel)
+            ? "doubao-seed-translation-250915"
+            : doubaoModel;
+
+        // Save Caiyun settings
+        var caiyunKey = CaiyunKeyBox.Password;
+        _settings.CaiyunApiKey = string.IsNullOrWhiteSpace(caiyunKey) ? null : caiyunKey;
+
+        // Save NiuTrans settings
+        var niutransKey = NiuTransKeyBox.Password;
+        _settings.NiuTransApiKey = string.IsNullOrWhiteSpace(niutransKey) ? null : niutransKey;
 
         // Save HTTP Proxy settings with validation
         _settings.ProxyEnabled = ProxyEnabledToggle.IsOn;

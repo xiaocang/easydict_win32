@@ -37,6 +37,7 @@ public sealed partial class FixedWindow : Window
     private volatile bool _isClosing;
     private bool _userChangedTargetLanguage;
     private bool _suppressTargetLanguageSelectionChanged;
+    private TitleBarDragRegionHelper? _titleBarHelper;
 
     /// <summary>
     /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -75,6 +76,18 @@ public sealed partial class FixedWindow : Window
         {
             content.Loaded += (s, e) => _isLoaded = true;
         }
+
+        // Set up title bar drag regions for unpackaged WinUI 3 apps
+        if (_appWindow != null)
+        {
+            _titleBarHelper = new TitleBarDragRegionHelper(
+                this,
+                _appWindow,
+                TitleBarRegion,
+                new FrameworkElement[] { CloseButton },
+                "FixedWindow");
+            _titleBarHelper.Initialize();
+        }
     }
 
     /// <summary>
@@ -102,8 +115,9 @@ public sealed partial class FixedWindow : Window
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
 
-        // Set the header grid as the draggable title bar region
-        this.SetTitleBar(TitleBarRegion);
+        // Note: SetTitleBar() doesn't work reliably in unpackaged WinUI 3 apps.
+        // We use InputNonClientPointerSource.SetRegionRects() instead to define
+        // passthrough regions for interactive controls. The rest becomes draggable.
 
         // Set window size from Fixed Window settings
         var scale = DpiHelper.GetScaleFactorForWindow(WindowNative.GetWindowHandle(this));
@@ -333,6 +347,10 @@ public sealed partial class FixedWindow : Window
 
     private async Task CleanupResourcesAsync()
     {
+        // Clean up title bar drag region helper
+        _titleBarHelper?.Dispose();
+        _titleBarHelper = null;
+
         CancelCurrentQuery();
 
         var task = _currentQueryTask;
@@ -795,6 +813,7 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     public void ShowAndActivate()
     {
+        _isClosing = false;
         _appWindow?.Show();
         this.Activate();
         InputTextBox.Focus(FocusState.Programmatic);

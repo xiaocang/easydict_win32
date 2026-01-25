@@ -183,6 +183,12 @@ public sealed class TrayIconService : IDisposable
     {
         var menu = new MenuFlyout();
 
+        // Set MinWidth to fit the longest menu item text "Fixed Window (Ctrl+Alt+F)"
+        // This ensures proper width on first open (H.NotifyIcon SecondWindow mode quirk)
+        var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
+        presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 250d));
+        menu.MenuFlyoutPresenterStyle = presenterStyle;
+
         var showItem = new MenuFlyoutItem { Text = "Show Easydict" };
         showItem.Click += (_, _) => ShowWindow();
         menu.Items.Add(showItem);

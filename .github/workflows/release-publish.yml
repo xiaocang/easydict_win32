@@ -10,6 +10,15 @@ name: Release and Publish
 # For pre-release versions (v1.0.0-beta.1):
 #   - Check "Set as a pre-release" when publishing
 #   - WinGet submission will be skipped automatically
+#
+# MSIX Signing:
+#   For production releases, configure a stable signing certificate:
+#   1. Generate a code signing certificate (or purchase from a CA)
+#   2. Export to PFX and base64 encode: base64 -w 0 cert.pfx > cert.b64
+#   3. Add secrets in GitHub: Settings > Secrets > Actions
+#      - MSIX_CERTIFICATE_BASE64: The base64-encoded PFX file
+#      - MSIX_CERTIFICATE_PASSWORD: The PFX password
+#   If secrets are not configured, a self-signed certificate will be used.
 
 on:
   release:
@@ -92,31 +101,43 @@ jobs:
             -p:Version=${{ steps.version.outputs.VERSION }} `
             -p:Platform=${{ matrix.platform }}
 
-      # Generate self-signed certificate for MSIX signing
-      - name: Generate signing certificate
+      # Setup signing certificate (use stable cert from secrets if available)
+      - name: Setup signing certificate
         id: cert
         shell: pwsh
+        env:
+          MSIX_CERT_BASE64: ${{ secrets.MSIX_CERTIFICATE_BASE64 }}
+          MSIX_CERT_PASSWORD: ${{ secrets.MSIX_CERTIFICATE_PASSWORD }}
         run: |
-          # Create certificate for signing
-          $certPassword = [System.Guid]::NewGuid().ToString()
           $certPath = "${{ github.workspace }}\signing.pfx"
 
-          # Generate self-signed certificate
-          $cert = New-SelfSignedCertificate `
-            -Type Custom `
-            -Subject "CN=xiaocang" `
-            -KeyUsage DigitalSignature `
-            -FriendlyName "Easydict Development Certificate" `
-            -CertStoreLocation "Cert:\CurrentUser\My" `
-            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          if ($env:MSIX_CERT_BASE64 -and $env:MSIX_CERT_PASSWORD) {
+            # Use stable certificate from secrets
+            Write-Host "Using stable signing certificate from secrets"
+            $certBytes = [Convert]::FromBase64String($env:MSIX_CERT_BASE64)
+            [IO.File]::WriteAllBytes($certPath, $certBytes)
+            $certPassword = $env:MSIX_CERT_PASSWORD
+          } else {
+            # Generate self-signed certificate as fallback
+            Write-Host "No stable certificate configured, generating self-signed certificate"
+            $certPassword = [System.Guid]::NewGuid().ToString()
 
-          # Export to PFX
-          $certPasswordSecure = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
-          Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $certPasswordSecure
+            $cert = New-SelfSignedCertificate `
+              -Type Custom `
+              -Subject "CN=xiaocang" `
+              -KeyUsage DigitalSignature `
+              -FriendlyName "Easydict Development Certificate" `
+              -CertStoreLocation "Cert:\CurrentUser\My" `
+              -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
 
+            $certPasswordSecure = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
+            Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $certPasswordSecure | Out-Null
+          }
+
+          # Output certificate path (password is passed via env var to avoid logging)
           echo "CERT_PATH=$certPath" >> $env:GITHUB_OUTPUT
+          # Store password in env file for subsequent steps (masked in logs)
           echo "CERT_PASSWORD=$certPassword" >> $env:GITHUB_OUTPUT
-          echo "CERT_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_OUTPUT
 
       # Update manifest version
       - name: Update manifest version

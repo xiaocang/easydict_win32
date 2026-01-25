@@ -15,6 +15,10 @@ CERT_PATH ?= ./certs/dev.pfx
 # Default version for local builds
 VERSION ?= 0.1.0.0
 
+# Manifest paths
+MANIFEST_SRC := src/Easydict.WinUI/Package.appxmanifest
+MANIFEST_TMP := $(shell mktemp -u).appxmanifest
+
 # Default target
 all: build
 
@@ -87,7 +91,7 @@ ifndef CERT_PASSWORD
 endif
 	@mkdir -p certs
 	@echo "Generating certificate..."
-	winapp cert generate --publisher "CN=xiaocang" --output $(CERT_PATH) --password "$(CERT_PASSWORD)"
+	@winapp cert generate --publisher "CN=xiaocang" --output $(CERT_PATH) --password "$(CERT_PASSWORD)"
 	@echo "Certificate saved to: $(CERT_PATH)"
 	@echo "Remember your password for cert-install and sign targets."
 
@@ -97,44 +101,52 @@ cert-install:
 ifndef CERT_PASSWORD
 	$(error CERT_PASSWORD is required. Usage: make cert-install CERT_PASSWORD=yourpassword)
 endif
-	winapp cert install --certificate $(CERT_PATH) --password "$(CERT_PASSWORD)"
+	@winapp cert install --certificate $(CERT_PATH) --password "$(CERT_PASSWORD)"
 
-# Helper function to update manifest for specific architecture
-define update_manifest
-	@echo "Updating manifest for $(1) architecture..."
-	@sed -i 's/ProcessorArchitecture="[^"]*"/ProcessorArchitecture="$(1)"/' src/Easydict.WinUI/Package.appxmanifest
-	@sed -i 's/Version="[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*"/Version="$(VERSION)"/' src/Easydict.WinUI/Package.appxmanifest
+# Helper function to create temp manifest with specific architecture and version
+# Usage: $(call create_temp_manifest,ARCH,TEMP_FILE)
+define create_temp_manifest
+	@echo "Creating temp manifest for $(1) architecture..."
+	@cp $(MANIFEST_SRC) $(2)
+	@sed -i 's/ProcessorArchitecture="[^"]*"/ProcessorArchitecture="$(1)"/' $(2)
+	@sed -i 's/Version="[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*"/Version="$(VERSION)"/' $(2)
 endef
 
 # Create MSIX package for x64
 msix-x64: publish-x64
 	@mkdir -p msix
-	$(call update_manifest,x64)
+	$(eval TMP_MANIFEST := $(shell mktemp -u).appxmanifest)
+	$(call create_temp_manifest,x64,$(TMP_MANIFEST))
 	winapp pack \
 		--input ./publish/x64 \
 		--output ./msix/Easydict-x64.msix \
-		--manifest src/Easydict.WinUI/Package.appxmanifest \
+		--manifest $(TMP_MANIFEST) \
 		--verbose
+	@rm -f $(TMP_MANIFEST)
 
 # Create MSIX package for x86
 msix-x86: publish-x86
 	@mkdir -p msix
-	$(call update_manifest,x86)
+	$(eval TMP_MANIFEST := $(shell mktemp -u).appxmanifest)
+	$(call create_temp_manifest,x86,$(TMP_MANIFEST))
 	winapp pack \
 		--input ./publish/x86 \
 		--output ./msix/Easydict-x86.msix \
-		--manifest src/Easydict.WinUI/Package.appxmanifest \
+		--manifest $(TMP_MANIFEST) \
 		--verbose
+	@rm -f $(TMP_MANIFEST)
 
 # Create MSIX package for ARM64
 msix-arm64: publish-arm64
 	@mkdir -p msix
-	$(call update_manifest,arm64)
+	$(eval TMP_MANIFEST := $(shell mktemp -u).appxmanifest)
+	$(call create_temp_manifest,arm64,$(TMP_MANIFEST))
 	winapp pack \
 		--input ./publish/arm64 \
 		--output ./msix/Easydict-arm64.msix \
-		--manifest src/Easydict.WinUI/Package.appxmanifest \
+		--manifest $(TMP_MANIFEST) \
 		--verbose
+	@rm -f $(TMP_MANIFEST)
 
 # Create MSIX package for current platform (default: x64)
 msix: msix-x64
@@ -154,7 +166,7 @@ endif
 ifndef MSIX
 	$(error MSIX is required. Usage: make sign CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword MSIX=./msix/Easydict-x64.msix)
 endif
-	winapp sign \
+	@winapp sign \
 		--input $(MSIX) \
 		--certificate $(CERT) \
 		--password "$(CERT_PASSWORD)" \
@@ -169,9 +181,9 @@ endif
 ifndef CERT_PASSWORD
 	$(error CERT_PASSWORD is required. Usage: make sign-all CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword)
 endif
-	winapp sign --input ./msix/Easydict-x64.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
-	winapp sign --input ./msix/Easydict-x86.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
-	winapp sign --input ./msix/Easydict-arm64.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
+	@winapp sign --input ./msix/Easydict-x64.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
+	@winapp sign --input ./msix/Easydict-x86.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
+	@winapp sign --input ./msix/Easydict-arm64.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
 
 # ============================================================
 # Run application

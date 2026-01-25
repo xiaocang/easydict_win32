@@ -8,7 +8,7 @@ app:
   description: Cross-platform dictionary and translation app
   publisher: CN=xiaocang
   publisherDisplayName: xiaocang
-  version: 0.1.0
+  version: 0.1.0.0
 
 # Package identity for MSIX
 identity:

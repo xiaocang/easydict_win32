@@ -67,8 +67,9 @@ jobs:
           MSIX_VERSION="${VERSION}"
           # If version has suffix like -beta.1, strip it for MSIX
           MSIX_VERSION=$(echo "$MSIX_VERSION" | sed 's/-.*$//')
-          # Ensure 4-part version
-          if [[ ! "$MSIX_VERSION" =~ \.[0-9]+$ ]]; then
+          # Ensure 4-part version by counting dots
+          IFS='.' read -r -a parts <<< "$MSIX_VERSION"
+          if [[ ${#parts[@]} -eq 3 ]]; then
             MSIX_VERSION="${MSIX_VERSION}.0"
           fi
           echo "MSIX_VERSION=$MSIX_VERSION" >> $GITHUB_OUTPUT

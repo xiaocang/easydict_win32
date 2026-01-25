@@ -3,7 +3,17 @@
 # Optional: WinApp CLI (for MSIX packaging)
 
 .PHONY: all build build-release build-debug test clean restore run help
-.PHONY: msix msix-x64 msix-x86 msix-arm64 cert-generate cert-install sign
+.PHONY: test-translation test-winui test-verbose run-release
+.PHONY: publish publish-x64 publish-x86 publish-arm64
+.PHONY: msix msix-x64 msix-x86 msix-arm64 msix-all
+.PHONY: cert-generate cert-install sign sign-all
+
+# Default certificate password (override with: make cert-generate CERT_PASSWORD=yourpassword)
+CERT_PASSWORD ?= $(shell cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1 2>/dev/null || echo "dev-$(shell date +%s)")
+CERT_PATH ?= ./certs/dev.pfx
+
+# Default version for local builds
+VERSION ?= 0.1.0.0
 
 # Default target
 all: build
@@ -70,16 +80,34 @@ publish-arm64: restore
 # ============================================================
 
 # Generate development certificate
+# Usage: make cert-generate [CERT_PASSWORD=yourpassword]
 cert-generate:
-	winapp cert generate --publisher "CN=xiaocang" --output ./certs/dev.pfx --password dev123
+	@mkdir -p certs
+	@echo "Generating certificate with password (save this): $(CERT_PASSWORD)"
+	winapp cert generate --publisher "CN=xiaocang" --output $(CERT_PATH) --password "$(CERT_PASSWORD)"
+	@echo "Certificate saved to: $(CERT_PATH)"
 
 # Install certificate to local machine (requires admin)
+# Usage: make cert-install CERT_PASSWORD=yourpassword
 cert-install:
-	winapp cert install --certificate ./certs/dev.pfx --password dev123
+	@if [ -z "$(CERT_PASSWORD)" ] || [ "$(CERT_PASSWORD)" = "dev-" ]; then \
+		echo "Error: CERT_PASSWORD is required"; \
+		echo "Usage: make cert-install CERT_PASSWORD=yourpassword"; \
+		exit 1; \
+	fi
+	winapp cert install --certificate $(CERT_PATH) --password "$(CERT_PASSWORD)"
+
+# Helper function to update manifest for specific architecture
+define update_manifest
+	@echo "Updating manifest for $(1) architecture..."
+	@sed -i 's/ProcessorArchitecture="[^"]*"/ProcessorArchitecture="$(1)"/' src/Easydict.WinUI/Package.appxmanifest
+	@sed -i 's/Version="[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*"/Version="$(VERSION)"/' src/Easydict.WinUI/Package.appxmanifest
+endef
 
 # Create MSIX package for x64
 msix-x64: publish-x64
 	@mkdir -p msix
+	$(call update_manifest,x64)
 	winapp pack \
 		--input ./publish/x64 \
 		--output ./msix/Easydict-x64.msix \
@@ -89,6 +117,7 @@ msix-x64: publish-x64
 # Create MSIX package for x86
 msix-x86: publish-x86
 	@mkdir -p msix
+	$(call update_manifest,x86)
 	winapp pack \
 		--input ./publish/x86 \
 		--output ./msix/Easydict-x86.msix \
@@ -98,6 +127,7 @@ msix-x86: publish-x86
 # Create MSIX package for ARM64
 msix-arm64: publish-arm64
 	@mkdir -p msix
+	$(call update_manifest,arm64)
 	winapp pack \
 		--input ./publish/arm64 \
 		--output ./msix/Easydict-arm64.msix \
@@ -111,26 +141,45 @@ msix: msix-x64
 msix-all: msix-x64 msix-x86 msix-arm64
 
 # Sign MSIX package (requires certificate)
+# Usage: make sign CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword MSIX=./msix/Easydict-x64.msix
 sign:
 	@if [ -z "$(CERT)" ]; then \
-		echo "Usage: make sign CERT=./certs/dev.pfx PASSWORD=yourpassword MSIX=./msix/Easydict-x64.msix"; \
+		echo "Error: CERT is required"; \
+		echo "Usage: make sign CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword MSIX=./msix/Easydict-x64.msix"; \
+		exit 1; \
+	fi
+	@if [ -z "$(CERT_PASSWORD)" ] || [ "$(CERT_PASSWORD)" = "dev-" ]; then \
+		echo "Error: CERT_PASSWORD is required"; \
+		echo "Usage: make sign CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword MSIX=./msix/Easydict-x64.msix"; \
+		exit 1; \
+	fi
+	@if [ -z "$(MSIX)" ]; then \
+		echo "Error: MSIX is required"; \
+		echo "Usage: make sign CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword MSIX=./msix/Easydict-x64.msix"; \
 		exit 1; \
 	fi
 	winapp sign \
 		--input $(MSIX) \
 		--certificate $(CERT) \
-		--password $(PASSWORD) \
+		--password "$(CERT_PASSWORD)" \
 		--verbose
 
 # Sign all MSIX packages
+# Usage: make sign-all CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword
 sign-all:
 	@if [ -z "$(CERT)" ]; then \
-		echo "Usage: make sign-all CERT=./certs/dev.pfx PASSWORD=yourpassword"; \
+		echo "Error: CERT is required"; \
+		echo "Usage: make sign-all CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword"; \
 		exit 1; \
 	fi
-	winapp sign --input ./msix/Easydict-x64.msix --certificate $(CERT) --password $(PASSWORD)
-	winapp sign --input ./msix/Easydict-x86.msix --certificate $(CERT) --password $(PASSWORD)
-	winapp sign --input ./msix/Easydict-arm64.msix --certificate $(CERT) --password $(PASSWORD)
+	@if [ -z "$(CERT_PASSWORD)" ] || [ "$(CERT_PASSWORD)" = "dev-" ]; then \
+		echo "Error: CERT_PASSWORD is required"; \
+		echo "Usage: make sign-all CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword"; \
+		exit 1; \
+	fi
+	winapp sign --input ./msix/Easydict-x64.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
+	winapp sign --input ./msix/Easydict-x86.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
+	winapp sign --input ./msix/Easydict-arm64.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
 
 # ============================================================
 # Run application
@@ -178,10 +227,15 @@ help:
 	@echo "  make msix-x86     - Create MSIX package for x86"
 	@echo "  make msix-arm64   - Create MSIX package for ARM64"
 	@echo "  make msix-all     - Create all MSIX packages"
-	@echo "  make cert-generate- Generate development certificate"
-	@echo "  make cert-install - Install certificate (requires admin)"
-	@echo "  make sign CERT=... PASSWORD=... MSIX=... - Sign MSIX package"
-	@echo "  make sign-all CERT=... PASSWORD=...      - Sign all MSIX packages"
+	@echo "  make cert-generate [CERT_PASSWORD=...] - Generate development certificate"
+	@echo "  make cert-install CERT_PASSWORD=...    - Install certificate (requires admin)"
+	@echo "  make sign CERT=... CERT_PASSWORD=... MSIX=... - Sign MSIX package"
+	@echo "  make sign-all CERT=... CERT_PASSWORD=...      - Sign all MSIX packages"
+	@echo ""
+	@echo "Variables:"
+	@echo "  VERSION=X.Y.Z.W   - Set version for MSIX package (default: 0.1.0.0)"
+	@echo "  CERT_PASSWORD=... - Certificate password"
+	@echo "  CERT_PATH=...     - Certificate file path (default: ./certs/dev.pfx)"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean        - Clean build artifacts"

@@ -169,10 +169,19 @@ public sealed partial class MiniWindow : Window
         else
         {
             // Position at top-right corner of the screen where cursor is located
-            GetCursorPos(out var cursorPos);
-            var displayArea = DisplayArea.GetFromPoint(
-                new PointInt32(cursorPos.X, cursorPos.Y),
-                DisplayAreaFallback.Primary);
+            var gotCursorPos = GetCursorPos(out var cursorPos);
+            DisplayArea displayArea;
+            if (gotCursorPos)
+            {
+                displayArea = DisplayArea.GetFromPoint(
+                    new PointInt32(cursorPos.X, cursorPos.Y),
+                    DisplayAreaFallback.Primary);
+            }
+            else
+            {
+                // GetCursorPos failed, fallback to display containing current window
+                displayArea = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
+            }
 
             if (displayArea != null)
             {
@@ -181,6 +190,11 @@ public sealed partial class MiniWindow : Window
                 var margin = 20; // 20 pixels margin from edge
                 var x = workArea.X + workArea.Width - windowSize.Width - margin;
                 var y = workArea.Y + margin;
+
+                // Clamp to keep window within display work area
+                x = Math.Max(workArea.X, Math.Min(x, workArea.X + workArea.Width - windowSize.Width));
+                y = Math.Max(workArea.Y, Math.Min(y, workArea.Y + workArea.Height - windowSize.Height));
+
                 _appWindow.Move(new PointInt32(x, y));
             }
         }
@@ -899,9 +913,16 @@ public sealed partial class MiniWindow : Window
         _lastShowTime = DateTime.UtcNow;
         _appWindow?.Show();
 
+        // Try to bring window to front using multiple methods
+        _appWindow?.MoveInZOrderAtTop();
+
         // Use Win32 SetForegroundWindow to forcefully bring window to front
         var hWnd = WindowNative.GetWindowHandle(this);
-        SetForegroundWindow(hWnd);
+        var foregroundSet = SetForegroundWindow(hWnd);
+        if (!foregroundSet)
+        {
+            System.Diagnostics.Debug.WriteLine("MiniWindow: SetForegroundWindow failed; relying on Activate()");
+        }
 
         this.Activate();
         InputTextBox.Focus(FocusState.Programmatic);

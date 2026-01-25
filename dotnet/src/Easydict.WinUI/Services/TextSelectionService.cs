@@ -17,22 +17,25 @@ public static class TextSelectionService
     /// </summary>
     public static Task<string?> GetSelectedTextAsync()
     {
-        try
+        return Task.Run(() =>
         {
-            var text = GetSelectedTextViaUIA();
-            if (!string.IsNullOrWhiteSpace(text))
+            try
             {
-                System.Diagnostics.Debug.WriteLine($"[TextSelectionService] Got {text.Length} chars via UIA");
-                return Task.FromResult<string?>(text);
+                var text = GetSelectedTextViaUIA();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[TextSelectionService] Got {text.Length} chars via UIA");
+                    return text;
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[TextSelectionService] UIA failed: {ex.Message}");
-        }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[TextSelectionService] UIA failed: {ex.Message}");
+            }
 
-        // UIA failed or no selection - return null, do NOT fall back to clipboard
-        return Task.FromResult<string?>(null);
+            // UIA failed or no selection - return null, do NOT fall back to clipboard
+            return null;
+        });
     }
 
     private static string? GetSelectedTextViaUIA()

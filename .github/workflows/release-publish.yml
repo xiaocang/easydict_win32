@@ -99,7 +99,8 @@ jobs:
             --no-restore `
             --output ./publish/${{ matrix.platform }} `
             -p:Version=${{ steps.version.outputs.VERSION }} `
-            -p:Platform=${{ matrix.platform }}
+            -p:Platform=${{ matrix.platform }} `
+            -p:PublishTrimmed=false
 
       # Setup signing certificate (use stable cert from secrets if available)
       - name: Setup signing certificate
@@ -134,9 +135,11 @@ jobs:
             Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $certPasswordSecure | Out-Null
           }
 
-          # Output certificate path (password is passed via env var to avoid logging)
+          # Mask password to prevent it from appearing in logs
+          Write-Host "::add-mask::$certPassword"
+
+          # Output certificate path and password for subsequent steps
           echo "CERT_PATH=$certPath" >> $env:GITHUB_OUTPUT
-          # Store password in env file for subsequent steps (masked in logs)
           echo "CERT_PASSWORD=$certPassword" >> $env:GITHUB_OUTPUT
 
       # Update manifest version
@@ -168,11 +171,13 @@ jobs:
       - name: Sign MSIX package
         working-directory: dotnet
         shell: pwsh
+        env:
+          SIGN_CERT_PASSWORD: ${{ steps.cert.outputs.CERT_PASSWORD }}
         run: |
           winapp sign `
             --input ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix `
             --certificate "${{ steps.cert.outputs.CERT_PATH }}" `
-            --password "${{ steps.cert.outputs.CERT_PASSWORD }}" `
+            --password "$env:SIGN_CERT_PASSWORD" `
             --verbose
 
       # Also create ZIP archive for portable distribution
@@ -183,8 +188,9 @@ jobs:
           $destination = "easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip"
           $tempDir = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP\zip-staging" -Force
 
-          # Copy files excluding .pdb to temp directory
-          Get-ChildItem -Path $source -Exclude "*.pdb" | Copy-Item -Destination $tempDir -Recurse
+          # Copy all files to temp directory, then remove PDBs recursively
+          Copy-Item -Path "$source\*" -Destination $tempDir -Recurse
+          Get-ChildItem -Path $tempDir -Filter "*.pdb" -Recurse | Remove-Item -Force
 
           # Create ZIP from temp directory (ensures relative paths in archive)
           Compress-Archive -Path "$tempDir\*" -DestinationPath $destination

@@ -15,9 +15,8 @@ CERT_PATH ?= ./certs/dev.pfx
 # Default version for local builds
 VERSION ?= 0.1.0.0
 
-# Manifest paths
+# Manifest source path
 MANIFEST_SRC := src/Easydict.WinUI/Package.appxmanifest
-MANIFEST_TMP := $(shell mktemp -u).appxmanifest
 
 # Default target
 all: build
@@ -115,7 +114,7 @@ endef
 # Create MSIX package for x64
 msix-x64: publish-x64
 	@mkdir -p msix
-	$(eval TMP_MANIFEST := $(shell mktemp -u).appxmanifest)
+	$(eval TMP_MANIFEST := $(shell mktemp --suffix=.appxmanifest))
 	$(call create_temp_manifest,x64,$(TMP_MANIFEST))
 	winapp pack \
 		--input ./publish/x64 \
@@ -127,7 +126,7 @@ msix-x64: publish-x64
 # Create MSIX package for x86
 msix-x86: publish-x86
 	@mkdir -p msix
-	$(eval TMP_MANIFEST := $(shell mktemp -u).appxmanifest)
+	$(eval TMP_MANIFEST := $(shell mktemp --suffix=.appxmanifest))
 	$(call create_temp_manifest,x86,$(TMP_MANIFEST))
 	winapp pack \
 		--input ./publish/x86 \
@@ -139,7 +138,7 @@ msix-x86: publish-x86
 # Create MSIX package for ARM64
 msix-arm64: publish-arm64
 	@mkdir -p msix
-	$(eval TMP_MANIFEST := $(shell mktemp -u).appxmanifest)
+	$(eval TMP_MANIFEST := $(shell mktemp --suffix=.appxmanifest))
 	$(call create_temp_manifest,arm64,$(TMP_MANIFEST))
 	winapp pack \
 		--input ./publish/arm64 \
@@ -209,7 +208,7 @@ help:
 	@echo "  make              - Build the project (Debug)"
 	@echo "  make build        - Build the project (Debug)"
 	@echo "  make build-debug  - Build the project (Debug)"
-	@echo "  make build-release- Build the project (Release)"
+	@echo "  make build-release - Build the project (Release)"
 	@echo "  make run          - Run the application (Debug)"
 	@echo "  make run-release  - Run the application (Release)"
 	@echo ""
@@ -223,7 +222,7 @@ help:
 	@echo "  make publish      - Publish for distribution (portable)"
 	@echo "  make publish-x64  - Publish for x64"
 	@echo "  make publish-x86  - Publish for x86"
-	@echo "  make publish-arm64- Publish for ARM64"
+	@echo "  make publish-arm64 - Publish for ARM64"
 	@echo ""
 	@echo "MSIX Packaging (requires WinApp CLI):"
 	@echo "  make msix         - Create MSIX package (x64)"

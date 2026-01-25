@@ -136,8 +136,8 @@ namespace Easydict.WinUI
         {
             try
             {
-                // Simulate Ctrl+C to copy selected text
-                var text = await KeyboardSimulator.CopySelectedTextAsync();
+                // Get selected text via UI Automation (avoids SIGINT in terminals)
+                var text = await TextSelectionService.GetSelectedTextAsync();
 
                 _window?.DispatcherQueue.TryEnqueue(() =>
                 {
@@ -161,8 +161,8 @@ namespace Easydict.WinUI
         {
             try
             {
-                // Simulate Ctrl+C to copy selected text
-                var text = await KeyboardSimulator.CopySelectedTextAsync();
+                // Get selected text via UI Automation (avoids SIGINT in terminals)
+                var text = await TextSelectionService.GetSelectedTextAsync();
 
                 _window?.DispatcherQueue.TryEnqueue(() =>
                 {

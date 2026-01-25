@@ -354,22 +354,28 @@ public sealed partial class MiniWindow : Window
 
         try
         {
-            // Measure desired size
-            content.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-            var desiredHeight = content.DesiredSize.Height;
-
             // Get DPI scale
             var hWnd = WindowNative.GetWindowHandle(this);
             var scale = DpiHelper.GetScaleFactorForWindow(hWnd);
 
-            // Calculate new height with limits (200-500 DIPs)
+            // Force layout update before measuring
+            content.UpdateLayout();
+
+            // Get current window width in DIPs for proper measurement
+            var currentSize = _appWindow.Size;
+            var currentWidthDips = DpiHelper.PhysicalPixelsToDips(currentSize.Width, scale);
+
+            // Measure desired size with actual width constraint (critical for text wrapping)
+            content.Measure(new Windows.Foundation.Size(currentWidthDips, double.PositiveInfinity));
+            var desiredHeight = content.DesiredSize.Height;
+
+            // Calculate new height with limits (200-800 DIPs)
             var minHeight = DpiHelper.DipsToPhysicalPixels(200, scale);
-            var maxHeight = DpiHelper.DipsToPhysicalPixels(500, scale);
+            var maxHeight = DpiHelper.DipsToPhysicalPixels(800, scale);
             var newHeight = DpiHelper.DipsToPhysicalPixels(desiredHeight + 16, scale); // +16 for padding
             newHeight = Math.Clamp(newHeight, minHeight, maxHeight);
 
             // Resize window (avoid micro-resizes)
-            var currentSize = _appWindow.Size;
             if (Math.Abs(currentSize.Height - newHeight) > 5)
             {
                 _appWindow.Resize(new SizeInt32(currentSize.Width, (int)newHeight));
@@ -565,7 +571,8 @@ public sealed partial class MiniWindow : Window
                             serviceResult.Result = result;
                             serviceResult.IsLoading = false;
                             serviceResult.ApplyAutoCollapseLogic();
-                            ResizeWindowToContent();
+                            // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
+                            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
                         });
                     }
                 }
@@ -582,7 +589,8 @@ public sealed partial class MiniWindow : Window
                         serviceResult.IsLoading = false;
                         serviceResult.IsStreaming = false;
                         serviceResult.ApplyAutoCollapseLogic();
-                        ResizeWindowToContent();
+                        // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
+                        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
                     });
                 }
                 catch (Exception ex)
@@ -598,7 +606,8 @@ public sealed partial class MiniWindow : Window
                         serviceResult.IsLoading = false;
                         serviceResult.IsStreaming = false;
                         serviceResult.ApplyAutoCollapseLogic();
-                        ResizeWindowToContent();
+                        // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
+                        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
                     });
                 }
             });
@@ -694,7 +703,8 @@ public sealed partial class MiniWindow : Window
                 {
                     if (_isClosing) return;
                     serviceResult.StreamingText = currentText;
-                    ResizeWindowToContent();
+                    // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
+                    DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
                 });
                 lastUpdateTime = now;
             }
@@ -719,7 +729,8 @@ public sealed partial class MiniWindow : Window
                 TimingMs = stopwatch.ElapsedMilliseconds
             };
             serviceResult.ApplyAutoCollapseLogic();
-            ResizeWindowToContent();
+            // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
+            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
         });
     }
 
@@ -879,6 +890,9 @@ public sealed partial class MiniWindow : Window
 
         this.Activate();
         InputTextBox.Focus(FocusState.Programmatic);
+
+        // Resize window to fit existing content (delayed to allow layout to complete)
+        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
     }
 
     /// <summary>

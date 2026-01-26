@@ -33,10 +33,76 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
+  # Setup signing certificate (runs once, shared by all platforms)
+  setup-cert:
+    name: Setup Certificate
+    runs-on: windows-latest
+    outputs:
+      IS_SELF_SIGNED: ${{ steps.cert.outputs.IS_SELF_SIGNED }}
+    steps:
+      - name: Setup signing certificate
+        id: cert
+        shell: pwsh
+        env:
+          MSIX_CERT_BASE64: ${{ secrets.MSIX_CERTIFICATE_BASE64 }}
+          MSIX_CERT_PASSWORD: ${{ secrets.MSIX_CERTIFICATE_PASSWORD }}
+        run: |
+          $certDir = "${{ github.workspace }}\certs"
+          New-Item -ItemType Directory -Force -Path $certDir | Out-Null
+          $certPath = "$certDir\signing.pfx"
+          $certPublicPath = "$certDir\signing.cer"
+          $isSelfSigned = $false
+
+          if ($env:MSIX_CERT_BASE64 -and $env:MSIX_CERT_PASSWORD) {
+            # Use stable certificate from secrets
+            Write-Host "Using stable signing certificate from secrets"
+            $certBytes = [Convert]::FromBase64String($env:MSIX_CERT_BASE64)
+            [IO.File]::WriteAllBytes($certPath, $certBytes)
+            $certPassword = $env:MSIX_CERT_PASSWORD
+          } else {
+            # Generate self-signed certificate as fallback
+            Write-Host "No stable certificate configured, generating self-signed certificate"
+            Write-Host "::warning::Using self-signed certificate. Users must install the .cer file to use MSIX packages."
+            $certPassword = [System.Guid]::NewGuid().ToString()
+            $isSelfSigned = $true
+
+            $cert = New-SelfSignedCertificate `
+              -Type Custom `
+              -Subject "CN=xiaocang" `
+              -KeyUsage DigitalSignature `
+              -FriendlyName "Easydict Development Certificate" `
+              -CertStoreLocation "Cert:\CurrentUser\My" `
+              -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}CA=false")
+
+            $certPasswordSecure = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
+            Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $certPasswordSecure | Out-Null
+
+            # Export public certificate (.cer) for users to install
+            Export-Certificate -Cert $cert -FilePath $certPublicPath -Type CERT | Out-Null
+            Write-Host "Exported public certificate to: $certPublicPath"
+          }
+
+          # Mask password to prevent it from appearing in logs
+          Write-Host "::add-mask::$certPassword"
+
+          # Save password to file for artifact (it's masked, so safe)
+          Set-Content -Path "$certDir\password.txt" -Value $certPassword -NoNewline
+
+          # Output info for job outputs
+          echo "IS_SELF_SIGNED=$isSelfSigned" >> $env:GITHUB_OUTPUT
+
+      - name: Upload certificate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-cert
+          path: certs/
+          retention-days: 1
+
   # Build and package MSIX using winapp CLI
   publish-msix:
     name: Build MSIX Package
     runs-on: windows-latest
+    needs: setup-cert
     strategy:
       fail-fast: false
       max-parallel: 1  # Serialize uploads to avoid race conditions
@@ -46,6 +112,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download signing certificate
+        uses: actions/download-artifact@v4
+        with:
+          name: signing-cert
+          path: certs/
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -72,17 +144,30 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
 
-          # Create MSIX-compatible version (must be X.Y.Z.0 format)
-          MSIX_VERSION="${VERSION}"
-          # If version has suffix like -beta.1, strip it for MSIX
-          MSIX_VERSION=$(echo "$MSIX_VERSION" | sed 's/-.*$//')
-          # Ensure 4-part version by counting dots
-          IFS='.' read -r -a parts <<< "$MSIX_VERSION"
-          if [[ ${#parts[@]} -eq 3 ]]; then
-            MSIX_VERSION="${MSIX_VERSION}.0"
+          # Create MSIX-compatible version (must be X.Y.Z.W format)
+          # Extract base version (without prerelease suffix)
+          BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
+
+          # Build 4-part MSIX version with proper ordering
+          # MSIX version comparison is numeric: X.Y.Z.W where higher W = newer
+          # For correct upgrade paths: stable releases MUST be higher than prereleases
+          # Solution: W=65535 for stable, W=1-999 for prereleases
+          # Example: 1.0.0 → 1.0.0.65535, 1.0.0-beta.1 → 1.0.0.1
+          if [[ "$VERSION" =~ -[a-zA-Z]+\.([0-9]+) ]]; then
+            # Format: v1.0.0-beta.1 → prerelease num = 1
+            REVISION="${BASH_REMATCH[1]}"
+          elif [[ "$VERSION" =~ -[a-zA-Z]+([0-9]+) ]]; then
+            # Format: v1.0.0-beta1 → prerelease num = 1
+            REVISION="${BASH_REMATCH[1]}"
+          else
+            # Stable release: use max revision for highest priority
+            REVISION=65535
           fi
+
+          MSIX_VERSION="${BASE_VERSION}.${REVISION}"
+
           echo "MSIX_VERSION=$MSIX_VERSION" >> $GITHUB_OUTPUT
-          echo "MSIX version: $MSIX_VERSION"
+          echo "MSIX version: $MSIX_VERSION (revision: $REVISION, stable=65535)"
 
       - name: Restore dependencies
         working-directory: dotnet
@@ -102,45 +187,24 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
-      # Setup signing certificate (use stable cert from secrets if available)
-      - name: Setup signing certificate
+      # Load signing certificate from artifact (generated once in setup-cert job)
+      - name: Load signing certificate
         id: cert
         shell: pwsh
-        env:
-          MSIX_CERT_BASE64: ${{ secrets.MSIX_CERTIFICATE_BASE64 }}
-          MSIX_CERT_PASSWORD: ${{ secrets.MSIX_CERTIFICATE_PASSWORD }}
         run: |
-          $certPath = "${{ github.workspace }}\signing.pfx"
-
-          if ($env:MSIX_CERT_BASE64 -and $env:MSIX_CERT_PASSWORD) {
-            # Use stable certificate from secrets
-            Write-Host "Using stable signing certificate from secrets"
-            $certBytes = [Convert]::FromBase64String($env:MSIX_CERT_BASE64)
-            [IO.File]::WriteAllBytes($certPath, $certBytes)
-            $certPassword = $env:MSIX_CERT_PASSWORD
-          } else {
-            # Generate self-signed certificate as fallback
-            Write-Host "No stable certificate configured, generating self-signed certificate"
-            $certPassword = [System.Guid]::NewGuid().ToString()
-
-            $cert = New-SelfSignedCertificate `
-              -Type Custom `
-              -Subject "CN=xiaocang" `
-              -KeyUsage DigitalSignature `
-              -FriendlyName "Easydict Development Certificate" `
-              -CertStoreLocation "Cert:\CurrentUser\My" `
-              -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
-
-            $certPasswordSecure = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
-            Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $certPasswordSecure | Out-Null
-          }
+          $certPath = "${{ github.workspace }}\certs\signing.pfx"
+          $certPublicPath = "${{ github.workspace }}\certs\signing.cer"
+          $certPassword = Get-Content "${{ github.workspace }}\certs\password.txt" -Raw
 
           # Mask password to prevent it from appearing in logs
           Write-Host "::add-mask::$certPassword"
 
-          # Output certificate path and password for subsequent steps
+          Write-Host "Using certificate from artifact: $certPath"
+
+          # Output certificate paths for subsequent steps
           echo "CERT_PATH=$certPath" >> $env:GITHUB_OUTPUT
           echo "CERT_PASSWORD=$certPassword" >> $env:GITHUB_OUTPUT
+          echo "CERT_PUBLIC_PATH=$certPublicPath" >> $env:GITHUB_OUTPUT
 
       # Update manifest version
       - name: Update manifest version
@@ -214,10 +278,8 @@ jobs:
           $msixName = Split-Path $msixFile -Leaf
           $zipName = Split-Path $zipFile -Leaf
 
-          @"
-          $msixHash  $msixName
-          $zipHash  $zipName
-          "@ | Set-Content -Path $checksumFile -NoNewline
+          # Use explicit string concatenation to avoid here-string indentation issues
+          "$msixHash  $msixName`n$zipHash  $zipName`n" | Set-Content -Path $checksumFile -NoNewline
 
           # Also output to console for visibility
           Write-Host "SHA256 Checksums for ${{ matrix.platform }}:"
@@ -232,6 +294,13 @@ jobs:
             easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
             checksums-${{ matrix.platform }}.sha256
           generate_release_notes: ${{ matrix.platform == 'x64' }}
+
+      # Upload public certificate for self-signed builds (only once, with x64)
+      - name: Upload signing certificate
+        if: needs.setup-cert.outputs.IS_SELF_SIGNED == 'true' && matrix.platform == 'x64'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: certs/signing.cer
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4

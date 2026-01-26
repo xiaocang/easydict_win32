@@ -183,8 +183,9 @@ namespace Easydict.WinUI.Views
             _serviceResults.Clear();
             ResultsPanel.Items.Clear();
 
-            // Get enabled services from settings
+            // Get enabled services and EnabledQuery settings from settings
             var enabledServices = _settings.MainWindowEnabledServices;
+            var enabledQuerySettings = _settings.MainWindowServiceEnabledQuery;
 
             // If no services are enabled, show placeholder with guidance
             if (enabledServices.Count == 0)
@@ -204,10 +205,15 @@ namespace Easydict.WinUI.Views
                     ? service.DisplayName
                     : serviceId;
 
+                // Get EnabledQuery setting (default true if not found)
+                var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
+
                 var result = new ServiceQueryResult
                 {
                     ServiceId = serviceId,
-                    ServiceDisplayName = displayName
+                    ServiceDisplayName = displayName,
+                    EnabledQuery = enabledQuery,
+                    IsExpanded = enabledQuery // Manual-query services start collapsed
                 };
 
                 var control = new ServiceResultItem
@@ -215,6 +221,7 @@ namespace Easydict.WinUI.Views
                     ServiceResult = result
                 };
                 control.CollapseToggled += OnServiceCollapseToggled;
+                control.QueryRequested += OnServiceQueryRequested;
 
                 _serviceResults.Add(result);
                 ResultsPanel.Items.Add(control);
@@ -231,6 +238,81 @@ namespace Easydict.WinUI.Views
         private void OnServiceCollapseToggled(object? sender, ServiceQueryResult result)
         {
             // Optional: could trigger layout update if needed
+        }
+
+        /// <summary>
+        /// Handle query request from a manual-query service that user clicked to expand.
+        /// </summary>
+        private async void OnServiceQueryRequested(object? sender, ServiceQueryResult serviceResult)
+        {
+            if (_isClosing || _detectionService is null)
+            {
+                return;
+            }
+
+            var inputText = InputTextBox.Text?.Trim();
+            if (string.IsNullOrEmpty(inputText))
+            {
+                return;
+            }
+
+            // Mark as loading and queried
+            serviceResult.IsLoading = true;
+            serviceResult.MarkQueried();
+
+            try
+            {
+                // Detect language (use cached if available from recent query)
+                var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
+                    ? _lastDetectedLanguage
+                    : await _detectionService.DetectAsync(inputText, CancellationToken.None);
+
+                // Get target language
+                var targetLanguage = GetTargetLanguage();
+
+                // Create request
+                var request = new TranslationRequest
+                {
+                    Text = inputText,
+                    FromLanguage = detectedLanguage,
+                    ToLanguage = targetLanguage
+                };
+
+                // Execute translation
+                using var handle = TranslationManagerService.Instance.AcquireHandle();
+                var manager = handle.Manager;
+
+                if (manager.IsStreamingService(serviceResult.ServiceId))
+                {
+                    await ExecuteStreamingTranslationForServiceAsync(
+                        manager, serviceResult, request, detectedLanguage, targetLanguage, CancellationToken.None);
+                }
+                else
+                {
+                    var result = await manager.TranslateAsync(request, CancellationToken.None, serviceResult.ServiceId);
+                    serviceResult.Result = result;
+                    serviceResult.IsLoading = false;
+                    serviceResult.ApplyAutoCollapseLogic();
+                }
+            }
+            catch (TranslationException ex)
+            {
+                serviceResult.Error = ex;
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = false;
+                serviceResult.ApplyAutoCollapseLogic();
+            }
+            catch (Exception ex)
+            {
+                serviceResult.Error = new TranslationException(ex.Message)
+                {
+                    ErrorCode = TranslationErrorCode.Unknown,
+                    ServiceId = serviceResult.ServiceId
+                };
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = false;
+                serviceResult.ApplyAutoCollapseLogic();
+            }
         }
 
         private async Task CleanupResourcesAsync()
@@ -446,7 +528,11 @@ namespace Easydict.WinUI.Views
                 foreach (var result in _serviceResults)
                 {
                     result.Reset();
-                    result.IsLoading = true;
+                    // Only set loading for auto-query services
+                    if (result.EnabledQuery)
+                    {
+                        result.IsLoading = true;
+                    }
                 }
 
                 // Hide placeholder
@@ -487,9 +573,19 @@ namespace Easydict.WinUI.Views
                     ToLanguage = targetLanguage
                 };
 
-                // Task returns: true = success, false = error, null = cancelled
+                // Task returns: true = success, false = error, null = cancelled/skipped
+                // Only auto-query services with EnabledQuery=true
                 var tasks = _serviceResults.Select(async serviceResult =>
                 {
+                    // Skip manual-query services (EnabledQuery=false)
+                    if (!serviceResult.EnabledQuery)
+                    {
+                        return (bool?)null; // Skipped, don't count
+                    }
+
+                    // Mark as queried for auto-query services
+                    serviceResult.MarkQueried();
+
                     try
                     {
                         // Acquire handle once per service to ensure consistent manager instance

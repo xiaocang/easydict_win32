@@ -137,6 +137,24 @@ public sealed class SettingsService
     /// </summary>
     public List<string> FixedWindowEnabledServices { get; set; } = ["google"];
 
+    /// <summary>
+    /// Per-service EnabledQuery setting for MainWindow.
+    /// When true (default), service auto-queries and expands. When false, starts collapsed and queries on demand.
+    /// </summary>
+    public Dictionary<string, bool> MainWindowServiceEnabledQuery { get; set; } = new();
+
+    /// <summary>
+    /// Per-service EnabledQuery setting for MiniWindow.
+    /// When true (default), service auto-queries and expands. When false, starts collapsed and queries on demand.
+    /// </summary>
+    public Dictionary<string, bool> MiniWindowServiceEnabledQuery { get; set; } = new();
+
+    /// <summary>
+    /// Per-service EnabledQuery setting for FixedWindow.
+    /// When true (default), service auto-queries and expands. When false, starts collapsed and queries on demand.
+    /// </summary>
+    public Dictionary<string, bool> FixedWindowServiceEnabledQuery { get; set; } = new();
+
     // HTTP Proxy settings
     /// <summary>
     /// Enable HTTP proxy for translation network requests.
@@ -308,6 +326,11 @@ public sealed class SettingsService
         FixedWindowHeightDips = GetValue(nameof(FixedWindowHeightDips), 280.0);
         FixedWindowEnabledServices = GetStringList(nameof(FixedWindowEnabledServices), ["google"]);
 
+        // EnabledQuery settings per window (which services auto-query vs. query on demand)
+        MainWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(MainWindowServiceEnabledQuery));
+        MiniWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(MiniWindowServiceEnabledQuery));
+        FixedWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(FixedWindowServiceEnabledQuery));
+
         // HTTP Proxy settings
         ProxyEnabled = GetValue(nameof(ProxyEnabled), false);
         ProxyUri = GetValue(nameof(ProxyUri), "");
@@ -406,6 +429,11 @@ public sealed class SettingsService
         _settings[nameof(FixedWindowHeightDips)] = FixedWindowHeightDips;
         _settings[nameof(FixedWindowEnabledServices)] = FixedWindowEnabledServices;
 
+        // EnabledQuery settings per window
+        _settings[nameof(MainWindowServiceEnabledQuery)] = MainWindowServiceEnabledQuery;
+        _settings[nameof(MiniWindowServiceEnabledQuery)] = MiniWindowServiceEnabledQuery;
+        _settings[nameof(FixedWindowServiceEnabledQuery)] = FixedWindowServiceEnabledQuery;
+
         // HTTP Proxy settings
         _settings[nameof(ProxyEnabled)] = ProxyEnabled;
         _settings[nameof(ProxyUri)] = ProxyUri;
@@ -481,6 +509,35 @@ public sealed class SettingsService
             catch { }
         }
         return defaultValue;
+    }
+
+    private Dictionary<string, bool> GetStringBoolDictionary(string key)
+    {
+        if (_settings.TryGetValue(key, out var value) && value != null)
+        {
+            try
+            {
+                if (value is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Object)
+                {
+                    var dict = new Dictionary<string, bool>();
+                    foreach (var prop in jsonElement.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.True || prop.Value.ValueKind == JsonValueKind.False)
+                        {
+                            dict[prop.Name] = prop.Value.GetBoolean();
+                        }
+                    }
+                    return dict;
+                }
+
+                if (value is Dictionary<string, bool> boolDict)
+                {
+                    return boolDict;
+                }
+            }
+            catch { }
+        }
+        return new Dictionary<string, bool>();
     }
 }
 

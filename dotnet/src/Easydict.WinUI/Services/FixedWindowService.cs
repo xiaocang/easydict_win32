@@ -71,6 +71,14 @@ public sealed class FixedWindowService : IDisposable
     }
 
     /// <summary>
+    /// Refresh service results when settings change.
+    /// </summary>
+    public void RefreshServiceResults()
+    {
+        _fixedWindow?.RefreshServiceResults();
+    }
+
+    /// <summary>
     /// Ensure the fixed window instance exists.
     /// </summary>
     private void EnsureWindowCreated()

@@ -16,6 +16,8 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     private string _streamingText = "";
     private bool _isExpanded = true;
     private bool _manuallyToggled;
+    private bool _enabledQuery = true;
+    private bool _hasQueried;
 
     /// <summary>
     /// Service identifier (e.g., "google", "deepl").
@@ -56,7 +58,13 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     public bool IsLoading
     {
         get => _isLoading;
-        set => SetField(ref _isLoading, value);
+        set
+        {
+            if (SetField(ref _isLoading, value))
+            {
+                OnPropertyChanged(nameof(ShowPendingQueryHint));
+            }
+        }
     }
 
     /// <summary>
@@ -120,6 +128,39 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
         set => SetField(ref _manuallyToggled, value);
     }
 
+    /// <summary>
+    /// Whether this service should auto-query when translation is triggered.
+    /// When true (default), service queries automatically and shows expanded.
+    /// When false, service starts collapsed and only queries when user clicks to expand.
+    /// Maps to macOS enabledQuery property.
+    /// </summary>
+    public bool EnabledQuery
+    {
+        get => _enabledQuery;
+        set => SetField(ref _enabledQuery, value);
+    }
+
+    /// <summary>
+    /// Whether this service has been queried (either auto or on-demand).
+    /// Used to track if a manual-query service needs to fetch results when expanded.
+    /// </summary>
+    public bool HasQueried
+    {
+        get => _hasQueried;
+        private set
+        {
+            if (SetField(ref _hasQueried, value))
+            {
+                OnPropertyChanged(nameof(ShowPendingQueryHint));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Mark this service as having been queried.
+    /// </summary>
+    public void MarkQueried() => HasQueried = true;
+
     // Computed properties for UI binding
 
     /// <summary>
@@ -138,6 +179,12 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     public bool IsWarningError => Error?.ErrorCode is
         TranslationErrorCode.UnsupportedLanguage or
         TranslationErrorCode.InvalidResponse;
+
+    /// <summary>
+    /// Whether to show the "Click to query" hint.
+    /// Shown when service is manual-query (!EnabledQuery), not yet queried, and not loading.
+    /// </summary>
+    public bool ShowPendingQueryHint => !EnabledQuery && !HasQueried && !IsLoading;
 
     /// <summary>
     /// The translated text to display (or error message).
@@ -219,13 +266,15 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
         IsLoading = false;
         IsStreaming = false;
         StreamingText = "";
-        IsExpanded = true;
+        IsExpanded = EnabledQuery; // Auto-query services expand, manual-query services collapse
         ManuallyToggled = false;
+        HasQueried = false;
         OnPropertyChanged(nameof(HasResult));
         OnPropertyChanged(nameof(HasError));
         OnPropertyChanged(nameof(DisplayText));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(ContentVisibility));
+        OnPropertyChanged(nameof(ShowPendingQueryHint));
     }
 
     #region INotifyPropertyChanged

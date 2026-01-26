@@ -25,6 +25,12 @@ public sealed partial class ServiceResultItem : UserControl
     /// </summary>
     public event EventHandler<ServiceQueryResult>? CollapseToggled;
 
+    /// <summary>
+    /// Event raised when user clicks to expand a manual-query service that hasn't been queried yet.
+    /// The subscriber should trigger the actual translation query for this service.
+    /// </summary>
+    public event EventHandler<ServiceQueryResult>? QueryRequested;
+
     public ServiceResultItem()
     {
         this.InitializeComponent();
@@ -96,19 +102,30 @@ public sealed partial class ServiceResultItem : UserControl
         var hasError = _serviceResult.HasError && !_serviceResult.IsLoading;
         ErrorIcon.Visibility = hasError ? Visibility.Visible : Visibility.Collapsed;
 
-        // Status text
-        StatusText.Text = _serviceResult.StatusText;
+        // Status text - show "Click to query" hint for pending manual-query services
+        if (_serviceResult.ShowPendingQueryHint)
+        {
+            StatusText.Text = "Click to query";
+        }
+        else
+        {
+            StatusText.Text = _serviceResult.StatusText;
+        }
 
         // Arrow direction
         ArrowIcon.Glyph = _serviceResult.ArrowGlyph;
 
-        // Content visibility: show during streaming (even if text is empty) or when result available
+        // Content visibility: show during streaming, when result available, or for pending query hint
+        var showPendingHint = _serviceResult.IsExpanded && _serviceResult.ShowPendingQueryHint;
         var showContent = _serviceResult.IsExpanded &&
-            (_serviceResult.HasResult || _serviceResult.IsStreaming);
+            (_serviceResult.HasResult || _serviceResult.IsStreaming || showPendingHint);
         ContentArea.Visibility = showContent ? Visibility.Visible : Visibility.Collapsed;
 
         // Update header corner radius based on expand state
         HeaderBar.CornerRadius = showContent ? new CornerRadius(6, 6, 0, 0) : new CornerRadius(6);
+
+        // Pending query hint visibility
+        PendingQueryText.Visibility = showPendingHint ? Visibility.Visible : Visibility.Collapsed;
 
         // Result text - handle streaming state
         if (_serviceResult.IsStreaming)
@@ -155,9 +172,20 @@ public sealed partial class ServiceResultItem : UserControl
         var point = e.GetCurrentPoint(HeaderBar);
         if (point.Properties.IsLeftButtonPressed)
         {
+            // Check if this is a manual-query service that needs to be queried
+            var wasCollapsed = !_serviceResult.IsExpanded;
+            var needsQuery = !_serviceResult.EnabledQuery && !_serviceResult.HasQueried && wasCollapsed;
+
             _serviceResult.ToggleExpanded();
             UpdateUI();
             CollapseToggled?.Invoke(this, _serviceResult);
+
+            // If expanding a manual-query service that hasn't been queried, request query
+            if (needsQuery && _serviceResult.IsExpanded)
+            {
+                QueryRequested?.Invoke(this, _serviceResult);
+            }
+
             e.Handled = true;
         }
     }

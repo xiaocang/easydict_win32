@@ -231,8 +231,9 @@ public sealed partial class FixedWindow : Window
         _resultControls.Clear();
         ResultsPanel.Items.Clear();
 
-        // Get enabled services from Fixed Window settings
+        // Get enabled services and EnabledQuery settings from settings
         var enabledServices = _settings.FixedWindowEnabledServices;
+        var enabledQuerySettings = _settings.FixedWindowServiceEnabledQuery;
 
         // Get display names from TranslationManager (single source of truth)
         var manager = TranslationManagerService.Instance.Manager;
@@ -244,10 +245,15 @@ public sealed partial class FixedWindow : Window
                 ? service.DisplayName
                 : serviceId;
 
+            // Get EnabledQuery setting (default true if not found)
+            var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
+
             var result = new ServiceQueryResult
             {
                 ServiceId = serviceId,
-                ServiceDisplayName = displayName
+                ServiceDisplayName = displayName,
+                EnabledQuery = enabledQuery,
+                IsExpanded = enabledQuery // Manual-query services start collapsed
             };
 
             var control = new ServiceResultItem
@@ -255,6 +261,7 @@ public sealed partial class FixedWindow : Window
                 ServiceResult = result
             };
             control.CollapseToggled += OnServiceCollapseToggled;
+            control.QueryRequested += OnServiceQueryRequested;
 
             _serviceResults.Add(result);
             _resultControls.Add(control);
@@ -269,6 +276,84 @@ public sealed partial class FixedWindow : Window
     {
         // Trigger window resize when collapse state changes
         DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+    }
+
+    /// <summary>
+    /// Handle query request from a manual-query service that user clicked to expand.
+    /// </summary>
+    private async void OnServiceQueryRequested(object? sender, ServiceQueryResult serviceResult)
+    {
+        if (_isClosing || _detectionService is null)
+        {
+            return;
+        }
+
+        var inputText = InputTextBox.Text?.Trim();
+        if (string.IsNullOrEmpty(inputText))
+        {
+            return;
+        }
+
+        // Mark as loading and queried
+        serviceResult.IsLoading = true;
+        serviceResult.MarkQueried();
+
+        try
+        {
+            // Detect language (use cached if available from recent query)
+            var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
+                ? _lastDetectedLanguage
+                : await _detectionService.DetectAsync(inputText, CancellationToken.None);
+
+            // Get target language
+            var targetLanguage = GetTargetLanguage();
+
+            // Create request
+            var request = new TranslationRequest
+            {
+                Text = inputText,
+                FromLanguage = detectedLanguage,
+                ToLanguage = targetLanguage
+            };
+
+            // Execute translation
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            var manager = handle.Manager;
+
+            if (manager.IsStreamingService(serviceResult.ServiceId))
+            {
+                await ExecuteStreamingTranslationForServiceAsync(
+                    manager, serviceResult, request, detectedLanguage, targetLanguage, CancellationToken.None);
+            }
+            else
+            {
+                var result = await manager.TranslateAsync(request, CancellationToken.None, serviceResult.ServiceId);
+                serviceResult.Result = result;
+                serviceResult.IsLoading = false;
+                serviceResult.ApplyAutoCollapseLogic();
+                RequestResize();
+            }
+        }
+        catch (TranslationException ex)
+        {
+            serviceResult.Error = ex;
+            serviceResult.IsLoading = false;
+            serviceResult.IsStreaming = false;
+            serviceResult.ApplyAutoCollapseLogic();
+            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+        }
+        catch (Exception ex)
+        {
+            serviceResult.Error = new TranslationException(ex.Message)
+            {
+                ErrorCode = TranslationErrorCode.Unknown,
+                ServiceId = serviceResult.ServiceId
+            };
+            serviceResult.IsLoading = false;
+            serviceResult.IsStreaming = false;
+            serviceResult.ApplyAutoCollapseLogic();
+            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+        }
     }
 
     private async void OnWindowClosed(object sender, WindowEventArgs args)
@@ -467,7 +552,11 @@ public sealed partial class FixedWindow : Window
             foreach (var result in _serviceResults)
             {
                 result.Reset();
-                result.IsLoading = true;
+                // Only set loading for auto-query services
+                if (result.EnabledQuery)
+                {
+                    result.IsLoading = true;
+                }
             }
 
             // Detect language
@@ -497,8 +586,18 @@ public sealed partial class FixedWindow : Window
             };
 
             // Execute translation for each enabled service in parallel
+            // Only auto-query services with EnabledQuery=true
             var tasks = _serviceResults.Select(async serviceResult =>
             {
+                // Skip manual-query services (EnabledQuery=false)
+                if (!serviceResult.EnabledQuery)
+                {
+                    return;
+                }
+
+                // Mark as queried for auto-query services
+                serviceResult.MarkQueried();
+
                 try
                 {
                     // Acquire handle once per service to ensure consistent manager instance
@@ -849,6 +948,14 @@ public sealed partial class FixedWindow : Window
     /// Check if window is currently visible.
     /// </summary>
     public bool IsVisible => _appWindow?.IsVisible ?? false;
+
+    /// <summary>
+    /// Refresh service result controls when settings change.
+    /// </summary>
+    public void RefreshServiceResults()
+    {
+        InitializeServiceResults();
+    }
 
     /// <summary>
     /// Cancel the current query's CTS without disposing it; disposal happens in StartQueryAsync's finally.

@@ -107,12 +107,23 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
+
+                    <!-- Pending Query Hint (for manual-query services not yet queried) -->
+                    <TextBlock
+                        x:Name="PendingQueryText"
+                        Grid.Row="0"
+                        Text="Click header to query"
+                        FontStyle="Italic"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Visibility="Collapsed" />
 
                     <!-- Translation Result -->
                     <TextBlock
                         x:Name="ResultText"
-                        Grid.Row="0"
+                        Grid.Row="1"
                         TextWrapping="Wrap"
                         IsTextSelectionEnabled="True"
                         Foreground="{ThemeResource QueryTextBrush}"
@@ -121,7 +132,7 @@
                     <!-- Error Message -->
                     <TextBlock
                         x:Name="ErrorText"
-                        Grid.Row="1"
+                        Grid.Row="2"
                         TextWrapping="Wrap"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         FontSize="12"
@@ -131,7 +142,7 @@
                     <Button
                         x:Name="CopyButton"
                         Grid.Row="0"
-                        Grid.RowSpan="2"
+                        Grid.RowSpan="3"
                         Click="OnCopyClicked"
                         ToolTipService.ToolTip="Copy"
                         Background="Transparent"

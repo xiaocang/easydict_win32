@@ -10,6 +10,7 @@ namespace Easydict.WinUI.Models;
 public class ServiceCheckItem : INotifyPropertyChanged
 {
     private bool _isChecked;
+    private bool _enabledQuery = true;
 
     /// <summary>
     /// The service identifier (e.g., "google", "deepl").
@@ -32,6 +33,24 @@ public class ServiceCheckItem : INotifyPropertyChanged
             if (_isChecked != value)
             {
                 _isChecked = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether this service should auto-query (true) or query on demand (false).
+    /// When true, service queries automatically when translation triggers.
+    /// When false, service starts collapsed and only queries when user clicks to expand.
+    /// </summary>
+    public bool EnabledQuery
+    {
+        get => _enabledQuery;
+        set
+        {
+            if (_enabledQuery != value)
+            {
+                _enabledQuery = value;
                 OnPropertyChanged();
             }
         }

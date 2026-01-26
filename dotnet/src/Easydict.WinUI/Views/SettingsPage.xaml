@@ -5,14 +5,19 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="using:Easydict.WinUI.Views"
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
+    <Page.Resources>
+        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    </Page.Resources>
+
     <Grid>
-        <ScrollViewer Padding="24">
+        <ScrollViewer x:Name="MainScrollViewer" Padding="24" ViewChanged="OnScrollViewChanged">
             <StackPanel Spacing="24" MaxWidth="800">
             <!-- Header -->
-            <Grid>
+            <Grid x:Name="HeaderSection">
                 <StackPanel Orientation="Horizontal" Spacing="12">
                     <Button Click="OnBackClick" Style="{StaticResource AccentButtonStyle}" Padding="8">
                         <FontIcon Glyph="&#xE72B;" FontSize="16" />
@@ -22,7 +27,7 @@
             </Grid>
 
             <!-- Translation Service -->
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="TranslationServiceSection" Spacing="12">
                 <TextBlock Text="Translation Service" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
@@ -59,7 +64,7 @@
             </StackPanel>
 
             <!-- Enabled Services for Each Window -->
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="EnabledServicesSection" Spacing="12">
                 <TextBlock Text="Enabled Services" FontSize="18" FontWeight="SemiBold" />
                 <TextBlock Text="Select which translation services to display in each window. Multiple services will run in parallel."
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
@@ -71,11 +76,24 @@
                         <ItemsControl x:Name="MainWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <CheckBox
-                                        Content="{Binding DisplayName}"
-                                        Tag="{Binding ServiceId}"
-                                        IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                        Margin="0,4" />
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox
+                                            Content="{Binding DisplayName}"
+                                            Tag="{Binding ServiceId}"
+                                            IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            IsOn="{Binding EnabledQuery, Mode=TwoWay}"
+                                            OnContent="Auto"
+                                            OffContent="Manual"
+                                            Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            MinWidth="0"
+                                            Margin="8,0,0,0" />
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -89,11 +107,24 @@
                         <ItemsControl x:Name="MiniWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <CheckBox
-                                        Content="{Binding DisplayName}"
-                                        Tag="{Binding ServiceId}"
-                                        IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                        Margin="0,4" />
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox
+                                            Content="{Binding DisplayName}"
+                                            Tag="{Binding ServiceId}"
+                                            IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            IsOn="{Binding EnabledQuery, Mode=TwoWay}"
+                                            OnContent="Auto"
+                                            OffContent="Manual"
+                                            Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            MinWidth="0"
+                                            Margin="8,0,0,0" />
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -107,11 +138,24 @@
                         <ItemsControl x:Name="FixedWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <CheckBox
-                                        Content="{Binding DisplayName}"
-                                        Tag="{Binding ServiceId}"
-                                        IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                        Margin="0,4" />
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox
+                                            Content="{Binding DisplayName}"
+                                            Tag="{Binding ServiceId}"
+                                            IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            IsOn="{Binding EnabledQuery, Mode=TwoWay}"
+                                            OnContent="Auto"
+                                            OffContent="Manual"
+                                            Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            MinWidth="0"
+                                            Margin="8,0,0,0" />
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -120,7 +164,7 @@
             </StackPanel>
 
             <!-- Language Preferences -->
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="LanguagePreferencesSection" Spacing="12">
                 <TextBlock Text="Language Preferences" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
@@ -174,7 +218,7 @@
             </StackPanel>
 
             <!-- Service Configuration -->
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="ServiceConfigurationSection" Spacing="12">
                 <TextBlock Text="Service Configuration" FontSize="18" FontWeight="SemiBold" />
                 <TextBlock Text="Configure API keys, endpoints, and models for each translation service."
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -408,7 +452,7 @@
             </StackPanel>
 
             <!-- HTTP Proxy -->
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="HttpProxySection" Spacing="12">
                 <TextBlock Text="HTTP Proxy" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
@@ -424,7 +468,7 @@
             </StackPanel>
 
             <!-- Behavior -->
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="BehaviorSection" Spacing="12">
                 <TextBlock Text="Behavior" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
@@ -437,7 +481,7 @@
             </StackPanel>
 
             <!-- Hotkeys -->
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="HotkeysSection" Spacing="12">
                 <TextBlock Text="Hotkeys" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
@@ -451,13 +495,13 @@
             </StackPanel>
 
             <!-- About -->
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="AboutSection" Spacing="12">
                 <TextBlock Text="About" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">
                         <TextBlock Text="Easydict for Windows" FontWeight="SemiBold" />
-                        <TextBlock Text="Version 1.0.0" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <HyperlinkButton Content="GitHub Repository" NavigateUri="https://github.com/tisfeng/Easydict" />
                     </StackPanel>
                 </Border>
@@ -478,6 +522,59 @@
             Margin="0,0,32,32"
             Padding="24,12"
             Visibility="Collapsed">
+        <Button.Shadow>
+            <ThemeShadow />
+        </Button.Shadow>
+    </Button>
+
+    <!-- Floating Navigation Sidebar (left side, vertically centered) -->
+    <Border x:Name="NavSidebar"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            Margin="8,0,0,0"
+            CornerRadius="12"
+            Padding="6,10"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            Opacity="0.9">
+        <Border.Shadow>
+            <ThemeShadow />
+        </Border.Shadow>
+        <StackPanel x:Name="NavIndicators" Spacing="12">
+            <!-- Nav dots created programmatically -->
+        </StackPanel>
+    </Border>
+
+    <!-- Floating Back Button (top-left, collapsed by default) -->
+    <Button x:Name="FloatingBackButton"
+            Click="OnBackClick"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Margin="8,8,0,0"
+            Width="36"
+            Height="36"
+            Padding="0"
+            CornerRadius="18"
+            Visibility="Collapsed"
+            ToolTipService.ToolTip="Back">
+        <FontIcon Glyph="&#xE72B;" FontSize="14" />
+        <Button.Shadow>
+            <ThemeShadow />
+        </Button.Shadow>
+    </Button>
+
+    <!-- Back to Top Button (bottom-left, collapsed by default) -->
+    <Button x:Name="BackToTopButton"
+            Click="OnBackToTopClick"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Margin="8,0,0,32"
+            Width="32"
+            Height="32"
+            Padding="0"
+            CornerRadius="16"
+            Visibility="Collapsed"
+            ToolTipService.ToolTip="Back to top">
+        <FontIcon Glyph="&#xE70E;" FontSize="14" />
         <Button.Shadow>
             <ThemeShadow />
         </Button.Shadow>

@@ -11,14 +11,10 @@ name: Release and Publish
 #   - Check "Set as a pre-release" when publishing
 #   - WinGet submission will be skipped automatically
 #
-# MSIX Signing:
-#   For production releases, configure a stable signing certificate:
-#   1. Generate a code signing certificate (or purchase from a CA)
-#   2. Export to PFX and base64 encode: base64 -w 0 cert.pfx > cert.b64
-#   3. Add secrets in GitHub: Settings > Secrets > Actions
-#      - MSIX_CERTIFICATE_BASE64: The base64-encoded PFX file
-#      - MSIX_CERTIFICATE_PASSWORD: The PFX password
-#   If secrets are not configured, a self-signed certificate will be used.
+# MSIX for Windows Store:
+#   - MSIX packages are created unsigned for Windows Store submission
+#   - Microsoft signs the package during the Store submission process
+#   - For sideloading, users can install the unsigned MSIX after enabling Developer Mode
 
 on:
   release:
@@ -33,76 +29,10 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
-  # Setup signing certificate (runs once, shared by all platforms)
-  setup-cert:
-    name: Setup Certificate
-    runs-on: windows-latest
-    outputs:
-      IS_SELF_SIGNED: ${{ steps.cert.outputs.IS_SELF_SIGNED }}
-    steps:
-      - name: Setup signing certificate
-        id: cert
-        shell: pwsh
-        env:
-          MSIX_CERT_BASE64: ${{ secrets.MSIX_CERTIFICATE_BASE64 }}
-          MSIX_CERT_PASSWORD: ${{ secrets.MSIX_CERTIFICATE_PASSWORD }}
-        run: |
-          $certDir = "${{ github.workspace }}\certs"
-          New-Item -ItemType Directory -Force -Path $certDir | Out-Null
-          $certPath = "$certDir\signing.pfx"
-          $certPublicPath = "$certDir\signing.cer"
-          $isSelfSigned = $false
-
-          if ($env:MSIX_CERT_BASE64 -and $env:MSIX_CERT_PASSWORD) {
-            # Use stable certificate from secrets
-            Write-Host "Using stable signing certificate from secrets"
-            $certBytes = [Convert]::FromBase64String($env:MSIX_CERT_BASE64)
-            [IO.File]::WriteAllBytes($certPath, $certBytes)
-            $certPassword = $env:MSIX_CERT_PASSWORD
-          } else {
-            # Generate self-signed certificate as fallback
-            Write-Host "No stable certificate configured, generating self-signed certificate"
-            Write-Host "::warning::Using self-signed certificate. Users must install the .cer file to use MSIX packages."
-            $certPassword = [System.Guid]::NewGuid().ToString()
-            $isSelfSigned = $true
-
-            $cert = New-SelfSignedCertificate `
-              -Type Custom `
-              -Subject "CN=xiaocang" `
-              -KeyUsage DigitalSignature `
-              -FriendlyName "Easydict Development Certificate" `
-              -CertStoreLocation "Cert:\CurrentUser\My" `
-              -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}CA=false")
-
-            $certPasswordSecure = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
-            Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $certPasswordSecure | Out-Null
-
-            # Export public certificate (.cer) for users to install
-            Export-Certificate -Cert $cert -FilePath $certPublicPath -Type CERT | Out-Null
-            Write-Host "Exported public certificate to: $certPublicPath"
-          }
-
-          # Mask password to prevent it from appearing in logs
-          Write-Host "::add-mask::$certPassword"
-
-          # Save password to file for artifact (it's masked, so safe)
-          Set-Content -Path "$certDir\password.txt" -Value $certPassword -NoNewline
-
-          # Output info for job outputs
-          echo "IS_SELF_SIGNED=$isSelfSigned" >> $env:GITHUB_OUTPUT
-
-      - name: Upload certificate artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: signing-cert
-          path: certs/
-          retention-days: 1
-
   # Build and package MSIX using winapp CLI
   publish-msix:
     name: Build MSIX Package
     runs-on: windows-latest
-    needs: setup-cert
     strategy:
       fail-fast: false
       max-parallel: 1  # Serialize uploads to avoid race conditions
@@ -112,12 +42,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Download signing certificate
-        uses: actions/download-artifact@v4
-        with:
-          name: signing-cert
-          path: certs/
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -187,25 +111,6 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
-      # Load signing certificate from artifact (generated once in setup-cert job)
-      - name: Load signing certificate
-        id: cert
-        shell: pwsh
-        run: |
-          $certPath = "${{ github.workspace }}\certs\signing.pfx"
-          $certPublicPath = "${{ github.workspace }}\certs\signing.cer"
-          $certPassword = Get-Content "${{ github.workspace }}\certs\password.txt" -Raw
-
-          # Mask password to prevent it from appearing in logs
-          Write-Host "::add-mask::$certPassword"
-
-          Write-Host "Using certificate from artifact: $certPath"
-
-          # Output certificate paths for subsequent steps
-          echo "CERT_PATH=$certPath" >> $env:GITHUB_OUTPUT
-          echo "CERT_PASSWORD=$certPassword" >> $env:GITHUB_OUTPUT
-          echo "CERT_PUBLIC_PATH=$certPublicPath" >> $env:GITHUB_OUTPUT
-
       # Update manifest version
       - name: Update manifest version
         shell: pwsh
@@ -216,7 +121,7 @@ jobs:
           $content = $content -replace 'ProcessorArchitecture="neutral"', "ProcessorArchitecture=`"${{ matrix.platform }}`""
           Set-Content $manifestPath $content
 
-      # Create MSIX package using winapp CLI
+      # Create MSIX package using winapp CLI (unsigned for Windows Store submission)
       - name: Create MSIX package
         working-directory: dotnet
         shell: pwsh
@@ -224,24 +129,12 @@ jobs:
           # Create MSIX output directory
           New-Item -ItemType Directory -Force -Path ./msix
 
-          # Package the application
-          winapp pack `
-            --input ./publish/${{ matrix.platform }} `
+          # Package the application (unsigned - Microsoft signs during Store submission)
+          winapp package `
+            ./publish/${{ matrix.platform }} `
             --output ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix `
             --manifest src/Easydict.WinUI/Package.appxmanifest `
-            --verbose
-
-      # Sign the MSIX package
-      - name: Sign MSIX package
-        working-directory: dotnet
-        shell: pwsh
-        env:
-          SIGN_CERT_PASSWORD: ${{ steps.cert.outputs.CERT_PASSWORD }}
-        run: |
-          winapp sign `
-            --input ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix `
-            --certificate "${{ steps.cert.outputs.CERT_PATH }}" `
-            --password "$env:SIGN_CERT_PASSWORD" `
+            --self-contained `
             --verbose
 
       # Also create ZIP archive for portable distribution
@@ -294,13 +187,6 @@ jobs:
             easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
             checksums-${{ matrix.platform }}.sha256
           generate_release_notes: ${{ matrix.platform == 'x64' }}
-
-      # Upload public certificate for self-signed builds (only once, with x64)
-      - name: Upload signing certificate
-        if: needs.setup-cert.outputs.IS_SELF_SIGNED == 'true' && matrix.platform == 'x64'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: certs/signing.cer
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4

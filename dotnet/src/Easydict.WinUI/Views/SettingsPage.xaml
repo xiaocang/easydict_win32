@@ -476,6 +476,7 @@
                         <ToggleSwitch x:Name="MinimizeToTrayToggle" Header="Minimize to system tray" />
                         <ToggleSwitch x:Name="ClipboardMonitorToggle" Header="Monitor clipboard for text" />
                         <ToggleSwitch x:Name="AlwaysOnTopToggle" Header="Always on top" />
+                        <ToggleSwitch x:Name="LaunchAtStartupToggle" Header="Launch at Windows startup" />
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -488,8 +489,10 @@
                     <StackPanel Spacing="16">
                         <TextBox x:Name="ShowHotkeyBox" Header="Show Window" Width="200" PlaceholderText="Ctrl+Alt+T" />
                         <TextBox x:Name="TranslateHotkeyBox" Header="Translate Selection" Width="200" PlaceholderText="Ctrl+Alt+D" />
-                        <TextBlock Text="Note: Restart app to apply hotkey changes"
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBox x:Name="ShowMiniHotkeyBox" Header="Show Mini Window" Width="200" PlaceholderText="Ctrl+Alt+M" />
+                        <TextBox x:Name="ShowFixedHotkeyBox" Header="Show Fixed Window" Width="200" PlaceholderText="Ctrl+Alt+F" />
+                        <TextBlock Text="Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M)."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -502,7 +505,14 @@
                     <StackPanel Spacing="8">
                         <TextBlock Text="Easydict for Windows" FontWeight="SemiBold" />
                         <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <HyperlinkButton Content="GitHub Repository" NavigateUri="https://github.com/tisfeng/Easydict" />
+                        <HyperlinkButton Content="GitHub Repository" NavigateUri="https://github.com/xiaocang/easydict_win32" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="Inspired by" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                            <HyperlinkButton Content="Easydict for macOS" NavigateUri="https://github.com/tisfeng/Easydict" FontSize="12" Padding="0" />
+                        </StackPanel>
+
+                        <TextBlock Text="License: GPL-3.0" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </Border>
             </StackPanel>

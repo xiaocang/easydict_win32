@@ -24,12 +24,6 @@ public sealed class HotkeyService : IDisposable
     private const uint MOD_SHIFT = 0x0004;
     private const uint MOD_NOREPEAT = 0x4000;
 
-    // Virtual key codes
-    private const uint VK_T = 0x54;  // T key
-    private const uint VK_D = 0x44;  // D key
-    private const uint VK_M = 0x4D;  // M key
-    private const uint VK_F = 0x46;  // F key
-
     private readonly Window _window;
     private readonly nint _hwnd;
     private bool _isDisposed;
@@ -69,7 +63,8 @@ public sealed class HotkeyService : IDisposable
 
     /// <summary>
     /// Initialize and register global hotkeys.
-    /// Default: Ctrl+Alt+T to show window, Ctrl+Alt+D to translate selection, Ctrl+Alt+M to show mini window.
+    /// Reads hotkey configurations from SettingsService.
+    /// Toggle hotkeys are derived by adding Shift to the base hotkey.
     /// </summary>
     public void Initialize()
     {
@@ -82,32 +77,67 @@ public sealed class HotkeyService : IDisposable
         var subclassResult = SetWindowSubclass(_hwnd, _subclassProc, 1, 0);
         System.Diagnostics.Debug.WriteLine($"[Hotkey] SetWindowSubclass: {subclassResult}");
 
-        // Register Ctrl+Alt+T to show window
-        var result1 = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_T);
-        System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey SHOW (Ctrl+Alt+T): {result1}, Error: {Marshal.GetLastWin32Error()}");
+        var settings = SettingsService.Instance;
 
-        // Register Ctrl+Alt+D to translate selection
-        var result2 = RegisterHotKey(_hwnd, HOTKEY_ID_TRANSLATE_SELECTION, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_D);
-        System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TRANSLATE (Ctrl+Alt+D): {result2}, Error: {Marshal.GetLastWin32Error()}");
+        // Register Show Window hotkey (default: Ctrl+Alt+T)
+        RegisterHotkeyFromSetting(HOTKEY_ID_SHOW, settings.ShowWindowHotkey, "SHOW");
 
-        // Register Ctrl+Alt+M to show mini window
-        var result3 = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_MINI, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_M);
-        System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey MINI (Ctrl+Alt+M): {result3}, Error: {Marshal.GetLastWin32Error()}");
+        // Register Translate Selection hotkey (default: Ctrl+Alt+D)
+        RegisterHotkeyFromSetting(HOTKEY_ID_TRANSLATE_SELECTION, settings.TranslateSelectionHotkey, "TRANSLATE");
 
-        // Register Ctrl+Alt+F to show fixed window
-        var result4 = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_F);
-        System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey FIXED (Ctrl+Alt+F): {result4}, Error: {Marshal.GetLastWin32Error()}");
+        // Register Show Mini Window hotkey (default: Ctrl+Alt+M)
+        var miniResult = HotkeyParser.Parse(settings.ShowMiniWindowHotkey);
+        if (miniResult.IsValid)
+        {
+            var result = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_MINI, miniResult.Modifiers | MOD_NOREPEAT, miniResult.VirtualKey);
+            System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey MINI ({settings.ShowMiniWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
 
-        // Register Ctrl+Alt+Shift+M to toggle mini window
-        var result5 = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_MINI, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, VK_M);
-        System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_MINI (Ctrl+Alt+Shift+M): {result5}, Error: {Marshal.GetLastWin32Error()}");
+            // Register Toggle Mini hotkey (base + Shift)
+            var toggleMini = HotkeyParser.AddShiftModifier(miniResult);
+            var toggleResult = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_MINI, toggleMini.Modifiers | MOD_NOREPEAT, toggleMini.VirtualKey);
+            System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_MINI ({settings.ShowMiniWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse ShowMiniWindowHotkey '{settings.ShowMiniWindowHotkey}': {miniResult.ErrorMessage}");
+        }
 
-        // Register Ctrl+Alt+Shift+F to toggle fixed window
-        var result6 = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_FIXED, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, VK_F);
-        System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_FIXED (Ctrl+Alt+Shift+F): {result6}, Error: {Marshal.GetLastWin32Error()}");
+        // Register Show Fixed Window hotkey (default: Ctrl+Alt+F)
+        var fixedResult = HotkeyParser.Parse(settings.ShowFixedWindowHotkey);
+        if (fixedResult.IsValid)
+        {
+            var result = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED, fixedResult.Modifiers | MOD_NOREPEAT, fixedResult.VirtualKey);
+            System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey FIXED ({settings.ShowFixedWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
+
+            // Register Toggle Fixed hotkey (base + Shift)
+            var toggleFixed = HotkeyParser.AddShiftModifier(fixedResult);
+            var toggleResult = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_FIXED, toggleFixed.Modifiers | MOD_NOREPEAT, toggleFixed.VirtualKey);
+            System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_FIXED ({settings.ShowFixedWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse ShowFixedWindowHotkey '{settings.ShowFixedWindowHotkey}': {fixedResult.ErrorMessage}");
+        }
 
         _isInitialized = true;
         System.Diagnostics.Debug.WriteLine("[Hotkey] Hotkey service initialized.");
+    }
+
+    /// <summary>
+    /// Register a hotkey from a settings string.
+    /// </summary>
+    private void RegisterHotkeyFromSetting(int hotkeyId, string hotkeyString, string debugName)
+    {
+        var parseResult = HotkeyParser.Parse(hotkeyString);
+        if (parseResult.IsValid)
+        {
+            var result = RegisterHotKey(_hwnd, hotkeyId, parseResult.Modifiers | MOD_NOREPEAT, parseResult.VirtualKey);
+            System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey {debugName} ({hotkeyString}): {result}, Error: {Marshal.GetLastWin32Error()}");
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse {debugName} hotkey '{hotkeyString}': {parseResult.ErrorMessage}");
+        }
     }
 
     /// <summary>

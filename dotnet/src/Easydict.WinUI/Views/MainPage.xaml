@@ -105,10 +105,10 @@
         <!-- Wide Layout: Language + Button in one row -->
         <Grid x:Name="ActionBarWide" Grid.Row="2" Margin="0,4,0,4" Visibility="Visible">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />  <!-- Source Language -->
+                <ColumnDefinition Width="Auto" />  <!-- Swap Button -->
+                <ColumnDefinition Width="Auto" />  <!-- Target Language -->
+                <ColumnDefinition Width="*" />     <!-- Translate Button (Right-aligned) -->
             </Grid.ColumnDefinitions>
 
             <!-- Source Language -->
@@ -141,16 +141,34 @@
                 <FontIcon Glyph="&#xE8AB;" FontSize="16" />
             </Button>
 
-            <!-- Translate Button (Center) -->
+            <!-- Target Language -->
+            <ComboBox
+                x:Name="TargetLangCombo"
+                Grid.Column="2"
+                MinWidth="130"
+                SelectedIndex="1"
+                SelectionChanged="OnTargetLanguageChanged"
+                VerticalAlignment="Center"
+                ToolTipService.ToolTip="Target Language">
+                <ComboBoxItem Content="English" />
+                <ComboBoxItem Content="Chinese" />
+                <ComboBoxItem Content="Japanese" />
+                <ComboBoxItem Content="Korean" />
+                <ComboBoxItem Content="French" />
+                <ComboBoxItem Content="German" />
+                <ComboBoxItem Content="Spanish" />
+            </ComboBox>
+
+            <!-- Translate Button (Right) -->
             <Button
                 x:Name="TranslateButton"
-                Grid.Column="2"
+                Grid.Column="3"
                 Click="OnTranslateClicked"
                 Width="40"
                 Height="40"
                 Padding="0"
                 CornerRadius="20"
-                HorizontalAlignment="Center"
+                HorizontalAlignment="Right"
                 VerticalAlignment="Center"
                 Background="{StaticResource AccentBrush}"
                 ToolTipService.ToolTip="Translate">
@@ -168,24 +186,6 @@
                         Foreground="White" />
                 </Grid>
             </Button>
-
-            <!-- Target Language -->
-            <ComboBox
-                x:Name="TargetLangCombo"
-                Grid.Column="3"
-                MinWidth="130"
-                SelectedIndex="1"
-                SelectionChanged="OnTargetLanguageChanged"
-                VerticalAlignment="Center"
-                ToolTipService.ToolTip="Target Language">
-                <ComboBoxItem Content="English" />
-                <ComboBoxItem Content="Chinese" />
-                <ComboBoxItem Content="Japanese" />
-                <ComboBoxItem Content="Korean" />
-                <ComboBoxItem Content="French" />
-                <ComboBoxItem Content="German" />
-                <ComboBoxItem Content="Spanish" />
-            </ComboBox>
         </Grid>
 
         <!-- Narrow Layout: Stacked controls -->

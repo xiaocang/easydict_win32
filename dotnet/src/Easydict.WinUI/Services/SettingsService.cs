@@ -103,6 +103,9 @@ public sealed class SettingsService
     // UI settings
     public bool AlwaysOnTop { get; set; } = false;
 
+    // Startup settings
+    public bool LaunchAtStartup { get; set; } = false;
+
     // Mini window settings
     public string ShowMiniWindowHotkey { get; set; } = "Ctrl+Alt+M";
     public bool MiniWindowAutoClose { get; set; } = true;
@@ -301,6 +304,7 @@ public sealed class SettingsService
         ShowWindowHotkey = GetValue(nameof(ShowWindowHotkey), "Ctrl+Alt+T");
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
+        LaunchAtStartup = GetValue(nameof(LaunchAtStartup), false);
         EnableDpiAwareness = GetValue(nameof(EnableDpiAwareness), true);
 
         // Try to load WindowWidthDips first (new format), fallback to WindowWidth (legacy)
@@ -406,6 +410,7 @@ public sealed class SettingsService
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;
+        _settings[nameof(LaunchAtStartup)] = LaunchAtStartup;
         _settings[nameof(EnableDpiAwareness)] = EnableDpiAwareness;
         _settings[nameof(WindowWidthDips)] = WindowWidthDips;
         _settings[nameof(WindowHeightDips)] = WindowHeightDips;

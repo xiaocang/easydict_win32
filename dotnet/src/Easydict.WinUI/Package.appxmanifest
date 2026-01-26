@@ -2,7 +2,6 @@
 
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
-  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap rescap">
@@ -12,8 +11,6 @@
     Publisher="CN=xiaocang"
     Version="0.1.0.0"
     ProcessorArchitecture="neutral" />
-
-  <mp:PhoneIdentity PhoneProductId="7ec29511-d845-41cd-a3c5-27d2606557a1" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
     <DisplayName>Easydict</DisplayName>
@@ -28,8 +25,7 @@
   </Dependencies>
 
   <Resources>
-    <Resource Language="en-US"/>
-    <Resource Language="zh-CN"/>
+    <Resource Language="x-generate"/>
   </Resources>
 
   <Applications>

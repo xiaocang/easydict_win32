@@ -72,11 +72,60 @@ While the feature set is not yet complete compared to the macOS version, this po
 ### System Requirements
 
 - Windows 10 version 1809 (build 17763) or later
-- .NET 8.0 Runtime
+- x64, x86, or ARM64 processor
 
 ### Download
 
-Download the latest ZIP package from the [Releases](https://github.com/xiaocang/easydict_win32/releases) page, extract it, and run `Easydict.WinUI.exe`.
+Download from the [Releases](https://github.com/xiaocang/easydict_win32/releases) page.
+
+#### Portable Version (Recommended)
+
+**File:** `easydict_win32-vX.Y.Z-x64.zip`
+
+- No installation required - extract and run
+- No administrator privileges needed
+- Self-contained (.NET runtime included)
+- First run may trigger Windows SmartScreen warning - click "More info" → "Run anyway"
+
+```powershell
+# Extract and run
+Expand-Archive easydict_win32-v1.0.0-x64.zip -DestinationPath Easydict
+.\Easydict\Easydict.WinUI.exe
+```
+
+#### MSIX Package
+
+**File:** `Easydict-vX.Y.Z-x64.msix`
+
+- Windows native installer format
+- Integrates with Start Menu and system features
+- Prepared for future Windows Store release
+- **Requires certificate trust** (self-signed builds)
+
+```powershell
+# For self-signed MSIX, you may need to install the certificate first
+# Or enable Developer Mode: Settings → Privacy & security → For developers
+
+# Install the package
+Add-AppxPackage -Path Easydict-v1.0.0-x64.msix
+```
+
+> **Note:** MSIX packages from GitHub Releases use self-signed certificates.
+> Users must trust the certificate before installation. For easier installation,
+> use the Portable version or wait for the Windows Store release.
+
+#### Verify Download (Optional)
+
+Each release includes SHA256 checksums for verification:
+
+```bash
+# Linux/macOS/WSL
+sha256sum -c checksums-x64.sha256
+
+# PowerShell
+(Get-FileHash easydict_win32-v1.0.0-x64.zip -Algorithm SHA256).Hash
+# Compare with the hash in checksums-x64.sha256
+```
 
 ### Build from Source
 

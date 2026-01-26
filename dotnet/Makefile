@@ -102,50 +102,51 @@ ifndef CERT_PASSWORD
 endif
 	@winapp cert install --certificate $(CERT_PATH) --password "$(CERT_PASSWORD)"
 
-# Helper function to create temp manifest with specific architecture and version
-# Usage: $(call create_temp_manifest,ARCH,TEMP_FILE)
-define create_temp_manifest
-	@echo "Creating temp manifest for $(1) architecture..."
-	@cp $(MANIFEST_SRC) $(2)
-	@sed -i 's/ProcessorArchitecture="[^"]*"/ProcessorArchitecture="$(1)"/' $(2)
-	@sed -i 's/Version="[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*"/Version="$(VERSION)"/' $(2)
-endef
-
 # Create MSIX package for x64
+# Uses shell-local variable to avoid race conditions with parallel builds
 msix-x64: publish-x64
 	@mkdir -p msix
-	$(eval TMP_MANIFEST := $(shell mktemp --suffix=.appxmanifest))
-	$(call create_temp_manifest,x64,$(TMP_MANIFEST))
+	@TMP_MANIFEST=$$(mktemp); \
+	echo "Creating temp manifest for x64 architecture..."; \
+	cp $(MANIFEST_SRC) $$TMP_MANIFEST; \
+	sed -i 's/ProcessorArchitecture="[^"]*"/ProcessorArchitecture="x64"/' $$TMP_MANIFEST; \
+	sed -i 's/Version="[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*"/Version="$(VERSION)"/' $$TMP_MANIFEST; \
 	winapp pack \
 		--input ./publish/x64 \
 		--output ./msix/Easydict-x64.msix \
-		--manifest $(TMP_MANIFEST) \
-		--verbose
-	@rm -f $(TMP_MANIFEST)
+		--manifest $$TMP_MANIFEST \
+		--verbose; \
+	rm -f $$TMP_MANIFEST
 
 # Create MSIX package for x86
 msix-x86: publish-x86
 	@mkdir -p msix
-	$(eval TMP_MANIFEST := $(shell mktemp --suffix=.appxmanifest))
-	$(call create_temp_manifest,x86,$(TMP_MANIFEST))
+	@TMP_MANIFEST=$$(mktemp); \
+	echo "Creating temp manifest for x86 architecture..."; \
+	cp $(MANIFEST_SRC) $$TMP_MANIFEST; \
+	sed -i 's/ProcessorArchitecture="[^"]*"/ProcessorArchitecture="x86"/' $$TMP_MANIFEST; \
+	sed -i 's/Version="[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*"/Version="$(VERSION)"/' $$TMP_MANIFEST; \
 	winapp pack \
 		--input ./publish/x86 \
 		--output ./msix/Easydict-x86.msix \
-		--manifest $(TMP_MANIFEST) \
-		--verbose
-	@rm -f $(TMP_MANIFEST)
+		--manifest $$TMP_MANIFEST \
+		--verbose; \
+	rm -f $$TMP_MANIFEST
 
 # Create MSIX package for ARM64
 msix-arm64: publish-arm64
 	@mkdir -p msix
-	$(eval TMP_MANIFEST := $(shell mktemp --suffix=.appxmanifest))
-	$(call create_temp_manifest,arm64,$(TMP_MANIFEST))
+	@TMP_MANIFEST=$$(mktemp); \
+	echo "Creating temp manifest for arm64 architecture..."; \
+	cp $(MANIFEST_SRC) $$TMP_MANIFEST; \
+	sed -i 's/ProcessorArchitecture="[^"]*"/ProcessorArchitecture="arm64"/' $$TMP_MANIFEST; \
+	sed -i 's/Version="[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*"/Version="$(VERSION)"/' $$TMP_MANIFEST; \
 	winapp pack \
 		--input ./publish/arm64 \
 		--output ./msix/Easydict-arm64.msix \
-		--manifest $(TMP_MANIFEST) \
-		--verbose
-	@rm -f $(TMP_MANIFEST)
+		--manifest $$TMP_MANIFEST \
+		--verbose; \
+	rm -f $$TMP_MANIFEST
 
 # Create MSIX package for current platform (default: x64)
 msix: msix-x64

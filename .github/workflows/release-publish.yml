@@ -129,7 +129,7 @@ jobs:
               -KeyUsage DigitalSignature `
               -FriendlyName "Easydict Development Certificate" `
               -CertStoreLocation "Cert:\CurrentUser\My" `
-              -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+              -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}CA=false")
 
             $certPasswordSecure = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
             Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $certPasswordSecure | Out-Null
@@ -214,10 +214,8 @@ jobs:
           $msixName = Split-Path $msixFile -Leaf
           $zipName = Split-Path $zipFile -Leaf
 
-          @"
-          $msixHash  $msixName
-          $zipHash  $zipName
-          "@ | Set-Content -Path $checksumFile -NoNewline
+          # Use explicit string concatenation to avoid here-string indentation issues
+          "$msixHash  $msixName`n$zipHash  $zipName`n" | Set-Content -Path $checksumFile -NoNewline
 
           # Also output to console for visibility
           Write-Host "SHA256 Checksums for ${{ matrix.platform }}:"

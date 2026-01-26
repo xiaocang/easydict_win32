@@ -1,4 +1,6 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -14,6 +16,11 @@ public sealed partial class SettingsPage : Page
     private bool _isLoading = true; // Prevent change detection during initial load
     private bool _handlersRegistered; // Guard to prevent duplicate event handler registration
 
+    // Service selection collections for each window (populated from TranslationManager.Services)
+    private readonly ObservableCollection<ServiceCheckItem> _mainWindowServices = [];
+    private readonly ObservableCollection<ServiceCheckItem> _miniWindowServices = [];
+    private readonly ObservableCollection<ServiceCheckItem> _fixedWindowServices = [];
+
     public SettingsPage()
     {
         this.InitializeComponent();
@@ -23,6 +30,12 @@ public sealed partial class SettingsPage : Page
     private void OnPageLoaded(object sender, RoutedEventArgs e)
     {
         _isLoading = true;
+
+        // Bind ItemsControls to collections
+        MainWindowServicesPanel.ItemsSource = _mainWindowServices;
+        MiniWindowServicesPanel.ItemsSource = _miniWindowServices;
+        FixedWindowServicesPanel.ItemsSource = _fixedWindowServices;
+
         LoadSettings();
         if (!_handlersRegistered)
         {
@@ -87,21 +100,20 @@ public sealed partial class SettingsPage : Page
         DeepLFreeCheck.Checked += OnSettingChanged;
         DeepLFreeCheck.Unchecked += OnSettingChanged;
 
-        // Service selection checkboxes for each window
-        RegisterServiceCheckBoxHandlers(MainWindowServicesPanel);
-        RegisterServiceCheckBoxHandlers(MiniWindowServicesPanel);
-        RegisterServiceCheckBoxHandlers(FixedWindowServicesPanel);
+        // Service selection changes (via PropertyChanged on ServiceCheckItem)
+        RegisterServiceCollectionHandlers(_mainWindowServices);
+        RegisterServiceCollectionHandlers(_miniWindowServices);
+        RegisterServiceCollectionHandlers(_fixedWindowServices);
     }
 
     /// <summary>
-    /// Register change handlers for all checkboxes in a panel.
+    /// Register PropertyChanged handlers for service check items in a collection.
     /// </summary>
-    private void RegisterServiceCheckBoxHandlers(StackPanel panel)
+    private void RegisterServiceCollectionHandlers(ObservableCollection<ServiceCheckItem> collection)
     {
-        foreach (var checkBox in panel.Children.OfType<CheckBox>())
+        foreach (var item in collection)
         {
-            checkBox.Checked += OnSettingChanged;
-            checkBox.Unchecked += OnSettingChanged;
+            item.PropertyChanged += (_, _) => OnSettingChanged(null!, null!);
         }
     }
 
@@ -191,21 +203,30 @@ public sealed partial class SettingsPage : Page
         ShowHotkeyBox.Text = _settings.ShowWindowHotkey;
         TranslateHotkeyBox.Text = _settings.TranslateSelectionHotkey;
 
-        // Enabled services for each window
-        LoadServiceCheckboxes(MainWindowServicesPanel, _settings.MainWindowEnabledServices);
-        LoadServiceCheckboxes(MiniWindowServicesPanel, _settings.MiniWindowEnabledServices);
-        LoadServiceCheckboxes(FixedWindowServicesPanel, _settings.FixedWindowEnabledServices);
+        // Enabled services for each window (populate from TranslationManager.Services)
+        PopulateServiceCollection(_mainWindowServices, _settings.MainWindowEnabledServices);
+        PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices);
+        PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices);
     }
 
     /// <summary>
-    /// Load enabled services into checkboxes for a window panel.
+    /// Populate a service collection from TranslationManager.Services with enabled state from settings.
     /// </summary>
-    private static void LoadServiceCheckboxes(StackPanel panel, List<string> enabledServices)
+    private static void PopulateServiceCollection(ObservableCollection<ServiceCheckItem> collection, List<string> enabledServices)
     {
-        foreach (var checkBox in panel.Children.OfType<CheckBox>().Where(cb => cb.Tag is string))
+        collection.Clear();
+
+        using var handle = TranslationManagerService.Instance.AcquireHandle();
+        var manager = handle.Manager;
+
+        foreach (var (serviceId, service) in manager.Services)
         {
-            var serviceId = (string)checkBox.Tag!;
-            checkBox.IsChecked = enabledServices.Contains(serviceId);
+            collection.Add(new ServiceCheckItem
+            {
+                ServiceId = serviceId,
+                DisplayName = service.DisplayName,
+                IsChecked = enabledServices.Contains(serviceId)
+            });
         }
     }
 
@@ -421,15 +442,15 @@ public sealed partial class SettingsPage : Page
         _settings.ShowWindowHotkey = ShowHotkeyBox.Text;
         _settings.TranslateSelectionHotkey = TranslateHotkeyBox.Text;
 
-        // Save enabled services for each window
-        _settings.MainWindowEnabledServices = GetEnabledServicesFromPanel(MainWindowServicesPanel);
-        _settings.MiniWindowEnabledServices = GetEnabledServicesFromPanel(MiniWindowServicesPanel);
-        _settings.FixedWindowEnabledServices = GetEnabledServicesFromPanel(FixedWindowServicesPanel);
+        // Save enabled services for each window (from collections)
+        _settings.MainWindowEnabledServices = GetEnabledServicesFromCollection(_mainWindowServices);
+        _settings.MiniWindowEnabledServices = GetEnabledServicesFromCollection(_miniWindowServices);
+        _settings.FixedWindowEnabledServices = GetEnabledServicesFromCollection(_fixedWindowServices);
 
-        // Validate that at least one service is enabled for each window (updates UI too)
-        EnsureDefaultServiceEnabled(MainWindowServicesPanel, _settings.MainWindowEnabledServices);
-        EnsureDefaultServiceEnabled(MiniWindowServicesPanel, _settings.MiniWindowEnabledServices);
-        EnsureDefaultServiceEnabled(FixedWindowServicesPanel, _settings.FixedWindowEnabledServices);
+        // Validate that at least one service is enabled for each window (updates collection too)
+        EnsureDefaultServiceEnabled(_mainWindowServices, _settings.MainWindowEnabledServices);
+        EnsureDefaultServiceEnabled(_miniWindowServices, _settings.MiniWindowEnabledServices);
+        EnsureDefaultServiceEnabled(_fixedWindowServices, _settings.FixedWindowEnabledServices);
 
         // Persist to storage
         _settings.Save();
@@ -537,35 +558,31 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
-    /// Get list of enabled services from a panel's checkboxes.
+    /// Get list of enabled services from a collection.
     /// </summary>
-    private static List<string> GetEnabledServicesFromPanel(StackPanel panel)
+    private static List<string> GetEnabledServicesFromCollection(ObservableCollection<ServiceCheckItem> collection)
     {
-        return panel.Children
-            .OfType<CheckBox>()
-            .Where(cb => cb.Tag is string && cb.IsChecked == true)
-            .Select(cb => (string)cb.Tag!)
+        return collection
+            .Where(item => item.IsChecked)
+            .Select(item => item.ServiceId)
             .ToList();
     }
 
     /// <summary>
-    /// Ensure at least Google is checked when the panel has no services selected.
-    /// Updates both the settings and the UI checkbox.
+    /// Ensure at least Google is checked when the collection has no services selected.
+    /// Updates both the settings and the collection item.
     /// </summary>
-    private static void EnsureDefaultServiceEnabled(StackPanel panel, List<string> services)
+    private static void EnsureDefaultServiceEnabled(ObservableCollection<ServiceCheckItem> collection, List<string> services)
     {
         if (services.Count > 0) return;
 
         services.Add("google");
 
-        // Also update the UI to reflect this default
-        var googleCheckBox = panel.Children
-            .OfType<CheckBox>()
-            .FirstOrDefault(cb => cb.Tag as string == "google");
-
-        if (googleCheckBox != null)
+        // Also update the collection item to reflect this default
+        var googleItem = collection.FirstOrDefault(item => item.ServiceId == "google");
+        if (googleItem != null)
         {
-            googleCheckBox.IsChecked = true;
+            googleItem.IsChecked = true;
         }
     }
 }

@@ -68,23 +68,17 @@
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
                         <TextBlock Text="Main Window" FontWeight="SemiBold" FontSize="14" />
-                        <StackPanel x:Name="MainWindowServicesPanel" Spacing="8">
-                            <CheckBox x:Name="MainGoogleCheck" Content="Google Translate" Tag="google" />
-                            <CheckBox x:Name="MainDeepLCheck" Content="DeepL" Tag="deepl" />
-                            <CheckBox x:Name="MainOpenAICheck" Content="OpenAI" Tag="openai" />
-                            <CheckBox x:Name="MainCustomOpenAICheck" Content="Custom OpenAI" Tag="custom-openai" />
-                            <CheckBox x:Name="MainOllamaCheck" Content="Ollama" Tag="ollama" />
-                            <CheckBox x:Name="MainBuiltinCheck" Content="Built-in AI" Tag="builtin" />
-                            <CheckBox x:Name="MainDeepSeekCheck" Content="DeepSeek" Tag="deepseek" />
-                            <CheckBox x:Name="MainGroqCheck" Content="Groq" Tag="groq" />
-                            <CheckBox x:Name="MainZhipuCheck" Content="Zhipu (智谱)" Tag="zhipu" />
-                            <CheckBox x:Name="MainGitHubCheck" Content="GitHub Models" Tag="github" />
-                            <CheckBox x:Name="MainGeminiCheck" Content="Gemini" Tag="gemini" />
-                            <CheckBox x:Name="MainDoubaoCheck" Content="Doubao" Tag="doubao" />
-                            <CheckBox x:Name="MainCaiyunCheck" Content="Caiyun" Tag="caiyun" />
-                            <CheckBox x:Name="MainNiuTransCheck" Content="NiuTrans" Tag="niutrans" />
-                            <CheckBox x:Name="MainLingueeCheck" Content="Linguee" Tag="linguee" />
-                        </StackPanel>
+                        <ItemsControl x:Name="MainWindowServicesPanel">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox
+                                        Content="{Binding DisplayName}"
+                                        Tag="{Binding ServiceId}"
+                                        IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                        Margin="0,4" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </Border>
 
@@ -92,23 +86,17 @@
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
                         <TextBlock Text="Mini Window" FontWeight="SemiBold" FontSize="14" />
-                        <StackPanel x:Name="MiniWindowServicesPanel" Spacing="8">
-                            <CheckBox x:Name="MiniGoogleCheck" Content="Google Translate" Tag="google" />
-                            <CheckBox x:Name="MiniDeepLCheck" Content="DeepL" Tag="deepl" />
-                            <CheckBox x:Name="MiniOpenAICheck" Content="OpenAI" Tag="openai" />
-                            <CheckBox x:Name="MiniCustomOpenAICheck" Content="Custom OpenAI" Tag="custom-openai" />
-                            <CheckBox x:Name="MiniOllamaCheck" Content="Ollama" Tag="ollama" />
-                            <CheckBox x:Name="MiniBuiltinCheck" Content="Built-in AI" Tag="builtin" />
-                            <CheckBox x:Name="MiniDeepSeekCheck" Content="DeepSeek" Tag="deepseek" />
-                            <CheckBox x:Name="MiniGroqCheck" Content="Groq" Tag="groq" />
-                            <CheckBox x:Name="MiniZhipuCheck" Content="Zhipu (智谱)" Tag="zhipu" />
-                            <CheckBox x:Name="MiniGitHubCheck" Content="GitHub Models" Tag="github" />
-                            <CheckBox x:Name="MiniGeminiCheck" Content="Gemini" Tag="gemini" />
-                            <CheckBox x:Name="MiniDoubaoCheck" Content="Doubao" Tag="doubao" />
-                            <CheckBox x:Name="MiniCaiyunCheck" Content="Caiyun" Tag="caiyun" />
-                            <CheckBox x:Name="MiniNiuTransCheck" Content="NiuTrans" Tag="niutrans" />
-                            <CheckBox x:Name="MiniLingueeCheck" Content="Linguee" Tag="linguee" />
-                        </StackPanel>
+                        <ItemsControl x:Name="MiniWindowServicesPanel">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox
+                                        Content="{Binding DisplayName}"
+                                        Tag="{Binding ServiceId}"
+                                        IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                        Margin="0,4" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </Border>
 
@@ -116,23 +104,17 @@
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
                         <TextBlock Text="Fixed Window" FontWeight="SemiBold" FontSize="14" />
-                        <StackPanel x:Name="FixedWindowServicesPanel" Spacing="8">
-                            <CheckBox x:Name="FixedGoogleCheck" Content="Google Translate" Tag="google" />
-                            <CheckBox x:Name="FixedDeepLCheck" Content="DeepL" Tag="deepl" />
-                            <CheckBox x:Name="FixedOpenAICheck" Content="OpenAI" Tag="openai" />
-                            <CheckBox x:Name="FixedCustomOpenAICheck" Content="Custom OpenAI" Tag="custom-openai" />
-                            <CheckBox x:Name="FixedOllamaCheck" Content="Ollama" Tag="ollama" />
-                            <CheckBox x:Name="FixedBuiltinCheck" Content="Built-in AI" Tag="builtin" />
-                            <CheckBox x:Name="FixedDeepSeekCheck" Content="DeepSeek" Tag="deepseek" />
-                            <CheckBox x:Name="FixedGroqCheck" Content="Groq" Tag="groq" />
-                            <CheckBox x:Name="FixedZhipuCheck" Content="Zhipu (智谱)" Tag="zhipu" />
-                            <CheckBox x:Name="FixedGitHubCheck" Content="GitHub Models" Tag="github" />
-                            <CheckBox x:Name="FixedGeminiCheck" Content="Gemini" Tag="gemini" />
-                            <CheckBox x:Name="FixedDoubaoCheck" Content="Doubao" Tag="doubao" />
-                            <CheckBox x:Name="FixedCaiyunCheck" Content="Caiyun" Tag="caiyun" />
-                            <CheckBox x:Name="FixedNiuTransCheck" Content="NiuTrans" Tag="niutrans" />
-                            <CheckBox x:Name="FixedLingueeCheck" Content="Linguee" Tag="linguee" />
-                        </StackPanel>
+                        <ItemsControl x:Name="FixedWindowServicesPanel">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox
+                                        Content="{Binding DisplayName}"
+                                        Tag="{Binding ServiceId}"
+                                        IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                        Margin="0,4" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </Border>
             </StackPanel>

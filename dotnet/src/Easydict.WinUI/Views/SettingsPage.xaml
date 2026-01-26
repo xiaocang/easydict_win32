@@ -473,7 +473,11 @@
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
-                        <ToggleSwitch x:Name="MinimizeToTrayToggle" Header="Minimize to system tray" />
+                        <StackPanel Spacing="4">
+                            <ToggleSwitch x:Name="MinimizeToTrayToggle" Header="Hide to tray when closing" />
+                            <TextBlock Text="When enabled, closing the window hides the app to system tray instead of exiting."
+                                       FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
                         <ToggleSwitch x:Name="ClipboardMonitorToggle" Header="Monitor clipboard for text" />
                         <ToggleSwitch x:Name="AlwaysOnTopToggle" Header="Always on top" />
                         <ToggleSwitch x:Name="LaunchAtStartupToggle" Header="Launch at Windows startup" />

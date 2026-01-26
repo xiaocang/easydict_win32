@@ -116,15 +116,22 @@ Add-AppxPackage -Path Easydict-v1.0.0-x64.msix
 
 #### Verify Download (Optional)
 
-Each release includes SHA256 checksums for verification:
+Each release includes SHA256 checksums for verification.
+
+**Note:** The checksum file contains entries for both MSIX and ZIP files.
+If you downloaded only one file, use the single-file verification method below.
 
 ```bash
-# Linux/macOS/WSL
+# Linux/macOS/WSL - Verify all files in current directory
 sha256sum -c checksums-x64.sha256
 
-# PowerShell
-(Get-FileHash easydict_win32-v1.0.0-x64.zip -Algorithm SHA256).Hash
-# Compare with the hash in checksums-x64.sha256
+# Linux/macOS/WSL - Verify single file (ignore missing files)
+sha256sum -c checksums-x64.sha256 --ignore-missing
+
+# PowerShell - Verify single file manually
+$expected = (Get-Content checksums-x64.sha256 | Select-String "easydict_win32").ToString().Split()[0]
+$actual = (Get-FileHash easydict_win32-v1.0.0-x64.zip -Algorithm SHA256).Hash.ToLower()
+if ($expected -eq $actual) { "OK" } else { "FAILED" }
 ```
 
 ### Build from Source

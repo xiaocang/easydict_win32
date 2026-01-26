@@ -33,83 +33,13 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
-  # Build and package MSIX using winapp CLI
-  publish-msix:
-    name: Build MSIX Package
+  # Setup signing certificate (runs once, shared by all platforms)
+  setup-cert:
+    name: Setup Certificate
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 1  # Serialize uploads to avoid race conditions
-      matrix:
-        platform: [x64, x86, arm64]
-
+    outputs:
+      IS_SELF_SIGNED: ${{ steps.cert.outputs.IS_SELF_SIGNED }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Setup WinApp CLI
-        uses: microsoft/setup-WinAppCli@v0.1
-
-      - name: Validate and extract version from tag
-        id: version
-        shell: bash
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-
-          # Validate tag format (must be v followed by semver)
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "Error: Tag '$TAG' does not match expected format (vX.Y.Z or vX.Y.Z-suffix)"
-            exit 1
-          fi
-
-          # Remove 'v' prefix from tag (v1.0.0 -> 1.0.0)
-          VERSION="${TAG#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
-
-          # Create MSIX-compatible version (must be X.Y.Z.W format)
-          # Extract base version (without prerelease suffix)
-          BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
-
-          # Extract prerelease number if present (e.g., beta.1 -> 1, rc.2 -> 2)
-          PRERELEASE_NUM=0
-          if [[ "$VERSION" =~ -[a-zA-Z]+\.([0-9]+) ]]; then
-            PRERELEASE_NUM="${BASH_REMATCH[1]}"
-          elif [[ "$VERSION" =~ -[a-zA-Z]+([0-9]+) ]]; then
-            PRERELEASE_NUM="${BASH_REMATCH[1]}"
-          fi
-
-          # Build 4-part version: X.Y.Z.W where W encodes prerelease
-          # W=0 for stable, W=1-999 for prereleases
-          MSIX_VERSION="${BASE_VERSION}.${PRERELEASE_NUM}"
-
-          echo "MSIX_VERSION=$MSIX_VERSION" >> $GITHUB_OUTPUT
-          echo "MSIX version: $MSIX_VERSION (prerelease num: $PRERELEASE_NUM)"
-
-      - name: Restore dependencies
-        working-directory: dotnet
-        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }}
-
-      # Build and publish the application
-      - name: Publish WinUI App
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --no-restore `
-            --output ./publish/${{ matrix.platform }} `
-            -p:Version=${{ steps.version.outputs.VERSION }} `
-            -p:Platform=${{ matrix.platform }} `
-            -p:PublishTrimmed=false
-
-      # Setup signing certificate (use stable cert from secrets if available)
       - name: Setup signing certificate
         id: cert
         shell: pwsh
@@ -117,8 +47,10 @@ jobs:
           MSIX_CERT_BASE64: ${{ secrets.MSIX_CERTIFICATE_BASE64 }}
           MSIX_CERT_PASSWORD: ${{ secrets.MSIX_CERTIFICATE_PASSWORD }}
         run: |
-          $certPath = "${{ github.workspace }}\signing.pfx"
-          $certPublicPath = "${{ github.workspace }}\signing.cer"
+          $certDir = "${{ github.workspace }}\certs"
+          New-Item -ItemType Directory -Force -Path $certDir | Out-Null
+          $certPath = "$certDir\signing.pfx"
+          $certPublicPath = "$certDir\signing.cer"
           $isSelfSigned = $false
 
           if ($env:MSIX_CERT_BASE64 -and $env:MSIX_CERT_PASSWORD) {
@@ -153,11 +85,126 @@ jobs:
           # Mask password to prevent it from appearing in logs
           Write-Host "::add-mask::$certPassword"
 
-          # Output certificate paths and info for subsequent steps
+          # Save password to file for artifact (it's masked, so safe)
+          Set-Content -Path "$certDir\password.txt" -Value $certPassword -NoNewline
+
+          # Output info for job outputs
+          echo "IS_SELF_SIGNED=$isSelfSigned" >> $env:GITHUB_OUTPUT
+
+      - name: Upload certificate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-cert
+          path: certs/
+          retention-days: 1
+
+  # Build and package MSIX using winapp CLI
+  publish-msix:
+    name: Build MSIX Package
+    runs-on: windows-latest
+    needs: setup-cert
+    strategy:
+      fail-fast: false
+      max-parallel: 1  # Serialize uploads to avoid race conditions
+      matrix:
+        platform: [x64, x86, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download signing certificate
+        uses: actions/download-artifact@v4
+        with:
+          name: signing-cert
+          path: certs/
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup WinApp CLI
+        uses: microsoft/setup-WinAppCli@v0.1
+
+      - name: Validate and extract version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # Validate tag format (must be v followed by semver)
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Tag '$TAG' does not match expected format (vX.Y.Z or vX.Y.Z-suffix)"
+            exit 1
+          fi
+
+          # Remove 'v' prefix from tag (v1.0.0 -> 1.0.0)
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+          # Create MSIX-compatible version (must be X.Y.Z.W format)
+          # Extract base version (without prerelease suffix)
+          BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
+
+          # Build 4-part MSIX version with proper ordering
+          # MSIX version comparison is numeric: X.Y.Z.W where higher W = newer
+          # For correct upgrade paths: stable releases MUST be higher than prereleases
+          # Solution: W=65535 for stable, W=1-999 for prereleases
+          # Example: 1.0.0 → 1.0.0.65535, 1.0.0-beta.1 → 1.0.0.1
+          if [[ "$VERSION" =~ -[a-zA-Z]+\.([0-9]+) ]]; then
+            # Format: v1.0.0-beta.1 → prerelease num = 1
+            REVISION="${BASH_REMATCH[1]}"
+          elif [[ "$VERSION" =~ -[a-zA-Z]+([0-9]+) ]]; then
+            # Format: v1.0.0-beta1 → prerelease num = 1
+            REVISION="${BASH_REMATCH[1]}"
+          else
+            # Stable release: use max revision for highest priority
+            REVISION=65535
+          fi
+
+          MSIX_VERSION="${BASE_VERSION}.${REVISION}"
+
+          echo "MSIX_VERSION=$MSIX_VERSION" >> $GITHUB_OUTPUT
+          echo "MSIX version: $MSIX_VERSION (revision: $REVISION, stable=65535)"
+
+      - name: Restore dependencies
+        working-directory: dotnet
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }}
+
+      # Build and publish the application
+      - name: Publish WinUI App
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --no-restore `
+            --output ./publish/${{ matrix.platform }} `
+            -p:Version=${{ steps.version.outputs.VERSION }} `
+            -p:Platform=${{ matrix.platform }} `
+            -p:PublishTrimmed=false
+
+      # Load signing certificate from artifact (generated once in setup-cert job)
+      - name: Load signing certificate
+        id: cert
+        shell: pwsh
+        run: |
+          $certPath = "${{ github.workspace }}\certs\signing.pfx"
+          $certPublicPath = "${{ github.workspace }}\certs\signing.cer"
+          $certPassword = Get-Content "${{ github.workspace }}\certs\password.txt" -Raw
+
+          # Mask password to prevent it from appearing in logs
+          Write-Host "::add-mask::$certPassword"
+
+          Write-Host "Using certificate from artifact: $certPath"
+
+          # Output certificate paths for subsequent steps
           echo "CERT_PATH=$certPath" >> $env:GITHUB_OUTPUT
           echo "CERT_PASSWORD=$certPassword" >> $env:GITHUB_OUTPUT
           echo "CERT_PUBLIC_PATH=$certPublicPath" >> $env:GITHUB_OUTPUT
-          echo "IS_SELF_SIGNED=$isSelfSigned" >> $env:GITHUB_OUTPUT
 
       # Update manifest version
       - name: Update manifest version
@@ -250,10 +297,10 @@ jobs:
 
       # Upload public certificate for self-signed builds (only once, with x64)
       - name: Upload signing certificate
-        if: steps.cert.outputs.IS_SELF_SIGNED == 'true' && matrix.platform == 'x64'
+        if: needs.setup-cert.outputs.IS_SELF_SIGNED == 'true' && matrix.platform == 'x64'
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ steps.cert.outputs.CERT_PUBLIC_PATH }}
+          files: certs/signing.cer
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4

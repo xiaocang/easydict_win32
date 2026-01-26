@@ -111,6 +111,37 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
+      # Verify MSIX assets are present in publish output
+      - name: Verify MSIX assets
+        shell: pwsh
+        run: |
+          $publishDir = "dotnet/publish/${{ matrix.platform }}"
+          $requiredAssets = @(
+            "Assets/SplashScreen.scale-100.png",
+            "Assets/LockScreenLogo.scale-100.png",
+            "Assets/Square150x150Logo.scale-100.png",
+            "Assets/Square44x44Logo.scale-100.png",
+            "Assets/Wide310x150Logo.scale-100.png",
+            "Assets/StoreLogo.png"
+          )
+
+          $missing = @()
+          foreach ($asset in $requiredAssets) {
+            $path = Join-Path $publishDir $asset
+            if (-not (Test-Path $path)) {
+              $missing += $asset
+            }
+          }
+
+          if ($missing.Count -gt 0) {
+            Write-Error "Missing required MSIX assets:"
+            $missing | ForEach-Object { Write-Error "  - $_" }
+            exit 1
+          }
+
+          Write-Host "All required MSIX assets verified:"
+          $requiredAssets | ForEach-Object { Write-Host "  - $_" }
+
       # Update manifest version
       - name: Update manifest version
         shell: pwsh

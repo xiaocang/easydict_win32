@@ -44,49 +44,15 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <!-- Square44x44Logo - All scales for proper DPI support -->
-        <Content Include="Assets\Square44x44Logo.scale-100.png" />
-        <Content Include="Assets\Square44x44Logo.scale-125.png" />
-        <Content Include="Assets\Square44x44Logo.scale-150.png" />
-        <Content Include="Assets\Square44x44Logo.scale-175.png" />
-        <Content Include="Assets\Square44x44Logo.scale-200.png" />
-        <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png">
+        <!-- MSIX Package Assets - copy to output for winapp package -->
+        <Content Include="Assets\*.png">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
 
-        <!-- Square150x150Logo - All scales -->
-        <Content Include="Assets\Square150x150Logo.scale-100.png" />
-        <Content Include="Assets\Square150x150Logo.scale-125.png" />
-        <Content Include="Assets\Square150x150Logo.scale-150.png" />
-        <Content Include="Assets\Square150x150Logo.scale-175.png" />
-        <Content Include="Assets\Square150x150Logo.scale-200.png" />
-
-        <!-- Wide310x150Logo - All scales -->
-        <Content Include="Assets\Wide310x150Logo.scale-100.png" />
-        <Content Include="Assets\Wide310x150Logo.scale-125.png" />
-        <Content Include="Assets\Wide310x150Logo.scale-150.png" />
-        <Content Include="Assets\Wide310x150Logo.scale-175.png" />
-        <Content Include="Assets\Wide310x150Logo.scale-200.png" />
-
-        <!-- SplashScreen - All scales -->
-        <Content Include="Assets\SplashScreen.scale-100.png" />
-        <Content Include="Assets\SplashScreen.scale-125.png" />
-        <Content Include="Assets\SplashScreen.scale-150.png" />
-        <Content Include="Assets\SplashScreen.scale-175.png" />
-        <Content Include="Assets\SplashScreen.scale-200.png" />
-
-        <!-- LockScreenLogo - All scales -->
-        <Content Include="Assets\LockScreenLogo.scale-100.png" />
-        <Content Include="Assets\LockScreenLogo.scale-125.png" />
-        <Content Include="Assets\LockScreenLogo.scale-150.png" />
-        <Content Include="Assets\LockScreenLogo.scale-175.png" />
-        <Content Include="Assets\LockScreenLogo.scale-200.png" />
-
-        <!-- Store Logo (unscaled) -->
-        <Content Include="Assets\StoreLogo.png" />
-
-        <!-- Service Icons - All services with scale variants -->
-        <Content Include="Assets\ServiceIcons\*.png" />
+        <!-- Service Icons -->
+        <Content Include="Assets\ServiceIcons\*.png">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
     <ItemGroup>

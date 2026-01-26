@@ -25,13 +25,13 @@
   </Dependencies>
 
   <Resources>
-    <Resource Language="x-generate"/>
+    <Resource Language="en-us"/>
   </Resources>
 
   <Applications>
     <Application Id="App"
-      Executable="$targetnametoken$.exe"
-      EntryPoint="$targetentrypoint$">
+      Executable="Easydict.WinUI.exe"
+      EntryPoint="Easydict.WinUI.App">
       <uap:VisualElements
         DisplayName="Easydict"
         Description="Cross-platform dictionary and translation app"

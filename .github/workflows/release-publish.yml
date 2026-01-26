@@ -72,17 +72,24 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
 
-          # Create MSIX-compatible version (must be X.Y.Z.0 format)
-          MSIX_VERSION="${VERSION}"
-          # If version has suffix like -beta.1, strip it for MSIX
-          MSIX_VERSION=$(echo "$MSIX_VERSION" | sed 's/-.*$//')
-          # Ensure 4-part version by counting dots
-          IFS='.' read -r -a parts <<< "$MSIX_VERSION"
-          if [[ ${#parts[@]} -eq 3 ]]; then
-            MSIX_VERSION="${MSIX_VERSION}.0"
+          # Create MSIX-compatible version (must be X.Y.Z.W format)
+          # Extract base version (without prerelease suffix)
+          BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
+
+          # Extract prerelease number if present (e.g., beta.1 -> 1, rc.2 -> 2)
+          PRERELEASE_NUM=0
+          if [[ "$VERSION" =~ -[a-zA-Z]+\.([0-9]+) ]]; then
+            PRERELEASE_NUM="${BASH_REMATCH[1]}"
+          elif [[ "$VERSION" =~ -[a-zA-Z]+([0-9]+) ]]; then
+            PRERELEASE_NUM="${BASH_REMATCH[1]}"
           fi
+
+          # Build 4-part version: X.Y.Z.W where W encodes prerelease
+          # W=0 for stable, W=1-999 for prereleases
+          MSIX_VERSION="${BASE_VERSION}.${PRERELEASE_NUM}"
+
           echo "MSIX_VERSION=$MSIX_VERSION" >> $GITHUB_OUTPUT
-          echo "MSIX version: $MSIX_VERSION"
+          echo "MSIX version: $MSIX_VERSION (prerelease num: $PRERELEASE_NUM)"
 
       - name: Restore dependencies
         working-directory: dotnet
@@ -111,6 +118,8 @@ jobs:
           MSIX_CERT_PASSWORD: ${{ secrets.MSIX_CERTIFICATE_PASSWORD }}
         run: |
           $certPath = "${{ github.workspace }}\signing.pfx"
+          $certPublicPath = "${{ github.workspace }}\signing.cer"
+          $isSelfSigned = $false
 
           if ($env:MSIX_CERT_BASE64 -and $env:MSIX_CERT_PASSWORD) {
             # Use stable certificate from secrets
@@ -121,7 +130,9 @@ jobs:
           } else {
             # Generate self-signed certificate as fallback
             Write-Host "No stable certificate configured, generating self-signed certificate"
+            Write-Host "::warning::Using self-signed certificate. Users must install the .cer file to use MSIX packages."
             $certPassword = [System.Guid]::NewGuid().ToString()
+            $isSelfSigned = $true
 
             $cert = New-SelfSignedCertificate `
               -Type Custom `
@@ -133,14 +144,20 @@ jobs:
 
             $certPasswordSecure = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
             Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $certPasswordSecure | Out-Null
+
+            # Export public certificate (.cer) for users to install
+            Export-Certificate -Cert $cert -FilePath $certPublicPath -Type CERT | Out-Null
+            Write-Host "Exported public certificate to: $certPublicPath"
           }
 
           # Mask password to prevent it from appearing in logs
           Write-Host "::add-mask::$certPassword"
 
-          # Output certificate path and password for subsequent steps
+          # Output certificate paths and info for subsequent steps
           echo "CERT_PATH=$certPath" >> $env:GITHUB_OUTPUT
           echo "CERT_PASSWORD=$certPassword" >> $env:GITHUB_OUTPUT
+          echo "CERT_PUBLIC_PATH=$certPublicPath" >> $env:GITHUB_OUTPUT
+          echo "IS_SELF_SIGNED=$isSelfSigned" >> $env:GITHUB_OUTPUT
 
       # Update manifest version
       - name: Update manifest version
@@ -230,6 +247,13 @@ jobs:
             easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
             checksums-${{ matrix.platform }}.sha256
           generate_release_notes: ${{ matrix.platform == 'x64' }}
+
+      # Upload public certificate for self-signed builds (only once, with x64)
+      - name: Upload signing certificate
+        if: steps.cert.outputs.IS_SELF_SIGNED == 'true' && matrix.platform == 'x64'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.cert.outputs.CERT_PUBLIC_PATH }}
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4

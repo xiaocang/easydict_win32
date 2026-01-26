@@ -163,7 +163,7 @@ jobs:
           # Package the application (unsigned - Microsoft signs during Store submission)
           winapp package `
             ./publish/${{ matrix.platform }} `
-            --output ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix `
+            --output ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix `
             --manifest src/Easydict.WinUI/Package.appxmanifest `
             --self-contained `
             --verbose
@@ -190,7 +190,7 @@ jobs:
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
-          $msixFile = "dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix"
+          $msixFile = "dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix"
           $zipFile = "easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip"
           $checksumFile = "checksums-${{ matrix.platform }}.sha256"
 
@@ -214,7 +214,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix
+            dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix
             easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
             checksums-${{ matrix.platform }}.sha256
           generate_release_notes: ${{ matrix.platform == 'x64' }}
@@ -224,7 +224,7 @@ jobs:
         with:
           name: easydict-${{ github.ref_name }}-${{ matrix.platform }}
           path: |
-            dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix
+            dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix
             easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
             checksums-${{ matrix.platform }}.sha256
           retention-days: 30

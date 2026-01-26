@@ -161,11 +161,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path ./msix
 
           # Package the application (unsigned - Microsoft signs during Store submission)
+          # Note: --self-contained is NOT used here because dotnet publish already
+          # bundles all runtime files. Using --self-contained would cause winapp to
+          # try building its own runtime deployment, which fails in CI.
           winapp package `
             ./publish/${{ matrix.platform }} `
             --output ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix `
             --manifest src/Easydict.WinUI/Package.appxmanifest `
-            --self-contained `
             --verbose
 
       # Also create ZIP archive for portable distribution

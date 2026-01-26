@@ -80,6 +80,7 @@ public sealed partial class SettingsPage : Page
         MinimizeToTrayToggle.Toggled += OnSettingChanged;
         ClipboardMonitorToggle.Toggled += OnSettingChanged;
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
+        LaunchAtStartupToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
 
@@ -91,6 +92,8 @@ public sealed partial class SettingsPage : Page
         ProxyUriBox.TextChanged += OnSettingChanged;
         ShowHotkeyBox.TextChanged += OnSettingChanged;
         TranslateHotkeyBox.TextChanged += OnSettingChanged;
+        ShowMiniHotkeyBox.TextChanged += OnSettingChanged;
+        ShowFixedHotkeyBox.TextChanged += OnSettingChanged;
 
         // TextBox/PasswordBox changes - new services
         DeepSeekKeyBox.PasswordChanged += OnSettingChanged;
@@ -209,10 +212,13 @@ public sealed partial class SettingsPage : Page
         MinimizeToTrayToggle.IsOn = _settings.MinimizeToTray;
         ClipboardMonitorToggle.IsOn = _settings.ClipboardMonitoring;
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
+        LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
 
         // Hotkeys
         ShowHotkeyBox.Text = _settings.ShowWindowHotkey;
         TranslateHotkeyBox.Text = _settings.TranslateSelectionHotkey;
+        ShowMiniHotkeyBox.Text = _settings.ShowMiniWindowHotkey;
+        ShowFixedHotkeyBox.Text = _settings.ShowFixedWindowHotkey;
 
         // Enabled services for each window (populate from TranslationManager.Services)
         PopulateServiceCollection(_mainWindowServices, _settings.MainWindowEnabledServices, _settings.MainWindowServiceEnabledQuery);
@@ -459,10 +465,16 @@ public sealed partial class SettingsPage : Page
         _settings.MinimizeToTray = MinimizeToTrayToggle.IsOn;
         _settings.ClipboardMonitoring = ClipboardMonitorToggle.IsOn;
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
+        _settings.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
+
+        // Apply startup setting to Windows registry
+        StartupService.SetEnabled(_settings.LaunchAtStartup);
 
         // Save hotkey settings
         _settings.ShowWindowHotkey = ShowHotkeyBox.Text;
         _settings.TranslateSelectionHotkey = TranslateHotkeyBox.Text;
+        _settings.ShowMiniWindowHotkey = ShowMiniHotkeyBox.Text;
+        _settings.ShowFixedWindowHotkey = ShowFixedHotkeyBox.Text;
 
         // Save enabled services for each window (from collections)
         _settings.MainWindowEnabledServices = GetEnabledServicesFromCollection(_mainWindowServices);

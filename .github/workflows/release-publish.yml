@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [x64, x86, arm64]
+        platform: [x64, arm64]
 
     steps:
       - name: Checkout code
@@ -67,30 +67,14 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
 
-          # Create MSIX-compatible version (must be X.Y.Z.W format)
-          # Extract base version (without prerelease suffix)
+          # Create MSIX-compatible version (must be X.Y.Z.0 format for Windows Store)
+          # Extract base version (without prerelease suffix) and append .0
+          # Windows Store requires the 4th part (revision) to always be 0
           BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
-
-          # Build 4-part MSIX version with proper ordering
-          # MSIX version comparison is numeric: X.Y.Z.W where higher W = newer
-          # For correct upgrade paths: stable releases MUST be higher than prereleases
-          # Solution: W=65535 for stable, W=1-999 for prereleases
-          # Example: 1.0.0 → 1.0.0.65535, 1.0.0-beta.1 → 1.0.0.1
-          if [[ "$VERSION" =~ -[a-zA-Z]+\.([0-9]+) ]]; then
-            # Format: v1.0.0-beta.1 → prerelease num = 1
-            REVISION="${BASH_REMATCH[1]}"
-          elif [[ "$VERSION" =~ -[a-zA-Z]+([0-9]+) ]]; then
-            # Format: v1.0.0-beta1 → prerelease num = 1
-            REVISION="${BASH_REMATCH[1]}"
-          else
-            # Stable release: use max revision for highest priority
-            REVISION=65535
-          fi
-
-          MSIX_VERSION="${BASE_VERSION}.${REVISION}"
+          MSIX_VERSION="${BASE_VERSION}.0"
 
           echo "MSIX_VERSION=$MSIX_VERSION" >> $GITHUB_OUTPUT
-          echo "MSIX version: $MSIX_VERSION (revision: $REVISION, stable=65535)"
+          echo "MSIX version: $MSIX_VERSION"
 
       - name: Restore dependencies
         working-directory: dotnet
@@ -165,7 +149,7 @@ jobs:
           # try building its own runtime deployment, which fails in CI.
           winapp package `
             ./publish/${{ matrix.platform }} `
-            --output ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix `
+            --output ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix `
             --manifest src/Easydict.WinUI/Package.appxmanifest `
             --verbose
 
@@ -198,7 +182,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: easydict-msix-${{ matrix.platform }}
-          path: dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix
+          path: dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix
           retention-days: 7
 
   # Create MSIX bundle containing all architectures and upload all release assets
@@ -229,7 +213,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path bundle-input
 
           # Copy all MSIX packages to input directory
-          Get-ChildItem -Path msix-packages -Filter "*.unsigned.msix" -Recurse | ForEach-Object {
+          Get-ChildItem -Path msix-packages -Filter "*.msix" -Recurse | ForEach-Object {
             Write-Host "Found MSIX: $($_.FullName)"
             Copy-Item -Path $_.FullName -Destination bundle-input/
           }

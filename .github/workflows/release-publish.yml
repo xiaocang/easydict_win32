@@ -212,10 +212,12 @@ jobs:
           # Create input directory for bundle
           New-Item -ItemType Directory -Force -Path bundle-input
 
-          # Copy all MSIX packages to input directory
+          # Copy all MSIX packages to input directory, renaming to .appx
+          # MakeAppx requires .appx extension for bundle payloads targeting older MinVersion
           Get-ChildItem -Path msix-packages -Filter "*.msix" -Recurse | ForEach-Object {
             Write-Host "Found MSIX: $($_.FullName)"
-            Copy-Item -Path $_.FullName -Destination bundle-input/
+            $newName = $_.Name -replace '\.msix$', '.appx'
+            Copy-Item -Path $_.FullName -Destination "bundle-input/$newName"
           }
 
           # List files to be bundled

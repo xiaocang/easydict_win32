@@ -17,8 +17,10 @@ identity:
 
 # SDK dependencies
 packages:
-  - Microsoft.WindowsAppSDK: 1.*
-  - Microsoft.Windows.SDK.BuildTools: 10.*
+  - name: Microsoft.WindowsAppSDK
+    version: 1.6.250108002
+  - name: Microsoft.Windows.SDK.BuildTools
+    version: 10.0.26100.1742
 
 # Build configuration
 build:

@@ -209,6 +209,10 @@ public sealed partial class SettingsPage : Page
         ProxyBypassLocalToggle.IsOn = _settings.ProxyBypassLocal;
 
         // Behavior
+        // UI Language - select based on current setting or system default
+        var currentLanguage = LocalizationService.Instance.CurrentLanguage;
+        SelectComboByTag(UILanguageCombo, currentLanguage);
+
         MinimizeToTrayToggle.IsOn = _settings.MinimizeToTray;
         ClipboardMonitorToggle.IsOn = _settings.ClipboardMonitoring;
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
@@ -781,6 +785,30 @@ public sealed partial class SettingsPage : Page
     private void OnBackToTopClick(object sender, RoutedEventArgs e)
     {
         MainScrollViewer.ChangeView(null, 0, null, disableAnimation: false);
+    }
+
+    /// <summary>
+    /// Handle UI language selection change.
+    /// </summary>
+    private async void OnUILanguageChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading) return;
+
+        var selectedTag = GetSelectedTag(UILanguageCombo);
+        if (string.IsNullOrEmpty(selectedTag)) return;
+
+        // Set the language (this also saves to settings)
+        LocalizationService.Instance.SetLanguage(selectedTag);
+
+        // Show restart required message
+        var dialog = new ContentDialog
+        {
+            Title = "RestartRequired".Localize(),
+            Content = "UILanguageDescription".Localize(),
+            CloseButtonText = "OK",
+            XamlRoot = this.XamlRoot
+        };
+        await dialog.ShowAsync();
     }
 
     /// <summary>

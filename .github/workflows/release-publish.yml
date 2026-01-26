@@ -188,53 +188,82 @@ jobs:
           # Cleanup temp directory
           Remove-Item -Path $tempDir -Recurse -Force
 
-      # Generate SHA256 checksums for all artifacts
-      - name: Generate SHA256 checksums
-        shell: pwsh
-        run: |
-          $msixFile = "dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix"
-          $zipFile = "easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip"
-          $checksumFile = "checksums-${{ matrix.platform }}.sha256"
-
-          # Generate checksums
-          $msixHash = (Get-FileHash -Path $msixFile -Algorithm SHA256).Hash.ToLower()
-          $zipHash = (Get-FileHash -Path $zipFile -Algorithm SHA256).Hash.ToLower()
-
-          # Write checksums file (BSD format, compatible with sha256sum -c)
-          $msixName = Split-Path $msixFile -Leaf
-          $zipName = Split-Path $zipFile -Leaf
-
-          # Use explicit string concatenation to avoid here-string indentation issues
-          "$msixHash  $msixName`n$zipHash  $zipName`n" | Set-Content -Path $checksumFile -NoNewline
-
-          # Also output to console for visibility
-          Write-Host "SHA256 Checksums for ${{ matrix.platform }}:"
-          Write-Host "  $msixHash  $msixName"
-          Write-Host "  $zipHash  $zipName"
-
-      - name: Upload to Release
+      - name: Upload ZIP to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix
-            easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
-            checksums-${{ matrix.platform }}.sha256
+          files: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
           generate_release_notes: ${{ matrix.platform == 'x64' }}
 
-      - name: Upload as artifact
+      - name: Upload MSIX as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: easydict-${{ github.ref_name }}-${{ matrix.platform }}
-          path: |
-            dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix
-            easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
-            checksums-${{ matrix.platform }}.sha256
-          retention-days: 30
+          name: easydict-msix-${{ matrix.platform }}
+          path: dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix
+          retention-days: 7
+
+  # Create MSIX bundle containing all architectures
+  create-bundle:
+    name: Create MSIX Bundle
+    runs-on: windows-latest
+    needs: publish-msix
+
+    steps:
+      - name: Download all MSIX artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: easydict-msix-*
+          path: msix-packages
+          merge-multiple: true
+
+      - name: Create MSIX Bundle
+        shell: pwsh
+        run: |
+          # Create input directory for bundle
+          New-Item -ItemType Directory -Force -Path bundle-input
+
+          # Copy all MSIX packages to input directory
+          Get-ChildItem -Path msix-packages -Filter "*.unsigned.msix" -Recurse | ForEach-Object {
+            Write-Host "Found MSIX: $($_.FullName)"
+            Copy-Item -Path $_.FullName -Destination bundle-input/
+          }
+
+          # List files to be bundled
+          Write-Host "`nFiles to bundle:"
+          Get-ChildItem bundle-input | ForEach-Object { Write-Host "  - $($_.Name)" }
+
+          # Find MakeAppx.exe from Windows SDK
+          $makeAppx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.*\x64\MakeAppx.exe" -ErrorAction SilentlyContinue |
+                      Sort-Object { [version]($_.Directory.Parent.Name) } -Descending |
+                      Select-Object -First 1
+
+          if (-not $makeAppx) {
+            Write-Error "MakeAppx.exe not found in Windows SDK"
+            exit 1
+          }
+
+          Write-Host "`nUsing MakeAppx: $($makeAppx.FullName)"
+
+          # Create the bundle
+          $bundlePath = "Easydict-${{ github.ref_name }}.unsigned.msixbundle"
+          & $makeAppx.FullName bundle /d bundle-input /p $bundlePath
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to create MSIX bundle"
+            exit 1
+          }
+
+          Write-Host "`nCreated bundle: $bundlePath"
+          Write-Host "Bundle size: $((Get-Item $bundlePath).Length / 1MB) MB"
+
+      - name: Upload bundle to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: Easydict-${{ github.ref_name }}.unsigned.msixbundle
 
   publish-winget:
     name: Publish to WinGet
     runs-on: windows-latest
-    needs: publish-msix
+    needs: create-bundle
     # Skip WinGet submission for pre-release versions
     # Uses GitHub's release.prerelease flag for reliable detection
     if: ${{ !github.event.release.prerelease }}

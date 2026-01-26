@@ -6,6 +6,12 @@ dotnet/**/AppPackages/
 dotnet/**/BundleArtifacts/
 dotnet/**/TestResults/
 
+# Publish output
+dotnet/publish/
+
+# Temporary build output
+dotnet/temp_build_output*/
+
 # Common build artifacts
 **/*.dll
 **/*.exe

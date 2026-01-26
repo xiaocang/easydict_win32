@@ -70,6 +70,14 @@ public sealed class MiniWindowService : IDisposable
     }
 
     /// <summary>
+    /// Refresh service results when settings change.
+    /// </summary>
+    public void RefreshServiceResults()
+    {
+        _miniWindow?.RefreshServiceResults();
+    }
+
+    /// <summary>
     /// Ensure the mini window instance exists.
     /// </summary>
     private void EnsureWindowCreated()

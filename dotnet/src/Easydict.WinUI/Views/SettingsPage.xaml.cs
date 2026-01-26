@@ -4,8 +4,14 @@ using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace Easydict.WinUI.Views;
+
+/// <summary>
+/// Represents a navigation section for the floating sidebar.
+/// </summary>
+internal sealed record NavSection(string Name, string Tooltip, string IconGlyph, FrameworkElement Element);
 
 /// <summary>
 /// Settings page for configuring translation services, hotkeys, and behavior.
@@ -20,6 +26,10 @@ public sealed partial class SettingsPage : Page
     private readonly ObservableCollection<ServiceCheckItem> _mainWindowServices = [];
     private readonly ObservableCollection<ServiceCheckItem> _miniWindowServices = [];
     private readonly ObservableCollection<ServiceCheckItem> _fixedWindowServices = [];
+
+    // Navigation sections for the floating sidebar
+    private List<NavSection> _navSections = [];
+    private int _currentSectionIndex = -1;
 
     public SettingsPage()
     {
@@ -37,6 +47,7 @@ public sealed partial class SettingsPage : Page
         FixedWindowServicesPanel.ItemsSource = _fixedWindowServices;
 
         LoadSettings();
+        InitializeNavigation();
         if (!_handlersRegistered)
         {
             RegisterChangeHandlers();
@@ -204,15 +215,22 @@ public sealed partial class SettingsPage : Page
         TranslateHotkeyBox.Text = _settings.TranslateSelectionHotkey;
 
         // Enabled services for each window (populate from TranslationManager.Services)
-        PopulateServiceCollection(_mainWindowServices, _settings.MainWindowEnabledServices);
-        PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices);
-        PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices);
+        PopulateServiceCollection(_mainWindowServices, _settings.MainWindowEnabledServices, _settings.MainWindowServiceEnabledQuery);
+        PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices, _settings.MiniWindowServiceEnabledQuery);
+        PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices, _settings.FixedWindowServiceEnabledQuery);
+
+        // Set version from assembly metadata
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        VersionText.Text = $"Version {version?.ToString(3) ?? "Unknown"}";
     }
 
     /// <summary>
-    /// Populate a service collection from TranslationManager.Services with enabled state from settings.
+    /// Populate a service collection from TranslationManager.Services with enabled state and EnabledQuery settings.
     /// </summary>
-    private static void PopulateServiceCollection(ObservableCollection<ServiceCheckItem> collection, List<string> enabledServices)
+    private static void PopulateServiceCollection(
+        ObservableCollection<ServiceCheckItem> collection,
+        List<string> enabledServices,
+        Dictionary<string, bool> enabledQuerySettings)
     {
         collection.Clear();
 
@@ -221,11 +239,15 @@ public sealed partial class SettingsPage : Page
 
         foreach (var (serviceId, service) in manager.Services)
         {
+            // Default EnabledQuery is true (auto-query); use stored setting if available
+            var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var stored) ? stored : true;
+
             collection.Add(new ServiceCheckItem
             {
                 ServiceId = serviceId,
                 DisplayName = service.DisplayName,
-                IsChecked = enabledServices.Contains(serviceId)
+                IsChecked = enabledServices.Contains(serviceId),
+                EnabledQuery = enabledQuery
             });
         }
     }
@@ -447,6 +469,11 @@ public sealed partial class SettingsPage : Page
         _settings.MiniWindowEnabledServices = GetEnabledServicesFromCollection(_miniWindowServices);
         _settings.FixedWindowEnabledServices = GetEnabledServicesFromCollection(_fixedWindowServices);
 
+        // Save EnabledQuery settings for each window
+        _settings.MainWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_mainWindowServices);
+        _settings.MiniWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_miniWindowServices);
+        _settings.FixedWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_fixedWindowServices);
+
         // Validate that at least one service is enabled for each window (updates collection too)
         EnsureDefaultServiceEnabled(_mainWindowServices, _settings.MainWindowEnabledServices);
         EnsureDefaultServiceEnabled(_miniWindowServices, _settings.MiniWindowEnabledServices);
@@ -454,6 +481,10 @@ public sealed partial class SettingsPage : Page
 
         // Persist to storage
         _settings.Save();
+
+        // Refresh window service results to pick up new EnabledQuery settings
+        MiniWindowService.Instance.RefreshServiceResults();
+        FixedWindowService.Instance.RefreshServiceResults();
 
         // If proxy settings changed, recreate manager with new proxy (includes service configuration)
         // Otherwise, just reconfigure services with new settings (API keys, models, endpoints)
@@ -584,5 +615,201 @@ public sealed partial class SettingsPage : Page
         {
             googleItem.IsChecked = true;
         }
+    }
+
+    /// <summary>
+    /// Initialize the floating navigation sidebar with section dots.
+    /// </summary>
+    private void InitializeNavigation()
+    {
+        // Define navigation sections
+        // Define navigation sections with icons (Segoe Fluent Icons)
+        _navSections =
+        [
+            new NavSection("HeaderSection", "Settings", "\uE713", HeaderSection),              // Settings gear
+            new NavSection("TranslationServiceSection", "Translation Service", "\uE8C1", TranslationServiceSection),  // Translate
+            new NavSection("EnabledServicesSection", "Enabled Services", "\uE73E", EnabledServicesSection),           // Checkmark
+            new NavSection("LanguagePreferencesSection", "Language Preferences", "\uE774", LanguagePreferencesSection), // Globe
+            new NavSection("ServiceConfigurationSection", "Service Configuration", "\uE90F", ServiceConfigurationSection), // Key
+            new NavSection("HttpProxySection", "HTTP Proxy", "\uE968", HttpProxySection),      // Network
+            new NavSection("BehaviorSection", "Behavior", "\uE771", BehaviorSection),          // Touch
+            new NavSection("HotkeysSection", "Hotkeys", "\uE765", HotkeysSection),             // Keyboard
+            new NavSection("AboutSection", "About", "\uE946", AboutSection)                    // Info
+        ];
+
+        // Clear existing icons and create new ones
+        NavIndicators.Children.Clear();
+
+        for (int i = 0; i < _navSections.Count; i++)
+        {
+            var section = _navSections[i];
+            var icon = new FontIcon
+            {
+                Glyph = section.IconGlyph,
+                FontSize = 14,
+                Foreground = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"],
+                Tag = i
+            };
+
+            // Add tooltip
+            ToolTipService.SetToolTip(icon, section.Tooltip);
+
+            // Add click handler
+            icon.PointerPressed += OnNavIconClick;
+            icon.PointerEntered += (s, e) => { if (s is FontIcon fi) fi.Opacity = 0.7; };
+            icon.PointerExited += (s, e) => { if (s is FontIcon fi) fi.Opacity = 1.0; };
+
+            NavIndicators.Children.Add(icon);
+        }
+
+        // Set initial active icon
+        UpdateActiveNavIcon(0);
+    }
+
+    /// <summary>
+    /// Handle scroll view changes to detect current section and show/hide back-to-top button.
+    /// </summary>
+    private void OnScrollViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (_navSections.Count == 0) return;
+
+        var scrollViewer = MainScrollViewer;
+        var verticalOffset = scrollViewer.VerticalOffset;
+
+        // Show/hide floating back button (show after 60px scroll - when header is out of view)
+        FloatingBackButton.Visibility = verticalOffset > 60 ? Visibility.Visible : Visibility.Collapsed;
+
+        // Show/hide back-to-top button (show after 200px scroll)
+        BackToTopButton.Visibility = verticalOffset > 200 ? Visibility.Visible : Visibility.Collapsed;
+
+        // Find current section by checking element positions relative to viewport
+        int currentIndex = 0;
+        double viewportTop = verticalOffset + 50; // Add small offset for better UX
+
+        for (int i = 0; i < _navSections.Count; i++)
+        {
+            var section = _navSections[i];
+            var transform = section.Element.TransformToVisual(scrollViewer);
+            var position = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+
+            // Element position relative to scroll content
+            var elementTop = position.Y + verticalOffset;
+
+            if (elementTop <= viewportTop)
+            {
+                currentIndex = i;
+            }
+        }
+
+        // Update active nav icon if section changed
+        if (currentIndex != _currentSectionIndex)
+        {
+            UpdateActiveNavIcon(currentIndex);
+        }
+    }
+
+    /// <summary>
+    /// Update the active navigation icon styling.
+    /// </summary>
+    private void UpdateActiveNavIcon(int activeIndex)
+    {
+        _currentSectionIndex = activeIndex;
+
+        for (int i = 0; i < NavIndicators.Children.Count; i++)
+        {
+            if (NavIndicators.Children[i] is FontIcon icon)
+            {
+                if (i == activeIndex)
+                {
+                    // Active icon: larger + accent color
+                    icon.FontSize = 16;
+                    icon.Foreground = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+                }
+                else
+                {
+                    // Inactive icon: smaller + tertiary color
+                    icon.FontSize = 14;
+                    icon.Foreground = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Handle navigation icon click to scroll to the corresponding section.
+    /// </summary>
+    private void OnNavIconClick(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is not FontIcon icon || icon.Tag is not int index) return;
+        if (index < 0 || index >= _navSections.Count) return;
+
+        var section = _navSections[index];
+        ScrollToElement(section.Element);
+    }
+
+    /// <summary>
+    /// Scroll to a specific element with smooth animation.
+    /// </summary>
+    private void ScrollToElement(FrameworkElement element)
+    {
+        var transform = element.TransformToVisual(MainScrollViewer);
+        var position = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+        var targetOffset = MainScrollViewer.VerticalOffset + position.Y - 24; // 24px padding
+
+        // Ensure we don't scroll past the content
+        targetOffset = Math.Max(0, Math.Min(targetOffset, MainScrollViewer.ScrollableHeight));
+
+        // Use ChangeView for smooth scrolling animation
+        MainScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: false);
+    }
+
+    /// <summary>
+    /// Handle back-to-top button click.
+    /// </summary>
+    private void OnBackToTopClick(object sender, RoutedEventArgs e)
+    {
+        MainScrollViewer.ChangeView(null, 0, null, disableAnimation: false);
+    }
+
+    /// <summary>
+    /// Get EnabledQuery dictionary from a service collection.
+    /// Only includes services that are checked (enabled).
+    /// </summary>
+    private static Dictionary<string, bool> GetEnabledQueryFromCollection(ObservableCollection<ServiceCheckItem> collection)
+    {
+        var dict = new Dictionary<string, bool>();
+        foreach (var item in collection)
+        {
+            if (item.IsChecked)
+            {
+                dict[item.ServiceId] = item.EnabledQuery;
+            }
+        }
+        return dict;
+    }
+}
+
+/// <summary>
+/// Converts a boolean value to Visibility.
+/// True = Visible, False = Collapsed.
+/// </summary>
+public class BoolToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+    {
+        if (value is bool boolValue)
+        {
+            return boolValue ? Visibility.Visible : Visibility.Collapsed;
+        }
+        return Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+    {
+        if (value is Visibility visibility)
+        {
+            return visibility == Visibility.Visible;
+        }
+        return false;
     }
 }

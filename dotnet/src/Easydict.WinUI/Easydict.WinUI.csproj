@@ -42,7 +42,15 @@
 
         <!-- Embed a Win32 icon into the unpackaged EXE (taskbar/dock icon in F5) -->
         <ApplicationIcon>$(IntermediateOutputPath)AppIcon.ico</ApplicationIcon>
+
+        <!-- Localization -->
+        <DefaultLanguage>en-US</DefaultLanguage>
     </PropertyGroup>
+
+    <!-- Localization Resources -->
+    <ItemGroup>
+        <PRIResource Include="Strings\**\*.resw" />
+    </ItemGroup>
 
     <ItemGroup>
         <!-- MSIX Package Assets - copy to output for winapp package -->

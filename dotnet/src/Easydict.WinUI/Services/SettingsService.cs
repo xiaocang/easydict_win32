@@ -103,6 +103,9 @@ public sealed class SettingsService
     // UI settings
     public bool AlwaysOnTop { get; set; } = false;
 
+    // UI Language (for localization)
+    public string UILanguage { get; set; } = ""; // Empty means system default
+
     // Startup settings
     public bool LaunchAtStartup { get; set; } = false;
 
@@ -304,6 +307,7 @@ public sealed class SettingsService
         ShowWindowHotkey = GetValue(nameof(ShowWindowHotkey), "Ctrl+Alt+T");
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
+        UILanguage = GetValue(nameof(UILanguage), "");
         LaunchAtStartup = GetValue(nameof(LaunchAtStartup), false);
         EnableDpiAwareness = GetValue(nameof(EnableDpiAwareness), true);
 
@@ -410,6 +414,7 @@ public sealed class SettingsService
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;
+        _settings[nameof(UILanguage)] = UILanguage;
         _settings[nameof(LaunchAtStartup)] = LaunchAtStartup;
         _settings[nameof(EnableDpiAwareness)] = EnableDpiAwareness;
         _settings[nameof(WindowWidthDips)] = WindowWidthDips;

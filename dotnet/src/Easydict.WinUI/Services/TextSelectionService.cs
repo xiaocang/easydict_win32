@@ -79,7 +79,8 @@ public static class TextSelectionService
     /// <summary>
     /// Gets the currently selected text using UI Automation API.
     /// For Electron apps, uses clipboard method (Ctrl+C) first since they don't support TextPattern,
-    /// with UIA as a fallback. For other apps, uses UIA directly.
+    /// with UIA as a fallback. For other apps, tries UIA first, then falls back to clipboard method
+    /// (required for modern UI apps like UWP/WinUI that don't support TextPattern).
     /// Returns null if no text is selected or if all methods fail.
     /// </summary>
     public static async Task<string?> GetSelectedTextAsync()
@@ -96,19 +97,19 @@ public static class TextSelectionService
             }
         }
 
-        // Use UIA for non-Electron apps (or as fallback if clipboard failed)
-        return await Task.Run(() =>
+        // Use UIA for non-Electron apps (or as fallback if clipboard failed for Electron)
+        string? uiaText = null;
+        await Task.Run(() =>
         {
             try
             {
                 // Lock to ensure thread-safe access to shared _automation instance
                 lock (_automationLock)
                 {
-                    var text = GetSelectedTextViaUIA();
-                    if (!string.IsNullOrWhiteSpace(text))
+                    uiaText = GetSelectedTextViaUIA();
+                    if (!string.IsNullOrWhiteSpace(uiaText))
                     {
-                        Debug.WriteLine($"[TextSelectionService] Got {text.Length} chars via UIA");
-                        return text;
+                        Debug.WriteLine($"[TextSelectionService] Got {uiaText.Length} chars via UIA");
                     }
                 }
             }
@@ -116,10 +117,24 @@ public static class TextSelectionService
             {
                 Debug.WriteLine($"[TextSelectionService] UIA failed: {ex.Message}");
             }
-
-            // UIA failed or no selection - return null
-            return null;
         });
+
+        if (!string.IsNullOrWhiteSpace(uiaText))
+        {
+            return uiaText;
+        }
+
+        // UIA failed or no selection - fallback to clipboard method (Ctrl+C)
+        // This is required for modern UI apps (UWP, WinUI, etc.) that don't support TextPattern
+        Debug.WriteLine("[TextSelectionService] UIA returned no text, falling back to clipboard method");
+        var fallbackText = await GetSelectedTextViaClipboardAsync();
+        if (!string.IsNullOrWhiteSpace(fallbackText))
+        {
+            Debug.WriteLine($"[TextSelectionService] Got {fallbackText.Length} chars via clipboard fallback");
+            return fallbackText;
+        }
+
+        return null;
     }
 
     private static string? GetSelectedTextViaUIA()

@@ -35,7 +35,6 @@ jobs:
     runs-on: windows-latest
     strategy:
       fail-fast: false
-      max-parallel: 1  # Serialize uploads to avoid race conditions
       matrix:
         platform: [x64, x86, arm64]
 
@@ -188,11 +187,12 @@ jobs:
           # Cleanup temp directory
           Remove-Item -Path $tempDir -Recurse -Force
 
-      - name: Upload ZIP to Release
-        uses: softprops/action-gh-release@v1
+      - name: Upload ZIP as artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
-          generate_release_notes: ${{ matrix.platform == 'x64' }}
+          name: easydict-zip-${{ matrix.platform }}
+          path: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          retention-days: 7
 
       - name: Upload MSIX as artifact
         uses: actions/upload-artifact@v4
@@ -201,7 +201,7 @@ jobs:
           path: dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.unsigned.msix
           retention-days: 7
 
-  # Create MSIX bundle containing all architectures
+  # Create MSIX bundle containing all architectures and upload all release assets
   create-bundle:
     name: Create MSIX Bundle
     runs-on: windows-latest
@@ -213,6 +213,13 @@ jobs:
         with:
           pattern: easydict-msix-*
           path: msix-packages
+          merge-multiple: true
+
+      - name: Download all ZIP artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: easydict-zip-*
+          path: zip-packages
           merge-multiple: true
 
       - name: Create MSIX Bundle
@@ -255,10 +262,13 @@ jobs:
           Write-Host "`nCreated bundle: $bundlePath"
           Write-Host "Bundle size: $((Get-Item $bundlePath).Length / 1MB) MB"
 
-      - name: Upload bundle to Release
+      - name: Upload all release assets
         uses: softprops/action-gh-release@v1
         with:
-          files: Easydict-${{ github.ref_name }}.unsigned.msixbundle
+          files: |
+            Easydict-${{ github.ref_name }}.unsigned.msixbundle
+            zip-packages/*.zip
+          generate_release_notes: true
 
   publish-winget:
     name: Publish to WinGet

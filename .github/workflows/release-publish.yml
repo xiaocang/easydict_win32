@@ -198,12 +198,39 @@ jobs:
           # Cleanup temp directory
           Remove-Item -Path $tempDir -Recurse -Force
 
-      - name: Upload MSIX to Release
+      # Generate SHA256 checksums for all artifacts
+      - name: Generate SHA256 checksums
+        shell: pwsh
+        run: |
+          $msixFile = "dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix"
+          $zipFile = "easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip"
+          $checksumFile = "checksums-${{ matrix.platform }}.sha256"
+
+          # Generate checksums
+          $msixHash = (Get-FileHash -Path $msixFile -Algorithm SHA256).Hash.ToLower()
+          $zipHash = (Get-FileHash -Path $zipFile -Algorithm SHA256).Hash.ToLower()
+
+          # Write checksums file (BSD format, compatible with sha256sum -c)
+          $msixName = Split-Path $msixFile -Leaf
+          $zipName = Split-Path $zipFile -Leaf
+
+          @"
+          $msixHash  $msixName
+          $zipHash  $zipName
+          "@ | Set-Content -Path $checksumFile -NoNewline
+
+          # Also output to console for visibility
+          Write-Host "SHA256 Checksums for ${{ matrix.platform }}:"
+          Write-Host "  $msixHash  $msixName"
+          Write-Host "  $zipHash  $zipName"
+
+      - name: Upload to Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix
             easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+            checksums-${{ matrix.platform }}.sha256
           generate_release_notes: ${{ matrix.platform == 'x64' }}
 
       - name: Upload as artifact
@@ -213,6 +240,7 @@ jobs:
           path: |
             dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix
             easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+            checksums-${{ matrix.platform }}.sha256
           retention-days: 30
 
   publish-winget:

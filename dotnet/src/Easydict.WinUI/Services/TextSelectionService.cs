@@ -73,6 +73,16 @@ public static class TextSelectionService
         "signal", "telegram desktop",
     };
 
+    // Known terminal app process names - Ctrl+C sends SIGINT in these apps
+    private static readonly HashSet<string> TerminalProcessNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "windowsterminal", "cmd", "powershell", "pwsh",  // Windows built-in
+        "conhost",  // Console Host
+        "mintty",  // Git Bash, Cygwin, MSYS2
+        "alacritty", "wezterm", "hyper", "terminus",  // Third-party terminals
+        "wsl", "wslhost",  // WSL
+    };
+
     private static readonly UIA3Automation _automation = new();
     private static readonly object _automationLock = new();
 
@@ -126,6 +136,13 @@ public static class TextSelectionService
 
         // UIA failed or no selection - fallback to clipboard method (Ctrl+C)
         // This is required for modern UI apps (UWP, WinUI, etc.) that don't support TextPattern
+        // BUT: Do NOT use clipboard method for terminal apps (Ctrl+C = SIGINT)
+        if (IsTerminalApp())
+        {
+            Debug.WriteLine("[TextSelectionService] Terminal app detected, skipping clipboard fallback to avoid SIGINT");
+            return null;
+        }
+
         Debug.WriteLine("[TextSelectionService] UIA returned no text, falling back to clipboard method");
         var fallbackText = await GetSelectedTextViaClipboardAsync();
         if (!string.IsNullOrWhiteSpace(fallbackText))
@@ -228,6 +245,28 @@ public static class TextSelectionService
 
             using var process = Process.GetProcessById((int)processId);
             return ElectronProcessNames.Contains(process.ProcessName);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks if the foreground window belongs to a terminal app.
+    /// Ctrl+C sends SIGINT in terminal apps, so we should not use clipboard method.
+    /// </summary>
+    private static bool IsTerminalApp()
+    {
+        try
+        {
+            var hWnd = GetForegroundWindow();
+            if (hWnd == IntPtr.Zero) return false;
+
+            if (GetWindowThreadProcessId(hWnd, out uint processId) == 0) return false;
+
+            using var process = Process.GetProcessById((int)processId);
+            return TerminalProcessNames.Contains(process.ProcessName);
         }
         catch
         {

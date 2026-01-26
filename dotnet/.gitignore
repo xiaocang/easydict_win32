@@ -1,0 +1,4 @@
+
+# Development certificate
+*.pfx
+*.msix

@@ -5,7 +5,7 @@ namespace Easydict.WinUI.Services;
 
 /// <summary>
 /// Provides localization services for the application.
-/// Supports English (en-US), Chinese Simplified (zh-CN), Japanese (ja-JP), and Korean (ko-KR).
+/// Supports English, Chinese (Simplified/Traditional), Japanese, Korean, French, and German.
 /// </summary>
 public sealed class LocalizationService
 {
@@ -18,7 +18,7 @@ public sealed class LocalizationService
     /// <summary>
     /// Supported UI languages.
     /// </summary>
-    public static readonly string[] SupportedLanguages = ["en-US", "zh-CN", "ja-JP", "ko-KR"];
+    public static readonly string[] SupportedLanguages = ["en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "fr-FR", "de-DE"];
 
     private LocalizationService()
     {
@@ -117,8 +117,14 @@ public sealed class LocalizationService
                 var systemLang = lang.ToLowerInvariant();
 
                 // Map to supported languages
+                // Chinese: distinguish between Simplified and Traditional
                 if (systemLang.StartsWith("zh"))
                 {
+                    if (systemLang.Contains("tw") || systemLang.Contains("hant") ||
+                        systemLang.Contains("hk") || systemLang.Contains("mo"))
+                    {
+                        return "zh-TW";
+                    }
                     return "zh-CN";
                 }
                 if (systemLang.StartsWith("ja"))
@@ -128,6 +134,14 @@ public sealed class LocalizationService
                 if (systemLang.StartsWith("ko"))
                 {
                     return "ko-KR";
+                }
+                if (systemLang.StartsWith("fr"))
+                {
+                    return "fr-FR";
+                }
+                if (systemLang.StartsWith("de"))
+                {
+                    return "de-DE";
                 }
                 if (systemLang.StartsWith("en"))
                 {
@@ -155,8 +169,11 @@ public sealed class LocalizationService
         {
             "en-US" => "English",
             "zh-CN" => "简体中文",
+            "zh-TW" => "繁體中文",
             "ja-JP" => "日本語",
             "ko-KR" => "한국어",
+            "fr-FR" => "Français",
+            "de-DE" => "Deutsch",
             _ => languageCode
         };
     }

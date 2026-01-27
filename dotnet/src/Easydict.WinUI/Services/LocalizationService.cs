@@ -25,18 +25,18 @@ public sealed class LocalizationService
     /// Supported UI languages with their metadata.
     /// Order matters: first match wins in system language detection.
     /// </summary>
-    private static readonly LanguageInfo[] _languages =
-    [
-        new("en-US", "English", ["en"]),
+    private static readonly LanguageInfo[] _languages = new LanguageInfo[]
+    {
+        new("en-US", "English", new[] { "en" }),
         // Chinese: Traditional variants must come before Simplified to match correctly
         // (zh-TW, zh-HK, zh-MO, zh-Hant should match Traditional; plain "zh" defaults to Simplified)
-        new("zh-TW", "繁體中文", ["zh-tw", "zh-hk", "zh-mo", "zh-hant"]),
-        new("zh-CN", "简体中文", ["zh"]), // Catches zh, zh-CN, zh-SG, zh-Hans, etc.
-        new("ja-JP", "日本語", ["ja"]),
-        new("ko-KR", "한국어", ["ko"]),
-        new("fr-FR", "Français", ["fr"]),
-        new("de-DE", "Deutsch", ["de"]),
-    ];
+        new("zh-TW", "繁體中文", new[] { "zh-tw", "zh-hk", "zh-mo", "zh-hant" }),
+        new("zh-CN", "简体中文", new[] { "zh" }), // Catches zh, zh-CN, zh-SG, zh-Hans, etc.
+        new("ja-JP", "日本語", new[] { "ja" }),
+        new("ko-KR", "한국어", new[] { "ko" }),
+        new("fr-FR", "Français", new[] { "fr" }),
+        new("de-DE", "Deutsch", new[] { "de" }),
+    };
 
     /// <summary>
     /// Supported UI language codes.

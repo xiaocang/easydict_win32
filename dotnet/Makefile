@@ -90,7 +90,7 @@ ifndef CERT_PASSWORD
 endif
 	@mkdir -p certs
 	@echo "Generating certificate..."
-	@winapp cert generate --publisher "CN=xiaocang" --output $(CERT_PATH) --password "$(CERT_PASSWORD)"
+	@winapp cert generate --publisher "CN=33FC47D7-8283-45FC-BB5D-297D1476BB29" --output $(CERT_PATH) --password "$(CERT_PASSWORD)"
 	@echo "Certificate saved to: $(CERT_PATH)"
 	@echo "Remember your password for cert-install and sign targets."
 

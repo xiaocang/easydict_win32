@@ -22,13 +22,13 @@
                     <Button Click="OnBackClick" Style="{StaticResource AccentButtonStyle}" Padding="8">
                         <FontIcon Glyph="&#xE72B;" FontSize="16" />
                     </Button>
-                    <TextBlock Text="Settings" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <TextBlock x:Name="SettingsHeaderText" Text="Settings" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
                 </StackPanel>
             </Grid>
 
             <!-- Translation Service -->
             <StackPanel x:Name="TranslationServiceSection" Spacing="12">
-                <TextBlock Text="Translation Service" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="TranslationServiceHeaderText" Text="Translation Service" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="16">
@@ -65,14 +65,14 @@
 
             <!-- Enabled Services for Each Window -->
             <StackPanel x:Name="EnabledServicesSection" Spacing="12">
-                <TextBlock Text="Enabled Services" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock Text="Select which translation services to display in each window. Multiple services will run in parallel."
+                <TextBlock x:Name="EnabledServicesHeaderText" Text="Enabled Services" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="EnabledServicesDescriptionText" Text="Select which translation services to display in each window. Multiple services will run in parallel."
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
                 <!-- Main Window Services -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock Text="Main Window" FontWeight="SemiBold" FontSize="14" />
+                        <TextBlock x:Name="MainWindowHeaderText" Text="Main Window" FontWeight="SemiBold" FontSize="14" />
                         <ItemsControl x:Name="MainWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -103,7 +103,7 @@
                 <!-- Mini Window Services -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock Text="Mini Window" FontWeight="SemiBold" FontSize="14" />
+                        <TextBlock x:Name="MiniWindowHeaderText" Text="Mini Window" FontWeight="SemiBold" FontSize="14" />
                         <ItemsControl x:Name="MiniWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -134,7 +134,7 @@
                 <!-- Fixed Window Services -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock Text="Fixed Window" FontWeight="SemiBold" FontSize="14" />
+                        <TextBlock x:Name="FixedWindowHeaderText" Text="Fixed Window" FontWeight="SemiBold" FontSize="14" />
                         <ItemsControl x:Name="FixedWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -165,7 +165,7 @@
 
             <!-- Language Preferences -->
             <StackPanel x:Name="LanguagePreferencesSection" Spacing="12">
-                <TextBlock Text="Language Preferences" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="LanguagePreferencesHeaderText" Text="Language Preferences" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="16">
@@ -201,6 +201,7 @@
 
                         <!-- Explanation -->
                         <TextBlock
+                            x:Name="LanguagePreferencesDescriptionText"
                             TextWrapping="Wrap"
                             FontSize="12"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -219,8 +220,8 @@
 
             <!-- Service Configuration -->
             <StackPanel x:Name="ServiceConfigurationSection" Spacing="12">
-                <TextBlock Text="Service Configuration" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock Text="Configure API keys, endpoints, and models for each translation service."
+                <TextBlock x:Name="ServiceConfigurationHeaderText" Text="Service Configuration" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="ServiceConfigurationDescriptionText" Text="Configure API keys, endpoints, and models for each translation service."
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
                 <!-- DeepL -->
@@ -444,8 +445,8 @@
                 <!-- Google Translate & Linguee (No configuration needed) -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="Free Services (No Configuration Required)" FontWeight="SemiBold" />
-                        <TextBlock Text="Google Translate and Linguee Dictionary work out of the box without API keys."
+                        <TextBlock x:Name="FreeServicesHeaderText" Text="Free Services (No Configuration Required)" FontWeight="SemiBold" />
+                        <TextBlock x:Name="FreeServicesDescriptionText" Text="Google Translate and Linguee Dictionary work out of the box without API keys."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
@@ -453,7 +454,7 @@
 
             <!-- HTTP Proxy -->
             <StackPanel x:Name="HttpProxySection" Spacing="12">
-                <TextBlock Text="HTTP Proxy" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="HttpProxyHeaderText" Text="HTTP Proxy" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="16">
@@ -503,7 +504,7 @@
 
             <!-- Hotkeys -->
             <StackPanel x:Name="HotkeysSection" Spacing="12">
-                <TextBlock Text="Hotkeys" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="HotkeysHeaderText" Text="Hotkeys" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="16">
@@ -511,7 +512,7 @@
                         <TextBox x:Name="TranslateHotkeyBox" Header="Translate Selection" Width="200" PlaceholderText="Ctrl+Alt+D" />
                         <TextBox x:Name="ShowMiniHotkeyBox" Header="Show Mini Window" Width="200" PlaceholderText="Ctrl+Alt+M" />
                         <TextBox x:Name="ShowFixedHotkeyBox" Header="Show Fixed Window" Width="200" PlaceholderText="Ctrl+Alt+F" />
-                        <TextBlock Text="Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M)."
+                        <TextBlock x:Name="HotkeysDescriptionText" Text="Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M)."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
@@ -519,7 +520,7 @@
 
             <!-- About -->
             <StackPanel x:Name="AboutSection" Spacing="12">
-                <TextBlock Text="About" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="AboutHeaderText" Text="About" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">

@@ -81,6 +81,9 @@
   <data name="StatusDisconnected" xml:space="preserve">
     <value>Disconnected</value>
   </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>Initializing...</value>
+  </data>
   <data name="StatusReady" xml:space="preserve">
     <value>Ready</value>
   </data>
@@ -349,14 +352,29 @@
   <data name="ServiceNotInitialized" xml:space="preserve">
     <value>Service not initialized</value>
   </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>No services enabled. Go to Settings to enable services.</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} service(s) completed</value>
+  </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
     <value>Invalid Language Selection</value>
+  </data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>First Language and Second Language cannot be the same.</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
     <value>Invalid Proxy URL</value>
   </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>The proxy URL is not valid. Please enter a valid URL (e.g., http://127.0.0.1:7890).</value>
+  </data>
   <data name="SettingsSaved" xml:space="preserve">
     <value>Settings Saved</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>Your settings have been saved successfully.</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
     <value>Restart Required</value>
@@ -364,11 +382,17 @@
   <data name="CannotConnectToOllama" xml:space="preserve">
     <value>Cannot Connect to Ollama</value>
   </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>Failed to fetch models from Ollama. Make sure Ollama is running and accessible.</value>
+  </data>
   <data name="Copied" xml:space="preserve">
     <value>Copied!</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
     <value>Detected: {0}</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>OK</value>
   </data>
 
   <!-- Service Names -->
@@ -435,6 +459,17 @@
     <value>Exit</value>
   </data>
 
+  <!-- Window Titles -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>Quick Translate</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>Fixed Translate</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>Pin window (stay on top)</value>
+  </data>
+
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
     <value>UI Language</value>
@@ -491,5 +526,11 @@
   </data>
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>Launch at Windows startup</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>Hide (Ctrl+Alt+F to show again)</value>
   </data>
 </root>

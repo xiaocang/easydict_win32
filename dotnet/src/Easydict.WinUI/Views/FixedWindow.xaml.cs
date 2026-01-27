@@ -75,7 +75,12 @@ public sealed partial class FixedWindow : Window
         // Track when content is loaded for safe UI operations
         if (this.Content is FrameworkElement content)
         {
-            content.Loaded += (s, e) => _isLoaded = true;
+            content.Loaded += (s, e) =>
+            {
+                _isLoaded = true;
+                // Apply localization after content is loaded
+                ApplyLocalization();
+            };
         }
 
         // Set up title bar drag regions for unpackaged WinUI 3 apps
@@ -89,6 +94,48 @@ public sealed partial class FixedWindow : Window
                 "FixedWindow");
             _titleBarHelper.Initialize();
         }
+    }
+
+    /// <summary>
+    /// Apply localization to all UI elements using LocalizationService.
+    /// </summary>
+    private void ApplyLocalization()
+    {
+        var loc = LocalizationService.Instance;
+
+        // Window title - keep "Easydict" brand name, only localize "Fixed"
+        this.Title = $"Easydict {loc.GetString("FixedTranslate")}";
+
+        // Source Language ComboBox items
+        if (SourceLangCombo.Items.Count >= 4)
+        {
+            ((ComboBoxItem)SourceLangCombo.Items[0]).Content = loc.GetString("Auto");
+            ((ComboBoxItem)SourceLangCombo.Items[1]).Content = loc.GetString("LangEnglish");
+            ((ComboBoxItem)SourceLangCombo.Items[2]).Content = loc.GetString("LangChinese");
+            ((ComboBoxItem)SourceLangCombo.Items[3]).Content = loc.GetString("LangJapanese");
+        }
+
+        // Target Language ComboBox items
+        if (TargetLangCombo.Items.Count >= 7)
+        {
+            ((ComboBoxItem)TargetLangCombo.Items[0]).Content = loc.GetString("LangEnglish");
+            ((ComboBoxItem)TargetLangCombo.Items[1]).Content = loc.GetString("LangChinese");
+            ((ComboBoxItem)TargetLangCombo.Items[2]).Content = loc.GetString("LangJapanese");
+            ((ComboBoxItem)TargetLangCombo.Items[3]).Content = loc.GetString("LangKorean");
+            ((ComboBoxItem)TargetLangCombo.Items[4]).Content = loc.GetString("LangFrench");
+            ((ComboBoxItem)TargetLangCombo.Items[5]).Content = loc.GetString("LangGerman");
+            ((ComboBoxItem)TargetLangCombo.Items[6]).Content = loc.GetString("LangSpanish");
+        }
+
+        // Placeholders
+        InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
+
+        // Tooltips
+        ToolTipService.SetToolTip(CloseButton, loc.GetString("HideWindow"));
+        ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
+        ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
+        ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
+        ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
     }
 
     /// <summary>
@@ -213,12 +260,12 @@ public sealed partial class FixedWindow : Window
         try
         {
             _detectionService = new LanguageDetectionService(_settings);
-            StatusText.Text = "Ready";
+            StatusText.Text = LocalizationService.Instance.GetString("StatusReady");
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[FixedWindow] Init error: {ex.Message}");
-            StatusText.Text = "Error";
+            StatusText.Text = LocalizationService.Instance.GetString("StatusError");
         }
     }
 
@@ -512,7 +559,7 @@ public sealed partial class FixedWindow : Window
 
         if (_detectionService is null)
         {
-            StatusText.Text = "Service not initialized";
+            StatusText.Text = LocalizationService.Instance.GetString("ServiceNotInitialized");
             InitializeTranslationServices();
             return;
         }
@@ -667,11 +714,12 @@ public sealed partial class FixedWindow : Window
             await Task.WhenAll(tasks);
 
             // Update status with completed count
+            var loc = LocalizationService.Instance;
             var successCount = _serviceResults.Count(r => r.Result != null);
             var errorCount = _serviceResults.Count(r => r.HasError);
             StatusText.Text = successCount > 0
-                ? $"{successCount} service(s) completed"
-                : errorCount > 0 ? "Translation failed" : "";
+                ? string.Format(loc.GetString("ServiceResultsComplete"), successCount)
+                : errorCount > 0 ? loc.GetString("TranslationFailed") : "";
         }
         catch (OperationCanceledException)
         {
@@ -679,7 +727,7 @@ public sealed partial class FixedWindow : Window
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Error: {ex.Message}";
+            StatusText.Text = $"{LocalizationService.Instance.GetString("StatusError")}: {ex.Message}";
         }
         finally
         {
@@ -807,7 +855,10 @@ public sealed partial class FixedWindow : Window
 
         if (detected != TranslationLanguage.Auto)
         {
-            DetectedLangText.Text = $"Detected: {detected.GetDisplayName()}";
+            var displayName = detected.GetDisplayName();
+            DetectedLangText.Text = string.Format(
+                LocalizationService.Instance.GetString("DetectedLanguage"),
+                displayName);
         }
         else
         {

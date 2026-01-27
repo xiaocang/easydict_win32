@@ -453,10 +453,20 @@ public sealed class SettingsService
         {
             var json = JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_settingsFilePath, json);
+
+            // Verify the file was written successfully
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] Settings saved successfully to: {_settingsFilePath}");
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] UILanguage saved as: {UILanguage}");
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore save errors
+            // Log the error for debugging
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] ERROR: Failed to save settings: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] Settings file path: {_settingsFilePath}");
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] Exception: {ex}");
+
+            // Re-throw the exception so callers know save failed
+            throw;
         }
     }
 

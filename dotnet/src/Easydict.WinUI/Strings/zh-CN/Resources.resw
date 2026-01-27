@@ -81,6 +81,9 @@
   <data name="StatusDisconnected" xml:space="preserve">
     <value>未连接</value>
   </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>初始化中...</value>
+  </data>
   <data name="StatusReady" xml:space="preserve">
     <value>就绪</value>
   </data>
@@ -349,14 +352,29 @@
   <data name="ServiceNotInitialized" xml:space="preserve">
     <value>服务未初始化</value>
   </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>未启用任何服务。请前往设置启用服务。</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} 个服务已完成</value>
+  </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
     <value>无效的语言选择</value>
+  </data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>第一语言和第二语言不能相同。</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
     <value>无效的代理地址</value>
   </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>代理地址无效。请输入有效的地址（例如 http://127.0.0.1:7890）。</value>
+  </data>
   <data name="SettingsSaved" xml:space="preserve">
     <value>设置已保存</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>您的设置已成功保存。</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
     <value>需要重启</value>
@@ -364,11 +382,17 @@
   <data name="CannotConnectToOllama" xml:space="preserve">
     <value>无法连接到 Ollama</value>
   </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>无法从 Ollama 获取模型列表。请确保 Ollama 正在运行并可访问。</value>
+  </data>
   <data name="Copied" xml:space="preserve">
     <value>已复制！</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
     <value>检测到：{0}</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>确定</value>
   </data>
 
   <!-- Service Names -->
@@ -435,6 +459,17 @@
     <value>退出</value>
   </data>
 
+  <!-- Window Titles -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>快速翻译</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>固定翻译</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>固定窗口（保持置顶）</value>
+  </data>
+
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
     <value>界面语言</value>
@@ -491,5 +526,11 @@
   </data>
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>开机自启动</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>隐藏 (Ctrl+Alt+F 再次显示)</value>
   </data>
 </root>

@@ -130,12 +130,6 @@
   <data name="TranslationService" xml:space="preserve">
     <value>Translation Service</value>
   </data>
-  <data name="DefaultService" xml:space="preserve">
-    <value>Default Service</value>
-  </data>
-  <data name="TargetLanguage" xml:space="preserve">
-    <value>Target Language</value>
-  </data>
   <data name="EnabledServices" xml:space="preserve">
     <value>Enabled Services</value>
   </data>

@@ -130,12 +130,6 @@
   <data name="TranslationService" xml:space="preserve">
     <value>翻译服务</value>
   </data>
-  <data name="DefaultService" xml:space="preserve">
-    <value>默认服务</value>
-  </data>
-  <data name="TargetLanguage" xml:space="preserve">
-    <value>目标语言</value>
-  </data>
   <data name="EnabledServices" xml:space="preserve">
     <value>已启用的服务</value>
   </data>

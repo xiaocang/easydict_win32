@@ -125,7 +125,6 @@ public sealed class TranslationManagerService : IDisposable
 
         _translationManager = new TranslationManager(options);
         ConfigureServices();
-        UpdateDefaultService();
 
         Debug.WriteLine("[TranslationManagerService] Initialized");
     }
@@ -289,7 +288,6 @@ public sealed class TranslationManagerService : IDisposable
         lock (_lock)
         {
             ConfigureServices();
-            UpdateDefaultService();
         }
     }
 
@@ -315,7 +313,6 @@ public sealed class TranslationManagerService : IDisposable
             oldManager = _translationManager;
             _translationManager = new TranslationManager(options);
             ConfigureServices();
-            UpdateDefaultService();
 
             // Check if the old manager has active handles
             hasActiveHandles = _handleCounts.TryGetValue(oldManager, out var count) && count > 0;
@@ -353,19 +350,6 @@ public sealed class TranslationManagerService : IDisposable
                 DisposeManagerSafely(oldManager);
             });
         }
-    }
-
-    /// <summary>
-    /// Update the default service ID from settings.
-    /// </summary>
-    private void UpdateDefaultService()
-    {
-        var defaultService = _settings.DefaultService;
-        if (_translationManager.Services.ContainsKey(defaultService))
-        {
-            _translationManager.DefaultServiceId = defaultService;
-        }
-        // else keeps default "google" from TranslationManager constructor
     }
 
     public void Dispose()

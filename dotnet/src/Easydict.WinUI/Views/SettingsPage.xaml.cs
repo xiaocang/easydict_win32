@@ -49,27 +49,6 @@ public sealed partial class SettingsPage : Page
         if (SettingsHeaderText != null)
             SettingsHeaderText.Text = loc.GetString("Settings");
 
-        // Translation Service section
-        if (TranslationServiceHeaderText != null)
-            TranslationServiceHeaderText.Text = loc.GetString("TranslationService");
-
-        ServiceCombo.Header = loc.GetString("DefaultService");
-        TargetLangCombo.Header = loc.GetString("TargetLanguage");
-
-        // Localize Target Language ComboBox items
-        if (TargetLangCombo.Items.Count >= 7)
-        {
-            ((ComboBoxItem)TargetLangCombo.Items[0]).Content = loc.GetString("LangChineseSimplified");
-            ((ComboBoxItem)TargetLangCombo.Items[1]).Content = loc.GetString("LangEnglish");
-            ((ComboBoxItem)TargetLangCombo.Items[2]).Content = loc.GetString("LangJapanese");
-            ((ComboBoxItem)TargetLangCombo.Items[3]).Content = loc.GetString("LangKorean");
-            ((ComboBoxItem)TargetLangCombo.Items[4]).Content = loc.GetString("LangFrench");
-            ((ComboBoxItem)TargetLangCombo.Items[5]).Content = loc.GetString("LangGerman");
-            ((ComboBoxItem)TargetLangCombo.Items[6]).Content = loc.GetString("LangSpanish");
-        }
-
-        // NOTE: ServiceCombo items (service names) stay in English - DO NOT translate
-
         // Enabled Services section
         if (EnabledServicesHeaderText != null)
             EnabledServicesHeaderText.Text = loc.GetString("EnabledServices");
@@ -221,8 +200,6 @@ public sealed partial class SettingsPage : Page
     private void RegisterChangeHandlers()
     {
         // ComboBox changes
-        ServiceCombo.SelectionChanged += OnSettingChanged;
-        TargetLangCombo.SelectionChanged += OnSettingChanged;
         FirstLanguageCombo.SelectionChanged += OnSettingChanged;
         SecondLanguageCombo.SelectionChanged += OnSettingChanged;
         OpenAIModelCombo.SelectionChanged += OnSettingChanged;
@@ -301,10 +278,6 @@ public sealed partial class SettingsPage : Page
 
     private void LoadSettings()
     {
-        // Translation service
-        SelectComboByTag(ServiceCombo, _settings.DefaultService);
-        SelectComboByTag(TargetLangCombo, _settings.TargetLanguage);
-
         // Language preferences
         SelectComboByTag(FirstLanguageCombo, _settings.FirstLanguage);
         SelectComboByTag(SecondLanguageCombo, _settings.SecondLanguage);
@@ -501,10 +474,6 @@ public sealed partial class SettingsPage : Page
         var originalProxyEnabled = _settings.ProxyEnabled;
         var originalProxyUri = _settings.ProxyUri;
         var originalProxyBypassLocal = _settings.ProxyBypassLocal;
-
-        // Save translation settings
-        _settings.DefaultService = GetSelectedTag(ServiceCombo) ?? "google";
-        _settings.TargetLanguage = GetSelectedTag(TargetLangCombo) ?? "zh";
 
         // Save language preferences with validation
         var firstLang = GetSelectedTag(FirstLanguageCombo) ?? "zh";
@@ -806,9 +775,8 @@ public sealed partial class SettingsPage : Page
         _navSections =
         [
             new NavSection("HeaderSection", "Settings", "\uE713", HeaderSection),              // Settings gear
-            new NavSection("TranslationServiceSection", "Translation Service", "\uE8C1", TranslationServiceSection),  // Translate
-            new NavSection("EnabledServicesSection", "Enabled Services", "\uE73E", EnabledServicesSection),           // Checkmark
             new NavSection("LanguagePreferencesSection", "Language Preferences", "\uE774", LanguagePreferencesSection), // Globe
+            new NavSection("EnabledServicesSection", "Enabled Services", "\uE73E", EnabledServicesSection),           // Checkmark
             new NavSection("ServiceConfigurationSection", "Service Configuration", "\uE90F", ServiceConfigurationSection), // Key
             new NavSection("HttpProxySection", "HTTP Proxy", "\uE968", HttpProxySection),      // Network
             new NavSection("BehaviorSection", "Behavior", "\uE771", BehaviorSection),          // Touch

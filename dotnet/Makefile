@@ -6,6 +6,7 @@
 .PHONY: test-translation test-winui test-verbose run-release
 .PHONY: publish publish-x64 publish-x86 publish-arm64
 .PHONY: msix msix-x64 msix-x86 msix-arm64 msix-all
+.PHONY: fix-msix-minversion
 .PHONY: cert-generate cert-install sign sign-all
 
 # Certificate configuration
@@ -185,6 +186,14 @@ endif
 	@winapp sign --input ./msix/Easydict-x86.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
 	@winapp sign --input ./msix/Easydict-arm64.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
 
+# Fix MSIX MinVersion (workaround for WindowsAppSDK #5598)
+# Usage: make fix-msix-minversion MSIX=./msix/Easydict-x64.msix
+fix-msix-minversion:
+ifndef MSIX
+	$(error MSIX is required. Usage: make fix-msix-minversion MSIX=./msix/Easydict-x64.msix)
+endif
+	@pwsh -ExecutionPolicy Bypass -File scripts/Fix-MsixMinVersion.ps1 -MsixPath "$(MSIX)"
+
 # ============================================================
 # Run application
 # ============================================================
@@ -235,6 +244,7 @@ help:
 	@echo "  make cert-install CERT_PASSWORD=...  - Install certificate (requires admin)"
 	@echo "  make sign CERT=... CERT_PASSWORD=... MSIX=... - Sign MSIX package"
 	@echo "  make sign-all CERT=... CERT_PASSWORD=...      - Sign all MSIX packages"
+	@echo "  make fix-msix-minversion MSIX=...             - Fix MinVersion in MSIX (WindowsAppSDK #5598)"
 	@echo ""
 	@echo "Variables:"
 	@echo "  VERSION=X.Y.Z.W   - Set version for MSIX package (default: 0.1.0.0)"

@@ -4,6 +4,11 @@ using Windows.Globalization;
 namespace Easydict.WinUI.Services;
 
 /// <summary>
+/// Represents a supported UI language with its metadata.
+/// </summary>
+public sealed record LanguageInfo(string Code, string DisplayName, string[] Prefixes);
+
+/// <summary>
 /// Provides localization services for the application.
 /// Supports English, Chinese (Simplified/Traditional), Japanese, Korean, French, and German.
 /// </summary>
@@ -16,9 +21,31 @@ public sealed class LocalizationService
     private string _currentLanguage;
 
     /// <summary>
-    /// Supported UI languages.
+    /// Supported UI languages with their metadata.
+    /// Order matters: first match wins in system language detection.
     /// </summary>
-    public static readonly string[] SupportedLanguages = ["en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "fr-FR", "de-DE"];
+    private static readonly LanguageInfo[] _languages =
+    [
+        new("en-US", "English", ["en"]),
+        // Chinese: Traditional variants must come before Simplified to match correctly
+        // (zh-TW, zh-HK, zh-MO, zh-Hant should match Traditional; plain "zh" defaults to Simplified)
+        new("zh-TW", "繁體中文", ["zh-tw", "zh-hk", "zh-mo", "zh-hant"]),
+        new("zh-CN", "简体中文", ["zh"]), // Catches zh, zh-CN, zh-SG, zh-Hans, etc.
+        new("ja-JP", "日本語", ["ja"]),
+        new("ko-KR", "한국어", ["ko"]),
+        new("fr-FR", "Français", ["fr"]),
+        new("de-DE", "Deutsch", ["de"]),
+    ];
+
+    /// <summary>
+    /// Supported UI language codes.
+    /// </summary>
+    public static readonly string[] SupportedLanguages = _languages.Select(l => l.Code).ToArray();
+
+    /// <summary>
+    /// Gets all supported languages with their metadata.
+    /// </summary>
+    public static IReadOnlyList<LanguageInfo> Languages => _languages;
 
     private LocalizationService()
     {
@@ -111,41 +138,18 @@ public sealed class LocalizationService
         try
         {
             // Get system language preferences (ordered by user preference)
-            var languages = ApplicationLanguages.Languages;
-            foreach (var lang in languages)
+            var systemLanguages = ApplicationLanguages.Languages;
+            foreach (var lang in systemLanguages)
             {
                 var systemLang = lang.ToLowerInvariant();
 
-                // Map to supported languages
-                // Chinese: distinguish between Simplified and Traditional
-                if (systemLang.StartsWith("zh"))
+                // Find matching supported language by prefix
+                foreach (var supported in _languages)
                 {
-                    if (systemLang.Contains("tw") || systemLang.Contains("hant") ||
-                        systemLang.Contains("hk") || systemLang.Contains("mo"))
+                    if (supported.Prefixes.Any(prefix => systemLang.StartsWith(prefix)))
                     {
-                        return "zh-TW";
+                        return supported.Code;
                     }
-                    return "zh-CN";
-                }
-                if (systemLang.StartsWith("ja"))
-                {
-                    return "ja-JP";
-                }
-                if (systemLang.StartsWith("ko"))
-                {
-                    return "ko-KR";
-                }
-                if (systemLang.StartsWith("fr"))
-                {
-                    return "fr-FR";
-                }
-                if (systemLang.StartsWith("de"))
-                {
-                    return "de-DE";
-                }
-                if (systemLang.StartsWith("en"))
-                {
-                    return "en-US";
                 }
             }
         }
@@ -165,17 +169,7 @@ public sealed class LocalizationService
     /// <returns>The display name.</returns>
     public static string GetLanguageDisplayName(string languageCode)
     {
-        return languageCode switch
-        {
-            "en-US" => "English",
-            "zh-CN" => "简体中文",
-            "zh-TW" => "繁體中文",
-            "ja-JP" => "日本語",
-            "ko-KR" => "한국어",
-            "fr-FR" => "Français",
-            "de-DE" => "Deutsch",
-            _ => languageCode
-        };
+        return _languages.FirstOrDefault(l => l.Code == languageCode)?.DisplayName ?? languageCode;
     }
 }
 

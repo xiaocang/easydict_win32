@@ -41,7 +41,7 @@ public sealed class LocalizationService
     /// <summary>
     /// Supported UI language codes.
     /// </summary>
-    public static readonly string[] SupportedLanguages = _languages.Select(l => l.Code).ToArray();
+    public static string[] SupportedLanguages => _languages.Select(l => l.Code).ToArray();
 
     /// <summary>
     /// Gets all supported languages with their metadata.

@@ -138,7 +138,7 @@ namespace Easydict.WinUI
         {
             try
             {
-                // Get selected text via UI Automation (avoids SIGINT in terminals)
+                // Get selected text via intelligent method (clipboard for Electron, UIA with ClipWait fallback for others)
                 var text = await TextSelectionService.GetSelectedTextAsync();
 
                 _window?.DispatcherQueue.TryEnqueue(() =>
@@ -163,7 +163,7 @@ namespace Easydict.WinUI
         {
             try
             {
-                // Get selected text via UI Automation (avoids SIGINT in terminals)
+                // Get selected text via intelligent method (clipboard for Electron, UIA with ClipWait fallback for others)
                 var text = await TextSelectionService.GetSelectedTextAsync();
 
                 _window?.DispatcherQueue.TryEnqueue(() =>

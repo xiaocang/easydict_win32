@@ -27,8 +27,6 @@ public sealed class SettingsService
     }
 
     // Translation settings
-    public string DefaultService { get; set; } = "google";
-    public string TargetLanguage { get; set; } = "zh";
     public string SourceLanguage { get; set; } = "auto";
 
     // Language preference settings (for automatic target language selection)
@@ -232,14 +230,23 @@ public sealed class SettingsService
             _settings = new();
         }
 
-        DefaultService = GetValue(nameof(DefaultService), "google");
-        TargetLanguage = GetValue(nameof(TargetLanguage), "zh");
         SourceLanguage = GetValue(nameof(SourceLanguage), "auto");
 
         // Load language preferences
         FirstLanguage = GetValue(nameof(FirstLanguage), "zh");
         SecondLanguage = GetValue(nameof(SecondLanguage), "en");
         AutoSelectTargetLanguage = GetValue(nameof(AutoSelectTargetLanguage), true);
+
+        // Migration: Import old TargetLanguage if FirstLanguage not explicitly set
+        if (_settings.ContainsKey("TargetLanguage") && !_settings.ContainsKey("FirstLanguage"))
+        {
+            var oldTarget = GetValue("TargetLanguage", "zh");
+            FirstLanguage = oldTarget;
+            // Set SecondLanguage as English ↔ Chinese fallback
+            SecondLanguage = (oldTarget == "en") ? "zh" : "en";
+            System.Diagnostics.Debug.WriteLine($"[Settings] Migrated TargetLanguage '{oldTarget}' to FirstLanguage");
+        }
+        // Note: TargetLanguage will NOT be written back on Save()
 
         // Validate: FirstLanguage and SecondLanguage cannot be the same
         if (FirstLanguage == SecondLanguage)
@@ -347,8 +354,6 @@ public sealed class SettingsService
 
     public void Save()
     {
-        _settings[nameof(DefaultService)] = DefaultService;
-        _settings[nameof(TargetLanguage)] = TargetLanguage;
         _settings[nameof(SourceLanguage)] = SourceLanguage;
 
         // Save language preferences

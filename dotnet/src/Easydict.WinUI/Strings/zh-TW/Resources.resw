@@ -127,12 +127,6 @@
   <data name="TranslationService" xml:space="preserve">
     <value>翻譯服務</value>
   </data>
-  <data name="DefaultService" xml:space="preserve">
-    <value>預設服務</value>
-  </data>
-  <data name="TargetLanguage" xml:space="preserve">
-    <value>目標語言</value>
-  </data>
   <data name="EnabledServices" xml:space="preserve">
     <value>已啟用的服務</value>
   </data>

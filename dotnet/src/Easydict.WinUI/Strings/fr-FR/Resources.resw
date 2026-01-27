@@ -127,12 +127,6 @@
   <data name="TranslationService" xml:space="preserve">
     <value>Service de traduction</value>
   </data>
-  <data name="DefaultService" xml:space="preserve">
-    <value>Service par défaut</value>
-  </data>
-  <data name="TargetLanguage" xml:space="preserve">
-    <value>Langue cible</value>
-  </data>
   <data name="EnabledServices" xml:space="preserve">
     <value>Services activés</value>
   </data>

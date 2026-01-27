@@ -29,34 +29,6 @@ public class SettingsServiceTests
     }
 
     [Fact]
-    public void DefaultService_HasDefaultValue()
-    {
-        // DefaultService should have a valid default
-        _settings.DefaultService.Should().NotBeNullOrEmpty();
-    }
-
-    [Fact]
-    public void DefaultService_CanBeSet()
-    {
-        var original = _settings.DefaultService;
-        try
-        {
-            _settings.DefaultService = "deepl";
-            _settings.DefaultService.Should().Be("deepl");
-        }
-        finally
-        {
-            _settings.DefaultService = original;
-        }
-    }
-
-    [Fact]
-    public void TargetLanguage_HasDefaultValue()
-    {
-        _settings.TargetLanguage.Should().NotBeNullOrEmpty();
-    }
-
-    [Fact]
     public void FirstLanguage_HasDefaultValue()
     {
         _settings.FirstLanguage.Should().NotBeNullOrEmpty();
@@ -309,5 +281,73 @@ public class SettingsServiceTests
         _ = _settings.MiniWindowIsPinned;
         // If we got here without exception, the test passes
         true.Should().BeTrue();
+    }
+
+    [Fact]
+    public void RemovedProperties_DoNotExist()
+    {
+        // Verify that DefaultService and TargetLanguage properties were removed
+        // This is a compile-time check - if this compiles, the properties don't exist
+        var type = typeof(SettingsService);
+        var defaultServiceProp = type.GetProperty("DefaultService");
+        var targetLanguageProp = type.GetProperty("TargetLanguage");
+
+        defaultServiceProp.Should().BeNull("DefaultService property should be removed");
+        targetLanguageProp.Should().BeNull("TargetLanguage property should be removed");
+    }
+
+    [Fact]
+    public void FirstLanguage_CanBeSet()
+    {
+        var original = _settings.FirstLanguage;
+        try
+        {
+            _settings.FirstLanguage = "en";
+            _settings.FirstLanguage.Should().Be("en");
+        }
+        finally
+        {
+            _settings.FirstLanguage = original;
+        }
+    }
+
+    [Fact]
+    public void SecondLanguage_CanBeSet()
+    {
+        var original = _settings.SecondLanguage;
+        try
+        {
+            _settings.SecondLanguage = "ja";
+            _settings.SecondLanguage.Should().Be("ja");
+        }
+        finally
+        {
+            _settings.SecondLanguage = original;
+        }
+    }
+
+    [Fact]
+    public void SaveAndLoad_PreservesFirstAndSecondLanguage()
+    {
+        var originalFirst = _settings.FirstLanguage;
+        var originalSecond = _settings.SecondLanguage;
+
+        try
+        {
+            // Set new values
+            _settings.FirstLanguage = "ja";
+            _settings.SecondLanguage = "en";
+            _settings.Save();
+
+            // Verify the values are persisted correctly
+            _settings.FirstLanguage.Should().Be("ja");
+            _settings.SecondLanguage.Should().Be("en");
+        }
+        finally
+        {
+            _settings.FirstLanguage = originalFirst;
+            _settings.SecondLanguage = originalSecond;
+            _settings.Save();
+        }
     }
 }

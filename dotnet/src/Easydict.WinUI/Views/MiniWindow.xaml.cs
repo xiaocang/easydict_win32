@@ -270,8 +270,8 @@ public sealed partial class MiniWindow : Window
 
     private void ApplySettings()
     {
-        // Apply target language from settings
-        var targetLang = _settings.TargetLanguage;
+        // Apply target language from settings (using FirstLanguage)
+        var targetLang = _settings.FirstLanguage;
         var targetIndex = targetLang switch
         {
             "en" => 0,

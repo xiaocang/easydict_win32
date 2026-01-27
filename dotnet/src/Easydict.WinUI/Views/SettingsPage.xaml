@@ -31,39 +31,57 @@
                 </StackPanel>
             </Grid>
 
-            <!-- Translation Service -->
-            <StackPanel x:Name="TranslationServiceSection" Spacing="12">
-                <TextBlock x:Name="TranslationServiceHeaderText" Text="Translation Service" FontSize="18" FontWeight="SemiBold" />
+            <!-- Language Preferences -->
+            <StackPanel x:Name="LanguagePreferencesSection" Spacing="12">
+                <TextBlock x:Name="LanguagePreferencesHeaderText" Text="Language Preferences" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="16">
-                        <ComboBox x:Name="ServiceCombo" Header="Default Service" Width="250">
-                            <ComboBoxItem Content="Google Translate" Tag="google" />
-                            <ComboBoxItem Content="DeepL" Tag="deepl" />
-                            <ComboBoxItem Content="OpenAI" Tag="openai" />
-                            <ComboBoxItem Content="Ollama (Local)" Tag="ollama" />
-                            <ComboBoxItem Content="Built-in AI" Tag="builtin" />
-                            <ComboBoxItem Content="DeepSeek" Tag="deepseek" />
-                            <ComboBoxItem Content="Groq" Tag="groq" />
-                            <ComboBoxItem Content="Zhipu (智谱)" Tag="zhipu" />
-                            <ComboBoxItem Content="GitHub Models" Tag="github" />
-                            <ComboBoxItem Content="Gemini" Tag="gemini" />
-                            <ComboBoxItem Content="Custom OpenAI" Tag="custom-openai" />
-                            <ComboBoxItem Content="Doubao (豆包)" Tag="doubao" />
-                            <ComboBoxItem Content="Caiyun (彩云)" Tag="caiyun" />
-                            <ComboBoxItem Content="NiuTrans (小牛)" Tag="niutrans" />
-                            <ComboBoxItem Content="Linguee Dictionary" Tag="linguee" />
+                        <!-- First Language -->
+                        <ComboBox
+                            x:Name="FirstLanguageCombo"
+                            Header="First Language"
+                            Width="250"
+                            HorizontalAlignment="Left">
+                            <ComboBoxItem Content="🇨🇳 Chinese (Simplified)" Tag="zh" />
+                            <ComboBoxItem Content="🇺🇸 English" Tag="en" />
+                            <ComboBoxItem Content="🇯🇵 Japanese" Tag="ja" />
+                            <ComboBoxItem Content="🇰🇷 Korean" Tag="ko" />
+                            <ComboBoxItem Content="🇫🇷 French" Tag="fr" />
+                            <ComboBoxItem Content="🇩🇪 German" Tag="de" />
+                            <ComboBoxItem Content="🇪🇸 Spanish" Tag="es" />
                         </ComboBox>
 
-                        <ComboBox x:Name="TargetLangCombo" Header="Target Language" Width="200">
-                            <ComboBoxItem Content="Chinese (Simplified)" Tag="zh" />
-                            <ComboBoxItem Content="English" Tag="en" />
-                            <ComboBoxItem Content="Japanese" Tag="ja" />
-                            <ComboBoxItem Content="Korean" Tag="ko" />
-                            <ComboBoxItem Content="French" Tag="fr" />
-                            <ComboBoxItem Content="German" Tag="de" />
-                            <ComboBoxItem Content="Spanish" Tag="es" />
+                        <!-- Second Language -->
+                        <ComboBox
+                            x:Name="SecondLanguageCombo"
+                            Header="Second Language"
+                            Width="250"
+                            HorizontalAlignment="Left">
+                            <ComboBoxItem Content="🇺🇸 English" Tag="en" />
+                            <ComboBoxItem Content="🇨🇳 Chinese (Simplified)" Tag="zh" />
+                            <ComboBoxItem Content="🇯🇵 Japanese" Tag="ja" />
+                            <ComboBoxItem Content="🇰🇷 Korean" Tag="ko" />
+                            <ComboBoxItem Content="🇫🇷 French" Tag="fr" />
+                            <ComboBoxItem Content="🇩🇪 German" Tag="de" />
+                            <ComboBoxItem Content="🇪🇸 Spanish" Tag="es" />
                         </ComboBox>
+
+                        <!-- Explanation -->
+                        <TextBlock
+                            x:Name="LanguagePreferencesDescriptionText"
+                            TextWrapping="Wrap"
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Margin="0,4,0,0">
+                            <Run Text="When detected language matches your First Language, translation target will be your Second Language, and vice versa." />
+                        </TextBlock>
+
+                        <!-- Auto-Select Toggle -->
+                        <ToggleSwitch
+                            x:Name="AutoSelectTargetToggle"
+                            Header="Automatically select target language based on detected source"
+                            IsOn="True" />
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -164,61 +182,6 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- Language Preferences -->
-            <StackPanel x:Name="LanguagePreferencesSection" Spacing="12">
-                <TextBlock x:Name="LanguagePreferencesHeaderText" Text="Language Preferences" FontSize="18" FontWeight="SemiBold" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <!-- First Language -->
-                        <ComboBox
-                            x:Name="FirstLanguageCombo"
-                            Header="First Language"
-                            Width="250"
-                            HorizontalAlignment="Left">
-                            <ComboBoxItem Content="🇨🇳 Chinese (Simplified)" Tag="zh" />
-                            <ComboBoxItem Content="🇺🇸 English" Tag="en" />
-                            <ComboBoxItem Content="🇯🇵 Japanese" Tag="ja" />
-                            <ComboBoxItem Content="🇰🇷 Korean" Tag="ko" />
-                            <ComboBoxItem Content="🇫🇷 French" Tag="fr" />
-                            <ComboBoxItem Content="🇩🇪 German" Tag="de" />
-                            <ComboBoxItem Content="🇪🇸 Spanish" Tag="es" />
-                        </ComboBox>
-
-                        <!-- Second Language -->
-                        <ComboBox
-                            x:Name="SecondLanguageCombo"
-                            Header="Second Language"
-                            Width="250"
-                            HorizontalAlignment="Left">
-                            <ComboBoxItem Content="🇺🇸 English" Tag="en" />
-                            <ComboBoxItem Content="🇨🇳 Chinese (Simplified)" Tag="zh" />
-                            <ComboBoxItem Content="🇯🇵 Japanese" Tag="ja" />
-                            <ComboBoxItem Content="🇰🇷 Korean" Tag="ko" />
-                            <ComboBoxItem Content="🇫🇷 French" Tag="fr" />
-                            <ComboBoxItem Content="🇩🇪 German" Tag="de" />
-                            <ComboBoxItem Content="🇪🇸 Spanish" Tag="es" />
-                        </ComboBox>
-
-                        <!-- Explanation -->
-                        <TextBlock
-                            x:Name="LanguagePreferencesDescriptionText"
-                            TextWrapping="Wrap"
-                            FontSize="12"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Margin="0,4,0,0">
-                            <Run Text="When detected language matches your First Language, translation target will be your Second Language, and vice versa." />
-                        </TextBlock>
-
-                        <!-- Auto-Select Toggle -->
-                        <ToggleSwitch
-                            x:Name="AutoSelectTargetToggle"
-                            Header="Automatically select target language based on detected source"
-                            IsOn="True" />
                     </StackPanel>
                 </Border>
             </StackPanel>

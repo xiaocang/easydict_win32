@@ -439,8 +439,8 @@
   <data name="UILanguage" xml:space="preserve">
     <value>Oberflächensprache</value>
   </data>
-  <data name="UILanguageDescription" xml:space="preserve">
-    <value>Wählen Sie die Anzeigesprache für die Anwendungsoberfläche. Neustart erforderlich.</value>
+  <data name="RestartRequiredMessage" xml:space="preserve">
+    <value>Bitte starten Sie die Anwendung neu, damit die Sprachänderung wirksam wird.</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
     <value>Englisch</value>

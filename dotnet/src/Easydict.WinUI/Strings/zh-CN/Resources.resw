@@ -439,8 +439,8 @@
   <data name="UILanguage" xml:space="preserve">
     <value>界面语言</value>
   </data>
-  <data name="UILanguageDescription" xml:space="preserve">
-    <value>选择应用程序界面的显示语言。需要重启生效。</value>
+  <data name="RestartRequiredMessage" xml:space="preserve">
+    <value>请重启应用程序以使语言更改生效。</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
     <value>英语</value>

@@ -439,8 +439,8 @@
   <data name="UILanguage" xml:space="preserve">
     <value>Langue de l'interface</value>
   </data>
-  <data name="UILanguageDescription" xml:space="preserve">
-    <value>Sélectionnez la langue d'affichage de l'interface de l'application. Redémarrage requis.</value>
+  <data name="RestartRequiredMessage" xml:space="preserve">
+    <value>Veuillez redémarrer l'application pour que le changement de langue prenne effet.</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
     <value>Anglais</value>

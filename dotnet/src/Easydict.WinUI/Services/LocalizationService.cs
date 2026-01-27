@@ -5,7 +5,7 @@ namespace Easydict.WinUI.Services;
 
 /// <summary>
 /// Provides localization services for the application.
-/// Supports English (en-US) and Chinese Simplified (zh-CN).
+/// Supports English (en-US), Chinese Simplified (zh-CN), Japanese (ja-JP), and Korean (ko-KR).
 /// </summary>
 public sealed class LocalizationService
 {
@@ -18,7 +18,7 @@ public sealed class LocalizationService
     /// <summary>
     /// Supported UI languages.
     /// </summary>
-    public static readonly string[] SupportedLanguages = ["en-US", "zh-CN"];
+    public static readonly string[] SupportedLanguages = ["en-US", "zh-CN", "ja-JP", "ko-KR"];
 
     private LocalizationService()
     {
@@ -104,21 +104,34 @@ public sealed class LocalizationService
 
     /// <summary>
     /// Gets the system's preferred language, mapped to our supported languages.
+    /// Falls back to English if the system language is not supported.
     /// </summary>
     private static string GetSystemLanguage()
     {
         try
         {
-            // Get system language
+            // Get system language preferences (ordered by user preference)
             var languages = ApplicationLanguages.Languages;
-            if (languages.Count > 0)
+            foreach (var lang in languages)
             {
-                var systemLang = languages[0].ToLowerInvariant();
+                var systemLang = lang.ToLowerInvariant();
 
                 // Map to supported languages
                 if (systemLang.StartsWith("zh"))
                 {
                     return "zh-CN";
+                }
+                if (systemLang.StartsWith("ja"))
+                {
+                    return "ja-JP";
+                }
+                if (systemLang.StartsWith("ko"))
+                {
+                    return "ko-KR";
+                }
+                if (systemLang.StartsWith("en"))
+                {
+                    return "en-US";
                 }
             }
         }
@@ -127,7 +140,7 @@ public sealed class LocalizationService
             // Ignore errors
         }
 
-        // Default to English
+        // Default to English if no supported language is found
         return "en-US";
     }
 
@@ -142,6 +155,8 @@ public sealed class LocalizationService
         {
             "en-US" => "English",
             "zh-CN" => "简体中文",
+            "ja-JP" => "日本語",
+            "ko-KR" => "한국어",
             _ => languageCode
         };
     }

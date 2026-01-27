@@ -14,7 +14,12 @@
     </Page.Resources>
 
     <Grid>
-        <ScrollViewer x:Name="MainScrollViewer" Padding="24" ViewChanged="OnScrollViewChanged">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <ScrollViewer x:Name="MainScrollViewer" Grid.Column="1" Padding="24" ViewChanged="OnScrollViewChanged">
             <StackPanel Spacing="24" MaxWidth="800">
             <!-- Header -->
             <Grid x:Name="HeaderSection">
@@ -545,6 +550,7 @@
 
     <!-- Floating Save Button (fixed at bottom-right) -->
     <Button x:Name="SaveButton"
+            Grid.Column="1"
             Content="Save Settings"
             Click="OnSaveClick"
             Style="{StaticResource AccentButtonStyle}"
@@ -560,9 +566,10 @@
 
     <!-- Floating Navigation Sidebar (left side, vertically centered) -->
     <Border x:Name="NavSidebar"
-            HorizontalAlignment="Left"
+            Grid.Column="0"
+            HorizontalAlignment="Center"
             VerticalAlignment="Center"
-            Margin="8,0,0,0"
+            Margin="0"
             CornerRadius="12"
             Padding="6,10"
             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -577,6 +584,7 @@
 
     <!-- Floating Back Button (top-left, collapsed by default) -->
     <Button x:Name="FloatingBackButton"
+            Grid.Column="1"
             Click="OnBackClick"
             HorizontalAlignment="Left"
             VerticalAlignment="Top"
@@ -595,6 +603,7 @@
 
     <!-- Back to Top Button (bottom-left, collapsed by default) -->
     <Button x:Name="BackToTopButton"
+            Grid.Column="1"
             Click="OnBackToTopClick"
             HorizontalAlignment="Left"
             VerticalAlignment="Bottom"

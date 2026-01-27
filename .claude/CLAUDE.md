@@ -15,15 +15,42 @@ easydict_win32/
 ├── dotnet/                              # .NET solution root
 │   ├── src/
 │   │   ├── Easydict.WinUI/              # Main WinUI 3 application
+│   │   │   ├── Views/                   # UI views and pages
+│   │   │   ├── Services/                # Application services
+│   │   │   ├── Models/                  # View models and data models
+│   │   │   ├── Strings/                 # Localization resources
+│   │   │   └── Themes/                  # Theme resources
 │   │   ├── Easydict.TranslationService/ # Translation service library
+│   │   │   ├── Services/                # Translation service implementations
+│   │   │   ├── Models/                  # Translation models
+│   │   │   ├── Streaming/               # LLM streaming support
+│   │   │   ├── Security/                # Encryption/security utilities
+│   │   │   └── Resources/               # Service resources
 │   │   └── Easydict.SidecarClient/      # IPC client library
+│   │       └── Protocol/                # IPC protocol definitions
 │   ├── tests/
 │   │   ├── Easydict.TranslationService.Tests/
+│   │   │   ├── Services/                # Translation service tests
+│   │   │   ├── Streaming/               # Streaming tests
+│   │   │   ├── Models/                  # Model tests
+│   │   │   └── Mocks/                   # Mock implementations
 │   │   └── Easydict.WinUI.Tests/
+│   │       └── Services/                # WinUI service tests
+│   ├── tools/
+│   │   └── EncryptSecret/               # Secret encryption utility
+│   ├── e2e/                             # E2E test for SidecarClient
+│   ├── scripts/                         # PowerShell build scripts
+│   │   ├── generate-*.ps1               # Asset generation scripts
+│   │   ├── Fix-MsixMinVersion.ps1       # MSIX manifest fixer
+│   │   └── publish.ps1                  # Publishing script
+│   ├── certs/                           # Code signing certificates
 │   ├── Easydict.Win32.sln               # Solution file
-│   └── Makefile
+│   ├── Makefile                         # Build automation
+│   └── winapp.yaml                      # WinApp CLI configuration
+├── easydict_win32/                      # Original/legacy code
 ├── sidecar_mock/                        # Mock sidecar for testing
 ├── screenshot/                          # Screenshots for README
+├── .github/                             # GitHub workflows
 └── README.md
 ```
 
@@ -31,7 +58,12 @@ easydict_win32/
 
 All commands should be run from the `dotnet/` directory.
 
+### Using dotnet CLI
+
 ```bash
+# Restore packages
+dotnet restore
+
 # Build Debug
 dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Debug
 
@@ -44,16 +76,698 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 # Run all tests
 dotnet test Easydict.Win32.sln
 
-# Publish
+# Run specific test projects
+dotnet test tests/Easydict.TranslationService.Tests
+dotnet test tests/Easydict.WinUI.Tests
+
+# Publish self-contained
 dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj -c Release -o ./publish
+```
+
+### Using Makefile
+
+```bash
+# Build (Debug)
+make build
+
+# Build Release
+make build-release
+
+# Run tests
+make test
+
+# Run specific tests
+make test-translation
+make test-winui
+
+# Publish (x64)
+make publish-x64
+
+# Create MSIX package
+make msix-x64
+
+# Run the app
+make run
 ```
 
 ## Key Features
 
-- Multiple translation services (Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, etc.)
-- LLM streaming translation
-- Multiple window modes (Main, Mini, Fixed)
-- Global hotkeys (Ctrl+Alt+T, Ctrl+Alt+D, Ctrl+Alt+M)
-- System tray support
-- Clipboard monitoring
-- Dark/Light theme support
+- **Translation Services**: 15+ services including Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama, and custom OpenAI-compatible services
+- **LLM Streaming Translation**: Real-time display of translation results
+- **Multiple Window Modes**: Main, Mini, Fixed windows
+- **Global Hotkeys**:
+  - `Ctrl+Alt+T` - Show/hide main window
+  - `Ctrl+Alt+D` - Translate clipboard content
+  - `Ctrl+Alt+M` - Show mini window with selection
+  - `Ctrl+Alt+F` - Show fixed window
+  - `Ctrl+Alt+Shift+M` - Toggle mini window
+  - `Ctrl+Alt+Shift+F` - Toggle fixed window
+- **System Tray**: Minimize to tray, background operation
+- **Clipboard Monitoring**: Auto-translate copied text
+- **HTTP Proxy Support**: Configure proxy server
+- **High DPI Support**: Per-Monitor V2 DPI awareness
+- **Dark/Light Theme**: System theme integration
+- **Traditional Chinese Support**: Multiple services support Traditional Chinese
+
+## Architecture Notes
+
+### Translation Services
+- All translation services implement a common interface in `Easydict.TranslationService`
+- LLM streaming is handled through SSE (Server-Sent Events) parsing
+- Service configurations are encrypted using DPAPI (Data Protection API)
+
+### Window Management
+- Three window types: Main (full), Mini (floating), Fixed (persistent)
+- Each window type is independently managed with separate activation states
+- Global hotkeys are registered using Windows low-level keyboard hooks
+
+### IPC Architecture
+- `Easydict.SidecarClient` provides communication with external sidecar processes
+- Used for OCR and other native features (future)
+- E2E tests in `e2e/` directory
+
+### Testing
+- Unit tests using xUnit + FluentAssertions
+- Mock implementations for HTTP clients and external services
+- Separate test projects for each major component
+
+## Coding Style and Conventions
+
+### 1. Naming Conventions
+
+#### Classes and Types
+```csharp
+// Services use 'Service' suffix
+public sealed class TranslationManagerService { }
+public class ClipboardService { }
+public class LocalizationService { }
+
+// Base/Abstract classes use 'Base' prefix
+public abstract class BaseTranslationService { }
+public abstract class BaseOpenAIService : BaseTranslationService { }
+
+// Descriptive model names
+public class ServiceCheckItem { }
+public record TranslationRequest { }
+```
+
+#### Methods and Properties
+```csharp
+// Public members use PascalCase
+public async Task<TranslationResult> TranslateAsync();
+public string DisplayName { get; init; }
+public bool IsConfigured { get; }
+
+// Boolean properties use 'Is', 'Has', 'Can' prefix
+public bool IsStreaming { get; }
+public bool HasError { get; }
+public bool CanTranslate { get; }
+
+// Event handlers use 'On' prefix
+private void OnClipboardContentChanged(object? sender, object e);
+private async void OnPageLoaded(object sender, RoutedEventArgs e);
+```
+
+#### Fields
+```csharp
+// Private instance fields use _camelCase
+private bool _isLoaded;
+private string _lastClipboardText;
+private readonly HttpClient _httpClient;
+
+// Static readonly fields use _PascalCase or _camelCase
+private static readonly Lazy<TranslationManagerService> _instance;
+private readonly object _lock = new();
+
+// Constants use PascalCase or CONSTANT_CASE
+private const string BaseUrl = "https://api.example.com";
+private const int DefaultTimeoutSeconds = 30;
+```
+
+#### Files and Namespaces
+```csharp
+// File names match class names
+// ClipboardService.cs, TranslationManagerService.cs
+
+// Use file-scoped namespaces (C# 10+)
+namespace Easydict.WinUI.Services;
+
+public class ClipboardService { }
+
+// Namespaces follow directory structure
+// src/Easydict.WinUI/Services/ -> Easydict.WinUI.Services
+// src/Easydict.TranslationService/Services/ -> Easydict.TranslationService.Services
+```
+
+### 2. Async/Await Patterns
+
+#### Standard Async Methods
+```csharp
+// Always use async suffix for async methods
+public async Task<TranslationResult> TranslateAsync(
+    TranslationRequest request,
+    CancellationToken cancellationToken = default)
+{
+    ValidateRequest(request);
+    var stopwatch = Stopwatch.StartNew();
+
+    try
+    {
+        var result = await TranslateInternalAsync(request, cancellationToken);
+        stopwatch.Stop();
+        return result with { TimingMs = stopwatch.ElapsedMilliseconds };
+    }
+    catch (HttpRequestException ex)
+    {
+        throw new TranslationException($"Network error: {ex.Message}", ex);
+    }
+}
+
+// Static async methods for utility operations
+public static async Task<string?> GetTextAsync()
+{
+    try
+    {
+        var content = Clipboard.GetContent();
+        if (content.Contains(StandardDataFormats.Text))
+        {
+            return await content.GetTextAsync();
+        }
+    }
+    catch { return null; }
+}
+```
+
+#### Streaming with Async Iterators
+```csharp
+// Implement IAsyncEnumerable<T> for streaming
+public async IAsyncEnumerable<string> TranslateStreamAsync(
+    TranslationRequest request,
+    [EnumeratorCancellation] CancellationToken cancellationToken = default)
+{
+    await foreach (var chunk in GetStreamChunksAsync(request, cancellationToken))
+    {
+        yield return chunk;
+    }
+}
+
+// Consume streaming results
+await foreach (var chunk in service.TranslateStreamAsync(request, ct))
+{
+    sb.Append(chunk);
+
+    // Throttle UI updates for performance
+    if ((DateTime.UtcNow - lastUpdateTime).TotalMilliseconds >= 100)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ResultText = sb.ToString();
+        });
+        lastUpdateTime = DateTime.UtcNow;
+    }
+}
+```
+
+#### UI Thread Marshalling
+```csharp
+// Use DispatcherQueue.TryEnqueue for UI updates from background threads
+DispatcherQueue.TryEnqueue(() =>
+{
+    if (_isClosing) return;
+
+    serviceResult.IsLoading = false;
+    serviceResult.IsStreaming = true;
+    serviceResult.StreamingText = updatedText;
+});
+```
+
+#### Fire-and-Forget Pattern
+```csharp
+// Use discard for intentional fire-and-forget
+_ = Task.Run(async () =>
+{
+    await Task.Delay(2000);
+    lock (_lock)
+    {
+        // Cleanup old resources
+    }
+});
+```
+
+### 3. Dependency Injection and Singleton Patterns
+
+#### Lazy Singleton Pattern
+```csharp
+// Use Lazy<T> for thread-safe singletons
+public sealed class TranslationManagerService
+{
+    private static readonly Lazy<TranslationManagerService> _instance =
+        new(() => new TranslationManagerService(),
+            LazyThreadSafetyMode.PublicationOnly);
+
+    public static TranslationManagerService Instance => _instance.Value;
+
+    private TranslationManagerService() { }
+}
+```
+
+#### Constructor Injection
+```csharp
+// Inject dependencies through constructor
+public sealed class GoogleTranslateService : BaseTranslationService
+{
+    protected readonly HttpClient HttpClient;
+
+    public GoogleTranslateService(HttpClient httpClient)
+        : base(httpClient)
+    {
+        HttpClient = httpClient;
+    }
+}
+```
+
+#### Service Locator (When DI Not Available)
+```csharp
+// Use Instance property for singleton access
+private readonly SettingsService _settings = SettingsService.Instance;
+private readonly LocalizationService _localization = LocalizationService.Instance;
+```
+
+#### Resource Handle Pattern
+```csharp
+// Use disposable handles for lifetime management
+using var handle = TranslationManagerService.Instance.AcquireHandle();
+var manager = handle.Manager;
+// Handle automatically releases on disposal
+```
+
+### 4. Error Handling
+
+#### Exception Hierarchy with Specific Catches
+```csharp
+try
+{
+    var result = await TranslateInternalAsync(request, cancellationToken);
+    return result;
+}
+catch (HttpRequestException ex)
+{
+    throw new TranslationException($"Network error: {ex.Message}", ex)
+    {
+        ErrorCode = TranslationErrorCode.NetworkError,
+        ServiceId = ServiceId
+    };
+}
+catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+{
+    throw new TranslationException("Request timed out", ex)
+    {
+        ErrorCode = TranslationErrorCode.Timeout
+    };
+}
+catch (TranslationException)
+{
+    throw; // Re-throw custom exceptions as-is
+}
+catch (Exception ex)
+{
+    throw new TranslationException($"Unexpected error: {ex.Message}", ex)
+    {
+        ErrorCode = TranslationErrorCode.Unknown
+    };
+}
+```
+
+#### Validation Before Operations
+```csharp
+protected virtual void ValidateRequest(TranslationRequest request)
+{
+    if (string.IsNullOrWhiteSpace(request.Text))
+        throw new TranslationException("Text cannot be empty");
+
+    if (!SupportsLanguagePair(request.FromLanguage, request.ToLanguage))
+        throw new TranslationException("Language pair not supported");
+}
+```
+
+#### Swallow-and-Log Pattern for Non-Critical Errors
+```csharp
+private async void OnClipboardContentChanged(object? sender, object e)
+{
+    try
+    {
+        var content = Clipboard.GetContent();
+        if (content.Contains(StandardDataFormats.Text))
+        {
+            var text = await content.GetTextAsync();
+            OnClipboardTextChanged?.Invoke(text);
+        }
+    }
+    catch
+    {
+        // Ignore clipboard access errors - non-critical
+    }
+}
+```
+
+#### Resource Cleanup with Finally
+```csharp
+try
+{
+    SetLoading(true);
+    await PerformOperationAsync();
+}
+finally
+{
+    if (!_isClosing)
+        SetLoading(false);
+
+    Interlocked.CompareExchange(ref _currentCts, null, currentCts);
+}
+```
+
+### 5. WinUI 3 / XAML Code-Behind Patterns
+
+#### Page Lifecycle Management
+```csharp
+public partial class MainPage : Page
+{
+    private bool _isLoaded;
+
+    public MainPage()
+    {
+        this.InitializeComponent();
+        this.Loaded += OnPageLoaded;
+        this.Unloaded += OnPageUnloaded;
+    }
+
+    private void OnPageLoaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = true;
+        InitializeServices();
+        ApplyLocalization();
+    }
+
+    private async void OnPageUnloaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = false;
+        await CleanupResourcesAsync();
+    }
+}
+```
+
+#### State Flags for UI Safety
+```csharp
+// Prevent operations during initialization or teardown
+private bool _isLoaded;
+private volatile bool _isClosing;
+private bool _suppressSelectionChanged;
+
+private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+{
+    if (!_isLoaded || _suppressSelectionChanged) return;
+
+    // Handle selection change
+}
+```
+
+#### Event Handler Registration/Unregistration
+```csharp
+private bool _handlersRegistered;
+
+private void OnPageLoaded(object sender, RoutedEventArgs e)
+{
+    if (!_handlersRegistered)
+    {
+        ServiceCombo.SelectionChanged += OnServiceComboChanged;
+        SaveButton.Click += OnSaveButtonClick;
+        _handlersRegistered = true;
+    }
+}
+
+private void OnPageUnloaded(object sender, RoutedEventArgs e)
+{
+    if (_handlersRegistered)
+    {
+        ServiceCombo.SelectionChanged -= OnServiceComboChanged;
+        SaveButton.Click -= OnSaveButtonClick;
+        _handlersRegistered = false;
+    }
+}
+```
+
+#### Inline Lambda Event Handlers
+```csharp
+// For simple synchronization or forwarding
+SourceLangCombo.SelectionChanged += (s, e) =>
+    SyncComboSelection(SourceLangCombo, SourceLangComboNarrow);
+```
+
+### 6. Thread Safety and Concurrency
+
+#### Lock-Based Synchronization
+```csharp
+private readonly object _lock = new();
+private Dictionary<TranslationManager, int> _handleCounts = new();
+
+public SafeManagerHandle AcquireHandle()
+{
+    lock (_lock)
+    {
+        var manager = _translationManager;
+        if (!_handleCounts.ContainsKey(manager))
+            _handleCounts[manager] = 0;
+
+        _handleCounts[manager]++;
+        return new SafeManagerHandle(manager, () => ReleaseHandle(manager));
+    }
+}
+```
+
+#### Interlocked Operations
+```csharp
+// Use Interlocked for atomic operations on shared state
+private CancellationTokenSource? _currentQueryCts;
+
+var previousCts = Interlocked.Exchange(ref _currentQueryCts, currentCts);
+previousCts?.Cancel();
+
+// Compare-exchange for conditional updates
+Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
+```
+
+#### Volatile Fields for Visibility
+```csharp
+// Use volatile for flags checked across threads
+private volatile bool _isClosing;
+```
+
+### 7. Interface Design and Abstraction
+
+#### Base Classes with Virtual Members
+```csharp
+public abstract class BaseTranslationService : ITranslationService
+{
+    // Abstract members must be implemented
+    public abstract string ServiceId { get; }
+    public abstract string DisplayName { get; }
+    public abstract bool RequiresApiKey { get; }
+
+    // Virtual members have default implementation
+    public virtual bool SupportsLanguagePair(Language from, Language to)
+    {
+        return true; // Default: support all pairs
+    }
+
+    public virtual Task<Language> DetectLanguageAsync(
+        string text,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult(Language.Auto);
+    }
+}
+```
+
+#### Interface Segregation
+```csharp
+// Base interface for all translation services
+public interface ITranslationService
+{
+    string ServiceId { get; }
+    string DisplayName { get; }
+    Task<TranslationResult> TranslateAsync(
+        TranslationRequest request,
+        CancellationToken ct = default);
+}
+
+// Separate interface for streaming capability
+public interface IStreamTranslationService : ITranslationService
+{
+    IAsyncEnumerable<string> TranslateStreamAsync(
+        TranslationRequest request,
+        CancellationToken ct = default);
+    bool IsStreaming { get; }
+}
+```
+
+### 8. Data Models and Records
+
+#### Record Types for Immutable Data
+```csharp
+// Use records for DTOs and immutable data structures
+internal sealed record NavSection(
+    string Name,
+    string Tooltip,
+    string IconGlyph,
+    FrameworkElement Element);
+
+// Init-only properties for semi-immutable records
+public record TranslationRequest
+{
+    public string Text { get; init; } = string.Empty;
+    public Language FromLanguage { get; init; }
+    public Language ToLanguage { get; init; }
+}
+```
+
+#### Observable Properties with INotifyPropertyChanged
+```csharp
+public class ServiceCheckItem : INotifyPropertyChanged
+{
+    private bool _isChecked;
+
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set
+        {
+            if (_isChecked != value)
+            {
+                _isChecked = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    protected virtual void OnPropertyChanged(
+        [CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this,
+            new PropertyChangedEventArgs(propertyName));
+    }
+}
+```
+
+### 9. Testing Conventions
+
+#### xUnit Test Structure
+```csharp
+public class GoogleTranslateServiceTests
+{
+    private readonly MockHttpMessageHandler _mockHandler;
+    private readonly HttpClient _httpClient;
+    private readonly GoogleTranslateService _service;
+
+    public GoogleTranslateServiceTests()
+    {
+        _mockHandler = new MockHttpMessageHandler();
+        _httpClient = new HttpClient(_mockHandler);
+        _service = new GoogleTranslateService(_httpClient);
+    }
+
+    [Fact]
+    public void ServiceId_IsGoogle()
+    {
+        // Assert
+        _service.ServiceId.Should().Be("google");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ReturnsTranslatedText()
+    {
+        // Arrange
+        var googleResponse = """{"sentences": [{"trans": "Hello"}]}""";
+        _mockHandler.EnqueueJsonResponse(googleResponse);
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.ChineseSimplified,
+            ToLanguage = Language.English
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert
+        result.TranslatedText.Should().Be("Hello");
+        result.ServiceId.Should().Be("google");
+    }
+}
+```
+
+#### FluentAssertions Usage
+```csharp
+// Use FluentAssertions for readable assertions
+result.Should().NotBeNull();
+result.TranslatedText.Should().Be("Expected text");
+result.TimingMs.Should().BeGreaterThan(0);
+list.Should().HaveCount(3);
+action.Should().ThrowAsync<TranslationException>();
+```
+
+### 10. Common Patterns
+
+#### Configuration Pattern
+```csharp
+// Configure services with fluent API
+_translationManager.ConfigureService("deepl", service =>
+{
+    if (service is DeepLService deepl)
+    {
+        deepl.Configure(apiKey, useWebFirst: true);
+    }
+});
+```
+
+#### Resource Disposal Pattern
+```csharp
+public void Dispose()
+{
+    if (_isDisposed) return;
+    _isDisposed = true;
+
+    // Cleanup resources
+    IsMonitoringEnabled = false;
+    _httpClient?.Dispose();
+}
+```
+
+#### Localization Pattern
+```csharp
+private void ApplyLocalization()
+{
+    var loc = LocalizationService.Instance;
+    TitleText.Text = loc.GetString("WindowTitle");
+    InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
+}
+```
+
+#### Debug Logging
+```csharp
+// Use Debug.WriteLine for development logging
+Debug.WriteLine($"[ServiceName] Operation started: {parameter}");
+Debug.WriteLine($"[ServiceName] Result: {result.Length} chars");
+```
+
+### Key Principles
+
+1. **Async by Default**: Use async/await for all I/O operations
+2. **Null Safety**: Leverage C# nullable reference types (`?`)
+3. **Immutability**: Prefer `init` and `record` types where appropriate
+4. **Thread Safety**: Use locks, Interlocked, or immutable types for shared state
+5. **Separation of Concerns**: Keep UI, business logic, and services separate
+6. **Resource Management**: Always dispose IDisposable resources properly
+7. **Error Handling**: Catch specific exceptions, provide meaningful error messages
+8. **Testing**: Write tests for all business logic and service implementations

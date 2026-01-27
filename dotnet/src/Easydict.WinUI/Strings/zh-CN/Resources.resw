@@ -468,6 +468,15 @@
   <data name="UILangKoreanItem.Content" xml:space="preserve">
     <value>한국어</value>
   </data>
+  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
+    <value>繁體中文</value>
+  </data>
+  <data name="UILangFrenchItem.Content" xml:space="preserve">
+    <value>Français</value>
+  </data>
+  <data name="UILangGermanItem.Content" xml:space="preserve">
+    <value>Deutsch</value>
+  </data>
   <data name="UILanguageDescription.Text" xml:space="preserve">
     <value>选择应用程序界面的显示语言。需要重启生效。</value>
   </data>

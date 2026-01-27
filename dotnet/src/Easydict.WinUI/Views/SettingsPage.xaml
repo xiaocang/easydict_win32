@@ -483,8 +483,11 @@
                             HorizontalAlignment="Left">
                             <ComboBoxItem x:Uid="UILangEnglishItem" Content="English" Tag="en-US" />
                             <ComboBoxItem x:Uid="UILangChineseItem" Content="简体中文" Tag="zh-CN" />
+                            <ComboBoxItem x:Uid="UILangTraditionalChineseItem" Content="繁體中文" Tag="zh-TW" />
                             <ComboBoxItem x:Uid="UILangJapaneseItem" Content="日本語" Tag="ja-JP" />
                             <ComboBoxItem x:Uid="UILangKoreanItem" Content="한국어" Tag="ko-KR" />
+                            <ComboBoxItem x:Uid="UILangFrenchItem" Content="Français" Tag="fr-FR" />
+                            <ComboBoxItem x:Uid="UILangGermanItem" Content="Deutsch" Tag="de-DE" />
                         </ComboBox>
                         <TextBlock x:Uid="UILanguageDescription"
                                    Text="Select the display language for the application interface. Restart required."

@@ -42,338 +42,338 @@
 
   <!-- App Name -->
   <data name="AppName" xml:space="preserve">
-    <value>Easydict</value>
+    <value>易詞典</value>
   </data>
 
   <!-- Main Page -->
   <data name="SourceText" xml:space="preserve">
-    <value>Source Text</value>
+    <value>原文</value>
   </data>
   <data name="TranslationResults" xml:space="preserve">
-    <value>Translation Results</value>
+    <value>翻譯結果</value>
   </data>
   <data name="InputPlaceholder" xml:space="preserve">
-    <value>Enter or paste text to translate...</value>
+    <value>輸入或貼上要翻譯的文字...</value>
   </data>
   <data name="TranslationPlaceholder" xml:space="preserve">
-    <value>Translation will appear here...</value>
+    <value>翻譯結果將在這裡顯示...</value>
   </data>
   <data name="SettingsTooltip" xml:space="preserve">
-    <value>Settings</value>
+    <value>設定</value>
   </data>
   <data name="TranslateTooltip" xml:space="preserve">
-    <value>Translate</value>
+    <value>翻譯</value>
   </data>
   <data name="SwapLanguagesTooltip" xml:space="preserve">
-    <value>Swap source and target languages</value>
+    <value>交換來源語言和目標語言</value>
   </data>
   <data name="SourceLanguageTooltip" xml:space="preserve">
-    <value>Source Language</value>
+    <value>來源語言</value>
   </data>
   <data name="TargetLanguageTooltip" xml:space="preserve">
-    <value>Target Language</value>
+    <value>目標語言</value>
   </data>
 
   <!-- Status -->
   <data name="StatusConnected" xml:space="preserve">
-    <value>Connected</value>
+    <value>已連線</value>
   </data>
   <data name="StatusDisconnected" xml:space="preserve">
-    <value>Disconnected</value>
+    <value>未連線</value>
   </data>
   <data name="StatusReady" xml:space="preserve">
-    <value>Ready</value>
+    <value>就緒</value>
   </data>
   <data name="StatusTranslating" xml:space="preserve">
-    <value>Translating...</value>
+    <value>翻譯中...</value>
   </data>
   <data name="StatusError" xml:space="preserve">
-    <value>Error</value>
+    <value>錯誤</value>
   </data>
 
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
-    <value>Auto Detect</value>
+    <value>自動偵測</value>
   </data>
   <data name="LangEnglish" xml:space="preserve">
-    <value>English</value>
+    <value>英語</value>
   </data>
   <data name="LangChinese" xml:space="preserve">
-    <value>Chinese</value>
+    <value>中文</value>
   </data>
   <data name="LangChineseSimplified" xml:space="preserve">
-    <value>Chinese (Simplified)</value>
+    <value>簡體中文</value>
   </data>
   <data name="LangJapanese" xml:space="preserve">
-    <value>Japanese</value>
+    <value>日語</value>
   </data>
   <data name="LangKorean" xml:space="preserve">
-    <value>Korean</value>
+    <value>韓語</value>
   </data>
   <data name="LangFrench" xml:space="preserve">
-    <value>French</value>
+    <value>法語</value>
   </data>
   <data name="LangGerman" xml:space="preserve">
-    <value>German</value>
+    <value>德語</value>
   </data>
   <data name="LangSpanish" xml:space="preserve">
-    <value>Spanish</value>
+    <value>西班牙語</value>
   </data>
 
   <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
-    <value>Settings</value>
+    <value>設定</value>
   </data>
   <data name="TranslationService" xml:space="preserve">
-    <value>Translation Service</value>
+    <value>翻譯服務</value>
   </data>
   <data name="DefaultService" xml:space="preserve">
-    <value>Default Service</value>
+    <value>預設服務</value>
   </data>
   <data name="TargetLanguage" xml:space="preserve">
-    <value>Target Language</value>
+    <value>目標語言</value>
   </data>
   <data name="EnabledServices" xml:space="preserve">
-    <value>Enabled Services</value>
+    <value>已啟用的服務</value>
   </data>
   <data name="EnabledServicesDescription" xml:space="preserve">
-    <value>Select which translation services to display in each window. Multiple services will run in parallel.</value>
+    <value>選擇在每個視窗中顯示哪些翻譯服務。多個服務將並行運行。</value>
   </data>
   <data name="MainWindow" xml:space="preserve">
-    <value>Main Window</value>
+    <value>主視窗</value>
   </data>
   <data name="MiniWindow" xml:space="preserve">
-    <value>Mini Window</value>
+    <value>迷你視窗</value>
   </data>
   <data name="FixedWindow" xml:space="preserve">
-    <value>Fixed Window</value>
+    <value>固定視窗</value>
   </data>
   <data name="Auto" xml:space="preserve">
-    <value>Auto</value>
+    <value>自動</value>
   </data>
   <data name="Manual" xml:space="preserve">
-    <value>Manual</value>
+    <value>手動</value>
   </data>
 
   <!-- Language Preferences -->
   <data name="LanguagePreferences" xml:space="preserve">
-    <value>Language Preferences</value>
+    <value>語言偏好</value>
   </data>
   <data name="FirstLanguage" xml:space="preserve">
-    <value>First Language</value>
+    <value>第一語言</value>
   </data>
   <data name="SecondLanguage" xml:space="preserve">
-    <value>Second Language</value>
+    <value>第二語言</value>
   </data>
   <data name="LanguagePreferencesDescription" xml:space="preserve">
-    <value>When detected language matches your First Language, translation target will be your Second Language, and vice versa.</value>
+    <value>當偵測到的語言與您的第一語言匹配時，翻譯目標將是您的第二語言，反之亦然。</value>
   </data>
   <data name="AutoSelectTargetLanguage" xml:space="preserve">
-    <value>Automatically select target language based on detected source</value>
+    <value>根據偵測到的來源語言自動選擇目標語言</value>
   </data>
 
   <!-- Service Configuration -->
   <data name="ServiceConfiguration" xml:space="preserve">
-    <value>Service Configuration</value>
+    <value>服務設定</value>
   </data>
   <data name="ServiceConfigurationDescription" xml:space="preserve">
-    <value>Configure API keys, endpoints, and models for each translation service.</value>
+    <value>為每個翻譯服務設定 API 金鑰、端點和模型。</value>
   </data>
   <data name="ApiKey" xml:space="preserve">
-    <value>API Key</value>
+    <value>API 金鑰</value>
   </data>
   <data name="ApiKeyOptional" xml:space="preserve">
-    <value>API Key (Optional)</value>
+    <value>API 金鑰（選填）</value>
   </data>
   <data name="Endpoint" xml:space="preserve">
-    <value>Endpoint</value>
+    <value>端點</value>
   </data>
   <data name="EndpointOptional" xml:space="preserve">
-    <value>Endpoint (Optional)</value>
+    <value>端點（選填）</value>
   </data>
   <data name="EndpointRequired" xml:space="preserve">
-    <value>Endpoint (Required)</value>
+    <value>端點（必填）</value>
   </data>
   <data name="Model" xml:space="preserve">
-    <value>Model</value>
+    <value>模型</value>
   </data>
   <data name="Refresh" xml:space="preserve">
-    <value>Refresh</value>
+    <value>重新整理</value>
   </data>
 
   <!-- Service Descriptions -->
   <data name="DeepLDescription" xml:space="preserve">
-    <value>Leave API key empty to use free web translation. Pro API key gives higher limits.</value>
+    <value>留空 API 金鑰可使用免費網頁翻譯。Pro API 金鑰有更高的限額。</value>
   </data>
   <data name="DeepLFreeOption" xml:space="preserve">
-    <value>Use Free API (no API key required for web translation)</value>
+    <value>使用免費 API（網頁翻譯無需 API 金鑰）</value>
   </data>
   <data name="OpenAIDescription" xml:space="preserve">
-    <value>You can type a custom model name directly.</value>
+    <value>您可以直接輸入自訂模型名稱。</value>
   </data>
   <data name="DeepSeekDescription" xml:space="preserve">
-    <value>Get your API key from platform.deepseek.com. You can type a custom model name.</value>
+    <value>從 platform.deepseek.com 取得您的 API 金鑰。您可以輸入自訂模型名稱。</value>
   </data>
   <data name="GroqDescription" xml:space="preserve">
-    <value>Groq provides fast inference. Get your API key from console.groq.com. You can type a custom model name.</value>
+    <value>Groq 提供快速推論。從 console.groq.com 取得您的 API 金鑰。您可以輸入自訂模型名稱。</value>
   </data>
   <data name="ZhipuDescription" xml:space="preserve">
-    <value>Get your API key from open.bigmodel.cn. You can type a custom model name.</value>
+    <value>從 open.bigmodel.cn 取得您的 API 金鑰。您可以輸入自訂模型名稱。</value>
   </data>
   <data name="GitHubModelsDescription" xml:space="preserve">
-    <value>Use your GitHub personal access token. Get one from github.com/settings/tokens. You can type a custom model name.</value>
+    <value>使用您的 GitHub 個人存取權杖。從 github.com/settings/tokens 取得。您可以輸入自訂模型名稱。</value>
   </data>
   <data name="GeminiDescription" xml:space="preserve">
-    <value>Get your API key from aistudio.google.com. You can type a custom model name.</value>
+    <value>從 aistudio.google.com 取得您的 API 金鑰。您可以輸入自訂模型名稱。</value>
   </data>
   <data name="CustomOpenAIDescription" xml:space="preserve">
-    <value>Configure any OpenAI-compatible API endpoint (e.g., local LLM servers, other AI providers).</value>
+    <value>設定任何與 OpenAI 相容的 API 端點（例如本機 LLM 伺服器、其他 AI 提供商）。</value>
   </data>
   <data name="OllamaDescription" xml:space="preserve">
-    <value>Ollama must be running locally. Click Refresh to load available models.</value>
+    <value>Ollama 必須在本機運行。點擊重新整理以載入可用模型。</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>Built-in AI uses Groq cloud service. No API key required. You can type a custom model name.</value>
+    <value>內建 AI 使用 Groq 雲端服務。無需 API 金鑰。您可以輸入自訂模型名稱。</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
-    <value>ByteDance's Doubao translation service. Get your API key from console.volcengine.com</value>
+    <value>字節跳動的豆包翻譯服務。從 console.volcengine.com 取得您的 API 金鑰</value>
   </data>
   <data name="CaiyunDescription" xml:space="preserve">
-    <value>Get your API key from fanyi.caiyunapp.com</value>
+    <value>從 fanyi.caiyunapp.com 取得您的 API 金鑰</value>
   </data>
   <data name="NiuTransDescription" xml:space="preserve">
-    <value>NiuTrans supports 450+ language pairs. Get your API key from niutrans.com</value>
+    <value>小牛翻譯支援 450+ 種語言對。從 niutrans.com 取得您的 API 金鑰</value>
   </data>
   <data name="FreeServicesTitle" xml:space="preserve">
-    <value>Free Services (No Configuration Required)</value>
+    <value>免費服務（無需設定）</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google Translate and Linguee Dictionary work out of the box without API keys.</value>
+    <value>Google 翻譯和 Linguee 詞典無需 API 金鑰即可使用。</value>
   </data>
 
   <!-- HTTP Proxy -->
   <data name="HttpProxy" xml:space="preserve">
-    <value>HTTP Proxy</value>
+    <value>HTTP 代理</value>
   </data>
   <data name="UseHttpProxy" xml:space="preserve">
-    <value>Use HTTP Proxy</value>
+    <value>使用 HTTP 代理</value>
   </data>
   <data name="ProxyUrl" xml:space="preserve">
-    <value>Proxy URL</value>
+    <value>代理位址</value>
   </data>
   <data name="BypassProxyForLocalhost" xml:space="preserve">
-    <value>Bypass proxy for localhost</value>
+    <value>本機位址繞過代理</value>
   </data>
   <data name="ProxyDescription" xml:space="preserve">
-    <value>Proxy changes take effect after app restart. Localhost bypass ensures Ollama works without proxy.</value>
+    <value>代理變更在應用程式重新啟動後生效。本機繞過確保 Ollama 無需代理即可運作。</value>
   </data>
 
   <!-- Behavior -->
   <data name="Behavior" xml:space="preserve">
-    <value>Behavior</value>
+    <value>行為</value>
   </data>
   <data name="MinimizeToTray" xml:space="preserve">
-    <value>Minimize to system tray</value>
+    <value>最小化到系統匣</value>
   </data>
   <data name="MonitorClipboard" xml:space="preserve">
-    <value>Monitor clipboard for text</value>
+    <value>監控剪貼簿文字</value>
   </data>
   <data name="AlwaysOnTop" xml:space="preserve">
-    <value>Always on top</value>
+    <value>始終置頂</value>
   </data>
   <data name="LaunchAtStartup" xml:space="preserve">
-    <value>Launch at Windows startup</value>
+    <value>開機自動啟動</value>
   </data>
 
   <!-- Hotkeys -->
   <data name="Hotkeys" xml:space="preserve">
-    <value>Hotkeys</value>
+    <value>快速鍵</value>
   </data>
   <data name="ShowWindow" xml:space="preserve">
-    <value>Show Window</value>
+    <value>顯示視窗</value>
   </data>
   <data name="TranslateSelection" xml:space="preserve">
-    <value>Translate Selection</value>
+    <value>翻譯選取文字</value>
   </data>
   <data name="ShowMiniWindow" xml:space="preserve">
-    <value>Show Mini Window</value>
+    <value>顯示迷你視窗</value>
   </data>
   <data name="ShowFixedWindow" xml:space="preserve">
-    <value>Show Fixed Window</value>
+    <value>顯示固定視窗</value>
   </data>
   <data name="HotkeysDescription" xml:space="preserve">
-    <value>Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M).</value>
+    <value>注意：重新啟動應用程式以套用快速鍵變更。切換快速鍵使用相同的鍵加 Shift（例如 Ctrl+Alt+Shift+M）。</value>
   </data>
 
   <!-- About -->
   <data name="About" xml:space="preserve">
-    <value>About</value>
+    <value>關於</value>
   </data>
   <data name="EasydictForWindows" xml:space="preserve">
-    <value>Easydict for Windows</value>
+    <value>Easydict Windows 版</value>
   </data>
   <data name="GitHubRepository" xml:space="preserve">
-    <value>GitHub Repository</value>
+    <value>GitHub 儲存庫</value>
   </data>
   <data name="InspiredBy" xml:space="preserve">
-    <value>Inspired by</value>
+    <value>靈感來自</value>
   </data>
   <data name="EasydictForMacOS" xml:space="preserve">
-    <value>Easydict for macOS</value>
+    <value>Easydict macOS 版</value>
   </data>
   <data name="License" xml:space="preserve">
-    <value>License: GPL-3.0</value>
+    <value>授權條款：GPL-3.0</value>
   </data>
 
   <!-- Buttons -->
   <data name="SaveSettings" xml:space="preserve">
-    <value>Save Settings</value>
+    <value>儲存設定</value>
   </data>
   <data name="Back" xml:space="preserve">
-    <value>Back</value>
+    <value>返回</value>
   </data>
   <data name="BackToTop" xml:space="preserve">
-    <value>Back to top</value>
+    <value>返回頂部</value>
   </data>
   <data name="Copy" xml:space="preserve">
-    <value>Copy</value>
+    <value>複製</value>
   </data>
   <data name="CopyAll" xml:space="preserve">
-    <value>Copy All</value>
+    <value>複製全部</value>
   </data>
 
   <!-- Messages -->
   <data name="TranslationFailed" xml:space="preserve">
-    <value>Translation failed</value>
+    <value>翻譯失敗</value>
   </data>
   <data name="ServiceNotInitialized" xml:space="preserve">
-    <value>Service not initialized</value>
+    <value>服務未初始化</value>
   </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
-    <value>Invalid Language Selection</value>
+    <value>無效的語言選擇</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
-    <value>Invalid Proxy URL</value>
+    <value>無效的代理位址</value>
   </data>
   <data name="SettingsSaved" xml:space="preserve">
-    <value>Settings Saved</value>
+    <value>設定已儲存</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
-    <value>Restart Required</value>
+    <value>需要重新啟動</value>
   </data>
   <data name="CannotConnectToOllama" xml:space="preserve">
-    <value>Cannot Connect to Ollama</value>
+    <value>無法連線到 Ollama</value>
   </data>
   <data name="Copied" xml:space="preserve">
-    <value>Copied!</value>
+    <value>已複製！</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
-    <value>Detected: {0}</value>
+    <value>偵測到：{0}</value>
   </data>
 
   <!-- Service Names -->
   <data name="ServiceGoogle" xml:space="preserve">
-    <value>Google Translate</value>
+    <value>Google 翻譯</value>
   </data>
   <data name="ServiceDeepL" xml:space="preserve">
     <value>DeepL</value>
@@ -382,10 +382,10 @@
     <value>OpenAI</value>
   </data>
   <data name="ServiceOllama" xml:space="preserve">
-    <value>Ollama (Local)</value>
+    <value>Ollama（本機）</value>
   </data>
   <data name="ServiceBuiltIn" xml:space="preserve">
-    <value>Built-in AI</value>
+    <value>內建 AI</value>
   </data>
   <data name="ServiceDeepSeek" xml:space="preserve">
     <value>DeepSeek</value>
@@ -394,7 +394,7 @@
     <value>Groq</value>
   </data>
   <data name="ServiceZhipu" xml:space="preserve">
-    <value>Zhipu</value>
+    <value>智譜</value>
   </data>
   <data name="ServiceGitHubModels" xml:space="preserve">
     <value>GitHub Models</value>
@@ -403,58 +403,58 @@
     <value>Gemini</value>
   </data>
   <data name="ServiceCustomOpenAI" xml:space="preserve">
-    <value>Custom OpenAI</value>
+    <value>自訂 OpenAI</value>
   </data>
   <data name="ServiceDoubao" xml:space="preserve">
-    <value>Doubao</value>
+    <value>豆包</value>
   </data>
   <data name="ServiceCaiyun" xml:space="preserve">
-    <value>Caiyun</value>
+    <value>彩雲小譯</value>
   </data>
   <data name="ServiceNiuTrans" xml:space="preserve">
-    <value>NiuTrans</value>
+    <value>小牛翻譯</value>
   </data>
   <data name="ServiceLinguee" xml:space="preserve">
-    <value>Linguee Dictionary</value>
+    <value>Linguee 詞典</value>
   </data>
 
   <!-- Tray Menu -->
   <data name="TrayShow" xml:space="preserve">
-    <value>Show</value>
+    <value>顯示</value>
   </data>
   <data name="TrayShowMini" xml:space="preserve">
-    <value>Mini Window</value>
+    <value>迷你視窗</value>
   </data>
   <data name="TrayShowFixed" xml:space="preserve">
-    <value>Fixed Window</value>
+    <value>固定視窗</value>
   </data>
   <data name="TraySettings" xml:space="preserve">
-    <value>Settings</value>
+    <value>設定</value>
   </data>
   <data name="TrayExit" xml:space="preserve">
-    <value>Exit</value>
+    <value>結束</value>
   </data>
 
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
-    <value>UI Language</value>
+    <value>介面語言</value>
   </data>
   <data name="UILanguageDescription" xml:space="preserve">
-    <value>Select the display language for the application interface. Restart required.</value>
+    <value>選擇應用程式介面的顯示語言。需要重新啟動生效。</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
-    <value>English</value>
+    <value>英語</value>
   </data>
   <data name="UILangChineseSimplified" xml:space="preserve">
-    <value>Chinese (Simplified)</value>
+    <value>簡體中文</value>
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
   <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>Behavior</value>
+    <value>行為</value>
   </data>
   <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>UI Language</value>
+    <value>介面語言</value>
   </data>
   <data name="UILangEnglishItem.Content" xml:space="preserve">
     <value>English</value>
@@ -462,14 +462,14 @@
   <data name="UILangChineseItem.Content" xml:space="preserve">
     <value>简体中文</value>
   </data>
+  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
+    <value>繁體中文</value>
+  </data>
   <data name="UILangJapaneseItem.Content" xml:space="preserve">
     <value>日本語</value>
   </data>
   <data name="UILangKoreanItem.Content" xml:space="preserve">
     <value>한국어</value>
-  </data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
-    <value>繁體中文</value>
   </data>
   <data name="UILangFrenchItem.Content" xml:space="preserve">
     <value>Français</value>
@@ -478,18 +478,18 @@
     <value>Deutsch</value>
   </data>
   <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>Select the display language for the application interface. Restart required.</value>
+    <value>選擇應用程式介面的顯示語言。需要重新啟動生效。</value>
   </data>
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>Minimize to system tray</value>
+    <value>最小化到系統匣</value>
   </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>Monitor clipboard for text</value>
+    <value>監控剪貼簿文字</value>
   </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>Always on top</value>
+    <value>始終置頂</value>
   </data>
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>Launch at Windows startup</value>
+    <value>開機自動啟動</value>
   </data>
 </root>

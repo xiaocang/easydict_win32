@@ -47,328 +47,328 @@
 
   <!-- Main Page -->
   <data name="SourceText" xml:space="preserve">
-    <value>Source Text</value>
+    <value>Quelltext</value>
   </data>
   <data name="TranslationResults" xml:space="preserve">
-    <value>Translation Results</value>
+    <value>Übersetzungsergebnisse</value>
   </data>
   <data name="InputPlaceholder" xml:space="preserve">
-    <value>Enter or paste text to translate...</value>
+    <value>Text zum Übersetzen eingeben oder einfügen...</value>
   </data>
   <data name="TranslationPlaceholder" xml:space="preserve">
-    <value>Translation will appear here...</value>
+    <value>Übersetzung erscheint hier...</value>
   </data>
   <data name="SettingsTooltip" xml:space="preserve">
-    <value>Settings</value>
+    <value>Einstellungen</value>
   </data>
   <data name="TranslateTooltip" xml:space="preserve">
-    <value>Translate</value>
+    <value>Übersetzen</value>
   </data>
   <data name="SwapLanguagesTooltip" xml:space="preserve">
-    <value>Swap source and target languages</value>
+    <value>Quell- und Zielsprache tauschen</value>
   </data>
   <data name="SourceLanguageTooltip" xml:space="preserve">
-    <value>Source Language</value>
+    <value>Quellsprache</value>
   </data>
   <data name="TargetLanguageTooltip" xml:space="preserve">
-    <value>Target Language</value>
+    <value>Zielsprache</value>
   </data>
 
   <!-- Status -->
   <data name="StatusConnected" xml:space="preserve">
-    <value>Connected</value>
+    <value>Verbunden</value>
   </data>
   <data name="StatusDisconnected" xml:space="preserve">
-    <value>Disconnected</value>
+    <value>Getrennt</value>
   </data>
   <data name="StatusReady" xml:space="preserve">
-    <value>Ready</value>
+    <value>Bereit</value>
   </data>
   <data name="StatusTranslating" xml:space="preserve">
-    <value>Translating...</value>
+    <value>Übersetze...</value>
   </data>
   <data name="StatusError" xml:space="preserve">
-    <value>Error</value>
+    <value>Fehler</value>
   </data>
 
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
-    <value>Auto Detect</value>
+    <value>Automatisch erkennen</value>
   </data>
   <data name="LangEnglish" xml:space="preserve">
-    <value>English</value>
+    <value>Englisch</value>
   </data>
   <data name="LangChinese" xml:space="preserve">
-    <value>Chinese</value>
+    <value>Chinesisch</value>
   </data>
   <data name="LangChineseSimplified" xml:space="preserve">
-    <value>Chinese (Simplified)</value>
+    <value>Chinesisch (Vereinfacht)</value>
   </data>
   <data name="LangJapanese" xml:space="preserve">
-    <value>Japanese</value>
+    <value>Japanisch</value>
   </data>
   <data name="LangKorean" xml:space="preserve">
-    <value>Korean</value>
+    <value>Koreanisch</value>
   </data>
   <data name="LangFrench" xml:space="preserve">
-    <value>French</value>
+    <value>Französisch</value>
   </data>
   <data name="LangGerman" xml:space="preserve">
-    <value>German</value>
+    <value>Deutsch</value>
   </data>
   <data name="LangSpanish" xml:space="preserve">
-    <value>Spanish</value>
+    <value>Spanisch</value>
   </data>
 
   <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
-    <value>Settings</value>
+    <value>Einstellungen</value>
   </data>
   <data name="TranslationService" xml:space="preserve">
-    <value>Translation Service</value>
+    <value>Übersetzungsdienst</value>
   </data>
   <data name="DefaultService" xml:space="preserve">
-    <value>Default Service</value>
+    <value>Standarddienst</value>
   </data>
   <data name="TargetLanguage" xml:space="preserve">
-    <value>Target Language</value>
+    <value>Zielsprache</value>
   </data>
   <data name="EnabledServices" xml:space="preserve">
-    <value>Enabled Services</value>
+    <value>Aktivierte Dienste</value>
   </data>
   <data name="EnabledServicesDescription" xml:space="preserve">
-    <value>Select which translation services to display in each window. Multiple services will run in parallel.</value>
+    <value>Wählen Sie aus, welche Übersetzungsdienste in jedem Fenster angezeigt werden. Mehrere Dienste werden parallel ausgeführt.</value>
   </data>
   <data name="MainWindow" xml:space="preserve">
-    <value>Main Window</value>
+    <value>Hauptfenster</value>
   </data>
   <data name="MiniWindow" xml:space="preserve">
-    <value>Mini Window</value>
+    <value>Mini-Fenster</value>
   </data>
   <data name="FixedWindow" xml:space="preserve">
-    <value>Fixed Window</value>
+    <value>Fixiertes Fenster</value>
   </data>
   <data name="Auto" xml:space="preserve">
-    <value>Auto</value>
+    <value>Automatisch</value>
   </data>
   <data name="Manual" xml:space="preserve">
-    <value>Manual</value>
+    <value>Manuell</value>
   </data>
 
   <!-- Language Preferences -->
   <data name="LanguagePreferences" xml:space="preserve">
-    <value>Language Preferences</value>
+    <value>Spracheinstellungen</value>
   </data>
   <data name="FirstLanguage" xml:space="preserve">
-    <value>First Language</value>
+    <value>Erste Sprache</value>
   </data>
   <data name="SecondLanguage" xml:space="preserve">
-    <value>Second Language</value>
+    <value>Zweite Sprache</value>
   </data>
   <data name="LanguagePreferencesDescription" xml:space="preserve">
-    <value>When detected language matches your First Language, translation target will be your Second Language, and vice versa.</value>
+    <value>Wenn die erkannte Sprache Ihrer Ersten Sprache entspricht, wird die Übersetzung in Ihre Zweite Sprache erfolgen und umgekehrt.</value>
   </data>
   <data name="AutoSelectTargetLanguage" xml:space="preserve">
-    <value>Automatically select target language based on detected source</value>
+    <value>Zielsprache automatisch basierend auf erkannter Quelle auswählen</value>
   </data>
 
   <!-- Service Configuration -->
   <data name="ServiceConfiguration" xml:space="preserve">
-    <value>Service Configuration</value>
+    <value>Dienstkonfiguration</value>
   </data>
   <data name="ServiceConfigurationDescription" xml:space="preserve">
-    <value>Configure API keys, endpoints, and models for each translation service.</value>
+    <value>Konfigurieren Sie API-Schlüssel, Endpunkte und Modelle für jeden Übersetzungsdienst.</value>
   </data>
   <data name="ApiKey" xml:space="preserve">
-    <value>API Key</value>
+    <value>API-Schlüssel</value>
   </data>
   <data name="ApiKeyOptional" xml:space="preserve">
-    <value>API Key (Optional)</value>
+    <value>API-Schlüssel (Optional)</value>
   </data>
   <data name="Endpoint" xml:space="preserve">
-    <value>Endpoint</value>
+    <value>Endpunkt</value>
   </data>
   <data name="EndpointOptional" xml:space="preserve">
-    <value>Endpoint (Optional)</value>
+    <value>Endpunkt (Optional)</value>
   </data>
   <data name="EndpointRequired" xml:space="preserve">
-    <value>Endpoint (Required)</value>
+    <value>Endpunkt (Erforderlich)</value>
   </data>
   <data name="Model" xml:space="preserve">
-    <value>Model</value>
+    <value>Modell</value>
   </data>
   <data name="Refresh" xml:space="preserve">
-    <value>Refresh</value>
+    <value>Aktualisieren</value>
   </data>
 
   <!-- Service Descriptions -->
   <data name="DeepLDescription" xml:space="preserve">
-    <value>Leave API key empty to use free web translation. Pro API key gives higher limits.</value>
+    <value>Lassen Sie den API-Schlüssel leer, um die kostenlose Web-Übersetzung zu nutzen. Pro-API-Schlüssel bieten höhere Limits.</value>
   </data>
   <data name="DeepLFreeOption" xml:space="preserve">
-    <value>Use Free API (no API key required for web translation)</value>
+    <value>Kostenlose API verwenden (kein API-Schlüssel für Web-Übersetzung erforderlich)</value>
   </data>
   <data name="OpenAIDescription" xml:space="preserve">
-    <value>You can type a custom model name directly.</value>
+    <value>Sie können einen benutzerdefinierten Modellnamen direkt eingeben.</value>
   </data>
   <data name="DeepSeekDescription" xml:space="preserve">
-    <value>Get your API key from platform.deepseek.com. You can type a custom model name.</value>
+    <value>Holen Sie sich Ihren API-Schlüssel von platform.deepseek.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
   </data>
   <data name="GroqDescription" xml:space="preserve">
-    <value>Groq provides fast inference. Get your API key from console.groq.com. You can type a custom model name.</value>
+    <value>Groq bietet schnelle Inferenz. Holen Sie sich Ihren API-Schlüssel von console.groq.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
   </data>
   <data name="ZhipuDescription" xml:space="preserve">
-    <value>Get your API key from open.bigmodel.cn. You can type a custom model name.</value>
+    <value>Holen Sie sich Ihren API-Schlüssel von open.bigmodel.cn. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
   </data>
   <data name="GitHubModelsDescription" xml:space="preserve">
-    <value>Use your GitHub personal access token. Get one from github.com/settings/tokens. You can type a custom model name.</value>
+    <value>Verwenden Sie Ihr GitHub-Personal-Access-Token. Erstellen Sie eines unter github.com/settings/tokens. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
   </data>
   <data name="GeminiDescription" xml:space="preserve">
-    <value>Get your API key from aistudio.google.com. You can type a custom model name.</value>
+    <value>Holen Sie sich Ihren API-Schlüssel von aistudio.google.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
   </data>
   <data name="CustomOpenAIDescription" xml:space="preserve">
-    <value>Configure any OpenAI-compatible API endpoint (e.g., local LLM servers, other AI providers).</value>
+    <value>Konfigurieren Sie jeden OpenAI-kompatiblen API-Endpunkt (z.B. lokale LLM-Server, andere KI-Anbieter).</value>
   </data>
   <data name="OllamaDescription" xml:space="preserve">
-    <value>Ollama must be running locally. Click Refresh to load available models.</value>
+    <value>Ollama muss lokal ausgeführt werden. Klicken Sie auf Aktualisieren, um verfügbare Modelle zu laden.</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>Built-in AI uses Groq cloud service. No API key required. You can type a custom model name.</value>
+    <value>Integrierte KI verwendet den Groq-Cloud-Dienst. Kein API-Schlüssel erforderlich. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
-    <value>ByteDance's Doubao translation service. Get your API key from console.volcengine.com</value>
+    <value>ByteDances Doubao-Übersetzungsdienst. Holen Sie sich Ihren API-Schlüssel von console.volcengine.com</value>
   </data>
   <data name="CaiyunDescription" xml:space="preserve">
-    <value>Get your API key from fanyi.caiyunapp.com</value>
+    <value>Holen Sie sich Ihren API-Schlüssel von fanyi.caiyunapp.com</value>
   </data>
   <data name="NiuTransDescription" xml:space="preserve">
-    <value>NiuTrans supports 450+ language pairs. Get your API key from niutrans.com</value>
+    <value>NiuTrans unterstützt über 450 Sprachpaare. Holen Sie sich Ihren API-Schlüssel von niutrans.com</value>
   </data>
   <data name="FreeServicesTitle" xml:space="preserve">
-    <value>Free Services (No Configuration Required)</value>
+    <value>Kostenlose Dienste (Keine Konfiguration erforderlich)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google Translate and Linguee Dictionary work out of the box without API keys.</value>
+    <value>Google Translate und Linguee Dictionary funktionieren sofort ohne API-Schlüssel.</value>
   </data>
 
   <!-- HTTP Proxy -->
   <data name="HttpProxy" xml:space="preserve">
-    <value>HTTP Proxy</value>
+    <value>HTTP-Proxy</value>
   </data>
   <data name="UseHttpProxy" xml:space="preserve">
-    <value>Use HTTP Proxy</value>
+    <value>HTTP-Proxy verwenden</value>
   </data>
   <data name="ProxyUrl" xml:space="preserve">
-    <value>Proxy URL</value>
+    <value>Proxy-URL</value>
   </data>
   <data name="BypassProxyForLocalhost" xml:space="preserve">
-    <value>Bypass proxy for localhost</value>
+    <value>Proxy für localhost umgehen</value>
   </data>
   <data name="ProxyDescription" xml:space="preserve">
-    <value>Proxy changes take effect after app restart. Localhost bypass ensures Ollama works without proxy.</value>
+    <value>Proxy-Änderungen werden nach Neustart der App wirksam. Localhost-Umgehung stellt sicher, dass Ollama ohne Proxy funktioniert.</value>
   </data>
 
   <!-- Behavior -->
   <data name="Behavior" xml:space="preserve">
-    <value>Behavior</value>
+    <value>Verhalten</value>
   </data>
   <data name="MinimizeToTray" xml:space="preserve">
-    <value>Minimize to system tray</value>
+    <value>In Taskleiste minimieren</value>
   </data>
   <data name="MonitorClipboard" xml:space="preserve">
-    <value>Monitor clipboard for text</value>
+    <value>Zwischenablage auf Text überwachen</value>
   </data>
   <data name="AlwaysOnTop" xml:space="preserve">
-    <value>Always on top</value>
+    <value>Immer im Vordergrund</value>
   </data>
   <data name="LaunchAtStartup" xml:space="preserve">
-    <value>Launch at Windows startup</value>
+    <value>Bei Windows-Start ausführen</value>
   </data>
 
   <!-- Hotkeys -->
   <data name="Hotkeys" xml:space="preserve">
-    <value>Hotkeys</value>
+    <value>Tastenkürzel</value>
   </data>
   <data name="ShowWindow" xml:space="preserve">
-    <value>Show Window</value>
+    <value>Fenster anzeigen</value>
   </data>
   <data name="TranslateSelection" xml:space="preserve">
-    <value>Translate Selection</value>
+    <value>Auswahl übersetzen</value>
   </data>
   <data name="ShowMiniWindow" xml:space="preserve">
-    <value>Show Mini Window</value>
+    <value>Mini-Fenster anzeigen</value>
   </data>
   <data name="ShowFixedWindow" xml:space="preserve">
-    <value>Show Fixed Window</value>
+    <value>Fixiertes Fenster anzeigen</value>
   </data>
   <data name="HotkeysDescription" xml:space="preserve">
-    <value>Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M).</value>
+    <value>Hinweis: Starten Sie die App neu, um Tastenkürzel-Änderungen anzuwenden. Umschalt-Tastenkürzel verwenden dieselbe Taste mit zusätzlicher Umschalttaste (z.B. Strg+Alt+Umschalt+M).</value>
   </data>
 
   <!-- About -->
   <data name="About" xml:space="preserve">
-    <value>About</value>
+    <value>Über</value>
   </data>
   <data name="EasydictForWindows" xml:space="preserve">
-    <value>Easydict for Windows</value>
+    <value>Easydict für Windows</value>
   </data>
   <data name="GitHubRepository" xml:space="preserve">
-    <value>GitHub Repository</value>
+    <value>GitHub-Repository</value>
   </data>
   <data name="InspiredBy" xml:space="preserve">
-    <value>Inspired by</value>
+    <value>Inspiriert von</value>
   </data>
   <data name="EasydictForMacOS" xml:space="preserve">
-    <value>Easydict for macOS</value>
+    <value>Easydict für macOS</value>
   </data>
   <data name="License" xml:space="preserve">
-    <value>License: GPL-3.0</value>
+    <value>Lizenz: GPL-3.0</value>
   </data>
 
   <!-- Buttons -->
   <data name="SaveSettings" xml:space="preserve">
-    <value>Save Settings</value>
+    <value>Einstellungen speichern</value>
   </data>
   <data name="Back" xml:space="preserve">
-    <value>Back</value>
+    <value>Zurück</value>
   </data>
   <data name="BackToTop" xml:space="preserve">
-    <value>Back to top</value>
+    <value>Nach oben</value>
   </data>
   <data name="Copy" xml:space="preserve">
-    <value>Copy</value>
+    <value>Kopieren</value>
   </data>
   <data name="CopyAll" xml:space="preserve">
-    <value>Copy All</value>
+    <value>Alle kopieren</value>
   </data>
 
   <!-- Messages -->
   <data name="TranslationFailed" xml:space="preserve">
-    <value>Translation failed</value>
+    <value>Übersetzung fehlgeschlagen</value>
   </data>
   <data name="ServiceNotInitialized" xml:space="preserve">
-    <value>Service not initialized</value>
+    <value>Dienst nicht initialisiert</value>
   </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
-    <value>Invalid Language Selection</value>
+    <value>Ungültige Sprachauswahl</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
-    <value>Invalid Proxy URL</value>
+    <value>Ungültige Proxy-URL</value>
   </data>
   <data name="SettingsSaved" xml:space="preserve">
-    <value>Settings Saved</value>
+    <value>Einstellungen gespeichert</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
-    <value>Restart Required</value>
+    <value>Neustart erforderlich</value>
   </data>
   <data name="CannotConnectToOllama" xml:space="preserve">
-    <value>Cannot Connect to Ollama</value>
+    <value>Verbindung zu Ollama nicht möglich</value>
   </data>
   <data name="Copied" xml:space="preserve">
-    <value>Copied!</value>
+    <value>Kopiert!</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
-    <value>Detected: {0}</value>
+    <value>Erkannt: {0}</value>
   </data>
 
   <!-- Service Names -->
@@ -382,10 +382,10 @@
     <value>OpenAI</value>
   </data>
   <data name="ServiceOllama" xml:space="preserve">
-    <value>Ollama (Local)</value>
+    <value>Ollama (Lokal)</value>
   </data>
   <data name="ServiceBuiltIn" xml:space="preserve">
-    <value>Built-in AI</value>
+    <value>Integrierte KI</value>
   </data>
   <data name="ServiceDeepSeek" xml:space="preserve">
     <value>DeepSeek</value>
@@ -403,7 +403,7 @@
     <value>Gemini</value>
   </data>
   <data name="ServiceCustomOpenAI" xml:space="preserve">
-    <value>Custom OpenAI</value>
+    <value>Benutzerdefiniertes OpenAI</value>
   </data>
   <data name="ServiceDoubao" xml:space="preserve">
     <value>Doubao</value>
@@ -415,46 +415,46 @@
     <value>NiuTrans</value>
   </data>
   <data name="ServiceLinguee" xml:space="preserve">
-    <value>Linguee Dictionary</value>
+    <value>Linguee Wörterbuch</value>
   </data>
 
   <!-- Tray Menu -->
   <data name="TrayShow" xml:space="preserve">
-    <value>Show</value>
+    <value>Anzeigen</value>
   </data>
   <data name="TrayShowMini" xml:space="preserve">
-    <value>Mini Window</value>
+    <value>Mini-Fenster</value>
   </data>
   <data name="TrayShowFixed" xml:space="preserve">
-    <value>Fixed Window</value>
+    <value>Fixiertes Fenster</value>
   </data>
   <data name="TraySettings" xml:space="preserve">
-    <value>Settings</value>
+    <value>Einstellungen</value>
   </data>
   <data name="TrayExit" xml:space="preserve">
-    <value>Exit</value>
+    <value>Beenden</value>
   </data>
 
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
-    <value>UI Language</value>
+    <value>Oberflächensprache</value>
   </data>
   <data name="UILanguageDescription" xml:space="preserve">
-    <value>Select the display language for the application interface. Restart required.</value>
+    <value>Wählen Sie die Anzeigesprache für die Anwendungsoberfläche. Neustart erforderlich.</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
-    <value>English</value>
+    <value>Englisch</value>
   </data>
   <data name="UILangChineseSimplified" xml:space="preserve">
-    <value>Chinese (Simplified)</value>
+    <value>Chinesisch (Vereinfacht)</value>
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
   <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>Behavior</value>
+    <value>Verhalten</value>
   </data>
   <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>UI Language</value>
+    <value>Oberflächensprache</value>
   </data>
   <data name="UILangEnglishItem.Content" xml:space="preserve">
     <value>English</value>
@@ -478,18 +478,18 @@
     <value>Deutsch</value>
   </data>
   <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>Select the display language for the application interface. Restart required.</value>
+    <value>Wählen Sie die Anzeigesprache für die Anwendungsoberfläche. Neustart erforderlich.</value>
   </data>
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>Minimize to system tray</value>
+    <value>In Taskleiste minimieren</value>
   </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>Monitor clipboard for text</value>
+    <value>Zwischenablage auf Text überwachen</value>
   </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>Always on top</value>
+    <value>Immer im Vordergrund</value>
   </data>
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>Launch at Windows startup</value>
+    <value>Bei Windows-Start ausführen</value>
   </data>
 </root>

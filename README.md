@@ -76,8 +76,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 ### System Requirements
 
-- Windows 10 version 1809 (build 17763) or later
-- x64, x86, or ARM64 processor
+- Windows 10 version 2004 (build 19041) or later
+- x64 or ARM64 processor
 
 ### Download
 

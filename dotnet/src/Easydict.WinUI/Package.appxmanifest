@@ -7,13 +7,13 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="xiaocang.Easydict"
-    Publisher="CN=xiaocang"
+    Name="xiaocang.EasydictforWindows"
+    Publisher="CN=33FC47D7-8283-45FC-BB5D-297D1476BB29"
     Version="0.2.0.0"
     ProcessorArchitecture="neutral" />
 
   <Properties>
-    <DisplayName>Easydict</DisplayName>
+    <DisplayName>Easydict for Windows</DisplayName>
     <PublisherDisplayName>xiaocang</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <Description>Cross-platform dictionary and translation app for Windows</Description>

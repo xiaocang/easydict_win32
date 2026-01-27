@@ -6,14 +6,14 @@ app:
   name: Easydict
   displayName: Easydict
   description: Cross-platform dictionary and translation app
-  publisher: CN=xiaocang
+  publisher: CN=33FC47D7-8283-45FC-BB5D-297D1476BB29
   publisherDisplayName: xiaocang
   version: 0.1.0.0
 
 # Package identity for MSIX
 identity:
-  name: xiaocang.Easydict
-  publisher: CN=xiaocang
+  name: xiaocang.EasydictforWindows
+  publisher: CN=33FC47D7-8283-45FC-BB5D-297D1476BB29
 
 # SDK dependencies
 packages:

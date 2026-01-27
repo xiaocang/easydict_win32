@@ -156,68 +156,12 @@ jobs:
       # Verify and fix MinVersion inside the MSIX package
       # winapp package may override TargetDeviceFamily MinVersion with a lower default.
       # Windows Store requires MinVersion > 10.0.17134.0.
+      # See: https://github.com/microsoft/WindowsAppSDK/issues/5598
       - name: Verify MSIX manifest MinVersion
         shell: pwsh
         run: |
-          $msixPath = "dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix"
-          $requiredMinVersion = "10.0.19041.0"
-          $extractDir = "$env:RUNNER_TEMP\msix-verify"
-
-          # Extract MSIX (it's a ZIP format)
-          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
-          Expand-Archive -Path $msixPath -DestinationPath $extractDir -Force
-
-          # Read the embedded AppxManifest.xml
-          $manifestPath = Join-Path $extractDir "AppxManifest.xml"
-          if (-not (Test-Path $manifestPath)) {
-            Write-Error "AppxManifest.xml not found in MSIX package"
-            exit 1
-          }
-
-          [xml]$manifest = Get-Content $manifestPath -Raw
-          $ns = New-Object System.Xml.XmlNamespaceManager($manifest.NameTable)
-          $ns.AddNamespace("f", "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
-
-          $tdf = $manifest.SelectSingleNode("//f:Dependencies/f:TargetDeviceFamily", $ns)
-          if ($tdf) {
-            $currentMin = $tdf.GetAttribute("MinVersion")
-            Write-Host "Current MinVersion in MSIX: $currentMin"
-            Write-Host "Required MinVersion: $requiredMinVersion"
-
-            if ([version]$currentMin -lt [version]$requiredMinVersion) {
-              Write-Host "::warning::MinVersion $currentMin is too low, fixing to $requiredMinVersion"
-              $tdf.SetAttribute("MinVersion", $requiredMinVersion)
-              $manifest.Save($manifestPath)
-
-              # Re-pack the MSIX with fixed manifest
-              # Find MakeAppx.exe from Windows SDK
-              $makeAppx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.*\x64\MakeAppx.exe" -ErrorAction SilentlyContinue |
-                          Sort-Object { [version]($_.Directory.Parent.Name) } -Descending |
-                          Select-Object -First 1
-
-              if (-not $makeAppx) {
-                Write-Error "MakeAppx.exe not found - cannot re-pack MSIX"
-                exit 1
-              }
-
-              # Remove the original MSIX and re-pack from the fixed content
-              Remove-Item $msixPath -Force
-              & $makeAppx.FullName pack /d $extractDir /p $msixPath /o
-              if ($LASTEXITCODE -ne 0) {
-                Write-Error "Failed to re-pack MSIX with fixed MinVersion"
-                exit 1
-              }
-              Write-Host "Re-packed MSIX with MinVersion=$requiredMinVersion"
-            } else {
-              Write-Host "MinVersion is OK: $currentMin >= $requiredMinVersion"
-            }
-          } else {
-            Write-Error "TargetDeviceFamily not found in AppxManifest.xml"
-            exit 1
-          }
-
-          # Cleanup
-          Remove-Item -Path $extractDir -Recurse -Force
+          dotnet/scripts/Fix-MsixMinVersion.ps1 `
+            -MsixPath "dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix"
 
       # Also create ZIP archive for portable distribution
       - name: Create ZIP archive

@@ -1,4 +1,5 @@
 using Microsoft.Windows.ApplicationModel.Resources;
+using System.Linq;
 using Windows.Globalization;
 
 namespace Easydict.WinUI.Services;

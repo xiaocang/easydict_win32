@@ -5,7 +5,7 @@ namespace Easydict.WinUI.Services;
 
 /// <summary>
 /// Provides localization services for the application.
-/// Supports English, Chinese (Simplified/Traditional), Japanese, Korean, French, and German.
+/// Supports: English, Chinese (Simplified/Traditional), Japanese, Korean, French, and German.
 /// </summary>
 public sealed class LocalizationService
 {

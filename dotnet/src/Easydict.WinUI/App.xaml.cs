@@ -32,14 +32,15 @@ namespace Easydict.WinUI
 
         public App()
         {
+            // CRITICAL: Set language override BEFORE InitializeComponent()
+            // This must happen before any WinUI resources are loaded
+            LocalizationService.InitializeLanguageEarly();
+
             this.InitializeComponent();
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
-            // Initialize localization service early to set language before UI loads
-            _ = LocalizationService.Instance;
-
             _window = new Window();
 
             // Set window title

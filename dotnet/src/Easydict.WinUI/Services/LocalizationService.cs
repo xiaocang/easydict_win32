@@ -27,7 +27,7 @@ public sealed class LocalizationService
         _currentLanguage = settings.UILanguage;
 
         // If no language is set, use system default
-        if (string.IsNullOrEmpty(_currentLanguage))
+        if (string.IsNullOrEmpty(_currentLanguage) || !IsSupported(_currentLanguage))
         {
             _currentLanguage = GetSystemLanguage();
         }
@@ -88,7 +88,7 @@ public sealed class LocalizationService
     /// <param name="languageCode">Language code (e.g., "en-US", "zh-CN").</param>
     public void SetLanguage(string languageCode)
     {
-        if (string.IsNullOrEmpty(languageCode))
+        if (string.IsNullOrEmpty(languageCode) || !IsSupported(languageCode))
         {
             languageCode = GetSystemLanguage();
         }
@@ -101,6 +101,9 @@ public sealed class LocalizationService
         settings.UILanguage = languageCode;
         settings.Save();
     }
+
+    private static bool IsSupported(string lang) =>
+        SupportedLanguages.Contains(lang, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets the system's preferred language, mapped to our supported languages.

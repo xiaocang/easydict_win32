@@ -6,7 +6,8 @@
         <FileVersion>0.1.0.0</FileVersion>
 
         <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+        <!-- MinVersion must be > 10.0.17134.0 for Windows Store submission -->
+        <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
         <OutputType>WinExe</OutputType>
 
         <!-- WinUI 3 -->

@@ -1,6 +1,6 @@
 # Privacy Policy for Easydict Win32
 
-**Last Updated:** January 2025
+**Last Updated:** January 2026
 
 ## Overview
 

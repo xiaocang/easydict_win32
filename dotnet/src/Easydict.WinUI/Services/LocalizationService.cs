@@ -4,80 +4,56 @@ using Windows.Globalization;
 namespace Easydict.WinUI.Services;
 
 /// <summary>
-/// Provides localization services for the application.
-/// Supports: English, Chinese (Simplified/Traditional), Japanese, Korean, French, and German.
+/// Provides localization services using WindowsAppSDK ResourceManager API.
+/// Supports runtime language switching without application restart.
+/// Supported languages: English, Chinese (Simplified/Traditional), Japanese, Korean, French, German.
 /// </summary>
 public sealed class LocalizationService
 {
     private static readonly Lazy<LocalizationService> _instance = new(() => new LocalizationService());
     public static LocalizationService Instance => _instance.Value;
 
-    private readonly ResourceLoader _resourceLoader;
+    private readonly ResourceManager _resourceManager;
+    private ResourceContext _resourceContext;
+    private ResourceMap _resourceMap;
     private string _currentLanguage;
 
     /// <summary>
     /// Supported UI languages.
     /// </summary>
-    public static readonly string[] SupportedLanguages = { "en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "fr-FR", "de-DE" };
-
-    /// <summary>
-    /// Initializes the language override BEFORE WinUI resources are loaded.
-    /// MUST be called from App constructor before InitializeComponent().
-    /// </summary>
-    public static void InitializeLanguageEarly()
-    {
-        try
-        {
-            // Load settings synchronously (required for early init)
-            var settings = SettingsService.Instance;
-            var languageCode = settings.UILanguage;
-
-            // Validate and fallback to system language if needed
-            if (string.IsNullOrEmpty(languageCode) || !IsSupported(languageCode))
-            {
-                languageCode = GetSystemLanguage();
-            }
-
-            // Set the override ONCE, before UI initialization
-            ApplicationLanguages.PrimaryLanguageOverride = languageCode;
-        }
-        catch (Exception ex)
-        {
-            // If anything goes wrong, fall back to system language
-            System.Diagnostics.Debug.WriteLine($"[LocalizationService] Early init failed: {ex.Message}");
-            try
-            {
-                ApplicationLanguages.PrimaryLanguageOverride = "en-US";
-            }
-            catch
-            {
-                // Last resort: let WinUI use its default
-            }
-        }
-    }
+    public static readonly string[] SupportedLanguages =
+        { "en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "fr-FR", "de-DE" };
 
     private LocalizationService()
     {
-        // Initialize based on settings or system default
+        System.Diagnostics.Debug.WriteLine("[LocalizationService] Initializing...");
+
+        // Create ResourceManager (new WindowsAppSDK API)
+        _resourceManager = new ResourceManager();
+        _resourceMap = _resourceManager.MainResourceMap;
+
+        // Load current language from settings or system default
         var settings = SettingsService.Instance;
         _currentLanguage = settings.UILanguage;
 
-        // If no language is set, use system default
         if (string.IsNullOrEmpty(_currentLanguage) || !IsSupported(_currentLanguage))
         {
             _currentLanguage = GetSystemLanguage();
+            System.Diagnostics.Debug.WriteLine($"[LocalizationService] Using system language: {_currentLanguage}");
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"[LocalizationService] Loaded language from settings: {_currentLanguage}");
         }
 
-        // NOTE: PrimaryLanguageOverride is set in InitializeLanguageEarly(),
-        // which is called from App constructor before InitializeComponent().
-        // DO NOT set it here - it's too late and will throw InvalidOperationException.
+        // Create ResourceContext with the selected language
+        _resourceContext = CreateResourceContextForLanguage(_currentLanguage);
 
-        // Create resource loader
-        _resourceLoader = new ResourceLoader();
+        System.Diagnostics.Debug.WriteLine($"[LocalizationService] Initialized with language: {_currentLanguage}");
     }
 
     /// <summary>
-    /// Gets the current UI language.
+    /// Gets the current UI language code.
     /// </summary>
     public string CurrentLanguage => _currentLanguage;
 
@@ -90,11 +66,21 @@ public sealed class LocalizationService
     {
         try
         {
-            var value = _resourceLoader.GetString(key);
-            return string.IsNullOrEmpty(value) ? key : value;
+            // Use ResourceMap with custom ResourceContext to get language-specific value
+            var resourceCandidate = _resourceMap.GetValue($"Resources/{key}", _resourceContext);
+            var value = resourceCandidate?.ValueAsString;
+
+            if (string.IsNullOrEmpty(value))
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocalizationService] Resource not found: {key}");
+                return key;
+            }
+
+            return value;
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[LocalizationService] Error loading resource '{key}': {ex.Message}");
             return key;
         }
     }
@@ -112,33 +98,57 @@ public sealed class LocalizationService
         {
             return string.Format(format, args);
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[LocalizationService] Error formatting string '{key}': {ex.Message}");
             return format;
         }
     }
 
     /// <summary>
-    /// Sets the UI language and saves to settings.
-    /// Note: Requires app restart to take full effect.
+    /// Sets the UI language and updates the ResourceContext.
+    /// Language change takes effect immediately without application restart.
     /// </summary>
     /// <param name="languageCode">Language code (e.g., "en-US", "zh-CN").</param>
     public void SetLanguage(string languageCode)
     {
         if (string.IsNullOrEmpty(languageCode) || !IsSupported(languageCode))
         {
+            System.Diagnostics.Debug.WriteLine($"[LocalizationService] Invalid language code: {languageCode}");
             languageCode = GetSystemLanguage();
         }
 
+        if (_currentLanguage == languageCode)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LocalizationService] Language already set to: {languageCode}");
+            return;
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[LocalizationService] Changing language from {_currentLanguage} to {languageCode}");
+
         _currentLanguage = languageCode;
-        // Note: PrimaryLanguageOverride is only set during app initialization.
-        // Setting it at runtime after UI is loaded causes InvalidOperationException.
-        // The new language will take effect on next app restart.
+
+        // Create new ResourceContext with the new language
+        _resourceContext = CreateResourceContextForLanguage(languageCode);
 
         // Save to settings
         var settings = SettingsService.Instance;
         settings.UILanguage = languageCode;
         settings.Save();
+
+        System.Diagnostics.Debug.WriteLine($"[LocalizationService] Language changed successfully to: {languageCode}");
+        System.Diagnostics.Debug.WriteLine($"[LocalizationService] NOTE: UI must be manually refreshed to show new language");
+    }
+
+    /// <summary>
+    /// Creates a ResourceContext configured for the specified language.
+    /// </summary>
+    private ResourceContext CreateResourceContextForLanguage(string languageCode)
+    {
+        var context = _resourceManager.CreateResourceContext();
+        context.QualifierValues["Language"] = languageCode;
+        System.Diagnostics.Debug.WriteLine($"[LocalizationService] Created ResourceContext for language: {languageCode}");
+        return context;
     }
 
     private static bool IsSupported(string lang) =>
@@ -169,31 +179,16 @@ public sealed class LocalizationService
                     }
                     return "zh-CN";
                 }
-                if (systemLang.StartsWith("ja"))
-                {
-                    return "ja-JP";
-                }
-                if (systemLang.StartsWith("ko"))
-                {
-                    return "ko-KR";
-                }
-                if (systemLang.StartsWith("fr"))
-                {
-                    return "fr-FR";
-                }
-                if (systemLang.StartsWith("de"))
-                {
-                    return "de-DE";
-                }
-                if (systemLang.StartsWith("en"))
-                {
-                    return "en-US";
-                }
+                if (systemLang.StartsWith("ja")) return "ja-JP";
+                if (systemLang.StartsWith("ko")) return "ko-KR";
+                if (systemLang.StartsWith("fr")) return "fr-FR";
+                if (systemLang.StartsWith("de")) return "de-DE";
+                if (systemLang.StartsWith("en")) return "en-US";
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore errors
+            System.Diagnostics.Debug.WriteLine($"[LocalizationService] GetSystemLanguage error: {ex.Message}");
         }
 
         // Default to English if no supported language is found

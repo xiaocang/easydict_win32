@@ -84,6 +84,9 @@ namespace Easydict.WinUI.Views
             SetLoading(false);
             ApplySettings();
 
+            // Apply localization to all UI elements
+            ApplyLocalization();
+
             // Initialize service result controls based on enabled services
             InitializeServiceResults();
         }
@@ -138,6 +141,60 @@ namespace Easydict.WinUI.Views
             }
         }
 
+        /// <summary>
+        /// Apply localization to all UI elements using LocalizationService.
+        /// </summary>
+        private void ApplyLocalization()
+        {
+            var loc = LocalizationService.Instance;
+
+            // Source Language ComboBoxes (Wide layout) - ONLY 4 items in XAML!
+            ((ComboBoxItem)SourceLangCombo.Items[0]).Content = loc.GetString("LangAutoDetect");
+            ((ComboBoxItem)SourceLangCombo.Items[1]).Content = loc.GetString("LangEnglish");
+            ((ComboBoxItem)SourceLangCombo.Items[2]).Content = loc.GetString("LangChinese");
+            ((ComboBoxItem)SourceLangCombo.Items[3]).Content = loc.GetString("LangJapanese");
+
+            // Source Language ComboBoxes (Narrow layout) - ONLY 4 items in XAML!
+            ((ComboBoxItem)SourceLangComboNarrow.Items[0]).Content = loc.GetString("LangAutoDetect");
+            ((ComboBoxItem)SourceLangComboNarrow.Items[1]).Content = loc.GetString("LangEnglish");
+            ((ComboBoxItem)SourceLangComboNarrow.Items[2]).Content = loc.GetString("LangChinese");
+            ((ComboBoxItem)SourceLangComboNarrow.Items[3]).Content = loc.GetString("LangJapanese");
+
+            // Target Language ComboBoxes (Wide layout) - 7 items
+            ((ComboBoxItem)TargetLangCombo.Items[0]).Content = loc.GetString("LangEnglish");
+            ((ComboBoxItem)TargetLangCombo.Items[1]).Content = loc.GetString("LangChinese");
+            ((ComboBoxItem)TargetLangCombo.Items[2]).Content = loc.GetString("LangJapanese");
+            ((ComboBoxItem)TargetLangCombo.Items[3]).Content = loc.GetString("LangKorean");
+            ((ComboBoxItem)TargetLangCombo.Items[4]).Content = loc.GetString("LangFrench");
+            ((ComboBoxItem)TargetLangCombo.Items[5]).Content = loc.GetString("LangGerman");
+            ((ComboBoxItem)TargetLangCombo.Items[6]).Content = loc.GetString("LangSpanish");
+
+            // Target Language ComboBoxes (Narrow layout) - 7 items
+            ((ComboBoxItem)TargetLangComboNarrow.Items[0]).Content = loc.GetString("LangEnglish");
+            ((ComboBoxItem)TargetLangComboNarrow.Items[1]).Content = loc.GetString("LangChinese");
+            ((ComboBoxItem)TargetLangComboNarrow.Items[2]).Content = loc.GetString("LangJapanese");
+            ((ComboBoxItem)TargetLangComboNarrow.Items[3]).Content = loc.GetString("LangKorean");
+            ((ComboBoxItem)TargetLangComboNarrow.Items[4]).Content = loc.GetString("LangFrench");
+            ((ComboBoxItem)TargetLangComboNarrow.Items[5]).Content = loc.GetString("LangGerman");
+            ((ComboBoxItem)TargetLangComboNarrow.Items[6]).Content = loc.GetString("LangSpanish");
+
+            // Input placeholder
+            InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
+
+            // Output placeholder
+            PlaceholderText.Text = loc.GetString("TranslationPlaceholder");
+
+            // Tooltips
+            ToolTipService.SetToolTip(SettingsButton, loc.GetString("SettingsTooltip"));
+            ToolTipService.SetToolTip(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
+            ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
+            ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
+            ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
+            ToolTipService.SetToolTip(SourceLangComboNarrow, loc.GetString("SourceLanguageTooltip"));
+            ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
+            ToolTipService.SetToolTip(TargetLangComboNarrow, loc.GetString("TargetLanguageTooltip"));
+        }
+
         private void OnClipboardTextReceived(string text)
         {
             if (_isClosing)
@@ -161,17 +218,17 @@ namespace Easydict.WinUI.Views
         {
             try
             {
-                UpdateStatus(null, "Initializing...");
+                UpdateStatus(null, LocalizationService.Instance.GetString("StatusInitializing"));
 
                 var manager = TranslationManagerService.Instance.Manager;
 
                 // DefaultServiceId is now managed centrally by TranslationManagerService
-                UpdateStatus(true, "Ready");
+                UpdateStatus(true, LocalizationService.Instance.GetString("StatusReady"));
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[MainPage] Init error: {ex.Message}");
-                UpdateStatus(false, "Error");
+                UpdateStatus(false, LocalizationService.Instance.GetString("StatusError"));
             }
         }
 
@@ -190,7 +247,7 @@ namespace Easydict.WinUI.Views
             // If no services are enabled, show placeholder with guidance
             if (enabledServices.Count == 0)
             {
-                PlaceholderText.Text = "No translation services enabled. Go to Settings to enable services.";
+                PlaceholderText.Text = LocalizationService.Instance.GetString("NoServicesEnabled");
                 PlaceholderText.Visibility = Visibility.Visible;
                 return;
             }
@@ -228,7 +285,7 @@ namespace Easydict.WinUI.Views
             }
 
             // Hide placeholder since we have services
-            PlaceholderText.Text = "Translation will appear here...";
+            PlaceholderText.Text = LocalizationService.Instance.GetString("TranslationPlaceholder");
             PlaceholderText.Visibility = Visibility.Collapsed;
         }
 
@@ -472,7 +529,7 @@ namespace Easydict.WinUI.Views
 
             if (_detectionService is null)
             {
-                StatusSummaryText.Text = "Service not initialized. Please wait...";
+                StatusSummaryText.Text = LocalizationService.Instance.GetString("ServiceNotInitialized");
                 InitializeTranslationServices();
                 return;
             }
@@ -489,7 +546,7 @@ namespace Easydict.WinUI.Views
             // Early return if no services are enabled
             if (_serviceResults.Count == 0)
             {
-                StatusSummaryText.Text = "No services enabled. Go to Settings to enable services.";
+                StatusSummaryText.Text = LocalizationService.Instance.GetString("NoServicesEnabled");
                 return;
             }
 
@@ -668,21 +725,22 @@ namespace Easydict.WinUI.Views
                 {
                     if (_isClosing) return;
 
+                    var loc = LocalizationService.Instance;
                     // Set status based on aggregated outcomes
                     if (successCount > 0)
                     {
-                        StatusSummaryText.Text = $"{successCount} service(s) completed";
-                        UpdateStatus(true, "Ready");
+                        StatusSummaryText.Text = string.Format(loc.GetString("ServiceResultsComplete"), successCount);
+                        UpdateStatus(true, loc.GetString("StatusReady"));
                     }
                     else if (errorCount > 0)
                     {
-                        StatusSummaryText.Text = "Translation failed";
-                        UpdateStatus(false, "Error");
+                        StatusSummaryText.Text = loc.GetString("TranslationFailed");
+                        UpdateStatus(false, loc.GetString("StatusError"));
                     }
                     else
                     {
                         StatusSummaryText.Text = "";
-                        UpdateStatus(true, "Ready");
+                        UpdateStatus(true, loc.GetString("StatusReady"));
                     }
                 });
             }
@@ -696,7 +754,7 @@ namespace Easydict.WinUI.Views
                 if (!_isClosing)
                 {
                     StatusSummaryText.Text = $"Error: {ex.Message}";
-                    UpdateStatus(false, "Error");
+                    UpdateStatus(false, LocalizationService.Instance.GetString("StatusError"));
 
                     // Reset all service results that may be stuck in loading state
                     ResetAllServiceResultsLoadingState();
@@ -863,7 +921,9 @@ namespace Easydict.WinUI.Views
             if (detected != TranslationLanguage.Auto)
             {
                 var displayName = detected.GetDisplayName();
-                DetectedLanguageText.Text = $"Detected: {displayName}";
+                DetectedLanguageText.Text = string.Format(
+                    LocalizationService.Instance.GetString("DetectedLanguage"),
+                    displayName);
                 DetectedLanguageText.Visibility = Visibility.Visible;
             }
             else

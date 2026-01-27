@@ -335,6 +335,9 @@ public sealed partial class SettingsPage : Page
 
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
+        // Get localization service instance once for the entire method
+        var loc = LocalizationService.Instance;
+
         // Capture original proxy settings to detect changes
         var originalProxyEnabled = _settings.ProxyEnabled;
         var originalProxyUri = _settings.ProxyUri;
@@ -353,9 +356,9 @@ public sealed partial class SettingsPage : Page
         {
             var errorDialog = new ContentDialog
             {
-                Title = "Invalid Language Selection",
-                Content = "First Language and Second Language cannot be the same. Please choose different languages.",
-                CloseButtonText = "OK",
+                Title = loc.GetString("InvalidLanguageSelection"),
+                Content = loc.GetString("InvalidLanguageSelectionMessage"),
+                CloseButtonText = loc.GetString("OK"),
                 XamlRoot = this.XamlRoot
             };
             await errorDialog.ShowAsync();
@@ -454,9 +457,9 @@ public sealed partial class SettingsPage : Page
             {
                 var errorDialog = new ContentDialog
                 {
-                    Title = "Invalid Proxy URL",
-                    Content = "The proxy URL is not valid. Please enter a valid URL (e.g., http://127.0.0.1:7890).",
-                    CloseButtonText = "OK",
+                    Title = loc.GetString("InvalidProxyUrl"),
+                    Content = loc.GetString("InvalidProxyUrlMessage"),
+                    CloseButtonText = loc.GetString("OK"),
                     XamlRoot = this.XamlRoot
                 };
                 await errorDialog.ShowAsync();
@@ -528,9 +531,9 @@ public sealed partial class SettingsPage : Page
         // Show confirmation
         var dialog = new ContentDialog
         {
-            Title = "Settings Saved",
-            Content = "Your settings have been saved. Hotkey changes require an app restart to take effect.",
-            CloseButtonText = "OK",
+            Title = loc.GetString("SettingsSaved"),
+            Content = loc.GetString("SettingsSavedMessage"),
+            CloseButtonText = loc.GetString("OK"),
             XamlRoot = this.XamlRoot
         };
         await dialog.ShowAsync();
@@ -589,11 +592,12 @@ public sealed partial class SettingsPage : Page
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Settings] Failed to refresh Ollama models: {ex.Message}");
+            var loc = LocalizationService.Instance;
             var errorDialog = new ContentDialog
             {
-                Title = "Cannot Connect to Ollama",
-                Content = $"Failed to fetch models from Ollama server. Make sure Ollama is running.\n\nError: {ex.Message}",
-                CloseButtonText = "OK",
+                Title = loc.GetString("CannotConnectToOllama"),
+                Content = loc.GetString("CannotConnectToOllamaMessage"),
+                CloseButtonText = loc.GetString("OK"),
                 XamlRoot = this.XamlRoot
             };
             await errorDialog.ShowAsync();
@@ -797,18 +801,41 @@ public sealed partial class SettingsPage : Page
         var selectedTag = GetSelectedTag(UILanguageCombo);
         if (string.IsNullOrEmpty(selectedTag)) return;
 
-        // Set the language (this also saves to settings)
-        LocalizationService.Instance.SetLanguage(selectedTag);
-
-        // Show restart required message
-        var dialog = new ContentDialog
+        try
         {
-            Title = "RestartRequired".Localize(),
-            Content = "RestartRequiredMessage".Localize(),
-            CloseButtonText = "OK",
-            XamlRoot = this.XamlRoot
-        };
-        await dialog.ShowAsync();
+            System.Diagnostics.Debug.WriteLine($"[SettingsPage] User selected language: {selectedTag}");
+
+            // Set the language (this also saves to settings)
+            LocalizationService.Instance.SetLanguage(selectedTag);
+
+            System.Diagnostics.Debug.WriteLine($"[SettingsPage] Language set and saved successfully");
+
+            // Show restart required message
+            var loc = LocalizationService.Instance;
+            var dialog = new ContentDialog
+            {
+                Title = loc.GetString("RestartRequired"),
+                Content = loc.GetString("RestartRequiredMessage"),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SettingsPage] ERROR: Failed to save language: {ex.Message}");
+
+            // Show error dialog to user
+            var loc = LocalizationService.Instance;
+            var errorDialog = new ContentDialog
+            {
+                Title = loc.GetString("StatusError"),
+                Content = $"Failed to save language setting: {ex.Message}\n\nPlease check if the application has write permissions.",
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await errorDialog.ShowAsync();
+        }
     }
 
     /// <summary>

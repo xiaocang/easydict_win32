@@ -42,7 +42,7 @@
 
   <!-- App Name -->
   <data name="AppName" xml:space="preserve">
-    <value>易词典</value>
+    <value>Easydict</value>
   </data>
 
   <!-- Main Page -->
@@ -50,330 +50,330 @@
     <value>原文</value>
   </data>
   <data name="TranslationResults" xml:space="preserve">
-    <value>翻译结果</value>
+    <value>翻訳結果</value>
   </data>
   <data name="InputPlaceholder" xml:space="preserve">
-    <value>输入或粘贴要翻译的文本...</value>
+    <value>翻訳するテキストを入力または貼り付け...</value>
   </data>
   <data name="TranslationPlaceholder" xml:space="preserve">
-    <value>翻译结果将在这里显示...</value>
+    <value>翻訳結果がここに表示されます...</value>
   </data>
   <data name="SettingsTooltip" xml:space="preserve">
-    <value>设置</value>
+    <value>設定</value>
   </data>
   <data name="TranslateTooltip" xml:space="preserve">
-    <value>翻译</value>
+    <value>翻訳</value>
   </data>
   <data name="SwapLanguagesTooltip" xml:space="preserve">
-    <value>交换源语言和目标语言</value>
+    <value>原文言語と翻訳先言語を入れ替える</value>
   </data>
   <data name="SourceLanguageTooltip" xml:space="preserve">
-    <value>源语言</value>
+    <value>原文言語</value>
   </data>
   <data name="TargetLanguageTooltip" xml:space="preserve">
-    <value>目标语言</value>
+    <value>翻訳先言語</value>
   </data>
 
   <!-- Status -->
   <data name="StatusConnected" xml:space="preserve">
-    <value>已连接</value>
+    <value>接続済み</value>
   </data>
   <data name="StatusDisconnected" xml:space="preserve">
-    <value>未连接</value>
+    <value>切断</value>
   </data>
   <data name="StatusReady" xml:space="preserve">
-    <value>就绪</value>
+    <value>準備完了</value>
   </data>
   <data name="StatusTranslating" xml:space="preserve">
-    <value>翻译中...</value>
+    <value>翻訳中...</value>
   </data>
   <data name="StatusError" xml:space="preserve">
-    <value>错误</value>
+    <value>エラー</value>
   </data>
 
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
-    <value>自动检测</value>
+    <value>自動検出</value>
   </data>
   <data name="LangEnglish" xml:space="preserve">
-    <value>英语</value>
+    <value>英語</value>
   </data>
   <data name="LangChinese" xml:space="preserve">
-    <value>中文</value>
+    <value>中国語</value>
   </data>
   <data name="LangChineseSimplified" xml:space="preserve">
-    <value>简体中文</value>
+    <value>中国語（簡体字）</value>
   </data>
   <data name="LangJapanese" xml:space="preserve">
-    <value>日语</value>
+    <value>日本語</value>
   </data>
   <data name="LangKorean" xml:space="preserve">
-    <value>韩语</value>
+    <value>韓国語</value>
   </data>
   <data name="LangFrench" xml:space="preserve">
-    <value>法语</value>
+    <value>フランス語</value>
   </data>
   <data name="LangGerman" xml:space="preserve">
-    <value>德语</value>
+    <value>ドイツ語</value>
   </data>
   <data name="LangSpanish" xml:space="preserve">
-    <value>西班牙语</value>
+    <value>スペイン語</value>
   </data>
 
   <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
-    <value>设置</value>
+    <value>設定</value>
   </data>
   <data name="TranslationService" xml:space="preserve">
-    <value>翻译服务</value>
+    <value>翻訳サービス</value>
   </data>
   <data name="DefaultService" xml:space="preserve">
-    <value>默认服务</value>
+    <value>デフォルトサービス</value>
   </data>
   <data name="TargetLanguage" xml:space="preserve">
-    <value>目标语言</value>
+    <value>翻訳先言語</value>
   </data>
   <data name="EnabledServices" xml:space="preserve">
-    <value>已启用的服务</value>
+    <value>有効なサービス</value>
   </data>
   <data name="EnabledServicesDescription" xml:space="preserve">
-    <value>选择在每个窗口中显示哪些翻译服务。多个服务将并行运行。</value>
+    <value>各ウィンドウに表示する翻訳サービスを選択します。複数のサービスは並行して実行されます。</value>
   </data>
   <data name="MainWindow" xml:space="preserve">
-    <value>主窗口</value>
+    <value>メインウィンドウ</value>
   </data>
   <data name="MiniWindow" xml:space="preserve">
-    <value>迷你窗口</value>
+    <value>ミニウィンドウ</value>
   </data>
   <data name="FixedWindow" xml:space="preserve">
-    <value>固定窗口</value>
+    <value>固定ウィンドウ</value>
   </data>
   <data name="Auto" xml:space="preserve">
-    <value>自动</value>
+    <value>自動</value>
   </data>
   <data name="Manual" xml:space="preserve">
-    <value>手动</value>
+    <value>手動</value>
   </data>
 
   <!-- Language Preferences -->
   <data name="LanguagePreferences" xml:space="preserve">
-    <value>语言偏好</value>
+    <value>言語設定</value>
   </data>
   <data name="FirstLanguage" xml:space="preserve">
-    <value>第一语言</value>
+    <value>第一言語</value>
   </data>
   <data name="SecondLanguage" xml:space="preserve">
-    <value>第二语言</value>
+    <value>第二言語</value>
   </data>
   <data name="LanguagePreferencesDescription" xml:space="preserve">
-    <value>当检测到的语言与您的第一语言匹配时，翻译目标将是您的第二语言，反之亦然。</value>
+    <value>検出された言語が第一言語と一致する場合、翻訳先は第二言語になります。逆も同様です。</value>
   </data>
   <data name="AutoSelectTargetLanguage" xml:space="preserve">
-    <value>根据检测到的源语言自动选择目标语言</value>
+    <value>検出された原文言語に基づいて翻訳先言語を自動選択</value>
   </data>
 
   <!-- Service Configuration -->
   <data name="ServiceConfiguration" xml:space="preserve">
-    <value>服务配置</value>
+    <value>サービス設定</value>
   </data>
   <data name="ServiceConfigurationDescription" xml:space="preserve">
-    <value>为每个翻译服务配置 API 密钥、端点和模型。</value>
+    <value>各翻訳サービスのAPIキー、エンドポイント、モデルを設定します。</value>
   </data>
   <data name="ApiKey" xml:space="preserve">
-    <value>API 密钥</value>
+    <value>APIキー</value>
   </data>
   <data name="ApiKeyOptional" xml:space="preserve">
-    <value>API 密钥（可选）</value>
+    <value>APIキー（オプション）</value>
   </data>
   <data name="Endpoint" xml:space="preserve">
-    <value>端点</value>
+    <value>エンドポイント</value>
   </data>
   <data name="EndpointOptional" xml:space="preserve">
-    <value>端点（可选）</value>
+    <value>エンドポイント（オプション）</value>
   </data>
   <data name="EndpointRequired" xml:space="preserve">
-    <value>端点（必填）</value>
+    <value>エンドポイント（必須）</value>
   </data>
   <data name="Model" xml:space="preserve">
-    <value>模型</value>
+    <value>モデル</value>
   </data>
   <data name="Refresh" xml:space="preserve">
-    <value>刷新</value>
+    <value>更新</value>
   </data>
 
   <!-- Service Descriptions -->
   <data name="DeepLDescription" xml:space="preserve">
-    <value>留空 API 密钥可使用免费网页翻译。Pro API 密钥有更高的限额。</value>
+    <value>APIキーを空にすると無料ウェブ翻訳を使用します。Pro APIキーで制限が増加します。</value>
   </data>
   <data name="DeepLFreeOption" xml:space="preserve">
-    <value>使用免费 API（网页翻译无需 API 密钥）</value>
+    <value>無料APIを使用（ウェブ翻訳にはAPIキー不要）</value>
   </data>
   <data name="OpenAIDescription" xml:space="preserve">
-    <value>您可以直接输入自定义模型名称。</value>
+    <value>カスタムモデル名を直接入力できます。</value>
   </data>
   <data name="DeepSeekDescription" xml:space="preserve">
-    <value>从 platform.deepseek.com 获取您的 API 密钥。您可以输入自定义模型名称。</value>
+    <value>platform.deepseek.comからAPIキーを取得してください。カスタムモデル名を入力できます。</value>
   </data>
   <data name="GroqDescription" xml:space="preserve">
-    <value>Groq 提供快速推理。从 console.groq.com 获取您的 API 密钥。您可以输入自定义模型名称。</value>
+    <value>Groqは高速推論を提供します。console.groq.comからAPIキーを取得してください。カスタムモデル名を入力できます。</value>
   </data>
   <data name="ZhipuDescription" xml:space="preserve">
-    <value>从 open.bigmodel.cn 获取您的 API 密钥。您可以输入自定义模型名称。</value>
+    <value>open.bigmodel.cnからAPIキーを取得してください。カスタムモデル名を入力できます。</value>
   </data>
   <data name="GitHubModelsDescription" xml:space="preserve">
-    <value>使用您的 GitHub 个人访问令牌。从 github.com/settings/tokens 获取。您可以输入自定义模型名称。</value>
+    <value>GitHubの個人アクセストークンを使用します。github.com/settings/tokensから取得してください。カスタムモデル名を入力できます。</value>
   </data>
   <data name="GeminiDescription" xml:space="preserve">
-    <value>从 aistudio.google.com 获取您的 API 密钥。您可以输入自定义模型名称。</value>
+    <value>aistudio.google.comからAPIキーを取得してください。カスタムモデル名を入力できます。</value>
   </data>
   <data name="CustomOpenAIDescription" xml:space="preserve">
-    <value>配置任何与 OpenAI 兼容的 API 端点（例如本地 LLM 服务器、其他 AI 提供商）。</value>
+    <value>OpenAI互換のAPIエンドポイントを設定します（例：ローカルLLMサーバー、他のAIプロバイダー）。</value>
   </data>
   <data name="OllamaDescription" xml:space="preserve">
-    <value>Ollama 必须在本地运行。点击刷新以加载可用模型。</value>
+    <value>Ollamaはローカルで実行している必要があります。更新をクリックして利用可能なモデルを読み込みます。</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>内置 AI 使用 Groq 云服务。无需 API 密钥。您可以输入自定义模型名称。</value>
+    <value>内蔵AIはGroqクラウドサービスを使用します。APIキー不要。カスタムモデル名を入力できます。</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
-    <value>字节跳动的豆包翻译服务。从 console.volcengine.com 获取您的 API 密钥</value>
+    <value>ByteDanceの豆包翻訳サービス。console.volcengine.comからAPIキーを取得してください</value>
   </data>
   <data name="CaiyunDescription" xml:space="preserve">
-    <value>从 fanyi.caiyunapp.com 获取您的 API 密钥</value>
+    <value>fanyi.caiyunapp.comからAPIキーを取得してください</value>
   </data>
   <data name="NiuTransDescription" xml:space="preserve">
-    <value>小牛翻译支持 450+ 种语言对。从 niutrans.com 获取您的 API 密钥</value>
+    <value>NiuTransは450以上の言語ペアをサポート。niutrans.comからAPIキーを取得してください</value>
   </data>
   <data name="FreeServicesTitle" xml:space="preserve">
-    <value>免费服务（无需配置）</value>
+    <value>無料サービス（設定不要）</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google 翻译和 Linguee 词典无需 API 密钥即可使用。</value>
+    <value>Google翻訳とLinguee辞書はAPIキーなしで使用できます。</value>
   </data>
 
   <!-- HTTP Proxy -->
   <data name="HttpProxy" xml:space="preserve">
-    <value>HTTP 代理</value>
+    <value>HTTPプロキシ</value>
   </data>
   <data name="UseHttpProxy" xml:space="preserve">
-    <value>使用 HTTP 代理</value>
+    <value>HTTPプロキシを使用</value>
   </data>
   <data name="ProxyUrl" xml:space="preserve">
-    <value>代理地址</value>
+    <value>プロキシURL</value>
   </data>
   <data name="BypassProxyForLocalhost" xml:space="preserve">
-    <value>本地地址绕过代理</value>
+    <value>localhostのプロキシをバイパス</value>
   </data>
   <data name="ProxyDescription" xml:space="preserve">
-    <value>代理更改在应用重启后生效。本地绕过确保 Ollama 无需代理即可工作。</value>
+    <value>プロキシの変更はアプリ再起動後に有効になります。localhostバイパスでOllamaがプロキシなしで動作します。</value>
   </data>
 
   <!-- Behavior -->
   <data name="Behavior" xml:space="preserve">
-    <value>行为</value>
+    <value>動作</value>
   </data>
   <data name="MinimizeToTray" xml:space="preserve">
-    <value>最小化到系统托盘</value>
+    <value>システムトレイに最小化</value>
   </data>
   <data name="MonitorClipboard" xml:space="preserve">
-    <value>监控剪贴板文本</value>
+    <value>クリップボードのテキストを監視</value>
   </data>
   <data name="AlwaysOnTop" xml:space="preserve">
-    <value>始终置顶</value>
+    <value>常に最前面</value>
   </data>
   <data name="LaunchAtStartup" xml:space="preserve">
-    <value>开机自启动</value>
+    <value>Windows起動時に起動</value>
   </data>
 
   <!-- Hotkeys -->
   <data name="Hotkeys" xml:space="preserve">
-    <value>快捷键</value>
+    <value>ホットキー</value>
   </data>
   <data name="ShowWindow" xml:space="preserve">
-    <value>显示窗口</value>
+    <value>ウィンドウを表示</value>
   </data>
   <data name="TranslateSelection" xml:space="preserve">
-    <value>翻译选中文本</value>
+    <value>選択テキストを翻訳</value>
   </data>
   <data name="ShowMiniWindow" xml:space="preserve">
-    <value>显示迷你窗口</value>
+    <value>ミニウィンドウを表示</value>
   </data>
   <data name="ShowFixedWindow" xml:space="preserve">
-    <value>显示固定窗口</value>
+    <value>固定ウィンドウを表示</value>
   </data>
   <data name="HotkeysDescription" xml:space="preserve">
-    <value>注意：重启应用以应用快捷键更改。切换快捷键使用相同的键加 Shift（例如 Ctrl+Alt+Shift+M）。</value>
+    <value>注意：ホットキーの変更を適用するにはアプリを再起動してください。切り替えホットキーは同じキーにShiftを追加します（例：Ctrl+Alt+Shift+M）。</value>
   </data>
 
   <!-- About -->
   <data name="About" xml:space="preserve">
-    <value>关于</value>
+    <value>このアプリについて</value>
   </data>
   <data name="EasydictForWindows" xml:space="preserve">
-    <value>Easydict Windows 版</value>
+    <value>Easydict for Windows</value>
   </data>
   <data name="GitHubRepository" xml:space="preserve">
-    <value>GitHub 仓库</value>
+    <value>GitHubリポジトリ</value>
   </data>
   <data name="InspiredBy" xml:space="preserve">
-    <value>灵感来自</value>
+    <value>インスピレーション元</value>
   </data>
   <data name="EasydictForMacOS" xml:space="preserve">
-    <value>Easydict macOS 版</value>
+    <value>Easydict for macOS</value>
   </data>
   <data name="License" xml:space="preserve">
-    <value>许可证：GPL-3.0</value>
+    <value>ライセンス：GPL-3.0</value>
   </data>
 
   <!-- Buttons -->
   <data name="SaveSettings" xml:space="preserve">
-    <value>保存设置</value>
+    <value>設定を保存</value>
   </data>
   <data name="Back" xml:space="preserve">
-    <value>返回</value>
+    <value>戻る</value>
   </data>
   <data name="BackToTop" xml:space="preserve">
-    <value>返回顶部</value>
+    <value>トップへ戻る</value>
   </data>
   <data name="Copy" xml:space="preserve">
-    <value>复制</value>
+    <value>コピー</value>
   </data>
   <data name="CopyAll" xml:space="preserve">
-    <value>复制全部</value>
+    <value>すべてコピー</value>
   </data>
 
   <!-- Messages -->
   <data name="TranslationFailed" xml:space="preserve">
-    <value>翻译失败</value>
+    <value>翻訳に失敗しました</value>
   </data>
   <data name="ServiceNotInitialized" xml:space="preserve">
-    <value>服务未初始化</value>
+    <value>サービスが初期化されていません</value>
   </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
-    <value>无效的语言选择</value>
+    <value>無効な言語選択</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
-    <value>无效的代理地址</value>
+    <value>無効なプロキシURL</value>
   </data>
   <data name="SettingsSaved" xml:space="preserve">
-    <value>设置已保存</value>
+    <value>設定を保存しました</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
-    <value>需要重启</value>
+    <value>再起動が必要</value>
   </data>
   <data name="CannotConnectToOllama" xml:space="preserve">
-    <value>无法连接到 Ollama</value>
+    <value>Ollamaに接続できません</value>
   </data>
   <data name="Copied" xml:space="preserve">
-    <value>已复制！</value>
+    <value>コピーしました！</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
-    <value>检测到：{0}</value>
+    <value>検出：{0}</value>
   </data>
 
   <!-- Service Names -->
   <data name="ServiceGoogle" xml:space="preserve">
-    <value>Google 翻译</value>
+    <value>Google翻訳</value>
   </data>
   <data name="ServiceDeepL" xml:space="preserve">
     <value>DeepL</value>
@@ -382,10 +382,10 @@
     <value>OpenAI</value>
   </data>
   <data name="ServiceOllama" xml:space="preserve">
-    <value>Ollama（本地）</value>
+    <value>Ollama（ローカル）</value>
   </data>
   <data name="ServiceBuiltIn" xml:space="preserve">
-    <value>内置 AI</value>
+    <value>内蔵AI</value>
   </data>
   <data name="ServiceDeepSeek" xml:space="preserve">
     <value>DeepSeek</value>
@@ -394,7 +394,7 @@
     <value>Groq</value>
   </data>
   <data name="ServiceZhipu" xml:space="preserve">
-    <value>智谱</value>
+    <value>智譜</value>
   </data>
   <data name="ServiceGitHubModels" xml:space="preserve">
     <value>GitHub Models</value>
@@ -403,58 +403,58 @@
     <value>Gemini</value>
   </data>
   <data name="ServiceCustomOpenAI" xml:space="preserve">
-    <value>自定义 OpenAI</value>
+    <value>カスタムOpenAI</value>
   </data>
   <data name="ServiceDoubao" xml:space="preserve">
     <value>豆包</value>
   </data>
   <data name="ServiceCaiyun" xml:space="preserve">
-    <value>彩云小译</value>
+    <value>彩雲小訳</value>
   </data>
   <data name="ServiceNiuTrans" xml:space="preserve">
-    <value>小牛翻译</value>
+    <value>NiuTrans</value>
   </data>
   <data name="ServiceLinguee" xml:space="preserve">
-    <value>Linguee 词典</value>
+    <value>Linguee辞書</value>
   </data>
 
   <!-- Tray Menu -->
   <data name="TrayShow" xml:space="preserve">
-    <value>显示</value>
+    <value>表示</value>
   </data>
   <data name="TrayShowMini" xml:space="preserve">
-    <value>迷你窗口</value>
+    <value>ミニウィンドウ</value>
   </data>
   <data name="TrayShowFixed" xml:space="preserve">
-    <value>固定窗口</value>
+    <value>固定ウィンドウ</value>
   </data>
   <data name="TraySettings" xml:space="preserve">
-    <value>设置</value>
+    <value>設定</value>
   </data>
   <data name="TrayExit" xml:space="preserve">
-    <value>退出</value>
+    <value>終了</value>
   </data>
 
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
-    <value>界面语言</value>
+    <value>UI言語</value>
   </data>
   <data name="UILanguageDescription" xml:space="preserve">
-    <value>选择应用程序界面的显示语言。需要重启生效。</value>
+    <value>アプリケーションインターフェースの表示言語を選択します。再起動が必要です。</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
-    <value>英语</value>
+    <value>英語</value>
   </data>
   <data name="UILangChineseSimplified" xml:space="preserve">
-    <value>简体中文</value>
+    <value>簡体字中国語</value>
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
   <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>行为</value>
+    <value>動作</value>
   </data>
   <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>界面语言</value>
+    <value>UI言語</value>
   </data>
   <data name="UILangEnglishItem.Content" xml:space="preserve">
     <value>English</value>
@@ -469,18 +469,18 @@
     <value>한국어</value>
   </data>
   <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>选择应用程序界面的显示语言。需要重启生效。</value>
+    <value>アプリケーションインターフェースの表示言語を選択します。再起動が必要です。</value>
   </data>
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>最小化到系统托盘</value>
+    <value>システムトレイに最小化</value>
   </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>监控剪贴板文本</value>
+    <value>クリップボードのテキストを監視</value>
   </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>始终置顶</value>
+    <value>常に最前面</value>
   </data>
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>开机自启动</value>
+    <value>Windows起動時に起動</value>
   </data>
 </root>

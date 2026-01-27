@@ -462,6 +462,12 @@
   <data name="UILangChineseItem.Content" xml:space="preserve">
     <value>简体中文</value>
   </data>
+  <data name="UILangJapaneseItem.Content" xml:space="preserve">
+    <value>日本語</value>
+  </data>
+  <data name="UILangKoreanItem.Content" xml:space="preserve">
+    <value>한국어</value>
+  </data>
   <data name="UILanguageDescription.Text" xml:space="preserve">
     <value>Select the display language for the application interface. Restart required.</value>
   </data>

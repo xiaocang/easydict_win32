@@ -47,11 +47,6 @@
         <DefaultLanguage>en-US</DefaultLanguage>
     </PropertyGroup>
 
-    <!-- Localization Resources -->
-    <ItemGroup>
-        <PRIResource Include="Strings\**\*.resw" />
-    </ItemGroup>
-
     <ItemGroup>
         <!-- MSIX Package Assets - copy to output for winapp package -->
         <Content Include="Assets\*.png">

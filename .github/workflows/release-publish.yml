@@ -325,6 +325,6 @@ jobs:
       - name: Submit to WinGet
         uses: vedantmgoyal2009/winget-releaser@v2
         with:
-          identifier: xiaocang.EasydictWin32
+          identifier: xiaocang.EasydictforWindows
           installers-regex: 'easydict_win32-v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?-x64\.zip$'
           token: ${{ secrets.WINGET_TOKEN }}

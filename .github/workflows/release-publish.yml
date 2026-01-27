@@ -153,6 +153,72 @@ jobs:
             --manifest src/Easydict.WinUI/Package.appxmanifest `
             --verbose
 
+      # Verify and fix MinVersion inside the MSIX package
+      # winapp package may override TargetDeviceFamily MinVersion with a lower default.
+      # Windows Store requires MinVersion > 10.0.17134.0.
+      - name: Verify MSIX manifest MinVersion
+        shell: pwsh
+        run: |
+          $msixPath = "dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix"
+          $requiredMinVersion = "10.0.19041.0"
+          $extractDir = "$env:RUNNER_TEMP\msix-verify"
+
+          # Extract MSIX (it's a ZIP format)
+          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+          Expand-Archive -Path $msixPath -DestinationPath $extractDir -Force
+
+          # Read the embedded AppxManifest.xml
+          $manifestPath = Join-Path $extractDir "AppxManifest.xml"
+          if (-not (Test-Path $manifestPath)) {
+            Write-Error "AppxManifest.xml not found in MSIX package"
+            exit 1
+          }
+
+          [xml]$manifest = Get-Content $manifestPath -Raw
+          $ns = New-Object System.Xml.XmlNamespaceManager($manifest.NameTable)
+          $ns.AddNamespace("f", "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
+
+          $tdf = $manifest.SelectSingleNode("//f:Dependencies/f:TargetDeviceFamily", $ns)
+          if ($tdf) {
+            $currentMin = $tdf.GetAttribute("MinVersion")
+            Write-Host "Current MinVersion in MSIX: $currentMin"
+            Write-Host "Required MinVersion: $requiredMinVersion"
+
+            if ([version]$currentMin -lt [version]$requiredMinVersion) {
+              Write-Host "::warning::MinVersion $currentMin is too low, fixing to $requiredMinVersion"
+              $tdf.SetAttribute("MinVersion", $requiredMinVersion)
+              $manifest.Save($manifestPath)
+
+              # Re-pack the MSIX with fixed manifest
+              # Find MakeAppx.exe from Windows SDK
+              $makeAppx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.*\x64\MakeAppx.exe" -ErrorAction SilentlyContinue |
+                          Sort-Object { [version]($_.Directory.Parent.Name) } -Descending |
+                          Select-Object -First 1
+
+              if (-not $makeAppx) {
+                Write-Error "MakeAppx.exe not found - cannot re-pack MSIX"
+                exit 1
+              }
+
+              # Remove the original MSIX and re-pack from the fixed content
+              Remove-Item $msixPath -Force
+              & $makeAppx.FullName pack /d $extractDir /p $msixPath /o
+              if ($LASTEXITCODE -ne 0) {
+                Write-Error "Failed to re-pack MSIX with fixed MinVersion"
+                exit 1
+              }
+              Write-Host "Re-packed MSIX with MinVersion=$requiredMinVersion"
+            } else {
+              Write-Host "MinVersion is OK: $currentMin >= $requiredMinVersion"
+            }
+          } else {
+            Write-Error "TargetDeviceFamily not found in AppxManifest.xml"
+            exit 1
+          }
+
+          # Cleanup
+          Remove-Item -Path $extractDir -Recurse -Force
+
       # Also create ZIP archive for portable distribution
       - name: Create ZIP archive
         shell: pwsh
@@ -247,6 +313,48 @@ jobs:
 
           Write-Host "`nCreated bundle: $bundlePath"
           Write-Host "Bundle size: $((Get-Item $bundlePath).Length / 1MB) MB"
+
+      # Verify bundle manifest MinVersion
+      - name: Verify bundle MinVersion
+        shell: pwsh
+        run: |
+          $bundlePath = "Easydict-${{ github.ref_name }}.unsigned.msixbundle"
+          $extractDir = "$env:RUNNER_TEMP\bundle-verify"
+
+          # Extract bundle (ZIP format)
+          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+          Expand-Archive -Path $bundlePath -DestinationPath $extractDir -Force
+
+          # Check AppxBundleManifest.xml
+          $bundleManifest = Join-Path $extractDir "AppxMetadata\AppxBundleManifest.xml"
+          if (Test-Path $bundleManifest) {
+            Write-Host "=== AppxBundleManifest.xml ==="
+            Get-Content $bundleManifest | Write-Host
+          }
+
+          # Also check individual package manifests inside the bundle
+          Get-ChildItem $extractDir -Filter "*.appx" -Recurse | ForEach-Object {
+            Write-Host "`n=== Checking: $($_.Name) ==="
+            $pkgDir = "$env:RUNNER_TEMP\pkg-$($_.BaseName)"
+            New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
+            Expand-Archive -Path $_.FullName -DestinationPath $pkgDir -Force
+            $appxManifest = Join-Path $pkgDir "AppxManifest.xml"
+            if (Test-Path $appxManifest) {
+              [xml]$xml = Get-Content $appxManifest -Raw
+              $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
+              $ns.AddNamespace("f", "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
+              $tdf = $xml.SelectSingleNode("//f:Dependencies/f:TargetDeviceFamily", $ns)
+              if ($tdf) {
+                Write-Host "  Name: $($tdf.GetAttribute('Name'))"
+                Write-Host "  MinVersion: $($tdf.GetAttribute('MinVersion'))"
+                Write-Host "  MaxVersionTested: $($tdf.GetAttribute('MaxVersionTested'))"
+              }
+            }
+            Remove-Item $pkgDir -Recurse -Force
+          }
+
+          # Cleanup
+          Remove-Item $extractDir -Recurse -Force
 
       - name: Upload all release assets
         uses: softprops/action-gh-release@v1

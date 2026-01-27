@@ -37,6 +37,161 @@ public sealed partial class SettingsPage : Page
         this.Loaded += OnPageLoaded;
     }
 
+    /// <summary>
+    /// Apply localization to all UI elements using LocalizationService.
+    /// NOTE: Service names (Google Translate, DeepL, etc.) remain in English.
+    /// </summary>
+    private void ApplyLocalization()
+    {
+        var loc = LocalizationService.Instance;
+
+        // Main header
+        if (SettingsHeaderText != null)
+            SettingsHeaderText.Text = loc.GetString("Settings");
+
+        // Translation Service section
+        if (TranslationServiceHeaderText != null)
+            TranslationServiceHeaderText.Text = loc.GetString("TranslationService");
+
+        ServiceCombo.Header = loc.GetString("DefaultService");
+        TargetLangCombo.Header = loc.GetString("TargetLanguage");
+
+        // Localize Target Language ComboBox items
+        if (TargetLangCombo.Items.Count >= 7)
+        {
+            ((ComboBoxItem)TargetLangCombo.Items[0]).Content = loc.GetString("LangChineseSimplified");
+            ((ComboBoxItem)TargetLangCombo.Items[1]).Content = loc.GetString("LangEnglish");
+            ((ComboBoxItem)TargetLangCombo.Items[2]).Content = loc.GetString("LangJapanese");
+            ((ComboBoxItem)TargetLangCombo.Items[3]).Content = loc.GetString("LangKorean");
+            ((ComboBoxItem)TargetLangCombo.Items[4]).Content = loc.GetString("LangFrench");
+            ((ComboBoxItem)TargetLangCombo.Items[5]).Content = loc.GetString("LangGerman");
+            ((ComboBoxItem)TargetLangCombo.Items[6]).Content = loc.GetString("LangSpanish");
+        }
+
+        // NOTE: ServiceCombo items (service names) stay in English - DO NOT translate
+
+        // Enabled Services section
+        if (EnabledServicesHeaderText != null)
+            EnabledServicesHeaderText.Text = loc.GetString("EnabledServices");
+        if (EnabledServicesDescriptionText != null)
+            EnabledServicesDescriptionText.Text = loc.GetString("EnabledServicesDescription");
+
+        // Window headers
+        if (MainWindowHeaderText != null)
+            MainWindowHeaderText.Text = loc.GetString("MainWindow");
+        if (MiniWindowHeaderText != null)
+            MiniWindowHeaderText.Text = loc.GetString("MiniWindow");
+        if (FixedWindowHeaderText != null)
+            FixedWindowHeaderText.Text = loc.GetString("FixedWindow");
+
+        // Language Preferences section
+        if (LanguagePreferencesHeaderText != null)
+            LanguagePreferencesHeaderText.Text = loc.GetString("LanguagePreferences");
+        if (LanguagePreferencesDescriptionText != null)
+            LanguagePreferencesDescriptionText.Text = loc.GetString("LanguagePreferencesDescription");
+
+        FirstLanguageCombo.Header = loc.GetString("FirstLanguage");
+        SecondLanguageCombo.Header = loc.GetString("SecondLanguage");
+        AutoSelectTargetToggle.Header = loc.GetString("AutoSelectTargetLanguage");
+
+        // Localize Language ComboBox items (these already have emoji flags)
+        // Keep emoji, translate language names
+        if (FirstLanguageCombo.Items.Count >= 7)
+        {
+            ((ComboBoxItem)FirstLanguageCombo.Items[0]).Content = $"🇨🇳 {loc.GetString("LangChineseSimplified")}";
+            ((ComboBoxItem)FirstLanguageCombo.Items[1]).Content = $"🇺🇸 {loc.GetString("LangEnglish")}";
+            ((ComboBoxItem)FirstLanguageCombo.Items[2]).Content = $"🇯🇵 {loc.GetString("LangJapanese")}";
+            ((ComboBoxItem)FirstLanguageCombo.Items[3]).Content = $"🇰🇷 {loc.GetString("LangKorean")}";
+            ((ComboBoxItem)FirstLanguageCombo.Items[4]).Content = $"🇫🇷 {loc.GetString("LangFrench")}";
+            ((ComboBoxItem)FirstLanguageCombo.Items[5]).Content = $"🇩🇪 {loc.GetString("LangGerman")}";
+            ((ComboBoxItem)FirstLanguageCombo.Items[6]).Content = $"🇪🇸 {loc.GetString("LangSpanish")}";
+        }
+
+        if (SecondLanguageCombo.Items.Count >= 7)
+        {
+            ((ComboBoxItem)SecondLanguageCombo.Items[0]).Content = $"🇺🇸 {loc.GetString("LangEnglish")}";
+            ((ComboBoxItem)SecondLanguageCombo.Items[1]).Content = $"🇨🇳 {loc.GetString("LangChineseSimplified")}";
+            ((ComboBoxItem)SecondLanguageCombo.Items[2]).Content = $"🇯🇵 {loc.GetString("LangJapanese")}";
+            ((ComboBoxItem)SecondLanguageCombo.Items[3]).Content = $"🇰🇷 {loc.GetString("LangKorean")}";
+            ((ComboBoxItem)SecondLanguageCombo.Items[4]).Content = $"🇫🇷 {loc.GetString("LangFrench")}";
+            ((ComboBoxItem)SecondLanguageCombo.Items[5]).Content = $"🇩🇪 {loc.GetString("LangGerman")}";
+            ((ComboBoxItem)SecondLanguageCombo.Items[6]).Content = $"🇪🇸 {loc.GetString("LangSpanish")}";
+        }
+
+        // Service Configuration section
+        if (ServiceConfigurationHeaderText != null)
+            ServiceConfigurationHeaderText.Text = loc.GetString("ServiceConfiguration");
+        if (ServiceConfigurationDescriptionText != null)
+            ServiceConfigurationDescriptionText.Text = loc.GetString("ServiceConfigurationDescription");
+
+        // Service configuration controls (API Keys, Endpoints, Models, etc.)
+        // TextBox/PasswordBox headers for each service
+        DeepLKeyBox.Header = loc.GetString("ApiKeyOptional");
+        OpenAIKeyBox.Header = loc.GetString("ApiKey");
+        OpenAIEndpointBox.Header = loc.GetString("EndpointOptional");
+        OpenAIModelCombo.Header = loc.GetString("Model");
+        DeepSeekKeyBox.Header = loc.GetString("ApiKey");
+        DeepSeekModelCombo.Header = loc.GetString("Model");
+        GroqKeyBox.Header = loc.GetString("ApiKey");
+        GroqModelCombo.Header = loc.GetString("Model");
+        ZhipuKeyBox.Header = loc.GetString("ApiKey");
+        ZhipuModelCombo.Header = loc.GetString("Model");
+        GitHubModelsTokenBox.Header = loc.GetString("ApiKey");
+        GitHubModelsModelCombo.Header = loc.GetString("Model");
+        GeminiKeyBox.Header = loc.GetString("ApiKey");
+        GeminiModelCombo.Header = loc.GetString("Model");
+        CustomOpenAIKeyBox.Header = loc.GetString("ApiKeyOptional");
+        CustomOpenAIEndpointBox.Header = loc.GetString("EndpointRequired");
+        CustomOpenAIModelBox.Header = loc.GetString("Model");
+        OllamaEndpointBox.Header = loc.GetString("EndpointOptional");
+        OllamaModelCombo.Header = loc.GetString("Model");
+        BuiltInModelCombo.Header = loc.GetString("Model");
+        DoubaoKeyBox.Header = loc.GetString("ApiKey");
+        DoubaoEndpointBox.Header = loc.GetString("EndpointOptional");
+        DoubaoModelBox.Header = loc.GetString("Model");
+        CaiyunKeyBox.Header = loc.GetString("ApiKey");
+        NiuTransKeyBox.Header = loc.GetString("ApiKey");
+
+        // Refresh button for Ollama
+        RefreshOllamaButton.Content = loc.GetString("Refresh");
+
+        // Free Services section
+        if (FreeServicesHeaderText != null)
+            FreeServicesHeaderText.Text = loc.GetString("FreeServicesTitle");
+        if (FreeServicesDescriptionText != null)
+            FreeServicesDescriptionText.Text = loc.GetString("FreeServicesDescription");
+
+        // HTTP Proxy section
+        if (HttpProxyHeaderText != null)
+            HttpProxyHeaderText.Text = loc.GetString("HttpProxy");
+
+        ProxyEnabledToggle.Header = loc.GetString("UseHttpProxy");
+        ProxyUriBox.Header = loc.GetString("ProxyUrl");
+        ProxyBypassLocalToggle.Header = loc.GetString("BypassProxyForLocalhost");
+
+        // Hotkeys section
+        if (HotkeysHeaderText != null)
+            HotkeysHeaderText.Text = loc.GetString("Hotkeys");
+        if (HotkeysDescriptionText != null)
+            HotkeysDescriptionText.Text = loc.GetString("HotkeysDescription");
+
+        ShowHotkeyBox.Header = loc.GetString("ShowWindow");
+        TranslateHotkeyBox.Header = loc.GetString("TranslateSelection");
+        ShowMiniHotkeyBox.Header = loc.GetString("ShowMiniWindow");
+        ShowFixedHotkeyBox.Header = loc.GetString("ShowFixedWindow");
+
+        // About section
+        if (AboutHeaderText != null)
+            AboutHeaderText.Text = loc.GetString("About");
+
+        // Save Settings button
+        SaveButton.Content = loc.GetString("SaveSettings");
+
+        // Tooltips
+        ToolTipService.SetToolTip(FloatingBackButton, loc.GetString("Back"));
+        ToolTipService.SetToolTip(BackToTopButton, loc.GetString("BackToTop"));
+    }
+
     private void OnPageLoaded(object sender, RoutedEventArgs e)
     {
         _isLoading = true;
@@ -48,6 +203,10 @@ public sealed partial class SettingsPage : Page
 
         LoadSettings();
         InitializeNavigation();
+
+        // Apply localization to all UI elements
+        ApplyLocalization();
+
         if (!_handlersRegistered)
         {
             RegisterChangeHandlers();

@@ -20,6 +20,42 @@ public sealed class LocalizationService
     /// </summary>
     public static readonly string[] SupportedLanguages = { "en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "fr-FR", "de-DE" };
 
+    /// <summary>
+    /// Initializes the language override BEFORE WinUI resources are loaded.
+    /// MUST be called from App constructor before InitializeComponent().
+    /// </summary>
+    public static void InitializeLanguageEarly()
+    {
+        try
+        {
+            // Load settings synchronously (required for early init)
+            var settings = SettingsService.Instance;
+            var languageCode = settings.UILanguage;
+
+            // Validate and fallback to system language if needed
+            if (string.IsNullOrEmpty(languageCode) || !IsSupported(languageCode))
+            {
+                languageCode = GetSystemLanguage();
+            }
+
+            // Set the override ONCE, before UI initialization
+            ApplicationLanguages.PrimaryLanguageOverride = languageCode;
+        }
+        catch (Exception ex)
+        {
+            // If anything goes wrong, fall back to system language
+            System.Diagnostics.Debug.WriteLine($"[LocalizationService] Early init failed: {ex.Message}");
+            try
+            {
+                ApplicationLanguages.PrimaryLanguageOverride = "en-US";
+            }
+            catch
+            {
+                // Last resort: let WinUI use its default
+            }
+        }
+    }
+
     private LocalizationService()
     {
         // Initialize based on settings or system default
@@ -32,8 +68,9 @@ public sealed class LocalizationService
             _currentLanguage = GetSystemLanguage();
         }
 
-        // Apply the language override
-        ApplicationLanguages.PrimaryLanguageOverride = _currentLanguage;
+        // NOTE: PrimaryLanguageOverride is set in InitializeLanguageEarly(),
+        // which is called from App constructor before InitializeComponent().
+        // DO NOT set it here - it's too late and will throw InvalidOperationException.
 
         // Create resource loader
         _resourceLoader = new ResourceLoader();
@@ -94,7 +131,9 @@ public sealed class LocalizationService
         }
 
         _currentLanguage = languageCode;
-        ApplicationLanguages.PrimaryLanguageOverride = languageCode;
+        // Note: PrimaryLanguageOverride is only set during app initialization.
+        // Setting it at runtime after UI is loaded causes InvalidOperationException.
+        // The new language will take effect on next app restart.
 
         // Save to settings
         var settings = SettingsService.Instance;

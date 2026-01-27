@@ -439,8 +439,8 @@
   <data name="UILanguage" xml:space="preserve">
     <value>UI Language</value>
   </data>
-  <data name="UILanguageDescription" xml:space="preserve">
-    <value>Select the display language for the application interface. Restart required.</value>
+  <data name="RestartRequiredMessage" xml:space="preserve">
+    <value>Please restart the application for the language change to take effect.</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
     <value>English</value>

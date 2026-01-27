@@ -804,7 +804,7 @@ public sealed partial class SettingsPage : Page
         var dialog = new ContentDialog
         {
             Title = "RestartRequired".Localize(),
-            Content = "UILanguageDescription".Localize(),
+            Content = "RestartRequiredMessage".Localize(),
             CloseButtonText = "OK",
             XamlRoot = this.XamlRoot
         };

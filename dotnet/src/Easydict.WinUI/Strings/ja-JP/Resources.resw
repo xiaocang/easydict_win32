@@ -439,8 +439,8 @@
   <data name="UILanguage" xml:space="preserve">
     <value>UI言語</value>
   </data>
-  <data name="UILanguageDescription" xml:space="preserve">
-    <value>アプリケーションインターフェースの表示言語を選択します。再起動が必要です。</value>
+  <data name="RestartRequiredMessage" xml:space="preserve">
+    <value>言語変更を有効にするには、アプリケーションを再起動してください。</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
     <value>英語</value>

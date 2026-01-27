@@ -439,8 +439,8 @@
   <data name="UILanguage" xml:space="preserve">
     <value>UI 언어</value>
   </data>
-  <data name="UILanguageDescription" xml:space="preserve">
-    <value>애플리케이션 인터페이스의 표시 언어를 선택합니다. 재시작이 필요합니다.</value>
+  <data name="RestartRequiredMessage" xml:space="preserve">
+    <value>언어 변경을 적용하려면 애플리케이션을 다시 시작하세요.</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
     <value>영어</value>

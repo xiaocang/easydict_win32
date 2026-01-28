@@ -40,8 +40,25 @@ namespace Easydict.WinUI
 
         private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
         {
+            // Log to persistent file so crashes are diagnosable even in release builds
+            try
+            {
+                var logDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Easydict");
+                Directory.CreateDirectory(logDir);
+                var logPath = Path.Combine(logDir, "crash.log");
+                var entry = $"[{DateTime.UtcNow:O}] {e.Exception}\n";
+                File.AppendAllText(logPath, entry);
+            }
+            catch
+            {
+                // Logging must not throw
+            }
+
             System.Diagnostics.Debug.WriteLine($"[App] Unhandled exception: {e.Exception}");
-            e.Handled = true;
+            // Do NOT set e.Handled = true; let truly fatal exceptions crash the app
+            // so they are visible rather than silently corrupting state.
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)

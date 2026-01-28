@@ -88,9 +88,7 @@ public sealed class TextToSpeechService : IDisposable
 
     private static VoiceInformation? FindVoiceForLanguage(Language language)
     {
-        var bcp47 = LanguageToBcp47(language);
-        if (string.IsNullOrEmpty(bcp47))
-            return null;
+        var bcp47 = language.ToBcp47();
 
         // Try exact match first, then prefix match
         var voices = SpeechSynthesizer.AllVoices;
@@ -105,52 +103,6 @@ public sealed class TextToSpeechService : IDisposable
         return voices.FirstOrDefault(v =>
             v.Language.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
-
-    private static string LanguageToBcp47(Language language) => language switch
-    {
-        Language.SimplifiedChinese => "zh-CN",
-        Language.TraditionalChinese => "zh-TW",
-        Language.English => "en-US",
-        Language.Japanese => "ja-JP",
-        Language.Korean => "ko-KR",
-        Language.French => "fr-FR",
-        Language.Spanish => "es-ES",
-        Language.Portuguese => "pt-BR",
-        Language.Italian => "it-IT",
-        Language.German => "de-DE",
-        Language.Russian => "ru-RU",
-        Language.Arabic => "ar-SA",
-        Language.Swedish => "sv-SE",
-        Language.Romanian => "ro-RO",
-        Language.Thai => "th-TH",
-        Language.Dutch => "nl-NL",
-        Language.Hungarian => "hu-HU",
-        Language.Greek => "el-GR",
-        Language.Danish => "da-DK",
-        Language.Finnish => "fi-FI",
-        Language.Polish => "pl-PL",
-        Language.Czech => "cs-CZ",
-        Language.Turkish => "tr-TR",
-        Language.Ukrainian => "uk-UA",
-        Language.Bulgarian => "bg-BG",
-        Language.Indonesian => "id-ID",
-        Language.Malay => "ms-MY",
-        Language.Vietnamese => "vi-VN",
-        Language.Persian => "fa-IR",
-        Language.Hindi => "hi-IN",
-        Language.Telugu => "te-IN",
-        Language.Tamil => "ta-IN",
-        Language.Bengali => "bn-IN",
-        Language.Norwegian => "nb-NO",
-        Language.Hebrew => "he-IL",
-        Language.Slovak => "sk-SK",
-        Language.Slovenian => "sl-SI",
-        Language.Estonian => "et-EE",
-        Language.Latvian => "lv-LV",
-        Language.Lithuanian => "lt-LT",
-        Language.Filipino => "fil-PH",
-        _ => "en-US"
-    };
 
     public void Dispose()
     {

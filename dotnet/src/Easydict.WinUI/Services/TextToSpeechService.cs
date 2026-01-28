@@ -19,7 +19,13 @@ public sealed class TextToSpeechService : IDisposable
 
     private readonly SpeechSynthesizer _synthesizer;
     private MediaPlayer? _mediaPlayer;
+    private SpeechSynthesisStream? _currentStream;
     private bool _isDisposed;
+
+    /// <summary>
+    /// Raised on the caller's thread when playback finishes or is stopped.
+    /// </summary>
+    public event Action? PlaybackEnded;
 
     /// <summary>
     /// Whether audio is currently playing.
@@ -56,14 +62,20 @@ public sealed class TextToSpeechService : IDisposable
             var stream = await _synthesizer.SynthesizeTextToStreamAsync(text).AsTask(cancellationToken);
 
             if (cancellationToken.IsCancellationRequested)
+            {
+                stream.Dispose();
                 return;
+            }
 
-            _mediaPlayer?.Dispose();
+            CleanupPlayback();
+
+            _currentStream = stream;
             _mediaPlayer = new MediaPlayer
             {
                 Source = MediaSource.CreateFromStream(stream, stream.ContentType),
                 AutoPlay = true
             };
+            _mediaPlayer.MediaEnded += OnMediaEnded;
         }
         catch (OperationCanceledException)
         {
@@ -83,7 +95,26 @@ public sealed class TextToSpeechService : IDisposable
         if (_mediaPlayer is { PlaybackSession.PlaybackState: MediaPlaybackState.Playing })
         {
             _mediaPlayer.Pause();
+            PlaybackEnded?.Invoke();
         }
+    }
+
+    private void OnMediaEnded(MediaPlayer sender, object args)
+    {
+        PlaybackEnded?.Invoke();
+    }
+
+    private void CleanupPlayback()
+    {
+        if (_mediaPlayer != null)
+        {
+            _mediaPlayer.MediaEnded -= OnMediaEnded;
+            _mediaPlayer.Dispose();
+            _mediaPlayer = null;
+        }
+
+        _currentStream?.Dispose();
+        _currentStream = null;
     }
 
     private static VoiceInformation? FindVoiceForLanguage(Language language)
@@ -109,7 +140,7 @@ public sealed class TextToSpeechService : IDisposable
         if (_isDisposed) return;
         _isDisposed = true;
 
-        _mediaPlayer?.Dispose();
+        CleanupPlayback();
         _synthesizer.Dispose();
     }
 }

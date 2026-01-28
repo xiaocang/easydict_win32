@@ -478,24 +478,22 @@ namespace Easydict.WinUI.Views
             if (string.IsNullOrWhiteSpace(text))
                 return;
 
-            // Use detected language if available, otherwise default to Auto
+            // Use detected language if available, otherwise default to English
             var language = _lastDetectedLanguage != TranslationLanguage.Auto
                 ? _lastDetectedLanguage
                 : TranslationLanguage.English;
 
+            var tts = TextToSpeechService.Instance;
+
+            void ResetIcon()
+            {
+                tts.PlaybackEnded -= ResetIcon;
+                DispatcherQueue.TryEnqueue(() => SourcePlayIcon.Glyph = "\uE768");
+            }
+
             SourcePlayIcon.Glyph = "\uE71A"; // Stop icon
-            try
-            {
-                await TextToSpeechService.Instance.SpeakAsync(text, language);
-            }
-            finally
-            {
-                DispatcherQueue.TryEnqueue(async () =>
-                {
-                    await Task.Delay(2000);
-                    SourcePlayIcon.Glyph = "\uE768"; // Play icon
-                });
-            }
+            tts.PlaybackEnded += ResetIcon;
+            await tts.SpeakAsync(text, language);
         }
 
         private async void OnInputTextBoxKeyDown(object sender, KeyRoutedEventArgs e)

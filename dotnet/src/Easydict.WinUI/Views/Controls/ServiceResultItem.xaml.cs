@@ -229,21 +229,15 @@ public sealed partial class ServiceResultItem : UserControl
 
         var tts = TextToSpeechService.Instance;
 
-        // Visual feedback: switch to stop icon while playing
+        void ResetIcon()
+        {
+            tts.PlaybackEnded -= ResetIcon;
+            DispatcherQueue.TryEnqueue(() => PlayIcon.Glyph = "\uE768");
+        }
+
         PlayIcon.Glyph = "\uE71A"; // Stop icon
-        try
-        {
-            await tts.SpeakAsync(result.TranslatedText, result.TargetLanguage);
-        }
-        finally
-        {
-            // Reset icon after a delay to allow playback to start
-            DispatcherQueue.TryEnqueue(async () =>
-            {
-                await Task.Delay(2000);
-                PlayIcon.Glyph = "\uE768"; // Play icon
-            });
-        }
+        tts.PlaybackEnded += ResetIcon;
+        await tts.SpeakAsync(result.TranslatedText, result.TargetLanguage);
     }
 
     private void OnCopyClicked(object sender, RoutedEventArgs e)

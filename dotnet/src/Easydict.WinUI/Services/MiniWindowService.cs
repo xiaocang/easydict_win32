@@ -1,4 +1,5 @@
 using Easydict.WinUI.Views;
+using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Services;
 
@@ -75,6 +76,14 @@ public sealed class MiniWindowService : IDisposable
     public void RefreshServiceResults()
     {
         _miniWindow?.RefreshServiceResults();
+    }
+
+    /// <summary>
+    /// Apply theme to the mini window.
+    /// </summary>
+    public void ApplyTheme(ElementTheme theme)
+    {
+        _miniWindow?.ApplyTheme(theme);
     }
 
     /// <summary>

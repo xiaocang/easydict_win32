@@ -40,7 +40,9 @@ namespace Easydict.WinUI
 
         private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
         {
-            // Log to persistent file so crashes are diagnosable even in release builds
+            var message = e.Exception?.ToString() ?? "Unknown error";
+
+            // Log to persistent file so crashes are diagnosable in release builds
             try
             {
                 var logDir = Path.Combine(
@@ -48,7 +50,7 @@ namespace Easydict.WinUI
                     "Easydict");
                 Directory.CreateDirectory(logDir);
                 var logPath = Path.Combine(logDir, "crash.log");
-                var entry = $"[{DateTime.UtcNow:O}] {e.Exception}\n";
+                var entry = $"[{DateTime.UtcNow:O}] {message}\n";
                 File.AppendAllText(logPath, entry);
             }
             catch
@@ -56,9 +58,33 @@ namespace Easydict.WinUI
                 // Logging must not throw
             }
 
-            System.Diagnostics.Debug.WriteLine($"[App] Unhandled exception: {e.Exception}");
-            // Do NOT set e.Handled = true; let truly fatal exceptions crash the app
-            // so they are visible rather than silently corrupting state.
+            System.Diagnostics.Debug.WriteLine($"[App] Unhandled exception: {message}");
+
+            // Show error dialog so the user sees what happened
+            e.Handled = true;
+            ShowErrorDialog(message);
+        }
+
+        private async void ShowErrorDialog(string message)
+        {
+            try
+            {
+                if (_window?.Content is not FrameworkElement root || root.XamlRoot is null)
+                    return;
+
+                var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+                {
+                    Title = "Unexpected Error",
+                    Content = message,
+                    CloseButtonText = "OK",
+                    XamlRoot = root.XamlRoot
+                };
+                await dialog.ShowAsync();
+            }
+            catch
+            {
+                // Dialog display must not throw
+            }
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)

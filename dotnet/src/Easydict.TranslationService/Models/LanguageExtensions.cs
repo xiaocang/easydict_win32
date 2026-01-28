@@ -130,6 +130,60 @@ public static class LanguageExtensions
     };
 
     /// <summary>
+    /// Convert language to BCP-47 locale tag for TTS voice selection.
+    /// Returns a full locale tag (e.g., "en-US", "zh-CN") suitable for
+    /// matching against system TTS voices.
+    /// </summary>
+    public static string ToBcp47(this Language lang) => lang switch
+    {
+        Language.SimplifiedChinese => "zh-CN",
+        Language.TraditionalChinese => "zh-TW",
+        Language.ClassicalChinese => "zh-CN",
+        Language.English => "en-US",
+        Language.Japanese => "ja-JP",
+        Language.Korean => "ko-KR",
+        Language.French => "fr-FR",
+        Language.Spanish => "es-ES",
+        Language.Portuguese => "pt-BR",
+        Language.Italian => "it-IT",
+        Language.German => "de-DE",
+        Language.Russian => "ru-RU",
+        Language.Arabic => "ar-SA",
+        Language.Swedish => "sv-SE",
+        Language.Romanian => "ro-RO",
+        Language.Thai => "th-TH",
+        Language.Dutch => "nl-NL",
+        Language.Hungarian => "hu-HU",
+        Language.Greek => "el-GR",
+        Language.Danish => "da-DK",
+        Language.Finnish => "fi-FI",
+        Language.Polish => "pl-PL",
+        Language.Czech => "cs-CZ",
+        Language.Turkish => "tr-TR",
+        Language.Ukrainian => "uk-UA",
+        Language.Bulgarian => "bg-BG",
+        Language.Indonesian => "id-ID",
+        Language.Malay => "ms-MY",
+        Language.Vietnamese => "vi-VN",
+        Language.Persian => "fa-IR",
+        Language.Hindi => "hi-IN",
+        Language.Telugu => "te-IN",
+        Language.Tamil => "ta-IN",
+        Language.Urdu => "ur-PK",
+        Language.Bengali => "bn-IN",
+        Language.Norwegian => "nb-NO",
+        Language.Hebrew => "he-IL",
+        Language.Slovak => "sk-SK",
+        Language.Slovenian => "sl-SI",
+        Language.Estonian => "et-EE",
+        Language.Latvian => "lv-LV",
+        Language.Lithuanian => "lt-LT",
+        Language.Filipino => "fil-PH",
+        Language.Auto => "en-US",
+        _ => "en-US"
+    };
+
+    /// <summary>
     /// Parse language from simplified code (settings format).
     /// </summary>
     public static Language FromCode(string code)

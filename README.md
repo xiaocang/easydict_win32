@@ -1,4 +1,13 @@
-# easydict_win32
+<p align="center">
+  <img src="screenshot/icon_512x512@2x.png" height="256">
+  <h1 align="center">Easydict <sub>for Windows</sub></h1>
+  <h4 align="center">Easy to look up words or translate text</h4>
+  <p align="center">A Windows port of <a href="https://github.com/tisfeng/Easydict">Easydict</a></p>
+</p>
+
+<div align="center">
+<a href="./README.md">English</a> &nbsp;&nbsp;|&nbsp;&nbsp; <a href="./README_ZH.md">中文</a>
+</div>
 
 [![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml)
 
@@ -98,42 +107,15 @@ Expand-Archive easydict_win32-v1.0.0-x64.zip -DestinationPath Easydict
 .\Easydict\Easydict.WinUI.exe
 ```
 
-#### MSIX Package
-
-**File:** `Easydict-vX.Y.Z-x64.msix`
-
-- Windows native installer format
-- Integrates with Start Menu and system features
-- Prepared for future Windows Store release
-- **Requires certificate trust** (self-signed builds)
-
-```powershell
-# For self-signed MSIX, you may need to install the certificate first
-# Or enable Developer Mode: Settings → Privacy & security → For developers
-
-# Install the package
-Add-AppxPackage -Path Easydict-v1.0.0-x64.msix
-```
-
-> **Note:** MSIX packages from GitHub Releases use self-signed certificates.
-> Users must trust the certificate before installation. For easier installation,
-> use the Portable version or wait for the Windows Store release.
-
 #### Verify Download (Optional)
 
 Each release includes SHA256 checksums for verification.
 
-**Note:** The checksum file contains entries for both MSIX and ZIP files.
-If you downloaded only one file, use the single-file verification method below.
-
 ```bash
-# Linux/macOS/WSL - Verify all files in current directory
-sha256sum -c checksums-x64.sha256
-
-# Linux/macOS/WSL - Verify single file (ignore missing files)
+# Linux/macOS/WSL
 sha256sum -c checksums-x64.sha256 --ignore-missing
 
-# PowerShell - Verify single file manually
+# PowerShell
 $expected = (Get-Content checksums-x64.sha256 | Select-String "easydict_win32").ToString().Split()[0]
 $actual = (Get-FileHash easydict_win32-v1.0.0-x64.zip -Algorithm SHA256).Hash.ToLower()
 if ($expected -eq $actual) { "OK" } else { "FAILED" }
@@ -152,30 +134,6 @@ dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release
 # Run
 dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ```
-
-## Recent Updates
-
-### January 2026
-
-**Translation Service Improvements:**
-
-- **Gemini Service** - Added 4 new models:
-  - `gemini-2.5-flash-lite` (lightweight, 500 RPD free tier)
-  - `gemini-2.5-pro` (advanced model)
-  - `gemini-3-flash-preview` (Gemini 3 Flash preview)
-  - `gemini-3-pro-preview` (Gemini 3 Pro preview)
-
-- **DeepL Service** - Added Traditional Chinese support
-  - Both API and web translation modes now support Traditional Chinese
-  - Proper `ZH-HANT` language code mapping
-
-- **Doubao Service** - Complete rewrite with correct API
-  - Now uses ByteDance's specialized translation API (`/api/v3/responses`)
-  - Translation-specific model: `doubao-seed-translation-250915`
-  - Improved streaming support with proper SSE event parsing
-  - Added Traditional Chinese support with `zh-Hant` language code
-
-- **Google Translate** - Hebrew language support verified and working correctly
 
 ## TODO
 
@@ -206,6 +164,11 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - [ ] **Smart Query** - Auto-select translation mode based on text type
 - [ ] **Multi-language UI** - UI localization
 - [ ] **Auto Update** - Check and install updates
+
+### Distribution
+
+- [ ] **Windows Store** - Publish to Microsoft Store
+- [ ] **winget** - Publish to Windows Package Manager
 
 ## Comparison with macOS Version
 

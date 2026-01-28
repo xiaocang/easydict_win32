@@ -60,9 +60,22 @@ namespace Easydict.WinUI
 
             System.Diagnostics.Debug.WriteLine($"[App] Unhandled exception: {message}");
 
-            // Show error dialog so the user sees what happened
+            // Let fatal exceptions (OOM, stack overflow, access violation) crash the process
+            // rather than continuing in a corrupted state.
+            if (IsFatalException(e.Exception))
+                return;
+
+            // For non-fatal exceptions, show an error dialog so the user sees what happened
             e.Handled = true;
             ShowErrorDialog(message);
+        }
+
+        private static bool IsFatalException(Exception? ex)
+        {
+            return ex is OutOfMemoryException
+                or StackOverflowException
+                or System.Runtime.InteropServices.SEHException
+                or AccessViolationException;
         }
 
         private async void ShowErrorDialog(string message)

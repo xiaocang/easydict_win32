@@ -1,4 +1,5 @@
 using Easydict.WinUI.Views;
+using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Services;
 
@@ -76,6 +77,14 @@ public sealed class FixedWindowService : IDisposable
     public void RefreshServiceResults()
     {
         _fixedWindow?.RefreshServiceResults();
+    }
+
+    /// <summary>
+    /// Apply theme to the fixed window.
+    /// </summary>
+    public void ApplyTheme(ElementTheme theme)
+    {
+        _fixedWindow?.ApplyTheme(theme);
     }
 
     /// <summary>

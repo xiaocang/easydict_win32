@@ -1,6 +1,6 @@
 <p align="center">
   <img src="screenshot/icon_512x512@2x.png" height="256">
-  <h1 align="center">Easydict <sub>for Windows</sub></h1>
+  <h1 align="center">Easydict <sup>for Windows</sup></h1>
   <h4 align="center">轻松查词翻译</h4>
   <p align="center">A Windows port of <a href="https://github.com/tisfeng/Easydict">Easydict</a></p>
 </p>

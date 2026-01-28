@@ -138,23 +138,43 @@
                         FontSize="12"
                         Visibility="Collapsed" />
 
-                    <!-- Copy Button (bottom right) -->
-                    <Button
-                        x:Name="CopyButton"
+                    <!-- Action Buttons (bottom right) -->
+                    <StackPanel
+                        x:Name="ActionButtons"
                         Grid.Row="0"
                         Grid.RowSpan="3"
-                        Click="OnCopyClicked"
-                        ToolTipService.ToolTip="Copy"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Width="24"
-                        Height="24"
-                        Padding="0"
+                        Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
+                        Spacing="2"
                         Visibility="Collapsed">
-                        <FontIcon x:Name="CopyIcon" Glyph="&#xE8C8;" FontSize="12" />
-                    </Button>
+
+                        <!-- TTS Play Button -->
+                        <Button
+                            x:Name="PlayButton"
+                            Click="OnPlayClicked"
+                            ToolTipService.ToolTip="Play audio"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Width="24"
+                            Height="24"
+                            Padding="0">
+                            <FontIcon x:Name="PlayIcon" Glyph="&#xE768;" FontSize="12" />
+                        </Button>
+
+                        <!-- Copy Button -->
+                        <Button
+                            x:Name="CopyButton"
+                            Click="OnCopyClicked"
+                            ToolTipService.ToolTip="Copy"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Width="24"
+                            Height="24"
+                            Padding="0">
+                            <FontIcon x:Name="CopyIcon" Glyph="&#xE8C8;" FontSize="12" />
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>

@@ -70,6 +70,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **Dark/Light Theme** - Follows system theme
 
+- **TTS (Text-to-Speech)** - Play source and translated text using Windows Speech Synthesis
+
 ### Screenshots
 
 ![Overview](screenshot/Snipaste_2026-01-26_21-39-35.png)
@@ -143,7 +145,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - [x] ~~**Caiyun**~~ - 彩云小译 ✅ **Implemented**
 - [x] ~~**NiuTrans**~~ - 小牛翻译 (450+ languages) ✅ **Implemented**
 - [x] ~~**Linguee Dictionary**~~ - Dictionary with context examples ✅ **Implemented**
-- [ ] **TTS (Text-to-Speech)** - Windows Speech Synthesis API
+- [x] ~~**TTS (Text-to-Speech)**~~ - Windows Speech Synthesis API ✅ **Implemented**
 
 ### Medium Priority
 
@@ -176,7 +178,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 |---------|-------|---------|
 | Translation Services | 25+ | 15 |
 | OCR Screenshot Translation | Yes | No |
-| TTS | Yes | Planned |
+| TTS | Yes | Yes |
 | Selection Translation | Yes | Yes |
 | Window Types | 3 | 3 |
 | Global Hotkeys | 10+ | 6 |

@@ -21,6 +21,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **Multiple Translation Services**
   - Google Translate (free, no API key required)
+  - Google Dict (rich dictionary: phonetics, definitions, examples)
   - DeepL (supports Free/Pro API, Traditional Chinese supported)
   - OpenAI (GPT-4o, GPT-4o-mini, etc.)
   - Gemini (Google AI, including Gemini 2.5 models)
@@ -177,6 +178,10 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 - **Google Translate** - Hebrew language support verified and working correctly
 
+- **Google Dict** - New rich Google Translate service
+  - Parses phonetics, definitions (parts of speech + meanings), and examples
+  - Independent from the existing Google Translate service; both can be enabled separately
+
 ## TODO
 
 ### High Priority
@@ -211,7 +216,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | Feature | macOS | Windows |
 |---------|-------|---------|
-| Translation Services | 25+ | 15 |
+| Translation Services | 25+ | 16 |
 | OCR Screenshot Translation | Yes | No |
 | TTS | Yes | Planned |
 | Selection Translation | Yes | Yes |

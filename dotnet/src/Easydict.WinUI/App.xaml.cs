@@ -35,6 +35,13 @@ namespace Easydict.WinUI
             // NOTE: Language is managed by LocalizationService using ResourceContext.
             // No early initialization needed - ResourceContext can be updated at runtime.
             this.InitializeComponent();
+            this.UnhandledException += OnUnhandledException;
+        }
+
+        private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Unhandled exception: {e.Exception}");
+            e.Handled = true;
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)
@@ -45,12 +52,37 @@ namespace Easydict.WinUI
             _window.Title = "Easydict";
 
             // Set window size and get AppWindow reference
-            _appWindow = ConfigureWindow(_window);
+            try
+            {
+                _appWindow = ConfigureWindow(_window);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] ConfigureWindow failed: {ex}");
+                // Fallback: get AppWindow without custom configuration
+                try
+                {
+                    var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+                    var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
+                    _appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+                }
+                catch (Exception ex2)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Fallback AppWindow retrieval failed: {ex2.Message}");
+                }
+            }
 
             // Set window icon for unpackaged scenarios
             if (_appWindow != null)
             {
-                WindowIconService.SetWindowIcon(_appWindow);
+                try
+                {
+                    WindowIconService.SetWindowIcon(_appWindow);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] SetWindowIcon failed: {ex.Message}");
+                }
 
                 // Handle window close to minimize to tray instead
                 _appWindow.Closing += OnWindowClosing;
@@ -77,26 +109,46 @@ namespace Easydict.WinUI
             var settings = SettingsService.Instance;
 
             // Initialize system tray icon
-            _trayIconService = new TrayIconService(_window, _appWindow);
-            _trayIconService.OnTranslateClipboard += OnTrayTranslateClipboard;
-            _trayIconService.OnOpenSettings += OnTrayOpenSettings;
-            _trayIconService.Initialize();
+            try
+            {
+                _trayIconService = new TrayIconService(_window, _appWindow);
+                _trayIconService.OnTranslateClipboard += OnTrayTranslateClipboard;
+                _trayIconService.OnOpenSettings += OnTrayOpenSettings;
+                _trayIconService.Initialize();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] TrayIconService initialization failed: {ex}");
+            }
 
             // Initialize hotkey service
-            _hotkeyService = new HotkeyService(_window);
-            _hotkeyService.OnShowWindow += OnShowWindowHotkey;
-            _hotkeyService.OnTranslateSelection += OnTranslateSelectionHotkey;
-            _hotkeyService.OnShowMiniWindow += OnShowMiniWindowHotkey;
-            _hotkeyService.OnShowFixedWindow += OnShowFixedWindowHotkey;
-            _hotkeyService.OnToggleMiniWindow += OnToggleMiniWindowHotkey;
-            _hotkeyService.OnToggleFixedWindow += OnToggleFixedWindowHotkey;
-            _hotkeyService.Initialize();
+            try
+            {
+                _hotkeyService = new HotkeyService(_window);
+                _hotkeyService.OnShowWindow += OnShowWindowHotkey;
+                _hotkeyService.OnTranslateSelection += OnTranslateSelectionHotkey;
+                _hotkeyService.OnShowMiniWindow += OnShowMiniWindowHotkey;
+                _hotkeyService.OnShowFixedWindow += OnShowFixedWindowHotkey;
+                _hotkeyService.OnToggleMiniWindow += OnToggleMiniWindowHotkey;
+                _hotkeyService.OnToggleFixedWindow += OnToggleFixedWindowHotkey;
+                _hotkeyService.Initialize();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] HotkeyService initialization failed: {ex}");
+            }
 
             // Initialize clipboard service
-            _clipboardService = new ClipboardService();
-            _clipboardService.OnClipboardTextChanged += OnClipboardTextChanged;
-            _clipboardService.IsMonitoringEnabled = settings.ClipboardMonitoring;
-
+            try
+            {
+                _clipboardService = new ClipboardService();
+                _clipboardService.OnClipboardTextChanged += OnClipboardTextChanged;
+                _clipboardService.IsMonitoringEnabled = settings.ClipboardMonitoring;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] ClipboardService initialization failed: {ex}");
+            }
 
             // Apply always-on-top setting
             ApplyAlwaysOnTop(settings.AlwaysOnTop);

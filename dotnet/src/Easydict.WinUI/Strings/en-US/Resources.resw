@@ -530,4 +530,21 @@
   <data name="HideWindow" xml:space="preserve">
     <value>Hide (Ctrl+Alt+F to show again)</value>
   </data>
+
+  <!-- App Theme -->
+  <data name="AppTheme" xml:space="preserve">
+    <value>App Theme</value>
+  </data>
+  <data name="AppThemeDescription" xml:space="preserve">
+    <value>Choose how Easydict appears. Select System to follow Windows theme.</value>
+  </data>
+  <data name="ThemeSystem" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="ThemeLight" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="ThemeDark" xml:space="preserve">
+    <value>Dark</value>
+  </data>
 </root>

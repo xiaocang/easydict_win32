@@ -530,4 +530,21 @@
   <data name="HideWindow" xml:space="preserve">
     <value>隐藏 (Ctrl+Alt+F 再次显示)</value>
   </data>
+
+  <!-- App Theme -->
+  <data name="AppTheme" xml:space="preserve">
+    <value>应用主题</value>
+  </data>
+  <data name="AppThemeDescription" xml:space="preserve">
+    <value>选择 Easydict 的外观。选择"系统"将跟随 Windows 主题。</value>
+  </data>
+  <data name="ThemeSystem" xml:space="preserve">
+    <value>系统</value>
+  </data>
+  <data name="ThemeLight" xml:space="preserve">
+    <value>浅色</value>
+  </data>
+  <data name="ThemeDark" xml:space="preserve">
+    <value>深色</value>
+  </data>
 </root>

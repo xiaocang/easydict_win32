@@ -1,4 +1,5 @@
 using Easydict.TranslationService.Models;
+using Easydict.WinUI.Services;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -136,28 +137,28 @@ public sealed partial class ServiceResultItem : UserControl
                 : _serviceResult.StreamingText;
             ResultText.Visibility = Visibility.Visible;
             ErrorText.Visibility = Visibility.Collapsed;
-            CopyButton.Visibility = Visibility.Collapsed; // Don't show copy during streaming
+            ActionButtons.Visibility = Visibility.Collapsed; // Don't show buttons during streaming
         }
         else if (_serviceResult.Result != null)
         {
             ResultText.Text = _serviceResult.Result.TranslatedText;
             ResultText.Visibility = Visibility.Visible;
             ErrorText.Visibility = Visibility.Collapsed;
-            CopyButton.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+            ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
         }
         else if (_serviceResult.Error != null)
         {
             ErrorText.Text = _serviceResult.Error.Message;
             ErrorText.Visibility = Visibility.Visible;
             ResultText.Visibility = Visibility.Collapsed;
-            CopyButton.Visibility = Visibility.Collapsed;
+            ActionButtons.Visibility = Visibility.Collapsed;
         }
         else
         {
             ResultText.Text = "";
             ResultText.Visibility = Visibility.Collapsed;
             ErrorText.Visibility = Visibility.Collapsed;
-            CopyButton.Visibility = Visibility.Collapsed;
+            ActionButtons.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -196,7 +197,7 @@ public sealed partial class ServiceResultItem : UserControl
 
         if (_serviceResult?.Result != null && _serviceResult.IsExpanded)
         {
-            CopyButton.Visibility = Visibility.Visible;
+            ActionButtons.Visibility = Visibility.Visible;
         }
     }
 
@@ -205,7 +206,7 @@ public sealed partial class ServiceResultItem : UserControl
         _isHovering = false;
         HeaderBar.Background = (Brush)Application.Current.Resources["TitleBarBackgroundBrush"];
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
-        CopyButton.Visibility = Visibility.Collapsed;
+        ActionButtons.Visibility = Visibility.Collapsed;
     }
 
     private void OnHeaderBarPointerEntered(object sender, PointerRoutedEventArgs e)
@@ -218,6 +219,31 @@ public sealed partial class ServiceResultItem : UserControl
     {
         HeaderBar.Background = (Brush)Application.Current.Resources["TitleBarBackgroundBrush"];
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+    }
+
+    private async void OnPlayClicked(object sender, RoutedEventArgs e)
+    {
+        var result = _serviceResult?.Result;
+        if (result == null || string.IsNullOrEmpty(result.TranslatedText))
+            return;
+
+        var tts = TextToSpeechService.Instance;
+
+        // Visual feedback: switch to stop icon while playing
+        PlayIcon.Glyph = "\uE71A"; // Stop icon
+        try
+        {
+            await tts.SpeakAsync(result.TranslatedText, result.TargetLanguage);
+        }
+        finally
+        {
+            // Reset icon after a delay to allow playback to start
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                await Task.Delay(2000);
+                PlayIcon.Glyph = "\uE768"; // Play icon
+            });
+        }
     }
 
     private void OnCopyClicked(object sender, RoutedEventArgs e)

@@ -293,8 +293,20 @@
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         VerticalAlignment="Center" />
 
-                    <!-- Placeholder for symmetry (invisible) -->
-                    <Border Grid.Column="1" Width="32" Height="15" />
+                    <!-- TTS Play Button for source text -->
+                    <Button
+                        x:Name="SourcePlayButton"
+                        Grid.Column="1"
+                        Click="OnSourcePlayClicked"
+                        ToolTipService.ToolTip="Play source text"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Width="24"
+                        Height="24"
+                        Padding="0"
+                        VerticalAlignment="Center">
+                        <FontIcon x:Name="SourcePlayIcon" Glyph="&#xE768;" FontSize="12" />
+                    </Button>
                 </Grid>
 
                 <!-- Detected Language Label -->

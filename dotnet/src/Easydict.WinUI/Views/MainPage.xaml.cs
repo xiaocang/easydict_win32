@@ -472,6 +472,32 @@ namespace Easydict.WinUI.Views
         /// Handle keyboard input in the input text box.
         /// Enter key triggers translation; Shift+Enter or Ctrl+Enter inserts newline.
         /// </summary>
+        private async void OnSourcePlayClicked(object sender, RoutedEventArgs e)
+        {
+            var text = InputTextBox.Text;
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
+            // Use detected language if available, otherwise default to Auto
+            var language = _lastDetectedLanguage != TranslationLanguage.Auto
+                ? _lastDetectedLanguage
+                : TranslationLanguage.English;
+
+            SourcePlayIcon.Glyph = "\uE71A"; // Stop icon
+            try
+            {
+                await TextToSpeechService.Instance.SpeakAsync(text, language);
+            }
+            finally
+            {
+                DispatcherQueue.TryEnqueue(async () =>
+                {
+                    await Task.Delay(2000);
+                    SourcePlayIcon.Glyph = "\uE768"; // Play icon
+                });
+            }
+        }
+
         private async void OnInputTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (e.Key != VirtualKey.Enter)

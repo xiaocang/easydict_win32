@@ -21,6 +21,7 @@
             <!-- Settings UI -->
             <Color x:Key="AddMinusBackgroundColor">#EAEAE9</Color>
             <Color x:Key="ListBorderColor">#DEDEDE</Color>
+            <Color x:Key="ActionButtonIconColor">#999999</Color>
 
             <!-- Brushes -->
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
@@ -34,6 +35,7 @@
             <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
             <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
+            <SolidColorBrush x:Key="ActionButtonIconBrush" Color="{StaticResource ActionButtonIconColor}" />
         </ResourceDictionary>
 
         <!-- Dark Theme Colors -->
@@ -54,6 +56,7 @@
             <!-- Settings UI -->
             <Color x:Key="AddMinusBackgroundColor">#3B3A3A</Color>
             <Color x:Key="ListBorderColor">#505050</Color>
+            <Color x:Key="ActionButtonIconColor">#707070</Color>
 
             <!-- Brushes -->
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
@@ -67,6 +70,7 @@
             <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
             <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
+            <SolidColorBrush x:Key="ActionButtonIconBrush" Color="{StaticResource ActionButtonIconColor}" />
         </ResourceDictionary>
 
         <!-- HighContrast Theme (fallback to Light theme values) -->
@@ -82,6 +86,7 @@
             <Color x:Key="BlueTintColor">#0000FF</Color>
             <Color x:Key="AddMinusBackgroundColor">#E0E0E0</Color>
             <Color x:Key="ListBorderColor">#000000</Color>
+            <Color x:Key="ActionButtonIconColor">#999999</Color>
 
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
             <SolidColorBrush x:Key="MainBorderBrush" Color="{StaticResource MainBorderColor}" />
@@ -94,6 +99,7 @@
             <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
             <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
+            <SolidColorBrush x:Key="ActionButtonIconBrush" Color="{StaticResource ActionButtonIconColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

@@ -125,6 +125,24 @@ jobs:
           Write-Host "All required MSIX assets verified:"
           $requiredAssets | ForEach-Object { Write-Host "  - $_" }
 
+      # Fix PRI: dotnet publish outputs localization PRI as Easydict.WinUI.pri,
+      # but MSIX packaging expects resources.pri. Copy it before packaging.
+      - name: Fix resources.pri for MSIX
+        shell: pwsh
+        run: |
+          $publishDir = "dotnet/publish/${{ matrix.platform }}"
+          $sourcePri = Join-Path $publishDir "Easydict.WinUI.pri"
+          $targetPri = Join-Path $publishDir "resources.pri"
+
+          if (Test-Path $sourcePri) {
+            $sourceSize = (Get-Item $sourcePri).Length
+            Write-Host "Found Easydict.WinUI.pri ($sourceSize bytes), copying to resources.pri"
+            Copy-Item -Path $sourcePri -Destination $targetPri -Force
+            Write-Host "resources.pri updated ($((Get-Item $targetPri).Length) bytes)"
+          } else {
+            Write-Warning "Easydict.WinUI.pri not found in $publishDir - resources.pri may lack localizations"
+          }
+
       # Update manifest version
       - name: Update manifest version
         shell: pwsh
@@ -151,6 +169,7 @@ jobs:
             ./publish/${{ matrix.platform }} `
             --output ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix `
             --manifest src/Easydict.WinUI/Package.appxmanifest `
+            --skip-pri `
             --verbose
 
       # Verify and fix MinVersion inside the MSIX package

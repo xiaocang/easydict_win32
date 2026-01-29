@@ -26,12 +26,12 @@ namespace Easydict.WinUI.Views
         private Task? _currentQueryTask;
         private readonly SettingsService _settings = SettingsService.Instance;
         private readonly List<ServiceQueryResult> _serviceResults = new();
+        private readonly TargetLanguageSelector _targetLanguageSelector;
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
-        private bool _isManualTargetSelection = false; // Track if user manually selected target
-        private string _lastQueryText = ""; // Track last query text to detect changes
         private bool _isLoaded;
         private volatile bool _isClosing;
         private bool _suppressTargetLanguageSelectionChanged;
+        private bool _suppressSourceLanguageSelectionChanged;
 
         /// <summary>
         /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -40,6 +40,8 @@ namespace Easydict.WinUI.Views
 
         public MainPage()
         {
+            _targetLanguageSelector = new TargetLanguageSelector(_settings);
+
             try
             {
                 System.Diagnostics.Debug.WriteLine("[MainPage] Constructor starting...");
@@ -55,8 +57,18 @@ namespace Easydict.WinUI.Views
             this.Unloaded += OnPageUnloaded;
 
             // Sync selection between Wide and Narrow layout ComboBoxes
-            SourceLangCombo.SelectionChanged += (s, e) => SyncComboSelection(SourceLangCombo, SourceLangComboNarrow);
-            SourceLangComboNarrow.SelectionChanged += (s, e) => SyncComboSelection(SourceLangComboNarrow, SourceLangCombo);
+            SourceLangCombo.SelectionChanged += (s, e) =>
+            {
+                _suppressSourceLanguageSelectionChanged = true;
+                try { SyncComboSelection(SourceLangCombo, SourceLangComboNarrow); }
+                finally { _suppressSourceLanguageSelectionChanged = false; }
+            };
+            SourceLangComboNarrow.SelectionChanged += (s, e) =>
+            {
+                _suppressSourceLanguageSelectionChanged = true;
+                try { SyncComboSelection(SourceLangComboNarrow, SourceLangCombo); }
+                finally { _suppressSourceLanguageSelectionChanged = false; }
+            };
             TargetLangCombo.SelectionChanged += (s, e) => SyncComboSelection(TargetLangCombo, TargetLangComboNarrow);
             TargetLangComboNarrow.SelectionChanged += (s, e) => SyncComboSelection(TargetLangComboNarrow, TargetLangCombo);
 
@@ -109,31 +121,23 @@ namespace Easydict.WinUI.Views
         private void ApplySettings()
         {
             // Apply target language from settings (using FirstLanguage)
-            var targetLang = _settings.FirstLanguage;
-            var targetIndex = targetLang switch
-            {
-                "en" => 0,
-                "zh" => 1,
-                "ja" => 2,
-                "ko" => 3,
-                "fr" => 4,
-                "de" => 5,
-                "es" => 6,
-                _ => 1 // Default to Chinese
-            };
+            var targetLang = LanguageExtensions.FromCode(_settings.FirstLanguage);
+
             _suppressTargetLanguageSelectionChanged = true;
             try
             {
-                if (targetIndex >= 0 && targetIndex < TargetLangCombo.Items.Count)
+                var targetIndex = LanguageComboHelper.FindLanguageIndex(TargetLangCombo, targetLang);
+                if (targetIndex >= 0)
                 {
                     TargetLangCombo.SelectedIndex = targetIndex;
                 }
-                if (targetIndex >= 0 && targetIndex < TargetLangComboNarrow.Items.Count)
+                var targetIndexNarrow = LanguageComboHelper.FindLanguageIndex(TargetLangComboNarrow, targetLang);
+                if (targetIndexNarrow >= 0)
                 {
-                    TargetLangComboNarrow.SelectedIndex = targetIndex;
+                    TargetLangComboNarrow.SelectedIndex = targetIndexNarrow;
                 }
 
-                _isManualTargetSelection = false;
+                _targetLanguageSelector.Reset();
             }
             finally
             {
@@ -148,35 +152,33 @@ namespace Easydict.WinUI.Views
         {
             var loc = LocalizationService.Instance;
 
-            // Source Language ComboBoxes (Wide layout) - ONLY 4 items in XAML!
+            // Source Language ComboBoxes (Wide layout) - 9 items: Auto + 8 languages
             ((ComboBoxItem)SourceLangCombo.Items[0]).Content = loc.GetString("LangAutoDetect");
-            ((ComboBoxItem)SourceLangCombo.Items[1]).Content = loc.GetString("LangEnglish");
-            ((ComboBoxItem)SourceLangCombo.Items[2]).Content = loc.GetString("LangChinese");
-            ((ComboBoxItem)SourceLangCombo.Items[3]).Content = loc.GetString("LangJapanese");
+            for (int i = 0; i < LanguageComboHelper.SelectableLanguages.Length; i++)
+            {
+                ((ComboBoxItem)SourceLangCombo.Items[i + 1]).Content =
+                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
+            }
 
-            // Source Language ComboBoxes (Narrow layout) - ONLY 4 items in XAML!
+            // Source Language ComboBoxes (Narrow layout) - 9 items: Auto + 8 languages
             ((ComboBoxItem)SourceLangComboNarrow.Items[0]).Content = loc.GetString("LangAutoDetect");
-            ((ComboBoxItem)SourceLangComboNarrow.Items[1]).Content = loc.GetString("LangEnglish");
-            ((ComboBoxItem)SourceLangComboNarrow.Items[2]).Content = loc.GetString("LangChinese");
-            ((ComboBoxItem)SourceLangComboNarrow.Items[3]).Content = loc.GetString("LangJapanese");
+            for (int i = 0; i < LanguageComboHelper.SelectableLanguages.Length; i++)
+            {
+                ((ComboBoxItem)SourceLangComboNarrow.Items[i + 1]).Content =
+                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
+            }
 
-            // Target Language ComboBoxes (Wide layout) - 7 items
-            ((ComboBoxItem)TargetLangCombo.Items[0]).Content = loc.GetString("LangEnglish");
-            ((ComboBoxItem)TargetLangCombo.Items[1]).Content = loc.GetString("LangChinese");
-            ((ComboBoxItem)TargetLangCombo.Items[2]).Content = loc.GetString("LangJapanese");
-            ((ComboBoxItem)TargetLangCombo.Items[3]).Content = loc.GetString("LangKorean");
-            ((ComboBoxItem)TargetLangCombo.Items[4]).Content = loc.GetString("LangFrench");
-            ((ComboBoxItem)TargetLangCombo.Items[5]).Content = loc.GetString("LangGerman");
-            ((ComboBoxItem)TargetLangCombo.Items[6]).Content = loc.GetString("LangSpanish");
-
-            // Target Language ComboBoxes (Narrow layout) - 7 items
-            ((ComboBoxItem)TargetLangComboNarrow.Items[0]).Content = loc.GetString("LangEnglish");
-            ((ComboBoxItem)TargetLangComboNarrow.Items[1]).Content = loc.GetString("LangChinese");
-            ((ComboBoxItem)TargetLangComboNarrow.Items[2]).Content = loc.GetString("LangJapanese");
-            ((ComboBoxItem)TargetLangComboNarrow.Items[3]).Content = loc.GetString("LangKorean");
-            ((ComboBoxItem)TargetLangComboNarrow.Items[4]).Content = loc.GetString("LangFrench");
-            ((ComboBoxItem)TargetLangComboNarrow.Items[5]).Content = loc.GetString("LangGerman");
-            ((ComboBoxItem)TargetLangComboNarrow.Items[6]).Content = loc.GetString("LangSpanish");
+            // Target Language ComboBoxes - 8 items (dynamically rebuilt, but localize initial XAML items)
+            for (int i = 0; i < TargetLangCombo.Items.Count && i < LanguageComboHelper.SelectableLanguages.Length; i++)
+            {
+                ((ComboBoxItem)TargetLangCombo.Items[i]).Content =
+                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
+            }
+            for (int i = 0; i < TargetLangComboNarrow.Items.Count && i < LanguageComboHelper.SelectableLanguages.Length; i++)
+            {
+                ((ComboBoxItem)TargetLangComboNarrow.Items[i]).Content =
+                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
+            }
 
             // Input placeholder
             InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
@@ -573,14 +575,6 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            // Reset manual target selection when text changes
-            // This ensures auto-detection works for new input (macOS behavior)
-            if (inputText != _lastQueryText)
-            {
-                _isManualTargetSelection = false;
-                _lastQueryText = inputText;
-            }
-
             using var currentCts = new CancellationTokenSource();
             var previousCts = Interlocked.Exchange(ref _currentQueryCts, currentCts);
 
@@ -618,31 +612,28 @@ namespace Easydict.WinUI.Views
                 // Hide placeholder
                 PlaceholderText.Visibility = Visibility.Collapsed;
 
-                // Step 1: Detect language
-                var detectedLanguage = await detectionService.DetectAsync(
-                    inputText,
-                    ct);
-
-                _lastDetectedLanguage = detectedLanguage;
-                UpdateDetectedLanguageDisplay(detectedLanguage);
-
-                // Step 2: Determine target language
-                TranslationLanguage targetLanguage;
-                if (_isManualTargetSelection)
+                // Step 1: Detect language (only when source = Auto)
+                var sourceLanguage = GetSourceLanguage();
+                TranslationLanguage detectedLanguage;
+                if (sourceLanguage == TranslationLanguage.Auto)
                 {
-                    // User manually selected target language, respect user's choice
-                    targetLanguage = GetTargetLanguage();
-                }
-                else if (_settings.AutoSelectTargetLanguage)
-                {
-                    // Auto-select target language (apply macOS algorithm)
-                    targetLanguage = detectionService.GetTargetLanguage(detectedLanguage);
-                    UpdateTargetLanguageSelector(targetLanguage);
+                    detectedLanguage = await detectionService.DetectAsync(inputText, ct);
+                    UpdateDetectedLanguageDisplay(detectedLanguage);
                 }
                 else
                 {
-                    // Auto-select disabled, use current selection
-                    targetLanguage = GetTargetLanguage();
+                    detectedLanguage = sourceLanguage;
+                    DetectedLanguageText.Visibility = Visibility.Collapsed;
+                }
+                _lastDetectedLanguage = detectedLanguage;
+
+                // Step 2: Determine target language
+                var currentTarget = GetTargetLanguage();
+                var targetLanguage = _targetLanguageSelector.ResolveTargetLanguage(
+                    detectedLanguage, currentTarget, detectionService);
+                if (targetLanguage != currentTarget)
+                {
+                    UpdateTargetLanguageSelector(targetLanguage);
                 }
 
                 // Step 3: Execute translation for each enabled service in parallel
@@ -916,19 +907,14 @@ namespace Easydict.WinUI.Views
             return result;
         }
 
+        private TranslationLanguage GetSourceLanguage()
+        {
+            return LanguageComboHelper.GetSelectedLanguage(SourceLangCombo);
+        }
+
         private TranslationLanguage GetTargetLanguage()
         {
-            return TargetLangCombo.SelectedIndex switch
-            {
-                0 => TranslationLanguage.English,
-                1 => TranslationLanguage.SimplifiedChinese,
-                2 => TranslationLanguage.Japanese,
-                3 => TranslationLanguage.Korean,
-                4 => TranslationLanguage.French,
-                5 => TranslationLanguage.German,
-                6 => TranslationLanguage.Spanish,
-                _ => TranslationLanguage.SimplifiedChinese
-            };
+            return LanguageComboHelper.GetSelectedLanguage(TargetLangCombo);
         }
 
         /// <summary>
@@ -965,20 +951,19 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            var targetIndex = LanguageToComboIndex(targetLang);
-
             // Update both Wide and Narrow layout ComboBoxes without triggering SelectionChanged
             _suppressTargetLanguageSelectionChanged = true;
             try
             {
-                _isManualTargetSelection = false; // Temporarily disable manual flag
-                if (targetIndex >= 0 && targetIndex < TargetLangCombo.Items.Count)
+                var targetIndex = LanguageComboHelper.FindLanguageIndex(TargetLangCombo, targetLang);
+                if (targetIndex >= 0)
                 {
                     TargetLangCombo.SelectedIndex = targetIndex;
                 }
-                if (targetIndex >= 0 && targetIndex < TargetLangComboNarrow.Items.Count)
+                var targetIndexNarrow = LanguageComboHelper.FindLanguageIndex(TargetLangComboNarrow, targetLang);
+                if (targetIndexNarrow >= 0)
                 {
-                    TargetLangComboNarrow.SelectedIndex = targetIndex;
+                    TargetLangComboNarrow.SelectedIndex = targetIndexNarrow;
                 }
             }
             finally
@@ -986,21 +971,6 @@ namespace Easydict.WinUI.Views
                 _suppressTargetLanguageSelectionChanged = false;
             }
         }
-
-        /// <summary>
-        /// Convert Language enum to ComboBox index.
-        /// </summary>
-        private static int LanguageToComboIndex(TranslationLanguage lang) => lang switch
-        {
-            TranslationLanguage.English => 0,
-            TranslationLanguage.SimplifiedChinese => 1,
-            TranslationLanguage.Japanese => 2,
-            TranslationLanguage.Korean => 3,
-            TranslationLanguage.French => 4,
-            TranslationLanguage.German => 5,
-            TranslationLanguage.Spanish => 6,
-            _ => 1 // Default to Chinese
-        };
 
         /// <summary>
         /// Handle target language manual selection.
@@ -1013,7 +983,7 @@ namespace Easydict.WinUI.Views
             }
 
             // User manually changed target language
-            _isManualTargetSelection = true;
+            _targetLanguageSelector.MarkManualSelection();
 
             // Re-translate if there's text in the input
             if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
@@ -1027,21 +997,98 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private void OnSwapLanguagesClicked(object sender, RoutedEventArgs e)
         {
-            if (_lastDetectedLanguage == TranslationLanguage.Auto)
+            var sourceLanguage = GetSourceLanguage();
+
+            if (sourceLanguage == TranslationLanguage.Auto)
             {
-                // No detection result, cannot swap
+                // Source is Auto: swap target to detected language
+                if (_lastDetectedLanguage == TranslationLanguage.Auto)
+                    return; // No detection result, cannot swap
+
+                UpdateTargetLanguageSelector(_lastDetectedLanguage);
+                _targetLanguageSelector.MarkManualSelection();
+            }
+            else
+            {
+                // Source is specific: swap source ↔ target
+                var currentTarget = GetTargetLanguage();
+                var newSource = currentTarget;
+                var newTarget = sourceLanguage;
+
+                // Set source to current target
+                _suppressSourceLanguageSelectionChanged = true;
+                try
+                {
+                    var srcIdx = LanguageComboHelper.FindLanguageIndex(SourceLangCombo, newSource);
+                    if (srcIdx >= 0) SourceLangCombo.SelectedIndex = srcIdx;
+                    var srcIdxNarrow = LanguageComboHelper.FindLanguageIndex(SourceLangComboNarrow, newSource);
+                    if (srcIdxNarrow >= 0) SourceLangComboNarrow.SelectedIndex = srcIdxNarrow;
+                }
+                finally
+                {
+                    _suppressSourceLanguageSelectionChanged = false;
+                }
+
+                // Rebuild target combos excluding new source
+                RebuildTargetCombos(newSource, newTarget);
+                _targetLanguageSelector.MarkManualSelection();
+
+                // Re-translate if text exists
+                if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
+                {
+                    _ = StartQueryTrackedAsync();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handle source language selection change.
+        /// Rebuilds target combo to exclude source language (mutual exclusion).
+        /// </summary>
+        private void OnSourceLanguageChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_isLoaded || _suppressSourceLanguageSelectionChanged)
+            {
                 return;
             }
 
-            // Set target language to detected source language
-            var newTargetIndex = LanguageToComboIndex(_lastDetectedLanguage);
-            TargetLangCombo.SelectedIndex = newTargetIndex;
-            TargetLangComboNarrow.SelectedIndex = newTargetIndex;
+            var sourceLanguage = GetSourceLanguage();
+            var currentTarget = GetTargetLanguage();
 
-            _isManualTargetSelection = true; // Mark as manual selection
+            RebuildTargetCombos(sourceLanguage, currentTarget);
 
-            // Note: Since source is always "Auto Detect", we only swap target
-            // If source becomes selectable in the future, add source update here
+            // Re-translate if text exists
+            if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
+            {
+                _ = StartQueryTrackedAsync();
+            }
+        }
+
+        /// <summary>
+        /// Rebuild both Wide and Narrow target combos excluding the source language.
+        /// </summary>
+        private void RebuildTargetCombos(TranslationLanguage sourceLanguage, TranslationLanguage currentTarget)
+        {
+            var loc = LocalizationService.Instance;
+
+            _suppressTargetLanguageSelectionChanged = true;
+            try
+            {
+                LanguageComboHelper.RebuildTargetCombo(
+                    TargetLangCombo, sourceLanguage, currentTarget, loc, out var newTarget);
+                LanguageComboHelper.RebuildTargetCombo(
+                    TargetLangComboNarrow, sourceLanguage, currentTarget, loc, out _);
+
+                // If target changed due to reversal, mark manual selection
+                if (newTarget != currentTarget)
+                {
+                    _targetLanguageSelector.MarkManualSelection();
+                }
+            }
+            finally
+            {
+                _suppressTargetLanguageSelectionChanged = false;
+            }
         }
 
         private void OnSettingsClicked(object sender, RoutedEventArgs e)
@@ -1054,6 +1101,7 @@ namespace Easydict.WinUI.Views
         /// </summary>
         public void SetTextAndTranslate(string text)
         {
+            _targetLanguageSelector.Reset();
             InputTextBox.Text = text;
             _ = StartQueryTrackedAsync();
         }

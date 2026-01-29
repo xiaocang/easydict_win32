@@ -117,12 +117,18 @@
                 Grid.Column="0"
                 MinWidth="130"
                 SelectedIndex="0"
+                SelectionChanged="OnSourceLanguageChanged"
                 VerticalAlignment="Center"
                 ToolTipService.ToolTip="Source Language">
-                <ComboBoxItem Content="Auto Detect" />
-                <ComboBoxItem Content="English" />
-                <ComboBoxItem Content="Chinese" />
-                <ComboBoxItem Content="Japanese" />
+                <ComboBoxItem Content="Auto Detect" Tag="auto" />
+                <ComboBoxItem Content="English" Tag="en" />
+                <ComboBoxItem Content="Chinese" Tag="zh" />
+                <ComboBoxItem Content="Chinese (Traditional)" Tag="zh-tw" />
+                <ComboBoxItem Content="Japanese" Tag="ja" />
+                <ComboBoxItem Content="Korean" Tag="ko" />
+                <ComboBoxItem Content="French" Tag="fr" />
+                <ComboBoxItem Content="German" Tag="de" />
+                <ComboBoxItem Content="Spanish" Tag="es" />
             </ComboBox>
 
             <!-- Swap Languages Button -->
@@ -150,13 +156,14 @@
                 SelectionChanged="OnTargetLanguageChanged"
                 VerticalAlignment="Center"
                 ToolTipService.ToolTip="Target Language">
-                <ComboBoxItem Content="English" />
-                <ComboBoxItem Content="Chinese" />
-                <ComboBoxItem Content="Japanese" />
-                <ComboBoxItem Content="Korean" />
-                <ComboBoxItem Content="French" />
-                <ComboBoxItem Content="German" />
-                <ComboBoxItem Content="Spanish" />
+                <ComboBoxItem Content="English" Tag="en" />
+                <ComboBoxItem Content="Chinese" Tag="zh" />
+                <ComboBoxItem Content="Chinese (Traditional)" Tag="zh-tw" />
+                <ComboBoxItem Content="Japanese" Tag="ja" />
+                <ComboBoxItem Content="Korean" Tag="ko" />
+                <ComboBoxItem Content="French" Tag="fr" />
+                <ComboBoxItem Content="German" Tag="de" />
+                <ComboBoxItem Content="Spanish" Tag="es" />
             </ComboBox>
 
             <!-- Translate Button (Right) -->
@@ -203,11 +210,17 @@
                     Grid.Column="0"
                     HorizontalAlignment="Stretch"
                     SelectedIndex="0"
+                    SelectionChanged="OnSourceLanguageChanged"
                     ToolTipService.ToolTip="Source Language">
-                    <ComboBoxItem Content="Auto Detect" />
-                    <ComboBoxItem Content="English" />
-                    <ComboBoxItem Content="Chinese" />
-                    <ComboBoxItem Content="Japanese" />
+                    <ComboBoxItem Content="Auto Detect" Tag="auto" />
+                    <ComboBoxItem Content="English" Tag="en" />
+                    <ComboBoxItem Content="Chinese" Tag="zh" />
+                    <ComboBoxItem Content="Chinese (Traditional)" Tag="zh-tw" />
+                    <ComboBoxItem Content="Japanese" Tag="ja" />
+                    <ComboBoxItem Content="Korean" Tag="ko" />
+                    <ComboBoxItem Content="French" Tag="fr" />
+                    <ComboBoxItem Content="German" Tag="de" />
+                    <ComboBoxItem Content="Spanish" Tag="es" />
                 </ComboBox>
 
                 <!-- Swap Button (Narrow) -->
@@ -233,13 +246,14 @@
                     SelectedIndex="1"
                     SelectionChanged="OnTargetLanguageChanged"
                     ToolTipService.ToolTip="Target Language">
-                    <ComboBoxItem Content="English" />
-                    <ComboBoxItem Content="Chinese" />
-                    <ComboBoxItem Content="Japanese" />
-                    <ComboBoxItem Content="Korean" />
-                    <ComboBoxItem Content="French" />
-                    <ComboBoxItem Content="German" />
-                    <ComboBoxItem Content="Spanish" />
+                    <ComboBoxItem Content="English" Tag="en" />
+                    <ComboBoxItem Content="Chinese" Tag="zh" />
+                    <ComboBoxItem Content="Chinese (Traditional)" Tag="zh-tw" />
+                    <ComboBoxItem Content="Japanese" Tag="ja" />
+                    <ComboBoxItem Content="Korean" Tag="ko" />
+                    <ComboBoxItem Content="French" Tag="fr" />
+                    <ComboBoxItem Content="German" Tag="de" />
+                    <ComboBoxItem Content="Spanish" Tag="es" />
                 </ComboBox>
             </Grid>
 

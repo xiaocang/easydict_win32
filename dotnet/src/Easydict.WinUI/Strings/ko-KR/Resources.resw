@@ -104,6 +104,9 @@
   <data name="LangChineseSimplified" xml:space="preserve">
     <value>중국어(간체)</value>
   </data>
+  <data name="LangChineseTraditional" xml:space="preserve">
+    <value>중국어(번체)</value>
+  </data>
   <data name="LangJapanese" xml:space="preserve">
     <value>일본어</value>
   </data>

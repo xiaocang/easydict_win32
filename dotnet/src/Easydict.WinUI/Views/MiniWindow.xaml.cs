@@ -47,14 +47,15 @@ public sealed partial class MiniWindow : Window
     private readonly SettingsService _settings = SettingsService.Instance;
     private readonly List<ServiceQueryResult> _serviceResults = new();
     private readonly List<ServiceResultItem> _resultControls = new();
+    private readonly TargetLanguageSelector _targetLanguageSelector;
     private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
     private AppWindow? _appWindow;
     private OverlappedPresenter? _presenter;
     private bool _isPinned;
     private volatile bool _isClosing;
     private bool _isLoaded;
-    private bool _userChangedTargetLanguage;
     private bool _suppressTargetLanguageSelectionChanged;
+    private bool _suppressSourceLanguageSelectionChanged;
     private TitleBarDragRegionHelper? _titleBarHelper;
     private DateTime _lastShowTime = DateTime.MinValue;
     private bool _resizePending;
@@ -66,6 +67,7 @@ public sealed partial class MiniWindow : Window
 
     public MiniWindow()
     {
+        _targetLanguageSelector = new TargetLanguageSelector(_settings);
         this.InitializeComponent();
 
         // Get AppWindow for window management
@@ -126,25 +128,22 @@ public sealed partial class MiniWindow : Window
         // Window title - keep "Easydict" brand name, only localize "Mini"
         this.Title = $"Easydict {loc.GetString("QuickTranslate")}";
 
-        // Source Language ComboBox items
-        if (SourceLangCombo.Items.Count >= 4)
+        // Source Language ComboBox items - 9 items: Auto + 8 languages
+        if (SourceLangCombo.Items.Count >= 9)
         {
             ((ComboBoxItem)SourceLangCombo.Items[0]).Content = loc.GetString("Auto");
-            ((ComboBoxItem)SourceLangCombo.Items[1]).Content = loc.GetString("LangEnglish");
-            ((ComboBoxItem)SourceLangCombo.Items[2]).Content = loc.GetString("LangChinese");
-            ((ComboBoxItem)SourceLangCombo.Items[3]).Content = loc.GetString("LangJapanese");
+            for (int i = 0; i < LanguageComboHelper.SelectableLanguages.Length; i++)
+            {
+                ((ComboBoxItem)SourceLangCombo.Items[i + 1]).Content =
+                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
+            }
         }
 
-        // Target Language ComboBox items
-        if (TargetLangCombo.Items.Count >= 7)
+        // Target Language ComboBox items - 8 items (dynamically rebuilt)
+        for (int i = 0; i < TargetLangCombo.Items.Count && i < LanguageComboHelper.SelectableLanguages.Length; i++)
         {
-            ((ComboBoxItem)TargetLangCombo.Items[0]).Content = loc.GetString("LangEnglish");
-            ((ComboBoxItem)TargetLangCombo.Items[1]).Content = loc.GetString("LangChinese");
-            ((ComboBoxItem)TargetLangCombo.Items[2]).Content = loc.GetString("LangJapanese");
-            ((ComboBoxItem)TargetLangCombo.Items[3]).Content = loc.GetString("LangKorean");
-            ((ComboBoxItem)TargetLangCombo.Items[4]).Content = loc.GetString("LangFrench");
-            ((ComboBoxItem)TargetLangCombo.Items[5]).Content = loc.GetString("LangGerman");
-            ((ComboBoxItem)TargetLangCombo.Items[6]).Content = loc.GetString("LangSpanish");
+            ((ComboBoxItem)TargetLangCombo.Items[i]).Content =
+                loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
         }
 
         // Placeholders
@@ -271,26 +270,17 @@ public sealed partial class MiniWindow : Window
     private void ApplySettings()
     {
         // Apply target language from settings (using FirstLanguage)
-        var targetLang = _settings.FirstLanguage;
-        var targetIndex = targetLang switch
-        {
-            "en" => 0,
-            "zh" => 1,
-            "ja" => 2,
-            "ko" => 3,
-            "fr" => 4,
-            "de" => 5,
-            "es" => 6,
-            _ => 1
-        };
+        var targetLang = LanguageExtensions.FromCode(_settings.FirstLanguage);
+
         _suppressTargetLanguageSelectionChanged = true;
         try
         {
-            if (targetIndex >= 0 && targetIndex < TargetLangCombo.Items.Count)
+            var targetIndex = LanguageComboHelper.FindLanguageIndex(TargetLangCombo, targetLang);
+            if (targetIndex >= 0)
             {
                 TargetLangCombo.SelectedIndex = targetIndex;
             }
-            _userChangedTargetLanguage = false;
+            _targetLanguageSelector.Reset();
         }
         finally
         {
@@ -725,22 +715,29 @@ public sealed partial class MiniWindow : Window
                 }
             }
 
-            // Detect language
-            var detectedLanguage = await detectionService.DetectAsync(inputText, ct);
-
-            _lastDetectedLanguage = detectedLanguage;
-            UpdateDetectedLanguageDisplay(detectedLanguage);
-
-            // Determine target language
-            TranslationLanguage targetLanguage;
-            if (_settings.AutoSelectTargetLanguage && !_userChangedTargetLanguage)
+            // Detect language (only when source = Auto)
+            var sourceLanguage = GetSourceLanguage();
+            TranslationLanguage detectedLanguage;
+            if (sourceLanguage == TranslationLanguage.Auto)
             {
-                targetLanguage = detectionService.GetTargetLanguage(detectedLanguage);
-                UpdateTargetLanguageSelector(targetLanguage);
+                detectedLanguage = await detectionService.DetectAsync(inputText, ct);
+                UpdateDetectedLanguageDisplay(detectedLanguage);
             }
             else
             {
-                targetLanguage = GetTargetLanguage();
+                detectedLanguage = sourceLanguage;
+                DetectedLangText.Text = "";
+                DetectedLangText.Visibility = Visibility.Collapsed;
+            }
+            _lastDetectedLanguage = detectedLanguage;
+
+            // Determine target language
+            var currentTarget = GetTargetLanguage();
+            var targetLanguage = _targetLanguageSelector.ResolveTargetLanguage(
+                detectedLanguage, currentTarget, detectionService);
+            if (targetLanguage != currentTarget)
+            {
+                UpdateTargetLanguageSelector(targetLanguage);
             }
 
             // Create translation request
@@ -953,19 +950,14 @@ public sealed partial class MiniWindow : Window
         });
     }
 
+    private TranslationLanguage GetSourceLanguage()
+    {
+        return LanguageComboHelper.GetSelectedLanguage(SourceLangCombo);
+    }
+
     private TranslationLanguage GetTargetLanguage()
     {
-        return TargetLangCombo.SelectedIndex switch
-        {
-            0 => TranslationLanguage.English,
-            1 => TranslationLanguage.SimplifiedChinese,
-            2 => TranslationLanguage.Japanese,
-            3 => TranslationLanguage.Korean,
-            4 => TranslationLanguage.French,
-            5 => TranslationLanguage.German,
-            6 => TranslationLanguage.Spanish,
-            _ => TranslationLanguage.SimplifiedChinese
-        };
+        return LanguageComboHelper.GetSelectedLanguage(TargetLangCombo);
     }
 
     private void UpdateDetectedLanguageDisplay(TranslationLanguage detected)
@@ -978,10 +970,12 @@ public sealed partial class MiniWindow : Window
             DetectedLangText.Text = string.Format(
                 LocalizationService.Instance.GetString("DetectedLanguage"),
                 displayName);
+            DetectedLangText.Visibility = Visibility.Visible;
         }
         else
         {
             DetectedLangText.Text = "";
+            DetectedLangText.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -989,24 +983,11 @@ public sealed partial class MiniWindow : Window
     {
         if (!_isLoaded) return;
 
-        var targetIndex = targetLang switch
-        {
-            TranslationLanguage.English => 0,
-            TranslationLanguage.SimplifiedChinese => 1,
-            TranslationLanguage.Japanese => 2,
-            TranslationLanguage.Korean => 3,
-            TranslationLanguage.French => 4,
-            TranslationLanguage.German => 5,
-            TranslationLanguage.Spanish => 6,
-            _ => 1
-        };
-
         _suppressTargetLanguageSelectionChanged = true;
         try
         {
-            _userChangedTargetLanguage = false;
-
-            if (targetIndex >= 0 && targetIndex < TargetLangCombo.Items.Count)
+            var targetIndex = LanguageComboHelper.FindLanguageIndex(TargetLangCombo, targetLang);
+            if (targetIndex >= 0)
             {
                 TargetLangCombo.SelectedIndex = targetIndex;
             }
@@ -1068,12 +1049,83 @@ public sealed partial class MiniWindow : Window
 
     private void OnSwapClicked(object sender, RoutedEventArgs e)
     {
-        if (_lastDetectedLanguage == TranslationLanguage.Auto)
-        {
-            return;
-        }
+        var sourceLanguage = GetSourceLanguage();
 
-        UpdateTargetLanguageSelector(_lastDetectedLanguage);
+        if (sourceLanguage == TranslationLanguage.Auto)
+        {
+            // Source is Auto: swap target to detected language
+            if (_lastDetectedLanguage == TranslationLanguage.Auto)
+                return;
+
+            UpdateTargetLanguageSelector(_lastDetectedLanguage);
+            _targetLanguageSelector.MarkManualSelection();
+        }
+        else
+        {
+            // Source is specific: swap source ↔ target
+            var currentTarget = GetTargetLanguage();
+            var newSource = currentTarget;
+            var newTarget = sourceLanguage;
+
+            _suppressSourceLanguageSelectionChanged = true;
+            try
+            {
+                var srcIdx = LanguageComboHelper.FindLanguageIndex(SourceLangCombo, newSource);
+                if (srcIdx >= 0) SourceLangCombo.SelectedIndex = srcIdx;
+            }
+            finally
+            {
+                _suppressSourceLanguageSelectionChanged = false;
+            }
+
+            RebuildTargetCombo(newSource, newTarget);
+            _targetLanguageSelector.MarkManualSelection();
+
+            if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
+            {
+                _ = StartQueryTrackedAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Handle source language selection change.
+    /// </summary>
+    private void OnSourceLangChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isLoaded || _suppressSourceLanguageSelectionChanged)
+            return;
+
+        var sourceLanguage = GetSourceLanguage();
+        var currentTarget = GetTargetLanguage();
+        RebuildTargetCombo(sourceLanguage, currentTarget);
+
+        if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
+        {
+            _ = StartQueryTrackedAsync();
+        }
+    }
+
+    /// <summary>
+    /// Rebuild target combo excluding the source language.
+    /// </summary>
+    private void RebuildTargetCombo(TranslationLanguage sourceLanguage, TranslationLanguage currentTarget)
+    {
+        var loc = LocalizationService.Instance;
+        _suppressTargetLanguageSelectionChanged = true;
+        try
+        {
+            LanguageComboHelper.RebuildTargetCombo(
+                TargetLangCombo, sourceLanguage, currentTarget, loc, out var newTarget);
+            if (newTarget != currentTarget)
+            {
+                _targetLanguageSelector.MarkManualSelection();
+            }
+        }
+        finally
+        {
+            _suppressTargetLanguageSelectionChanged = false;
+        }
     }
 
     private void OnTargetLangChanged(object sender, SelectionChangedEventArgs e)
@@ -1084,7 +1136,7 @@ public sealed partial class MiniWindow : Window
             return;
         }
 
-        _userChangedTargetLanguage = true;
+        _targetLanguageSelector.MarkManualSelection();
     }
 
     /// <summary>
@@ -1092,7 +1144,7 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     public void SetTextAndTranslate(string text)
     {
-        _userChangedTargetLanguage = false; // Reset for new external input
+        _targetLanguageSelector.Reset();
 
         // Clear all cached results IMMEDIATELY to prevent showing old data
         foreach (var result in _serviceResults)

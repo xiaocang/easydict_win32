@@ -95,6 +95,13 @@ public sealed class FixedWindowService : IDisposable
         if (_fixedWindow == null)
         {
             _fixedWindow = new FixedWindow();
+            var theme = SettingsService.Instance.AppTheme switch
+            {
+                "Light" => ElementTheme.Light,
+                "Dark" => ElementTheme.Dark,
+                _ => ElementTheme.Default
+            };
+            _fixedWindow.ApplyTheme(theme);
         }
     }
 

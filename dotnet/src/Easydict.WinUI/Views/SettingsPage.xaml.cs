@@ -810,7 +810,7 @@ public sealed partial class SettingsPage : Page
             {
                 Glyph = section.IconGlyph,
                 FontSize = 14,
-                Foreground = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"],
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
                 Tag = i
             };
 
@@ -890,9 +890,9 @@ public sealed partial class SettingsPage : Page
                 }
                 else
                 {
-                    // Inactive icon: smaller + tertiary color
+                    // Inactive icon: smaller + secondary color
                     icon.FontSize = 14;
-                    icon.Foreground = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
+                    icon.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
                 }
             }
         }

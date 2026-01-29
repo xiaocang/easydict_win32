@@ -94,6 +94,13 @@ public sealed class MiniWindowService : IDisposable
         if (_miniWindow == null)
         {
             _miniWindow = new MiniWindow();
+            var theme = SettingsService.Instance.AppTheme switch
+            {
+                "Light" => ElementTheme.Light,
+                "Dark" => ElementTheme.Dark,
+                _ => ElementTheme.Default
+            };
+            _miniWindow.ApplyTheme(theme);
         }
     }
 

@@ -614,17 +614,12 @@ public sealed partial class FixedWindow : Window
             UpdateDetectedLanguageDisplay(detectedLanguage);
 
             // Determine target language
-            var autoTarget = _targetLanguageSelector.ResolveTargetLanguage(
-                detectedLanguage, detectionService);
-            TranslationLanguage targetLanguage;
-            if (autoTarget.HasValue)
+            var currentTarget = GetTargetLanguage();
+            var targetLanguage = _targetLanguageSelector.ResolveTargetLanguage(
+                detectedLanguage, currentTarget, detectionService);
+            if (targetLanguage != currentTarget)
             {
-                targetLanguage = autoTarget.Value;
                 UpdateTargetLanguageSelector(targetLanguage);
-            }
-            else
-            {
-                targetLanguage = GetTargetLanguage();
             }
 
             // Create translation request
@@ -969,6 +964,8 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     public void SetTextAndTranslate(string text)
     {
+        _targetLanguageSelector.Reset();
+
         // Clear all cached results IMMEDIATELY to prevent showing old data
         foreach (var result in _serviceResults)
         {

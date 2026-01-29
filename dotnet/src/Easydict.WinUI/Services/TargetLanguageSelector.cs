@@ -11,6 +11,9 @@ namespace Easydict.WinUI.Services;
 /// Once the user manually selects a target language (via combo box or swap),
 /// that selection is preserved until <see cref="Reset"/> is called
 /// (typically on window close/reopen).
+///
+/// In all modes (auto, manual, auto-select-disabled), same-language translation
+/// is prevented by reversing first↔second language when source == target.
 /// </summary>
 public sealed class TargetLanguageSelector
 {
@@ -49,36 +52,51 @@ public sealed class TargetLanguageSelector
 
     /// <summary>
     /// Resolve the target language for a query.
-    /// Returns the auto-selected language when in auto mode, or null when
-    /// the caller should use the current combo box value (manual mode).
+    /// In auto mode, auto-selects the target language via the detection service.
+    /// In manual mode or when auto-select is disabled, uses <paramref name="currentTarget"/>.
+    /// In all modes, prevents same-language translation by reversing first↔second language.
     /// </summary>
     /// <param name="detectedSource">The detected source language.</param>
+    /// <param name="currentTarget">The current target language from the UI combo box.</param>
     /// <param name="detectionService">The language detection service for auto-selection.</param>
-    /// <returns>
-    /// The auto-selected target language, or <c>null</c> if the caller should
-    /// use the current UI selection (manual mode or auto-select disabled).
-    /// </returns>
-    public Language? ResolveTargetLanguage(
+    /// <returns>The resolved target language (never the same as source).</returns>
+    public Language ResolveTargetLanguage(
         Language detectedSource,
+        Language currentTarget,
         LanguageDetectionService detectionService)
     {
         if (detectionService is null)
             throw new ArgumentNullException(nameof(detectionService));
 
-        if (_isManualSelection)
+        Language target;
+
+        if (_isManualSelection || !_settings.AutoSelectTargetLanguage)
         {
-            Debug.WriteLine("[TargetLanguageSelector] Using manual selection");
-            return null;
+            target = currentTarget;
+            Debug.WriteLine($"[TargetLanguageSelector] Using {(_isManualSelection ? "manual" : "settings")} selection: {target}");
+        }
+        else
+        {
+            target = detectionService.GetTargetLanguage(detectedSource);
+            Debug.WriteLine($"[TargetLanguageSelector] Auto-selected: {target}");
         }
 
-        if (!_settings.AutoSelectTargetLanguage)
+        // Prevent same-language translation
+        if (detectedSource != Language.Auto && target == detectedSource)
         {
-            Debug.WriteLine("[TargetLanguageSelector] Auto-select disabled, using current selection");
-            return null;
+            var firstLang = LanguageExtensions.FromCode(_settings.FirstLanguage);
+            var secondLang = LanguageExtensions.FromCode(_settings.SecondLanguage);
+
+            if (detectedSource == firstLang)
+                target = secondLang;
+            else if (detectedSource == secondLang)
+                target = firstLang;
+            else
+                target = firstLang;
+
+            Debug.WriteLine($"[TargetLanguageSelector] Same-language reversal: {detectedSource} -> {target}");
         }
 
-        var target = detectionService.GetTargetLanguage(detectedSource);
-        Debug.WriteLine($"[TargetLanguageSelector] Auto-selected: {target}");
         return target;
     }
 }

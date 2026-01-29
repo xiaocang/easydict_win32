@@ -620,17 +620,12 @@ namespace Easydict.WinUI.Views
                 UpdateDetectedLanguageDisplay(detectedLanguage);
 
                 // Step 2: Determine target language
-                var autoTarget = _targetLanguageSelector.ResolveTargetLanguage(
-                    detectedLanguage, detectionService);
-                TranslationLanguage targetLanguage;
-                if (autoTarget.HasValue)
+                var currentTarget = GetTargetLanguage();
+                var targetLanguage = _targetLanguageSelector.ResolveTargetLanguage(
+                    detectedLanguage, currentTarget, detectionService);
+                if (targetLanguage != currentTarget)
                 {
-                    targetLanguage = autoTarget.Value;
                     UpdateTargetLanguageSelector(targetLanguage);
-                }
-                else
-                {
-                    targetLanguage = GetTargetLanguage();
                 }
 
                 // Step 3: Execute translation for each enabled service in parallel
@@ -1041,6 +1036,7 @@ namespace Easydict.WinUI.Views
         /// </summary>
         public void SetTextAndTranslate(string text)
         {
+            _targetLanguageSelector.Reset();
             InputTextBox.Text = text;
             _ = StartQueryTrackedAsync();
         }

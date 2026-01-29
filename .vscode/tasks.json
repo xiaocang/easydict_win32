@@ -1,0 +1,382 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        // ============================================
+        // Build Tasks
+        // ============================================
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "build",
+                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "-p:WindowsPackageType=None",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary,ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "build-debug",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "build",
+                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "--configuration",
+                "Debug",
+                "-p:WindowsPackageType=None",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary,ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "build-release",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "build",
+                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "--configuration",
+                "Release",
+                "-p:WindowsPackageType=None",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary,ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "clean",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "clean",
+                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "-p:WindowsPackageType=None"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "rebuild",
+            "dependsOn": [
+                "clean",
+                "build"
+            ],
+            "dependsOrder": "sequence",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "build-debug-with-icons",
+            "dependsOn": [
+                "generate-app-icons",
+                "build-debug"
+            ],
+            "dependsOrder": "sequence",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "build-release-with-icons",
+            "dependsOn": [
+                "generate-app-icons",
+                "build-release"
+            ],
+            "dependsOrder": "sequence",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        // ============================================
+        // Test Tasks
+        // ============================================
+        {
+            "label": "test-e2e",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "run",
+                "--project",
+                "${workspaceFolder}/dotnet/e2e/E2E.SidecarClient.csproj"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            }
+        },
+        // ============================================
+        // Run Tasks
+        // ============================================
+        {
+            "label": "run-debug",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "run",
+                "--project",
+                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "--configuration",
+                "Debug",
+                "-p:WindowsPackageType=None"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            }
+        },
+        {
+            "label": "run-release",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "run",
+                "--project",
+                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "--configuration",
+                "Release",
+                "-p:WindowsPackageType=None"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            }
+        },
+        // ============================================
+        // Asset Generation Tasks
+        // ============================================
+        {
+            "label": "generate-assets",
+            "command": "powershell.exe",
+            "type": "shell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/dotnet/scripts/generate-windows-assets.ps1"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            }
+        },
+        {
+            "label": "generate-app-icons",
+            "command": "powershell.exe",
+            "type": "shell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/dotnet/scripts/generate-assets-from-macos-icon.ps1"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            }
+        },
+        {
+            "label": "generate-service-icons",
+            "command": "powershell.exe",
+            "type": "shell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/dotnet/scripts/convert-service-icons.ps1"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            }
+        },
+        {
+            "label": "generate-all-icons",
+            "dependsOn": [
+                "generate-app-icons",
+                "generate-service-icons"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            }
+        },
+        // ============================================
+        // Publish Tasks
+        // ============================================
+        {
+            "label": "publish-x64",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "publish",
+                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "-c",
+                "Release",
+                "-r",
+                "win-x64",
+                "--self-contained",
+                "true",
+                "/p:PublishReadyToRun=true"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "publish-x86",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "publish",
+                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "-c",
+                "Release",
+                "-r",
+                "win-x86",
+                "--self-contained",
+                "true",
+                "/p:PublishReadyToRun=true"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "publish-arm64",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "publish",
+                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "-c",
+                "Release",
+                "-r",
+                "win-arm64",
+                "--self-contained",
+                "true",
+                "/p:PublishReadyToRun=true"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        // ============================================
+        // Restore Tasks
+        // ============================================
+        {
+            "label": "restore",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "restore",
+                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            }
+        },
+        // ============================================
+        // Utility Tasks
+        // ============================================
+        {
+            "label": "open-settings",
+            "command": "explorer",
+            "type": "shell",
+            "args": [
+                "%LocalAppData%\\Easydict"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "never",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "clean-settings",
+            "command": "powershell.exe",
+            "type": "shell",
+            "args": [
+                "-Command",
+                "Remove-Item -Path \"$env:LocalAppData\\Easydict\\settings.json\" -ErrorAction SilentlyContinue; Write-Host 'Settings file deleted'"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "list-assets",
+            "command": "powershell.exe",
+            "type": "shell",
+            "args": [
+                "-Command",
+                "Get-ChildItem -Path \"${workspaceFolder}\\dotnet\\src\\Easydict.WinUI\\Assets\" -Filter *.png | Select-Object Name, Length | Format-Table -AutoSize"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            }
+        }
+    ]
+}

@@ -321,7 +321,7 @@ public class TranslationManagerServiceTests
     }
 
     [Fact]
-    public void ReconfigureProxy_ConcurrentWithAcquireHandle_NoExceptions()
+    public async Task ReconfigureProxy_ConcurrentWithAcquireHandle_NoExceptions()
     {
         var service = TranslationManagerService.Instance;
         var exceptions = new List<Exception>();
@@ -379,7 +379,7 @@ public class TranslationManagerServiceTests
             }));
         }
 
-        Task.WaitAll(tasks.ToArray());
+        await Task.WhenAll(tasks);
 
         exceptions.Should().BeEmpty("concurrent handle acquisition and proxy reconfiguration should not throw");
 

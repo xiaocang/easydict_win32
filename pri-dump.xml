@@ -1,0 +1,4016 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<PriInfo>
+	<ResourceMap name="xiaocang.EasydictforWindows" version="1.0" primary="true">
+		<Qualifiers>
+			<AlternateForm>UNPLATED</AlternateForm>
+			<Language>EN-US,DE-DE,FR-FR,JA-JP,KO-KR,ZH-CN,ZH-TW</Language>
+			<Scale>200,175,150,125,100</Scale>
+			<TargetSize>24</TargetSize>
+		</Qualifiers>
+		<ResourceMapSubtree name="Files">
+			<NamedResource name="App.xbf" uri="ms-resource://xiaocang.EasydictforWindows/Files/App.xbf">
+				<Candidate type="EmbeddedData">
+					<Base64Value>[Embedded Binary Data]</Base64Value>
+				</Candidate>
+			</NamedResource>
+			<ResourceMapSubtree name="Assets">
+				<NamedResource name="LockScreenLogo.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/LockScreenLogo.png">
+					<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+						<Value>Assets\LockScreenLogo.scale-200.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+						<Value>Assets\LockScreenLogo.scale-175.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+						<Value>Assets\LockScreenLogo.scale-150.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+						<Value>Assets\LockScreenLogo.scale-125.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+						<Value>Assets\LockScreenLogo.scale-100.png</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="SplashScreen.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/SplashScreen.png">
+					<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+						<Value>Assets\SplashScreen.scale-200.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+						<Value>Assets\SplashScreen.scale-175.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+						<Value>Assets\SplashScreen.scale-150.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+						<Value>Assets\SplashScreen.scale-125.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+						<Value>Assets\SplashScreen.scale-100.png</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Square150x150Logo.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/Square150x150Logo.png">
+					<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+						<Value>Assets\Square150x150Logo.scale-200.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+						<Value>Assets\Square150x150Logo.scale-175.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+						<Value>Assets\Square150x150Logo.scale-150.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+						<Value>Assets\Square150x150Logo.scale-125.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+						<Value>Assets\Square150x150Logo.scale-100.png</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Square44x44Logo.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/Square44x44Logo.png">
+					<Candidate qualifiers="TargetSize-24, AlternateForm-UNPLATED" type="Path">
+						<Value>Assets\Square44x44Logo.targetsize-24_altform-unplated.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+						<Value>Assets\Square44x44Logo.scale-200.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+						<Value>Assets\Square44x44Logo.scale-175.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+						<Value>Assets\Square44x44Logo.scale-150.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+						<Value>Assets\Square44x44Logo.scale-125.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+						<Value>Assets\Square44x44Logo.scale-100.png</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="StoreLogo.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/StoreLogo.png">
+					<Candidate type="Path">
+						<Value>Assets\StoreLogo.png</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Wide310x150Logo.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/Wide310x150Logo.png">
+					<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+						<Value>Assets\Wide310x150Logo.scale-200.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+						<Value>Assets\Wide310x150Logo.scale-175.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+						<Value>Assets\Wide310x150Logo.scale-150.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+						<Value>Assets\Wide310x150Logo.scale-125.png</Value>
+					</Candidate>
+					<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+						<Value>Assets\Wide310x150Logo.scale-100.png</Value>
+					</Candidate>
+				</NamedResource>
+				<ResourceMapSubtree name="macos">
+					<ResourceMapSubtree name="logo.imageset">
+						<NamedResource name="Contents.json" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/logo.imageset/Contents.json">
+							<Candidate type="Path">
+								<Value>Assets\macos\logo.imageset\Contents.json</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_ns_512x512@2x.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/logo.imageset/icon_ns_512x512@2x.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\logo.imageset\icon_ns_512x512@2x.png</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_ns_512x512@3x.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/logo.imageset/icon_ns_512x512@3x.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\logo.imageset\icon_ns_512x512@3x.png</Value>
+							</Candidate>
+						</NamedResource>
+					</ResourceMapSubtree>
+					<ResourceMapSubtree name="white-black-icon.appiconset">
+						<NamedResource name="Contents.json" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/Contents.json">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\Contents.json</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_128x128.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/icon_128x128.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\icon_128x128.png</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_128x128@2x.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/icon_128x128@2x.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\icon_128x128@2x.png</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_16x16.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/icon_16x16.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\icon_16x16.png</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_16x16@2x.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/icon_16x16@2x.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\icon_16x16@2x.png</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_256x256.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/icon_256x256.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\icon_256x256.png</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_256x256@2x.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/icon_256x256@2x.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\icon_256x256@2x.png</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_32x32.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/icon_32x32.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\icon_32x32.png</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_32x32@2x.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/icon_32x32@2x.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\icon_32x32@2x.png</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_512x512.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/icon_512x512.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\icon_512x512.png</Value>
+							</Candidate>
+						</NamedResource>
+						<NamedResource name="icon_512x512@2x.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/macos/white-black-icon.appiconset/icon_512x512@2x.png">
+							<Candidate type="Path">
+								<Value>Assets\macos\white-black-icon.appiconset\icon_512x512@2x.png</Value>
+							</Candidate>
+						</NamedResource>
+					</ResourceMapSubtree>
+				</ResourceMapSubtree>
+				<ResourceMapSubtree name="ServiceIcons">
+					<NamedResource name="Alibaba.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Alibaba.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Alibaba.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Alibaba.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Alibaba.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Alibaba.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Alibaba.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Apple.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Apple.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Apple.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Apple.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Apple.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Apple.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Apple.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="AppleDictionary.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/AppleDictionary.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\AppleDictionary.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\AppleDictionary.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\AppleDictionary.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\AppleDictionary.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\AppleDictionary.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Baidu.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Baidu.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Baidu.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Baidu.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Baidu.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Baidu.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Baidu.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Bing.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Bing.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Bing.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Bing.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Bing.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Bing.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Bing.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="BuiltInAI.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/BuiltInAI.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\BuiltInAI.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\BuiltInAI.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\BuiltInAI.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\BuiltInAI.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\BuiltInAI.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Caiyun.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Caiyun.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Caiyun.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Caiyun.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Caiyun.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Caiyun.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Caiyun.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="CustomOpenAI.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/CustomOpenAI.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\CustomOpenAI.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\CustomOpenAI.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\CustomOpenAI.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\CustomOpenAI.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\CustomOpenAI.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="DeepL.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/DeepL.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\DeepL.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\DeepL.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\DeepL.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\DeepL.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\DeepL.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="DeepSeek.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/DeepSeek.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\DeepSeek.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\DeepSeek.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\DeepSeek.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\DeepSeek.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\DeepSeek.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Doubao.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Doubao.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Doubao.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Doubao.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Doubao.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Doubao.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Doubao.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Gemini.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Gemini.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Gemini.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Gemini.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Gemini.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Gemini.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Gemini.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="GitHub.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/GitHub.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\GitHub.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\GitHub.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\GitHub.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\GitHub.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\GitHub.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Google.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Google.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Google.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Google.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Google.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Google.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Google.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Groq.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Groq.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Groq.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Groq.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Groq.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Groq.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Groq.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Iciba.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Iciba.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Iciba.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Iciba.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Iciba.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Iciba.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Iciba.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Linguee.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Linguee.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Linguee.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Linguee.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Linguee.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Linguee.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Linguee.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Microsoft.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Microsoft.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Microsoft.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Microsoft.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Microsoft.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Microsoft.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Microsoft.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="NiuTrans.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/NiuTrans.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\NiuTrans.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\NiuTrans.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\NiuTrans.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\NiuTrans.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\NiuTrans.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Ollama.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Ollama.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Ollama.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Ollama.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Ollama.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Ollama.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Ollama.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="OpenAI.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/OpenAI.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\OpenAI.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\OpenAI.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\OpenAI.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\OpenAI.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\OpenAI.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="play.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/play.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\play.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\play.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\play.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\play.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\play.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Polishing.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Polishing.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Polishing.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Polishing.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Polishing.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Polishing.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Polishing.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Summary.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Summary.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Summary.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Summary.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Summary.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Summary.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Summary.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Tencent.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Tencent.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Tencent.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Tencent.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Tencent.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Tencent.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Tencent.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Volcano.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Volcano.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Volcano.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Volcano.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Volcano.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Volcano.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Volcano.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Youdao.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Youdao.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Youdao.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Youdao.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Youdao.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Youdao.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Youdao.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+					<NamedResource name="Zhipu.png" uri="ms-resource://xiaocang.EasydictforWindows/Files/Assets/ServiceIcons/Zhipu.png">
+						<Candidate qualifiers="Scale-200" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Zhipu.scale-200.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-175" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Zhipu.scale-175.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-150" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Zhipu.scale-150.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-125" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Zhipu.scale-125.png</Value>
+						</Candidate>
+						<Candidate qualifiers="Scale-100" isDefault="true" type="Path">
+							<Value>Assets\ServiceIcons\Zhipu.scale-100.png</Value>
+						</Candidate>
+					</NamedResource>
+				</ResourceMapSubtree>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="Themes">
+				<NamedResource name="Colors.xbf" uri="ms-resource://xiaocang.EasydictforWindows/Files/Themes/Colors.xbf">
+					<Candidate type="EmbeddedData">
+						<Base64Value>[Embedded Binary Data]</Base64Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="Views">
+				<NamedResource name="FixedWindow.xbf" uri="ms-resource://xiaocang.EasydictforWindows/Files/Views/FixedWindow.xbf">
+					<Candidate type="EmbeddedData">
+						<Base64Value>[Embedded Binary Data]</Base64Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="MainPage.xbf" uri="ms-resource://xiaocang.EasydictforWindows/Files/Views/MainPage.xbf">
+					<Candidate type="EmbeddedData">
+						<Base64Value>[Embedded Binary Data]</Base64Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="MiniWindow.xbf" uri="ms-resource://xiaocang.EasydictforWindows/Files/Views/MiniWindow.xbf">
+					<Candidate type="EmbeddedData">
+						<Base64Value>[Embedded Binary Data]</Base64Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="SettingsPage.xbf" uri="ms-resource://xiaocang.EasydictforWindows/Files/Views/SettingsPage.xbf">
+					<Candidate type="EmbeddedData">
+						<Base64Value>[Embedded Binary Data]</Base64Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="TestPage.xbf" uri="ms-resource://xiaocang.EasydictforWindows/Files/Views/TestPage.xbf">
+					<Candidate type="EmbeddedData">
+						<Base64Value>[Embedded Binary Data]</Base64Value>
+					</Candidate>
+				</NamedResource>
+				<ResourceMapSubtree name="Controls">
+					<NamedResource name="ServiceResultItem.xbf" uri="ms-resource://xiaocang.EasydictforWindows/Files/Views/Controls/ServiceResultItem.xbf">
+						<Candidate type="EmbeddedData">
+							<Base64Value>[Embedded Binary Data]</Base64Value>
+						</Candidate>
+					</NamedResource>
+				</ResourceMapSubtree>
+			</ResourceMapSubtree>
+		</ResourceMapSubtree>
+		<ResourceMapSubtree name="Resources">
+			<NamedResource name="About" uri="ms-resource://xiaocang.EasydictforWindows/Resources/About">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>關於</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>关于</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>정보</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>このアプリについて</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>À propos</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>About</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Über</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="AlwaysOnTop" uri="ms-resource://xiaocang.EasydictforWindows/Resources/AlwaysOnTop">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>始終置頂</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>始终置顶</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>항상 위</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>常に最前面</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Toujours au premier plan</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Always on top</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Immer im Vordergrund</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ApiKey" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ApiKey">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>API 金鑰</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>API 密钥</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>API 키</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>APIキー</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Clé API</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>API Key</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>API-Schlüssel</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ApiKeyOptional" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ApiKeyOptional">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>API 金鑰（選填）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>API 密钥（可选）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>API 키 (선택사항)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>APIキー（オプション）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Clé API (optionnel)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>API Key (Optional)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>API-Schlüssel (Optional)</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="AppName" uri="ms-resource://xiaocang.EasydictforWindows/Resources/AppName">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>易詞典</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>易词典</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Easydict</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Easydict</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Easydict</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Easydict</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Easydict</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Auto" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Auto">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>自動</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>自动</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>자동</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>自動</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Auto</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Auto</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Automatisch</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="AutoSelectTargetLanguage" uri="ms-resource://xiaocang.EasydictforWindows/Resources/AutoSelectTargetLanguage">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>根據偵測到的來源語言自動選擇目標語言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>根据检测到的源语言自动选择目标语言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>감지된 원본 언어에 따라 대상 언어 자동 선택</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>検出された原文言語に基づいて翻訳先言語を自動選択</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Sélectionner automatiquement la langue cible selon la source détectée</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Automatically select target language based on detected source</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Zielsprache automatisch basierend auf erkannter Quelle auswählen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Back" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Back">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>返回</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>返回</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>뒤로</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>戻る</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Retour</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Back</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Zurück</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="BackToTop" uri="ms-resource://xiaocang.EasydictforWindows/Resources/BackToTop">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>返回頂部</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>返回顶部</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>맨 위로</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>トップへ戻る</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Retour en haut</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Back to top</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Nach oben</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Behavior" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Behavior">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>行為</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>行为</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>동작</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>動作</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Comportement</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Behavior</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Verhalten</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="BuiltInAIDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/BuiltInAIDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>內建 AI 使用 Groq 雲端服務。無需 API 金鑰。您可以輸入自訂模型名稱。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>内置 AI 使用 Groq 云服务。无需 API 密钥。您可以输入自定义模型名称。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>내장 AI는 Groq 클라우드 서비스를 사용합니다. API 키 불필요. 사용자 정의 모델 이름을 입력할 수 있습니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>内蔵AIはGroqクラウドサービスを使用します。APIキー不要。カスタムモデル名を入力できます。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>L'IA intégrée utilise le service cloud Groq. Aucune clé API requise. Vous pouvez saisir un nom de modèle personnalisé.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Built-in AI uses Groq cloud service. No API key required. You can type a custom model name.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Integrierte KI verwendet den Groq-Cloud-Dienst. Kein API-Schlüssel erforderlich. Sie können einen benutzerdefinierten Modellnamen eingeben.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="BypassProxyForLocalhost" uri="ms-resource://xiaocang.EasydictforWindows/Resources/BypassProxyForLocalhost">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>本機位址繞過代理</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>本地地址绕过代理</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>localhost 프록시 우회</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>localhostのプロキシをバイパス</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Contourner le proxy pour localhost</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Bypass proxy for localhost</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Proxy für localhost umgehen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="CaiyunDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/CaiyunDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>從 fanyi.caiyunapp.com 取得您的 API 金鑰</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>从 fanyi.caiyunapp.com 获取您的 API 密钥</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>fanyi.caiyunapp.com에서 API 키를 받으세요</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>fanyi.caiyunapp.comからAPIキーを取得してください</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Obtenez votre clé API sur fanyi.caiyunapp.com</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Get your API key from fanyi.caiyunapp.com</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Holen Sie sich Ihren API-Schlüssel von fanyi.caiyunapp.com</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="CannotConnectToOllama" uri="ms-resource://xiaocang.EasydictforWindows/Resources/CannotConnectToOllama">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>無法連線到 Ollama</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>无法连接到 Ollama</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Ollama에 연결할 수 없습니다</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Ollamaに接続できません</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Impossible de se connecter à Ollama</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Cannot Connect to Ollama</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Verbindung zu Ollama nicht möglich</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="CannotConnectToOllamaMessage" uri="ms-resource://xiaocang.EasydictforWindows/Resources/CannotConnectToOllamaMessage">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>无法从 Ollama 获取模型列表。请确保 Ollama 正在运行并可访问。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Failed to fetch models from Ollama. Make sure Ollama is running and accessible.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Close" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Close">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>关闭</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Close</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Copied" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Copied">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>已複製！</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>已复制！</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>복사됨!</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>コピーしました！</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Copié !</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Copied!</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Kopiert!</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Copy" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Copy">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>複製</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>复制</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>복사</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>コピー</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Copier</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Copy</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Kopieren</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="CopyAll" uri="ms-resource://xiaocang.EasydictforWindows/Resources/CopyAll">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>複製全部</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>复制全部</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>모두 복사</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>すべてコピー</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Tout copier</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Copy All</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Alle kopieren</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="CustomOpenAIDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/CustomOpenAIDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>設定任何與 OpenAI 相容的 API 端點（例如本機 LLM 伺服器、其他 AI 提供商）。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>配置任何与 OpenAI 兼容的 API 端点（例如本地 LLM 服务器、其他 AI 提供商）。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>OpenAI 호환 API 엔드포인트를 구성합니다 (예: 로컬 LLM 서버, 기타 AI 제공업체).</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>OpenAI互換のAPIエンドポイントを設定します（例：ローカルLLMサーバー、他のAIプロバイダー）。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Configurez n'importe quel point de terminaison API compatible OpenAI (ex : serveurs LLM locaux, autres fournisseurs IA).</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Configure any OpenAI-compatible API endpoint (e.g., local LLM servers, other AI providers).</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Konfigurieren Sie jeden OpenAI-kompatiblen API-Endpunkt (z.B. lokale LLM-Server, andere KI-Anbieter).</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="DeepLDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/DeepLDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>留空 API 金鑰可使用免費網頁翻譯。Pro API 金鑰有更高的限額。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>留空 API 密钥可使用免费网页翻译。Pro API 密钥有更高的限额。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>API 키를 비워두면 무료 웹 번역을 사용합니다. Pro API 키로 제한이 늘어납니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>APIキーを空にすると無料ウェブ翻訳を使用します。Pro APIキーで制限が増加します。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Laissez la clé API vide pour utiliser la traduction web gratuite. La clé API Pro offre des limites plus élevées.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Leave API key empty to use free web translation. Pro API key gives higher limits.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Lassen Sie den API-Schlüssel leer, um die kostenlose Web-Übersetzung zu nutzen. Pro-API-Schlüssel bieten höhere Limits.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="DeepLFreeOption" uri="ms-resource://xiaocang.EasydictforWindows/Resources/DeepLFreeOption">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>使用免費 API（網頁翻譯無需 API 金鑰）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>使用免费 API（网页翻译无需 API 密钥）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>무료 API 사용 (웹 번역에 API 키 불필요)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>無料APIを使用（ウェブ翻訳にはAPIキー不要）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Utiliser l'API gratuite (aucune clé API requise pour la traduction web)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Use Free API (no API key required for web translation)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Kostenlose API verwenden (kein API-Schlüssel für Web-Übersetzung erforderlich)</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="DeepSeekDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/DeepSeekDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>從 platform.deepseek.com 取得您的 API 金鑰。您可以輸入自訂模型名稱。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>从 platform.deepseek.com 获取您的 API 密钥。您可以输入自定义模型名称。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>platform.deepseek.com에서 API 키를 받으세요. 사용자 정의 모델 이름을 입력할 수 있습니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>platform.deepseek.comからAPIキーを取得してください。カスタムモデル名を入力できます。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Obtenez votre clé API sur platform.deepseek.com. Vous pouvez saisir un nom de modèle personnalisé.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Get your API key from platform.deepseek.com. You can type a custom model name.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Holen Sie sich Ihren API-Schlüssel von platform.deepseek.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="DetectedLanguage" uri="ms-resource://xiaocang.EasydictforWindows/Resources/DetectedLanguage">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>偵測到：{0}</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>检测到：{0}</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>감지됨: {0}</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>検出：{0}</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Détecté : {0}</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Detected: {0}</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Erkannt: {0}</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="DoubaoDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/DoubaoDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>字節跳動的豆包翻譯服務。從 console.volcengine.com 取得您的 API 金鑰</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>字节跳动的豆包翻译服务。从 console.volcengine.com 获取您的 API 密钥</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>ByteDance의 豆包 번역 서비스. console.volcengine.com에서 API 키를 받으세요</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>ByteDanceの豆包翻訳サービス。console.volcengine.comからAPIキーを取得してください</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Service de traduction Doubao de ByteDance. Obtenez votre clé API sur console.volcengine.com</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>ByteDance's Doubao translation service. Get your API key from console.volcengine.com</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>ByteDances Doubao-Übersetzungsdienst. Holen Sie sich Ihren API-Schlüssel von console.volcengine.com</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="EasydictForMacOS" uri="ms-resource://xiaocang.EasydictforWindows/Resources/EasydictForMacOS">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>Easydict macOS 版</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>Easydict macOS 版</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>macOS용 Easydict</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Easydict for macOS</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Easydict pour macOS</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Easydict for macOS</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Easydict für macOS</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="EasydictForWindows" uri="ms-resource://xiaocang.EasydictforWindows/Resources/EasydictForWindows">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>Easydict Windows 版</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>Easydict Windows 版</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Windows용 Easydict</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Easydict for Windows</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Easydict pour Windows</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Easydict for Windows</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Easydict für Windows</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="EnabledServices" uri="ms-resource://xiaocang.EasydictforWindows/Resources/EnabledServices">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>已啟用的服務</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>已启用的服务</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>활성화된 서비스</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>有効なサービス</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Services activés</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Enabled Services</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Aktivierte Dienste</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="EnabledServicesDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/EnabledServicesDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>選擇在每個視窗中顯示哪些翻譯服務。多個服務將並行運行。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>选择在每个窗口中显示哪些翻译服务。多个服务将并行运行。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>각 창에 표시할 번역 서비스를 선택하세요. 여러 서비스가 병렬로 실행됩니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>各ウィンドウに表示する翻訳サービスを選択します。複数のサービスは並行して実行されます。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Sélectionnez les services de traduction à afficher dans chaque fenêtre. Plusieurs services s'exécuteront en parallèle.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Select which translation services to display in each window. Multiple services will run in parallel.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Wählen Sie aus, welche Übersetzungsdienste in jedem Fenster angezeigt werden. Mehrere Dienste werden parallel ausgeführt.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Endpoint" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Endpoint">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>端點</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>端点</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>엔드포인트</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>エンドポイント</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Point de terminaison</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Endpoint</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Endpunkt</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="EndpointOptional" uri="ms-resource://xiaocang.EasydictforWindows/Resources/EndpointOptional">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>端點（選填）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>端点（可选）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>엔드포인트 (선택사항)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>エンドポイント（オプション）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Point de terminaison (optionnel)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Endpoint (Optional)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Endpunkt (Optional)</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="EndpointRequired" uri="ms-resource://xiaocang.EasydictforWindows/Resources/EndpointRequired">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>端點（必填）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>端点（必填）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>엔드포인트 (필수)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>エンドポイント（必須）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Point de terminaison (requis)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Endpoint (Required)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Endpunkt (Erforderlich)</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="FirstLanguage" uri="ms-resource://xiaocang.EasydictforWindows/Resources/FirstLanguage">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>第一語言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>第一语言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>제1 언어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>第一言語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Première langue</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>First Language</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Erste Sprache</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="FixedTranslate" uri="ms-resource://xiaocang.EasydictforWindows/Resources/FixedTranslate">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>固定翻译</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Fixed Translate</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="FixedWindow" uri="ms-resource://xiaocang.EasydictforWindows/Resources/FixedWindow">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>固定視窗</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>固定窗口</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>고정 창</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>固定ウィンドウ</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Fenêtre fixe</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Fixed Window</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Fixiertes Fenster</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="FreeServicesDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/FreeServicesDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>Google 翻譯和 Linguee 詞典無需 API 金鑰即可使用。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>Google 翻译和 Linguee 词典无需 API 密钥即可使用。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Google 번역과 Linguee 사전은 API 키 없이 바로 사용할 수 있습니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Google翻訳とLinguee辞書はAPIキーなしで使用できます。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Google Traduction et le dictionnaire Linguee fonctionnent sans clé API.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Google Translate and Linguee Dictionary work out of the box without API keys.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Google Translate und Linguee Dictionary funktionieren sofort ohne API-Schlüssel.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="FreeServicesTitle" uri="ms-resource://xiaocang.EasydictforWindows/Resources/FreeServicesTitle">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>免費服務（無需設定）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>免费服务（无需配置）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>무료 서비스 (구성 불필요)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>無料サービス（設定不要）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Services gratuits (aucune configuration requise)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Free Services (No Configuration Required)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Kostenlose Dienste (Keine Konfiguration erforderlich)</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="GeminiDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/GeminiDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>從 aistudio.google.com 取得您的 API 金鑰。您可以輸入自訂模型名稱。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>从 aistudio.google.com 获取您的 API 密钥。您可以输入自定义模型名称。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>aistudio.google.com에서 API 키를 받으세요. 사용자 정의 모델 이름을 입력할 수 있습니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>aistudio.google.comからAPIキーを取得してください。カスタムモデル名を入力できます。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Obtenez votre clé API sur aistudio.google.com. Vous pouvez saisir un nom de modèle personnalisé.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Get your API key from aistudio.google.com. You can type a custom model name.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Holen Sie sich Ihren API-Schlüssel von aistudio.google.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="GitHubModelsDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/GitHubModelsDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>使用您的 GitHub 個人存取權杖。從 github.com/settings/tokens 取得。您可以輸入自訂模型名稱。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>使用您的 GitHub 个人访问令牌。从 github.com/settings/tokens 获取。您可以输入自定义模型名称。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>GitHub 개인 액세스 토큰을 사용하세요. github.com/settings/tokens에서 받으세요. 사용자 정의 모델 이름을 입력할 수 있습니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>GitHubの個人アクセストークンを使用します。github.com/settings/tokensから取得してください。カスタムモデル名を入力できます。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Utilisez votre jeton d'accès personnel GitHub. Obtenez-le sur github.com/settings/tokens. Vous pouvez saisir un nom de modèle personnalisé.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Use your GitHub personal access token. Get one from github.com/settings/tokens. You can type a custom model name.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Verwenden Sie Ihr GitHub-Personal-Access-Token. Erstellen Sie eines unter github.com/settings/tokens. Sie können einen benutzerdefinierten Modellnamen eingeben.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="GitHubRepository" uri="ms-resource://xiaocang.EasydictforWindows/Resources/GitHubRepository">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>GitHub 儲存庫</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>GitHub 仓库</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>GitHub 저장소</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>GitHubリポジトリ</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Dépôt GitHub</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>GitHub Repository</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>GitHub-Repository</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="GroqDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/GroqDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>Groq 提供快速推論。從 console.groq.com 取得您的 API 金鑰。您可以輸入自訂模型名稱。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>Groq 提供快速推理。从 console.groq.com 获取您的 API 密钥。您可以输入自定义模型名称。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Groq는 빠른 추론을 제공합니다. console.groq.com에서 API 키를 받으세요. 사용자 정의 모델 이름을 입력할 수 있습니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Groqは高速推論を提供します。console.groq.comからAPIキーを取得してください。カスタムモデル名を入力できます。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Groq offre une inférence rapide. Obtenez votre clé API sur console.groq.com. Vous pouvez saisir un nom de modèle personnalisé.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Groq provides fast inference. Get your API key from console.groq.com. You can type a custom model name.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Groq bietet schnelle Inferenz. Holen Sie sich Ihren API-Schlüssel von console.groq.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="HideWindow" uri="ms-resource://xiaocang.EasydictforWindows/Resources/HideWindow">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>隐藏 (Ctrl+Alt+F 再次显示)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Hide (Ctrl+Alt+F to show again)</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Hotkeys" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Hotkeys">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>快速鍵</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>快捷键</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>단축키</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>ホットキー</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Raccourcis clavier</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Hotkeys</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Tastenkürzel</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="HotkeysDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/HotkeysDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>注意：重新啟動應用程式以套用快速鍵變更。切換快速鍵使用相同的鍵加 Shift（例如 Ctrl+Alt+Shift+M）。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>注意：重启应用以应用快捷键更改。切换快捷键使用相同的键加 Shift（例如 Ctrl+Alt+Shift+M）。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>참고: 단축키 변경을 적용하려면 앱을 다시 시작하세요. 토글 단축키는 같은 키에 Shift를 추가합니다 (예: Ctrl+Alt+Shift+M).</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>注意：ホットキーの変更を適用するにはアプリを再起動してください。切り替えホットキーは同じキーにShiftを追加します（例：Ctrl+Alt+Shift+M）。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Note : Redémarrez l'application pour appliquer les changements de raccourcis. Les raccourcis de bascule utilisent la même touche avec Shift ajouté (ex : Ctrl+Alt+Shift+M).</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M).</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Hinweis: Starten Sie die App neu, um Tastenkürzel-Änderungen anzuwenden. Umschalt-Tastenkürzel verwenden dieselbe Taste mit zusätzlicher Umschalttaste (z.B. Strg+Alt+Umschalt+M).</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="HttpProxy" uri="ms-resource://xiaocang.EasydictforWindows/Resources/HttpProxy">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>HTTP 代理</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>HTTP 代理</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>HTTP 프록시</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>HTTPプロキシ</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Proxy HTTP</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>HTTP Proxy</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>HTTP-Proxy</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="InputPlaceholder" uri="ms-resource://xiaocang.EasydictforWindows/Resources/InputPlaceholder">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>輸入或貼上要翻譯的文字...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>输入或粘贴要翻译的文本...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>번역할 텍스트를 입력하거나 붙여넣기...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>翻訳するテキストを入力または貼り付け...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Entrez ou collez le texte à traduire...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Enter or paste text to translate...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Text zum Übersetzen eingeben oder einfügen...</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="InsertReplace" uri="ms-resource://xiaocang.EasydictforWindows/Resources/InsertReplace">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>插入/替換</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>插入/替换</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>삽입/교체</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>挿入/置換</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Insérer/Remplacer</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Insert/Replace</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Einfügen/Ersetzen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="InspiredBy" uri="ms-resource://xiaocang.EasydictforWindows/Resources/InspiredBy">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>靈感來自</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>灵感来自</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>영감을 받은 곳</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>インスピレーション元</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Inspiré par</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Inspired by</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Inspiriert von</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="InvalidLanguageSelection" uri="ms-resource://xiaocang.EasydictforWindows/Resources/InvalidLanguageSelection">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>無效的語言選擇</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>无效的语言选择</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>잘못된 언어 선택</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>無効な言語選択</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Sélection de langue invalide</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Invalid Language Selection</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Ungültige Sprachauswahl</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="InvalidLanguageSelectionMessage" uri="ms-resource://xiaocang.EasydictforWindows/Resources/InvalidLanguageSelectionMessage">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>第一语言和第二语言不能相同。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>First Language and Second Language cannot be the same.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="InvalidProxyUrl" uri="ms-resource://xiaocang.EasydictforWindows/Resources/InvalidProxyUrl">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>無效的代理位址</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>无效的代理地址</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>잘못된 프록시 URL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>無効なプロキシURL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>URL de proxy invalide</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Invalid Proxy URL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Ungültige Proxy-URL</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="InvalidProxyUrlMessage" uri="ms-resource://xiaocang.EasydictforWindows/Resources/InvalidProxyUrlMessage">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>代理地址无效。请输入有效的地址（例如 http://127.0.0.1:7890）。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>The proxy URL is not valid. Please enter a valid URL (e.g., http://127.0.0.1:7890).</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LangAutoDetect" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LangAutoDetect">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>自動偵測</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>自动检测</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>자동 감지</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>自動検出</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Détection automatique</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Auto Detect</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Automatisch erkennen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LangChinese" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LangChinese">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>中文</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>中文</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>중국어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>中国語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Chinois</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Chinese</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Chinesisch</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LangChineseSimplified" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LangChineseSimplified">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>簡體中文</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>简体中文</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>중국어(간체)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>中国語（簡体字）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Chinois (simplifié)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Chinese (Simplified)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Chinesisch (Vereinfacht)</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LangEnglish" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LangEnglish">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>英語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>英语</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>영어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>英語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Anglais</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>English</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Englisch</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LangFrench" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LangFrench">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>法語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>法语</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>프랑스어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>フランス語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Français</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>French</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Französisch</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LangGerman" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LangGerman">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>德語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>德语</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>독일어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>ドイツ語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Allemand</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>German</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Deutsch</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LangJapanese" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LangJapanese">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>日語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>日语</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>일본어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>日本語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Japonais</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Japanese</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Japanisch</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LangKorean" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LangKorean">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>韓語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>韩语</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>한국어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>韓国語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Coréen</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Korean</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Koreanisch</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LangSpanish" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LangSpanish">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>西班牙語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>西班牙语</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>스페인어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>スペイン語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Espagnol</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Spanish</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Spanisch</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LanguagePreferences" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LanguagePreferences">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>語言偏好</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>语言偏好</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>언어 기본 설정</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>言語設定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Préférences linguistiques</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Language Preferences</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Spracheinstellungen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LanguagePreferencesDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LanguagePreferencesDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>當偵測到的語言與您的第一語言匹配時，翻譯目標將是您的第二語言，反之亦然。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>当检测到的语言与您的第一语言匹配时，翻译目标将是您的第二语言，反之亦然。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>감지된 언어가 제1 언어와 일치하면 번역 대상은 제2 언어가 됩니다. 그 반대도 마찬가지입니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>検出された言語が第一言語と一致する場合、翻訳先は第二言語になります。逆も同様です。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Lorsque la langue détectée correspond à votre première langue, la cible de traduction sera votre deuxième langue, et vice versa.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>When detected language matches your First Language, translation target will be your Second Language, and vice versa.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Wenn die erkannte Sprache Ihrer Ersten Sprache entspricht, wird die Übersetzung in Ihre Zweite Sprache erfolgen und umgekehrt.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="LaunchAtStartup" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LaunchAtStartup">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>開機自動啟動</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>开机自启动</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Windows 시작 시 실행</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Windows起動時に起動</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Lancer au démarrage de Windows</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Launch at Windows startup</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Bei Windows-Start ausführen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="License" uri="ms-resource://xiaocang.EasydictforWindows/Resources/License">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>授權條款：GPL-3.0</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>许可证：GPL-3.0</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>라이선스: GPL-3.0</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>ライセンス：GPL-3.0</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Licence : GPL-3.0</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>License: GPL-3.0</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Lizenz: GPL-3.0</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="MainWindow" uri="ms-resource://xiaocang.EasydictforWindows/Resources/MainWindow">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>主視窗</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>主窗口</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>메인 창</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>メインウィンドウ</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Fenêtre principale</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Main Window</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Hauptfenster</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Manual" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Manual">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>手動</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>手动</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>수동</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>手動</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Manuel</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Manual</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Manuell</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="MinimizeToTray" uri="ms-resource://xiaocang.EasydictforWindows/Resources/MinimizeToTray">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>最小化到系統匣</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>最小化到系统托盘</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>시스템 트레이로 최소화</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>システムトレイに最小化</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Réduire dans la barre des tâches</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Minimize to system tray</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>In Taskleiste minimieren</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="MiniWindow" uri="ms-resource://xiaocang.EasydictforWindows/Resources/MiniWindow">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>迷你視窗</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>迷你窗口</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>미니 창</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>ミニウィンドウ</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Mini fenêtre</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Mini Window</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Mini-Fenster</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Model" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Model">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>模型</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>模型</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>모델</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>モデル</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Modèle</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Model</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Modell</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="MonitorClipboard" uri="ms-resource://xiaocang.EasydictforWindows/Resources/MonitorClipboard">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>監控剪貼簿文字</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>监控剪贴板文本</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>클립보드 텍스트 모니터링</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>クリップボードのテキストを監視</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Surveiller le presse-papiers</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Monitor clipboard for text</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Zwischenablage auf Text überwachen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="NiuTransDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/NiuTransDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>小牛翻譯支援 450+ 種語言對。從 niutrans.com 取得您的 API 金鑰</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>小牛翻译支持 450+ 种语言对。从 niutrans.com 获取您的 API 密钥</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>NiuTrans는 450개 이상의 언어 쌍을 지원합니다. niutrans.com에서 API 키를 받으세요</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>NiuTransは450以上の言語ペアをサポート。niutrans.comからAPIキーを取得してください</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>NiuTrans prend en charge plus de 450 paires de langues. Obtenez votre clé API sur niutrans.com</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>NiuTrans supports 450+ language pairs. Get your API key from niutrans.com</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>NiuTrans unterstützt über 450 Sprachpaare. Holen Sie sich Ihren API-Schlüssel von niutrans.com</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="NoServicesEnabled" uri="ms-resource://xiaocang.EasydictforWindows/Resources/NoServicesEnabled">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>未启用任何服务。请前往设置启用服务。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>No services enabled. Go to Settings to enable services.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="OK" uri="ms-resource://xiaocang.EasydictforWindows/Resources/OK">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>确定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>OK</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="OllamaDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/OllamaDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>Ollama 必須在本機運行。點擊重新整理以載入可用模型。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>Ollama 必须在本地运行。点击刷新以加载可用模型。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Ollama가 로컬에서 실행 중이어야 합니다. 새로고침을 클릭하여 사용 가능한 모델을 로드하세요.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Ollamaはローカルで実行している必要があります。更新をクリックして利用可能なモデルを読み込みます。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Ollama doit être en cours d'exécution localement. Cliquez sur Actualiser pour charger les modèles disponibles.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Ollama must be running locally. Click Refresh to load available models.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Ollama muss lokal ausgeführt werden. Klicken Sie auf Aktualisieren, um verfügbare Modelle zu laden.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="OpenAIDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/OpenAIDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>您可以直接輸入自訂模型名稱。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>您可以直接输入自定义模型名称。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>사용자 정의 모델 이름을 직접 입력할 수 있습니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>カスタムモデル名を直接入力できます。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Vous pouvez saisir directement un nom de modèle personnalisé.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>You can type a custom model name directly.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Sie können einen benutzerdefinierten Modellnamen direkt eingeben.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="PinWindowTooltip" uri="ms-resource://xiaocang.EasydictforWindows/Resources/PinWindowTooltip">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>固定窗口（保持置顶）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Pin window (stay on top)</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ProxyDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ProxyDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>代理變更在應用程式重新啟動後生效。本機繞過確保 Ollama 無需代理即可運作。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>代理更改在应用重启后生效。本地绕过确保 Ollama 无需代理即可工作。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>프록시 변경은 앱 재시작 후 적용됩니다. localhost 우회로 Ollama가 프록시 없이 작동합니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>プロキシの変更はアプリ再起動後に有効になります。localhostバイパスでOllamaがプロキシなしで動作します。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Les modifications du proxy prennent effet après le redémarrage de l'application. Le contournement localhost assure le fonctionnement d'Ollama sans proxy.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Proxy changes take effect after app restart. Localhost bypass ensures Ollama works without proxy.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Proxy-Änderungen werden nach Neustart der App wirksam. Localhost-Umgehung stellt sicher, dass Ollama ohne Proxy funktioniert.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ProxyUrl" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ProxyUrl">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>代理位址</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>代理地址</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>프록시 URL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>プロキシURL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>URL du proxy</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Proxy URL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Proxy-URL</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="QuickTranslate" uri="ms-resource://xiaocang.EasydictforWindows/Resources/QuickTranslate">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>快速翻译</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Quick Translate</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Refresh" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Refresh">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>重新整理</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>刷新</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>새로고침</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>更新</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Actualiser</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Refresh</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Aktualisieren</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="RestartRequired" uri="ms-resource://xiaocang.EasydictforWindows/Resources/RestartRequired">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>需要重新啟動</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>需要重启</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>재시작 필요</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>再起動が必要</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Redémarrage requis</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Restart Required</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Neustart erforderlich</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="RestartRequiredMessage" uri="ms-resource://xiaocang.EasydictforWindows/Resources/RestartRequiredMessage">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>請重新啟動應用程式以使語言更改生效。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>请重启应用程序以使语言更改生效。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>언어 변경을 적용하려면 애플리케이션을 다시 시작하세요.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>言語変更を有効にするには、アプリケーションを再起動してください。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Veuillez redémarrer l'application pour que le changement de langue prenne effet.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Please restart the application for the language change to take effect.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Bitte starten Sie die Anwendung neu, damit die Sprachänderung wirksam wird.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="SaveSettings" uri="ms-resource://xiaocang.EasydictforWindows/Resources/SaveSettings">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>儲存設定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>保存设置</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>설정 저장</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>設定を保存</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Enregistrer les paramètres</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Save Settings</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Einstellungen speichern</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="SecondLanguage" uri="ms-resource://xiaocang.EasydictforWindows/Resources/SecondLanguage">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>第二語言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>第二语言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>제2 언어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>第二言語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Deuxième langue</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Second Language</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Zweite Sprache</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceBuiltIn" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceBuiltIn">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>內建 AI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>内置 AI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>내장 AI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>内蔵AI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>IA intégrée</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Built-in AI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Integrierte KI</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceCaiyun" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceCaiyun">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>彩雲小譯</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>彩云小译</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>彩云小译</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>彩雲小訳</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Caiyun</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Caiyun</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Caiyun</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceConfiguration" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceConfiguration">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>服務設定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>服务配置</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>서비스 구성</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>サービス設定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Configuration des services</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Service Configuration</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Dienstkonfiguration</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceConfigurationDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceConfigurationDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>為每個翻譯服務設定 API 金鑰、端點和模型。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>为每个翻译服务配置 API 密钥、端点和模型。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>각 번역 서비스에 대한 API 키, 엔드포인트 및 모델을 구성합니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>各翻訳サービスのAPIキー、エンドポイント、モデルを設定します。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Configurez les clés API, les points de terminaison et les modèles pour chaque service de traduction.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Configure API keys, endpoints, and models for each translation service.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Konfigurieren Sie API-Schlüssel, Endpunkte und Modelle für jeden Übersetzungsdienst.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceCustomOpenAI" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceCustomOpenAI">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>自訂 OpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>自定义 OpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>사용자 정의 OpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>カスタムOpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>OpenAI personnalisé</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Custom OpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Benutzerdefiniertes OpenAI</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceDeepL" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceDeepL">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>DeepL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>DeepL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>DeepL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>DeepL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>DeepL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>DeepL</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>DeepL</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceDeepSeek" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceDeepSeek">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>DeepSeek</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>DeepSeek</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>DeepSeek</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>DeepSeek</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>DeepSeek</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>DeepSeek</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>DeepSeek</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceDoubao" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceDoubao">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>豆包</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>豆包</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>豆包</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>豆包</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Doubao</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Doubao</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Doubao</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceGemini" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceGemini">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>Gemini</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>Gemini</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Gemini</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Gemini</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Gemini</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Gemini</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Gemini</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceGitHubModels" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceGitHubModels">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>GitHub Models</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>GitHub Models</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>GitHub Models</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>GitHub Models</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>GitHub Models</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>GitHub Models</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>GitHub Models</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceGoogle" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceGoogle">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>Google 翻譯</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>Google 翻译</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Google 번역</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Google翻訳</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Google Traduction</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Google Translate</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Google Translate</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceGroq" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceGroq">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>Groq</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>Groq</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Groq</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Groq</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Groq</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Groq</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Groq</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceLinguee" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceLinguee">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>Linguee 詞典</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>Linguee 词典</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Linguee 사전</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Linguee辞書</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Dictionnaire Linguee</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Linguee Dictionary</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Linguee Wörterbuch</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceNiuTrans" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceNiuTrans">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>小牛翻譯</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>小牛翻译</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>NiuTrans</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>NiuTrans</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>NiuTrans</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>NiuTrans</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>NiuTrans</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceNotInitialized" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceNotInitialized">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>服務未初始化</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>服务未初始化</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>서비스가 초기화되지 않았습니다</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>サービスが初期化されていません</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Service non initialisé</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Service not initialized</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Dienst nicht initialisiert</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceOllama" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceOllama">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>Ollama（本機）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>Ollama（本地）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>Ollama (로컬)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>Ollama（ローカル）</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Ollama (local)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Ollama (Local)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Ollama (Lokal)</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceOpenAI" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceOpenAI">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>OpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>OpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>OpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>OpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>OpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>OpenAI</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>OpenAI</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceResultsComplete" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceResultsComplete">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>{0} 个服务已完成</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>{0} service(s) completed</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ServiceZhipu" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ServiceZhipu">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>智譜</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>智谱</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>智谱</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>智譜</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Zhipu</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Zhipu</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Zhipu</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="Settings" uri="ms-resource://xiaocang.EasydictforWindows/Resources/Settings">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>設定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>设置</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>설정</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>設定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Paramètres</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Settings</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Einstellungen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="SettingsSaved" uri="ms-resource://xiaocang.EasydictforWindows/Resources/SettingsSaved">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>設定已儲存</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>设置已保存</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>설정이 저장되었습니다</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>設定を保存しました</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Paramètres enregistrés</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Settings Saved</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Einstellungen gespeichert</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="SettingsSavedMessage" uri="ms-resource://xiaocang.EasydictforWindows/Resources/SettingsSavedMessage">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>您的设置已成功保存。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Your settings have been saved successfully.</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="SettingsTooltip" uri="ms-resource://xiaocang.EasydictforWindows/Resources/SettingsTooltip">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>設定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>设置</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>설정</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>設定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Paramètres</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Settings</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Einstellungen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ShowFixedWindow" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ShowFixedWindow">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>顯示固定視窗</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>显示固定窗口</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>고정 창 표시</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>固定ウィンドウを表示</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Afficher la fenêtre fixe</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Show Fixed Window</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Fixiertes Fenster anzeigen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ShowMiniWindow" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ShowMiniWindow">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>顯示迷你視窗</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>显示迷你窗口</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>미니 창 표시</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>ミニウィンドウを表示</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Afficher la mini fenêtre</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Show Mini Window</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Mini-Fenster anzeigen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ShowWindow" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ShowWindow">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>顯示視窗</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>显示窗口</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>창 표시</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>ウィンドウを表示</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Afficher la fenêtre</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Show Window</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Fenster anzeigen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="SourceLanguageTooltip" uri="ms-resource://xiaocang.EasydictforWindows/Resources/SourceLanguageTooltip">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>來源語言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>源语言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>원본 언어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>原文言語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Langue source</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Source Language</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Quellsprache</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="SourceText" uri="ms-resource://xiaocang.EasydictforWindows/Resources/SourceText">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>原文</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>原文</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>원문</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>原文</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Texte source</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Source Text</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Quelltext</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="StatusConnected" uri="ms-resource://xiaocang.EasydictforWindows/Resources/StatusConnected">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>已連線</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>已连接</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>연결됨</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>接続済み</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Connecté</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Connected</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Verbunden</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="StatusDisconnected" uri="ms-resource://xiaocang.EasydictforWindows/Resources/StatusDisconnected">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>未連線</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>未连接</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>연결 끊김</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>切断</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Déconnecté</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Disconnected</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Getrennt</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="StatusError" uri="ms-resource://xiaocang.EasydictforWindows/Resources/StatusError">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>錯誤</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>错误</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>오류</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>エラー</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Erreur</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Error</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Fehler</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="StatusInitializing" uri="ms-resource://xiaocang.EasydictforWindows/Resources/StatusInitializing">
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>初始化中...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Initializing...</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="StatusReady" uri="ms-resource://xiaocang.EasydictforWindows/Resources/StatusReady">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>就緒</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>就绪</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>준비됨</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>準備完了</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Prêt</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Ready</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Bereit</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="StatusTranslating" uri="ms-resource://xiaocang.EasydictforWindows/Resources/StatusTranslating">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>翻譯中...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>翻译中...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>번역 중...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>翻訳中...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Traduction en cours...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Translating...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Übersetze...</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="SwapLanguagesTooltip" uri="ms-resource://xiaocang.EasydictforWindows/Resources/SwapLanguagesTooltip">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>交換來源語言和目標語言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>交换源语言和目标语言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>원본 언어와 대상 언어 바꾸기</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>原文言語と翻訳先言語を入れ替える</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Échanger les langues source et cible</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Swap source and target languages</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Quell- und Zielsprache tauschen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TargetLanguageTooltip" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TargetLanguageTooltip">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>目標語言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>目标语言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>대상 언어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>翻訳先言語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Langue cible</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Target Language</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Zielsprache</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TranslateSelection" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TranslateSelection">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>翻譯選取文字</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>翻译选中文本</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>선택 번역</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>選択テキストを翻訳</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Traduire la sélection</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Translate Selection</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Auswahl übersetzen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TranslateTooltip" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TranslateTooltip">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>翻譯</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>翻译</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>번역</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>翻訳</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Traduire</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Translate</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Übersetzen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TranslationFailed" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TranslationFailed">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>翻譯失敗</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>翻译失败</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>번역 실패</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>翻訳に失敗しました</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Échec de la traduction</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Translation failed</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Übersetzung fehlgeschlagen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TranslationPlaceholder" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TranslationPlaceholder">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>翻譯結果將在這裡顯示...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>翻译结果将在这里显示...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>번역 결과가 여기에 표시됩니다...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>翻訳結果がここに表示されます...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>La traduction apparaîtra ici...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Translation will appear here...</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Übersetzung erscheint hier...</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TranslationResults" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TranslationResults">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>翻譯結果</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>翻译结果</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>번역 결과</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>翻訳結果</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Résultats de traduction</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Translation Results</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Übersetzungsergebnisse</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TranslationService" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TranslationService">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>翻譯服務</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>翻译服务</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>번역 서비스</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>翻訳サービス</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Service de traduction</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Translation Service</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Übersetzungsdienst</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TrayExit" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TrayExit">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>結束</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>退出</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>종료</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>終了</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Quitter</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Exit</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Beenden</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TraySettings" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TraySettings">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>設定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>设置</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>설정</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>設定</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Paramètres</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Settings</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Einstellungen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TrayShow" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TrayShow">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>顯示</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>显示</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>표시</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>表示</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Afficher</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Show</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Anzeigen</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TrayShowFixed" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TrayShowFixed">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>固定視窗</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>固定窗口</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>고정 창</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>固定ウィンドウ</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Fenêtre fixe</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Fixed Window</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Fixiertes Fenster</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="TrayShowMini" uri="ms-resource://xiaocang.EasydictforWindows/Resources/TrayShowMini">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>迷你視窗</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>迷你窗口</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>미니 창</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>ミニウィンドウ</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Mini fenêtre</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Mini Window</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Mini-Fenster</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="UILangChineseSimplified" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILangChineseSimplified">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>簡體中文</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>简体中文</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>중국어(간체)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>簡体字中国語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Chinois (simplifié)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Chinese (Simplified)</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Chinesisch (Vereinfacht)</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="UILangEnglish" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILangEnglish">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>英語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>英语</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>영어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>英語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Anglais</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>English</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Englisch</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="UILanguage" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILanguage">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>介面語言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>界面语言</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>UI 언어</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>UI言語</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Langue de l'interface</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>UI Language</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Oberflächensprache</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="UseHttpProxy" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UseHttpProxy">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>使用 HTTP 代理</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>使用 HTTP 代理</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>HTTP 프록시 사용</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>HTTPプロキシを使用</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Utiliser un proxy HTTP</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Use HTTP Proxy</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>HTTP-Proxy verwenden</Value>
+				</Candidate>
+			</NamedResource>
+			<NamedResource name="ZhipuDescription" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ZhipuDescription">
+				<Candidate qualifiers="Language-ZH-TW" type="String">
+					<Value>從 open.bigmodel.cn 取得您的 API 金鑰。您可以輸入自訂模型名稱。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-ZH-CN" type="String">
+					<Value>从 open.bigmodel.cn 获取您的 API 密钥。您可以输入自定义模型名称。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-KO-KR" type="String">
+					<Value>open.bigmodel.cn에서 API 키를 받으세요. 사용자 정의 모델 이름을 입력할 수 있습니다.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-JA-JP" type="String">
+					<Value>open.bigmodel.cnからAPIキーを取得してください。カスタムモデル名を入力できます。</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-FR-FR" type="String">
+					<Value>Obtenez votre clé API sur open.bigmodel.cn. Vous pouvez saisir un nom de modèle personnalisé.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+					<Value>Get your API key from open.bigmodel.cn. You can type a custom model name.</Value>
+				</Candidate>
+				<Candidate qualifiers="Language-DE-DE" type="String">
+					<Value>Holen Sie sich Ihren API-Schlüssel von open.bigmodel.cn. Sie können einen benutzerdefinierten Modellnamen eingeben.</Value>
+				</Candidate>
+			</NamedResource>
+			<ResourceMapSubtree name="AlwaysOnTopToggle">
+				<NamedResource name="Header" uri="ms-resource://xiaocang.EasydictforWindows/Resources/AlwaysOnTopToggle/Header">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>始終置頂</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>始终置顶</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>항상 위</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>常に最前面</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>Toujours au premier plan</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>Always on top</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>Immer im Vordergrund</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="BehaviorHeader">
+				<NamedResource name="Text" uri="ms-resource://xiaocang.EasydictforWindows/Resources/BehaviorHeader/Text">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>行為</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>行为</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>동작</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>動作</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>Comportement</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>Behavior</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>Verhalten</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="ClipboardMonitorToggle">
+				<NamedResource name="Header" uri="ms-resource://xiaocang.EasydictforWindows/Resources/ClipboardMonitorToggle/Header">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>監控剪貼簿文字</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>监控剪贴板文本</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>클립보드 텍스트 모니터링</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>クリップボードのテキストを監視</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>Surveiller le presse-papiers</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>Monitor clipboard for text</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>Zwischenablage auf Text überwachen</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="LaunchAtStartupToggle">
+				<NamedResource name="Header" uri="ms-resource://xiaocang.EasydictforWindows/Resources/LaunchAtStartupToggle/Header">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>開機自動啟動</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>开机自启动</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>Windows 시작 시 실행</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>Windows起動時に起動</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>Lancer au démarrage de Windows</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>Launch at Windows startup</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>Bei Windows-Start ausführen</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="MinimizeToTrayToggle">
+				<NamedResource name="Header" uri="ms-resource://xiaocang.EasydictforWindows/Resources/MinimizeToTrayToggle/Header">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>最小化到系統匣</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>最小化到系统托盘</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>시스템 트레이로 최소화</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>システムトレイに最小化</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>Réduire dans la barre des tâches</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>Minimize to system tray</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>In Taskleiste minimieren</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="UILangChineseItem">
+				<NamedResource name="Content" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILangChineseItem/Content">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>简体中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>简体中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>简体中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>简体中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>简体中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>简体中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>简体中文</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="UILangEnglishItem">
+				<NamedResource name="Content" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILangEnglishItem/Content">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>English</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>English</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>English</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>English</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>English</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>English</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>English</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="UILangFrenchItem">
+				<NamedResource name="Content" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILangFrenchItem/Content">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>Français</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>Français</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>Français</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>Français</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>Français</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>Français</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>Français</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="UILangGermanItem">
+				<NamedResource name="Content" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILangGermanItem/Content">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>Deutsch</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>Deutsch</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>Deutsch</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>Deutsch</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>Deutsch</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>Deutsch</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>Deutsch</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="UILangJapaneseItem">
+				<NamedResource name="Content" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILangJapaneseItem/Content">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>日本語</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>日本語</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>日本語</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>日本語</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>日本語</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>日本語</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>日本語</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="UILangKoreanItem">
+				<NamedResource name="Content" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILangKoreanItem/Content">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>한국어</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>한국어</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>한국어</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>한국어</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>한국어</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>한국어</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>한국어</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="UILangTraditionalChineseItem">
+				<NamedResource name="Content" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILangTraditionalChineseItem/Content">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>繁體中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>繁體中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>繁體中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>繁體中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>繁體中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>繁體中文</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>繁體中文</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="UILanguageCombo">
+				<NamedResource name="Header" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILanguageCombo/Header">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>介面語言</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>界面语言</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>UI 언어</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>UI言語</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>Langue de l'interface</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>UI Language</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>Oberflächensprache</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+			<ResourceMapSubtree name="UILanguageDescription">
+				<NamedResource name="Text" uri="ms-resource://xiaocang.EasydictforWindows/Resources/UILanguageDescription/Text">
+					<Candidate qualifiers="Language-ZH-TW" type="String">
+						<Value>選擇應用程式介面的顯示語言。需要重新啟動生效。</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-ZH-CN" type="String">
+						<Value>选择应用程序界面的显示语言。需要重启生效。</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-KO-KR" type="String">
+						<Value>애플리케이션 인터페이스의 표시 언어를 선택합니다. 재시작이 필요합니다.</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-JA-JP" type="String">
+						<Value>アプリケーションインターフェースの表示言語を選択します。再起動が必要です。</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-FR-FR" type="String">
+						<Value>Sélectionnez la langue d'affichage de l'interface de l'application. Redémarrage requis.</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>Select the display language for the application interface. Restart required.</Value>
+					</Candidate>
+					<Candidate qualifiers="Language-DE-DE" type="String">
+						<Value>Wählen Sie die Anzeigesprache für die Anwendungsoberfläche. Neustart erforderlich.</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+		</ResourceMapSubtree>
+	</ResourceMap>
+</PriInfo>

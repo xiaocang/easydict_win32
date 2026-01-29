@@ -1004,8 +1004,6 @@ public sealed partial class MiniWindow : Window
         _suppressTargetLanguageSelectionChanged = true;
         try
         {
-            _userChangedTargetLanguage = false;
-
             if (targetIndex >= 0 && targetIndex < TargetLangCombo.Items.Count)
             {
                 TargetLangCombo.SelectedIndex = targetIndex;
@@ -1074,6 +1072,7 @@ public sealed partial class MiniWindow : Window
         }
 
         UpdateTargetLanguageSelector(_lastDetectedLanguage);
+        _userChangedTargetLanguage = true; // Swap is a manual language choice
     }
 
     private void OnTargetLangChanged(object sender, SelectionChangedEventArgs e)
@@ -1092,8 +1091,6 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     public void SetTextAndTranslate(string text)
     {
-        _userChangedTargetLanguage = false; // Reset for new external input
-
         // Clear all cached results IMMEDIATELY to prevent showing old data
         foreach (var result in _serviceResults)
         {

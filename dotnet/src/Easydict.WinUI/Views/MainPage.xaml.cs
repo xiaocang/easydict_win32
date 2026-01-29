@@ -28,7 +28,6 @@ namespace Easydict.WinUI.Views
         private readonly List<ServiceQueryResult> _serviceResults = new();
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
         private bool _isManualTargetSelection = false; // Track if user manually selected target
-        private string _lastQueryText = ""; // Track last query text to detect changes
         private bool _isLoaded;
         private volatile bool _isClosing;
         private bool _suppressTargetLanguageSelectionChanged;
@@ -573,14 +572,6 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            // Reset manual target selection when text changes
-            // This ensures auto-detection works for new input (macOS behavior)
-            if (inputText != _lastQueryText)
-            {
-                _isManualTargetSelection = false;
-                _lastQueryText = inputText;
-            }
-
             using var currentCts = new CancellationTokenSource();
             var previousCts = Interlocked.Exchange(ref _currentQueryCts, currentCts);
 
@@ -971,7 +962,6 @@ namespace Easydict.WinUI.Views
             _suppressTargetLanguageSelectionChanged = true;
             try
             {
-                _isManualTargetSelection = false; // Temporarily disable manual flag
                 if (targetIndex >= 0 && targetIndex < TargetLangCombo.Items.Count)
                 {
                     TargetLangCombo.SelectedIndex = targetIndex;

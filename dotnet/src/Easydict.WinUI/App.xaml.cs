@@ -32,6 +32,7 @@ namespace Easydict.WinUI
 
         public App()
         {
+#if DEBUG
             // Log FIRST THING to see if constructor runs
             try
             {
@@ -39,9 +40,11 @@ namespace Easydict.WinUI
                 File.AppendAllText(tempLog, $"[{DateTime.UtcNow:O}] App constructor started\n");
             }
             catch { }
+#endif
 
             // NOTE: Language is managed by LocalizationService using ResourceContext.
             // No early initialization needed - ResourceContext can be updated at runtime.
+#if DEBUG
             try
             {
                 File.AppendAllText(Path.Combine(Path.GetTempPath(), "Easydict-constructor.log"),
@@ -60,6 +63,9 @@ namespace Easydict.WinUI
                 catch { }
                 throw;
             }
+#else
+            this.InitializeComponent();
+#endif
 
             this.UnhandledException += OnUnhandledException;
         }

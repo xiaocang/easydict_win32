@@ -469,8 +469,7 @@ namespace Easydict.WinUI.Views
         }
 
         /// <summary>
-        /// Handle keyboard input in the input text box.
-        /// Enter key triggers translation; Shift+Enter or Ctrl+Enter inserts newline.
+        /// Play the source text using text-to-speech with the detected language voice.
         /// </summary>
         private async void OnSourcePlayClicked(object sender, RoutedEventArgs e)
         {

@@ -13,11 +13,12 @@ namespace Easydict.WinUI.Services;
 public sealed class TextToSpeechService : IDisposable
 {
     private static readonly Lazy<TextToSpeechService> _instance =
-        new(() => new TextToSpeechService(), LazyThreadSafetyMode.PublicationOnly);
+        new(() => new TextToSpeechService(), LazyThreadSafetyMode.ExecutionAndPublication);
 
     public static TextToSpeechService Instance => _instance.Value;
 
     private readonly SpeechSynthesizer _synthesizer;
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
     private MediaPlayer? _mediaPlayer;
     private SpeechSynthesisStream? _currentStream;
     private bool _isDisposed;
@@ -46,10 +47,11 @@ public sealed class TextToSpeechService : IDisposable
         if (string.IsNullOrWhiteSpace(text))
             return;
 
-        Stop();
-
+        await _semaphore.WaitAsync(cancellationToken);
         try
         {
+            Stop();
+
             // Select a voice matching the target language
             var voice = FindVoiceForLanguage(language);
             if (voice != null)
@@ -84,6 +86,10 @@ public sealed class TextToSpeechService : IDisposable
         catch (Exception ex)
         {
             Debug.WriteLine($"[TTS] Error: {ex.Message}");
+        }
+        finally
+        {
+            _semaphore.Release();
         }
     }
 

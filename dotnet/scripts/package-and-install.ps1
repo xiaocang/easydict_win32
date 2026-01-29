@@ -6,7 +6,7 @@ param(
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
     [string]$CertPath = ".\.certsmatching.pfx",
-    [string]$CertPassword = "password"
+    [string]$CertPassword = $(if ($env:CERT_PASSWORD) { $env:CERT_PASSWORD } else { "password" })
 )
 
 $ErrorActionPreference = "Stop"

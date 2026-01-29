@@ -20,7 +20,9 @@ public class TitleBarDragRegionHelperTests : IDisposable
     private AppWindow? _testAppWindow;
     private Grid? _testTitleBar;
     private Button? _testButton;
+#pragma warning disable CS0649 // Field is assigned in individual test methods via local variables
     private TitleBarDragRegionHelper? _helper;
+#pragma warning restore CS0649
 
     public void Dispose()
     {

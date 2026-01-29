@@ -127,7 +127,8 @@
                         TextWrapping="Wrap"
                         IsTextSelectionEnabled="True"
                         Foreground="{ThemeResource QueryTextBrush}"
-                        FontSize="13" />
+                        FontSize="13"
+                        />
 
                     <!-- Error Message -->
                     <TextBlock
@@ -138,15 +139,18 @@
                         FontSize="12"
                         Visibility="Collapsed" />
 
-                    <!-- Action Buttons (top right) -->
+                    <!-- Action Buttons (floating overlay, top-right corner) -->
                     <StackPanel
                         x:Name="ActionButtons"
                         Grid.Row="0"
                         Grid.RowSpan="3"
+                        Height="27"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         Spacing="2"
+                        Background="Transparent"
+                        Margin="0"
                         Visibility="Collapsed">
 
                         <!-- Insert/Replace Button -->
@@ -159,7 +163,7 @@
                             Height="24"
                             Padding="0"
                             Visibility="Collapsed">
-                            <FontIcon x:Name="ReplaceIcon" Glyph="&#xE8AC;" FontSize="12" />
+                            <FontIcon x:Name="ReplaceIcon" Glyph="&#xE8AC;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
                         </Button>
 
                         <!-- TTS Play Button -->
@@ -172,7 +176,7 @@
                             Width="24"
                             Height="24"
                             Padding="0">
-                            <FontIcon x:Name="PlayIcon" Glyph="&#xE768;" FontSize="12" />
+                            <FontIcon x:Name="PlayIcon" Glyph="&#xE768;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
                         </Button>
 
                         <!-- Copy Button -->
@@ -185,7 +189,7 @@
                             Width="24"
                             Height="24"
                             Padding="0">
-                            <FontIcon x:Name="CopyIcon" Glyph="&#xE8C8;" FontSize="12" />
+                            <FontIcon x:Name="CopyIcon" Glyph="&#xE8C8;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
                         </Button>
                     </StackPanel>
                 </Grid>

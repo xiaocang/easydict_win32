@@ -72,13 +72,9 @@ public class LingueeServiceTests
     {
         // Arrange
         var lingueeResponse = """
-            {
-                "exact": [
-                    {"word": "hello", "translations": [{"word": "bonjour"}]}
-                ],
-                "featured_word": "hello",
-                "query": "hello"
-            }
+            [
+                {"text": "hello", "pos": "interjection", "translations": [{"text": "bonjour"}]}
+            ]
             """;
         _mockHandler.EnqueueJsonResponse(lingueeResponse);
 
@@ -103,20 +99,17 @@ public class LingueeServiceTests
     {
         // Arrange
         var lingueeResponse = """
-            {
-                "exact": [
-                    {
-                        "word": "good",
-                        "translations": [
-                            {"word": "bon"},
-                            {"word": "bien"},
-                            {"word": "bonne"}
-                        ]
-                    }
-                ],
-                "featured_word": "good",
-                "query": "good"
-            }
+            [
+                {
+                    "text": "good",
+                    "pos": "adjective",
+                    "translations": [
+                        {"text": "bon"},
+                        {"text": "bien"},
+                        {"text": "bonne"}
+                    ]
+                }
+            ]
             """;
         _mockHandler.EnqueueJsonResponse(lingueeResponse);
 
@@ -141,13 +134,7 @@ public class LingueeServiceTests
     public async Task TranslateAsync_HandlesEmptyResults()
     {
         // Arrange
-        var lingueeResponse = """
-            {
-                "exact": [],
-                "featured_word": "",
-                "query": "nonexistentword"
-            }
-            """;
+        var lingueeResponse = """[]""";
         _mockHandler.EnqueueJsonResponse(lingueeResponse);
 
         var request = new TranslationRequest
@@ -189,7 +176,7 @@ public class LingueeServiceTests
     public async Task TranslateAsync_SendsCorrectUrl()
     {
         // Arrange
-        var lingueeResponse = """{"exact": [{"word": "hello", "translations": [{"word": "bonjour"}]}]}""";
+        var lingueeResponse = """[{"text": "hello", "translations": [{"text": "bonjour"}]}]""";
         _mockHandler.EnqueueJsonResponse(lingueeResponse);
 
         var request = new TranslationRequest

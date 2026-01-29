@@ -11,6 +11,7 @@
             "args": [
                 "build",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "-p:Platform=x64",
                 "-p:WindowsPackageType=None",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary,ForceNoAlign"
@@ -32,6 +33,7 @@
             "args": [
                 "build",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "-p:Platform=x64",
                 "--configuration",
                 "Debug",
                 "-p:WindowsPackageType=None",
@@ -52,6 +54,7 @@
             "args": [
                 "build",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
+                "-p:Platform=x64",
                 "--configuration",
                 "Release",
                 "-p:WindowsPackageType=None",

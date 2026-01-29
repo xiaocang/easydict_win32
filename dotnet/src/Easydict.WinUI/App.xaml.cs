@@ -32,15 +32,74 @@ namespace Easydict.WinUI
 
         public App()
         {
+            // Log FIRST THING to see if constructor runs
+            try
+            {
+                var tempLog = Path.Combine(Path.GetTempPath(), "Easydict-constructor.log");
+                File.AppendAllText(tempLog, $"[{DateTime.UtcNow:O}] App constructor started\n");
+            }
+            catch { }
+
             // NOTE: Language is managed by LocalizationService using ResourceContext.
             // No early initialization needed - ResourceContext can be updated at runtime.
-            this.InitializeComponent();
+            try
+            {
+                File.AppendAllText(Path.Combine(Path.GetTempPath(), "Easydict-constructor.log"),
+                    $"[{DateTime.UtcNow:O}] Calling InitializeComponent\n");
+                this.InitializeComponent();
+                File.AppendAllText(Path.Combine(Path.GetTempPath(), "Easydict-constructor.log"),
+                    $"[{DateTime.UtcNow:O}] InitializeComponent completed\n");
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    File.AppendAllText(Path.Combine(Path.GetTempPath(), "Easydict-constructor.log"),
+                        $"[{DateTime.UtcNow:O}] InitializeComponent FAILED: {ex}\n");
+                }
+                catch { }
+                throw;
+            }
+
             this.UnhandledException += OnUnhandledException;
+        }
+
+        /// <summary>
+        /// Diagnostic logging with fallback locations for MSIX troubleshooting.
+        /// </summary>
+        private static void LogToFile(string message)
+        {
+            var timestamp = DateTime.UtcNow.ToString("O");
+            var entry = $"[{timestamp}] {message}\n";
+
+            // Try LocalApplicationData first
+            try
+            {
+                var logDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Easydict");
+                Directory.CreateDirectory(logDir);
+                var logPath = Path.Combine(logDir, "debug.log");
+                File.AppendAllText(logPath, entry);
+                return;
+            }
+            catch { /* Try fallback */ }
+
+            // Fallback: Windows Temp directory
+            try
+            {
+                var tempLog = Path.Combine(Path.GetTempPath(), "Easydict-debug.log");
+                File.AppendAllText(tempLog, entry);
+            }
+            catch { /* Must not throw */ }
         }
 
         private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
         {
             var message = e.Exception?.ToString() ?? "Unknown error";
+
+            // ALWAYS log to debug log first
+            LogToFile($"[UnhandledException] {message}");
 
             // Log to persistent file so crashes are diagnosable in release builds
             try
@@ -102,7 +161,11 @@ namespace Easydict.WinUI
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
+            LogToFile($"[OnLaunched] Starting - Args: {e.Arguments}");
+            LogToFile($"[OnLaunched] Package: {Windows.ApplicationModel.Package.Current.Id.FullName}");
+
             _window = new Window();
+            LogToFile("[OnLaunched] Window created");
 
             // Set window title
             _window.Title = "Easydict";
@@ -151,11 +214,18 @@ namespace Easydict.WinUI
                 _window.Content = rootFrame;
             }
 
+            LogToFile("[OnLaunched] Navigating to MainPage...");
             _ = rootFrame.Navigate(typeof(MainPage), e.Arguments);
+            LogToFile("[OnLaunched] Navigation complete");
+
+            LogToFile("[OnLaunched] Activating window...");
             _window.Activate();
+            LogToFile("[OnLaunched] Window activated");
 
             // Initialize services
+            LogToFile("[OnLaunched] Initializing services...");
             InitializeServices();
+            LogToFile("[OnLaunched] Launch complete!");
         }
 
         private void InitializeServices()
@@ -217,6 +287,8 @@ namespace Easydict.WinUI
 
         private void OnShowWindowHotkey()
         {
+            TextInsertionService.CaptureSourceWindow();
+
             _window?.DispatcherQueue.TryEnqueue(() =>
             {
                 ShowAndActivateWindow();
@@ -225,6 +297,8 @@ namespace Easydict.WinUI
 
         private async void OnTranslateSelectionHotkey()
         {
+            TextInsertionService.CaptureSourceWindow();
+
             // Get selected text from clipboard
             var text = await ClipboardService.GetTextAsync();
             if (!string.IsNullOrWhiteSpace(text))
@@ -246,6 +320,9 @@ namespace Easydict.WinUI
         {
             try
             {
+                // Capture source window before getting text (which may change focus)
+                TextInsertionService.CaptureSourceWindow();
+
                 // Get selected text via intelligent method (clipboard for Electron, UIA with ClipWait fallback for others)
                 var text = await TextSelectionService.GetSelectedTextAsync();
 
@@ -271,6 +348,9 @@ namespace Easydict.WinUI
         {
             try
             {
+                // Capture source window before getting text (which may change focus)
+                TextInsertionService.CaptureSourceWindow();
+
                 // Get selected text via intelligent method (clipboard for Electron, UIA with ClipWait fallback for others)
                 var text = await TextSelectionService.GetSelectedTextAsync();
 

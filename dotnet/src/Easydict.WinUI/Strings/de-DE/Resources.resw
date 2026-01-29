@@ -104,6 +104,9 @@
   <data name="LangChineseSimplified" xml:space="preserve">
     <value>Chinesisch (Vereinfacht)</value>
   </data>
+  <data name="LangChineseTraditional" xml:space="preserve">
+    <value>Chinesisch (Traditionell)</value>
+  </data>
   <data name="LangJapanese" xml:space="preserve">
     <value>Japanisch</value>
   </data>

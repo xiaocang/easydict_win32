@@ -82,11 +82,17 @@
                 Grid.Column="0"
                 HorizontalAlignment="Stretch"
                 SelectedIndex="0"
+                SelectionChanged="OnSourceLangChanged"
                 ToolTipService.ToolTip="Source Language">
                 <ComboBoxItem Content="Auto" Tag="auto" />
                 <ComboBoxItem Content="English" Tag="en" />
                 <ComboBoxItem Content="Chinese" Tag="zh" />
+                <ComboBoxItem Content="Chinese (Traditional)" Tag="zh-tw" />
                 <ComboBoxItem Content="Japanese" Tag="ja" />
+                <ComboBoxItem Content="Korean" Tag="ko" />
+                <ComboBoxItem Content="French" Tag="fr" />
+                <ComboBoxItem Content="German" Tag="de" />
+                <ComboBoxItem Content="Spanish" Tag="es" />
             </ComboBox>
 
             <Button
@@ -111,6 +117,7 @@
                 ToolTipService.ToolTip="Target Language">
                 <ComboBoxItem Content="English" Tag="en" />
                 <ComboBoxItem Content="Chinese" Tag="zh" />
+                <ComboBoxItem Content="Chinese (Traditional)" Tag="zh-tw" />
                 <ComboBoxItem Content="Japanese" Tag="ja" />
                 <ComboBoxItem Content="Korean" Tag="ko" />
                 <ComboBoxItem Content="French" Tag="fr" />

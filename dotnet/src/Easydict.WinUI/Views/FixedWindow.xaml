@@ -133,7 +133,7 @@
                 Height="32"
                 Padding="0"
                 CornerRadius="16"
-                Background="{StaticResource AccentBrush}"
+                Background="{ThemeResource AccentBrush}"
                 ToolTipService.ToolTip="Translate"
                 Margin="4,0,0,0">
                 <Grid>
@@ -158,7 +158,7 @@
             Grid.Row="3"
             Text=""
             FontSize="10"
-            Foreground="{ThemeResource AccentBrush}"
+            Foreground="{ThemeResource BlueAccentBrush}"
             Margin="0,0,0,2"
             Visibility="Collapsed" />
 

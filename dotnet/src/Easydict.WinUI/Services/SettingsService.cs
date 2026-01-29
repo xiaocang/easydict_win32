@@ -104,6 +104,9 @@ public sealed class SettingsService
     // UI Language (for localization)
     public string UILanguage { get; set; } = ""; // Empty means system default
 
+    // App Theme (System, Light, Dark)
+    public string AppTheme { get; set; } = "System"; // Default to system theme
+
     // Startup settings
     public bool LaunchAtStartup { get; set; } = false;
 
@@ -315,6 +318,7 @@ public sealed class SettingsService
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
         UILanguage = GetValue(nameof(UILanguage), "");
+        AppTheme = GetValue(nameof(AppTheme), "System");
         LaunchAtStartup = GetValue(nameof(LaunchAtStartup), false);
         EnableDpiAwareness = GetValue(nameof(EnableDpiAwareness), true);
 
@@ -420,6 +424,7 @@ public sealed class SettingsService
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;
         _settings[nameof(UILanguage)] = UILanguage;
+        _settings[nameof(AppTheme)] = AppTheme;
         _settings[nameof(LaunchAtStartup)] = LaunchAtStartup;
         _settings[nameof(EnableDpiAwareness)] = EnableDpiAwareness;
         _settings[nameof(WindowWidthDips)] = WindowWidthDips;

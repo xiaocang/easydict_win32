@@ -1,0 +1,124 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        // ============================================
+        // WinUI App - Debug (x64)
+        // ============================================
+        {
+            "name": "Launch WinUI App (Debug x64)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-debug",
+            "program": "${workspaceFolder}/dotnet/src/Easydict.WinUI/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64/Easydict.WinUI.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/dotnet/src/Easydict.WinUI/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64",
+            "stopAtEntry": false,
+            "console": "internalConsole",
+            "env": {
+                "DOTNET_ENVIRONMENT": "Development"
+            },
+            "requireExactSource": false,
+            "logging": {
+                "moduleLoad": false,
+                "programOutput": true
+            }
+        },
+        // ============================================
+        // WinUI App - Release (x64)
+        // ============================================
+        {
+            "name": "Launch WinUI App (Release x64)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-release",
+            "program": "${workspaceFolder}/dotnet/src/Easydict.WinUI/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/Easydict.WinUI.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/dotnet/src/Easydict.WinUI/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64",
+            "stopAtEntry": false,
+            "console": "internalConsole",
+            "env": {
+                "DOTNET_ENVIRONMENT": "Production"
+            }
+        },
+        // ============================================
+        // WinUI App - Debug with Icon Regeneration
+        // ============================================
+        {
+            "name": "Launch WinUI App (Debug x64 + Regenerate Icons)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-debug-with-icons",
+            "program": "${workspaceFolder}/dotnet/src/Easydict.WinUI/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64/Easydict.WinUI.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/dotnet/src/Easydict.WinUI/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64",
+            "stopAtEntry": false,
+            "console": "internalConsole",
+            "env": {
+                "DOTNET_ENVIRONMENT": "Development"
+            },
+            "requireExactSource": false
+        },
+        // ============================================
+        // WinUI App - Release with Icon Regeneration
+        // ============================================
+        {
+            "name": "Launch WinUI App (Release x64 + Regenerate Icons)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-release-with-icons",
+            "program": "${workspaceFolder}/dotnet/src/Easydict.WinUI/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/Easydict.WinUI.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/dotnet/src/Easydict.WinUI/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64",
+            "stopAtEntry": false,
+            "console": "internalConsole",
+            "env": {
+                "DOTNET_ENVIRONMENT": "Production"
+            }
+        },
+        // ============================================
+        // E2E Tests
+        // ============================================
+        {
+            "name": "Launch E2E Tests",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/dotnet/e2e/bin/Debug/net8.0/e2e.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/dotnet/e2e",
+            "stopAtEntry": false,
+            "console": "integratedTerminal",
+            "env": {
+                "DOTNET_ENVIRONMENT": "Development"
+            }
+        },
+        // ============================================
+        // Attach to Running Process
+        // ============================================
+        {
+            "name": "Attach to Easydict Process",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "Easydict.WinUI.exe"
+        },
+        {
+            "name": "Attach to Process (Manual)",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ],
+    // ============================================
+    // Compound Configurations
+    // ============================================
+    "compounds": [
+        {
+            "name": "Debug WinUI + Watch",
+            "configurations": ["Launch WinUI App (Debug x64)"],
+            "presentation": {
+                "hidden": false,
+                "group": "Debug",
+                "order": 1
+            }
+        }
+    ]
+}

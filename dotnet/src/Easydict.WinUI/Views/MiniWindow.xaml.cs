@@ -1174,4 +1174,15 @@ public sealed partial class MiniWindow : Window
         }
         // Don't dispose - let the query's finally block dispose it
     }
+
+    /// <summary>
+    /// Apply theme to the window content.
+    /// </summary>
+    public void ApplyTheme(ElementTheme theme)
+    {
+        if (this.Content is FrameworkElement root)
+        {
+            root.RequestedTheme = theme;
+        }
+    }
 }

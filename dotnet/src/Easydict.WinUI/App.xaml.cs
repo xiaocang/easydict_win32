@@ -292,6 +292,9 @@ namespace Easydict.WinUI
             // Apply always-on-top setting
             ApplyAlwaysOnTop(settings.AlwaysOnTop);
 
+            // Apply saved theme setting
+            ApplyTheme(settings.AppTheme);
+
 #if DEBUG
             // Debug mode: automatically open mini window on startup
             MiniWindowService.Instance.Show();
@@ -533,6 +536,34 @@ namespace Easydict.WinUI
             {
                 clipboardService.IsMonitoringEnabled = enabled;
             }
+        }
+
+        /// <summary>
+        /// Apply app theme setting to all windows.
+        /// </summary>
+        /// <param name="theme">Theme name: "System", "Light", or "Dark"</param>
+        public static void ApplyTheme(string theme)
+        {
+            var elementTheme = theme switch
+            {
+                "Light" => ElementTheme.Light,
+                "Dark" => ElementTheme.Dark,
+                _ => ElementTheme.Default // "System" follows system theme
+            };
+
+            // Apply to main window
+            if (Instance._window?.Content is FrameworkElement mainRoot)
+            {
+                mainRoot.RequestedTheme = elementTheme;
+            }
+
+            // Apply to mini window
+            MiniWindowService.Instance.ApplyTheme(elementTheme);
+
+            // Apply to fixed window
+            FixedWindowService.Instance.ApplyTheme(elementTheme);
+
+            System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {theme} (ElementTheme.{elementTheme})");
         }
 
         private static AppWindow ConfigureWindow(Window window)

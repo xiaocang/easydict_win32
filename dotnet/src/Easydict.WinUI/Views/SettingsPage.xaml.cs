@@ -166,6 +166,19 @@ public sealed partial class SettingsPage : Page
         // Save Settings button
         SaveButton.Content = loc.GetString("SaveSettings");
 
+        // App Theme
+        AppThemeCombo.Header = loc.GetString("AppTheme");
+        if (AppThemeDescriptionText != null)
+            AppThemeDescriptionText.Text = loc.GetString("AppThemeDescription");
+
+        // Localize Theme ComboBox items
+        if (AppThemeCombo.Items.Count >= 3)
+        {
+            ((ComboBoxItem)AppThemeCombo.Items[0]).Content = loc.GetString("ThemeSystem");
+            ((ComboBoxItem)AppThemeCombo.Items[1]).Content = loc.GetString("ThemeLight");
+            ((ComboBoxItem)AppThemeCombo.Items[2]).Content = loc.GetString("ThemeDark");
+        }
+
         // Tooltips
         ToolTipService.SetToolTip(FloatingBackButton, loc.GetString("Back"));
         ToolTipService.SetToolTip(BackToTopButton, loc.GetString("BackToTop"));
@@ -341,6 +354,9 @@ public sealed partial class SettingsPage : Page
         ProxyBypassLocalToggle.IsOn = _settings.ProxyBypassLocal;
 
         // Behavior
+        // App Theme - select based on current setting
+        SelectComboByTag(AppThemeCombo, _settings.AppTheme);
+
         // UI Language - select based on current setting or system default
         var currentLanguage = LocalizationService.Instance.CurrentLanguage;
         SelectComboByTag(UILanguageCombo, currentLanguage);
@@ -794,7 +810,7 @@ public sealed partial class SettingsPage : Page
             {
                 Glyph = section.IconGlyph,
                 FontSize = 14,
-                Foreground = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"],
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
                 Tag = i
             };
 
@@ -874,9 +890,9 @@ public sealed partial class SettingsPage : Page
                 }
                 else
                 {
-                    // Inactive icon: smaller + tertiary color
+                    // Inactive icon: smaller + secondary color
                     icon.FontSize = 14;
-                    icon.Foreground = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
+                    icon.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
                 }
             }
         }
@@ -916,6 +932,29 @@ public sealed partial class SettingsPage : Page
     private void OnBackToTopClick(object sender, RoutedEventArgs e)
     {
         MainScrollViewer.ChangeView(null, 0, null, disableAnimation: false);
+    }
+
+    /// <summary>
+    /// Handle app theme selection change.
+    /// </summary>
+    private void OnAppThemeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading) return;
+
+        var selectedTag = GetSelectedTag(AppThemeCombo);
+        if (string.IsNullOrEmpty(selectedTag)) return;
+
+        System.Diagnostics.Debug.WriteLine($"[SettingsPage] User selected theme: {selectedTag}");
+
+        // Save the theme setting
+        _settings.AppTheme = selectedTag;
+        _settings.Save();
+
+        // Apply theme immediately
+        App.ApplyTheme(selectedTag);
+
+        // Show the save button (in case other settings were changed)
+        SaveButton.Visibility = Visibility.Visible;
     }
 
     /// <summary>

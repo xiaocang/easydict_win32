@@ -489,4 +489,21 @@
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>Windows起動時に起動</value>
   </data>
+
+  <!-- App Theme -->
+  <data name="AppTheme" xml:space="preserve">
+    <value>アプリのテーマ</value>
+  </data>
+  <data name="AppThemeDescription" xml:space="preserve">
+    <value>Easydictの外観を選択します。「システム」を選択するとWindowsのテーマに従います。</value>
+  </data>
+  <data name="ThemeSystem" xml:space="preserve">
+    <value>システム</value>
+  </data>
+  <data name="ThemeLight" xml:space="preserve">
+    <value>ライト</value>
+  </data>
+  <data name="ThemeDark" xml:space="preserve">
+    <value>ダーク</value>
+  </data>
 </root>

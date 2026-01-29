@@ -489,4 +489,21 @@
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>開機自動啟動</value>
   </data>
+
+  <!-- App Theme -->
+  <data name="AppTheme" xml:space="preserve">
+    <value>應用程式主題</value>
+  </data>
+  <data name="AppThemeDescription" xml:space="preserve">
+    <value>選擇 Easydict 的外觀。選擇「系統」將跟隨 Windows 主題。</value>
+  </data>
+  <data name="ThemeSystem" xml:space="preserve">
+    <value>系統</value>
+  </data>
+  <data name="ThemeLight" xml:space="preserve">
+    <value>淺色</value>
+  </data>
+  <data name="ThemeDark" xml:space="preserve">
+    <value>深色</value>
+  </data>
 </root>

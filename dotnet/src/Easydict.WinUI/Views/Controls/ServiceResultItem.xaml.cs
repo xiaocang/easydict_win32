@@ -207,20 +207,47 @@ public sealed partial class ServiceResultItem : UserControl
     private void OnControlPointerExited(object sender, PointerRoutedEventArgs e)
     {
         _isHovering = false;
-        HeaderBar.Background = (Brush)Application.Current.Resources["TitleBarBackgroundBrush"];
+        HeaderBar.ClearValue(Border.BackgroundProperty);
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         ActionButtons.Visibility = Visibility.Collapsed;
     }
 
     private void OnHeaderBarPointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        HeaderBar.Background = (Brush)Application.Current.Resources["ButtonHoverBrush"];
+        if (FindThemeBrush("ButtonHoverBrush") is Brush brush)
+            HeaderBar.Background = brush;
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
+    }
+
+    private Brush? FindThemeBrush(string key)
+    {
+        var themeName = ActualTheme == ElementTheme.Dark ? "Dark" : "Light";
+
+        // Check top-level ThemeDictionaries first
+        if (Application.Current.Resources.ThemeDictionaries.TryGetValue(themeName, out var topObj))
+        {
+            var topDict = (ResourceDictionary)topObj;
+            if (topDict.ContainsKey(key))
+                return (Brush)topDict[key];
+        }
+
+        // Check merged dictionaries (Colors.xaml lives here)
+        foreach (var merged in Application.Current.Resources.MergedDictionaries)
+        {
+            if (merged.ThemeDictionaries.TryGetValue(themeName, out var obj))
+            {
+                var dict = (ResourceDictionary)obj;
+                if (dict.ContainsKey(key))
+                    return (Brush)dict[key];
+            }
+        }
+
+        return null;
     }
 
     private void OnHeaderBarPointerExited(object sender, PointerRoutedEventArgs e)
     {
-        HeaderBar.Background = (Brush)Application.Current.Resources["TitleBarBackgroundBrush"];
+        HeaderBar.ClearValue(Border.BackgroundProperty);
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     }
 

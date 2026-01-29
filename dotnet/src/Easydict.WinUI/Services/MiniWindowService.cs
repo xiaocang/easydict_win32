@@ -1,4 +1,5 @@
 using Easydict.WinUI.Views;
+using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Services;
 
@@ -78,6 +79,14 @@ public sealed class MiniWindowService : IDisposable
     }
 
     /// <summary>
+    /// Apply theme to the mini window.
+    /// </summary>
+    public void ApplyTheme(ElementTheme theme)
+    {
+        _miniWindow?.ApplyTheme(theme);
+    }
+
+    /// <summary>
     /// Ensure the mini window instance exists.
     /// </summary>
     private void EnsureWindowCreated()
@@ -85,6 +94,13 @@ public sealed class MiniWindowService : IDisposable
         if (_miniWindow == null)
         {
             _miniWindow = new MiniWindow();
+            var theme = SettingsService.Instance.AppTheme switch
+            {
+                "Light" => ElementTheme.Light,
+                "Dark" => ElementTheme.Dark,
+                _ => ElementTheme.Default
+            };
+            _miniWindow.ApplyTheme(theme);
         }
     }
 

@@ -1,4 +1,5 @@
 using Easydict.WinUI.Views;
+using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Services;
 
@@ -79,6 +80,14 @@ public sealed class FixedWindowService : IDisposable
     }
 
     /// <summary>
+    /// Apply theme to the fixed window.
+    /// </summary>
+    public void ApplyTheme(ElementTheme theme)
+    {
+        _fixedWindow?.ApplyTheme(theme);
+    }
+
+    /// <summary>
     /// Ensure the fixed window instance exists.
     /// </summary>
     private void EnsureWindowCreated()
@@ -86,6 +95,13 @@ public sealed class FixedWindowService : IDisposable
         if (_fixedWindow == null)
         {
             _fixedWindow = new FixedWindow();
+            var theme = SettingsService.Instance.AppTheme switch
+            {
+                "Light" => ElementTheme.Light,
+                "Dark" => ElementTheme.Dark,
+                _ => ElementTheme.Default
+            };
+            _fixedWindow.ApplyTheme(theme);
         }
     }
 

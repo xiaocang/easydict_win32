@@ -442,6 +442,22 @@
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
+                        <!-- App Theme -->
+                        <ComboBox
+                            x:Name="AppThemeCombo"
+                            Header="App Theme"
+                            Width="250"
+                            SelectionChanged="OnAppThemeChanged"
+                            HorizontalAlignment="Left">
+                            <ComboBoxItem Content="System" Tag="System" />
+                            <ComboBoxItem Content="Light" Tag="Light" />
+                            <ComboBoxItem Content="Dark" Tag="Dark" />
+                        </ComboBox>
+                        <TextBlock
+                            x:Name="AppThemeDescriptionText"
+                            Text="Choose how Easydict appears. Select System to follow Windows theme."
+                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
                         <!-- UI Language -->
                         <ComboBox
                             x:Name="UILanguageCombo"

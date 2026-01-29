@@ -489,4 +489,21 @@
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>Bei Windows-Start ausführen</value>
   </data>
+
+  <!-- App Theme -->
+  <data name="AppTheme" xml:space="preserve">
+    <value>App-Design</value>
+  </data>
+  <data name="AppThemeDescription" xml:space="preserve">
+    <value>Wählen Sie das Erscheinungsbild von Easydict. Wählen Sie System, um dem Windows-Design zu folgen.</value>
+  </data>
+  <data name="ThemeSystem" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="ThemeLight" xml:space="preserve">
+    <value>Hell</value>
+  </data>
+  <data name="ThemeDark" xml:space="preserve">
+    <value>Dunkel</value>
+  </data>
 </root>

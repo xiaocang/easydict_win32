@@ -332,6 +332,9 @@
   <data name="Copy" xml:space="preserve">
     <value>복사</value>
   </data>
+  <data name="InsertReplace" xml:space="preserve">
+    <value>삽입/교체</value>
+  </data>
   <data name="CopyAll" xml:space="preserve">
     <value>모두 복사</value>
   </data>

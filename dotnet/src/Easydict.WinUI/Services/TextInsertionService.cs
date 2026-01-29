@@ -110,6 +110,8 @@ public static class TextInsertionService
             {
                 try
                 {
+                    // Intentionally overwrite clipboard without save/restore:
+                    // the user expects the translated text to remain on the clipboard after insertion.
                     var dataPackage = new DataPackage();
                     dataPackage.SetText(text);
                     Clipboard.SetContent(dataPackage);

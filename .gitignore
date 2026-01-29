@@ -8,6 +8,7 @@ dotnet/**/TestResults/
 
 # Publish output
 dotnet/publish/
+publish/
 
 # Temporary build output
 dotnet/temp_build_output*/
@@ -34,8 +35,11 @@ dotnet/temp_build_output*/
 *.nupkg
 project.lock.json
 
-# VS Code
+# VS Code - ignore user settings but keep shared configs
 .vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
 # JetBrains IDEs
 .idea/*
@@ -48,6 +52,12 @@ project.lock.json
 *.tmp
 *~
 
+# Null device artifacts (Windows redirection errors)
+nul
+
+# Backup files
+*.bak
+
 # CI debug files
 .ci-debug/
 
@@ -56,5 +66,19 @@ packages-microsoft-prod.deb
 pr-comments.txt
 review.md
 .claude/settings.local.json
+
+# MSIX packages and build directories
+*.msixbundle
+msix/
+
+# Debug scripts
+check-crash.ps1
+check-runtime.ps1
+get-activation-error.ps1
+test-direct-exe.ps1
+test-release-bin.ps1
+
+# Planning documents
+*-plan.md
 
 CLAUDE.md

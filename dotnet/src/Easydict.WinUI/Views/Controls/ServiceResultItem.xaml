@@ -138,7 +138,7 @@
                         FontSize="12"
                         Visibility="Collapsed" />
 
-                    <!-- Action Buttons (bottom right) -->
+                    <!-- Action Buttons (top right) -->
                     <StackPanel
                         x:Name="ActionButtons"
                         Grid.Row="0"
@@ -148,6 +148,19 @@
                         VerticalAlignment="Top"
                         Spacing="2"
                         Visibility="Collapsed">
+
+                        <!-- Insert/Replace Button -->
+                        <Button
+                            x:Name="ReplaceButton"
+                            Click="OnReplaceClicked"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Width="24"
+                            Height="24"
+                            Padding="0"
+                            Visibility="Collapsed">
+                            <FontIcon x:Name="ReplaceIcon" Glyph="&#xE8AC;" FontSize="12" />
+                        </Button>
 
                         <!-- TTS Play Button -->
                         <Button

@@ -35,6 +35,7 @@ public sealed partial class ServiceResultItem : UserControl
     public ServiceResultItem()
     {
         this.InitializeComponent();
+        ToolTipService.SetToolTip(ReplaceButton, LocalizationService.Instance.GetString("InsertReplace"));
     }
 
     /// <summary>
@@ -145,6 +146,7 @@ public sealed partial class ServiceResultItem : UserControl
             ResultText.Visibility = Visibility.Visible;
             ErrorText.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+            ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
         }
         else if (_serviceResult.Error != null)
         {
@@ -198,6 +200,7 @@ public sealed partial class ServiceResultItem : UserControl
         if (_serviceResult?.Result != null && _serviceResult.IsExpanded)
         {
             ActionButtons.Visibility = Visibility.Visible;
+            ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 
@@ -219,6 +222,23 @@ public sealed partial class ServiceResultItem : UserControl
     {
         HeaderBar.Background = (Brush)Application.Current.Resources["TitleBarBackgroundBrush"];
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+    }
+
+    private async void OnReplaceClicked(object sender, RoutedEventArgs e)
+    {
+        var text = _serviceResult?.Result?.TranslatedText;
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        var success = await TextInsertionService.InsertTextAsync(text);
+
+        // Visual feedback
+        ReplaceIcon.Glyph = success ? "\uE8FB" : "\uE783"; // Checkmark or error
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            await Task.Delay(1500);
+            ReplaceIcon.Glyph = "\uE8AC"; // Reset to replace icon
+        });
     }
 
     private async void OnPlayClicked(object sender, RoutedEventArgs e)

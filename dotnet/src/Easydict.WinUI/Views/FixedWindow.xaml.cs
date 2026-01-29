@@ -968,6 +968,13 @@ public sealed partial class FixedWindow : Window
     public void SetTextAndTranslate(string text)
     {
         _userChangedTargetLanguage = false; // Reset for new external input
+
+        // Clear all cached results IMMEDIATELY to prevent showing old data
+        foreach (var result in _serviceResults)
+        {
+            result.Reset();
+        }
+
         InputTextBox.Text = text;
         _ = StartQueryTrackedAsync();
     }

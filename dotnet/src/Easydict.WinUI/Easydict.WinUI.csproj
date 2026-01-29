@@ -13,7 +13,7 @@
         <!-- WinUI 3 -->
         <UseWinUI>true</UseWinUI>
         <EnableMsixTooling>true</EnableMsixTooling>
-        <WindowsPackageType>None</WindowsPackageType>
+        <!-- Default to packaged behavior. For unpackaged runs use: dotnet build -p:WindowsPackageType=None -->
 
         <!-- Project Options -->
         <Nullable>enable</Nullable>
@@ -27,7 +27,7 @@
         <Platforms>x86;x64;ARM64</Platforms>
         <Platform Condition="'$(Platform)' == ''">x64</Platform>
         <ApplicationManifest>app.manifest</ApplicationManifest>
-        <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+        <PublishProfile Condition="'$(Platform)' != 'AnyCPU'">win-$(Platform).pubxml</PublishProfile>
         <RuntimeIdentifiers Condition="$([MSBuild]::GetTargetFrameworkVersion('$(TargetFramework)')) &gt;= 8">win-x86;win-x64;win-arm64</RuntimeIdentifiers>
         <RuntimeIdentifiers Condition="$([MSBuild]::GetTargetFrameworkVersion('$(TargetFramework)')) &lt; 8">win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
 
@@ -45,7 +45,32 @@
 
         <!-- Localization -->
         <DefaultLanguage>en-US</DefaultLanguage>
+
+        <!--
+            Ensure PRI resources are generated for BOTH packaged and unpackaged modes.
+            WindowsPackageType=None normally skips PRI generation, but ResourceManager API
+            needs resources.pri in both modes. These properties force PRI generation.
+            Note: Do NOT add explicit <PRIResource Include="Strings\**\*.resw" /> here -
+            the .NET SDK auto-discovers resw files and duplicates cause build errors.
+        -->
+        <GeneratePriConfigXmlFile>true</GeneratePriConfigXmlFile>
+        <GeneratePriFile>true</GeneratePriFile>
+        <!-- Force PRI generation even when WindowsPackageType=None -->
+        <AppxGeneratePriEnabled>true</AppxGeneratePriEnabled>
+        <BypassFrameworkInstallChecks>true</BypassFrameworkInstallChecks>
     </PropertyGroup>
+
+    <!-- Verify resources.pri is generated in both packaged and unpackaged modes -->
+    <Target Name="VerifyPriFile" AfterTargets="Build">
+        <Message Importance="high" Text="[Localization] Checking for resources.pri..." />
+        <Message Importance="high" Text="[Localization] WindowsPackageType=$(WindowsPackageType)" />
+        <Message Importance="high" Text="[Localization] OutDir=$(OutDir)" />
+        <Warning Condition="!Exists('$(OutDir)resources.pri')"
+                 Text="[Localization] ⚠ resources.pri NOT found in $(OutDir). Localization will show keys instead of values!" />
+        <Message Condition="Exists('$(OutDir)resources.pri')"
+                 Importance="high"
+                 Text="[Localization] ✓ resources.pri found - localization will work correctly" />
+    </Target>
 
     <ItemGroup>
         <!-- MSIX Package Assets - copy to output for winapp package -->

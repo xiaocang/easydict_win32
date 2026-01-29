@@ -81,31 +81,30 @@ public sealed class LingueeService : BaseTranslationService
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        // Extract translations from "exact" matches
-        string translatedText = originalText; // Default to original if no translation found
+        string translatedText = originalText;
         var alternatives = new List<string>();
 
-        if (root.TryGetProperty("exact", out var exactArray) && exactArray.GetArrayLength() > 0)
+        // Root is an array of dictionary entries
+        if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
         {
-            var firstExact = exactArray[0];
-            if (firstExact.TryGetProperty("translations", out var translations) && translations.GetArrayLength() > 0)
+            var firstEntry = root[0];
+            if (firstEntry.TryGetProperty("translations", out var translations) && translations.GetArrayLength() > 0)
             {
                 var firstTranslation = translations[0];
-                if (firstTranslation.TryGetProperty("word", out var wordProp))
+                if (firstTranslation.TryGetProperty("text", out var textProp))
                 {
-                    translatedText = wordProp.GetString() ?? originalText;
+                    translatedText = textProp.GetString() ?? originalText;
                 }
 
-                // Collect alternatives (skip the first one, it's the main translation)
                 for (int i = 1; i < translations.GetArrayLength(); i++)
                 {
                     var trans = translations[i];
-                    if (trans.TryGetProperty("word", out var altWord))
+                    if (trans.TryGetProperty("text", out var altText))
                     {
-                        var altText = altWord.GetString();
-                        if (!string.IsNullOrEmpty(altText))
+                        var alt = altText.GetString();
+                        if (!string.IsNullOrEmpty(alt))
                         {
-                            alternatives.Add(altText);
+                            alternatives.Add(alt);
                         }
                     }
                 }

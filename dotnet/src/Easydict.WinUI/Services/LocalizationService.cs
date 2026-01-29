@@ -28,9 +28,26 @@ public sealed class LocalizationService
     {
         System.Diagnostics.Debug.WriteLine("[LocalizationService] Initializing...");
 
+        // Detect if running as packaged (MSIX) or unpackaged
+        var isPackaged = IsRunningAsPackaged();
+        System.Diagnostics.Debug.WriteLine($"[LocalizationService] Running as packaged: {isPackaged}");
+
         // Create ResourceManager (new WindowsAppSDK API)
+        // This works in both packaged and unpackaged modes if resources.pri exists
         _resourceManager = new ResourceManager();
         _resourceMap = _resourceManager.MainResourceMap;
+
+        // Log resource map info for debugging
+        try
+        {
+            var subtreeCount = _resourceMap.ResourceCount;
+            System.Diagnostics.Debug.WriteLine($"[LocalizationService] ResourceMap has {subtreeCount} resources");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LocalizationService] Warning: Could not enumerate resources: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine("[LocalizationService] This may indicate resources.pri is missing or corrupted.");
+        }
 
         // Load current language from settings or system default
         var settings = SettingsService.Instance;
@@ -153,6 +170,23 @@ public sealed class LocalizationService
 
     private static bool IsSupported(string lang) =>
         SupportedLanguages.Contains(lang, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Detects if the application is running as a packaged (MSIX) app.
+    /// </summary>
+    private static bool IsRunningAsPackaged()
+    {
+        try
+        {
+            // Windows.ApplicationModel.Package.Current throws if not packaged
+            var package = Windows.ApplicationModel.Package.Current;
+            return package != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// Gets the system's preferred language, mapped to our supported languages.

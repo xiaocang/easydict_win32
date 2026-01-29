@@ -20,19 +20,29 @@ try {
     Write-Host "=== Easydict MSIX Package and Install Script ===" -ForegroundColor Cyan
     Write-Host ""
 
-    # Step 1: Build
-    Write-Host "[1/5] Building project..." -ForegroundColor Yellow
-    dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c $Configuration -p:Platform=$Platform
-    if ($LASTEXITCODE -ne 0) { throw "Build failed" }
-    Write-Host "Build completed successfully" -ForegroundColor Green
+    # Step 1: Publish (self-contained)
+    Write-Host "[1/5] Publishing project..." -ForegroundColor Yellow
+    $publishDir = "./publish/$Platform"
+    dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
+        -c $Configuration `
+        --runtime "win-$Platform" `
+        --self-contained true `
+        --output $publishDir `
+        -p:Platform=$Platform
+    if ($LASTEXITCODE -ne 0) { throw "Publish failed" }
+    Write-Host "Publish completed successfully" -ForegroundColor Green
 
-    # Verify resources.pri was generated
-    $priPath = "src/Easydict.WinUI/bin/$Platform/$Configuration/net8.0-windows10.0.19041.0/win-$Platform/resources.pri"
-    if (Test-Path $priPath) {
-        Write-Host "  ✓ resources.pri found (localization will work)" -ForegroundColor Green
+    # dotnet publish names the PRI file after the assembly (Easydict.WinUI.pri),
+    # but MSIX packaged mode requires it to be named resources.pri.
+    $assemblyPri = Join-Path $publishDir "Easydict.WinUI.pri"
+    $resourcesPri = Join-Path $publishDir "resources.pri"
+    if (Test-Path $assemblyPri) {
+        Copy-Item $assemblyPri $resourcesPri -Force
+        Write-Host "  resources.pri created from Easydict.WinUI.pri (localization will work)" -ForegroundColor Green
+    } elseif (Test-Path $resourcesPri) {
+        Write-Host "  resources.pri found (localization will work)" -ForegroundColor Green
     } else {
-        Write-Host "  ⚠ resources.pri NOT found! Localization may not work in MSIX" -ForegroundColor Yellow
-        Write-Host "    Expected path: $priPath" -ForegroundColor Gray
+        Write-Host "  WARNING: No PRI file found! Localization will show keys instead of values" -ForegroundColor Yellow
     }
     Write-Host ""
 
@@ -44,18 +54,29 @@ try {
 
     # Step 3: Package
     Write-Host "[3/5] Packaging MSIX..." -ForegroundColor Yellow
-    $binPath = "src/Easydict.WinUI/bin/$Platform/$Configuration/net8.0-windows10.0.19041.0/win-$Platform"
     $msixPath = ".\msix\Easydict-v$Version-$Platform.msix"
     $manifestPath = "src/Easydict.WinUI/Package.appxmanifest"
 
-    winapp package $binPath --output $msixPath --manifest $manifestPath
-    if ($LASTEXITCODE -ne 0) { throw "Packaging failed" }
+    # Create temp manifest with correct architecture and version
+    $tempManifest = [System.IO.Path]::GetTempFileName()
+    try {
+        $manifestContent = Get-Content $manifestPath -Raw
+        $manifestContent = $manifestContent -replace 'ProcessorArchitecture="[^"]*"', "ProcessorArchitecture=`"$Platform`""
+        $msixVersion = "$Version.0"
+        $manifestContent = $manifestContent -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"$msixVersion`""
+        Set-Content $tempManifest $manifestContent
+
+        winapp package $publishDir --output $msixPath --manifest $tempManifest --skip-pri --verbose
+        if ($LASTEXITCODE -ne 0) { throw "Packaging failed" }
+    } finally {
+        Remove-Item $tempManifest -ErrorAction SilentlyContinue
+    }
     Write-Host "Package created: $msixPath" -ForegroundColor Green
     Write-Host ""
 
     # Step 4: Sign
     Write-Host "[4/5] Signing MSIX..." -ForegroundColor Yellow
-    winapp sign $msixPath $CertPath --password $CertPassword
+    winapp sign $msixPath $CertPath --password $CertPassword --verbose
     if ($LASTEXITCODE -ne 0) { throw "Signing failed" }
     Write-Host "Package signed successfully" -ForegroundColor Green
     Write-Host ""

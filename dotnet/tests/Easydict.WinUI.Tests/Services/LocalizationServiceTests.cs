@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using FluentAssertions;
 using Xunit;
 
@@ -133,9 +134,12 @@ public class LocalizationServiceTests
         // The .NET SDK auto-discovers resw files in Strings/ folders.
         // Explicit <PRIResource Include> causes duplicate item errors.
         var csprojPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Easydict.WinUI.csproj");
-        var content = File.ReadAllText(csprojPath);
+        var doc = XDocument.Load(csprojPath);
+        var priResources = doc.Descendants()
+            .Where(element => element.Name.LocalName == "PRIResource")
+            .ToList();
 
-        content.Should().NotContain("<PRIResource Include=\"Strings\\**\\*.resw\"",
+        priResources.Should().BeEmpty(
             "csproj should NOT have explicit PRIResource Include - SDK auto-discovers resw files");
     }
 

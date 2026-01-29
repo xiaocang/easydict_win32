@@ -35,7 +35,7 @@ public sealed partial class FixedWindow : Window
     private OverlappedPresenter? _presenter;
     private bool _isLoaded;
     private volatile bool _isClosing;
-    private bool _userChangedTargetLanguage;
+    private readonly TargetLanguageSelector _targetLanguageSelector;
     private bool _suppressTargetLanguageSelectionChanged;
     private TitleBarDragRegionHelper? _titleBarHelper;
     private bool _resizePending;
@@ -47,6 +47,7 @@ public sealed partial class FixedWindow : Window
 
     public FixedWindow()
     {
+        _targetLanguageSelector = new TargetLanguageSelector(_settings);
         this.InitializeComponent();
 
         // Get AppWindow for window management
@@ -247,7 +248,7 @@ public sealed partial class FixedWindow : Window
             {
                 TargetLangCombo.SelectedIndex = targetIndex;
             }
-            _userChangedTargetLanguage = false;
+            _targetLanguageSelector.Reset();
         }
         finally
         {
@@ -613,10 +614,12 @@ public sealed partial class FixedWindow : Window
             UpdateDetectedLanguageDisplay(detectedLanguage);
 
             // Determine target language
+            var autoTarget = _targetLanguageSelector.ResolveTargetLanguage(
+                detectedLanguage, detectionService);
             TranslationLanguage targetLanguage;
-            if (_settings.AutoSelectTargetLanguage && !_userChangedTargetLanguage)
+            if (autoTarget.HasValue)
             {
-                targetLanguage = detectionService.GetTargetLanguage(detectedLanguage);
+                targetLanguage = autoTarget.Value;
                 UpdateTargetLanguageSelector(targetLanguage);
             }
             else
@@ -947,7 +950,7 @@ public sealed partial class FixedWindow : Window
         }
 
         UpdateTargetLanguageSelector(_lastDetectedLanguage);
-        _userChangedTargetLanguage = true; // Swap is a manual language choice
+        _targetLanguageSelector.MarkManualSelection(); // Swap is a manual language choice
     }
 
     private void OnTargetLangChanged(object sender, SelectionChangedEventArgs e)
@@ -958,7 +961,7 @@ public sealed partial class FixedWindow : Window
             return;
         }
 
-        _userChangedTargetLanguage = true;
+        _targetLanguageSelector.MarkManualSelection();
     }
 
     /// <summary>

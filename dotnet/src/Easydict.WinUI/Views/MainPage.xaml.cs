@@ -26,8 +26,8 @@ namespace Easydict.WinUI.Views
         private Task? _currentQueryTask;
         private readonly SettingsService _settings = SettingsService.Instance;
         private readonly List<ServiceQueryResult> _serviceResults = new();
+        private readonly TargetLanguageSelector _targetLanguageSelector;
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
-        private bool _isManualTargetSelection = false; // Track if user manually selected target
         private bool _isLoaded;
         private volatile bool _isClosing;
         private bool _suppressTargetLanguageSelectionChanged;
@@ -39,6 +39,8 @@ namespace Easydict.WinUI.Views
 
         public MainPage()
         {
+            _targetLanguageSelector = new TargetLanguageSelector(_settings);
+
             try
             {
                 System.Diagnostics.Debug.WriteLine("[MainPage] Constructor starting...");
@@ -132,7 +134,7 @@ namespace Easydict.WinUI.Views
                     TargetLangComboNarrow.SelectedIndex = targetIndex;
                 }
 
-                _isManualTargetSelection = false;
+                _targetLanguageSelector.Reset();
             }
             finally
             {
@@ -618,21 +620,16 @@ namespace Easydict.WinUI.Views
                 UpdateDetectedLanguageDisplay(detectedLanguage);
 
                 // Step 2: Determine target language
+                var autoTarget = _targetLanguageSelector.ResolveTargetLanguage(
+                    detectedLanguage, detectionService);
                 TranslationLanguage targetLanguage;
-                if (_isManualTargetSelection)
+                if (autoTarget.HasValue)
                 {
-                    // User manually selected target language, respect user's choice
-                    targetLanguage = GetTargetLanguage();
-                }
-                else if (_settings.AutoSelectTargetLanguage)
-                {
-                    // Auto-select target language (apply macOS algorithm)
-                    targetLanguage = detectionService.GetTargetLanguage(detectedLanguage);
+                    targetLanguage = autoTarget.Value;
                     UpdateTargetLanguageSelector(targetLanguage);
                 }
                 else
                 {
-                    // Auto-select disabled, use current selection
                     targetLanguage = GetTargetLanguage();
                 }
 
@@ -1003,7 +1000,7 @@ namespace Easydict.WinUI.Views
             }
 
             // User manually changed target language
-            _isManualTargetSelection = true;
+            _targetLanguageSelector.MarkManualSelection();
 
             // Re-translate if there's text in the input
             if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
@@ -1028,7 +1025,7 @@ namespace Easydict.WinUI.Views
             TargetLangCombo.SelectedIndex = newTargetIndex;
             TargetLangComboNarrow.SelectedIndex = newTargetIndex;
 
-            _isManualTargetSelection = true; // Mark as manual selection
+            _targetLanguageSelector.MarkManualSelection();
 
             // Note: Since source is always "Auto Detect", we only swap target
             // If source becomes selectable in the future, add source update here

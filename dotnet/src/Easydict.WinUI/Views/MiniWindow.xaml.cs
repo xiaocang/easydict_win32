@@ -47,13 +47,13 @@ public sealed partial class MiniWindow : Window
     private readonly SettingsService _settings = SettingsService.Instance;
     private readonly List<ServiceQueryResult> _serviceResults = new();
     private readonly List<ServiceResultItem> _resultControls = new();
+    private readonly TargetLanguageSelector _targetLanguageSelector;
     private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
     private AppWindow? _appWindow;
     private OverlappedPresenter? _presenter;
     private bool _isPinned;
     private volatile bool _isClosing;
     private bool _isLoaded;
-    private bool _userChangedTargetLanguage;
     private bool _suppressTargetLanguageSelectionChanged;
     private TitleBarDragRegionHelper? _titleBarHelper;
     private DateTime _lastShowTime = DateTime.MinValue;
@@ -66,6 +66,7 @@ public sealed partial class MiniWindow : Window
 
     public MiniWindow()
     {
+        _targetLanguageSelector = new TargetLanguageSelector(_settings);
         this.InitializeComponent();
 
         // Get AppWindow for window management
@@ -290,7 +291,7 @@ public sealed partial class MiniWindow : Window
             {
                 TargetLangCombo.SelectedIndex = targetIndex;
             }
-            _userChangedTargetLanguage = false;
+            _targetLanguageSelector.Reset();
         }
         finally
         {
@@ -732,10 +733,12 @@ public sealed partial class MiniWindow : Window
             UpdateDetectedLanguageDisplay(detectedLanguage);
 
             // Determine target language
+            var autoTarget = _targetLanguageSelector.ResolveTargetLanguage(
+                detectedLanguage, detectionService);
             TranslationLanguage targetLanguage;
-            if (_settings.AutoSelectTargetLanguage && !_userChangedTargetLanguage)
+            if (autoTarget.HasValue)
             {
-                targetLanguage = detectionService.GetTargetLanguage(detectedLanguage);
+                targetLanguage = autoTarget.Value;
                 UpdateTargetLanguageSelector(targetLanguage);
             }
             else
@@ -1072,7 +1075,7 @@ public sealed partial class MiniWindow : Window
         }
 
         UpdateTargetLanguageSelector(_lastDetectedLanguage);
-        _userChangedTargetLanguage = true; // Swap is a manual language choice
+        _targetLanguageSelector.MarkManualSelection(); // Swap is a manual language choice
     }
 
     private void OnTargetLangChanged(object sender, SelectionChangedEventArgs e)
@@ -1083,7 +1086,7 @@ public sealed partial class MiniWindow : Window
             return;
         }
 
-        _userChangedTargetLanguage = true;
+        _targetLanguageSelector.MarkManualSelection();
     }
 
     /// <summary>

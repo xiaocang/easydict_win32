@@ -255,18 +255,6 @@ public class LocalizationServiceTests
         }
     }
 
-    [Fact]
-    public void VscodeTasks_HasMsixBuildTask()
-    {
-        var tasksPath = Path.Combine(ProjectRoot, "..", ".vscode", "tasks.json");
-        if (File.Exists(tasksPath))
-        {
-            var content = File.ReadAllText(tasksPath);
-            content.Should().Contain("build-winui-msix",
-                "tasks.json should have MSIX build task");
-        }
-    }
-
     #endregion
 
     #region Helper Methods

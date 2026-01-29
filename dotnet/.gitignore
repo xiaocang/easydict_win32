@@ -2,3 +2,6 @@
 # Development certificate
 *.pfx
 *.msix
+
+# MSIX packaging directory
+msix/

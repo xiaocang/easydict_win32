@@ -162,7 +162,14 @@ namespace Easydict.WinUI
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
             LogToFile($"[OnLaunched] Starting - Args: {e.Arguments}");
-            LogToFile($"[OnLaunched] Package: {Windows.ApplicationModel.Package.Current.Id.FullName}");
+            try
+            {
+                LogToFile($"[OnLaunched] Package: {Windows.ApplicationModel.Package.Current.Id.FullName}");
+            }
+            catch
+            {
+                LogToFile("[OnLaunched] Package: (unpackaged)");
+            }
 
             _window = new Window();
             LogToFile("[OnLaunched] Window created");

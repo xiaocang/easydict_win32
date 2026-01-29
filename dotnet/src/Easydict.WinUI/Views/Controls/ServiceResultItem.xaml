@@ -104,6 +104,10 @@
                 Padding="8,6,8,8"
                 Visibility="Visible">
                 <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -114,6 +118,7 @@
                     <TextBlock
                         x:Name="PendingQueryText"
                         Grid.Row="0"
+                        Grid.Column="0"
                         Text="Click header to query"
                         FontStyle="Italic"
                         FontSize="12"
@@ -124,6 +129,7 @@
                     <TextBlock
                         x:Name="ResultText"
                         Grid.Row="1"
+                        Grid.Column="0"
                         TextWrapping="Wrap"
                         IsTextSelectionEnabled="True"
                         Foreground="{ThemeResource QueryTextBrush}"
@@ -133,20 +139,23 @@
                     <TextBlock
                         x:Name="ErrorText"
                         Grid.Row="2"
+                        Grid.Column="0"
                         TextWrapping="Wrap"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         FontSize="12"
                         Visibility="Collapsed" />
 
-                    <!-- Action Buttons (top right) -->
+                    <!-- Action Buttons (top right, reserved column) -->
                     <StackPanel
                         x:Name="ActionButtons"
                         Grid.Row="0"
+                        Grid.Column="1"
                         Grid.RowSpan="3"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         Spacing="2"
+                        Margin="4,0,0,0"
                         Visibility="Collapsed">
 
                         <!-- Insert/Replace Button -->

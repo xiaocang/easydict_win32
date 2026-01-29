@@ -104,10 +104,6 @@
                 Padding="8,6,8,8"
                 Visibility="Visible">
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="54" />
-                    </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -118,7 +114,6 @@
                     <TextBlock
                         x:Name="PendingQueryText"
                         Grid.Row="0"
-                        Grid.Column="0"
                         Text="Click header to query"
                         FontStyle="Italic"
                         FontSize="12"
@@ -129,33 +124,33 @@
                     <TextBlock
                         x:Name="ResultText"
                         Grid.Row="1"
-                        Grid.Column="0"
                         TextWrapping="Wrap"
                         IsTextSelectionEnabled="True"
                         Foreground="{ThemeResource QueryTextBrush}"
-                        FontSize="13" />
+                        FontSize="13"
+                        />
 
                     <!-- Error Message -->
                     <TextBlock
                         x:Name="ErrorText"
                         Grid.Row="2"
-                        Grid.Column="0"
                         TextWrapping="Wrap"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         FontSize="12"
                         Visibility="Collapsed" />
 
-                    <!-- Action Buttons (top right, reserved column) -->
+                    <!-- Action Buttons (floating overlay, top-right corner) -->
                     <StackPanel
                         x:Name="ActionButtons"
                         Grid.Row="0"
-                        Grid.Column="1"
                         Grid.RowSpan="3"
+                        Height="27"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         Spacing="2"
-                        Margin="4,0,0,0"
+                        Background="Transparent"
+                        Margin="0"
                         Visibility="Collapsed">
 
                         <!-- Insert/Replace Button -->
@@ -168,7 +163,7 @@
                             Height="24"
                             Padding="0"
                             Visibility="Collapsed">
-                            <FontIcon x:Name="ReplaceIcon" Glyph="&#xE8AC;" FontSize="12" />
+                            <FontIcon x:Name="ReplaceIcon" Glyph="&#xE8AC;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
                         </Button>
 
                         <!-- TTS Play Button -->
@@ -181,7 +176,7 @@
                             Width="24"
                             Height="24"
                             Padding="0">
-                            <FontIcon x:Name="PlayIcon" Glyph="&#xE768;" FontSize="12" />
+                            <FontIcon x:Name="PlayIcon" Glyph="&#xE768;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
                         </Button>
 
                         <!-- Copy Button -->
@@ -194,7 +189,7 @@
                             Width="24"
                             Height="24"
                             Padding="0">
-                            <FontIcon x:Name="CopyIcon" Glyph="&#xE8C8;" FontSize="12" />
+                            <FontIcon x:Name="CopyIcon" Glyph="&#xE8C8;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
                         </Button>
                     </StackPanel>
                 </Grid>

@@ -15,14 +15,7 @@
                 <ResourceDictionary Source="Themes/Colors.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- Accent Colors -->
-            <Color x:Key="AccentColor">#0078D4</Color>
-            <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
-
-            <!-- Status Colors -->
-            <SolidColorBrush x:Key="StatusConnectedBrush" Color="#107C10" />
-            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="#797775" />
-            <SolidColorBrush x:Key="StatusErrorBrush" Color="#D13438" />
+            <!-- Accent and Status Colors are now theme-aware via Themes/Colors.xaml -->
 
             <!-- Card Style -->
             <Style x:Key="CardStyle" TargetType="Border">

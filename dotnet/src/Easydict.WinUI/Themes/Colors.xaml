@@ -18,6 +18,12 @@
             <Color x:Key="BlueAccentColor">#007AFF</Color>
             <Color x:Key="BlueTintColor">#1296DB</Color>
 
+            <!-- Status Colors -->
+            <Color x:Key="StatusConnectedColor">#107C10</Color>
+            <Color x:Key="StatusDisconnectedColor">#797775</Color>
+            <Color x:Key="StatusErrorColor">#D13438</Color>
+            <Color x:Key="AccentColor">#0078D4</Color>
+
             <!-- Settings UI -->
             <Color x:Key="AddMinusBackgroundColor">#EAEAE9</Color>
             <Color x:Key="ListBorderColor">#DEDEDE</Color>
@@ -36,27 +42,39 @@
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
             <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
             <SolidColorBrush x:Key="ActionButtonIconBrush" Color="{StaticResource ActionButtonIconColor}" />
+            <SolidColorBrush x:Key="StatusConnectedBrush" Color="{StaticResource StatusConnectedColor}" />
+            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
+            <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
         </ResourceDictionary>
 
         <!-- Dark Theme Colors -->
         <ResourceDictionary x:Key="Dark">
-            <!-- Main Colors -->
-            <Color x:Key="MainViewBackgroundColor">#232325</Color>
-            <Color x:Key="MainBorderColor">#515253</Color>
-            <Color x:Key="QueryViewBackgroundColor">#303132</Color>
-            <Color x:Key="QueryTextColor">#E0E0E0</Color>
-            <Color x:Key="TitleBarBackgroundColor">#2C2D2E</Color>
-            <Color x:Key="ResultViewBackgroundColor">#303132</Color>
-            <Color x:Key="ButtonHoverColor">#515253</Color>
+            <!-- Main Colors — subtle blue-tinted grays for depth and visual warmth -->
+            <Color x:Key="MainViewBackgroundColor">#1C1E26</Color>
+            <Color x:Key="MainBorderColor">#3A3D4A</Color>
+            <Color x:Key="QueryViewBackgroundColor">#252830</Color>
+            <Color x:Key="QueryTextColor">#E2E4E9</Color>
+            <Color x:Key="TitleBarBackgroundColor">#21242C</Color>
+            <Color x:Key="ResultViewBackgroundColor">#252830</Color>
+            <Color x:Key="ButtonHoverColor">#3A3D4A</Color>
 
-            <!-- Accent Colors -->
-            <Color x:Key="BlueAccentColor">#007AFF</Color>
-            <Color x:Key="BlueTintColor">#1296DB</Color>
+            <!-- Accent Colors — desaturated for dark backgrounds to reduce eye strain -->
+            <Color x:Key="BlueAccentColor">#5EB5FF</Color>
+            <Color x:Key="BlueTintColor">#4DB8E8</Color>
+
+            <!-- Status Colors — softer pastel tones for dark mode -->
+            <Color x:Key="StatusConnectedColor">#6CCB5F</Color>
+            <Color x:Key="StatusDisconnectedColor">#8A8D93</Color>
+            <Color x:Key="StatusErrorColor">#FF99A4</Color>
+
+            <!-- Button accent — medium blue that supports white text on top -->
+            <Color x:Key="AccentColor">#2B88D8</Color>
 
             <!-- Settings UI -->
-            <Color x:Key="AddMinusBackgroundColor">#3B3A3A</Color>
-            <Color x:Key="ListBorderColor">#505050</Color>
-            <Color x:Key="ActionButtonIconColor">#707070</Color>
+            <Color x:Key="AddMinusBackgroundColor">#2E3140</Color>
+            <Color x:Key="ListBorderColor">#3A3D4A</Color>
+            <Color x:Key="ActionButtonIconColor">#9096A3</Color>
 
             <!-- Brushes -->
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
@@ -71,6 +89,10 @@
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
             <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
             <SolidColorBrush x:Key="ActionButtonIconBrush" Color="{StaticResource ActionButtonIconColor}" />
+            <SolidColorBrush x:Key="StatusConnectedBrush" Color="{StaticResource StatusConnectedColor}" />
+            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
+            <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
         </ResourceDictionary>
 
         <!-- HighContrast Theme (fallback to Light theme values) -->
@@ -84,6 +106,10 @@
             <Color x:Key="ButtonHoverColor">#E0E0E0</Color>
             <Color x:Key="BlueAccentColor">#0000FF</Color>
             <Color x:Key="BlueTintColor">#0000FF</Color>
+            <Color x:Key="StatusConnectedColor">#107C10</Color>
+            <Color x:Key="StatusDisconnectedColor">#797775</Color>
+            <Color x:Key="StatusErrorColor">#D13438</Color>
+            <Color x:Key="AccentColor">#0078D4</Color>
             <Color x:Key="AddMinusBackgroundColor">#E0E0E0</Color>
             <Color x:Key="ListBorderColor">#000000</Color>
             <Color x:Key="ActionButtonIconColor">#999999</Color>
@@ -100,6 +126,10 @@
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
             <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
             <SolidColorBrush x:Key="ActionButtonIconBrush" Color="{StaticResource ActionButtonIconColor}" />
+            <SolidColorBrush x:Key="StatusConnectedBrush" Color="{StaticResource StatusConnectedColor}" />
+            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
+            <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

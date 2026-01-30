@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Easydict.TranslationService
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Easydict.WinUI.Tests", "tests\Easydict.WinUI.Tests\Easydict.WinUI.Tests.csproj", "{AA92A836-78EA-429A-B75C-CEB22479ABC8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Easydict.UIAutomation.Tests", "tests\Easydict.UIAutomation.Tests\Easydict.UIAutomation.Tests.csproj", "{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -101,6 +103,18 @@ Global
 		{AA92A836-78EA-429A-B75C-CEB22479ABC8}.Release|x64.Build.0 = Release|Any CPU
 		{AA92A836-78EA-429A-B75C-CEB22479ABC8}.Release|x86.ActiveCfg = Release|Any CPU
 		{AA92A836-78EA-429A-B75C-CEB22479ABC8}.Release|x86.Build.0 = Release|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Debug|x64.Build.0 = Debug|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Debug|x86.Build.0 = Debug|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Release|x64.ActiveCfg = Release|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Release|x64.Build.0 = Release|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Release|x86.ActiveCfg = Release|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -110,5 +124,6 @@ Global
 		{A8876090-18E2-4962-B7A3-B0A191DE49D4} = {AB2BBC7D-BD1A-4F69-AE7D-1F990D21DC05}
 		{678608FD-AB4E-422A-86E9-47066BD85D56} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{AA92A836-78EA-429A-B75C-CEB22479ABC8} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

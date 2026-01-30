@@ -3,7 +3,7 @@
 # Optional: WinApp CLI (for MSIX packaging)
 
 .PHONY: all build build-release build-debug test clean restore run help
-.PHONY: test-translation test-winui test-verbose run-release
+.PHONY: test-translation test-winui test-ui test-verbose run-release
 .PHONY: publish publish-x64 publish-x86 publish-arm64
 .PHONY: msix msix-x64 msix-x86 msix-arm64 msix-all
 .PHONY: fix-msix-minversion
@@ -51,6 +51,10 @@ test-translation:
 test-winui:
 	dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"
 
+# Run UI automation tests (requires app to be installed or EASYDICT_EXE_PATH set)
+test-ui:
+	dotnet test tests/Easydict.UIAutomation.Tests --logger "console;verbosity=detailed" --filter "Category=UIAutomation"
+
 # Run tests with verbose output
 test-verbose:
 	dotnet test --logger "console;verbosity=detailed"
@@ -63,6 +67,7 @@ clean:
 	rm -rf src/Easydict.SidecarClient/bin src/Easydict.SidecarClient/obj
 	rm -rf tests/Easydict.TranslationService.Tests/bin tests/Easydict.TranslationService.Tests/obj
 	rm -rf tests/Easydict.WinUI.Tests/bin tests/Easydict.WinUI.Tests/obj
+	rm -rf tests/Easydict.UIAutomation.Tests/bin tests/Easydict.UIAutomation.Tests/obj
 	rm -rf publish msix
 
 # Publish for distribution (portable)
@@ -226,6 +231,7 @@ help:
 	@echo "  make test         - Run all unit tests"
 	@echo "  make test-translation - Run TranslationService tests only"
 	@echo "  make test-winui   - Run WinUI tests only"
+	@echo "  make test-ui      - Run UI automation tests (requires installed app)"
 	@echo "  make test-verbose - Run tests with verbose output"
 	@echo ""
 	@echo "Publishing:"

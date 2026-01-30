@@ -5,3 +5,28 @@
 
 # MSIX packaging directory
 msix/
+# Build output directories
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# VS Code settings
+.vscode/
+
+# Logs
+*.log
+
+# Auto-generated LockScreenLogo assets
+src/Easydict.WinUI/Assets/LockScreenLogo*.png
+
+# Auto-generated Windows assets
+src/Easydict.WinUI/Assets/Square44x44Logo*.png
+src/Easydict.WinUI/Assets/Square150x150Logo*.png
+src/Easydict.WinUI/Assets/Wide310x150Logo*.png
+src/Easydict.WinUI/Assets/SplashScreen*.png
+src/Easydict.WinUI/Assets/StoreLogo*.png

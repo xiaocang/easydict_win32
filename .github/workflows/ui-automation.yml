@@ -1,0 +1,259 @@
+name: UI Automation Tests
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  ui-automation:
+    name: MSIX + UI Automation
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup WinApp CLI
+        uses: microsoft/setup-WinAppCli@v0.1
+
+      # ── Build & Publish (x64, same as release) ──
+      - name: Restore dependencies
+        working-directory: dotnet
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-x64
+
+      - name: Publish WinUI App (x64)
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --no-restore `
+            --output ./publish/x64 `
+            -p:Platform=x64 `
+            -p:PublishTrimmed=false
+
+      # ── MSIX Packaging (same pipeline as release) ──
+      - name: Verify MSIX assets
+        shell: pwsh
+        run: |
+          $publishDir = "dotnet/publish/x64"
+          $requiredAssets = @(
+            "Assets/SplashScreen.scale-100.png",
+            "Assets/LockScreenLogo.scale-100.png",
+            "Assets/Square150x150Logo.scale-100.png",
+            "Assets/Square44x44Logo.scale-100.png",
+            "Assets/Wide310x150Logo.scale-100.png",
+            "Assets/StoreLogo.png"
+          )
+
+          $missing = @()
+          foreach ($asset in $requiredAssets) {
+            $path = Join-Path $publishDir $asset
+            if (-not (Test-Path $path)) {
+              $missing += $asset
+            }
+          }
+
+          if ($missing.Count -gt 0) {
+            Write-Error "Missing required MSIX assets:"
+            $missing | ForEach-Object { Write-Error "  - $_" }
+            exit 1
+          }
+
+          Write-Host "All required MSIX assets verified."
+
+      - name: Fix resources.pri for MSIX
+        shell: pwsh
+        run: |
+          $publishDir = "dotnet/publish/x64"
+          $sourcePri = Join-Path $publishDir "Easydict.WinUI.pri"
+          $targetPri = Join-Path $publishDir "resources.pri"
+
+          if (Test-Path $sourcePri) {
+            Write-Host "Copying Easydict.WinUI.pri to resources.pri"
+            Copy-Item -Path $sourcePri -Destination $targetPri -Force
+          } else {
+            Write-Warning "Easydict.WinUI.pri not found"
+          }
+
+      - name: Update manifest for x64
+        shell: pwsh
+        run: |
+          $manifestPath = "dotnet/src/Easydict.WinUI/Package.appxmanifest"
+          $content = Get-Content $manifestPath -Raw
+          $content = $content -replace 'ProcessorArchitecture="neutral"', 'ProcessorArchitecture="x64"'
+          Set-Content $manifestPath $content
+
+      - name: Create MSIX package
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ./msix
+          winapp package `
+            ./publish/x64 `
+            --output ./msix/Easydict-ui-test-x64.msix `
+            --manifest src/Easydict.WinUI/Package.appxmanifest `
+            --skip-pri `
+            --verbose
+
+      - name: Fix MSIX MinVersion
+        shell: pwsh
+        run: |
+          dotnet/scripts/Fix-MsixMinVersion.ps1 `
+            -MsixPath "dotnet/msix/Easydict-ui-test-x64.msix"
+
+      # ── Install MSIX ──
+      - name: Enable Developer Mode (sideloading)
+        shell: pwsh
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" `
+            /t REG_DWORD /v AllowDevelopmentWithoutDevLicense /d 1 /f
+
+      - name: Install Windows App Runtime
+        shell: pwsh
+        run: |
+          $url = "https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-x64.exe"
+          $installer = Join-Path $env:TEMP "windowsappruntimeinstall-x64.exe"
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow
+          Write-Host "Windows App Runtime installed"
+
+      - name: Install MSIX package (register from extracted layout)
+        shell: pwsh
+        run: |
+          $msixPath = "dotnet/msix/Easydict-ui-test-x64.msix"
+          $extractDir = "dotnet/msix/extracted"
+          Write-Host "Installing MSIX: $msixPath"
+
+          # Remove any previous installation
+          $existing = Get-AppxPackage -Name "xiaocang.EasydictforWindows" -ErrorAction SilentlyContinue
+          if ($existing) {
+            Write-Host "Removing existing installation..."
+            Remove-AppxPackage -Package $existing.PackageFullName
+            Start-Sleep -Seconds 2
+          }
+
+          # Extract MSIX (ZIP format) and register from manifest
+          # This avoids code-signing requirements for CI testing
+          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+          Expand-Archive -Path $msixPath -DestinationPath $extractDir -Force
+
+          $manifestPath = Join-Path $extractDir "AppxManifest.xml"
+          if (-not (Test-Path $manifestPath)) {
+            Write-Error "AppxManifest.xml not found in extracted MSIX"
+            exit 1
+          }
+
+          Add-AppxPackage -Register $manifestPath
+          Start-Sleep -Seconds 3
+
+          # Verify installation
+          $pkg = Get-AppxPackage -Name "xiaocang.EasydictforWindows"
+          if (-not $pkg) {
+            Write-Error "MSIX installation failed - package not found"
+            exit 1
+          }
+
+          Write-Host "Installed: $($pkg.PackageFullName)"
+          Write-Host "InstallLocation: $($pkg.InstallLocation)"
+          Write-Host "PackageFamilyName: $($pkg.PackageFamilyName)"
+
+          # Export for later steps
+          echo "EASYDICT_PACKAGE_FAMILY_NAME=$($pkg.PackageFamilyName)" >> $env:GITHUB_ENV
+
+      # ── Build & Run UI Automation Tests ──
+      - name: Restore UI test dependencies
+        working-directory: dotnet
+        run: dotnet restore tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj
+
+      - name: Build UI Automation Tests
+        working-directory: dotnet
+        run: |
+          dotnet build tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
+            --configuration Release --no-restore -p:Platform=x64
+
+      - name: Run UI Automation Tests
+        working-directory: dotnet
+        env:
+          SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/screenshots
+        run: |
+          # Create screenshot output directory
+          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/screenshots"
+
+          dotnet test tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
+            --configuration Release `
+            --no-build `
+            --verbosity normal `
+            --logger "trx;LogFileName=ui-test-results.trx" `
+            --logger "console;verbosity=detailed" `
+            -p:Platform=x64 `
+            --filter "Category=UIAutomation"
+
+      # ── Collect Artifacts ──
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-screenshots
+          path: |
+            screenshots/
+          retention-days: 30
+
+      - name: Upload baseline candidates
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: baseline-candidates
+          path: |
+            screenshots/baseline-candidates/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-test-results
+          path: dotnet/**/TestResults/*.trx
+          retention-days: 30
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-test-msix
+          path: dotnet/msix/Easydict-ui-test-x64.msix
+          retention-days: 7
+
+      # ── Cleanup ──
+      - name: Uninstall MSIX package
+        if: always()
+        shell: pwsh
+        run: |
+          $pkg = Get-AppxPackage -Name "xiaocang.EasydictforWindows" -ErrorAction SilentlyContinue
+          if ($pkg) {
+            Write-Host "Uninstalling: $($pkg.PackageFullName)"
+            Remove-AppxPackage -Package $pkg.PackageFullName
+          } else {
+            Write-Host "Package already uninstalled"
+          }
+
+      - name: Revert manifest changes
+        if: always()
+        shell: pwsh
+        run: |
+          git checkout -- dotnet/src/Easydict.WinUI/Package.appxmanifest

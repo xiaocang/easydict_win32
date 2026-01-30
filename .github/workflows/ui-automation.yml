@@ -180,7 +180,6 @@ jobs:
             --logger "console;verbosity=detailed" `
             -p:Platform=x64 `
             --filter "Category=UIAutomation"
-        continue-on-error: true
 
       # ── Collect Artifacts ──
       - name: Upload screenshots

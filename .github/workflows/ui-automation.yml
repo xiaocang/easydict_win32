@@ -123,10 +123,11 @@ jobs:
           reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" `
             /t REG_DWORD /v AllowDevelopmentWithoutDevLicense /d 1 /f
 
-      - name: Install MSIX package
+      - name: Install MSIX package (register from extracted layout)
         shell: pwsh
         run: |
           $msixPath = "dotnet/msix/Easydict-ui-test-x64.msix"
+          $extractDir = "dotnet/msix/extracted"
           Write-Host "Installing MSIX: $msixPath"
 
           # Remove any previous installation
@@ -137,7 +138,18 @@ jobs:
             Start-Sleep -Seconds 2
           }
 
-          Add-AppxPackage -Path $msixPath
+          # Extract MSIX (ZIP format) and register from manifest
+          # This avoids code-signing requirements for CI testing
+          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+          Expand-Archive -Path $msixPath -DestinationPath $extractDir -Force
+
+          $manifestPath = Join-Path $extractDir "AppxManifest.xml"
+          if (-not (Test-Path $manifestPath)) {
+            Write-Error "AppxManifest.xml not found in extracted MSIX"
+            exit 1
+          }
+
+          Add-AppxPackage -Register $manifestPath
           Start-Sleep -Seconds 3
 
           # Verify installation
@@ -148,6 +160,7 @@ jobs:
           }
 
           Write-Host "Installed: $($pkg.PackageFullName)"
+          Write-Host "InstallLocation: $($pkg.InstallLocation)"
           Write-Host "PackageFamilyName: $($pkg.PackageFamilyName)"
 
           # Export for later steps

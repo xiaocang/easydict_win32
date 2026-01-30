@@ -63,7 +63,7 @@ public static class VisualRegressionHelper
         {
             diffImagePath = Path.Combine(ScreenshotHelper.OutputDir, $"{baselineName}_diff.png");
             using var diffImage = ImageSharpCompare.CalcDiffMaskImage(screenshotPath, baselinePath);
-            diffImage.SaveAsPng(diffImagePath);
+            diffImage.Save(diffImagePath);
         }
 
         return new VisualComparisonResult

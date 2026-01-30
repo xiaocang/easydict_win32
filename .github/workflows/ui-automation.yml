@@ -123,6 +123,15 @@ jobs:
           reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" `
             /t REG_DWORD /v AllowDevelopmentWithoutDevLicense /d 1 /f
 
+      - name: Install Windows App Runtime
+        shell: pwsh
+        run: |
+          $url = "https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-x64.exe"
+          $installer = Join-Path $env:TEMP "windowsappruntimeinstall-x64.exe"
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow
+          Write-Host "Windows App Runtime installed"
+
       - name: Install MSIX package (register from extracted layout)
         shell: pwsh
         run: |

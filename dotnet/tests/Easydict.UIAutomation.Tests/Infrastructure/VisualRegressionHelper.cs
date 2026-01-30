@@ -1,4 +1,5 @@
 using Codeuctivity.ImageSharpCompare;
+using SixLabors.ImageSharp;
 
 namespace Easydict.UIAutomation.Tests.Infrastructure;
 

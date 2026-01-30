@@ -136,7 +136,7 @@ jobs:
             --self-contained true `
             --no-restore `
             --output ./publish/${{ matrix.platform }} `
-            -p:Version=${{ steps.version.outputs.VERSION }} `
+            -p:Version=${{ steps.version.outputs.BASE_VERSION }} `
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
@@ -170,6 +170,19 @@ jobs:
 
           Write-Host "All required MSIX assets verified:"
           $requiredAssets | ForEach-Object { Write-Host "  - $_" }
+
+      # Verify targetsize icons are present (required for high-quality icons in Start Menu)
+      - name: Verify targetsize icons
+        shell: pwsh
+        run: |
+          $publishDir = "dotnet/publish/${{ matrix.platform }}"
+          $targetsize = Get-ChildItem "$publishDir\Assets" -Filter "*targetsize*.png"
+          Write-Host "Found $($targetsize.Count) targetsize icons"
+          if ($targetsize.Count -lt 10) {
+            Write-Error "Expected 10 targetsize icons, found $($targetsize.Count). Start Menu icon may appear low-resolution!"
+            exit 1
+          }
+          Write-Host "All targetsize icons verified (high-quality icons ensured)"
 
       # Fix PRI: dotnet publish outputs localization PRI as Easydict.WinUI.pri,
       # but MSIX packaging expects resources.pri. Copy it before packaging.

@@ -56,14 +56,16 @@ jobs:
 
       - name: Run store listing sync
         shell: pwsh
+        env:
+          INPUT_ACTION: ${{ github.event.inputs.action }}
+          INPUT_LANGUAGES: ${{ github.event.inputs.languages }}
         run: |
           $params = @{
-            Mode = "${{ github.event.inputs.action }}"
+            Mode = $env:INPUT_ACTION
           }
 
-          $languages = "${{ github.event.inputs.languages }}"
-          if ($languages -ne "") {
-            $params.Languages = $languages
+          if ($env:INPUT_LANGUAGES -ne "") {
+            $params.Languages = $env:INPUT_LANGUAGES
           }
 
           .winstore/scripts/Sync-StoreListings.ps1 @params

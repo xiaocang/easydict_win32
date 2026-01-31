@@ -207,6 +207,7 @@ foreach ($lang in $targetLanguages) {
 
         # Build the msstore update command arguments
         # The msstore CLI uses Partner Center API to update listings
+        $tempFile = $null
         try {
             # Create a temporary JSON payload for msstore
             $payload = @{
@@ -244,11 +245,14 @@ foreach ($lang in $targetLanguages) {
             } else {
                 Write-Host "  Successfully updated listing for $lang" -ForegroundColor Green
             }
-
-            Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
         }
         catch {
             Write-Error "Failed to update listing for $lang : $_"
+        }
+        finally {
+            if ($tempFile -and (Test-Path $tempFile)) {
+                Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 

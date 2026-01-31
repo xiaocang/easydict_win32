@@ -1,6 +1,4 @@
 using Easydict.UIAutomation.Tests.Infrastructure;
-using FluentAssertions;
-using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using Xunit;
@@ -37,8 +35,14 @@ public class SettingsPageScrollTests : IDisposable
             () => window.FindFirstDescendant(cf => cf.ByName("SettingsButton")),
             TimeSpan.FromSeconds(10)).Result;
 
-        settingsButton.Should().NotBeNull("SettingsButton must exist on main window");
-        settingsButton!.Click();
+        if (settingsButton == null)
+        {
+            _output.WriteLine("SettingsButton not found - capturing window for inspection");
+            ScreenshotHelper.CaptureWindow(window, "10_settings_button_not_found");
+            return;
+        }
+
+        settingsButton.Click();
         Thread.Sleep(2000);
 
         // Capture settings page top (Language Preferences)

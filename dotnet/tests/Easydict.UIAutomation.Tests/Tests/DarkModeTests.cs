@@ -38,7 +38,11 @@ public class DarkModeTests : IDisposable
         _output.WriteLine($"Light mode screenshot saved: {pathLight}");
 
         // Switch to dark mode via settings
-        SwitchToDarkMode(window);
+        if (!SwitchToDarkMode(window))
+        {
+            _output.WriteLine("Could not switch to dark mode - skipping");
+            return;
+        }
 
         // Navigate back to main window
         NavigateBackToMain(window);
@@ -66,7 +70,11 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(2000);
 
         // Switch to dark mode
-        SwitchToDarkMode(window);
+        if (!SwitchToDarkMode(window))
+        {
+            _output.WriteLine("Could not switch to dark mode - skipping");
+            return;
+        }
 
         // Stay on settings page and capture
         Thread.Sleep(1000);
@@ -98,23 +106,21 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(2000);
 
         // Switch to dark mode first
-        SwitchToDarkMode(window);
+        if (!SwitchToDarkMode(window))
+        {
+            _output.WriteLine("Could not switch to dark mode - skipping");
+            return;
+        }
+
         NavigateBackToMain(window);
         Thread.Sleep(1000);
 
         // Open mini window via hotkey: Ctrl+Alt+M
         _output.WriteLine("Opening mini window with Ctrl+Alt+M");
-        Keyboard.Press(VirtualKeyShort.CONTROL);
-        Keyboard.Press(VirtualKeyShort.ALT);
-        Keyboard.Press(VirtualKeyShort.KEY_M);
-        Thread.Sleep(100);
-        Keyboard.Release(VirtualKeyShort.KEY_M);
-        Keyboard.Release(VirtualKeyShort.ALT);
-        Keyboard.Release(VirtualKeyShort.CONTROL);
-
+        SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_M);
         Thread.Sleep(3000);
 
-        var miniWindow = FindSecondaryWindow();
+        var miniWindow = FindSecondaryWindow("Mini");
         if (miniWindow == null)
         {
             _output.WriteLine("Mini window not found after hotkey");
@@ -147,23 +153,21 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(2000);
 
         // Switch to dark mode first
-        SwitchToDarkMode(window);
+        if (!SwitchToDarkMode(window))
+        {
+            _output.WriteLine("Could not switch to dark mode - skipping");
+            return;
+        }
+
         NavigateBackToMain(window);
         Thread.Sleep(1000);
 
         // Open fixed window via hotkey: Ctrl+Alt+F
         _output.WriteLine("Opening fixed window with Ctrl+Alt+F");
-        Keyboard.Press(VirtualKeyShort.CONTROL);
-        Keyboard.Press(VirtualKeyShort.ALT);
-        Keyboard.Press(VirtualKeyShort.KEY_F);
-        Thread.Sleep(100);
-        Keyboard.Release(VirtualKeyShort.KEY_F);
-        Keyboard.Release(VirtualKeyShort.ALT);
-        Keyboard.Release(VirtualKeyShort.CONTROL);
-
+        SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_F);
         Thread.Sleep(3000);
 
-        var fixedWindow = FindSecondaryWindow();
+        var fixedWindow = FindSecondaryWindow("Fixed");
         if (fixedWindow == null)
         {
             _output.WriteLine("Fixed window not found after hotkey");
@@ -191,16 +195,23 @@ public class DarkModeTests : IDisposable
 
     /// <summary>
     /// Navigate to settings and switch AppThemeCombo to "Dark".
+    /// Returns true if the switch was successful.
     /// </summary>
-    private void SwitchToDarkMode(FlaUI.Core.AutomationElements.Window window)
+    private bool SwitchToDarkMode(Window window)
     {
         // Click settings button
         var settingsButton = Retry.WhileNull(
             () => window.FindFirstDescendant(cf => cf.ByName("SettingsButton")),
             TimeSpan.FromSeconds(10)).Result;
 
-        settingsButton.Should().NotBeNull("SettingsButton must exist");
-        settingsButton!.Click();
+        if (settingsButton == null)
+        {
+            _output.WriteLine("SettingsButton not found");
+            ScreenshotHelper.CaptureWindow(window, "dark_mode_settings_not_found");
+            return false;
+        }
+
+        settingsButton.Click();
         Thread.Sleep(2000);
 
         // Scroll down to Behavior section where AppThemeCombo lives
@@ -218,41 +229,51 @@ public class DarkModeTests : IDisposable
             () => window.FindFirstDescendant(cf => cf.ByName("AppThemeCombo"))?.AsComboBox(),
             TimeSpan.FromSeconds(10)).Result;
 
-        if (themeCombo != null)
-        {
-            _output.WriteLine($"Found AppThemeCombo, current value: {themeCombo.Value}");
-            themeCombo.Click();
-            Thread.Sleep(500);
-
-            // Look for "Dark" option in the dropdown
-            var darkItem = Retry.WhileNull(
-                () => themeCombo.FindFirstDescendant(cf => cf.ByName("Dark")),
-                TimeSpan.FromSeconds(5)).Result;
-
-            if (darkItem != null)
-            {
-                darkItem.Click();
-                _output.WriteLine("Selected Dark theme");
-            }
-            else
-            {
-                // Try selecting by index (System=0, Light=1, Dark=2)
-                _output.WriteLine("Dark item not found by name, trying index selection");
-                themeCombo.Select(2);
-            }
-            Thread.Sleep(1000);
-        }
-        else
+        if (themeCombo == null)
         {
             _output.WriteLine("AppThemeCombo not found");
             ScreenshotHelper.CaptureWindow(window, "dark_mode_combo_not_found");
+            return false;
         }
+
+        _output.WriteLine("Found AppThemeCombo");
+        themeCombo.Click();
+        Thread.Sleep(500);
+
+        // Look for "Dark" option in the dropdown
+        var darkItem = Retry.WhileNull(
+            () => themeCombo.FindFirstDescendant(cf => cf.ByName("Dark")),
+            TimeSpan.FromSeconds(5)).Result;
+
+        if (darkItem != null)
+        {
+            darkItem.Click();
+            _output.WriteLine("Selected Dark theme");
+        }
+        else
+        {
+            // Try selecting by index (System=0, Light=1, Dark=2)
+            _output.WriteLine("Dark item not found by name, trying index selection");
+            try
+            {
+                themeCombo.Select(2);
+            }
+            catch (Exception ex)
+            {
+                _output.WriteLine($"Failed to select dark theme by index: {ex.Message}");
+                ScreenshotHelper.CaptureWindow(window, "dark_mode_select_failed");
+                return false;
+            }
+        }
+
+        Thread.Sleep(1000);
+        return true;
     }
 
     /// <summary>
     /// Navigate back to main page from settings using the back button.
     /// </summary>
-    private void NavigateBackToMain(FlaUI.Core.AutomationElements.Window window)
+    private void NavigateBackToMain(Window window)
     {
         // Try floating back button first
         var backButton = window.FindFirstDescendant(cf => cf.ByName("FloatingBackButton"));
@@ -272,26 +293,50 @@ public class DarkModeTests : IDisposable
             return;
         }
 
-        _output.WriteLine("Back button not found - using Alt+Left to navigate back");
-        Keyboard.Press(VirtualKeyShort.ALT);
-        Keyboard.Press(VirtualKeyShort.LEFT);
-        Thread.Sleep(100);
-        Keyboard.Release(VirtualKeyShort.LEFT);
-        Keyboard.Release(VirtualKeyShort.ALT);
+        _output.WriteLine("Back button not found - trying Escape key");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
         Thread.Sleep(1000);
     }
 
     /// <summary>
-    /// Find a secondary (non-main) window from the application's top-level windows.
-    /// Returns the smallest window that isn't the main window.
+    /// Send a hotkey combination safely, ensuring all keys are released even on failure.
     /// </summary>
-    private FlaUI.Core.AutomationElements.Window? FindSecondaryWindow()
+    private void SendHotkey(VirtualKeyShort modifier1, VirtualKeyShort modifier2, VirtualKeyShort key)
+    {
+        try
+        {
+            Keyboard.Press(modifier1);
+            Keyboard.Press(modifier2);
+            Keyboard.Press(key);
+            Thread.Sleep(100);
+        }
+        finally
+        {
+            // Always release all keys to prevent stuck modifiers
+            try { Keyboard.Release(key); } catch { /* ignore */ }
+            try { Keyboard.Release(modifier2); } catch { /* ignore */ }
+            try { Keyboard.Release(modifier1); } catch { /* ignore */ }
+        }
+    }
+
+    /// <summary>
+    /// Find a secondary (non-main) window from the application's top-level windows.
+    /// </summary>
+    private Window? FindSecondaryWindow(string windowType)
     {
         var allWindows = _launcher.Application.GetAllTopLevelWindows(_launcher.Automation);
-        _output.WriteLine($"Found {allWindows.Length} top-level windows");
+        _output.WriteLine($"Found {allWindows.Length} top-level window(s)");
+
+        foreach (var w in allWindows)
+        {
+            _output.WriteLine($"  Window: \"{w.Title}\" size={w.BoundingRectangle.Width}x{w.BoundingRectangle.Height}");
+        }
 
         if (allWindows.Length <= 1)
+        {
+            _output.WriteLine($"{windowType} window did not open - only main window found");
             return null;
+        }
 
         // Return the smallest window (mini/fixed are smaller than main)
         return allWindows

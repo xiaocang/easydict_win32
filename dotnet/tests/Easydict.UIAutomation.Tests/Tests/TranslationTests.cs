@@ -1,5 +1,4 @@
 using Easydict.UIAutomation.Tests.Infrastructure;
-using FluentAssertions;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
@@ -57,10 +56,8 @@ public class TranslationTests : IDisposable
         var pathBeforeTranslate = ScreenshotHelper.CaptureWindow(window, "20_main_before_translate");
         _output.WriteLine($"Screenshot saved: {pathBeforeTranslate}");
 
-        // Press Enter to trigger translation
-        Keyboard.Press(VirtualKeyShort.ENTER);
-        Thread.Sleep(100);
-        Keyboard.Release(VirtualKeyShort.ENTER);
+        // Press Enter to trigger translation (Type = press + release, safe)
+        Keyboard.Type(VirtualKeyShort.ENTER);
 
         // Wait for translation results
         _output.WriteLine($"Waiting {TranslationWaitMs}ms for translation results...");
@@ -81,41 +78,15 @@ public class TranslationTests : IDisposable
 
         // Open mini window via hotkey: Ctrl+Alt+M
         _output.WriteLine("Opening mini window with Ctrl+Alt+M");
-        Keyboard.Press(VirtualKeyShort.CONTROL);
-        Keyboard.Press(VirtualKeyShort.ALT);
-        Keyboard.Press(VirtualKeyShort.KEY_M);
-        Thread.Sleep(100);
-        Keyboard.Release(VirtualKeyShort.KEY_M);
-        Keyboard.Release(VirtualKeyShort.ALT);
-        Keyboard.Release(VirtualKeyShort.CONTROL);
+        SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_M);
 
         // Wait for mini window to appear
         Thread.Sleep(3000);
 
-        // Try to find the mini window - it may be a new top-level window
-        FlaUI.Core.AutomationElements.Window? miniWindow = null;
-        var allWindows = _launcher.Application.GetAllTopLevelWindows(_launcher.Automation);
-        foreach (var w in allWindows)
-        {
-            _output.WriteLine($"Found window: \"{w.Title}\" ({w.ClassName})");
-            if (w.Title?.Contains("Mini", StringComparison.OrdinalIgnoreCase) == true
-                || w.Title?.Contains("Easydict", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                // Pick the smaller window as mini (not the main window)
-                if (miniWindow == null || w.BoundingRectangle.Width < miniWindow.BoundingRectangle.Width)
-                    miniWindow = w;
-            }
-        }
-
-        if (miniWindow == null && allWindows.Length > 1)
-        {
-            // If we can't identify by title, pick the second window
-            miniWindow = allWindows.OrderBy(w => w.BoundingRectangle.Width).First();
-        }
-
+        var miniWindow = FindSecondaryWindow("Mini");
         if (miniWindow == null)
         {
-            _output.WriteLine("Mini window not found after hotkey");
+            _output.WriteLine("Mini window not found after hotkey - capturing screen");
             ScreenshotHelper.CaptureScreen("23_mini_window_not_found");
             return;
         }
@@ -144,9 +115,7 @@ public class TranslationTests : IDisposable
         Thread.Sleep(500);
 
         // Press Enter to trigger translation
-        Keyboard.Press(VirtualKeyShort.ENTER);
-        Thread.Sleep(100);
-        Keyboard.Release(VirtualKeyShort.ENTER);
+        Keyboard.Type(VirtualKeyShort.ENTER);
 
         _output.WriteLine($"Waiting {TranslationWaitMs}ms for translation results...");
         Thread.Sleep(TranslationWaitMs);
@@ -163,39 +132,15 @@ public class TranslationTests : IDisposable
 
         // Open fixed window via hotkey: Ctrl+Alt+F
         _output.WriteLine("Opening fixed window with Ctrl+Alt+F");
-        Keyboard.Press(VirtualKeyShort.CONTROL);
-        Keyboard.Press(VirtualKeyShort.ALT);
-        Keyboard.Press(VirtualKeyShort.KEY_F);
-        Thread.Sleep(100);
-        Keyboard.Release(VirtualKeyShort.KEY_F);
-        Keyboard.Release(VirtualKeyShort.ALT);
-        Keyboard.Release(VirtualKeyShort.CONTROL);
+        SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_F);
 
         // Wait for fixed window to appear
         Thread.Sleep(3000);
 
-        // Find the fixed window among top-level windows
-        FlaUI.Core.AutomationElements.Window? fixedWindow = null;
-        var allWindows = _launcher.Application.GetAllTopLevelWindows(_launcher.Automation);
-        foreach (var w in allWindows)
-        {
-            _output.WriteLine($"Found window: \"{w.Title}\" ({w.ClassName})");
-            if (w.Title?.Contains("Fixed", StringComparison.OrdinalIgnoreCase) == true
-                || w.Title?.Contains("Easydict", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                if (fixedWindow == null || w.BoundingRectangle.Width < fixedWindow.BoundingRectangle.Width)
-                    fixedWindow = w;
-            }
-        }
-
-        if (fixedWindow == null && allWindows.Length > 1)
-        {
-            fixedWindow = allWindows.OrderBy(w => w.BoundingRectangle.Width).First();
-        }
-
+        var fixedWindow = FindSecondaryWindow("Fixed");
         if (fixedWindow == null)
         {
-            _output.WriteLine("Fixed window not found after hotkey");
+            _output.WriteLine("Fixed window not found after hotkey - capturing screen");
             ScreenshotHelper.CaptureScreen("25_fixed_window_not_found");
             return;
         }
@@ -224,15 +169,59 @@ public class TranslationTests : IDisposable
         Thread.Sleep(500);
 
         // Press Enter to trigger translation
-        Keyboard.Press(VirtualKeyShort.ENTER);
-        Thread.Sleep(100);
-        Keyboard.Release(VirtualKeyShort.ENTER);
+        Keyboard.Type(VirtualKeyShort.ENTER);
 
         _output.WriteLine($"Waiting {TranslationWaitMs}ms for translation results...");
         Thread.Sleep(TranslationWaitMs);
 
         var pathResult = ScreenshotHelper.CaptureWindow(fixedWindow, "26_fixed_after_translate");
         _output.WriteLine($"Screenshot saved: {pathResult}");
+    }
+
+    /// <summary>
+    /// Send a hotkey combination safely, ensuring all keys are released even on failure.
+    /// </summary>
+    private void SendHotkey(VirtualKeyShort modifier1, VirtualKeyShort modifier2, VirtualKeyShort key)
+    {
+        try
+        {
+            Keyboard.Press(modifier1);
+            Keyboard.Press(modifier2);
+            Keyboard.Press(key);
+            Thread.Sleep(100);
+        }
+        finally
+        {
+            // Always release all keys to prevent stuck modifiers
+            try { Keyboard.Release(key); } catch { /* ignore */ }
+            try { Keyboard.Release(modifier2); } catch { /* ignore */ }
+            try { Keyboard.Release(modifier1); } catch { /* ignore */ }
+        }
+    }
+
+    /// <summary>
+    /// Find a secondary (non-main) window from the application's top-level windows.
+    /// </summary>
+    private Window? FindSecondaryWindow(string windowType)
+    {
+        var allWindows = _launcher.Application.GetAllTopLevelWindows(_launcher.Automation);
+        _output.WriteLine($"Found {allWindows.Length} top-level window(s)");
+
+        foreach (var w in allWindows)
+        {
+            _output.WriteLine($"  Window: \"{w.Title}\" size={w.BoundingRectangle.Width}x{w.BoundingRectangle.Height}");
+        }
+
+        if (allWindows.Length <= 1)
+        {
+            _output.WriteLine($"{windowType} window did not open - only main window found");
+            return null;
+        }
+
+        // Return the smallest window (mini/fixed are smaller than main)
+        return allWindows
+            .OrderBy(w => w.BoundingRectangle.Width * w.BoundingRectangle.Height)
+            .First();
     }
 
     public void Dispose()

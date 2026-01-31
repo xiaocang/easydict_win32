@@ -312,6 +312,9 @@
   <data name="GitHubRepository" xml:space="preserve">
     <value>GitHub 저장소</value>
   </data>
+  <data name="IssueFeedback" xml:space="preserve">
+    <value>문제 피드백</value>
+  </data>
   <data name="InspiredBy" xml:space="preserve">
     <value>영감을 받은 곳</value>
   </data>

@@ -162,6 +162,8 @@ public sealed partial class SettingsPage : Page
         // About section
         if (AboutHeaderText != null)
             AboutHeaderText.Text = loc.GetString("About");
+        if (IssueFeedbackLink != null)
+            IssueFeedbackLink.Content = loc.GetString("IssueFeedback");
 
         // Save Settings button
         SaveButton.Content = loc.GetString("SaveSettings");

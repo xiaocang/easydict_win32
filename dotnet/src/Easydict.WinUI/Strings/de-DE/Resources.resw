@@ -312,6 +312,9 @@
   <data name="GitHubRepository" xml:space="preserve">
     <value>GitHub-Repository</value>
   </data>
+  <data name="IssueFeedback" xml:space="preserve">
+    <value>Problem melden</value>
+  </data>
   <data name="InspiredBy" xml:space="preserve">
     <value>Inspiriert von</value>
   </data>

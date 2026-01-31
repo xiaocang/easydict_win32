@@ -315,6 +315,9 @@
   <data name="GitHubRepository" xml:space="preserve">
     <value>GitHub Repository</value>
   </data>
+  <data name="IssueFeedback" xml:space="preserve">
+    <value>Issue Feedback</value>
+  </data>
   <data name="InspiredBy" xml:space="preserve">
     <value>Inspired by</value>
   </data>

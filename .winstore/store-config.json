@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicknsy/mscli/main/schemas/store-config.schema.json",
+  "app": {
+    "id": "9p7nqvxf9dzj",
+    "name": "xiaocang.EasydictforWindows",
+    "publisherDisplayName": "xiaocang"
+  },
+  "listing": {
+    "basePath": "listings",
+    "languages": [
+      "en-us",
+      "zh-cn",
+      "zh-tw",
+      "ja-jp",
+      "ko-kr",
+      "fr-fr",
+      "de-de"
+    ],
+    "primaryLanguage": "en-us"
+  },
+  "submission": {
+    "category": "Productivity",
+    "subcategory": "Tools",
+    "privacyPolicyUrl": "https://github.com/xiaocang/easydict_win32/blob/main/PRIVACY.md",
+    "supportUrl": "https://github.com/xiaocang/easydict_win32/issues",
+    "websiteUrl": "https://github.com/xiaocang/easydict_win32",
+    "pricing": "Free",
+    "markets": "All"
+  }
+}

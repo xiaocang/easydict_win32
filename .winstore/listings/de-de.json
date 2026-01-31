@@ -1,0 +1,39 @@
+{
+  "language": "de-de",
+  "title": "Easydict für Windows",
+  "shortTitle": "Easydict",
+  "sortTitle": "Easydict",
+  "voiceTitle": "Easy Dict",
+  "shortDescription": "Einfach Wörter nachschlagen oder Texte übersetzen",
+  "description": "Easydict für Windows ist ein leistungsstarkes Übersetzungs- und Wörterbuchtool mit sofortigem Zugriff auf über 16 Übersetzungsdienste. Ob Sie schnell ein Wort nachschlagen, einen vollständigen Text übersetzen oder KI-gestützte Übersetzungen mit Echtzeit-Streaming nutzen möchten – Easydict deckt alles ab.\n\nEine Windows-Portierung der beliebten macOS-App Easydict, entwickelt mit modernen .NET 8- und WinUI 3-Technologien für ein natives Windows-Erlebnis.\n\nWichtigste Funktionen:\n\n- Über 16 Übersetzungsdienste: Google Übersetzer, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama und mehr\n- KI-Streaming-Übersetzung: LLM-Übersetzungen erscheinen in Echtzeit\n- Mehrere Fenstermodi: Vollständiges Hauptfenster, kompaktes Minifenster oder dauerhaftes festes Fenster\n- Globale Tastenkombinationen: Übersetzen Sie von überall mit anpassbaren Tastenkombinationen\n- Infobereich: Läuft leise im Hintergrund, immer einsatzbereit\n- Zwischenablage-Überwachung: Automatische Übersetzung kopierter Texte\n- Dunkles/Helles Design: Folgt dem Windows-Systemdesign\n- Text-zu-Sprache: Quell- und übersetzten Text anhören\n- Hohe DPI-Unterstützung: Gestochen scharf auf jedem Display\n\nPerfekt für Studenten, Berufstätige, Übersetzer und alle, die schnelle, zuverlässige Übersetzungen in mehreren Sprachen benötigen.",
+  "features": [
+    "Über 16 Übersetzungsdienste einschließlich Google, DeepL, OpenAI, Gemini und DeepSeek",
+    "Echtzeit-Streaming-Übersetzung mit KI-Diensten",
+    "Mehrere Fenstermodi: Haupt-, Mini- und festes Fenster",
+    "Globale Tastenkombinationen für sofortige Übersetzung aus jeder Anwendung",
+    "Infobereich-Integration für den Hintergrundbetrieb",
+    "Zwischenablage-Überwachung mit automatischer Übersetzung",
+    "Dunkles und helles Design passend zu den Systemeinstellungen",
+    "Text-zu-Sprache für Quell- und übersetzten Text",
+    "HTTP-Proxy-Unterstützung",
+    "Lokale LLM-Unterstützung über Ollama",
+    "Unterstützung benutzerdefinierter OpenAI-kompatibler Dienste",
+    "Hohe DPI- und Multi-Monitor-Unterstützung"
+  ],
+  "keywords": [
+    "Übersetzer",
+    "Übersetzung",
+    "Wörterbuch",
+    "DeepL",
+    "OpenAI",
+    "Gemini",
+    "LLM",
+    "mehrsprachig",
+    "Tastenkombination",
+    "übersetzen"
+  ],
+  "releaseNotes": "",
+  "copyrightAndTrademarkInfo": "Copyright (c) xiaocang. GPL-3.0-Lizenz.",
+  "additionalLicenseTerms": "",
+  "developedBy": "xiaocang"
+}

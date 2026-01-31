@@ -1,0 +1,39 @@
+{
+  "language": "zh-cn",
+  "title": "Easydict Windows 版",
+  "shortTitle": "Easydict",
+  "sortTitle": "Easydict",
+  "voiceTitle": "易词典",
+  "shortDescription": "轻松查词翻译",
+  "description": "Easydict Windows 版是一款强大的翻译和词典工具，提供 16+ 种翻译服务的即时访问。无论您需要快速查词、全文翻译，还是支持实时流式输出的 AI 翻译，Easydict 都能满足您的需求。\n\n本应用是热门 macOS Easydict 应用的 Windows 移植版，采用现代 .NET 8 和 WinUI 3 技术构建，提供原生 Windows 体验。\n\n核心亮点：\n\n- 16+ 种翻译服务：Google 翻译、DeepL、OpenAI、Gemini、DeepSeek、Groq、智谱 AI、GitHub Models、豆包、彩云小译、小牛翻译、Linguee、Ollama 等\n- AI 流式翻译：实时观看 LLM 翻译结果逐字生成\n- 多种窗口模式：完整主窗口、紧凑迷你窗口或常驻固定窗口\n- 全局快捷键：通过可自定义的键盘快捷键随时随地翻译\n- 系统托盘：安静地在后台运行，需要时随时可用\n- 剪贴板监听：自动翻译复制的文本\n- 深色/浅色主题：跟随 Windows 系统主题\n- 文字转语音：朗读原文和翻译结果\n- 高 DPI 支持：在任何显示器上都清晰锐利\n\n适合学生、职场人士、翻译工作者以及需要快速、可靠多语言翻译的所有人。",
+  "features": [
+    "16+ 种翻译服务，包括 Google、DeepL、OpenAI、Gemini 和 DeepSeek",
+    "AI 服务实时流式翻译",
+    "多种窗口模式：主窗口、迷你窗口和固定窗口",
+    "全局快捷键，从任意应用中即时翻译",
+    "系统托盘集成，支持后台运行",
+    "剪贴板监听，自动翻译",
+    "深色和浅色主题，跟随系统设置",
+    "文字转语音，朗读原文和译文",
+    "HTTP 代理支持",
+    "通过 Ollama 支持本地 LLM",
+    "自定义 OpenAI 兼容服务支持",
+    "高 DPI 和多显示器支持"
+  ],
+  "keywords": [
+    "翻译",
+    "词典",
+    "翻译器",
+    "DeepL",
+    "OpenAI",
+    "Gemini",
+    "大语言模型",
+    "多语言",
+    "快捷键",
+    "划词翻译"
+  ],
+  "releaseNotes": "",
+  "copyrightAndTrademarkInfo": "Copyright (c) xiaocang. 基于 GPL-3.0 许可证。",
+  "additionalLicenseTerms": "",
+  "developedBy": "xiaocang"
+}

@@ -1,5 +1,13 @@
 # .winstore - Windows Store Listing Metadata
 
+Easydict for Windows is now available on the Microsoft Store.
+
+<a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
+  <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200" />
+</a>
+
+**Store URL**: https://apps.microsoft.com/detail/9p7nqvxf9dzj
+
 This directory maintains the Microsoft Store listing metadata for Easydict for Windows.
 
 ## Directory Structure

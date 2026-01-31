@@ -70,6 +70,8 @@
 
 - **深色/浅色主题** - 跟随系统主题
 
+- **TTS（文字转语音）** - 使用 Windows Speech Synthesis 朗读原文和译文
+
 ### 截图
 
 ![总览](screenshot/Snipaste_2026-01-26_21-39-35.png)
@@ -143,7 +145,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - [x] ~~**彩云小译**~~ ✅ **已实现**
 - [x] ~~**小牛翻译**~~ - 450+ 语种 ✅ **已实现**
 - [x] ~~**Linguee 词典**~~ - 带上下文例句的词典 ✅ **已实现**
-- [ ] **TTS（文字转语音）** - Windows Speech Synthesis API
+- [x] ~~**TTS（文字转语音）**~~ - Windows Speech Synthesis API ✅ **已实现**
 
 ### 中优先级
 
@@ -174,9 +176,9 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | 功能 | macOS | Windows |
 |------|-------|---------|
-| 翻译服务 | 25+ | 15 |
+| 翻译服务 | 25+ | 16 |
 | OCR 截图翻译 | 支持 | 不支持 |
-| TTS | 支持 | 计划中 |
+| TTS | 支持 | 支持 |
 | 划词翻译 | 支持 | 支持 |
 | 窗口类型 | 3 | 3 |
 | 全局快捷键 | 10+ | 6 |

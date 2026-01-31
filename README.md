@@ -174,7 +174,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ### Distribution
 
-- [ ] **Windows Store** - Publish to Microsoft Store
+- [x] **Windows Store** - Published to Microsoft Store
 - [ ] **winget** - Publish to Windows Package Manager
 
 ## Comparison with macOS Version

@@ -173,7 +173,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ### 分发
 
-- [ ] **Windows 商店** - 上架 Microsoft Store
+- [x] **Windows 商店** - 已上架 Microsoft Store
 - [ ] **winget** - 发布到 Windows 包管理器
 
 ## 与 macOS 版本对比

@@ -74,7 +74,7 @@ public class DarkModeTests : IDisposable
         _output.WriteLine($"Screenshot saved: {path}");
 
         // Scroll down to show more settings in dark mode
-        var scrollViewer = window.FindFirstDescendant(cf => cf.ByName("MainScrollViewer"));
+        var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
         if (scrollViewer != null)
         {
             Mouse.MoveTo(scrollViewer.GetClickablePoint());
@@ -174,7 +174,7 @@ public class DarkModeTests : IDisposable
     {
         // Click settings button
         var settingsButton = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByName("SettingsButton")),
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("SettingsButton")),
             TimeSpan.FromSeconds(10)).Result;
 
         settingsButton.Should().NotBeNull("SettingsButton must exist");
@@ -182,7 +182,7 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(2000);
 
         // Scroll down to Behavior section where AppThemeCombo lives
-        var scrollViewer = window.FindFirstDescendant(cf => cf.ByName("MainScrollViewer"));
+        var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
         if (scrollViewer != null)
         {
             Mouse.MoveTo(scrollViewer.GetClickablePoint());
@@ -193,7 +193,7 @@ public class DarkModeTests : IDisposable
 
         // Find and interact with AppThemeCombo
         var themeCombo = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByName("AppThemeCombo"))?.AsComboBox(),
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo"))?.AsComboBox(),
             TimeSpan.FromSeconds(10)).Result;
 
         themeCombo.Should().NotBeNull("AppThemeCombo must exist on settings page");
@@ -228,7 +228,7 @@ public class DarkModeTests : IDisposable
     private void NavigateBackToMain(Window window)
     {
         // Try floating back button first
-        var backButton = window.FindFirstDescendant(cf => cf.ByName("FloatingBackButton"));
+        var backButton = window.FindFirstDescendant(cf => cf.ByAutomationId("FloatingBackButton"));
         if (backButton != null)
         {
             backButton.Click();
@@ -237,7 +237,7 @@ public class DarkModeTests : IDisposable
         }
 
         // Try any back button
-        backButton = window.FindFirstDescendant(cf => cf.ByName("BackButton"));
+        backButton = window.FindFirstDescendant(cf => cf.ByAutomationId("BackButton"));
         if (backButton != null)
         {
             backButton.Click();

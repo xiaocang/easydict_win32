@@ -33,7 +33,7 @@ public class SettingsPageScrollTests : IDisposable
 
         // Navigate to settings
         var settingsButton = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByName("SettingsButton")),
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("SettingsButton")),
             TimeSpan.FromSeconds(10)).Result;
 
         settingsButton.Should().NotBeNull("SettingsButton must exist on main window");
@@ -44,7 +44,7 @@ public class SettingsPageScrollTests : IDisposable
         var path = ScreenshotHelper.CaptureWindow(window, "10_settings_top_language_prefs");
         _output.WriteLine($"Screenshot saved: {path}");
 
-        var scrollViewer = window.FindFirstDescendant(cf => cf.ByName("MainScrollViewer"));
+        var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
         scrollViewer.Should().NotBeNull("MainScrollViewer must exist on settings page");
 
         Mouse.MoveTo(scrollViewer!.GetClickablePoint());

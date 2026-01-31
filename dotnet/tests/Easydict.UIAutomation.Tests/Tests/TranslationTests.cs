@@ -38,7 +38,7 @@ public class TranslationTests : IDisposable
 
         // Find the input text box
         var inputBox = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox(),
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
             TimeSpan.FromSeconds(10)).Result;
 
         inputBox.Should().NotBeNull("InputTextBox must exist on main window");
@@ -90,7 +90,7 @@ public class TranslationTests : IDisposable
 
         // Find input text box in mini window
         var inputBox = Retry.WhileNull(
-            () => miniWindow.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox(),
+            () => miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
             TimeSpan.FromSeconds(10)).Result;
 
         inputBox.Should().NotBeNull("InputTextBox must exist in mini window");
@@ -134,7 +134,7 @@ public class TranslationTests : IDisposable
 
         // Find input text box in fixed window
         var inputBox = Retry.WhileNull(
-            () => fixedWindow.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox(),
+            () => fixedWindow.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
             TimeSpan.FromSeconds(10)).Result;
 
         inputBox.Should().NotBeNull("InputTextBox must exist in fixed window");

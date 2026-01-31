@@ -50,6 +50,10 @@ easydict_win32/
 ├── easydict_win32/                      # Original/legacy code
 ├── sidecar_mock/                        # Mock sidecar for testing
 ├── screenshot/                          # Screenshots for README
+├── .winstore/                           # Microsoft Store listing metadata
+│   ├── listings/                        # Per-language store listings (en-us, zh-cn, etc.)
+│   ├── scripts/                         # Store sync scripts (Sync-StoreListings.ps1)
+│   └── store-config.json               # Store app ID, languages, submission settings
 ├── .github/                             # GitHub workflows
 └── README.md
 ```
@@ -150,6 +154,16 @@ make run
 - Unit tests using xUnit + FluentAssertions
 - Mock implementations for HTTP clients and external services
 - Separate test projects for each major component
+
+### Windows Store (`.winstore/`)
+- App is published on Microsoft Store: https://apps.microsoft.com/detail/9p7nqvxf9dzj
+- Store listing metadata is maintained as JSON files in `.winstore/listings/`, one per language (en-us, zh-cn, zh-tw, ja-jp, ko-kr, fr-fr, de-de)
+- `en-us` is the primary language; update it first, then translate to others
+- **Keywords must NOT contain third-party product names** (DeepL, OpenAI, ChatGPT, Gemini, DeepSeek, etc.) per Microsoft Store policy; these names are allowed in `description` and `features` only
+- Description must emphasize "free and open-source" and GPL-3.0 in the first sentence
+- `store-config.json` holds app identity, supported languages, and submission settings
+- `scripts/Sync-StoreListings.ps1` validates/previews/submits listings via `msstore` CLI
+- GitHub Actions workflow `store-listings.yml` provides manual-trigger store listing management
 
 ## Coding Style and Conventions
 

@@ -508,12 +508,7 @@
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="Easydict for Windows" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            <Border Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="4" Padding="6,1,6,2" VerticalAlignment="Center" Margin="0,-4,0,0">
-                                <TextBlock Text="Beta" FontSize="10" FontWeight="SemiBold" Foreground="White" />
-                            </Border>
-                        </StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Easydict for Windows ᵇᵉᵗᵃ" />
                         <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <HyperlinkButton Content="GitHub Repository" NavigateUri="https://github.com/xiaocang/easydict_win32" />
                         <HyperlinkButton x:Name="IssueFeedbackLink" Content="Issue Feedback" NavigateUri="https://github.com/xiaocang/easydict_win32/issues/new/choose" />

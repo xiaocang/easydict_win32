@@ -106,7 +106,7 @@ public sealed partial class FixedWindow : Window
         var loc = LocalizationService.Instance;
 
         // Window title - keep "Easydict" brand name, only localize "Fixed"
-        this.Title = $"Easydict Beta {loc.GetString("FixedTranslate")}";
+        this.Title = $"Easydict ᵇᵉᵗᵃ {loc.GetString("FixedTranslate")}";
 
         // Source Language ComboBox items - 9 items: Auto + 8 languages
         if (SourceLangCombo.Items.Count >= 9)

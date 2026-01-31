@@ -1,0 +1,107 @@
+name: Store Listings Management
+
+# Manually triggered workflow for managing Microsoft Store listing metadata.
+# Uses the Microsoft Store Developer CLI (msstore) to sync listing content
+# from .winstore/listings/ to Partner Center.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - validate
+          - preview
+          - submit
+        default: 'validate'
+      languages:
+        description: 'Languages to process (comma-separated, empty for all)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  store-listings:
+    name: "${{ github.event.inputs.action }} store listings"
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Microsoft Store Developer CLI
+        if: github.event.inputs.action == 'submit'
+        run: dotnet tool install -g MSStore.CLI
+
+      - name: Configure msstore credentials
+        if: github.event.inputs.action == 'submit'
+        shell: pwsh
+        env:
+          MSSTORE_TENANT_ID: ${{ secrets.MSSTORE_TENANT_ID }}
+          MSSTORE_CLIENT_ID: ${{ secrets.MSSTORE_CLIENT_ID }}
+          MSSTORE_CLIENT_SECRET: ${{ secrets.MSSTORE_CLIENT_SECRET }}
+        run: |
+          # Configure msstore CLI with Azure AD credentials for Partner Center API access
+          # These credentials are created in Azure Portal > App registrations
+          # and granted access in Partner Center > Account settings > User management
+          msstore reconfigure `
+            --tenantId $env:MSSTORE_TENANT_ID `
+            --clientId $env:MSSTORE_CLIENT_ID `
+            --clientSecret $env:MSSTORE_CLIENT_SECRET
+
+      - name: Run store listing sync
+        shell: pwsh
+        env:
+          INPUT_ACTION: ${{ github.event.inputs.action }}
+          INPUT_LANGUAGES: ${{ github.event.inputs.languages }}
+        run: |
+          $params = @{
+            Mode = $env:INPUT_ACTION
+          }
+
+          if ($env:INPUT_LANGUAGES -ne "") {
+            $params.Languages = $env:INPUT_LANGUAGES
+          }
+
+          .winstore/scripts/Sync-StoreListings.ps1 @params
+
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: |
+          $config = Get-Content .winstore/store-config.json -Raw | ConvertFrom-Json
+          $languages = $config.listing.languages
+
+          # Generate GitHub Actions step summary
+          $summary = @"
+          ## Store Listings - ${{ github.event.inputs.action }}
+
+          | Language | File | Status |
+          |----------|------|--------|
+          "@
+
+          foreach ($lang in $languages) {
+            $file = ".winstore/listings/$lang.json"
+            if (Test-Path $file) {
+              $listing = Get-Content $file -Raw | ConvertFrom-Json
+              $summary += "`n| $lang | ``$lang.json`` | $($listing.title) |"
+            } else {
+              $summary += "`n| $lang | ``$lang.json`` | Missing |"
+            }
+          }
+
+          $summary += @"
+
+          ### Configuration
+          - **App ID**: $($config.app.id)
+          - **Primary Language**: $($config.listing.primaryLanguage)
+          - **Action**: ${{ github.event.inputs.action }}
+          - **Languages Filter**: ${{ github.event.inputs.languages || 'all' }}
+          "@
+
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8

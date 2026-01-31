@@ -11,6 +11,10 @@
 
 [![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml)
 
+<a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
+  <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="从 Microsoft 获取" width="200" />
+</a>
+
 ## 简介
 
 这是 [Easydict](https://github.com/tisfeng/Easydict) 的 Windows 移植版本，原版是一款 macOS 翻译词典应用。本项目使用 **Vibe Coding** — AI 辅助编程，将 Swift/SwiftUI 代码库迁移到 .NET 8 + WinUI 3。
@@ -74,13 +78,13 @@
 
 ### 截图
 
-![总览](screenshot/Snipaste_2026-01-26_21-39-35.png)
+![总览](screenshot/overview.png)
 
 *主窗口与迷你窗口（快速翻译）*
 
 | 主窗口 | 所有窗口 | 设置 |
 |--------|---------|------|
-| ![主窗口](screenshot/Snipaste_2026-01-26_21-40-19.png) | ![所有窗口](screenshot/Snipaste_2026-01-26_21-41-52.png) | ![设置](screenshot/Snipaste_2026-01-26_21-40-59.png) |
+| ![主窗口](screenshot/main-window.png) | ![所有窗口](screenshot/all-windows.png) | ![设置](screenshot/settings.png) |
 | 完整翻译界面 | 主窗口 + 迷你窗口 + 固定窗口及快捷键设置 | 服务配置 |
 
 ## 安装
@@ -169,7 +173,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ### 分发
 
-- [ ] **Windows 商店** - 上架 Microsoft Store
+- [x] **Windows 商店** - 已上架 Microsoft Store
 - [ ] **winget** - 发布到 Windows 包管理器
 
 ## 与 macOS 版本对比

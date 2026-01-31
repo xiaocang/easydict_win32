@@ -1,0 +1,54 @@
+{
+  "language": "en-us",
+  "title": "Easydict for Windows",
+  "shortTitle": "Easydict",
+  "sortTitle": "Easydict",
+  "voiceTitle": "Easy Dict",
+  "shortDescription": "Easy to look up words or translate text",
+  "description": "Easydict for Windows is a free and open-source translation and dictionary tool that provides instant access to 16+ translation services. The full source code is available on GitHub under the GPL-3.0 license. Whether you need quick word lookups, full-text translation, or AI-powered translations with real-time streaming, Easydict has you covered.\n\nA Windows port of the popular macOS Easydict app, built with modern .NET 8 and WinUI 3 technologies for a native Windows experience.\n\nKey Highlights:\n\n- 16+ Translation Services: Google Translate, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama, and more\n- AI-Powered Streaming: Watch LLM translations appear in real-time as they're generated\n- Multiple Window Modes: Full main window, compact mini window, or persistent fixed window\n- Global Hotkeys: Translate from anywhere with customizable keyboard shortcuts\n- System Tray: Runs quietly in the background, always ready when you need it\n- Clipboard Monitoring: Automatically translate copied text\n- Dark/Light Theme: Follows your Windows system theme\n- Text-to-Speech: Listen to source and translated text\n- High DPI Support: Crystal clear on any display\n\nPerfect for students, professionals, translators, and anyone who needs quick, reliable translations across multiple languages.",
+  "features": [
+    "16+ translation services including Google, DeepL, OpenAI, Gemini, and DeepSeek",
+    "Real-time LLM streaming translation with AI services",
+    "Multiple window modes: Main, Mini, and Fixed windows",
+    "Global hotkeys for instant translation from any application",
+    "System tray integration for background operation",
+    "Clipboard monitoring with auto-translate",
+    "Dark and Light theme support following system settings",
+    "Text-to-Speech for source and translated text",
+    "HTTP proxy support for network configuration",
+    "Support for local LLM via Ollama",
+    "Custom OpenAI-compatible service support",
+    "High DPI and multi-monitor support"
+  ],
+  "keywords": [
+    "translate",
+    "translation",
+    "dictionary",
+    "translator",
+    "open source",
+    "LLM",
+    "multilingual"
+  ],
+  "releaseNotes": "",
+  "copyrightAndTrademarkInfo": "Copyright (c) xiaocang. Licensed under GPL-3.0.",
+  "additionalLicenseTerms": "",
+  "developedBy": "xiaocang",
+  "images": {
+    "overview": {
+      "fileName": "../../screenshot/overview.png",
+      "description": "Main Window with Mini Window for quick translation"
+    },
+    "main-window": {
+      "fileName": "../../screenshot/main-window.png",
+      "description": "Full translation interface with multiple services"
+    },
+    "all-windows": {
+      "fileName": "../../screenshot/all-windows.png",
+      "description": "All window modes: Main, Mini, and Fixed windows with hotkey settings"
+    },
+    "settings": {
+      "fileName": "../../screenshot/settings.png",
+      "description": "Settings page with service configuration"
+    }
+  }
+}

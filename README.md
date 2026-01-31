@@ -11,6 +11,10 @@
 
 [![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml)
 
+<a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
+  <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200" />
+</a>
+
 ## Introduction
 
 This is a Windows port of [Easydict](https://github.com/tisfeng/Easydict), originally a macOS translation dictionary app. The project was developed using **Vibe Coding** - AI-assisted programming to migrate the Swift/SwiftUI codebase to .NET 8 + WinUI 3.
@@ -75,13 +79,13 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 ### Screenshots
 
-![Overview](screenshot/Snipaste_2026-01-26_21-39-35.png)
+![Overview](screenshot/overview.png)
 
 *Main Window with Mini Window (Quick Translate)*
 
 | Main Window | All Windows | Settings |
 |-------------|-------------|----------|
-| ![Main Window](screenshot/Snipaste_2026-01-26_21-40-19.png) | ![All Windows](screenshot/Snipaste_2026-01-26_21-41-52.png) | ![Settings](screenshot/Snipaste_2026-01-26_21-40-59.png) |
+| ![Main Window](screenshot/main-window.png) | ![All Windows](screenshot/all-windows.png) | ![Settings](screenshot/settings.png) |
 | Full translation interface | Main + Mini + Fixed windows with hotkey settings | Service configuration |
 
 ## Installation
@@ -170,7 +174,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ### Distribution
 
-- [ ] **Windows Store** - Publish to Microsoft Store
+- [x] **Windows Store** - Published to Microsoft Store
 - [ ] **winget** - Publish to Windows Package Manager
 
 ## Comparison with macOS Version

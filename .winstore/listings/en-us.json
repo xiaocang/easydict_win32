@@ -34,20 +34,20 @@
   "additionalLicenseTerms": "",
   "developedBy": "xiaocang",
   "images": {
-    "screenshot1": {
-      "fileName": "screenshot1.png",
+    "overview": {
+      "fileName": "../../screenshot/overview.png",
       "description": "Main Window with Mini Window for quick translation"
     },
-    "screenshot2": {
-      "fileName": "screenshot2.png",
+    "main-window": {
+      "fileName": "../../screenshot/main-window.png",
       "description": "Full translation interface with multiple services"
     },
-    "screenshot3": {
-      "fileName": "screenshot3.png",
-      "description": "All window modes: Main, Mini, and Fixed windows"
+    "all-windows": {
+      "fileName": "../../screenshot/all-windows.png",
+      "description": "All window modes: Main, Mini, and Fixed windows with hotkey settings"
     },
-    "screenshot4": {
-      "fileName": "screenshot4.png",
+    "settings": {
+      "fileName": "../../screenshot/settings.png",
       "description": "Settings page with service configuration"
     }
   }

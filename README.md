@@ -79,13 +79,13 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 ### Screenshots
 
-![Overview](screenshot/Snipaste_2026-01-26_21-39-35.png)
+![Overview](screenshot/overview.png)
 
 *Main Window with Mini Window (Quick Translate)*
 
 | Main Window | All Windows | Settings |
 |-------------|-------------|----------|
-| ![Main Window](screenshot/Snipaste_2026-01-26_21-40-19.png) | ![All Windows](screenshot/Snipaste_2026-01-26_21-41-52.png) | ![Settings](screenshot/Snipaste_2026-01-26_21-40-59.png) |
+| ![Main Window](screenshot/main-window.png) | ![All Windows](screenshot/all-windows.png) | ![Settings](screenshot/settings.png) |
 | Full translation interface | Main + Mini + Fixed windows with hotkey settings | Service configuration |
 
 ## Installation

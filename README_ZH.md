@@ -78,13 +78,13 @@
 
 ### 截图
 
-![总览](screenshot/Snipaste_2026-01-26_21-39-35.png)
+![总览](screenshot/overview.png)
 
 *主窗口与迷你窗口（快速翻译）*
 
 | 主窗口 | 所有窗口 | 设置 |
 |--------|---------|------|
-| ![主窗口](screenshot/Snipaste_2026-01-26_21-40-19.png) | ![所有窗口](screenshot/Snipaste_2026-01-26_21-41-52.png) | ![设置](screenshot/Snipaste_2026-01-26_21-40-59.png) |
+| ![主窗口](screenshot/main-window.png) | ![所有窗口](screenshot/all-windows.png) | ![设置](screenshot/settings.png) |
 | 完整翻译界面 | 主窗口 + 迷你窗口 + 固定窗口及快捷键设置 | 服务配置 |
 
 ## 安装

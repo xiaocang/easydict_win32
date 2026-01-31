@@ -32,5 +32,23 @@
   "releaseNotes": "",
   "copyrightAndTrademarkInfo": "Copyright (c) xiaocang. GPL-3.0 ライセンス。",
   "additionalLicenseTerms": "",
-  "developedBy": "xiaocang"
+  "developedBy": "xiaocang",
+  "images": {
+    "overview": {
+      "fileName": "../../screenshot/overview.png",
+      "description": "メインウィンドウとミニウィンドウでクイック翻訳"
+    },
+    "main-window": {
+      "fileName": "../../screenshot/main-window.png",
+      "description": "複数の翻訳サービスに対応した翻訳インターフェース"
+    },
+    "all-windows": {
+      "fileName": "../../screenshot/all-windows.png",
+      "description": "全ウィンドウモード：メイン、ミニ、固定ウィンドウとホットキー設定"
+    },
+    "settings": {
+      "fileName": "../../screenshot/settings.png",
+      "description": "設定画面：翻訳サービスの構成"
+    }
+  }
 }

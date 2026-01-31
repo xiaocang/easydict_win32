@@ -32,5 +32,23 @@
   "releaseNotes": "",
   "copyrightAndTrademarkInfo": "Copyright (c) xiaocang. GPL-3.0 라이선스.",
   "additionalLicenseTerms": "",
-  "developedBy": "xiaocang"
+  "developedBy": "xiaocang",
+  "images": {
+    "overview": {
+      "fileName": "../../screenshot/overview.png",
+      "description": "메인 창과 미니 창으로 빠른 번역"
+    },
+    "main-window": {
+      "fileName": "../../screenshot/main-window.png",
+      "description": "다양한 번역 서비스를 지원하는 번역 인터페이스"
+    },
+    "all-windows": {
+      "fileName": "../../screenshot/all-windows.png",
+      "description": "모든 창 모드: 메인, 미니, 고정 창 및 단축키 설정"
+    },
+    "settings": {
+      "fileName": "../../screenshot/settings.png",
+      "description": "설정 페이지: 번역 서비스 구성"
+    }
+  }
 }

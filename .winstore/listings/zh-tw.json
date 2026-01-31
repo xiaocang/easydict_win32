@@ -32,5 +32,23 @@
   "releaseNotes": "",
   "copyrightAndTrademarkInfo": "Copyright (c) xiaocang. 基於 GPL-3.0 授權條款。",
   "additionalLicenseTerms": "",
-  "developedBy": "xiaocang"
+  "developedBy": "xiaocang",
+  "images": {
+    "overview": {
+      "fileName": "../../screenshot/overview.png",
+      "description": "主視窗與迷你視窗快速翻譯"
+    },
+    "main-window": {
+      "fileName": "../../screenshot/main-window.png",
+      "description": "完整翻譯介面，支援多種翻譯服務"
+    },
+    "all-windows": {
+      "fileName": "../../screenshot/all-windows.png",
+      "description": "所有視窗模式：主視窗、迷你視窗、固定視窗及快速鍵設定"
+    },
+    "settings": {
+      "fileName": "../../screenshot/settings.png",
+      "description": "設定頁面：翻譯服務配置"
+    }
+  }
 }

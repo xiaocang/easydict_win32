@@ -32,5 +32,23 @@
   "releaseNotes": "",
   "copyrightAndTrademarkInfo": "Copyright (c) xiaocang. GPL-3.0-Lizenz.",
   "additionalLicenseTerms": "",
-  "developedBy": "xiaocang"
+  "developedBy": "xiaocang",
+  "images": {
+    "overview": {
+      "fileName": "../../screenshot/overview.png",
+      "description": "Hauptfenster und Minifenster für schnelle Übersetzung"
+    },
+    "main-window": {
+      "fileName": "../../screenshot/main-window.png",
+      "description": "Vollständige Übersetzungsoberfläche mit mehreren Diensten"
+    },
+    "all-windows": {
+      "fileName": "../../screenshot/all-windows.png",
+      "description": "Alle Fenstermodi: Haupt-, Mini-, festes Fenster und Tastenkombinationen"
+    },
+    "settings": {
+      "fileName": "../../screenshot/settings.png",
+      "description": "Einstellungsseite: Konfiguration der Übersetzungsdienste"
+    }
+  }
 }

@@ -32,5 +32,23 @@
   "releaseNotes": "",
   "copyrightAndTrademarkInfo": "Copyright (c) xiaocang. 基于 GPL-3.0 许可证。",
   "additionalLicenseTerms": "",
-  "developedBy": "xiaocang"
+  "developedBy": "xiaocang",
+  "images": {
+    "overview": {
+      "fileName": "../../screenshot/overview.png",
+      "description": "主窗口与迷你窗口快速翻译"
+    },
+    "main-window": {
+      "fileName": "../../screenshot/main-window.png",
+      "description": "完整翻译界面，支持多种翻译服务"
+    },
+    "all-windows": {
+      "fileName": "../../screenshot/all-windows.png",
+      "description": "所有窗口模式：主窗口、迷你窗口、固定窗口及快捷键设置"
+    },
+    "settings": {
+      "fileName": "../../screenshot/settings.png",
+      "description": "设置页面：翻译服务配置"
+    }
+  }
 }

@@ -5,7 +5,7 @@
   "sortTitle": "Easydict",
   "voiceTitle": "易詞典",
   "shortDescription": "輕鬆查詞翻譯",
-  "description": "Easydict Windows 版是一款強大的翻譯和詞典工具，提供 16+ 種翻譯服務的即時存取。無論您需要快速查詞、全文翻譯，還是支援即時串流輸出的 AI 翻譯，Easydict 都能滿足您的需求。\n\n本應用程式是熱門 macOS Easydict 應用程式的 Windows 移植版，採用現代 .NET 8 和 WinUI 3 技術建構，提供原生 Windows 體驗。\n\n核心亮點：\n\n- 16+ 種翻譯服務：Google 翻譯、DeepL、OpenAI、Gemini、DeepSeek、Groq、智譜 AI、GitHub Models、豆包、彩雲小譯、小牛翻譯、Linguee、Ollama 等\n- AI 串流翻譯：即時觀看 LLM 翻譯結果逐字生成\n- 多種視窗模式：完整主視窗、精巧迷你視窗或常駐固定視窗\n- 全域快速鍵：透過可自訂的鍵盤快速鍵隨時隨地翻譯\n- 系統匣：安靜地在背景執行，需要時隨時可用\n- 剪貼簿監聽：自動翻譯複製的文字\n- 深色/淺色主題：跟隨 Windows 系統主題\n- 文字轉語音：朗讀原文和翻譯結果\n- 高 DPI 支援：在任何顯示器上都清晰銳利\n\n適合學生、職場人士、翻譯工作者以及需要快速、可靠多語言翻譯的所有人。",
+  "description": "Easydict Windows 版是一款免費開源的翻譯和詞典工具，提供 16+ 種翻譯服務的即時存取。完整原始碼已在 GitHub 上以 GPL-3.0 授權條款開放。無論您需要快速查詞、全文翻譯，還是支援即時串流輸出的 AI 翻譯，Easydict 都能滿足您的需求。\n\n本應用程式是熱門 macOS Easydict 應用程式的 Windows 移植版，採用現代 .NET 8 和 WinUI 3 技術建構，提供原生 Windows 體驗。\n\n核心亮點：\n\n- 16+ 種翻譯服務：Google 翻譯、DeepL、OpenAI、Gemini、DeepSeek、Groq、智譜 AI、GitHub Models、豆包、彩雲小譯、小牛翻譯、Linguee、Ollama 等\n- AI 串流翻譯：即時觀看 LLM 翻譯結果逐字生成\n- 多種視窗模式：完整主視窗、精巧迷你視窗或常駐固定視窗\n- 全域快速鍵：透過可自訂的鍵盤快速鍵隨時隨地翻譯\n- 系統匣：安靜地在背景執行，需要時隨時可用\n- 剪貼簿監聽：自動翻譯複製的文字\n- 深色/淺色主題：跟隨 Windows 系統主題\n- 文字轉語音：朗讀原文和翻譯結果\n- 高 DPI 支援：在任何顯示器上都清晰銳利\n\n適合學生、職場人士、翻譯工作者以及需要快速、可靠多語言翻譯的所有人。",
   "features": [
     "16+ 種翻譯服務，包括 Google、DeepL、OpenAI、Gemini 和 DeepSeek",
     "AI 服務即時串流翻譯",
@@ -24,12 +24,9 @@
     "翻譯",
     "詞典",
     "翻譯器",
-    "DeepL",
-    "OpenAI",
-    "Gemini",
+    "開源",
     "大型語言模型",
     "多語言",
-    "快速鍵",
     "劃詞翻譯"
   ],
   "releaseNotes": "",

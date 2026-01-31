@@ -5,7 +5,7 @@
   "sortTitle": "Easydict",
   "voiceTitle": "Easy Dict",
   "shortDescription": "Recherchez facilement des mots ou traduisez du texte",
-  "description": "Easydict pour Windows est un puissant outil de traduction et de dictionnaire offrant un accès instantané à plus de 16 services de traduction. Que vous ayez besoin de rechercher rapidement un mot, de traduire un texte intégral ou d'utiliser des traductions alimentées par l'IA avec streaming en temps réel, Easydict répond à tous vos besoins.\n\nVersion Windows de la populaire application macOS Easydict, construite avec les technologies modernes .NET 8 et WinUI 3 pour une expérience Windows native.\n\nPoints forts :\n\n- Plus de 16 services de traduction : Google Traduction, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama et plus encore\n- Traduction IA en streaming : regardez les traductions LLM apparaître en temps réel\n- Modes de fenêtre multiples : fenêtre principale complète, mini-fenêtre compacte ou fenêtre fixe persistante\n- Raccourcis clavier globaux : traduisez de n'importe où avec des raccourcis personnalisables\n- Zone de notification : fonctionne discrètement en arrière-plan, toujours prêt\n- Surveillance du presse-papiers : traduction automatique du texte copié\n- Thème sombre/clair : suit le thème système de Windows\n- Synthèse vocale : écoutez le texte source et traduit\n- Support haute résolution : net et précis sur tout écran\n\nParfait pour les étudiants, les professionnels, les traducteurs et tous ceux qui ont besoin de traductions rapides et fiables dans plusieurs langues.",
+  "description": "Easydict pour Windows est un outil de traduction et de dictionnaire gratuit et open source, offrant un accès instantané à plus de 16 services de traduction. Le code source complet est disponible sur GitHub sous licence GPL-3.0. Que vous ayez besoin de rechercher rapidement un mot, de traduire un texte intégral ou d'utiliser des traductions alimentées par l'IA avec streaming en temps réel, Easydict répond à tous vos besoins.\n\nVersion Windows de la populaire application macOS Easydict, construite avec les technologies modernes .NET 8 et WinUI 3 pour une expérience Windows native.\n\nPoints forts :\n\n- Plus de 16 services de traduction : Google Traduction, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama et plus encore\n- Traduction IA en streaming : regardez les traductions LLM apparaître en temps réel\n- Modes de fenêtre multiples : fenêtre principale complète, mini-fenêtre compacte ou fenêtre fixe persistante\n- Raccourcis clavier globaux : traduisez de n'importe où avec des raccourcis personnalisables\n- Zone de notification : fonctionne discrètement en arrière-plan, toujours prêt\n- Surveillance du presse-papiers : traduction automatique du texte copié\n- Thème sombre/clair : suit le thème système de Windows\n- Synthèse vocale : écoutez le texte source et traduit\n- Support haute résolution : net et précis sur tout écran\n\nParfait pour les étudiants, les professionnels, les traducteurs et tous ceux qui ont besoin de traductions rapides et fiables dans plusieurs langues.",
   "features": [
     "Plus de 16 services de traduction dont Google, DeepL, OpenAI, Gemini et DeepSeek",
     "Traduction en streaming en temps réel avec les services IA",
@@ -24,12 +24,9 @@
     "traduction",
     "dictionnaire",
     "traducteur",
-    "DeepL",
-    "OpenAI",
-    "Gemini",
+    "open source",
     "LLM",
     "multilingue",
-    "raccourci",
     "traduire"
   ],
   "releaseNotes": "",

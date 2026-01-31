@@ -181,7 +181,7 @@ namespace Easydict.WinUI
             LogToFile("[OnLaunched] Window created");
 
             // Set window title
-            _window.Title = "Easydict";
+            _window.Title = "Easydict Beta";
 
             // Set window size and get AppWindow reference
             try

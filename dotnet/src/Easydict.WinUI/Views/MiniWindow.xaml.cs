@@ -126,7 +126,7 @@ public sealed partial class MiniWindow : Window
         var loc = LocalizationService.Instance;
 
         // Window title - keep "Easydict" brand name, only localize "Mini"
-        this.Title = $"Easydict {loc.GetString("QuickTranslate")}";
+        this.Title = $"Easydict Beta {loc.GetString("QuickTranslate")}";
 
         // Source Language ComboBox items - 9 items: Auto + 8 languages
         if (SourceLangCombo.Items.Count >= 9)

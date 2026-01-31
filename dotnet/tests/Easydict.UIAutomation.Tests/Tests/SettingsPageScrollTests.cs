@@ -1,4 +1,5 @@
 using Easydict.UIAutomation.Tests.Infrastructure;
+using FluentAssertions;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using Xunit;
@@ -35,14 +36,8 @@ public class SettingsPageScrollTests : IDisposable
             () => window.FindFirstDescendant(cf => cf.ByName("SettingsButton")),
             TimeSpan.FromSeconds(10)).Result;
 
-        if (settingsButton == null)
-        {
-            _output.WriteLine("SettingsButton not found - capturing window for inspection");
-            ScreenshotHelper.CaptureWindow(window, "10_settings_button_not_found");
-            return;
-        }
-
-        settingsButton.Click();
+        settingsButton.Should().NotBeNull("SettingsButton must exist on main window");
+        settingsButton!.Click();
         Thread.Sleep(2000);
 
         // Capture settings page top (Language Preferences)
@@ -50,14 +45,9 @@ public class SettingsPageScrollTests : IDisposable
         _output.WriteLine($"Screenshot saved: {path}");
 
         var scrollViewer = window.FindFirstDescendant(cf => cf.ByName("MainScrollViewer"));
-        if (scrollViewer == null)
-        {
-            _output.WriteLine("MainScrollViewer not found - capturing fallback");
-            ScreenshotHelper.CaptureWindow(window, "10_settings_no_scrollviewer");
-            return;
-        }
+        scrollViewer.Should().NotBeNull("MainScrollViewer must exist on settings page");
 
-        Mouse.MoveTo(scrollViewer.GetClickablePoint());
+        Mouse.MoveTo(scrollViewer!.GetClickablePoint());
 
         // Scroll 1: Enabled Services section
         Mouse.Scroll(-8);

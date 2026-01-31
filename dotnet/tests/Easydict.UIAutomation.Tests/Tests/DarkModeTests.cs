@@ -38,11 +38,7 @@ public class DarkModeTests : IDisposable
         _output.WriteLine($"Light mode screenshot saved: {pathLight}");
 
         // Switch to dark mode via settings
-        if (!SwitchToDarkMode(window))
-        {
-            _output.WriteLine("Could not switch to dark mode - skipping");
-            return;
-        }
+        SwitchToDarkMode(window);
 
         // Navigate back to main window
         NavigateBackToMain(window);
@@ -70,11 +66,7 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(2000);
 
         // Switch to dark mode
-        if (!SwitchToDarkMode(window))
-        {
-            _output.WriteLine("Could not switch to dark mode - skipping");
-            return;
-        }
+        SwitchToDarkMode(window);
 
         // Stay on settings page and capture
         Thread.Sleep(1000);
@@ -106,11 +98,7 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(2000);
 
         // Switch to dark mode first
-        if (!SwitchToDarkMode(window))
-        {
-            _output.WriteLine("Could not switch to dark mode - skipping");
-            return;
-        }
+        SwitchToDarkMode(window);
 
         NavigateBackToMain(window);
         Thread.Sleep(1000);
@@ -121,14 +109,9 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(3000);
 
         var miniWindow = FindSecondaryWindow("Mini");
-        if (miniWindow == null)
-        {
-            _output.WriteLine("Mini window not found after hotkey");
-            ScreenshotHelper.CaptureScreen("35_dark_mini_not_found");
-            return;
-        }
+        miniWindow.Should().NotBeNull("Mini window must open after Ctrl+Alt+M hotkey in dark mode");
 
-        miniWindow.SetForeground();
+        miniWindow!.SetForeground();
         Thread.Sleep(500);
 
         var path = ScreenshotHelper.CaptureWindow(miniWindow, "35_mini_dark_mode");
@@ -153,11 +136,7 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(2000);
 
         // Switch to dark mode first
-        if (!SwitchToDarkMode(window))
-        {
-            _output.WriteLine("Could not switch to dark mode - skipping");
-            return;
-        }
+        SwitchToDarkMode(window);
 
         NavigateBackToMain(window);
         Thread.Sleep(1000);
@@ -168,14 +147,9 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(3000);
 
         var fixedWindow = FindSecondaryWindow("Fixed");
-        if (fixedWindow == null)
-        {
-            _output.WriteLine("Fixed window not found after hotkey");
-            ScreenshotHelper.CaptureScreen("36_dark_fixed_not_found");
-            return;
-        }
+        fixedWindow.Should().NotBeNull("Fixed window must open after Ctrl+Alt+F hotkey in dark mode");
 
-        fixedWindow.SetForeground();
+        fixedWindow!.SetForeground();
         Thread.Sleep(500);
 
         var path = ScreenshotHelper.CaptureWindow(fixedWindow, "36_fixed_dark_mode");
@@ -195,23 +169,16 @@ public class DarkModeTests : IDisposable
 
     /// <summary>
     /// Navigate to settings and switch AppThemeCombo to "Dark".
-    /// Returns true if the switch was successful.
     /// </summary>
-    private bool SwitchToDarkMode(Window window)
+    private void SwitchToDarkMode(Window window)
     {
         // Click settings button
         var settingsButton = Retry.WhileNull(
             () => window.FindFirstDescendant(cf => cf.ByName("SettingsButton")),
             TimeSpan.FromSeconds(10)).Result;
 
-        if (settingsButton == null)
-        {
-            _output.WriteLine("SettingsButton not found");
-            ScreenshotHelper.CaptureWindow(window, "dark_mode_settings_not_found");
-            return false;
-        }
-
-        settingsButton.Click();
+        settingsButton.Should().NotBeNull("SettingsButton must exist");
+        settingsButton!.Click();
         Thread.Sleep(2000);
 
         // Scroll down to Behavior section where AppThemeCombo lives
@@ -229,15 +196,10 @@ public class DarkModeTests : IDisposable
             () => window.FindFirstDescendant(cf => cf.ByName("AppThemeCombo"))?.AsComboBox(),
             TimeSpan.FromSeconds(10)).Result;
 
-        if (themeCombo == null)
-        {
-            _output.WriteLine("AppThemeCombo not found");
-            ScreenshotHelper.CaptureWindow(window, "dark_mode_combo_not_found");
-            return false;
-        }
+        themeCombo.Should().NotBeNull("AppThemeCombo must exist on settings page");
 
         _output.WriteLine("Found AppThemeCombo");
-        themeCombo.Click();
+        themeCombo!.Click();
         Thread.Sleep(500);
 
         // Look for "Dark" option in the dropdown
@@ -254,20 +216,10 @@ public class DarkModeTests : IDisposable
         {
             // Try selecting by index (System=0, Light=1, Dark=2)
             _output.WriteLine("Dark item not found by name, trying index selection");
-            try
-            {
-                themeCombo.Select(2);
-            }
-            catch (Exception ex)
-            {
-                _output.WriteLine($"Failed to select dark theme by index: {ex.Message}");
-                ScreenshotHelper.CaptureWindow(window, "dark_mode_select_failed");
-                return false;
-            }
+            themeCombo.Select(2);
         }
 
         Thread.Sleep(1000);
-        return true;
     }
 
     /// <summary>

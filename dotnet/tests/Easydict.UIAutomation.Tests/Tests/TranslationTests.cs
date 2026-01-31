@@ -1,4 +1,5 @@
 using Easydict.UIAutomation.Tests.Infrastructure;
+using FluentAssertions;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
@@ -40,15 +41,10 @@ public class TranslationTests : IDisposable
             () => window.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox(),
             TimeSpan.FromSeconds(10)).Result;
 
-        if (inputBox == null)
-        {
-            _output.WriteLine("InputTextBox not found - capturing window for inspection");
-            ScreenshotHelper.CaptureWindow(window, "20_main_translate_input_not_found");
-            return;
-        }
+        inputBox.Should().NotBeNull("InputTextBox must exist on main window");
 
         // Type text and press Enter to translate
-        inputBox.Click();
+        inputBox!.Click();
         Thread.Sleep(300);
         inputBox.Text = TestInputText;
         Thread.Sleep(500);
@@ -84,14 +80,9 @@ public class TranslationTests : IDisposable
         Thread.Sleep(3000);
 
         var miniWindow = FindSecondaryWindow("Mini");
-        if (miniWindow == null)
-        {
-            _output.WriteLine("Mini window not found after hotkey - capturing screen");
-            ScreenshotHelper.CaptureScreen("23_mini_window_not_found");
-            return;
-        }
+        miniWindow.Should().NotBeNull("Mini window must open after Ctrl+Alt+M hotkey");
 
-        miniWindow.SetForeground();
+        miniWindow!.SetForeground();
         Thread.Sleep(500);
 
         var pathInitial = ScreenshotHelper.CaptureWindow(miniWindow, "23_mini_window_initial");
@@ -102,14 +93,9 @@ public class TranslationTests : IDisposable
             () => miniWindow.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox(),
             TimeSpan.FromSeconds(10)).Result;
 
-        if (inputBox == null)
-        {
-            _output.WriteLine("InputTextBox not found in mini window");
-            ScreenshotHelper.CaptureWindow(miniWindow, "23_mini_input_not_found");
-            return;
-        }
+        inputBox.Should().NotBeNull("InputTextBox must exist in mini window");
 
-        inputBox.Click();
+        inputBox!.Click();
         Thread.Sleep(300);
         inputBox.Text = TestInputText;
         Thread.Sleep(500);
@@ -138,14 +124,9 @@ public class TranslationTests : IDisposable
         Thread.Sleep(3000);
 
         var fixedWindow = FindSecondaryWindow("Fixed");
-        if (fixedWindow == null)
-        {
-            _output.WriteLine("Fixed window not found after hotkey - capturing screen");
-            ScreenshotHelper.CaptureScreen("25_fixed_window_not_found");
-            return;
-        }
+        fixedWindow.Should().NotBeNull("Fixed window must open after Ctrl+Alt+F hotkey");
 
-        fixedWindow.SetForeground();
+        fixedWindow!.SetForeground();
         Thread.Sleep(500);
 
         var pathInitial = ScreenshotHelper.CaptureWindow(fixedWindow, "25_fixed_window_initial");
@@ -156,14 +137,9 @@ public class TranslationTests : IDisposable
             () => fixedWindow.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox(),
             TimeSpan.FromSeconds(10)).Result;
 
-        if (inputBox == null)
-        {
-            _output.WriteLine("InputTextBox not found in fixed window");
-            ScreenshotHelper.CaptureWindow(fixedWindow, "25_fixed_input_not_found");
-            return;
-        }
+        inputBox.Should().NotBeNull("InputTextBox must exist in fixed window");
 
-        inputBox.Click();
+        inputBox!.Click();
         Thread.Sleep(300);
         inputBox.Text = TestInputText;
         Thread.Sleep(500);

@@ -771,3 +771,7 @@ Debug.WriteLine($"[ServiceName] Result: {result.Length} chars");
 6. **Resource Management**: Always dispose IDisposable resources properly
 7. **Error Handling**: Catch specific exceptions, provide meaningful error messages
 8. **Testing**: Write tests for all business logic and service implementations
+
+## Documentation Sync Requirement
+
+`README.md` (English) and `readme_zh.md` (Chinese) must always stay in sync. When modifying either file, apply the corresponding changes to the other file to keep both versions consistent in structure and content. This includes but is not limited to: feature descriptions, installation instructions, configuration guides, screenshots, and links.

@@ -42,7 +42,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          global-json-file: dotnet/global.json
 
       - name: Restore dependencies
         working-directory: dotnet
@@ -91,7 +91,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          global-json-file: dotnet/global.json
 
       - name: Setup WinApp CLI
         uses: microsoft/setup-WinAppCli@v0.1

@@ -1,5 +1,6 @@
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;

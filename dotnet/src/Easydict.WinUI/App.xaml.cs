@@ -632,10 +632,18 @@ namespace Easydict.WinUI
             var widthPhysical = DpiHelper.DipsToPhysicalPixels(targetWidthDips, scaleFactor);
             var heightPhysical = DpiHelper.DipsToPhysicalPixels(targetHeightDips, scaleFactor);
 
+            // Clamp to work area so the window fits on small screens
+            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+            if (displayArea is not null)
+            {
+                widthPhysical = Math.Min(widthPhysical, displayArea.WorkArea.Width);
+                heightPhysical = Math.Min(heightPhysical, displayArea.WorkArea.Height);
+            }
+
             // Set initial size
             appWindow.Resize(new Windows.Graphics.SizeInt32(widthPhysical, heightPhysical));
 
-            // Enforce minimum window size with DPI awareness
+            // Enforce minimum window size with DPI awareness, clamped to work area
             var enforcingMinSize = false;
             appWindow.Changed += (_, args) =>
             {
@@ -645,6 +653,14 @@ namespace Easydict.WinUI
                 var currentScale = DpiHelper.GetScaleFactorForWindow(hWnd);
                 var minWidthPhysical = DpiHelper.DipsToPhysicalPixels(minWidthDips, currentScale);
                 var minHeightPhysical = DpiHelper.DipsToPhysicalPixels(minHeightDips, currentScale);
+
+                // Clamp the minimum to the current work area so we never exceed it
+                var currentDisplay = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+                if (currentDisplay is not null)
+                {
+                    minWidthPhysical = Math.Min(minWidthPhysical, currentDisplay.WorkArea.Width);
+                    minHeightPhysical = Math.Min(minHeightPhysical, currentDisplay.WorkArea.Height);
+                }
 
                 var size = appWindow.Size;
                 var targetWidth = Math.Max(size.Width, minWidthPhysical);
@@ -656,6 +672,19 @@ namespace Easydict.WinUI
                 try
                 {
                     appWindow.Resize(new Windows.Graphics.SizeInt32(targetWidth, targetHeight));
+
+                    // Reposition if the enforced size pushes the window out of the work area
+                    if (currentDisplay is not null)
+                    {
+                        var pos = appWindow.Position;
+                        var wa = currentDisplay.WorkArea;
+                        var newX = Math.Max(wa.X, Math.Min(pos.X, wa.X + wa.Width - targetWidth));
+                        var newY = Math.Max(wa.Y, Math.Min(pos.Y, wa.Y + wa.Height - targetHeight));
+                        if (newX != pos.X || newY != pos.Y)
+                        {
+                            appWindow.Move(new Windows.Graphics.PointInt32(newX, newY));
+                        }
+                    }
                 }
                 finally
                 {
@@ -663,13 +692,17 @@ namespace Easydict.WinUI
                 }
             };
 
-            // Center on screen with DPI awareness
-            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+            // Center on screen with DPI awareness, ensuring the window stays within the work area
             if (displayArea is not null)
             {
                 // WorkArea is in physical pixels
-                var centerX = (displayArea.WorkArea.Width - widthPhysical) / 2;
-                var centerY = (displayArea.WorkArea.Height - heightPhysical) / 2;
+                var centerX = (displayArea.WorkArea.Width - widthPhysical) / 2 + displayArea.WorkArea.X;
+                var centerY = (displayArea.WorkArea.Height - heightPhysical) / 2 + displayArea.WorkArea.Y;
+
+                // Clamp position so the window doesn't extend beyond the work area
+                centerX = Math.Max(displayArea.WorkArea.X, Math.Min(centerX, displayArea.WorkArea.X + displayArea.WorkArea.Width - widthPhysical));
+                centerY = Math.Max(displayArea.WorkArea.Y, Math.Min(centerY, displayArea.WorkArea.Y + displayArea.WorkArea.Height - heightPhysical));
+
                 appWindow.Move(new Windows.Graphics.PointInt32(centerX, centerY));
             }
         }
@@ -689,19 +722,38 @@ namespace Easydict.WinUI
             var targetWidth = (int)settings.WindowWidthDips;
             var targetHeight = (int)settings.WindowHeightDips;
 
+            // Clamp to work area so the window fits on small screens
+            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+            if (displayArea is not null)
+            {
+                targetWidth = Math.Min(targetWidth, displayArea.WorkArea.Width);
+                targetHeight = Math.Min(targetHeight, displayArea.WorkArea.Height);
+            }
+
             // Set initial size from settings
             appWindow.Resize(new Windows.Graphics.SizeInt32(targetWidth, targetHeight));
 
-            // Enforce minimum window size (safe for unpackaged apps; avoids Win32 WndProc subclassing).
+            // Enforce minimum window size, clamped to work area
             var enforcingMinSize = false;
             appWindow.Changed += (_, args) =>
             {
                 if (!args.DidSizeChange) return;
                 if (enforcingMinSize) return;
 
+                var effectiveMinW = minWidth;
+                var effectiveMinH = minHeight;
+
+                // Clamp the minimum to the current work area so we never exceed it
+                var currentDisplay = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+                if (currentDisplay is not null)
+                {
+                    effectiveMinW = Math.Min(effectiveMinW, currentDisplay.WorkArea.Width);
+                    effectiveMinH = Math.Min(effectiveMinH, currentDisplay.WorkArea.Height);
+                }
+
                 var size = appWindow.Size;
-                var targetW = Math.Max(size.Width, minWidth);
-                var targetH = Math.Max(size.Height, minHeight);
+                var targetW = Math.Max(size.Width, effectiveMinW);
+                var targetH = Math.Max(size.Height, effectiveMinH);
 
                 if (targetW == size.Width && targetH == size.Height) return;
 
@@ -709,6 +761,19 @@ namespace Easydict.WinUI
                 try
                 {
                     appWindow.Resize(new Windows.Graphics.SizeInt32(targetW, targetH));
+
+                    // Reposition if the enforced size pushes the window out of the work area
+                    if (currentDisplay is not null)
+                    {
+                        var pos = appWindow.Position;
+                        var wa = currentDisplay.WorkArea;
+                        var newX = Math.Max(wa.X, Math.Min(pos.X, wa.X + wa.Width - targetW));
+                        var newY = Math.Max(wa.Y, Math.Min(pos.Y, wa.Y + wa.Height - targetH));
+                        if (newX != pos.X || newY != pos.Y)
+                        {
+                            appWindow.Move(new Windows.Graphics.PointInt32(newX, newY));
+                        }
+                    }
                 }
                 finally
                 {
@@ -716,12 +781,16 @@ namespace Easydict.WinUI
                 }
             };
 
-            // Center on screen using settings dimensions
-            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+            // Center on screen, ensuring the window stays within the work area
             if (displayArea is not null)
             {
-                var centerX = (displayArea.WorkArea.Width - targetWidth) / 2;
-                var centerY = (displayArea.WorkArea.Height - targetHeight) / 2;
+                var centerX = (displayArea.WorkArea.Width - targetWidth) / 2 + displayArea.WorkArea.X;
+                var centerY = (displayArea.WorkArea.Height - targetHeight) / 2 + displayArea.WorkArea.Y;
+
+                // Clamp position so the window doesn't extend beyond the work area
+                centerX = Math.Max(displayArea.WorkArea.X, Math.Min(centerX, displayArea.WorkArea.X + displayArea.WorkArea.Width - targetWidth));
+                centerY = Math.Max(displayArea.WorkArea.Y, Math.Min(centerY, displayArea.WorkArea.Y + displayArea.WorkArea.Height - targetHeight));
+
                 appWindow.Move(new Windows.Graphics.PointInt32(centerX, centerY));
             }
         }
@@ -744,14 +813,29 @@ namespace Easydict.WinUI
             var targetWidthPhysical = DpiHelper.DipsToPhysicalPixels(targetWidthDips, newScaleFactor);
             var targetHeightPhysical = DpiHelper.DipsToPhysicalPixels(targetHeightDips, newScaleFactor);
 
+            // Clamp to work area so the window fits on small screens
+            var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
+            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+            if (displayArea is not null)
+            {
+                targetWidthPhysical = Math.Min(targetWidthPhysical, displayArea.WorkArea.Width);
+                targetHeightPhysical = Math.Min(targetHeightPhysical, displayArea.WorkArea.Height);
+            }
+
             // Resize window to optimal size for new DPI
             appWindow.Resize(new Windows.Graphics.SizeInt32(targetWidthPhysical, targetHeightPhysical));
 
-            // Re-apply minimum size constraints with new DPI
+            // Re-apply minimum size constraints with new DPI, clamped to work area
             const int minWidthDips = 400;
             const int minHeightDips = 500;
             var minWidthPhysical = DpiHelper.DipsToPhysicalPixels(minWidthDips, newScaleFactor);
             var minHeightPhysical = DpiHelper.DipsToPhysicalPixels(minHeightDips, newScaleFactor);
+
+            if (displayArea is not null)
+            {
+                minWidthPhysical = Math.Min(minWidthPhysical, displayArea.WorkArea.Width);
+                minHeightPhysical = Math.Min(minHeightPhysical, displayArea.WorkArea.Height);
+            }
 
             var currentSize = appWindow.Size;
             if (currentSize.Width < minWidthPhysical || currentSize.Height < minHeightPhysical)
@@ -759,6 +843,20 @@ namespace Easydict.WinUI
                 var targetWidth = Math.Max(currentSize.Width, minWidthPhysical);
                 var targetHeight = Math.Max(currentSize.Height, minHeightPhysical);
                 appWindow.Resize(new Windows.Graphics.SizeInt32(targetWidth, targetHeight));
+            }
+
+            // Reposition if the window extends beyond the work area
+            if (displayArea is not null)
+            {
+                var pos = appWindow.Position;
+                var size = appWindow.Size;
+                var wa = displayArea.WorkArea;
+                var newX = Math.Max(wa.X, Math.Min(pos.X, wa.X + wa.Width - size.Width));
+                var newY = Math.Max(wa.Y, Math.Min(pos.Y, wa.Y + wa.Height - size.Height));
+                if (newX != pos.X || newY != pos.Y)
+                {
+                    appWindow.Move(new Windows.Graphics.PointInt32(newX, newY));
+                }
             }
 
             // Log DPI change for debugging

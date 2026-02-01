@@ -632,6 +632,14 @@ namespace Easydict.WinUI
             var widthPhysical = DpiHelper.DipsToPhysicalPixels(targetWidthDips, scaleFactor);
             var heightPhysical = DpiHelper.DipsToPhysicalPixels(targetHeightDips, scaleFactor);
 
+            // Clamp to work area so the window fits on small screens
+            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+            if (displayArea is not null)
+            {
+                widthPhysical = Math.Min(widthPhysical, displayArea.WorkArea.Width);
+                heightPhysical = Math.Min(heightPhysical, displayArea.WorkArea.Height);
+            }
+
             // Set initial size
             appWindow.Resize(new Windows.Graphics.SizeInt32(widthPhysical, heightPhysical));
 
@@ -663,13 +671,17 @@ namespace Easydict.WinUI
                 }
             };
 
-            // Center on screen with DPI awareness
-            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+            // Center on screen with DPI awareness, ensuring the window stays within the work area
             if (displayArea is not null)
             {
                 // WorkArea is in physical pixels
-                var centerX = (displayArea.WorkArea.Width - widthPhysical) / 2;
-                var centerY = (displayArea.WorkArea.Height - heightPhysical) / 2;
+                var centerX = (displayArea.WorkArea.Width - widthPhysical) / 2 + displayArea.WorkArea.X;
+                var centerY = (displayArea.WorkArea.Height - heightPhysical) / 2 + displayArea.WorkArea.Y;
+
+                // Clamp position so the window doesn't extend beyond the work area
+                centerX = Math.Max(displayArea.WorkArea.X, Math.Min(centerX, displayArea.WorkArea.X + displayArea.WorkArea.Width - widthPhysical));
+                centerY = Math.Max(displayArea.WorkArea.Y, Math.Min(centerY, displayArea.WorkArea.Y + displayArea.WorkArea.Height - heightPhysical));
+
                 appWindow.Move(new Windows.Graphics.PointInt32(centerX, centerY));
             }
         }
@@ -688,6 +700,14 @@ namespace Easydict.WinUI
             // Read window dimensions from settings
             var targetWidth = (int)settings.WindowWidthDips;
             var targetHeight = (int)settings.WindowHeightDips;
+
+            // Clamp to work area so the window fits on small screens
+            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+            if (displayArea is not null)
+            {
+                targetWidth = Math.Min(targetWidth, displayArea.WorkArea.Width);
+                targetHeight = Math.Min(targetHeight, displayArea.WorkArea.Height);
+            }
 
             // Set initial size from settings
             appWindow.Resize(new Windows.Graphics.SizeInt32(targetWidth, targetHeight));
@@ -716,12 +736,16 @@ namespace Easydict.WinUI
                 }
             };
 
-            // Center on screen using settings dimensions
-            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+            // Center on screen, ensuring the window stays within the work area
             if (displayArea is not null)
             {
-                var centerX = (displayArea.WorkArea.Width - targetWidth) / 2;
-                var centerY = (displayArea.WorkArea.Height - targetHeight) / 2;
+                var centerX = (displayArea.WorkArea.Width - targetWidth) / 2 + displayArea.WorkArea.X;
+                var centerY = (displayArea.WorkArea.Height - targetHeight) / 2 + displayArea.WorkArea.Y;
+
+                // Clamp position so the window doesn't extend beyond the work area
+                centerX = Math.Max(displayArea.WorkArea.X, Math.Min(centerX, displayArea.WorkArea.X + displayArea.WorkArea.Width - targetWidth));
+                centerY = Math.Max(displayArea.WorkArea.Y, Math.Min(centerY, displayArea.WorkArea.Y + displayArea.WorkArea.Height - targetHeight));
+
                 appWindow.Move(new Windows.Graphics.PointInt32(centerX, centerY));
             }
         }

@@ -11,6 +11,7 @@ public class ServiceCheckItem : INotifyPropertyChanged
 {
     private bool _isChecked;
     private bool _enabledQuery = true;
+    private bool _isAvailable = true;
 
     /// <summary>
     /// The service identifier (e.g., "google", "deepl").
@@ -51,6 +52,24 @@ public class ServiceCheckItem : INotifyPropertyChanged
             if (_enabledQuery != value)
             {
                 _enabledQuery = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether this service is available in the current region.
+    /// When false, the service is grayed out and cannot be checked.
+    /// International-only services are unavailable when EnableInternationalServices is off.
+    /// </summary>
+    public bool IsAvailable
+    {
+        get => _isAvailable;
+        set
+        {
+            if (_isAvailable != value)
+            {
+                _isAvailable = value;
                 OnPropertyChanged();
             }
         }

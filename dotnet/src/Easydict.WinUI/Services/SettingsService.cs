@@ -123,13 +123,13 @@ public sealed class SettingsService
     /// List of enabled translation services for MiniWindow.
     /// Each service result is displayed in a collapsible panel.
     /// </summary>
-    public List<string> MiniWindowEnabledServices { get; set; } = ["google"];
+    public List<string> MiniWindowEnabledServices { get; set; } = [GetRegionDefaultServiceId()];
 
     /// <summary>
     /// List of enabled translation services for MainWindow.
     /// Each service result is displayed in a collapsible panel.
     /// </summary>
-    public List<string> MainWindowEnabledServices { get; set; } = ["google"];
+    public List<string> MainWindowEnabledServices { get; set; } = [GetRegionDefaultServiceId()];
 
     // Fixed window settings
     public string ShowFixedWindowHotkey { get; set; } = "Ctrl+Alt+F";
@@ -142,7 +142,7 @@ public sealed class SettingsService
     /// List of enabled translation services for FixedWindow.
     /// Each service result is displayed in a collapsible panel.
     /// </summary>
-    public List<string> FixedWindowEnabledServices { get; set; } = ["google"];
+    public List<string> FixedWindowEnabledServices { get; set; } = [GetRegionDefaultServiceId()];
 
     /// <summary>
     /// Per-service EnabledQuery setting for MainWindow.
@@ -161,6 +161,13 @@ public sealed class SettingsService
     /// When true (default), service auto-queries and expands. When false, starts collapsed and queries on demand.
     /// </summary>
     public Dictionary<string, bool> FixedWindowServiceEnabledQuery { get; set; } = new();
+
+    /// <summary>
+    /// Enable international services that may not be accessible in all regions.
+    /// Auto-detected from system region on first launch only; once the user explicitly
+    /// saves settings, the persisted value is always used (no further auto-detection).
+    /// </summary>
+    public bool EnableInternationalServices { get; set; } = !IsChinaRegion();
 
     // HTTP Proxy settings
     /// <summary>
@@ -334,8 +341,8 @@ public sealed class SettingsService
         MiniWindowWidthDips = GetValue(nameof(MiniWindowWidthDips), 320.0);
         MiniWindowHeightDips = GetValue(nameof(MiniWindowHeightDips), 200.0);
         MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
-        MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), ["google"]);
-        MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), ["google"]);
+        MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), [GetRegionDefaultServiceId()]);
+        MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), [GetRegionDefaultServiceId()]);
 
         // Fixed window settings
         ShowFixedWindowHotkey = GetValue(nameof(ShowFixedWindowHotkey), "Ctrl+Alt+F");
@@ -343,12 +350,16 @@ public sealed class SettingsService
         FixedWindowYDips = GetValue(nameof(FixedWindowYDips), 0.0);
         FixedWindowWidthDips = GetValue(nameof(FixedWindowWidthDips), 320.0);
         FixedWindowHeightDips = GetValue(nameof(FixedWindowHeightDips), 280.0);
-        FixedWindowEnabledServices = GetStringList(nameof(FixedWindowEnabledServices), ["google"]);
+        FixedWindowEnabledServices = GetStringList(nameof(FixedWindowEnabledServices), [GetRegionDefaultServiceId()]);
 
         // EnabledQuery settings per window (which services auto-query vs. query on demand)
         MainWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(MainWindowServiceEnabledQuery));
         MiniWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(MiniWindowServiceEnabledQuery));
         FixedWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(FixedWindowServiceEnabledQuery));
+
+        // International services setting: use persisted value if user has explicitly set it,
+        // otherwise auto-detect based on region (off for China, on elsewhere)
+        EnableInternationalServices = GetValue(nameof(EnableInternationalServices), !IsChinaRegion());
 
         // HTTP Proxy settings
         ProxyEnabled = GetValue(nameof(ProxyEnabled), false);
@@ -454,6 +465,9 @@ public sealed class SettingsService
         _settings[nameof(MiniWindowServiceEnabledQuery)] = MiniWindowServiceEnabledQuery;
         _settings[nameof(FixedWindowServiceEnabledQuery)] = FixedWindowServiceEnabledQuery;
 
+        // International services setting
+        _settings[nameof(EnableInternationalServices)] = EnableInternationalServices;
+
         // HTTP Proxy settings
         _settings[nameof(ProxyEnabled)] = ProxyEnabled;
         _settings[nameof(ProxyUri)] = ProxyUri;
@@ -478,6 +492,47 @@ public sealed class SettingsService
             // Re-throw the exception so callers know save failed
             throw;
         }
+    }
+
+    /// <summary>
+    /// Service IDs that require international network access (may not be available in all regions).
+    /// </summary>
+    public static readonly HashSet<string> InternationalOnlyServices = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "google", "google_web", "deepl", "openai", "gemini",
+        "groq", "github", "builtin", "linguee"
+    };
+
+    /// <summary>
+    /// Detects whether the system is configured for China mainland based on locale/region settings.
+    /// </summary>
+    public static bool IsChinaRegion()
+    {
+        try
+        {
+            var region = System.Globalization.RegionInfo.CurrentRegion;
+            if (region.TwoLetterISORegionName.Equals("CN", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // Also check system culture
+            var culture = System.Globalization.CultureInfo.CurrentUICulture;
+            var name = culture.Name.ToLowerInvariant();
+            if (name == "zh-cn" || name == "zh-hans" || name == "zh-hans-cn")
+                return true;
+        }
+        catch
+        {
+            // Ignore errors in region detection
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Returns the default service ID appropriate for the current region.
+    /// </summary>
+    public static string GetRegionDefaultServiceId()
+    {
+        return IsChinaRegion() ? "deepseek" : "google";
     }
 
     private T GetValue<T>(string key, T defaultValue)

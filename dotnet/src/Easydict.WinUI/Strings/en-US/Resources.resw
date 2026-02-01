@@ -537,6 +537,14 @@
     <value>Hide (Ctrl+Alt+F to show again)</value>
   </data>
 
+  <!-- International Services -->
+  <data name="EnableInternationalServices" xml:space="preserve">
+    <value>Enable International Services</value>
+  </data>
+  <data name="EnableInternationalServicesDescription" xml:space="preserve">
+    <value>Some services (Google, DeepL, OpenAI, Gemini, etc.) require international network access and may not be available in all regions.</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>App Theme</value>

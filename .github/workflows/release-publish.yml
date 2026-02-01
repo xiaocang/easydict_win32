@@ -117,6 +117,7 @@ jobs:
           # Extract base version (without prerelease suffix) and append .0
           # Windows Store requires the 4th part (revision) to always be 0
           BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
+          echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
           MSIX_VERSION="${BASE_VERSION}.0"
 
           echo "MSIX_VERSION=$MSIX_VERSION" >> $GITHUB_OUTPUT

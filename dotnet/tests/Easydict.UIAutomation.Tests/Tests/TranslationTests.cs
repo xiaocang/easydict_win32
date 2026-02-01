@@ -1,6 +1,5 @@
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
-using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;
@@ -69,17 +68,19 @@ public class TranslationTests : IDisposable
     [Fact]
     public void MiniWindow_TranslateWithEnter()
     {
-        var window = _launcher.GetMainWindow();
+        // Ensure app is ready before sending hotkey
+        _ = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
         // Open mini window via hotkey: Ctrl+Alt+M
         _output.WriteLine("Opening mini window with Ctrl+Alt+M");
-        SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_M);
+        UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_M);
 
         // Wait for mini window to appear
         Thread.Sleep(3000);
 
-        var miniWindow = FindSecondaryWindow("Mini");
+        var miniWindow = UITestHelper.FindSecondaryWindow(
+            _launcher.Application, _launcher.Automation, "Mini", _output);
         miniWindow.Should().NotBeNull("Mini window must open after Ctrl+Alt+M hotkey");
 
         miniWindow!.SetForeground();
@@ -113,17 +114,19 @@ public class TranslationTests : IDisposable
     [Fact]
     public void FixedWindow_TranslateWithEnter()
     {
-        var window = _launcher.GetMainWindow();
+        // Ensure app is ready before sending hotkey
+        _ = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
         // Open fixed window via hotkey: Ctrl+Alt+F
         _output.WriteLine("Opening fixed window with Ctrl+Alt+F");
-        SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_F);
+        UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_F);
 
         // Wait for fixed window to appear
         Thread.Sleep(3000);
 
-        var fixedWindow = FindSecondaryWindow("Fixed");
+        var fixedWindow = UITestHelper.FindSecondaryWindow(
+            _launcher.Application, _launcher.Automation, "Fixed", _output);
         fixedWindow.Should().NotBeNull("Fixed window must open after Ctrl+Alt+F hotkey");
 
         fixedWindow!.SetForeground();
@@ -152,52 +155,6 @@ public class TranslationTests : IDisposable
 
         var pathResult = ScreenshotHelper.CaptureWindow(fixedWindow, "26_fixed_after_translate");
         _output.WriteLine($"Screenshot saved: {pathResult}");
-    }
-
-    /// <summary>
-    /// Send a hotkey combination safely, ensuring all keys are released even on failure.
-    /// </summary>
-    private void SendHotkey(VirtualKeyShort modifier1, VirtualKeyShort modifier2, VirtualKeyShort key)
-    {
-        try
-        {
-            Keyboard.Press(modifier1);
-            Keyboard.Press(modifier2);
-            Keyboard.Press(key);
-            Thread.Sleep(100);
-        }
-        finally
-        {
-            // Always release all keys to prevent stuck modifiers
-            try { Keyboard.Release(key); } catch { /* ignore */ }
-            try { Keyboard.Release(modifier2); } catch { /* ignore */ }
-            try { Keyboard.Release(modifier1); } catch { /* ignore */ }
-        }
-    }
-
-    /// <summary>
-    /// Find a secondary (non-main) window from the application's top-level windows.
-    /// </summary>
-    private Window? FindSecondaryWindow(string windowType)
-    {
-        var allWindows = _launcher.Application.GetAllTopLevelWindows(_launcher.Automation);
-        _output.WriteLine($"Found {allWindows.Length} top-level window(s)");
-
-        foreach (var w in allWindows)
-        {
-            _output.WriteLine($"  Window: \"{w.Title}\" size={w.BoundingRectangle.Width}x{w.BoundingRectangle.Height}");
-        }
-
-        if (allWindows.Length <= 1)
-        {
-            _output.WriteLine($"{windowType} window did not open - only main window found");
-            return null;
-        }
-
-        // Return the smallest window (mini/fixed are smaller than main)
-        return allWindows
-            .OrderBy(w => w.BoundingRectangle.Width * w.BoundingRectangle.Height)
-            .First();
     }
 
     public void Dispose()

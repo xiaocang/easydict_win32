@@ -16,6 +16,8 @@ namespace Easydict.WinUI
         private TrayIconService? _trayIconService;
         private HotkeyService? _hotkeyService;
         private ClipboardService? _clipboardService;
+        private MouseHookService? _mouseHookService;
+        private PopButtonService? _popButtonService;
         private AppWindow? _appWindow;
 
         private static App Instance => (App)Current;
@@ -289,6 +291,29 @@ namespace Easydict.WinUI
                 System.Diagnostics.Debug.WriteLine($"[App] ClipboardService initialization failed: {ex}");
             }
 
+            // Initialize mouse selection translate service
+            try
+            {
+                _popButtonService = new PopButtonService(_window.DispatcherQueue);
+                _mouseHookService = new MouseHookService();
+
+                _mouseHookService.OnDragSelectionEnd += _popButtonService.OnDragSelectionEnd;
+                _mouseHookService.OnMouseDown += _popButtonService.Dismiss;
+                _mouseHookService.OnMouseScroll += _popButtonService.Dismiss;
+                _mouseHookService.OnRightMouseDown += _popButtonService.Dismiss;
+
+                if (settings.MouseSelectionTranslate)
+                {
+                    _mouseHookService.Install();
+                }
+
+                _popButtonService.IsEnabled = settings.MouseSelectionTranslate;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] MouseSelectionTranslate initialization failed: {ex}");
+            }
+
             // Apply always-on-top setting
             ApplyAlwaysOnTop(settings.AlwaysOnTop);
 
@@ -518,6 +543,8 @@ namespace Easydict.WinUI
 
         private void CleanupServices()
         {
+            _mouseHookService?.Dispose();
+            _popButtonService?.Dispose();
             _clipboardService?.Dispose();
             _hotkeyService?.Dispose();
             _trayIconService?.Dispose();
@@ -537,6 +564,31 @@ namespace Easydict.WinUI
                 if (presenter != null)
                 {
                     presenter.IsAlwaysOnTop = alwaysOnTop;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Apply mouse selection translate setting.
+        /// Installs or uninstalls the global mouse hook at runtime.
+        /// </summary>
+        public static void ApplyMouseSelectionTranslate(bool enabled)
+        {
+            var app = Instance;
+            if (app._popButtonService != null)
+            {
+                app._popButtonService.IsEnabled = enabled;
+            }
+
+            if (app._mouseHookService != null)
+            {
+                if (enabled)
+                {
+                    app._mouseHookService.Install();
+                }
+                else
+                {
+                    app._mouseHookService.Uninstall();
                 }
             }
         }
@@ -577,6 +629,9 @@ namespace Easydict.WinUI
 
             // Apply to fixed window
             FixedWindowService.Instance.ApplyTheme(elementTheme);
+
+            // Apply to pop button
+            Instance._popButtonService?.ApplyTheme(elementTheme);
 
             System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {theme} (ElementTheme.{elementTheme})");
         }

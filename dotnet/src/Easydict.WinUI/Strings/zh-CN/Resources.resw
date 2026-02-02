@@ -524,6 +524,9 @@
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>监控剪贴板文本</value>
   </data>
+  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
+    <value>划词翻译（选中文本 → 点击浮动图标）</value>
+  </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
     <value>始终置顶</value>
   </data>

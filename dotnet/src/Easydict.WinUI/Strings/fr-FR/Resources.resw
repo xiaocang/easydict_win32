@@ -489,6 +489,9 @@
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>Surveiller le presse-papiers</value>
   </data>
+  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
+    <value>Traduction par sélection souris (sélectionner → cliquer sur l'icône flottante)</value>
+  </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
     <value>Toujours au premier plan</value>
   </data>

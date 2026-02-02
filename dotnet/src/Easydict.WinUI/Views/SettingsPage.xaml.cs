@@ -236,6 +236,7 @@ public sealed partial class SettingsPage : Page
         AutoSelectTargetToggle.Toggled += OnSettingChanged;
         MinimizeToTrayToggle.Toggled += OnSettingChanged;
         ClipboardMonitorToggle.Toggled += OnSettingChanged;
+        MouseSelectionTranslateToggle.Toggled += OnSettingChanged;
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
         LaunchAtStartupToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
@@ -375,6 +376,7 @@ public sealed partial class SettingsPage : Page
 
         MinimizeToTrayToggle.IsOn = _settings.MinimizeToTray;
         ClipboardMonitorToggle.IsOn = _settings.ClipboardMonitoring;
+        MouseSelectionTranslateToggle.IsOn = _settings.MouseSelectionTranslate;
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
         LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
 
@@ -709,6 +711,7 @@ public sealed partial class SettingsPage : Page
         // Save behavior settings
         _settings.MinimizeToTray = MinimizeToTrayToggle.IsOn;
         _settings.ClipboardMonitoring = ClipboardMonitorToggle.IsOn;
+        _settings.MouseSelectionTranslate = MouseSelectionTranslateToggle.IsOn;
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
         _settings.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
 
@@ -762,6 +765,7 @@ public sealed partial class SettingsPage : Page
 
         // Apply clipboard monitoring immediately
         App.ApplyClipboardMonitoring(_settings.ClipboardMonitoring);
+        App.ApplyMouseSelectionTranslate(_settings.MouseSelectionTranslate);
 
         // Hide the floating save button and reset unsaved changes flag
         _hasUnsavedChanges = false;

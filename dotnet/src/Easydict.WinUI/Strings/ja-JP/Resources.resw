@@ -489,6 +489,9 @@
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>クリップボードのテキストを監視</value>
   </data>
+  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
+    <value>マウス選択翻訳（テキスト選択 → フローティングアイコンをクリック）</value>
+  </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
     <value>常に最前面</value>
   </data>

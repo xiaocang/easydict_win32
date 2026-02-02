@@ -489,6 +489,9 @@
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>Zwischenablage auf Text überwachen</value>
   </data>
+  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
+    <value>Mausauswahl-Übersetzung (Text auswählen → schwebendes Symbol anklicken)</value>
+  </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
     <value>Immer im Vordergrund</value>
   </data>

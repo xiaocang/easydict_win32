@@ -524,6 +524,9 @@
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>Monitor clipboard for text</value>
   </data>
+  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
+    <value>Mouse selection translate (select text → click floating icon)</value>
+  </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
     <value>Always on top</value>
   </data>

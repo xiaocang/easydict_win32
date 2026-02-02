@@ -10,7 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// <summary>
 /// Tests for BingTranslateService.
 /// </summary>
-public class BingTranslateServiceTests
+public class BingTranslateServiceTests : IDisposable
 {
     private readonly MockHttpMessageHandler _mockHandler;
     private readonly HttpClient _httpClient;
@@ -34,6 +34,12 @@ public class BingTranslateServiceTests
         _mockHandler = new MockHttpMessageHandler();
         _httpClient = new HttpClient(_mockHandler);
         _service = new BingTranslateService(_httpClient);
+    }
+
+    public void Dispose()
+    {
+        _service.Dispose();
+        _httpClient.Dispose();
     }
 
     [Fact]

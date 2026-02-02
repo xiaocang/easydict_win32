@@ -531,6 +531,18 @@ public sealed partial class SettingsPage : Page
 
         // Validate proxy URI
         var proxyUri = ProxyUriBox.Text?.Trim() ?? "";
+        if (ProxyEnabledToggle.IsOn && string.IsNullOrWhiteSpace(proxyUri))
+        {
+            var errorDialog = new ContentDialog
+            {
+                Title = loc.GetString("InvalidProxyUrl"),
+                Content = loc.GetString("InvalidProxyUrlMessage"),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await errorDialog.ShowAsync();
+            return;
+        }
         if (ProxyEnabledToggle.IsOn && !string.IsNullOrWhiteSpace(proxyUri))
         {
             if (!Uri.TryCreate(proxyUri, UriKind.Absolute, out _))

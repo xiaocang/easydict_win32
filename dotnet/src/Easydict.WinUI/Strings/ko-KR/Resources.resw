@@ -520,4 +520,18 @@
   <data name="ThemeDark" xml:space="preserve">
     <value>다크</value>
   </data>
+
+  <!-- Unsaved Changes Dialog -->
+  <data name="UnsavedChangesTitle" xml:space="preserve">
+    <value>저장되지 않은 변경 사항</value>
+  </data>
+  <data name="UnsavedChangesMessage" xml:space="preserve">
+    <value>저장되지 않은 변경 사항이 있습니다. 나가기 전에 저장하시겠습니까?</value>
+  </data>
+  <data name="DontSave" xml:space="preserve">
+    <value>저장 안 함</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>취소</value>
+  </data>
 </root>

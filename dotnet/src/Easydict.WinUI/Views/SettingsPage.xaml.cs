@@ -21,6 +21,7 @@ public sealed partial class SettingsPage : Page
     private readonly SettingsService _settings = SettingsService.Instance;
     private bool _isLoading = true; // Prevent change detection during initial load
     private bool _handlersRegistered; // Guard to prevent duplicate event handler registration
+    private bool _hasUnsavedChanges; // Track whether any settings have been modified since last save
 
     // Service selection collections for each window (populated from TranslationManager.Services)
     private readonly ObservableCollection<ServiceCheckItem> _mainWindowServices = [];
@@ -293,6 +294,7 @@ public sealed partial class SettingsPage : Page
     private void OnSettingChanged(object sender, object e)
     {
         if (_isLoading) return;
+        _hasUnsavedChanges = true;
         SaveButton.Visibility = Visibility.Visible;
     }
 
@@ -492,8 +494,42 @@ public sealed partial class SettingsPage : Page
         combo.Text = value;
     }
 
-    private void OnBackClick(object sender, RoutedEventArgs e)
+    private async void OnBackClick(object sender, RoutedEventArgs e)
     {
+        if (_hasUnsavedChanges)
+        {
+            var loc = LocalizationService.Instance;
+            var dialog = new ContentDialog
+            {
+                Title = loc.GetString("UnsavedChangesTitle"),
+                Content = loc.GetString("UnsavedChangesMessage"),
+                PrimaryButtonText = loc.GetString("SaveSettings"),
+                SecondaryButtonText = loc.GetString("DontSave"),
+                CloseButtonText = loc.GetString("Cancel"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot
+            };
+
+            var result = await dialog.ShowAsync();
+
+            if (result == ContentDialogResult.Primary)
+            {
+                // Save and then go back
+                var saved = await SaveSettingsAsync();
+                if (!saved) return; // Validation failed, stay on page
+            }
+            else if (result == ContentDialogResult.Secondary)
+            {
+                // Discard changes and go back
+                _hasUnsavedChanges = false;
+            }
+            else
+            {
+                // Cancel - stay on settings page
+                return;
+            }
+        }
+
         if (Frame.CanGoBack)
         {
             Frame.GoBack();
@@ -501,6 +537,26 @@ public sealed partial class SettingsPage : Page
     }
 
     private async void OnSaveClick(object sender, RoutedEventArgs e)
+    {
+        var saved = await SaveSettingsAsync();
+        if (!saved) return;
+
+        // Show confirmation
+        var loc = LocalizationService.Instance;
+        var dialog = new ContentDialog
+        {
+            Title = loc.GetString("SettingsSaved"),
+            Content = loc.GetString("SettingsSavedMessage"),
+            CloseButtonText = loc.GetString("OK"),
+            XamlRoot = this.XamlRoot
+        };
+        await dialog.ShowAsync();
+    }
+
+    /// <summary>
+    /// Validates and saves all settings. Returns true if save was successful, false if validation failed.
+    /// </summary>
+    private async Task<bool> SaveSettingsAsync()
     {
         // Get localization service instance once for the entire method
         var loc = LocalizationService.Instance;
@@ -526,7 +582,7 @@ public sealed partial class SettingsPage : Page
                 XamlRoot = this.XamlRoot
             };
             await errorDialog.ShowAsync();
-            return;
+            return false;
         }
 
         // Validate proxy URI
@@ -541,7 +597,7 @@ public sealed partial class SettingsPage : Page
                 XamlRoot = this.XamlRoot
             };
             await errorDialog.ShowAsync();
-            return;
+            return false;
         }
         if (ProxyEnabledToggle.IsOn && !string.IsNullOrWhiteSpace(proxyUri))
         {
@@ -555,7 +611,7 @@ public sealed partial class SettingsPage : Page
                     XamlRoot = this.XamlRoot
                 };
                 await errorDialog.ShowAsync();
-                return;
+                return false;
             }
         }
 
@@ -707,18 +763,11 @@ public sealed partial class SettingsPage : Page
         // Apply clipboard monitoring immediately
         App.ApplyClipboardMonitoring(_settings.ClipboardMonitoring);
 
-        // Hide the floating save button
+        // Hide the floating save button and reset unsaved changes flag
+        _hasUnsavedChanges = false;
         SaveButton.Visibility = Visibility.Collapsed;
 
-        // Show confirmation
-        var dialog = new ContentDialog
-        {
-            Title = loc.GetString("SettingsSaved"),
-            Content = loc.GetString("SettingsSavedMessage"),
-            CloseButtonText = loc.GetString("OK"),
-            XamlRoot = this.XamlRoot
-        };
-        await dialog.ShowAsync();
+        return true;
     }
 
     /// <summary>

@@ -29,6 +29,8 @@ public sealed partial class MouseHookService : IDisposable
     private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
     private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
+    // SetWindowsHookEx must use DllImport because LibraryImport source generators
+    // do not support delegate (function pointer) parameters.
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
 

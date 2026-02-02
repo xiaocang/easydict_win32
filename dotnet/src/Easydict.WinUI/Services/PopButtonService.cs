@@ -65,8 +65,10 @@ public sealed class PopButtonService : IDisposable
     {
         if (!_isEnabled || _isDisposed) return;
 
-        // Cancel and dispose any previous pending selection detection
-        var previousCts = _selectionCts;
+        // Cancel any previous pending selection detection.
+        // Swap field first so previous operation sees cancellation via its own token,
+        // then dispose after swap to avoid racing with in-flight awaits.
+        var previousCts = Interlocked.Exchange(ref _selectionCts, null);
         previousCts?.Cancel();
         previousCts?.Dispose();
 
@@ -78,11 +80,10 @@ public sealed class PopButtonService : IDisposable
         {
             // Wait for the source app to finalize the selection
             await Task.Delay(SelectionDelayMs, ct);
-            if (ct.IsCancellationRequested) return;
 
             // Get the selected text using the existing TextSelectionService
             var text = await TextSelectionService.GetSelectedTextAsync();
-            if (ct.IsCancellationRequested) return;
+            ct.ThrowIfCancellationRequested();
 
             if (string.IsNullOrWhiteSpace(text))
             {

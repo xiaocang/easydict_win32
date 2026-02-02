@@ -34,6 +34,12 @@ public sealed partial class PopButtonWindow : Window
     private const int SW_SHOWNOACTIVATE = 4;
     private const int SW_HIDE = 0;
 
+    // These Win32 P/Invoke calls are required because WinUI 3 does not provide managed APIs for:
+    // - WS_EX_NOACTIVATE/WS_EX_TOOLWINDOW extended window styles (prevents focus steal)
+    // - SWP_NOACTIVATE positioning (shows window without activating)
+    // - Per-window DPI queries
+    // The OverlappedPresenter API only covers a subset of window chrome options.
+
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial int GetWindowLong(IntPtr hWnd, int nIndex);
 

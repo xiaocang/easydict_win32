@@ -135,6 +135,7 @@
                         x:Name="ErrorText"
                         Grid.Row="2"
                         TextWrapping="Wrap"
+                        IsTextSelectionEnabled="True"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         FontSize="12"
                         Visibility="Collapsed" />

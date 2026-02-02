@@ -25,7 +25,7 @@ public sealed class BuiltInAIService : BaseOpenAIService
         "mixtral-8x7b-32768"
     };
 
-    private static readonly IReadOnlyList<Language> BuiltInLanguages = new[]
+    private static readonly IReadOnlyList<Language> _builtInLanguages = new[]
     {
         Language.SimplifiedChinese,
         Language.TraditionalChinese,
@@ -53,7 +53,7 @@ public sealed class BuiltInAIService : BaseOpenAIService
     public override string DisplayName => "Built-in AI";
     public override bool RequiresApiKey => false; // API key is built-in
     public override bool IsConfigured => !string.IsNullOrEmpty(GetApiKey());
-    public override IReadOnlyList<Language> SupportedLanguages => BuiltInLanguages;
+    public override IReadOnlyList<Language> SupportedLanguages => _builtInLanguages;
 
     public override string Endpoint => SecretKeyManager.GetSecret("builtInAIEndpoint") ?? "";
     public override string ApiKey => GetApiKey();

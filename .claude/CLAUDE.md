@@ -209,8 +209,9 @@ private bool _isLoaded;
 private string _lastClipboardText;
 private readonly HttpClient _httpClient;
 
-// Static readonly fields use _PascalCase or _camelCase
+// Private static readonly fields use _camelCase
 private static readonly Lazy<TranslationManagerService> _instance;
+private static readonly IReadOnlyList<Language> _googleLanguages;
 private readonly object _lock = new();
 
 // Constants use PascalCase or CONSTANT_CASE

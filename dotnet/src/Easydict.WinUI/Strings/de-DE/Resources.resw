@@ -496,6 +496,14 @@
     <value>Bei Windows-Start ausführen</value>
   </data>
 
+  <!-- International Services -->
+  <data name="EnableInternationalServices" xml:space="preserve">
+    <value>Internationale Dienste aktivieren</value>
+  </data>
+  <data name="EnableInternationalServicesDescription" xml:space="preserve">
+    <value>Einige Dienste (Google, DeepL, OpenAI, Gemini usw.) erfordern internationalen Netzwerkzugang und sind möglicherweise nicht in allen Regionen verfügbar.</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>App-Design</value>

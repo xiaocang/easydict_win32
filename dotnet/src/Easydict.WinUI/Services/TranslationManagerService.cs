@@ -126,6 +126,8 @@ public sealed class TranslationManagerService : IDisposable
         _translationManager = new TranslationManager(options);
         ConfigureServices();
 
+        _settings.EnableInternationalServicesChanged += (_, _) => ReconfigureServices();
+
         Debug.WriteLine("[TranslationManagerService] Initialized");
     }
 
@@ -134,6 +136,15 @@ public sealed class TranslationManagerService : IDisposable
     /// </summary>
     private void ConfigureServices()
     {
+        // Configure Bing Translate (use China host if international services are disabled)
+        _translationManager.ConfigureService("bing", service =>
+        {
+            if (service is BingTranslateService bing)
+            {
+                bing.Configure(useChinaHost: !_settings.EnableInternationalServices);
+            }
+        });
+
         // Configure DeepL
         _translationManager.ConfigureService("deepl", service =>
         {

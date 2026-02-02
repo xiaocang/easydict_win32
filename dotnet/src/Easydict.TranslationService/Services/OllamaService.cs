@@ -13,7 +13,7 @@ public sealed class OllamaService : BaseOpenAIService
     private const string DefaultEndpoint = "http://localhost:11434/v1/chat/completions";
     private const string DefaultModel = "llama3.2";
 
-    private static readonly IReadOnlyList<Language> OllamaLanguages = new[]
+    private static readonly IReadOnlyList<Language> _ollamaLanguages = new[]
     {
         Language.SimplifiedChinese,
         Language.TraditionalChinese,
@@ -45,7 +45,7 @@ public sealed class OllamaService : BaseOpenAIService
     public override string DisplayName => "Ollama";
     public override bool RequiresApiKey => false;
     public override bool IsConfigured => true; // Always configured (local service)
-    public override IReadOnlyList<Language> SupportedLanguages => OllamaLanguages;
+    public override IReadOnlyList<Language> SupportedLanguages => _ollamaLanguages;
 
     public override string Endpoint => _endpoint;
     public override string ApiKey => ""; // No API key needed

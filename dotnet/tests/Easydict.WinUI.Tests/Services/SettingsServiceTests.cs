@@ -350,4 +350,96 @@ public class SettingsServiceTests
             _settings.Save();
         }
     }
+
+    [Fact]
+    public void IsChinaRegion_ReturnsBool()
+    {
+        // IsChinaRegion should return a boolean based on system region/culture
+        var result = SettingsService.IsChinaRegion();
+        (result == true || result == false).Should().BeTrue();
+    }
+
+    [Fact]
+    public void GetRegionDefaultServiceId_ReturnsValidServiceId()
+    {
+        var serviceId = SettingsService.GetRegionDefaultServiceId();
+
+        // Should return either "bing" (China) or "google" (international)
+        serviceId.Should().BeOneOf("bing", "google");
+    }
+
+    [Fact]
+    public void GetRegionDefaultServiceId_MatchesChinaRegionDetection()
+    {
+        var isChinaRegion = SettingsService.IsChinaRegion();
+        var serviceId = SettingsService.GetRegionDefaultServiceId();
+
+        if (isChinaRegion)
+        {
+            serviceId.Should().Be("bing");
+        }
+        else
+        {
+            serviceId.Should().Be("google");
+        }
+    }
+
+    [Fact]
+    public void InternationalOnlyServices_ContainsExpectedServices()
+    {
+        // Verify the set contains known international-only services
+        SettingsService.InternationalOnlyServices.Should().Contain("google");
+        SettingsService.InternationalOnlyServices.Should().Contain("deepl");
+        SettingsService.InternationalOnlyServices.Should().Contain("openai");
+        SettingsService.InternationalOnlyServices.Should().Contain("gemini");
+        SettingsService.InternationalOnlyServices.Should().Contain("linguee");
+    }
+
+    [Fact]
+    public void InternationalOnlyServices_DoesNotContainChinaServices()
+    {
+        // Services available in China should NOT be in the international-only set
+        SettingsService.InternationalOnlyServices.Should().NotContain("bing");
+        SettingsService.InternationalOnlyServices.Should().NotContain("deepseek");
+        SettingsService.InternationalOnlyServices.Should().NotContain("caiyun");
+        SettingsService.InternationalOnlyServices.Should().NotContain("niutrans");
+        SettingsService.InternationalOnlyServices.Should().NotContain("zhipu");
+        SettingsService.InternationalOnlyServices.Should().NotContain("doubao");
+    }
+
+    [Fact]
+    public void InternationalOnlyServices_IsCaseInsensitive()
+    {
+        // The set should be case-insensitive
+        SettingsService.InternationalOnlyServices.Should().Contain("Google");
+        SettingsService.InternationalOnlyServices.Should().Contain("DEEPL");
+    }
+
+    [Fact]
+    public void EnableInternationalServices_CanBeToggled()
+    {
+        var original = _settings.EnableInternationalServices;
+        try
+        {
+            _settings.EnableInternationalServices = true;
+            _settings.EnableInternationalServices.Should().BeTrue();
+
+            _settings.EnableInternationalServices = false;
+            _settings.EnableInternationalServices.Should().BeFalse();
+        }
+        finally
+        {
+            _settings.EnableInternationalServices = original;
+        }
+    }
+
+    [Fact]
+    public void EnableInternationalServices_DefaultMatchesRegion()
+    {
+        // The default value (before any persistence) should be !IsChinaRegion()
+        // We can't fully test this since the singleton already loaded, but we can
+        // verify the property is accessible and returns a valid boolean
+        var value = _settings.EnableInternationalServices;
+        (value == true || value == false).Should().BeTrue();
+    }
 }

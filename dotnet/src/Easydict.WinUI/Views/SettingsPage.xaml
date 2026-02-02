@@ -11,6 +11,9 @@
 
     <Page.Resources>
         <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <local:BoolToOpacityConverter x:Key="BoolToOpacityConverter" />
+        <local:BoolToCompactMarginConverter x:Key="BoolToCompactMarginConverter" />
+        <local:BoolToCompactFontSizeConverter x:Key="BoolToCompactFontSizeConverter" />
     </Page.Resources>
 
     <Grid>
@@ -92,6 +95,32 @@
                 <TextBlock x:Name="EnabledServicesDescriptionText" Text="Select which translation services to display in each window. Multiple services will run in parallel."
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
+                <!-- International Services Toggle -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="12,8">
+                    <StackPanel Spacing="4">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="EnableInternationalServicesHeaderText"
+                                       Text="Enable International Services"
+                                       FontSize="13"
+                                       VerticalAlignment="Center" />
+                            <ToggleSwitch x:Name="EnableInternationalServicesToggle"
+                                          Grid.Column="1"
+                                          Toggled="OnEnableInternationalServicesToggled"
+                                          MinWidth="0"
+                                          VerticalAlignment="Center" />
+                        </Grid>
+                        <TextBlock x:Name="EnableInternationalServicesDescriptionText"
+                                   Text="Some services require international network access."
+                                   FontSize="11"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
                 <!-- Main Window Services -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
@@ -99,21 +128,24 @@
                         <ItemsControl x:Name="MainWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,4">
+                                    <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <CheckBox
                                             Content="{Binding DisplayName}"
+                                            FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
                                             Tag="{Binding ServiceId}"
-                                            IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                                            IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                            IsEnabled="{Binding IsAvailable}" />
                                         <ToggleSwitch
                                             Grid.Column="1"
                                             IsOn="{Binding EnabledQuery, Mode=TwoWay}"
                                             OnContent="Auto"
                                             OffContent="Manual"
                                             Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            IsEnabled="{Binding IsAvailable}"
                                             MinWidth="0"
                                             Margin="8,0,0,0" />
                                     </Grid>
@@ -130,21 +162,24 @@
                         <ItemsControl x:Name="MiniWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,4">
+                                    <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <CheckBox
                                             Content="{Binding DisplayName}"
+                                            FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
                                             Tag="{Binding ServiceId}"
-                                            IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                                            IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                            IsEnabled="{Binding IsAvailable}" />
                                         <ToggleSwitch
                                             Grid.Column="1"
                                             IsOn="{Binding EnabledQuery, Mode=TwoWay}"
                                             OnContent="Auto"
                                             OffContent="Manual"
                                             Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            IsEnabled="{Binding IsAvailable}"
                                             MinWidth="0"
                                             Margin="8,0,0,0" />
                                     </Grid>
@@ -161,21 +196,24 @@
                         <ItemsControl x:Name="FixedWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,4">
+                                    <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <CheckBox
                                             Content="{Binding DisplayName}"
+                                            FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
                                             Tag="{Binding ServiceId}"
-                                            IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                                            IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                            IsEnabled="{Binding IsAvailable}" />
                                         <ToggleSwitch
                                             Grid.Column="1"
                                             IsOn="{Binding EnabledQuery, Mode=TwoWay}"
                                             OnContent="Auto"
                                             OffContent="Manual"
                                             Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            IsEnabled="{Binding IsAvailable}"
                                             MinWidth="0"
                                             Margin="8,0,0,0" />
                                     </Grid>

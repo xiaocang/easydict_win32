@@ -26,7 +26,7 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
     /// <summary>
     /// Languages supported by Doubao translation.
     /// </summary>
-    private static readonly IReadOnlyList<Language> DoubaoLanguages = new[]
+    private static readonly IReadOnlyList<Language> _doubaoLanguages = new[]
     {
         Language.SimplifiedChinese,
         Language.TraditionalChinese,
@@ -62,7 +62,7 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
     public override string DisplayName => "Doubao";
     public override bool RequiresApiKey => true;
     public override bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
-    public override IReadOnlyList<Language> SupportedLanguages => DoubaoLanguages;
+    public override IReadOnlyList<Language> SupportedLanguages => _doubaoLanguages;
     public bool IsStreaming => true;
 
     /// <summary>

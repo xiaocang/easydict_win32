@@ -39,7 +39,7 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
     /// <summary>
     /// Languages supported by Gemini.
     /// </summary>
-    private static readonly IReadOnlyList<Language> GeminiLanguages = new[]
+    private static readonly IReadOnlyList<Language> _geminiLanguages = new[]
     {
         Language.SimplifiedChinese,
         Language.TraditionalChinese,
@@ -85,7 +85,7 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
     public override string DisplayName => "Gemini";
     public override bool RequiresApiKey => true;
     public override bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
-    public override IReadOnlyList<Language> SupportedLanguages => GeminiLanguages;
+    public override IReadOnlyList<Language> SupportedLanguages => _geminiLanguages;
 
     /// <summary>
     /// This is a streaming service.

@@ -496,6 +496,14 @@
     <value>開機自動啟動</value>
   </data>
 
+  <!-- International Services -->
+  <data name="EnableInternationalServices" xml:space="preserve">
+    <value>啟用國際服務</value>
+  </data>
+  <data name="EnableInternationalServicesDescription" xml:space="preserve">
+    <value>部分服務（Google、DeepL、OpenAI、Gemini 等）需要國際網路存取，可能在部分地區無法使用。</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>應用程式主題</value>

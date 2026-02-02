@@ -13,7 +13,7 @@ public sealed class NiuTransService : BaseTranslationService
     private const string Endpoint = "https://api.niutrans.com/NiuTransServer/translation";
     private const int MaxTextLength = 5000;
 
-    private static readonly IReadOnlyList<Language> NiuTransLanguages = new[]
+    private static readonly IReadOnlyList<Language> _niuTransLanguages = new[]
     {
         Language.Auto,
         Language.SimplifiedChinese,
@@ -68,7 +68,7 @@ public sealed class NiuTransService : BaseTranslationService
     public override string DisplayName => "NiuTrans";
     public override bool RequiresApiKey => true;
     public override bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
-    public override IReadOnlyList<Language> SupportedLanguages => NiuTransLanguages;
+    public override IReadOnlyList<Language> SupportedLanguages => _niuTransLanguages;
 
     /// <summary>
     /// Configure the NiuTrans service with API key.

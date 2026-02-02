@@ -537,6 +537,14 @@
     <value>隐藏 (Ctrl+Alt+F 再次显示)</value>
   </data>
 
+  <!-- International Services -->
+  <data name="EnableInternationalServices" xml:space="preserve">
+    <value>启用国际服务</value>
+  </data>
+  <data name="EnableInternationalServicesDescription" xml:space="preserve">
+    <value>部分服务（Google、DeepL、OpenAI、Gemini 等）需要国际网络访问，可能在部分地区不可用。</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>应用主题</value>

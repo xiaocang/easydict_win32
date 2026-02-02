@@ -12,7 +12,7 @@ public sealed class CaiyunService : BaseTranslationService
 {
     private const string Endpoint = "https://api.interpreter.caiyunai.com/v1/translator";
 
-    private static readonly IReadOnlyList<Language> CaiyunLanguages = new[]
+    private static readonly IReadOnlyList<Language> _caiyunLanguages = new[]
     {
         Language.Auto,
         Language.SimplifiedChinese,
@@ -42,7 +42,7 @@ public sealed class CaiyunService : BaseTranslationService
     public override string DisplayName => "Caiyun";
     public override bool RequiresApiKey => true;
     public override bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
-    public override IReadOnlyList<Language> SupportedLanguages => CaiyunLanguages;
+    public override IReadOnlyList<Language> SupportedLanguages => _caiyunLanguages;
 
     /// <summary>
     /// Configure the Caiyun service with API token.

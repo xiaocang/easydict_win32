@@ -496,6 +496,14 @@
     <value>Windows起動時に起動</value>
   </data>
 
+  <!-- International Services -->
+  <data name="EnableInternationalServices" xml:space="preserve">
+    <value>国際サービスを有効にする</value>
+  </data>
+  <data name="EnableInternationalServicesDescription" xml:space="preserve">
+    <value>一部のサービス（Google、DeepL、OpenAI、Gemini など）は国際ネットワークアクセスが必要で、地域によっては利用できない場合があります。</value>
+  </data>
+
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
     <value>アプリのテーマ</value>

@@ -55,6 +55,11 @@ public sealed partial class SettingsPage : Page
         if (EnabledServicesDescriptionText != null)
             EnabledServicesDescriptionText.Text = loc.GetString("EnabledServicesDescription");
 
+        // International Services toggle
+        EnableInternationalServicesHeaderText.Text = loc.GetString("EnableInternationalServices");
+        if (EnableInternationalServicesDescriptionText != null)
+            EnableInternationalServicesDescriptionText.Text = loc.GetString("EnableInternationalServicesDescription");
+
         // Window headers
         if (MainWindowHeaderText != null)
             MainWindowHeaderText.Text = loc.GetString("MainWindow");
@@ -293,6 +298,9 @@ public sealed partial class SettingsPage : Page
 
     private void LoadSettings()
     {
+        // International services toggle
+        EnableInternationalServicesToggle.IsOn = _settings.EnableInternationalServices;
+
         // Language preferences
         SelectComboByTag(FirstLanguageCombo, _settings.FirstLanguage);
         SelectComboByTag(SecondLanguageCombo, _settings.SecondLanguage);
@@ -394,6 +402,9 @@ public sealed partial class SettingsPage : Page
     {
         collection.Clear();
 
+        var settings = SettingsService.Instance;
+        var internationalEnabled = settings.EnableInternationalServices;
+
         using var handle = TranslationManagerService.Instance.AcquireHandle();
         var manager = handle.Manager;
 
@@ -402,13 +413,19 @@ public sealed partial class SettingsPage : Page
             // Default EnabledQuery is true (auto-query); use stored setting if available
             var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var stored) ? stored : true;
 
-            collection.Add(new ServiceCheckItem
+            var isInternationalOnly = SettingsService.InternationalOnlyServices.Contains(serviceId);
+            var isAvailable = internationalEnabled || !isInternationalOnly;
+
+            var item = new ServiceCheckItem
             {
                 ServiceId = serviceId,
                 DisplayName = service.DisplayName,
-                IsChecked = enabledServices.Contains(serviceId),
-                EnabledQuery = enabledQuery
-            });
+                IsChecked = isAvailable && enabledServices.Contains(serviceId),
+                EnabledQuery = enabledQuery,
+                IsAvailable = isAvailable
+            };
+
+            collection.Add(item);
         }
     }
 
@@ -493,11 +510,12 @@ public sealed partial class SettingsPage : Page
         var originalProxyUri = _settings.ProxyUri;
         var originalProxyBypassLocal = _settings.ProxyBypassLocal;
 
-        // Save language preferences with validation
+        // === Validate all inputs before modifying any settings ===
+
+        // Validate language preferences
         var firstLang = GetSelectedTag(FirstLanguageCombo) ?? "zh";
         var secondLang = GetSelectedTag(SecondLanguageCombo) ?? "en";
 
-        // Validate: FirstLanguage and SecondLanguage cannot be the same
         if (firstLang == secondLang)
         {
             var errorDialog = new ContentDialog
@@ -510,6 +528,41 @@ public sealed partial class SettingsPage : Page
             await errorDialog.ShowAsync();
             return;
         }
+
+        // Validate proxy URI
+        var proxyUri = ProxyUriBox.Text?.Trim() ?? "";
+        if (ProxyEnabledToggle.IsOn && string.IsNullOrWhiteSpace(proxyUri))
+        {
+            var errorDialog = new ContentDialog
+            {
+                Title = loc.GetString("InvalidProxyUrl"),
+                Content = loc.GetString("InvalidProxyUrlMessage"),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await errorDialog.ShowAsync();
+            return;
+        }
+        if (ProxyEnabledToggle.IsOn && !string.IsNullOrWhiteSpace(proxyUri))
+        {
+            if (!Uri.TryCreate(proxyUri, UriKind.Absolute, out _))
+            {
+                var errorDialog = new ContentDialog
+                {
+                    Title = loc.GetString("InvalidProxyUrl"),
+                    Content = loc.GetString("InvalidProxyUrlMessage"),
+                    CloseButtonText = loc.GetString("OK"),
+                    XamlRoot = this.XamlRoot
+                };
+                await errorDialog.ShowAsync();
+                return;
+            }
+        }
+
+        // === All validations passed — apply settings ===
+
+        // Save international services setting
+        _settings.EnableInternationalServices = EnableInternationalServicesToggle.IsOn;
 
         _settings.FirstLanguage = firstLang;
         _settings.SecondLanguage = secondLang;
@@ -592,26 +645,9 @@ public sealed partial class SettingsPage : Page
         var niutransKey = NiuTransKeyBox.Password;
         _settings.NiuTransApiKey = string.IsNullOrWhiteSpace(niutransKey) ? null : niutransKey;
 
-        // Save HTTP Proxy settings with validation
+        // Save HTTP Proxy settings (already validated above)
         _settings.ProxyEnabled = ProxyEnabledToggle.IsOn;
         _settings.ProxyBypassLocal = ProxyBypassLocalToggle.IsOn;
-
-        var proxyUri = ProxyUriBox.Text?.Trim() ?? "";
-        if (_settings.ProxyEnabled && !string.IsNullOrWhiteSpace(proxyUri))
-        {
-            if (!Uri.TryCreate(proxyUri, UriKind.Absolute, out _))
-            {
-                var errorDialog = new ContentDialog
-                {
-                    Title = loc.GetString("InvalidProxyUrl"),
-                    Content = loc.GetString("InvalidProxyUrlMessage"),
-                    CloseButtonText = loc.GetString("OK"),
-                    XamlRoot = this.XamlRoot
-                };
-                await errorDialog.ShowAsync();
-                return;
-            }
-        }
         _settings.ProxyUri = proxyUri;
 
         // Save behavior settings
@@ -766,20 +802,25 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
-    /// Ensure at least Google is checked when the collection has no services selected.
+    /// Ensure at least one service is checked when the collection has no services selected.
+    /// Uses region-appropriate default (bing for China, google for international),
+    /// falling back to the first available service if the default is unavailable.
     /// Updates both the settings and the collection item.
     /// </summary>
     private static void EnsureDefaultServiceEnabled(ObservableCollection<ServiceCheckItem> collection, List<string> services)
     {
         if (services.Count > 0) return;
 
-        services.Add("google");
+        var defaultServiceId = SettingsService.GetRegionDefaultServiceId();
 
-        // Also update the collection item to reflect this default
-        var googleItem = collection.FirstOrDefault(item => item.ServiceId == "google");
-        if (googleItem != null)
+        // If the region default is not available, pick the first available service
+        var defaultItem = collection.FirstOrDefault(item => item.ServiceId == defaultServiceId && item.IsAvailable)
+                       ?? collection.FirstOrDefault(item => item.IsAvailable);
+
+        if (defaultItem != null)
         {
-            googleItem.IsChecked = true;
+            services.Add(defaultItem.ServiceId);
+            defaultItem.IsChecked = true;
         }
     }
 
@@ -937,6 +978,58 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
+    /// Handle Enable International Services toggle change.
+    /// Updates IsAvailable on all service items and unchecks unavailable services.
+    /// </summary>
+    private void OnEnableInternationalServicesToggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading) return;
+
+        var enabled = EnableInternationalServicesToggle.IsOn;
+
+        UpdateServiceAvailability(_mainWindowServices, enabled);
+        UpdateServiceAvailability(_miniWindowServices, enabled);
+        UpdateServiceAvailability(_fixedWindowServices, enabled);
+
+        // Ensure at least one available service is still enabled after unchecking unavailable ones
+        var mainServices = GetEnabledServicesFromCollection(_mainWindowServices);
+        var miniServices = GetEnabledServicesFromCollection(_miniWindowServices);
+        var fixedServices = GetEnabledServicesFromCollection(_fixedWindowServices);
+        EnsureDefaultServiceEnabled(_mainWindowServices, mainServices);
+        EnsureDefaultServiceEnabled(_miniWindowServices, miniServices);
+        EnsureDefaultServiceEnabled(_fixedWindowServices, fixedServices);
+
+        SaveButton.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Update IsAvailable and uncheck unavailable services in a collection.
+    /// </summary>
+    private static void UpdateServiceAvailability(ObservableCollection<ServiceCheckItem> collection, bool internationalEnabled)
+    {
+        foreach (var item in collection)
+        {
+            var isInternationalOnly = SettingsService.InternationalOnlyServices.Contains(item.ServiceId);
+            item.IsAvailable = internationalEnabled || !isInternationalOnly;
+
+            // Uncheck unavailable services
+            if (!item.IsAvailable && item.IsChecked)
+            {
+                item.IsChecked = false;
+            }
+        }
+
+        // Sort: available items first, unavailable items last (preserve relative order within each group)
+        var sorted = collection.OrderBy(item => item.IsAvailable ? 0 : 1).ToList();
+        for (int i = 0; i < sorted.Count; i++)
+        {
+            var currentIndex = collection.IndexOf(sorted[i]);
+            if (currentIndex != i)
+                collection.Move(currentIndex, i);
+        }
+    }
+
+    /// <summary>
     /// Handle app theme selection change.
     /// </summary>
     private void OnAppThemeChanged(object sender, SelectionChangedEventArgs e)
@@ -1047,4 +1140,55 @@ public class BoolToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
         }
         return false;
     }
+}
+
+/// <summary>
+/// Converts a boolean value to opacity.
+/// True = 1.0 (fully opaque), False = 0.4 (grayed out).
+/// </summary>
+public class BoolToOpacityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+    {
+        if (value is bool boolValue)
+        {
+            return boolValue ? 1.0 : 0.4;
+        }
+        return 1.0;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+    {
+        if (value is double opacity)
+        {
+            return opacity > 0.5;
+        }
+        return true;
+    }
+}
+
+/// <summary>
+/// Converts a boolean (IsAvailable) to margin for compact layout.
+/// True = normal spacing, False = reduced spacing for unavailable items.
+/// </summary>
+public class BoolToCompactMarginConverter : Microsoft.UI.Xaml.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+        => value is true ? new Thickness(0, 4, 0, 0) : new Thickness(0, 1, 0, 0);
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+        => throw new NotImplementedException();
+}
+
+/// <summary>
+/// Converts a boolean (IsAvailable) to font size for compact layout.
+/// True = normal size (14), False = smaller size (12) for unavailable items.
+/// </summary>
+public class BoolToCompactFontSizeConverter : Microsoft.UI.Xaml.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+        => value is true ? 14.0 : 12.0;
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+        => throw new NotImplementedException();
 }

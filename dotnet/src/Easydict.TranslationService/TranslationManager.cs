@@ -86,6 +86,7 @@ public sealed class TranslationManager : IDisposable
         // Register default services
         RegisterService(new GoogleTranslateService(_httpClient));
         RegisterService(new GoogleWebTranslateService(_httpClient));
+        RegisterService(new BingTranslateService(_httpClient));
         RegisterService(new DeepLService(_httpClient));
 
         // Register streaming LLM services

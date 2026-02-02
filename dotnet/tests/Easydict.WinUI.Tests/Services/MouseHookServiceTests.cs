@@ -1,5 +1,6 @@
 using Easydict.WinUI.Services;
 using FluentAssertions;
+using Xunit;
 using static Easydict.WinUI.Services.MouseHookService;
 
 namespace Easydict.WinUI.Tests.Services;

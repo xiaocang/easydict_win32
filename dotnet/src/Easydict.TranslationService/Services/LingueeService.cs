@@ -11,7 +11,7 @@ public sealed class LingueeService : BaseTranslationService
 {
     private const string BaseUrl = "https://linguee-api.fly.dev/api/v2/translations";
 
-    private static readonly IReadOnlyList<Language> LingueeLanguages = new[]
+    private static readonly IReadOnlyList<Language> _lingueeLanguages = new[]
     {
         Language.English,
         Language.German,
@@ -45,7 +45,7 @@ public sealed class LingueeService : BaseTranslationService
     public override string DisplayName => "Linguee Dictionary";
     public override bool RequiresApiKey => false; // Public proxy, no API key needed
     public override bool IsConfigured => true;
-    public override IReadOnlyList<Language> SupportedLanguages => LingueeLanguages;
+    public override IReadOnlyList<Language> SupportedLanguages => _lingueeLanguages;
 
     protected override async Task<TranslationResult> TranslateInternalAsync(
         TranslationRequest request,

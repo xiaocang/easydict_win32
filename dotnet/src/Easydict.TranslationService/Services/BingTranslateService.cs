@@ -14,7 +14,7 @@ namespace Easydict.TranslationService.Services;
 /// then calls the ttranslatev3 endpoint.
 /// Supports cn.bing.com for China mainland access.
 /// </summary>
-public sealed class BingTranslateService : BaseTranslationService
+public sealed class BingTranslateService : BaseTranslationService, IDisposable
 {
     private const string GlobalHost = "www.bing.com";
     private const string ChinaHost = "cn.bing.com";
@@ -342,6 +342,11 @@ public sealed class BingTranslateService : BaseTranslationService
             "nb" => Language.Norwegian,
             _ => LanguageCodes.FromIso639(code)
         };
+    }
+
+    public void Dispose()
+    {
+        _credentialSemaphore.Dispose();
     }
 
     /// <summary>

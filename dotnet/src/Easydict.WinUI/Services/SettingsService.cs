@@ -14,7 +14,7 @@ public sealed class SettingsService
 
     private readonly string _settingsFilePath;
     private Dictionary<string, object?> _settings = new();
-    private bool _hasPersistedInternationalSetting;
+    private volatile bool _hasPersistedInternationalSetting;
 
     private SettingsService()
     {
@@ -571,8 +571,7 @@ public sealed class SettingsService
             using var request = new HttpRequestMessage(HttpMethod.Head, "https://translate.googleapis.com");
             request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            using var response = await httpClient.SendAsync(request, cts.Token);
+            using var response = await httpClient.SendAsync(request);
 
             // If we get any response (even 4xx), the service is reachable
             System.Diagnostics.Debug.WriteLine($"[Settings] Network probe: Google Translate reachable (status={response.StatusCode})");

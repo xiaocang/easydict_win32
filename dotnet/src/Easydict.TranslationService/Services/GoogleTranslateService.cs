@@ -14,7 +14,7 @@ public sealed class GoogleTranslateService : BaseTranslationService
 {
     private const string BaseUrl = "https://translate.googleapis.com/translate_a/single";
 
-    private static readonly IReadOnlyList<Language> GoogleLanguages =
+    private static readonly IReadOnlyList<Language> _googleLanguages =
     [
         Language.SimplifiedChinese, Language.TraditionalChinese, Language.English,
         Language.Japanese, Language.Korean, Language.French, Language.Spanish,
@@ -36,7 +36,7 @@ public sealed class GoogleTranslateService : BaseTranslationService
     public override string DisplayName => "Google Translate";
     public override bool RequiresApiKey => false;
     public override bool IsConfigured => true;
-    public override IReadOnlyList<Language> SupportedLanguages => GoogleLanguages;
+    public override IReadOnlyList<Language> SupportedLanguages => _googleLanguages;
 
     protected override async Task<TranslationResult> TranslateInternalAsync(
         TranslationRequest request,

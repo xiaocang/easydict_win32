@@ -49,7 +49,7 @@ public sealed class MouseHookService : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct POINT
+    public struct POINT
     {
         public int x;
         public int y;
@@ -59,8 +59,10 @@ public sealed class MouseHookService : IDisposable
     private LowLevelMouseProc? _hookProc; // prevent GC collection of delegate
     private bool _isDisposed;
 
-    // Drag detection state - exposed internally for testing
-    internal DragDetector Detector { get; } = new();
+    /// <summary>
+    /// Drag detection state machine. Public for unit testing.
+    /// </summary>
+    public DragDetector Detector { get; } = new();
 
     /// <summary>
     /// Fired when a drag-select gesture ends (mouse up after dragging).
@@ -132,9 +134,9 @@ public sealed class MouseHookService : IDisposable
     }
 
     /// <summary>
-    /// Process a mouse message. Separated from HookCallback for testability.
+    /// Process a mouse message. Public for unit testing without installing a real hook.
     /// </summary>
-    internal void ProcessMouseMessage(int message, POINT pt)
+    public void ProcessMouseMessage(int message, POINT pt)
     {
         switch (message)
         {
@@ -178,7 +180,7 @@ public sealed class MouseHookService : IDisposable
     /// Encapsulates drag detection state machine logic.
     /// Separated from MouseHookService for unit testing without actual Win32 hooks.
     /// </summary>
-    internal sealed class DragDetector
+    public sealed class DragDetector
     {
         private POINT _startPoint;
         private bool _isLeftButtonDown;
@@ -225,5 +227,5 @@ public sealed class MouseHookService : IDisposable
         }
     }
 
-    internal readonly record struct DragResult(bool IsDragSelection, POINT EndPoint);
+    public readonly record struct DragResult(bool IsDragSelection, POINT EndPoint);
 }

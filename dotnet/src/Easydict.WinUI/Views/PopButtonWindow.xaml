@@ -9,9 +9,9 @@
     Title="">
 
     <Grid x:Name="RootGrid"
-          Background="{ThemeResource SystemControlBackgroundAltHighBrush}"
+          Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
           CornerRadius="6"
-          BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}"
+          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
           BorderThickness="1"
           Padding="0">
 
@@ -27,7 +27,7 @@
                 Click="OnTranslateButtonClick">
             <FontIcon Glyph="&#xE8C1;"
                       FontSize="14"
-                      Foreground="{ThemeResource SystemAccentColor}" />
+                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
         </Button>
     </Grid>
 </Window>

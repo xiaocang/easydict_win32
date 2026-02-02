@@ -82,8 +82,7 @@ public sealed class PopButtonService : IDisposable
             await Task.Delay(SelectionDelayMs, ct);
 
             // Get the selected text using the existing TextSelectionService
-            var text = await TextSelectionService.GetSelectedTextAsync();
-            ct.ThrowIfCancellationRequested();
+            var text = await TextSelectionService.GetSelectedTextAsync(ct);
 
             if (string.IsNullOrWhiteSpace(text))
             {

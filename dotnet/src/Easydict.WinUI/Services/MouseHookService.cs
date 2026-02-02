@@ -69,6 +69,7 @@ public sealed partial class MouseHookService : IDisposable
     private LowLevelMouseProc? _mouseHookProc; // prevent GC collection of delegate
     private LowLevelKeyboardProc? _keyboardHookProc;
     private bool _isDisposed;
+    private bool _firstCallbackLogged;
 
     /// <summary>
     /// Drag detection state machine. Public for unit testing.
@@ -183,6 +184,12 @@ public sealed partial class MouseHookService : IDisposable
     /// </summary>
     public void ProcessMouseMessage(int message, POINT pt)
     {
+        if (!_firstCallbackLogged)
+        {
+            _firstCallbackLogged = true;
+            Debug.WriteLine($"[MouseHook] First mouse callback received (msg=0x{message:X4})");
+        }
+
         switch (message)
         {
             case WM_LBUTTONDOWN:

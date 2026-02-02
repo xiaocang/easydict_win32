@@ -305,7 +305,10 @@ namespace Easydict.WinUI
 
                 if (settings.MouseSelectionTranslate)
                 {
-                    _mouseHookService.Install();
+                    if (!_mouseHookService.Install())
+                    {
+                        System.Diagnostics.Trace.WriteLine("[App] Mouse hook installation failed at startup");
+                    }
                 }
 
                 _popButtonService.IsEnabled = settings.MouseSelectionTranslate;
@@ -585,7 +588,10 @@ namespace Easydict.WinUI
             {
                 if (enabled)
                 {
-                    app._mouseHookService.Install();
+                    if (!app._mouseHookService.Install())
+                    {
+                        System.Diagnostics.Trace.WriteLine("[App] Mouse hook installation failed on toggle");
+                    }
                 }
                 else
                 {

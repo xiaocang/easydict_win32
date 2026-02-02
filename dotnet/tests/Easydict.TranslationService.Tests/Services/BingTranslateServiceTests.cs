@@ -207,6 +207,9 @@ public class BingTranslateServiceTests
         translationRequest.Method.Should().Be(HttpMethod.Post);
         translationRequest.RequestUri!.PathAndQuery.Should().Contain("/ttranslatev3");
         translationRequest.RequestUri.PathAndQuery.Should().Contain("IG=ABC123DEF456");
+        translationRequest.RequestUri.PathAndQuery.Should().Contain("ref=TThis");
+        translationRequest.RequestUri.PathAndQuery.Should().Contain("edgepdftranslator=1");
+        translationRequest.RequestUri.PathAndQuery.Should().Contain("isVertical=1");
 
         // Check POST body
         var body = _mockHandler.LastRequestBody;
@@ -245,10 +248,12 @@ public class BingTranslateServiceTests
     }
 
     [Fact]
-    public async Task TranslateAsync_ThrowsOnRateLimited()
+    public async Task TranslateAsync_RetriesOnceOn429ThenThrows()
     {
-        // Arrange
+        // Arrange - page fetch, then 429, then fresh page fetch, then 429 again
         _mockHandler.EnqueueJsonResponse(FakeTranslatorPage);
+        _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage); // retry fetches fresh credentials
         _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
 
         var request = new TranslationRequest
@@ -263,6 +268,36 @@ public class BingTranslateServiceTests
 
         exception.ErrorCode.Should().Be(TranslationErrorCode.RateLimited);
         exception.ServiceId.Should().Be("bing");
+
+        // Should have made 4 requests: page + 429 + page (retry) + 429
+        _mockHandler.Requests.Should().HaveCount(4);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_RetriesOn429AndSucceedsWithFreshCredentials()
+    {
+        // Arrange - page fetch, then 429, then fresh page fetch, then success
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage);
+        _mockHandler.EnqueueErrorResponse(HttpStatusCode.TooManyRequests);
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage); // retry fetches fresh credentials
+
+        var bingResponse = """
+            [{"detectedLanguage":{"language":"en","score":1.0},"translations":[{"text":"你好","to":"zh-Hans"}]}]
+            """;
+        _mockHandler.EnqueueJsonResponse(bingResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert - retry succeeded
+        result.TranslatedText.Should().Be("你好");
+        _mockHandler.Requests.Should().HaveCount(4);
     }
 
     [Fact]
@@ -392,5 +427,93 @@ public class BingTranslateServiceTests
         _mockHandler.Requests.Should().HaveCount(3); // 1 page fetch + 2 translations
         result1.TranslatedText.Should().Be("你好");
         result2.TranslatedText.Should().Be("世界");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ThrowsDescriptiveErrorWhenCredentialExtractionFails()
+    {
+        // Arrange - page HTML without params_AbusePreventionHelper
+        var htmlWithoutParams = """
+            <html>
+            <body>
+            <script>IG:"ABC123DEF456"</script>
+            <div data-iid="translator.5023.1"></div>
+            </body>
+            </html>
+            """;
+        _mockHandler.EnqueueJsonResponse(htmlWithoutParams);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<TranslationException>(
+            () => _service.TranslateAsync(request));
+
+        exception.Message.Should().Contain("Failed to extract Bing session credentials");
+        exception.ErrorCode.Should().Be(TranslationErrorCode.ServiceUnavailable);
+        exception.ServiceId.Should().Be("bing");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ThrowsDescriptiveErrorWhenParamsFormatChanged()
+    {
+        // Arrange - page HTML with params_AbusePreventionHelper in an unexpected format
+        var htmlWithChangedParams = """
+            <html>
+            <body>
+            <script>IG:"ABC123DEF456"</script>
+            <div data-iid="translator.5023.1"></div>
+            <script>var params_AbusePreventionHelper = {"newFormat": true};</script>
+            </body>
+            </html>
+            """;
+        _mockHandler.EnqueueJsonResponse(htmlWithChangedParams);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<TranslationException>(
+            () => _service.TranslateAsync(request));
+
+        exception.Message.Should().Contain("Failed to extract Bing session credentials");
+        exception.ErrorCode.Should().Be(TranslationErrorCode.ServiceUnavailable);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_EptCounterIncrementsAcrossRequests()
+    {
+        // Arrange - one page fetch, two translations
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage);
+
+        var bingResponse = """
+            [{"detectedLanguage":{"language":"en","score":1.0},"translations":[{"text":"你好","to":"zh-Hans"}]}]
+            """;
+        _mockHandler.EnqueueJsonResponse(bingResponse);
+        _mockHandler.EnqueueJsonResponse(bingResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act - two translations
+        await _service.TranslateAsync(request);
+        await _service.TranslateAsync(request);
+
+        // Assert - SFX counter increments: first request SFX=1, second SFX=2
+        var firstTranslateUrl = _mockHandler.Requests[1].RequestUri!.PathAndQuery;
+        var secondTranslateUrl = _mockHandler.Requests[2].RequestUri!.PathAndQuery;
+
+        firstTranslateUrl.Should().Contain("SFX=1");
+        secondTranslateUrl.Should().Contain("SFX=2");
     }
 }

@@ -137,9 +137,61 @@ make run
 ## Architecture Notes
 
 ### Translation Services
-- All translation services implement a common interface in `Easydict.TranslationService`
+
+All translation services live in `Easydict.TranslationService` and follow a strict class hierarchy:
+
+#### Interface & Base Class Hierarchy
+
+```
+ITranslationService                         # Core interface: ServiceId, DisplayName, TranslateAsync, etc.
+├── IStreamTranslationService               # Adds TranslateStreamAsync (IAsyncEnumerable<string>)
+│
+BaseTranslationService : ITranslationService            # Abstract base with validation, timing, error handling
+├── GoogleTranslateService                              # Non-streaming services extend this directly
+├── GoogleWebTranslateService
+├── DeepLService
+├── LingueeService
+├── CaiyunService
+├── NiuTransService
+├── GeminiService : IStreamTranslationService           # Custom SSE protocol (not OpenAI-compatible)
+├── DoubaoService : IStreamTranslationService           # Custom SSE protocol (ByteDance)
+└── BaseOpenAIService : IStreamTranslationService       # Abstract base for OpenAI-compatible LLM services
+    ├── OpenAIService
+    ├── OllamaService
+    ├── BuiltInAIService
+    ├── DeepSeekService
+    ├── GroqService
+    ├── ZhipuService
+    ├── GitHubModelsService
+    └── CustomOpenAIService
+```
+
+#### Adding a New Translation Service
+
+1. **Non-streaming**: Extend `BaseTranslationService`, implement `TranslateInternalAsync`
+2. **OpenAI-compatible streaming**: Extend `BaseOpenAIService`, provide `Endpoint`, `ApiKey`, `Model`
+3. **Custom streaming protocol**: Extend `BaseTranslationService` + implement `IStreamTranslationService`
+4. Register in `TranslationManager.cs` constructor
+5. Add service icon in `Assets/ServiceIcons/`
+6. Add configuration UI in settings page if `RequiresApiKey`
+
+#### Required Overrides for Any Service
+
+```csharp
+public override string ServiceId { get; }              // e.g. "google", "openai"
+public override string DisplayName { get; }            // e.g. "Google Translate"
+public override bool RequiresApiKey { get; }
+public override bool IsConfigured { get; }
+public override IReadOnlyList<Language> SupportedLanguages { get; }
+protected override Task<TranslationResult> TranslateInternalAsync(
+    TranslationRequest request, CancellationToken cancellationToken);
+```
+
+#### Key Design Points
 - LLM streaming is handled through SSE (Server-Sent Events) parsing
 - Service configurations are encrypted using DPAPI (Data Protection API)
+- Language codes are mapped via overrideable `GetLanguageCode(Language)` per service
+- All services are registered in `TranslationManager` and accessed via `TranslationManagerService.Instance`
 
 ### Window Management
 - Four window types: Main (full), Mini (floating), Fixed (persistent), PopButton (selection icon)

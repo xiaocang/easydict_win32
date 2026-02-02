@@ -95,9 +95,9 @@ public class PopButtonServiceTests
     }
 
     [Fact]
-    public void DragDetector_ThreadSafety_ConsecutiveOperations()
+    public void DragDetector_RapidConsecutiveOperations_AllDetected()
     {
-        // Verify the detector handles rapid consecutive operations
+        // Verify the detector handles rapid consecutive drag-select cycles
         var detector = new MouseHookService.DragDetector();
 
         // Rapid fire: 100 drag-select cycles

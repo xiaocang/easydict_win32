@@ -145,9 +145,9 @@ public sealed partial class PopButtonWindow : Window
             if (y + physicalSize > workArea.Y + workArea.Height)
                 y = workArea.Y + workArea.Height - physicalSize;
         }
-        catch
+        catch (Exception ex)
         {
-            // Fall through with unclamped position if display info unavailable
+            Debug.WriteLine($"[PopButton] Screen bounds check failed, using unclamped position: {ex.Message}");
         }
 
         SetWindowPos(_hwnd, HWND_TOPMOST, x, y, physicalSize, physicalSize,

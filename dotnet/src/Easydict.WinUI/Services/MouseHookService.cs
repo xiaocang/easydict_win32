@@ -24,7 +24,7 @@ public sealed partial class MouseHookService : IDisposable
     /// Minimum drag distance in pixels to consider a mouse gesture as text selection.
     /// Prevents short clicks from being misidentified as drags.
     /// </summary>
-    internal const int MinDragDistance = 10;
+    public const int MinDragDistance = 10;
 
     private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
     private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
@@ -102,8 +102,9 @@ public sealed partial class MouseHookService : IDisposable
     /// <summary>
     /// Install the global low-level mouse and keyboard hooks.
     /// Must be called from the UI thread (requires a message pump).
+    /// Returns true if both hooks were installed successfully.
     /// </summary>
-    public void Install()
+    public bool Install()
     {
         using var curProcess = Process.GetCurrentProcess();
         using var curModule = curProcess.MainModule!;
@@ -130,6 +131,8 @@ public sealed partial class MouseHookService : IDisposable
             else
                 Debug.WriteLine("[MouseHook] Low-level keyboard hook installed");
         }
+
+        return _mouseHookId != IntPtr.Zero && _keyboardHookId != IntPtr.Zero;
     }
 
     /// <summary>

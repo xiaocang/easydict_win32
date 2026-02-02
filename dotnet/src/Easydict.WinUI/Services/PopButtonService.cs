@@ -225,7 +225,11 @@ public sealed class PopButtonService : IDisposable
 
         try
         {
-            _popWindow?.Close();
+            if (_popWindow != null)
+            {
+                _popWindow.OnClicked -= OnPopButtonClicked;
+                _popWindow.Close();
+            }
         }
         catch
         {

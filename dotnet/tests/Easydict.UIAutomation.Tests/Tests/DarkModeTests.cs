@@ -229,27 +229,41 @@ public class DarkModeTests : IDisposable
     /// </summary>
     private void NavigateBackToMain(Window window)
     {
-        // Try floating back button first
+        // Try floating back button first, then fall back to BackButton
         var backButton = window.FindFirstDescendant(cf => cf.ByAutomationId("FloatingBackButton"));
-        if (backButton != null)
-        {
-            backButton.Click();
-            Thread.Sleep(1000);
-            return;
-        }
+        if (backButton == null)
+            backButton = window.FindFirstDescendant(cf => cf.ByAutomationId("BackButton"));
 
-        // Try any back button
-        backButton = window.FindFirstDescendant(cf => cf.ByAutomationId("BackButton"));
         if (backButton != null)
         {
             backButton.Click();
             Thread.Sleep(1000);
+
+            // Handle unsaved changes dialog if it appears
+            DismissUnsavedChangesDialog(window);
             return;
         }
 
         _output.WriteLine("Back button not found - trying Escape key");
         Keyboard.Type(VirtualKeyShort.ESCAPE);
         Thread.Sleep(1000);
+    }
+
+    /// <summary>
+    /// Dismiss the unsaved changes confirmation dialog by clicking "Don't Save".
+    /// </summary>
+    private void DismissUnsavedChangesDialog(Window window)
+    {
+        var dontSaveButton = Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByName("Don't Save")),
+            TimeSpan.FromSeconds(3)).Result;
+
+        if (dontSaveButton != null)
+        {
+            _output.WriteLine("Unsaved changes dialog detected - clicking Don't Save");
+            dontSaveButton.Click();
+            Thread.Sleep(1000);
+        }
     }
 
     public void Dispose()

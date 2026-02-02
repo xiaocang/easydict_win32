@@ -787,6 +787,13 @@ Debug.WriteLine($"[ServiceName] Result: {result.Length} chars");
 7. **Error Handling**: Catch specific exceptions, provide meaningful error messages
 8. **Testing**: Write tests for all business logic and service implementations
 
+## Version Bump Files
+
+When bumping the app version, update these 2 files:
+
+- `dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj` — `Version`, `AssemblyVersion`, `FileVersion`
+- `dotnet/src/Easydict.WinUI/Package.appxmanifest` — `Identity Version`
+
 ## Documentation Sync Requirement
 
 `README.md` (English) and `README_ZH.md` (Chinese) must always stay in sync. When modifying either file, apply the corresponding changes to the other file to keep both versions consistent in structure and content. This includes but is not limited to: feature descriptions, installation instructions, configuration guides, screenshots, and links.

@@ -164,7 +164,7 @@ public class MouseHookServiceTests
     [Fact]
     public void ProcessMouseMessage_DragSequence_FiresEvent()
     {
-        var service = new MouseHookService();
+        using var service = new MouseHookService();
         POINT? firedPoint = null;
         service.OnDragSelectionEnd += pt => firedPoint = pt;
 
@@ -179,7 +179,7 @@ public class MouseHookServiceTests
     [Fact]
     public void ProcessMouseMessage_ShortClick_DoesNotFireDragEvent()
     {
-        var service = new MouseHookService();
+        using var service = new MouseHookService();
         bool fired = false;
         service.OnDragSelectionEnd += _ => fired = true;
 
@@ -192,7 +192,7 @@ public class MouseHookServiceTests
     [Fact]
     public void ProcessMouseMessage_MouseDown_FiresOnMouseDown()
     {
-        var service = new MouseHookService();
+        using var service = new MouseHookService();
         bool fired = false;
         service.OnMouseDown += () => fired = true;
 
@@ -204,7 +204,7 @@ public class MouseHookServiceTests
     [Fact]
     public void ProcessMouseMessage_MouseWheel_FiresOnMouseScroll()
     {
-        var service = new MouseHookService();
+        using var service = new MouseHookService();
         bool fired = false;
         service.OnMouseScroll += () => fired = true;
 
@@ -216,7 +216,7 @@ public class MouseHookServiceTests
     [Fact]
     public void ProcessMouseMessage_RightMouseDown_FiresOnRightMouseDown()
     {
-        var service = new MouseHookService();
+        using var service = new MouseHookService();
         bool fired = false;
         service.OnRightMouseDown += () => fired = true;
 

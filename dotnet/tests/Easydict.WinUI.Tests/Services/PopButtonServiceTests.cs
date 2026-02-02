@@ -43,7 +43,7 @@ public class PopButtonServiceTests
     public void MouseHookService_Events_FullIntegration()
     {
         // Verify MouseHookService and PopButtonService events can be wired together
-        var hookService = new MouseHookService();
+        using var hookService = new MouseHookService();
 
         int mouseDownCount = 0;
         int scrollCount = 0;

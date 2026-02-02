@@ -16,12 +16,12 @@ public sealed class PopButtonService : IDisposable
     /// Delay after mouse-up before querying selected text.
     /// Allows the source application to finalize selection state.
     /// </summary>
-    internal const int SelectionDelayMs = 150;
+    public const int SelectionDelayMs = 150;
 
     /// <summary>
     /// Auto-dismiss timeout for the pop button if the user doesn't interact.
     /// </summary>
-    internal const int AutoDismissMs = 5000;
+    public const int AutoDismissMs = 5000;
 
     private readonly DispatcherQueue _dispatcherQueue;
     private PopButtonWindow? _popWindow;
@@ -65,10 +65,14 @@ public sealed class PopButtonService : IDisposable
     {
         if (!_isEnabled || _isDisposed) return;
 
-        // Cancel any previous pending selection detection
-        _selectionCts?.Cancel();
-        _selectionCts = new CancellationTokenSource();
-        var ct = _selectionCts.Token;
+        // Cancel and dispose any previous pending selection detection
+        var previousCts = _selectionCts;
+        previousCts?.Cancel();
+        previousCts?.Dispose();
+
+        var currentCts = new CancellationTokenSource();
+        _selectionCts = currentCts;
+        var ct = currentCts.Token;
 
         try
         {
@@ -87,7 +91,7 @@ public sealed class PopButtonService : IDisposable
             }
 
             _pendingText = text;
-            Debug.WriteLine($"[PopButtonService] Selected text: '{text.Substring(0, Math.Min(50, text.Length))}...'");
+            Debug.WriteLine($"[PopButtonService] Selected text: '{text[..Math.Min(50, text.Length)]}...'");
 
             // Show the pop button on the UI thread
             _dispatcherQueue.TryEnqueue(() =>
@@ -101,7 +105,7 @@ public sealed class PopButtonService : IDisposable
                 StartAutoDismissTimer();
             });
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException)
         {
             // Expected when a new selection starts before the previous one completes
         }
@@ -118,7 +122,7 @@ public sealed class PopButtonService : IDisposable
     public void Dismiss()
     {
         _selectionCts?.Cancel();
-        _autoDismissCts?.Cancel();
+        CancelAutoDismissTimer();
         _pendingText = null;
 
         _dispatcherQueue.TryEnqueue(() =>
@@ -138,7 +142,7 @@ public sealed class PopButtonService : IDisposable
 
         if (string.IsNullOrWhiteSpace(text)) return;
 
-        Debug.WriteLine($"[PopButtonService] Opening MiniWindow with text: '{text.Substring(0, Math.Min(50, text.Length))}...'");
+        Debug.WriteLine($"[PopButtonService] Opening MiniWindow with text: '{text[..Math.Min(50, text.Length)]}...'");
 
         _dispatcherQueue.TryEnqueue(() =>
         {
@@ -168,9 +172,11 @@ public sealed class PopButtonService : IDisposable
 
     private void StartAutoDismissTimer()
     {
-        _autoDismissCts?.Cancel();
-        _autoDismissCts = new CancellationTokenSource();
-        var ct = _autoDismissCts.Token;
+        CancelAutoDismissTimer();
+
+        var cts = new CancellationTokenSource();
+        _autoDismissCts = cts;
+        var ct = cts.Token;
 
         _ = Task.Run(async () =>
         {
@@ -183,11 +189,19 @@ public sealed class PopButtonService : IDisposable
                     Dismiss();
                 }
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
                 // Expected when dismissed before timeout
             }
         });
+    }
+
+    private void CancelAutoDismissTimer()
+    {
+        var cts = _autoDismissCts;
+        _autoDismissCts = null;
+        cts?.Cancel();
+        cts?.Dispose();
     }
 
     /// <summary>
@@ -204,7 +218,10 @@ public sealed class PopButtonService : IDisposable
         _isDisposed = true;
 
         _selectionCts?.Cancel();
-        _autoDismissCts?.Cancel();
+        _selectionCts?.Dispose();
+        _selectionCts = null;
+
+        CancelAutoDismissTimer();
 
         try
         {

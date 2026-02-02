@@ -126,6 +126,7 @@ make run
   - `Ctrl+Alt+F` - Show fixed window
   - `Ctrl+Alt+Shift+M` - Toggle mini window
   - `Ctrl+Alt+Shift+F` - Toggle fixed window
+- **Mouse Selection Translate**: Select text in any app → floating icon appears → click to translate in Mini Window (uses `WH_MOUSE_LL` global hook)
 - **System Tray**: Minimize to tray, background operation
 - **Clipboard Monitoring**: Auto-translate copied text
 - **HTTP Proxy Support**: Configure proxy server
@@ -141,9 +142,17 @@ make run
 - Service configurations are encrypted using DPAPI (Data Protection API)
 
 ### Window Management
-- Three window types: Main (full), Mini (floating), Fixed (persistent)
+- Four window types: Main (full), Mini (floating), Fixed (persistent), PopButton (selection icon)
 - Each window type is independently managed with separate activation states
-- Global hotkeys are registered using Windows low-level keyboard hooks
+- Global hotkeys are registered using `RegisterHotKey` Win32 API
+
+### Mouse Selection Translate (Pop Button)
+- **MouseHookService**: `WH_MOUSE_LL` global low-level mouse hook detects drag-select gestures (mouse down → drag beyond 10px threshold → mouse up)
+- **PopButtonWindow**: 30×30 WinUI 3 window with `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST` — does not steal focus from source app
+- **PopButtonService**: Orchestrates the lifecycle — on drag-select end, waits 150ms, queries `TextSelectionService` for selected text, shows icon at cursor position, auto-dismisses after 5s
+- **Dismiss triggers**: Left click elsewhere, right click, scroll, keyboard, new drag selection
+- **Setting**: `MouseSelectionTranslate` in SettingsService (default: off), toggle in Settings → Behavior
+- **Flow**: `MouseHookService.OnDragSelectionEnd` → `PopButtonService.OnDragSelectionEnd` → `TextSelectionService.GetSelectedTextAsync` → `PopButtonWindow.ShowAt` → user clicks → `MiniWindowService.ShowWithText`
 
 ### IPC Architecture
 - `Easydict.SidecarClient` provides communication with external sidecar processes

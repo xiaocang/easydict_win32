@@ -56,7 +56,7 @@ public sealed partial class SettingsPage : Page
             EnabledServicesDescriptionText.Text = loc.GetString("EnabledServicesDescription");
 
         // International Services toggle
-        EnableInternationalServicesToggle.Header = loc.GetString("EnableInternationalServices");
+        EnableInternationalServicesHeaderText.Text = loc.GetString("EnableInternationalServices");
         if (EnableInternationalServicesDescriptionText != null)
             EnableInternationalServicesDescriptionText.Text = loc.GetString("EnableInternationalServicesDescription");
 
@@ -510,14 +510,12 @@ public sealed partial class SettingsPage : Page
         var originalProxyUri = _settings.ProxyUri;
         var originalProxyBypassLocal = _settings.ProxyBypassLocal;
 
-        // Save international services setting
-        _settings.EnableInternationalServices = EnableInternationalServicesToggle.IsOn;
+        // === Validate all inputs before modifying any settings ===
 
-        // Save language preferences with validation
+        // Validate language preferences
         var firstLang = GetSelectedTag(FirstLanguageCombo) ?? "zh";
         var secondLang = GetSelectedTag(SecondLanguageCombo) ?? "en";
 
-        // Validate: FirstLanguage and SecondLanguage cannot be the same
         if (firstLang == secondLang)
         {
             var errorDialog = new ContentDialog
@@ -530,6 +528,29 @@ public sealed partial class SettingsPage : Page
             await errorDialog.ShowAsync();
             return;
         }
+
+        // Validate proxy URI
+        var proxyUri = ProxyUriBox.Text?.Trim() ?? "";
+        if (ProxyEnabledToggle.IsOn && !string.IsNullOrWhiteSpace(proxyUri))
+        {
+            if (!Uri.TryCreate(proxyUri, UriKind.Absolute, out _))
+            {
+                var errorDialog = new ContentDialog
+                {
+                    Title = loc.GetString("InvalidProxyUrl"),
+                    Content = loc.GetString("InvalidProxyUrlMessage"),
+                    CloseButtonText = loc.GetString("OK"),
+                    XamlRoot = this.XamlRoot
+                };
+                await errorDialog.ShowAsync();
+                return;
+            }
+        }
+
+        // === All validations passed — apply settings ===
+
+        // Save international services setting
+        _settings.EnableInternationalServices = EnableInternationalServicesToggle.IsOn;
 
         _settings.FirstLanguage = firstLang;
         _settings.SecondLanguage = secondLang;
@@ -612,26 +633,9 @@ public sealed partial class SettingsPage : Page
         var niutransKey = NiuTransKeyBox.Password;
         _settings.NiuTransApiKey = string.IsNullOrWhiteSpace(niutransKey) ? null : niutransKey;
 
-        // Save HTTP Proxy settings with validation
+        // Save HTTP Proxy settings (already validated above)
         _settings.ProxyEnabled = ProxyEnabledToggle.IsOn;
         _settings.ProxyBypassLocal = ProxyBypassLocalToggle.IsOn;
-
-        var proxyUri = ProxyUriBox.Text?.Trim() ?? "";
-        if (_settings.ProxyEnabled && !string.IsNullOrWhiteSpace(proxyUri))
-        {
-            if (!Uri.TryCreate(proxyUri, UriKind.Absolute, out _))
-            {
-                var errorDialog = new ContentDialog
-                {
-                    Title = loc.GetString("InvalidProxyUrl"),
-                    Content = loc.GetString("InvalidProxyUrlMessage"),
-                    CloseButtonText = loc.GetString("OK"),
-                    XamlRoot = this.XamlRoot
-                };
-                await errorDialog.ShowAsync();
-                return;
-            }
-        }
         _settings.ProxyUri = proxyUri;
 
         // Save behavior settings
@@ -1002,6 +1006,15 @@ public sealed partial class SettingsPage : Page
                 item.IsChecked = false;
             }
         }
+
+        // Sort: available items first, unavailable items last (preserve relative order within each group)
+        var sorted = collection.OrderBy(item => item.IsAvailable ? 0 : 1).ToList();
+        for (int i = 0; i < sorted.Count; i++)
+        {
+            var currentIndex = collection.IndexOf(sorted[i]);
+            if (currentIndex != i)
+                collection.Move(currentIndex, i);
+        }
     }
 
     /// <summary>
@@ -1140,4 +1153,30 @@ public class BoolToOpacityConverter : Microsoft.UI.Xaml.Data.IValueConverter
         }
         return true;
     }
+}
+
+/// <summary>
+/// Converts a boolean (IsAvailable) to margin for compact layout.
+/// True = normal spacing, False = reduced spacing for unavailable items.
+/// </summary>
+public class BoolToCompactMarginConverter : Microsoft.UI.Xaml.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+        => value is true ? new Thickness(0, 4, 0, 0) : new Thickness(0, 1, 0, 0);
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+        => throw new NotImplementedException();
+}
+
+/// <summary>
+/// Converts a boolean (IsAvailable) to font size for compact layout.
+/// True = normal size (14), False = smaller size (12) for unavailable items.
+/// </summary>
+public class BoolToCompactFontSizeConverter : Microsoft.UI.Xaml.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+        => value is true ? 14.0 : 12.0;
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+        => throw new NotImplementedException();
 }

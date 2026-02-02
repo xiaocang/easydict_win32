@@ -153,7 +153,9 @@ public sealed partial class ServiceResultItem : UserControl
             ErrorText.Text = _serviceResult.Error.Message;
             ErrorText.Visibility = Visibility.Visible;
             ResultText.Visibility = Visibility.Collapsed;
-            ActionButtons.Visibility = Visibility.Collapsed;
+            ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+            ReplaceButton.Visibility = Visibility.Collapsed;
+            PlayButton.Visibility = Visibility.Collapsed;
         }
         else
         {
@@ -197,10 +199,14 @@ public sealed partial class ServiceResultItem : UserControl
     {
         _isHovering = true;
 
-        if (_serviceResult?.Result != null && _serviceResult.IsExpanded)
+        if (_serviceResult?.IsExpanded == true &&
+            (_serviceResult.Result != null || _serviceResult.Error != null))
         {
             ActionButtons.Visibility = Visibility.Visible;
-            ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
+            ReplaceButton.Visibility = _serviceResult.Result != null && TextInsertionService.HasSourceWindow
+                ? Visibility.Visible : Visibility.Collapsed;
+            PlayButton.Visibility = _serviceResult.Result != null
+                ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 
@@ -289,7 +295,8 @@ public sealed partial class ServiceResultItem : UserControl
 
     private void OnCopyClicked(object sender, RoutedEventArgs e)
     {
-        var text = _serviceResult?.Result?.TranslatedText;
+        var text = _serviceResult?.Result?.TranslatedText
+                ?? _serviceResult?.Error?.Message;
         if (string.IsNullOrEmpty(text))
         {
             return;

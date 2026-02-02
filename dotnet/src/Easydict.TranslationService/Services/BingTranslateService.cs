@@ -100,7 +100,7 @@ public sealed class BingTranslateService : BaseTranslationService, IDisposable
             var sourceCode = GetBingLanguageCode(request.FromLanguage);
             var targetCode = GetBingLanguageCode(request.ToLanguage);
 
-            var host = GetHost();
+            var host = credentials.ResolvedHost;
             var sfx = Interlocked.Increment(ref _eptCounter);
             var url = $"https://{host}{TranslateApiPath}?isVertical=1&IG={credentials.IG}&IID={credentials.IID}&ref=TThis&edgepdftranslator=1&SFX={sfx}";
 
@@ -121,6 +121,7 @@ public sealed class BingTranslateService : BaseTranslationService, IDisposable
             };
             httpRequest.Headers.Add("User-Agent", UserAgent);
             httpRequest.Headers.Add("Referer", $"https://{host}/translator");
+            httpRequest.Headers.Add("Origin", $"https://{host}");
 
             using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
 
@@ -160,6 +161,28 @@ public sealed class BingTranslateService : BaseTranslationService, IDisposable
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            // Guard: Bing may return empty body or HTML (captcha/redirect) with 200 status
+            var trimmed = json.TrimStart();
+            if (trimmed.Length == 0 || (trimmed[0] != '[' && trimmed[0] != '{'))
+            {
+                if (attempt < maxAttempts)
+                {
+                    Debug.WriteLine($"[BingTranslate] Non-JSON response (length={json.Length}), retrying with fresh credentials (attempt {attempt}/{maxAttempts})");
+                    await _credentialSemaphore.WaitAsync(cancellationToken);
+                    try { _credentials = null; }
+                    finally { _credentialSemaphore.Release(); }
+                    continue;
+                }
+
+                throw new TranslationException(
+                    $"Bing returned non-JSON response (length={json.Length}, starts with: '{json[..Math.Min(json.Length, 50)]}...')")
+                {
+                    ErrorCode = TranslationErrorCode.InvalidResponse,
+                    ServiceId = ServiceId
+                };
+            }
+
             return ParseResponse(json, request);
         }
 
@@ -263,6 +286,8 @@ public sealed class BingTranslateService : BaseTranslationService, IDisposable
         using var response = await HttpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
+        var resolvedHost = response.RequestMessage?.RequestUri?.Host ?? host;
+
         var html = await response.Content.ReadAsStringAsync(cancellationToken);
 
         // Extract IG
@@ -311,7 +336,7 @@ public sealed class BingTranslateService : BaseTranslationService, IDisposable
 
         Debug.WriteLine($"[BingTranslate] Credentials fetched: IG={ig[..Math.Min(8, ig.Length)]}..., IID={iid}");
 
-        return new BingCredentials(ig, iid, token, key, expiryInterval);
+        return new BingCredentials(ig, iid, token, key, expiryInterval, resolvedHost);
     }
 
     /// <summary>
@@ -418,15 +443,17 @@ public sealed class BingTranslateService : BaseTranslationService, IDisposable
         public string IID { get; }
         public string Token { get; }
         public long Key { get; }
+        public string ResolvedHost { get; }
         private readonly long _expiryInterval;
         private readonly long _createdAt;
 
-        public BingCredentials(string ig, string iid, string token, long key, long expiryInterval)
+        public BingCredentials(string ig, string iid, string token, long key, long expiryInterval, string resolvedHost)
         {
             IG = ig;
             IID = iid;
             Token = token;
             Key = key;
+            ResolvedHost = resolvedHost;
             _expiryInterval = expiryInterval;
             _createdAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         }

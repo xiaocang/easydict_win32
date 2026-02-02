@@ -12,6 +12,8 @@
     <Page.Resources>
         <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         <local:BoolToOpacityConverter x:Key="BoolToOpacityConverter" />
+        <local:BoolToCompactMarginConverter x:Key="BoolToCompactMarginConverter" />
+        <local:BoolToCompactFontSizeConverter x:Key="BoolToCompactFontSizeConverter" />
     </Page.Resources>
 
     <Grid>
@@ -94,14 +96,28 @@
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
                 <!-- International Services Toggle -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="8">
-                        <ToggleSwitch x:Name="EnableInternationalServicesToggle"
-                                      Header="Enable International Services"
-                                      Toggled="OnEnableInternationalServicesToggled" />
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="12,8">
+                    <StackPanel Spacing="4">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="EnableInternationalServicesHeaderText"
+                                       Text="Enable International Services"
+                                       FontSize="13"
+                                       VerticalAlignment="Center" />
+                            <ToggleSwitch x:Name="EnableInternationalServicesToggle"
+                                          Grid.Column="1"
+                                          Toggled="OnEnableInternationalServicesToggled"
+                                          MinWidth="0"
+                                          VerticalAlignment="Center" />
+                        </Grid>
                         <TextBlock x:Name="EnableInternationalServicesDescriptionText"
-                                   Text="Some services (Google, DeepL, OpenAI, Gemini, etc.) require international network access and may not be available in all regions."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                   Text="Some services require international network access."
+                                   FontSize="11"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
@@ -112,13 +128,14 @@
                         <ItemsControl x:Name="MainWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,4" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
+                                    <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <CheckBox
                                             Content="{Binding DisplayName}"
+                                            FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
                                             Tag="{Binding ServiceId}"
                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                             IsEnabled="{Binding IsAvailable}" />
@@ -145,13 +162,14 @@
                         <ItemsControl x:Name="MiniWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,4" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
+                                    <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <CheckBox
                                             Content="{Binding DisplayName}"
+                                            FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
                                             Tag="{Binding ServiceId}"
                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                             IsEnabled="{Binding IsAvailable}" />
@@ -178,13 +196,14 @@
                         <ItemsControl x:Name="FixedWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,4" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
+                                    <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <CheckBox
                                             Content="{Binding DisplayName}"
+                                            FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
                                             Tag="{Binding ServiceId}"
                                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                             IsEnabled="{Binding IsAvailable}" />

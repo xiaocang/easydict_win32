@@ -93,7 +93,23 @@ public class MockHttpMessageHandler : HttpMessageHandler
                 "No responses queued. Call EnqueueResponse or EnqueueJsonResponse before making requests.");
         }
 
-        return _responses.Dequeue();
+        var response = _responses.Dequeue();
+        response.RequestMessage ??= request;
+        return response;
+    }
+
+    /// <summary>
+    /// Enqueue a successful JSON response that simulates a redirect by pre-setting
+    /// RequestMessage with the given resolved URI (mirrors real HttpClient redirect behavior).
+    /// </summary>
+    public void EnqueueJsonResponseWithResolvedUri(string json, Uri resolvedUri, HttpStatusCode statusCode = HttpStatusCode.OK)
+    {
+        var response = new HttpResponseMessage(statusCode)
+        {
+            Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+            RequestMessage = new HttpRequestMessage(HttpMethod.Get, resolvedUri)
+        };
+        _responses.Enqueue(response);
     }
 
     /// <summary>

@@ -211,6 +211,10 @@ public class BingTranslateServiceTests
         translationRequest.RequestUri.PathAndQuery.Should().Contain("edgepdftranslator=1");
         translationRequest.RequestUri.PathAndQuery.Should().Contain("isVertical=1");
 
+        // Check headers
+        translationRequest.Headers.GetValues("Origin").Should().ContainSingle()
+            .Which.Should().Be("https://www.bing.com");
+
         // Check POST body
         var body = _mockHandler.LastRequestBody;
         body.Should().NotBeNull();
@@ -485,6 +489,151 @@ public class BingTranslateServiceTests
 
         exception.Message.Should().Contain("Failed to extract Bing session credentials");
         exception.ErrorCode.Should().Be(TranslationErrorCode.ServiceUnavailable);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_EmptyResponse_RetriesWithFreshCredentials()
+    {
+        // Arrange - page fetch, empty response (attempt 1), fresh page fetch, valid response (attempt 2)
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage);
+        _mockHandler.EnqueueJsonResponse(""); // empty body with 200 status
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage); // retry fetches fresh credentials
+
+        var bingResponse = """
+            [{"detectedLanguage":{"language":"en","score":1.0},"translations":[{"text":"你好","to":"zh-Hans"}]}]
+            """;
+        _mockHandler.EnqueueJsonResponse(bingResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert - retry succeeded
+        result.TranslatedText.Should().Be("你好");
+        _mockHandler.Requests.Should().HaveCount(4); // page + empty + page (retry) + success
+    }
+
+    [Fact]
+    public async Task TranslateAsync_HtmlResponse_RetriesWithFreshCredentials()
+    {
+        // Arrange - page fetch, HTML captcha response (attempt 1), fresh page fetch, valid response (attempt 2)
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage);
+        _mockHandler.EnqueueJsonResponse("<!DOCTYPE html><html><body>Captcha</body></html>"); // HTML with 200
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage); // retry fetches fresh credentials
+
+        var bingResponse = """
+            [{"detectedLanguage":{"language":"en","score":1.0},"translations":[{"text":"你好","to":"zh-Hans"}]}]
+            """;
+        _mockHandler.EnqueueJsonResponse(bingResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert - retry succeeded
+        result.TranslatedText.Should().Be("你好");
+        _mockHandler.Requests.Should().HaveCount(4);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_NonJsonResponse_AllRetriesExhausted_ThrowsInvalidResponse()
+    {
+        // Arrange - both attempts return non-JSON
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage);
+        _mockHandler.EnqueueJsonResponse("   "); // whitespace body (attempt 1)
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage); // retry fetches fresh credentials
+        _mockHandler.EnqueueJsonResponse("<html>error</html>"); // HTML body (attempt 2)
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<TranslationException>(
+            () => _service.TranslateAsync(request));
+
+        exception.ErrorCode.Should().Be(TranslationErrorCode.InvalidResponse);
+        exception.ServiceId.Should().Be("bing");
+        exception.Message.Should().Contain("non-JSON response");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ChinaHostRedirectsToGlobal_UsesResolvedHostForPost()
+    {
+        // Arrange - cn.bing.com redirects to www.bing.com (simulated via resolved URI)
+        _service.Configure(useChinaHost: true);
+
+        _mockHandler.EnqueueJsonResponseWithResolvedUri(
+            FakeTranslatorPage,
+            new Uri("https://www.bing.com/translator?mkt=zh-CN"));
+
+        var bingResponse = """
+            [{"detectedLanguage":{"language":"en","score":1.0},"translations":[{"text":"你好","to":"zh-Hans"}]}]
+            """;
+        _mockHandler.EnqueueJsonResponse(bingResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert - credential fetch goes to cn.bing.com, but POST uses resolved www.bing.com
+        _mockHandler.Requests[0].RequestUri!.Host.Should().Be("cn.bing.com");
+        _mockHandler.Requests[1].RequestUri!.Host.Should().Be("www.bing.com");
+
+        // Verify Origin and Referer headers use the resolved host
+        var translationRequest = _mockHandler.Requests[1];
+        translationRequest.Headers.GetValues("Origin").Should().ContainSingle()
+            .Which.Should().Be("https://www.bing.com");
+        translationRequest.Headers.GetValues("Referer").Should().ContainSingle()
+            .Which.Should().Be("https://www.bing.com/translator");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_GlobalHostNoRedirect_UsesSameHost()
+    {
+        // Arrange - www.bing.com with no redirect (default behavior)
+        _mockHandler.EnqueueJsonResponse(FakeTranslatorPage);
+
+        var bingResponse = """
+            [{"detectedLanguage":{"language":"en","score":1.0},"translations":[{"text":"你好","to":"zh-Hans"}]}]
+            """;
+        _mockHandler.EnqueueJsonResponse(bingResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert - both requests use www.bing.com
+        _mockHandler.Requests[0].RequestUri!.Host.Should().Be("www.bing.com");
+        _mockHandler.Requests[1].RequestUri!.Host.Should().Be("www.bing.com");
+
+        var translationRequest = _mockHandler.Requests[1];
+        translationRequest.Headers.GetValues("Origin").Should().ContainSingle()
+            .Which.Should().Be("https://www.bing.com");
     }
 
     [Fact]

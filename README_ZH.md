@@ -34,6 +34,8 @@
 
 - **多种翻译服务**
   - Google 翻译（免费，无需 API Key）
+  - Google 词典（丰富词典：音标、释义、例句）
+  - 必应翻译（免费，无需 API Key）
   - DeepL（支持 Free/Pro API，支持繁体中文）
   - OpenAI（GPT-4o、GPT-4o-mini 等）
   - Gemini（Google AI，包括 Gemini 2.5 模型）
@@ -180,7 +182,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | 功能 | macOS | Windows |
 |------|-------|---------|
-| 翻译服务 | 25+ | 16 |
+| 翻译服务 | 25+ | 17 |
 | OCR 截图翻译 | 支持 | 不支持 |
 | TTS | 支持 | 支持 |
 | 划词翻译 | 支持 | 支持 |

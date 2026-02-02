@@ -787,7 +787,7 @@ public sealed partial class SettingsPage : Page
 
     /// <summary>
     /// Ensure at least one service is checked when the collection has no services selected.
-    /// Uses region-appropriate default (deepseek for China, google for international).
+    /// Uses region-appropriate default (bing for China, google for international).
     /// Updates both the settings and the collection item.
     /// </summary>
     private static void EnsureDefaultServiceEnabled(ObservableCollection<ServiceCheckItem> collection, List<string> services)

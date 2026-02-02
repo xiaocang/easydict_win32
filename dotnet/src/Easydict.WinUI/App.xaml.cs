@@ -295,6 +295,9 @@ namespace Easydict.WinUI
             // Apply saved theme setting
             ApplyTheme(settings.AppTheme);
 
+            // Run first-launch network probe to detect international service availability
+            _ = settings.RunFirstLaunchNetworkProbeAsync();
+
 #if DEBUG
             // Debug mode: automatically open mini window on startup
             MiniWindowService.Instance.Show();

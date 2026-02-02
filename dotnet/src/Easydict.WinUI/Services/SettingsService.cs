@@ -517,10 +517,11 @@ public sealed class SettingsService
             if (region.TwoLetterISORegionName.Equals("CN", StringComparison.OrdinalIgnoreCase))
                 return true;
 
-            // Also check system culture
+            // Also check system culture (only zh-CN and zh-Hans-CN are mainland China;
+            // zh-Hans alone is ambiguous and could be Singapore zh-Hans-SG, etc.)
             var culture = System.Globalization.CultureInfo.CurrentUICulture;
             var name = culture.Name.ToLowerInvariant();
-            if (name == "zh-cn" || name == "zh-hans" || name == "zh-hans-cn")
+            if (name == "zh-cn" || name == "zh-hans-cn")
                 return true;
         }
         catch

@@ -26,7 +26,7 @@ public sealed class BingTranslateService : BaseTranslationService
     /// </summary>
     private const int MaxTextLength = 1000;
 
-    private static readonly IReadOnlyList<Language> BingLanguages =
+    private static readonly IReadOnlyList<Language> _bingLanguages =
     [
         Language.SimplifiedChinese, Language.TraditionalChinese, Language.English,
         Language.Japanese, Language.Korean, Language.French, Language.Spanish,
@@ -43,7 +43,7 @@ public sealed class BingTranslateService : BaseTranslationService
     /// <summary>
     /// Bing uses some non-standard language codes compared to ISO 639-1.
     /// </summary>
-    private static readonly Dictionary<Language, string> BingLanguageCodes = new()
+    private static readonly Dictionary<Language, string> _bingLanguageCodes = new()
     {
         { Language.SimplifiedChinese, "zh-Hans" },
         { Language.TraditionalChinese, "zh-Hant" },
@@ -52,7 +52,7 @@ public sealed class BingTranslateService : BaseTranslationService
         { Language.Filipino, "fil" },
     };
 
-    private readonly object _credentialLock = new();
+    private readonly SemaphoreSlim _credentialSemaphore = new(1, 1);
     private BingCredentials? _credentials;
     private bool _useChinaHost;
 
@@ -64,7 +64,7 @@ public sealed class BingTranslateService : BaseTranslationService
     public override string DisplayName => "Bing Translate";
     public override bool RequiresApiKey => false;
     public override bool IsConfigured => true;
-    public override IReadOnlyList<Language> SupportedLanguages => BingLanguages;
+    public override IReadOnlyList<Language> SupportedLanguages => _bingLanguages;
 
     /// <summary>
     /// Configure whether to use China host (cn.bing.com) or global host (www.bing.com).
@@ -118,10 +118,7 @@ public sealed class BingTranslateService : BaseTranslationService
             if (response.StatusCode == HttpStatusCode.TooManyRequests ||
                 response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                lock (_credentialLock)
-                {
-                    _credentials = null;
-                }
+                _credentials = null;
             }
 
             throw new TranslationException($"Bing API error: {response.StatusCode}")
@@ -186,30 +183,33 @@ public sealed class BingTranslateService : BaseTranslationService
 
     private static string GetBingLanguageCode(Language language)
     {
-        if (BingLanguageCodes.TryGetValue(language, out var code))
+        if (_bingLanguageCodes.TryGetValue(language, out var code))
             return code;
         return language.ToIso639();
     }
 
     private async Task<BingCredentials> GetOrRefreshCredentialsAsync(CancellationToken cancellationToken)
     {
-        BingCredentials? creds;
-        lock (_credentialLock)
-        {
-            creds = _credentials;
-        }
-
+        var creds = _credentials;
         if (creds != null && !creds.IsExpired)
             return creds;
 
-        creds = await FetchCredentialsAsync(cancellationToken);
-
-        lock (_credentialLock)
+        await _credentialSemaphore.WaitAsync(cancellationToken);
+        try
         {
-            _credentials = creds;
-        }
+            // Double-check after acquiring the semaphore (another thread may have refreshed)
+            creds = _credentials;
+            if (creds != null && !creds.IsExpired)
+                return creds;
 
-        return creds;
+            creds = await FetchCredentialsAsync(cancellationToken);
+            _credentials = creds;
+            return creds;
+        }
+        finally
+        {
+            _credentialSemaphore.Release();
+        }
     }
 
     /// <summary>
@@ -249,7 +249,7 @@ public sealed class BingTranslateService : BaseTranslationService
             expiryInterval = long.Parse(paramsMatch.Groups[3].Value);
         }
 
-        Debug.WriteLine($"[BingTranslate] Credentials fetched: IG={ig[..8]}..., IID={iid}");
+        Debug.WriteLine($"[BingTranslate] Credentials fetched: IG={ig[..Math.Min(8, ig.Length)]}..., IID={iid}");
 
         return new BingCredentials(ig, iid, token, key, expiryInterval);
     }

@@ -787,7 +787,8 @@ public sealed partial class SettingsPage : Page
 
     /// <summary>
     /// Ensure at least one service is checked when the collection has no services selected.
-    /// Uses region-appropriate default (bing for China, google for international).
+    /// Uses region-appropriate default (bing for China, google for international),
+    /// falling back to the first available service if the default is unavailable.
     /// Updates both the settings and the collection item.
     /// </summary>
     private static void EnsureDefaultServiceEnabled(ObservableCollection<ServiceCheckItem> collection, List<string> services)
@@ -795,12 +796,14 @@ public sealed partial class SettingsPage : Page
         if (services.Count > 0) return;
 
         var defaultServiceId = SettingsService.GetRegionDefaultServiceId();
-        services.Add(defaultServiceId);
 
-        // Also update the collection item to reflect this default
-        var defaultItem = collection.FirstOrDefault(item => item.ServiceId == defaultServiceId);
+        // If the region default is not available, pick the first available service
+        var defaultItem = collection.FirstOrDefault(item => item.ServiceId == defaultServiceId && item.IsAvailable)
+                       ?? collection.FirstOrDefault(item => item.IsAvailable);
+
         if (defaultItem != null)
         {
+            services.Add(defaultItem.ServiceId);
             defaultItem.IsChecked = true;
         }
     }
@@ -971,6 +974,14 @@ public sealed partial class SettingsPage : Page
         UpdateServiceAvailability(_mainWindowServices, enabled);
         UpdateServiceAvailability(_miniWindowServices, enabled);
         UpdateServiceAvailability(_fixedWindowServices, enabled);
+
+        // Ensure at least one available service is still enabled after unchecking unavailable ones
+        var mainServices = GetEnabledServicesFromCollection(_mainWindowServices);
+        var miniServices = GetEnabledServicesFromCollection(_miniWindowServices);
+        var fixedServices = GetEnabledServicesFromCollection(_fixedWindowServices);
+        EnsureDefaultServiceEnabled(_mainWindowServices, mainServices);
+        EnsureDefaultServiceEnabled(_miniWindowServices, miniServices);
+        EnsureDefaultServiceEnabled(_fixedWindowServices, fixedServices);
 
         SaveButton.Visibility = Visibility.Visible;
     }

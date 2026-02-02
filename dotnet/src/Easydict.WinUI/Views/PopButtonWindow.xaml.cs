@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Windows.Graphics;
 using WinRT.Interop;
 
 namespace Easydict.WinUI.Views;
@@ -33,22 +34,22 @@ public sealed partial class PopButtonWindow : Window
     private const int SW_SHOWNOACTIVATE = 4;
     private const int SW_HIDE = 0;
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    private static partial int GetWindowLong(IntPtr hWnd, int nIndex);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    private static partial int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    private static partial bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
-    [DllImport("user32.dll")]
+    [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private static partial bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
-    [DllImport("user32.dll")]
-    private static extern int GetDpiForWindow(IntPtr hWnd);
+    [LibraryImport("user32.dll")]
+    private static partial int GetDpiForWindow(IntPtr hWnd);
 
     private readonly IntPtr _hwnd;
     private readonly AppWindow? _appWindow;
@@ -127,6 +128,27 @@ public sealed partial class PopButtonWindow : Window
         // Position: to the right and above the mouse release point
         var x = screenX + offsetX;
         var y = screenY - offsetY;
+
+        // Clamp to screen bounds so the button never appears off-screen
+        try
+        {
+            var display = DisplayArea.GetFromPoint(
+                new PointInt32(screenX, screenY), DisplayAreaFallback.Nearest);
+            var workArea = display.WorkArea;
+
+            if (x + physicalSize > workArea.X + workArea.Width)
+                x = workArea.X + workArea.Width - physicalSize;
+            if (x < workArea.X)
+                x = workArea.X;
+            if (y < workArea.Y)
+                y = workArea.Y;
+            if (y + physicalSize > workArea.Y + workArea.Height)
+                y = workArea.Y + workArea.Height - physicalSize;
+        }
+        catch
+        {
+            // Fall through with unclamped position if display info unavailable
+        }
 
         SetWindowPos(_hwnd, HWND_TOPMOST, x, y, physicalSize, physicalSize,
             SWP_NOACTIVATE | SWP_SHOWWINDOW);

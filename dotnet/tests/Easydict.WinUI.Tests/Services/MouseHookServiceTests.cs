@@ -226,6 +226,44 @@ public class MouseHookServiceTests
         fired.Should().BeTrue();
     }
 
+    // --- Keyboard dismiss ---
+
+    [Fact]
+    public void ProcessKeyboardMessage_KeyDown_FiresOnKeyDown()
+    {
+        using var service = new MouseHookService();
+        bool fired = false;
+        service.OnKeyDown += () => fired = true;
+
+        service.ProcessKeyboardMessage(0x0100); // WM_KEYDOWN
+
+        fired.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ProcessKeyboardMessage_SysKeyDown_FiresOnKeyDown()
+    {
+        using var service = new MouseHookService();
+        bool fired = false;
+        service.OnKeyDown += () => fired = true;
+
+        service.ProcessKeyboardMessage(0x0104); // WM_SYSKEYDOWN
+
+        fired.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ProcessKeyboardMessage_OtherMessage_DoesNotFire()
+    {
+        using var service = new MouseHookService();
+        bool fired = false;
+        service.OnKeyDown += () => fired = true;
+
+        service.ProcessKeyboardMessage(0x0101); // WM_KEYUP
+
+        fired.Should().BeFalse();
+    }
+
     // --- Reset ---
 
     [Fact]

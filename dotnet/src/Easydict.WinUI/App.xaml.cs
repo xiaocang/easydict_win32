@@ -301,6 +301,7 @@ namespace Easydict.WinUI
                 _mouseHookService.OnMouseDown += _popButtonService.Dismiss;
                 _mouseHookService.OnMouseScroll += _popButtonService.Dismiss;
                 _mouseHookService.OnRightMouseDown += _popButtonService.Dismiss;
+                _mouseHookService.OnKeyDown += _popButtonService.Dismiss;
 
                 if (settings.MouseSelectionTranslate)
                 {

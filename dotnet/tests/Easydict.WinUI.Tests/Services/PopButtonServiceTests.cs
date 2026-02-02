@@ -50,11 +50,13 @@ public class PopButtonServiceTests
         int scrollCount = 0;
         int rightClickCount = 0;
         int dragCount = 0;
+        int keyDownCount = 0;
 
         hookService.OnMouseDown += () => mouseDownCount++;
         hookService.OnMouseScroll += () => scrollCount++;
         hookService.OnRightMouseDown += () => rightClickCount++;
         hookService.OnDragSelectionEnd += _ => dragCount++;
+        hookService.OnKeyDown += () => keyDownCount++;
 
         // Simulate a full interaction sequence:
         // 1. User clicks (dismiss any existing pop button)
@@ -72,10 +74,14 @@ public class PopButtonServiceTests
         // 4. User right-clicks (dismiss pop button)
         hookService.ProcessMouseMessage(0x0204, new MouseHookService.POINT { x = 200, y = 100 });
 
+        // 5. User presses a key (dismiss pop button)
+        hookService.ProcessKeyboardMessage(0x0100); // WM_KEYDOWN
+
         mouseDownCount.Should().Be(2, "two left button down events");
         dragCount.Should().Be(1, "one drag selection");
         scrollCount.Should().Be(1, "one scroll event");
         rightClickCount.Should().Be(1, "one right-click event");
+        keyDownCount.Should().Be(1, "one key down event");
     }
 
     [Fact]

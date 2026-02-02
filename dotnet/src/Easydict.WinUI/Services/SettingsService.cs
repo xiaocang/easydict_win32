@@ -14,7 +14,7 @@ public sealed class SettingsService
 
     private readonly string _settingsFilePath;
     private Dictionary<string, object?> _settings = new();
-    private volatile bool _hasPersistedInternationalSetting;
+
 
     private SettingsService()
     {
@@ -165,10 +165,26 @@ public sealed class SettingsService
 
     /// <summary>
     /// Enable international services that may not be accessible in all regions.
-    /// Auto-detected from system region on first launch only; once the user explicitly
-    /// saves settings, the persisted value is always used (no further auto-detection).
+    /// Auto-detected from system region; persisted value is used once saved.
     /// </summary>
-    public bool EnableInternationalServices { get; set; } = !IsChinaRegion();
+    private bool _enableInternationalServices = !IsChinaRegion();
+    public bool EnableInternationalServices
+    {
+        get => _enableInternationalServices;
+        set
+        {
+            if (_enableInternationalServices != value)
+            {
+                _enableInternationalServices = value;
+                EnableInternationalServicesChanged?.Invoke(this, value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Raised when <see cref="EnableInternationalServices"/> changes.
+    /// </summary>
+    public event EventHandler<bool>? EnableInternationalServicesChanged;
 
     // HTTP Proxy settings
     /// <summary>
@@ -358,10 +374,7 @@ public sealed class SettingsService
         MiniWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(MiniWindowServiceEnabledQuery));
         FixedWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(FixedWindowServiceEnabledQuery));
 
-        // International services setting: use persisted value if user has explicitly set it,
-        // otherwise auto-detect based on region (off for China, on elsewhere).
-        // Network probe on first launch will refine this detection asynchronously.
-        _hasPersistedInternationalSetting = _settings.ContainsKey(nameof(EnableInternationalServices));
+        // International services setting: auto-detect based on region (off for China, on elsewhere).
         EnableInternationalServices = GetValue(nameof(EnableInternationalServices), !IsChinaRegion());
 
         // HTTP Proxy settings
@@ -537,56 +550,6 @@ public sealed class SettingsService
     public static string GetRegionDefaultServiceId()
     {
         return IsChinaRegion() ? "bing" : "google";
-    }
-
-    /// <summary>
-    /// Runs a one-time network probe on first launch to detect whether international
-    /// translation services are reachable. Only runs when:
-    /// 1. The user has NOT previously saved an explicit EnableInternationalServices setting
-    /// 2. The system locale suggests a China region (Chinese language)
-    ///
-    /// If Google Translate is unreachable, sets EnableInternationalServices = false and saves.
-    /// </summary>
-    public async Task RunFirstLaunchNetworkProbeAsync()
-    {
-        // Skip if the user has already persisted a choice
-        if (_hasPersistedInternationalSetting)
-        {
-            System.Diagnostics.Debug.WriteLine("[Settings] Network probe skipped: user has persisted setting");
-            return;
-        }
-
-        // Only probe when system locale is Chinese (potential China region)
-        if (!IsChinaRegion())
-        {
-            System.Diagnostics.Debug.WriteLine("[Settings] Network probe skipped: not China region");
-            return;
-        }
-
-        System.Diagnostics.Debug.WriteLine("[Settings] Running first-launch network probe...");
-
-        try
-        {
-            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            using var request = new HttpRequestMessage(HttpMethod.Head, "https://translate.googleapis.com");
-            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-
-            using var response = await httpClient.SendAsync(request);
-
-            // If we get any response (even 4xx), the service is reachable
-            System.Diagnostics.Debug.WriteLine($"[Settings] Network probe: Google Translate reachable (status={response.StatusCode})");
-            EnableInternationalServices = true;
-        }
-        catch (Exception ex)
-        {
-            // Network error = Google Translate not reachable from this network
-            System.Diagnostics.Debug.WriteLine($"[Settings] Network probe: Google Translate unreachable ({ex.GetType().Name}: {ex.Message})");
-            EnableInternationalServices = false;
-        }
-
-        // Persist the detected result so we don't probe again
-        Save();
-        System.Diagnostics.Debug.WriteLine($"[Settings] Network probe result saved: EnableInternationalServices={EnableInternationalServices}");
     }
 
     private T GetValue<T>(string key, T defaultValue)

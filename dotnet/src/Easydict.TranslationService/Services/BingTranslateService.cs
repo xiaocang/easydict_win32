@@ -59,7 +59,7 @@ public sealed class BingTranslateService : BaseTranslationService, IDisposable
     };
 
     private readonly SemaphoreSlim _credentialSemaphore = new(1, 1);
-    private BingCredentials? _credentials;
+    private volatile BingCredentials? _credentials;
     private bool _useChinaHost;
     private int _eptCounter;
 
@@ -132,7 +132,15 @@ public sealed class BingTranslateService : BaseTranslationService, IDisposable
                 // Clear credentials so next attempt fetches fresh ones
                 if (isRetryable)
                 {
-                    _credentials = null;
+                    await _credentialSemaphore.WaitAsync(cancellationToken);
+                    try
+                    {
+                        _credentials = null;
+                    }
+                    finally
+                    {
+                        _credentialSemaphore.Release();
+                    }
                 }
 
                 // Retry once with fresh credentials on 429/401

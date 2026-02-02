@@ -126,6 +126,8 @@ public sealed class TranslationManagerService : IDisposable
         _translationManager = new TranslationManager(options);
         ConfigureServices();
 
+        _settings.EnableInternationalServicesChanged += (_, _) => ReconfigureServices();
+
         Debug.WriteLine("[TranslationManagerService] Initialized");
     }
 

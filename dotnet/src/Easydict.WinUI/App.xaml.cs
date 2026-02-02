@@ -295,19 +295,6 @@ namespace Easydict.WinUI
             // Apply saved theme setting
             ApplyTheme(settings.AppTheme);
 
-            // Run first-launch network probe to detect international service availability
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await settings.RunFirstLaunchNetworkProbeAsync();
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[App] Network probe failed: {ex.Message}");
-                }
-            });
-
 #if DEBUG
             // Debug mode: automatically open mini window on startup
             MiniWindowService.Instance.Show();

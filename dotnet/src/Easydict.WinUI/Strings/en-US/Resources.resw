@@ -561,4 +561,18 @@
   <data name="ThemeDark" xml:space="preserve">
     <value>Dark</value>
   </data>
+
+  <!-- Unsaved Changes Dialog -->
+  <data name="UnsavedChangesTitle" xml:space="preserve">
+    <value>Unsaved Changes</value>
+  </data>
+  <data name="UnsavedChangesMessage" xml:space="preserve">
+    <value>You have unsaved changes. Do you want to save them before leaving?</value>
+  </data>
+  <data name="DontSave" xml:space="preserve">
+    <value>Don't Save</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
 </root>

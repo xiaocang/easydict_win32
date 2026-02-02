@@ -520,4 +520,18 @@
   <data name="ThemeDark" xml:space="preserve">
     <value>深色</value>
   </data>
+
+  <!-- Unsaved Changes Dialog -->
+  <data name="UnsavedChangesTitle" xml:space="preserve">
+    <value>未儲存的變更</value>
+  </data>
+  <data name="UnsavedChangesMessage" xml:space="preserve">
+    <value>您有未儲存的變更。是否要在離開前儲存？</value>
+  </data>
+  <data name="DontSave" xml:space="preserve">
+    <value>不儲存</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
 </root>

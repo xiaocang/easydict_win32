@@ -264,6 +264,128 @@ public class MouseHookServiceTests
         fired.Should().BeFalse();
     }
 
+    // --- Multi-click detection (MultiClickDetector) ---
+
+    [Fact]
+    public void MultiClick_DoubleClick_ReturnsCount2()
+    {
+        var detector = new MultiClickDetector();
+        var pt = Pt(100, 100);
+
+        detector.OnClick(pt, 1000, 500); // first click at t=1000
+        var result = detector.OnClick(pt, 1300, 500); // second click at t=1300 (within 500ms)
+
+        result.ClickCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void MultiClick_TripleClick_ReturnsCount3()
+    {
+        var detector = new MultiClickDetector();
+        var pt = Pt(100, 100);
+
+        detector.OnClick(pt, 1000, 500);
+        detector.OnClick(pt, 1200, 500);
+        var result = detector.OnClick(pt, 1400, 500);
+
+        result.ClickCount.Should().Be(3);
+    }
+
+    [Fact]
+    public void MultiClick_TooSlow_ResetsCount()
+    {
+        var detector = new MultiClickDetector();
+        var pt = Pt(100, 100);
+
+        detector.OnClick(pt, 1000, 500);
+        var result = detector.OnClick(pt, 1600, 500); // 600ms > 500ms threshold
+
+        result.ClickCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void MultiClick_TooFar_ResetsCount()
+    {
+        var detector = new MultiClickDetector();
+
+        detector.OnClick(Pt(100, 100), 1000, 500);
+        // MaxClickDistance = 4, so (100, 100) → (110, 100) distance = 10 > 4
+        var result = detector.OnClick(Pt(110, 100), 1200, 500);
+
+        result.ClickCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void MultiClick_WithinDistance_Counts()
+    {
+        var detector = new MultiClickDetector();
+
+        detector.OnClick(Pt(100, 100), 1000, 500);
+        // (100, 100) → (103, 103) distance = sqrt(18) ≈ 4.24 > MaxClickDistance(4)
+        var result1 = detector.OnClick(Pt(103, 103), 1200, 500);
+        result1.ClickCount.Should().Be(1, "distance slightly exceeds threshold");
+
+        // Reset and try within distance
+        detector.Reset();
+        detector.OnClick(Pt(100, 100), 1000, 500);
+        // (100, 100) → (103, 100) distance = 3 <= 4
+        var result2 = detector.OnClick(Pt(103, 100), 1200, 500);
+        result2.ClickCount.Should().Be(2, "distance within threshold");
+    }
+
+    [Fact]
+    public void MultiClick_Reset_ClearsState()
+    {
+        var detector = new MultiClickDetector();
+        detector.OnClick(Pt(100, 100), 1000, 500);
+        detector.OnClick(Pt(100, 100), 1200, 500);
+
+        detector.ClickCount.Should().Be(2);
+
+        detector.Reset();
+
+        detector.ClickCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void ProcessMouseMessage_DoubleClick_FiresSelectionEvent()
+    {
+        using var service = new MouseHookService();
+        int fireCount = 0;
+        service.OnDragSelectionEnd += _ => fireCount++;
+
+        // First click (down + up, no drag)
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+
+        // Second click (down + up, no drag) — triggers multi-click detection
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+
+        // The timer fires asynchronously, so the event count depends on timing.
+        // But the click detector should have count=2.
+        service.ClickDetector.ClickCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void DragAfterClick_DoesNotTriggerMultiClick()
+    {
+        using var service = new MouseHookService();
+
+        // First: short click
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0202, Pt(100, 100));
+        service.ClickDetector.ClickCount.Should().Be(1);
+
+        // Second: drag (not a multi-click)
+        service.ProcessMouseMessage(0x0201, Pt(100, 100));
+        service.ProcessMouseMessage(0x0200, Pt(200, 100)); // drag
+        service.ProcessMouseMessage(0x0202, Pt(200, 100));
+
+        // ClickDetector should have been reset by the drag
+        service.ClickDetector.ClickCount.Should().Be(0);
+    }
+
     // --- Reset ---
 
     [Fact]

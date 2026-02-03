@@ -126,7 +126,7 @@ make run
   - `Ctrl+Alt+F` - Show fixed window
   - `Ctrl+Alt+Shift+M` - Toggle mini window
   - `Ctrl+Alt+Shift+F` - Toggle fixed window
-- **Mouse Selection Translate**: Select text in any app → floating icon appears → click to translate in Mini Window (uses `WH_MOUSE_LL` global hook)
+- **Mouse Selection Translate**: Select text in any app (drag, double-click, triple-click) → floating icon appears → click to translate in Mini Window (uses `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks)
 - **System Tray**: Minimize to tray, background operation
 - **Clipboard Monitoring**: Auto-translate copied text
 - **HTTP Proxy Support**: Configure proxy server
@@ -199,10 +199,12 @@ protected override Task<TranslationResult> TranslateInternalAsync(
 - Global hotkeys are registered using `RegisterHotKey` Win32 API
 
 ### Mouse Selection Translate (Pop Button)
-- **MouseHookService**: `WH_MOUSE_LL` global low-level mouse hook detects drag-select gestures (mouse down → drag beyond 10px threshold → mouse up)
+- **MouseHookService**: `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks detect text selection gestures:
+  - **Drag select**: mouse down → drag beyond 10px threshold → mouse up (fires immediately)
+  - **Multi-click**: double-click (select word) and triple-click (select line/paragraph), detected by tracking consecutive non-drag clicks within system `GetDoubleClickTime()` and 4px distance (fires after a brief delay to allow triple-click)
 - **PopButtonWindow**: 30×30 WinUI 3 window with `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST` — does not steal focus from source app
-- **PopButtonService**: Orchestrates the lifecycle — on drag-select end, waits 150ms, queries `TextSelectionService` for selected text, shows icon at cursor position, auto-dismisses after 5s
-- **Dismiss triggers**: Left click elsewhere, right click, scroll, keyboard, new drag selection
+- **PopButtonService**: Orchestrates the lifecycle — on selection detected, waits 150ms, queries `TextSelectionService` for selected text, shows icon at cursor position, auto-dismisses after 5s
+- **Dismiss triggers**: Left click elsewhere, right click, scroll, keyboard, new selection
 - **Setting**: `MouseSelectionTranslate` in SettingsService (default: off), toggle in Settings → Behavior
 - **Flow**: `MouseHookService.OnDragSelectionEnd` → `PopButtonService.OnDragSelectionEnd` → `TextSelectionService.GetSelectedTextAsync` → `PopButtonWindow.ShowAt` → user clicks → `MiniWindowService.ShowWithText`
 

@@ -53,6 +53,9 @@ public sealed partial class MouseHookService : IDisposable
     [LibraryImport("user32.dll")]
     private static partial IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
 
+    [LibraryImport("user32.dll")]
+    private static partial uint GetDoubleClickTime();
+
     private const uint GA_ROOT = 2; // Get root window
 
     [StructLayout(LayoutKind.Sequential)]
@@ -84,6 +87,11 @@ public sealed partial class MouseHookService : IDisposable
     /// Drag detection state machine. Public for unit testing.
     /// </summary>
     public DragDetector Detector { get; } = new();
+
+    /// <summary>
+    /// Multi-click (double/triple) detection. Public for unit testing.
+    /// </summary>
+    public MultiClickDetector ClickDetector { get; } = new();
 
     /// <summary>
     /// Set the PopButton window handle to prevent dismissing it when clicking on it.
@@ -243,8 +251,22 @@ public sealed partial class MouseHookService : IDisposable
                 var result = Detector.OnLeftButtonUp(pt);
                 if (result.IsDragSelection)
                 {
+                    // Drag selection — cancel any pending multi-click
+                    ClickDetector.Reset();
+                    CancelMultiClickTimer();
                     Debug.WriteLine($"[MouseHook] Drag selection detected at ({pt.x}, {pt.y})");
                     OnDragSelectionEnd?.Invoke(pt);
+                }
+                else
+                {
+                    // Non-drag click — check for multi-click (double/triple)
+                    var clickResult = ClickDetector.OnClick(pt);
+                    if (clickResult.ClickCount >= 2)
+                    {
+                        // Start/restart a short timer to allow for additional clicks
+                        // (e.g. triple-click after double-click)
+                        StartMultiClickTimer(pt, clickResult.ClickCount);
+                    }
                 }
                 break;
 
@@ -269,10 +291,51 @@ public sealed partial class MouseHookService : IDisposable
         }
     }
 
+    private CancellationTokenSource? _multiClickCts;
+
+    private void StartMultiClickTimer(POINT pt, int clickCount)
+    {
+        CancelMultiClickTimer();
+
+        var cts = new CancellationTokenSource();
+        _multiClickCts = cts;
+        var ct = cts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // Wait slightly longer than the system double-click time
+                // to allow additional clicks (double → triple)
+                var delay = (int)GetDoubleClickTime() + 50;
+                await Task.Delay(delay, ct);
+
+                if (!ct.IsCancellationRequested)
+                {
+                    Debug.WriteLine($"[MouseHook] Multi-click selection detected (clicks={clickCount}) at ({pt.x}, {pt.y})");
+                    OnDragSelectionEnd?.Invoke(pt);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when another click arrives or a drag starts
+            }
+        });
+    }
+
+    private void CancelMultiClickTimer()
+    {
+        var cts = _multiClickCts;
+        _multiClickCts = null;
+        cts?.Cancel();
+        cts?.Dispose();
+    }
+
     public void Dispose()
     {
         if (_isDisposed) return;
         _isDisposed = true;
+        CancelMultiClickTimer();
         Uninstall();
     }
 
@@ -328,4 +391,67 @@ public sealed partial class MouseHookService : IDisposable
     }
 
     public readonly record struct DragResult(bool IsDragSelection, POINT EndPoint);
+
+    /// <summary>
+    /// Detects multi-click gestures (double-click, triple-click) by tracking
+    /// consecutive non-drag clicks within the system double-click time and distance.
+    /// WH_MOUSE_LL does not receive WM_LBUTTONDBLCLK, so we must detect it manually.
+    /// </summary>
+    public sealed class MultiClickDetector
+    {
+        /// <summary>
+        /// Maximum distance in pixels between consecutive clicks to count as multi-click.
+        /// Uses the same value as the system double-click distance (typically 4px).
+        /// </summary>
+        public const int MaxClickDistance = 4;
+
+        private int _clickCount;
+        private long _lastClickTicks;
+        private POINT _lastClickPoint;
+
+        public int ClickCount => _clickCount;
+
+        /// <summary>
+        /// Record a non-drag click. Returns the updated click count.
+        /// Call this on WM_LBUTTONUP when no drag was detected.
+        /// </summary>
+        public ClickResult OnClick(POINT pt)
+        {
+            return OnClick(pt, Environment.TickCount64, GetDoubleClickTime());
+        }
+
+        /// <summary>
+        /// Testable overload with explicit timing parameters.
+        /// </summary>
+        public ClickResult OnClick(POINT pt, long currentTicks, uint doubleClickTimeMs)
+        {
+            var elapsed = currentTicks - _lastClickTicks;
+            var dx = pt.x - _lastClickPoint.x;
+            var dy = pt.y - _lastClickPoint.y;
+            var withinDistance = dx * dx + dy * dy <= MaxClickDistance * MaxClickDistance;
+
+            if (elapsed <= doubleClickTimeMs && withinDistance)
+            {
+                _clickCount++;
+            }
+            else
+            {
+                _clickCount = 1;
+            }
+
+            _lastClickTicks = currentTicks;
+            _lastClickPoint = pt;
+
+            return new ClickResult(_clickCount);
+        }
+
+        public void Reset()
+        {
+            _clickCount = 0;
+            _lastClickTicks = 0;
+            _lastClickPoint = default;
+        }
+    }
+
+    public readonly record struct ClickResult(int ClickCount);
 }

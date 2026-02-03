@@ -84,6 +84,12 @@ public sealed partial class MouseHookService : IDisposable
     private IntPtr _popButtonWindowHandle = IntPtr.Zero;
 
     /// <summary>
+    /// Cached system double-click time to avoid P/Invoke on every click.
+    /// Refreshed on Install() since it rarely changes (only when user changes mouse settings).
+    /// </summary>
+    private uint _cachedDoubleClickTime;
+
+    /// <summary>
     /// Drag detection state machine. Public for unit testing.
     /// </summary>
     public DragDetector Detector { get; } = new();
@@ -135,6 +141,9 @@ public sealed partial class MouseHookService : IDisposable
     /// </summary>
     public bool Install()
     {
+        // Cache the system double-click time to avoid P/Invoke on every click.
+        _cachedDoubleClickTime = GetDoubleClickTime();
+
         using var curProcess = Process.GetCurrentProcess();
         using var curModule = curProcess.MainModule!;
         var moduleHandle = GetModuleHandle(curModule.ModuleName);
@@ -186,12 +195,16 @@ public sealed partial class MouseHookService : IDisposable
         }
     }
 
-    private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    private unsafe IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0)
         {
-            var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-            ProcessMouseMessage((int)wParam, hookStruct.pt);
+            // Read the POINT directly from unmanaged memory without allocating a boxed copy.
+            // Marshal.PtrToStructure<MSLLHOOKSTRUCT> allocates on every call; since this callback
+            // fires on every mouse message (including WM_MOUSEMOVE at high frequency), the
+            // allocation pressure causes GC pauses that manifest as UI micro-stutters.
+            var pt = ((MSLLHOOKSTRUCT*)lParam)->pt;
+            ProcessMouseMessage((int)wParam, pt);
         }
         return CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
     }
@@ -219,26 +232,28 @@ public sealed partial class MouseHookService : IDisposable
         switch (message)
         {
             case WM_LBUTTONDOWN:
-                // Don't dismiss if clicking on the PopButton itself
-                var windowAtPoint = WindowFromPoint(pt);
-                // Get the root window to handle child controls (Button inside PopButtonWindow)
-                var rootWindow = windowAtPoint != IntPtr.Zero ? GetAncestor(windowAtPoint, GA_ROOT) : IntPtr.Zero;
-                
-                bool isPopButtonClick = (rootWindow == _popButtonWindowHandle || windowAtPoint == _popButtonWindowHandle) 
-                                         && _popButtonWindowHandle != IntPtr.Zero;
-                
-                if (!isPopButtonClick)
+                // Only do the expensive WindowFromPoint + GetAncestor calls when the
+                // pop button is actually registered (i.e. has been shown at least once).
+                // Before that, every click would pay two P/Invoke calls for nothing.
+                if (_popButtonWindowHandle != IntPtr.Zero)
                 {
-                    // Notify pop button to dismiss (user clicked somewhere else)
-                    if (_popButtonWindowHandle != IntPtr.Zero)
+                    var windowAtPoint = WindowFromPoint(pt);
+                    var rootWindow = windowAtPoint != IntPtr.Zero ? GetAncestor(windowAtPoint, GA_ROOT) : IntPtr.Zero;
+                    bool isPopButtonClick = rootWindow == _popButtonWindowHandle || windowAtPoint == _popButtonWindowHandle;
+
+                    if (!isPopButtonClick)
                     {
                         Debug.WriteLine($"[MouseHook] Click on window 0x{windowAtPoint:X} (root=0x{rootWindow:X}, PopButton=0x{_popButtonWindowHandle:X}), dismissing");
+                        OnMouseDown?.Invoke();
                     }
-                    OnMouseDown?.Invoke();
+                    else
+                    {
+                        Debug.WriteLine($"[MouseHook] Click on PopButton window 0x{windowAtPoint:X} (root=0x{rootWindow:X}), not dismissing");
+                    }
                 }
                 else
                 {
-                    Debug.WriteLine($"[MouseHook] Click on PopButton window 0x{windowAtPoint:X} (root=0x{rootWindow:X}), not dismissing");
+                    OnMouseDown?.Invoke();
                 }
                 Detector.OnLeftButtonDown(pt);
                 break;
@@ -259,8 +274,9 @@ public sealed partial class MouseHookService : IDisposable
                 }
                 else
                 {
-                    // Non-drag click — check for multi-click (double/triple)
-                    var clickResult = ClickDetector.OnClick(pt);
+                    // Non-drag click — check for multi-click (double/triple).
+                    // Use cached double-click time to avoid P/Invoke on every click.
+                    var clickResult = ClickDetector.OnClick(pt, Environment.TickCount64, _cachedDoubleClickTime);
                     if (clickResult.ClickCount >= 2)
                     {
                         // Start/restart a short timer to allow for additional clicks
@@ -307,7 +323,7 @@ public sealed partial class MouseHookService : IDisposable
             {
                 // Wait slightly longer than the system double-click time
                 // to allow additional clicks (double → triple)
-                var delay = (int)GetDoubleClickTime() + 50;
+                var delay = (int)_cachedDoubleClickTime + 50;
                 await Task.Delay(delay, ct);
 
                 if (!ct.IsCancellationRequested)

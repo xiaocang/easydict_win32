@@ -9,6 +9,12 @@
     <Platform>x64</Platform>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <UseWinUI>true</UseWinUI>
+    <!-- Disable the Windows App SDK auto-initializer that runs as a module constructor.
+         Without this, loading the test assembly on CI runners (which lack the Windows App SDK
+         runtime) triggers a TypeInitializationException / COMException (REGDB_E_CLASSNOTREG)
+         that fails ALL tests before any can execute. Test code does not need the deployment
+         manager — only the real app does. -->
+    <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
   </PropertyGroup>
 
   <ItemGroup>

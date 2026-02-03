@@ -24,6 +24,7 @@ public sealed class PopButtonService : IDisposable
     public const int AutoDismissMs = 5000;
 
     private readonly DispatcherQueue _dispatcherQueue;
+    private readonly MouseHookService? _mouseHookService;
     private PopButtonWindow? _popWindow;
     private string? _pendingText;
     private CancellationTokenSource? _selectionCts;
@@ -52,9 +53,10 @@ public sealed class PopButtonService : IDisposable
     /// </summary>
     public bool IsVisible => _popWindow?.IsPopupVisible ?? false;
 
-    public PopButtonService(DispatcherQueue dispatcherQueue)
+    public PopButtonService(DispatcherQueue dispatcherQueue, MouseHookService? mouseHookService = null)
     {
         _dispatcherQueue = dispatcherQueue;
+        _mouseHookService = mouseHookService;
     }
 
     /// <summary>
@@ -108,10 +110,11 @@ public sealed class PopButtonService : IDisposable
         catch (OperationCanceledException)
         {
             // Expected when a new selection starts before the previous one completes
+            Debug.WriteLine("[PopButtonService] Selection detection canceled (user performed another action)");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[PopButtonService] Error during selection detection: {ex.Message}");
+            Debug.WriteLine($"[PopButtonService] Error during selection detection: {ex}");
         }
     }
 
@@ -119,9 +122,13 @@ public sealed class PopButtonService : IDisposable
     /// Dismiss the pop button and clear pending state.
     /// Called by MouseHookService on mouse-down, scroll, right-click, etc.
     /// </summary>
-    public void Dismiss()
+    public void Dismiss(string reason = "Unknown")
     {
-        _selectionCts?.Cancel();
+        if (_selectionCts != null)
+        {
+            Debug.WriteLine($"[PopButtonService] Dismissing due to: {reason}");
+            _selectionCts?.Cancel();
+        }
         CancelAutoDismissTimer();
         _pendingText = null;
 
@@ -157,6 +164,12 @@ public sealed class PopButtonService : IDisposable
 
         _popWindow = new PopButtonWindow();
         _popWindow.OnClicked += OnPopButtonClicked;
+
+        // Register window handle with mouse hook service to prevent self-dismissal
+        if (_mouseHookService != null)
+        {
+            _mouseHookService.SetPopButtonWindowHandle(_popWindow.WindowHandle);
+        }
 
         // Apply current theme
         var theme = SettingsService.Instance.AppTheme switch

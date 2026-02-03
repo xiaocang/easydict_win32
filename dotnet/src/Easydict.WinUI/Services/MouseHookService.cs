@@ -47,6 +47,14 @@ public sealed partial class MouseHookService : IDisposable
     [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial IntPtr GetModuleHandle(string? lpModuleName);
 
+    [LibraryImport("user32.dll")]
+    private static partial IntPtr WindowFromPoint(POINT pt);
+
+    [LibraryImport("user32.dll")]
+    private static partial IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
+
+    private const uint GA_ROOT = 2; // Get root window
+
     [StructLayout(LayoutKind.Sequential)]
     private struct MSLLHOOKSTRUCT
     {
@@ -70,11 +78,21 @@ public sealed partial class MouseHookService : IDisposable
     private LowLevelKeyboardProc? _keyboardHookProc;
     private bool _isDisposed;
     private bool _firstCallbackLogged;
+    private IntPtr _popButtonWindowHandle = IntPtr.Zero;
 
     /// <summary>
     /// Drag detection state machine. Public for unit testing.
     /// </summary>
     public DragDetector Detector { get; } = new();
+
+    /// <summary>
+    /// Set the PopButton window handle to prevent dismissing it when clicking on it.
+    /// </summary>
+    public void SetPopButtonWindowHandle(IntPtr hwnd)
+    {
+        _popButtonWindowHandle = hwnd;
+        Debug.WriteLine($"[MouseHook] PopButton window handle registered: 0x{hwnd:X}");
+    }
 
     /// <summary>
     /// Fired when a drag-select gesture ends (mouse up after dragging).
@@ -193,8 +211,27 @@ public sealed partial class MouseHookService : IDisposable
         switch (message)
         {
             case WM_LBUTTONDOWN:
-                // Notify pop button to dismiss (user clicked somewhere)
-                OnMouseDown?.Invoke();
+                // Don't dismiss if clicking on the PopButton itself
+                var windowAtPoint = WindowFromPoint(pt);
+                // Get the root window to handle child controls (Button inside PopButtonWindow)
+                var rootWindow = windowAtPoint != IntPtr.Zero ? GetAncestor(windowAtPoint, GA_ROOT) : IntPtr.Zero;
+                
+                bool isPopButtonClick = (rootWindow == _popButtonWindowHandle || windowAtPoint == _popButtonWindowHandle) 
+                                         && _popButtonWindowHandle != IntPtr.Zero;
+                
+                if (!isPopButtonClick)
+                {
+                    // Notify pop button to dismiss (user clicked somewhere else)
+                    if (_popButtonWindowHandle != IntPtr.Zero)
+                    {
+                        Debug.WriteLine($"[MouseHook] Click on window 0x{windowAtPoint:X} (root=0x{rootWindow:X}, PopButton=0x{_popButtonWindowHandle:X}), dismissing");
+                    }
+                    OnMouseDown?.Invoke();
+                }
+                else
+                {
+                    Debug.WriteLine($"[MouseHook] Click on PopButton window 0x{windowAtPoint:X} (root=0x{rootWindow:X}), not dismissing");
+                }
                 Detector.OnLeftButtonDown(pt);
                 break;
 

@@ -294,14 +294,14 @@ namespace Easydict.WinUI
             // Initialize mouse selection translate service
             try
             {
-                _popButtonService = new PopButtonService(_window.DispatcherQueue);
                 _mouseHookService = new MouseHookService();
+                _popButtonService = new PopButtonService(_window.DispatcherQueue, _mouseHookService);
 
                 _mouseHookService.OnDragSelectionEnd += _popButtonService.OnDragSelectionEnd;
-                _mouseHookService.OnMouseDown += _popButtonService.Dismiss;
-                _mouseHookService.OnMouseScroll += _popButtonService.Dismiss;
-                _mouseHookService.OnRightMouseDown += _popButtonService.Dismiss;
-                _mouseHookService.OnKeyDown += _popButtonService.Dismiss;
+                _mouseHookService.OnMouseDown += () => _popButtonService.Dismiss("MouseDown");
+                _mouseHookService.OnMouseScroll += () => _popButtonService.Dismiss("MouseScroll");
+                _mouseHookService.OnRightMouseDown += () => _popButtonService.Dismiss("RightMouseDown");
+                _mouseHookService.OnKeyDown += () => _popButtonService.Dismiss("KeyDown");
 
                 if (settings.MouseSelectionTranslate)
                 {

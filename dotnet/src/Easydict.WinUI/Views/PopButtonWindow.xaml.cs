@@ -40,11 +40,12 @@ public sealed partial class PopButtonWindow : Window
     // - Per-window DPI queries
     // The OverlappedPresenter API only covers a subset of window chrome options.
 
-    [LibraryImport("user32.dll", SetLastError = true)]
-    private static partial int GetWindowLong(IntPtr hWnd, int nIndex);
+    // Use GetWindowLongPtr/SetWindowLongPtr for 64-bit compatibility
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static partial IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
-    [LibraryImport("user32.dll", SetLastError = true)]
-    private static partial int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static partial IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -70,6 +71,11 @@ public sealed partial class PopButtonWindow : Window
     /// Gets whether the pop button window is currently visible.
     /// </summary>
     public bool IsPopupVisible => _isVisible;
+
+    /// <summary>
+    /// Gets the window handle (HWND) of the pop button window.
+    /// </summary>
+    public IntPtr WindowHandle => _hwnd;
 
     public PopButtonWindow()
     {
@@ -100,9 +106,9 @@ public sealed partial class PopButtonWindow : Window
         }
 
         // Set extended window styles
-        var exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
-        exStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
-        SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle);
+        var exStyle = GetWindowLongPtr(_hwnd, GWL_EXSTYLE);
+        exStyle = (IntPtr)((long)exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST);
+        SetWindowLongPtr(_hwnd, GWL_EXSTYLE, exStyle);
 
         // Set initial size (30x30 logical pixels, scaled for DPI)
         var dpi = GetDpiForWindow(_hwnd);

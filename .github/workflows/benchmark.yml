@@ -38,7 +38,11 @@ jobs:
 
       - name: Build (Release)
         working-directory: dotnet
-        run: dotnet build tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj -c Release -p:Platform=x64
+        # WindowsAppSdkAutoInitialize=false prevents the SDK from generating a module
+        # constructor that tries to initialize the Windows App SDK runtime. Without this,
+        # loading the Easydict.WinUI assembly on CI (which lacks the SDK runtime) throws
+        # TypeInitializationException before any test can run.
+        run: dotnet build tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj -c Release -p:Platform=x64 -p:WindowsAppSdkAutoInitialize=false
 
       - name: Run performance benchmarks
         working-directory: dotnet

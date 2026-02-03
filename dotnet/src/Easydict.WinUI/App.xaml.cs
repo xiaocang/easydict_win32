@@ -488,6 +488,13 @@ namespace Easydict.WinUI
                 return;
             }
 
+            // Don't save dimensions when the window is minimized — the size is meaningless
+            if (_appWindow.Presenter is OverlappedPresenter presenter &&
+                presenter.State == OverlappedPresenterState.Minimized)
+            {
+                return;
+            }
+
             var hWnd = WindowNative.GetWindowHandle(_window);
             var scaleFactor = DpiHelper.GetScaleFactorForWindow(hWnd);
 
@@ -495,6 +502,14 @@ namespace Easydict.WinUI
             var currentSize = _appWindow.Size;
             var widthDips = DpiHelper.PhysicalPixelsToDips(currentSize.Width, scaleFactor);
             var heightDips = DpiHelper.PhysicalPixelsToDips(currentSize.Height, scaleFactor);
+
+            // Don't save unreasonably small dimensions (e.g. hidden or partially collapsed window)
+            const double minWidthDips = 400;
+            const double minHeightDips = 500;
+            if (widthDips < minWidthDips || heightDips < minHeightDips)
+            {
+                return;
+            }
 
             settings.WindowWidthDips = widthDips;
             settings.WindowHeightDips = heightDips;
@@ -614,19 +629,9 @@ namespace Easydict.WinUI
 
             var settings = SettingsService.Instance;
 
-            // Choose window dimensions based on DPI scale for optimal visual size
-            // High DPI (150%+): Use smaller DIPs to get ~580×700 physical pixels
-            // Low DPI (100-125%): Use larger DIPs to get ~500×600 physical pixels
-            var targetWidthDips = scaleFactor >= 1.5 ? 290.0 : 500.0;
-            var targetHeightDips = scaleFactor >= 1.5 ? 350.0 : 600.0;
-
-            // If user has customized window size, respect it
-            var hasCustomSize = settings.WindowWidthDips != 290 && settings.WindowWidthDips != 500;
-            if (hasCustomSize)
-            {
-                targetWidthDips = settings.WindowWidthDips;
-                targetHeightDips = settings.WindowHeightDips;
-            }
+            // Use saved window dimensions (DIPs are already DPI-independent), clamped to minimums
+            var targetWidthDips = Math.Max(settings.WindowWidthDips, minWidthDips);
+            var targetHeightDips = Math.Max(settings.WindowHeightDips, minHeightDips);
 
             // Convert DIPs to physical pixels for AppWindow APIs
             var widthPhysical = DpiHelper.DipsToPhysicalPixels(targetWidthDips, scaleFactor);
@@ -718,9 +723,9 @@ namespace Easydict.WinUI
 
             var settings = SettingsService.Instance;
 
-            // Read window dimensions from settings
-            var targetWidth = (int)settings.WindowWidthDips;
-            var targetHeight = (int)settings.WindowHeightDips;
+            // Read window dimensions from settings, clamped to minimums
+            var targetWidth = Math.Max((int)settings.WindowWidthDips, minWidth);
+            var targetHeight = Math.Max((int)settings.WindowHeightDips, minHeight);
 
             // Clamp to work area so the window fits on small screens
             var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);

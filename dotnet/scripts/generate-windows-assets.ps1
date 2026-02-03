@@ -4,6 +4,7 @@
 
 param(
     [string]$SourceIcon = "screenshot/icon_512x512@2x.png",
+    [string]$UnplatedIcon = "dotnet/src/Easydict.WinUI/Assets/icon_unplated_1024.png",
     [string]$OutputDir = "dotnet/src/Easydict.WinUI/Assets"
 )
 
@@ -169,7 +170,16 @@ if (-not (Test-Path $SourceIcon)) {
     exit 1
 }
 
+if (-not (Test-Path $UnplatedIcon)) {
+    Write-Host "WARNING: Unplated icon not found: $UnplatedIcon" -ForegroundColor Yellow
+    Write-Host "  Unplated variants will use the same source as plated variants." -ForegroundColor Yellow
+    Write-Host "  To generate a proper unplated icon (transparent background), run:" -ForegroundColor Yellow
+    Write-Host "    python3 scripts/generate-unplated-icon.py" -ForegroundColor Yellow
+    $UnplatedIcon = $SourceIcon
+}
+
 Write-Host "Using source icon: $SourceIcon (1024x1024)" -ForegroundColor Cyan
+Write-Host "Using unplated icon: $UnplatedIcon" -ForegroundColor Cyan
 Write-Host ""
 
 $successCount = 0
@@ -217,9 +227,9 @@ foreach ($size in $targetSizes) {
         $failCount++
     }
 
-    # Unplated version (no background plate)
+    # Unplated version (transparent background, no plate)
     $outputPath = Join-Path $OutputDir "Square44x44Logo.targetsize-${size}_altform-unplated.png"
-    if (Resize-Image -SourcePath $SourceIcon -OutputPath $outputPath -Width $size -Height $size) {
+    if (Resize-Image -SourcePath $UnplatedIcon -OutputPath $outputPath -Width $size -Height $size) {
         $successCount++
     } else {
         $failCount++

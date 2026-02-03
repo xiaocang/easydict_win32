@@ -530,6 +530,12 @@
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>开机自启动</value>
   </data>
+  <data name="ContextMenuToggle.Header" xml:space="preserve">
+    <value>添加到 Windows 右键菜单</value>
+  </data>
+  <data name="ContextMenuDescription.Text" xml:space="preserve">
+    <value>在 Windows 资源管理器右键菜单中添加"使用 Easydict 翻译"选项。剪贴板中的文本将发送到主窗口进行翻译。</value>
+  </data>
   <data name="Close" xml:space="preserve">
     <value>关闭</value>
   </data>

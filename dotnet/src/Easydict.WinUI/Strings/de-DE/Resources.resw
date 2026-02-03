@@ -495,6 +495,12 @@
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>Bei Windows-Start ausführen</value>
   </data>
+  <data name="ContextMenuToggle.Header" xml:space="preserve">
+    <value>Zum Windows-Kontextmenü hinzufügen</value>
+  </data>
+  <data name="ContextMenuDescription.Text" xml:space="preserve">
+    <value>„Mit Easydict übersetzen" zum Windows Explorer-Kontextmenü hinzufügen. Der Text aus der Zwischenablage wird zur Übersetzung an das Hauptfenster gesendet.</value>
+  </data>
 
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">

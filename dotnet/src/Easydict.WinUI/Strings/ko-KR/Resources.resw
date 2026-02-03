@@ -495,6 +495,12 @@
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>Windows 시작 시 실행</value>
   </data>
+  <data name="ContextMenuToggle.Header" xml:space="preserve">
+    <value>Windows 우클릭 메뉴에 추가</value>
+  </data>
+  <data name="ContextMenuDescription.Text" xml:space="preserve">
+    <value>Windows 탐색기 우클릭 메뉴에 "Easydict로 번역" 옵션을 추가합니다. 클립보드의 텍스트가 메인 창으로 전송되어 번역됩니다.</value>
+  </data>
 
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">

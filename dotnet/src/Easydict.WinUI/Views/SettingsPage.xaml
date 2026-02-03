@@ -520,6 +520,10 @@
                         <ToggleSwitch x:Name="ClipboardMonitorToggle" x:Uid="ClipboardMonitorToggle" Header="Monitor clipboard for text" />
                         <ToggleSwitch x:Name="AlwaysOnTopToggle" x:Uid="AlwaysOnTopToggle" Header="Always on top" />
                         <ToggleSwitch x:Name="LaunchAtStartupToggle" x:Uid="LaunchAtStartupToggle" Header="Launch at Windows startup" />
+                        <ToggleSwitch x:Name="ContextMenuToggle" x:Uid="ContextMenuToggle" Header="Add to Windows right-click menu" />
+                        <TextBlock x:Uid="ContextMenuDescription"
+                                   Text="Add 'Translate with Easydict' to the Windows Explorer right-click menu. Selected text from clipboard will be sent to the main window for translation."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
             </StackPanel>

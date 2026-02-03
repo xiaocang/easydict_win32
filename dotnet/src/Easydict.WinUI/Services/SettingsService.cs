@@ -111,6 +111,9 @@ public sealed class SettingsService
     // Startup settings
     public bool LaunchAtStartup { get; set; } = false;
 
+    // Context menu integration
+    public bool ContextMenuEnabled { get; set; } = false;
+
     // Mini window settings
     public string ShowMiniWindowHotkey { get; set; } = "Ctrl+Alt+M";
     public bool MiniWindowAutoClose { get; set; } = true;
@@ -344,6 +347,7 @@ public sealed class SettingsService
         UILanguage = GetValue(nameof(UILanguage), "");
         AppTheme = GetValue(nameof(AppTheme), "System");
         LaunchAtStartup = GetValue(nameof(LaunchAtStartup), false);
+        ContextMenuEnabled = GetValue(nameof(ContextMenuEnabled), false);
         EnableDpiAwareness = GetValue(nameof(EnableDpiAwareness), true);
 
         // Try to load WindowWidthDips first (new format), fallback to WindowWidth (legacy)
@@ -453,6 +457,7 @@ public sealed class SettingsService
         _settings[nameof(UILanguage)] = UILanguage;
         _settings[nameof(AppTheme)] = AppTheme;
         _settings[nameof(LaunchAtStartup)] = LaunchAtStartup;
+        _settings[nameof(ContextMenuEnabled)] = ContextMenuEnabled;
         _settings[nameof(EnableDpiAwareness)] = EnableDpiAwareness;
         _settings[nameof(WindowWidthDips)] = WindowWidthDips;
         _settings[nameof(WindowHeightDips)] = WindowHeightDips;

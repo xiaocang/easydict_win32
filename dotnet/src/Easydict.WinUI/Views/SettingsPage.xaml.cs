@@ -238,6 +238,7 @@ public sealed partial class SettingsPage : Page
         ClipboardMonitorToggle.Toggled += OnSettingChanged;
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
         LaunchAtStartupToggle.Toggled += OnSettingChanged;
+        ContextMenuToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
 
@@ -377,6 +378,7 @@ public sealed partial class SettingsPage : Page
         ClipboardMonitorToggle.IsOn = _settings.ClipboardMonitoring;
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
         LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
+        ContextMenuToggle.IsOn = _settings.ContextMenuEnabled;
 
         // Hotkeys
         ShowHotkeyBox.Text = _settings.ShowWindowHotkey;
@@ -711,9 +713,13 @@ public sealed partial class SettingsPage : Page
         _settings.ClipboardMonitoring = ClipboardMonitorToggle.IsOn;
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
         _settings.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
+        _settings.ContextMenuEnabled = ContextMenuToggle.IsOn;
 
         // Apply startup setting to Windows registry
         StartupService.SetEnabled(_settings.LaunchAtStartup);
+
+        // Apply context menu setting to Windows registry
+        ContextMenuService.SetEnabled(_settings.ContextMenuEnabled);
 
         // Save hotkey settings
         _settings.ShowWindowHotkey = ShowHotkeyBox.Text;

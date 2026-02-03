@@ -16,6 +16,7 @@ namespace Easydict.WinUI
         private TrayIconService? _trayIconService;
         private HotkeyService? _hotkeyService;
         private ClipboardService? _clipboardService;
+        private SingleInstanceService? _singleInstanceService;
         private AppWindow? _appWindow;
 
         private static App Instance => (App)Current;
@@ -165,7 +166,7 @@ namespace Easydict.WinUI
             }
         }
 
-        protected override void OnLaunched(LaunchActivatedEventArgs e)
+        protected override async void OnLaunched(LaunchActivatedEventArgs e)
         {
             LogToFile($"[OnLaunched] Starting - Args: {e.Arguments}");
             try
@@ -176,6 +177,32 @@ namespace Easydict.WinUI
             {
                 LogToFile("[OnLaunched] Package: (unpackaged)");
             }
+
+            // Handle --translate-clipboard: if another instance is running, send text via pipe and exit
+            var args = Environment.GetCommandLineArgs();
+            if (args.Contains("--translate-clipboard"))
+            {
+                LogToFile("[OnLaunched] --translate-clipboard detected, attempting IPC");
+                var text = await GetClipboardTextForSecondInstanceAsync();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    await SingleInstanceService.SendTranslateCommandAsync(text);
+                }
+                LogToFile("[OnLaunched] IPC done, exiting secondary instance");
+                Exit();
+                return;
+            }
+
+            // Initialize single-instance service
+            _singleInstanceService = new SingleInstanceService();
+            if (!_singleInstanceService.TryAcquire())
+            {
+                LogToFile("[OnLaunched] Another instance is running, exiting");
+                Exit();
+                return;
+            }
+            _singleInstanceService.OnTranslateTextReceived += OnSingleInstanceTranslateText;
+            _singleInstanceService.StartListening();
 
             _window = new Window();
             LogToFile("[OnLaunched] Window created");
@@ -501,11 +528,45 @@ namespace Easydict.WinUI
             settings.Save();
         }
 
+        /// <summary>
+        /// Handles text received from another instance via named pipe IPC.
+        /// </summary>
+        private void OnSingleInstanceTranslateText(string text)
+        {
+            _window?.DispatcherQueue.TryEnqueue(() =>
+            {
+                ShowAndActivateWindow();
+
+                if (_window?.Content is Frame frame && frame.Content is MainPage mainPage)
+                {
+                    mainPage.SetTextAndTranslate(text);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Gets clipboard text in a secondary instance context (no WinUI clipboard API available).
+        /// Uses Win32 clipboard APIs directly.
+        /// </summary>
+        private static async Task<string?> GetClipboardTextForSecondInstanceAsync()
+        {
+            try
+            {
+                // Use ClipboardService static method which works without WinUI context
+                return await ClipboardService.GetTextAsync();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private void CleanupServices()
         {
             _clipboardService?.Dispose();
             _hotkeyService?.Dispose();
             _trayIconService?.Dispose();
+            _singleInstanceService?.Dispose();
             FixedWindowService.Instance.Dispose();
             MiniWindowService.Instance.Dispose();
         }

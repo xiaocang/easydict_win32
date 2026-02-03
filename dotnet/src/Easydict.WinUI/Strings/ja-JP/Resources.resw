@@ -495,6 +495,12 @@
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>Windows起動時に起動</value>
   </data>
+  <data name="ContextMenuToggle.Header" xml:space="preserve">
+    <value>Windows 右クリックメニューに追加</value>
+  </data>
+  <data name="ContextMenuDescription.Text" xml:space="preserve">
+    <value>Windows エクスプローラーの右クリックメニューに「Easydict で翻訳」を追加します。クリップボードのテキストがメインウィンドウに送信され翻訳されます。</value>
+  </data>
 
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">

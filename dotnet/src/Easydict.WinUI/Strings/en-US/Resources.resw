@@ -530,6 +530,12 @@
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>Launch at Windows startup</value>
   </data>
+  <data name="ContextMenuToggle.Header" xml:space="preserve">
+    <value>Add to Windows right-click menu</value>
+  </data>
+  <data name="ContextMenuDescription.Text" xml:space="preserve">
+    <value>Add "Translate with Easydict" to the Windows Explorer right-click menu. Clipboard text will be sent to the main window for translation.</value>
+  </data>
   <data name="Close" xml:space="preserve">
     <value>Close</value>
   </data>

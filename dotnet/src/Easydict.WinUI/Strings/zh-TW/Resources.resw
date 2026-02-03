@@ -495,6 +495,12 @@
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
     <value>開機自動啟動</value>
   </data>
+  <data name="ContextMenuToggle.Header" xml:space="preserve">
+    <value>新增至 Windows 右鍵選單</value>
+  </data>
+  <data name="ContextMenuDescription.Text" xml:space="preserve">
+    <value>在 Windows 檔案總管右鍵選單中新增「使用 Easydict 翻譯」選項。剪貼簿中的文字將傳送至主視窗進行翻譯。</value>
+  </data>
 
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">

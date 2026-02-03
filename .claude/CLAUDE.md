@@ -126,6 +126,7 @@ make run
   - `Ctrl+Alt+F` - Show fixed window
   - `Ctrl+Alt+Shift+M` - Toggle mini window
   - `Ctrl+Alt+Shift+F` - Toggle fixed window
+- **Mouse Selection Translate**: Select text in any app (drag, double-click, triple-click) → floating icon appears → click to translate in Mini Window (uses `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks)
 - **System Tray**: Minimize to tray, background operation
 - **Clipboard Monitoring**: Auto-translate copied text
 - **HTTP Proxy Support**: Configure proxy server
@@ -136,14 +137,76 @@ make run
 ## Architecture Notes
 
 ### Translation Services
-- All translation services implement a common interface in `Easydict.TranslationService`
+
+All translation services live in `Easydict.TranslationService` and follow a strict class hierarchy:
+
+#### Interface & Base Class Hierarchy
+
+```
+ITranslationService                         # Core interface: ServiceId, DisplayName, TranslateAsync, etc.
+├── IStreamTranslationService               # Adds TranslateStreamAsync (IAsyncEnumerable<string>)
+│
+BaseTranslationService : ITranslationService            # Abstract base with validation, timing, error handling
+├── GoogleTranslateService                              # Non-streaming services extend this directly
+├── GoogleWebTranslateService
+├── DeepLService
+├── LingueeService
+├── CaiyunService
+├── NiuTransService
+├── GeminiService : IStreamTranslationService           # Custom SSE protocol (not OpenAI-compatible)
+├── DoubaoService : IStreamTranslationService           # Custom SSE protocol (ByteDance)
+└── BaseOpenAIService : IStreamTranslationService       # Abstract base for OpenAI-compatible LLM services
+    ├── OpenAIService
+    ├── OllamaService
+    ├── BuiltInAIService
+    ├── DeepSeekService
+    ├── GroqService
+    ├── ZhipuService
+    ├── GitHubModelsService
+    └── CustomOpenAIService
+```
+
+#### Adding a New Translation Service
+
+1. **Non-streaming**: Extend `BaseTranslationService`, implement `TranslateInternalAsync`
+2. **OpenAI-compatible streaming**: Extend `BaseOpenAIService`, provide `Endpoint`, `ApiKey`, `Model`
+3. **Custom streaming protocol**: Extend `BaseTranslationService` + implement `IStreamTranslationService`
+4. Register in `TranslationManager.cs` constructor
+5. Add service icon in `Assets/ServiceIcons/`
+6. Add configuration UI in settings page if `RequiresApiKey`
+
+#### Required Overrides for Any Service
+
+```csharp
+public override string ServiceId { get; }              // e.g. "google", "openai"
+public override string DisplayName { get; }            // e.g. "Google Translate"
+public override bool RequiresApiKey { get; }
+public override bool IsConfigured { get; }
+public override IReadOnlyList<Language> SupportedLanguages { get; }
+protected override Task<TranslationResult> TranslateInternalAsync(
+    TranslationRequest request, CancellationToken cancellationToken);
+```
+
+#### Key Design Points
 - LLM streaming is handled through SSE (Server-Sent Events) parsing
 - Service configurations are encrypted using DPAPI (Data Protection API)
+- Language codes are mapped via overrideable `GetLanguageCode(Language)` per service
+- All services are registered in `TranslationManager` and accessed via `TranslationManagerService.Instance`
 
 ### Window Management
-- Three window types: Main (full), Mini (floating), Fixed (persistent)
+- Four window types: Main (full), Mini (floating), Fixed (persistent), PopButton (selection icon)
 - Each window type is independently managed with separate activation states
-- Global hotkeys are registered using Windows low-level keyboard hooks
+- Global hotkeys are registered using `RegisterHotKey` Win32 API
+
+### Mouse Selection Translate (Pop Button)
+- **MouseHookService**: `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks detect text selection gestures:
+  - **Drag select**: mouse down → drag beyond 10px threshold → mouse up (fires immediately)
+  - **Multi-click**: double-click (select word) and triple-click (select line/paragraph), detected by tracking consecutive non-drag clicks within system `GetDoubleClickTime()` and 4px distance (fires after a brief delay to allow triple-click)
+- **PopButtonWindow**: 30×30 WinUI 3 window with `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST` — does not steal focus from source app
+- **PopButtonService**: Orchestrates the lifecycle — on selection detected, waits 150ms, queries `TextSelectionService` for selected text, shows icon at cursor position, auto-dismisses after 5s
+- **Dismiss triggers**: Left click elsewhere, right click, scroll, keyboard, new selection
+- **Setting**: `MouseSelectionTranslate` in SettingsService (default: off), toggle in Settings → Behavior
+- **Flow**: `MouseHookService.OnDragSelectionEnd` → `PopButtonService.OnDragSelectionEnd` → `TextSelectionService.GetSelectedTextAsync` → `PopButtonWindow.ShowAt` → user clicks → `MiniWindowService.ShowWithText`
 
 ### IPC Architecture
 - `Easydict.SidecarClient` provides communication with external sidecar processes

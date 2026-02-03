@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Easydict.WinUI.Views.PopButtonWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="">
+
+    <Grid x:Name="RootGrid"
+          Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+          CornerRadius="6"
+          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+          BorderThickness="1"
+          Padding="0"
+          Opacity="0.75">
+
+        <Button x:Name="TranslateButton"
+                Width="30" Height="30"
+                Padding="0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="Transparent"
+                BorderThickness="0"
+                CornerRadius="6"
+                ToolTipService.ToolTip="Translate selection"
+                Click="OnTranslateButtonClick"
+                PointerEntered="OnTranslateButtonPointerEntered"
+                PointerExited="OnTranslateButtonPointerExited"
+                PointerPressed="OnTranslateButtonPointerPressed"
+                PointerReleased="OnTranslateButtonPointerReleased"
+                PointerCanceled="OnTranslateButtonPointerCanceled"
+                PointerCaptureLost="OnTranslateButtonPointerCaptureLost">
+            <FontIcon Glyph="&#xE8C1;"
+                      FontSize="14"
+                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+        </Button>
+    </Grid>
+</Window>

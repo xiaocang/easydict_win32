@@ -95,6 +95,12 @@ public sealed class SettingsService
     public bool ClipboardMonitoring { get; set; } = false;
     public bool AutoTranslate { get; set; } = false;
 
+    /// <summary>
+    /// Enable mouse selection translation: a floating translate button appears
+    /// after selecting text in any application. Click the button to translate.
+    /// </summary>
+    public bool MouseSelectionTranslate { get; set; } = false;
+
     // Hotkey settings (stored as string like "Ctrl+Alt+T")
     public string ShowWindowHotkey { get; set; } = "Ctrl+Alt+T";
     public string TranslateSelectionHotkey { get; set; } = "Ctrl+Alt+D";
@@ -338,6 +344,7 @@ public sealed class SettingsService
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
+        MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), false);
         ShowWindowHotkey = GetValue(nameof(ShowWindowHotkey), "Ctrl+Alt+T");
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
@@ -447,6 +454,7 @@ public sealed class SettingsService
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
+        _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;

@@ -489,6 +489,9 @@
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>監控剪貼簿文字</value>
   </data>
+  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
+    <value>劃詞翻譯（選取文字 → 點擊浮動圖示）</value>
+  </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
     <value>始終置頂</value>
   </data>

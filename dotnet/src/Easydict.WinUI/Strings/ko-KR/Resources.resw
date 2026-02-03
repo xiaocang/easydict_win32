@@ -489,6 +489,9 @@
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>클립보드 텍스트 모니터링</value>
   </data>
+  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
+    <value>마우스 선택 번역 (텍스트 선택 → 플로팅 아이콘 클릭)</value>
+  </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
     <value>항상 위</value>
   </data>

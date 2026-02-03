@@ -17,7 +17,7 @@ from PIL import Image
 
 
 def create_unplated_icon(src_path: str, out_path: str) -> None:
-    """Remove white rounded-rect background via flood fill from transparent edges."""
+    """Remove white rounded-rect background via flood fill from border pixels."""
     img = Image.open(src_path).convert("RGBA")
     w, h = img.size
     pixels = img.load()
@@ -25,17 +25,22 @@ def create_unplated_icon(src_path: str, out_path: str) -> None:
     visited = [[False] * w for _ in range(h)]
     to_clear: set[tuple[int, int]] = set()
 
-    # Seed BFS with all fully transparent pixels
+    # Seed BFS from border pixels that are near-white or transparent.
+    # The macOS source icon is fully opaque (alpha=255 everywhere), so we
+    # cannot rely on transparent pixels.  Border pixels are guaranteed to be
+    # background (white corners of the squircle).
     queue: deque[tuple[int, int]] = deque()
     for y in range(h):
         for x in range(w):
-            _, _, _, a = pixels[x, y]
-            if a < 10:
-                queue.append((x, y))
-                visited[y][x] = True
-                to_clear.add((x, y))
+            if x == 0 or x == w - 1 or y == 0 or y == h - 1:
+                r, g, b, a = pixels[x, y]
+                brightness = (r + g + b) / 3
+                if brightness > 190 or a < 10:
+                    queue.append((x, y))
+                    visited[y][x] = True
+                    to_clear.add((x, y))
 
-    print(f"  Seeds: {len(queue)} transparent pixels")
+    print(f"  Seeds: {len(queue)} border pixels")
 
     # 8-connected flood fill: expand to adjacent near-white or semi-transparent pixels
     dx = [0, 0, 1, -1, 1, 1, -1, -1]
@@ -48,7 +53,7 @@ def create_unplated_icon(src_path: str, out_path: str) -> None:
             if 0 <= nx < w and 0 <= ny < h and not visited[ny][nx]:
                 r, g, b, a = pixels[nx, ny]
                 brightness = (r + g + b) / 3
-                if (brightness > 220 and a > 100) or a < 128:
+                if (brightness > 190 and a > 100) or a < 128:
                     visited[ny][nx] = True
                     to_clear.add((nx, ny))
                     queue.append((nx, ny))

@@ -5,7 +5,7 @@ param(
     [string]$Version = "0.2.0",
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
-    [string]$CertPath = ".\.certsmatching.pfx",
+    [string]$CertPath = ".\certs\dev-signing.pfx",
     [string]$CertPassword = $(if ($env:CERT_PASSWORD) { $env:CERT_PASSWORD } else { "password" })
 )
 

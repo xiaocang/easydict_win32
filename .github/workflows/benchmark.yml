@@ -1,0 +1,60 @@
+name: Performance Benchmarks
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'dotnet/src/Easydict.WinUI/Services/MouseHookService.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/PopButtonService.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/TextSelectionService.cs'
+      - 'dotnet/src/Easydict.WinUI/Views/PopButtonWindow.xaml.cs'
+      - 'dotnet/tests/Easydict.WinUI.Tests/Services/SelectionPerformanceTests.cs'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'dotnet/src/Easydict.WinUI/Services/MouseHookService.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/PopButtonService.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/TextSelectionService.cs'
+      - 'dotnet/src/Easydict.WinUI/Views/PopButtonWindow.xaml.cs'
+      - 'dotnet/tests/Easydict.WinUI.Tests/Services/SelectionPerformanceTests.cs'
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: dotnet/global.json
+
+      - name: Restore dependencies
+        working-directory: dotnet
+        run: dotnet restore Easydict.Win32.sln -p:Platform=x64
+
+      - name: Build (Release)
+        working-directory: dotnet
+        run: dotnet build tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj -c Release -p:Platform=x64
+
+      - name: Run performance benchmarks
+        working-directory: dotnet
+        run: >-
+          dotnet test tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj
+          --no-build
+          -c Release
+          -p:Platform=x64
+          --filter "Category=Performance"
+          --verbosity normal
+          --logger "trx;LogFileName=benchmark-results.trx"
+          --logger "console;verbosity=detailed"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results
+          path: dotnet/**/TestResults/benchmark-results.trx

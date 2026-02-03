@@ -124,10 +124,12 @@ public sealed class PopButtonService : IDisposable
     /// </summary>
     public void Dismiss(string reason = "Unknown")
     {
-        if (_selectionCts != null)
+        var oldSelectionCts = Interlocked.Exchange(ref _selectionCts, null);
+        if (oldSelectionCts != null)
         {
             Debug.WriteLine($"[PopButtonService] Dismissing due to: {reason}");
-            _selectionCts?.Cancel();
+            oldSelectionCts.Cancel();
+            oldSelectionCts.Dispose();
         }
         CancelAutoDismissTimer();
         _pendingText = null;

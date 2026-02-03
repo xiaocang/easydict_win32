@@ -85,16 +85,6 @@ public class PopButtonServiceTests
     }
 
     [Fact]
-    public void SettingsService_MouseSelectionTranslate_DefaultIsFalse()
-    {
-        // The feature should be opt-in (disabled by default)
-        // We can't test SettingsService directly (singleton with file I/O),
-        // but we verify the default value pattern
-        var defaultValue = false;
-        defaultValue.Should().BeFalse("MouseSelectionTranslate should default to false for safety");
-    }
-
-    [Fact]
     public void DragDetector_RapidConsecutiveOperations_AllDetected()
     {
         // Verify the detector handles rapid consecutive drag-select cycles

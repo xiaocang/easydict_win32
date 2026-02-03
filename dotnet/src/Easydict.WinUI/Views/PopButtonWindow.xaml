@@ -13,7 +13,8 @@
           CornerRadius="6"
           BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
           BorderThickness="1"
-          Padding="0">
+          Padding="0"
+          Opacity="0.75">
 
         <Button x:Name="TranslateButton"
                 Width="30" Height="30"
@@ -24,7 +25,13 @@
                 BorderThickness="0"
                 CornerRadius="6"
                 ToolTipService.ToolTip="Translate selection"
-                Click="OnTranslateButtonClick">
+                Click="OnTranslateButtonClick"
+                PointerEntered="OnTranslateButtonPointerEntered"
+                PointerExited="OnTranslateButtonPointerExited"
+                PointerPressed="OnTranslateButtonPointerPressed"
+                PointerReleased="OnTranslateButtonPointerReleased"
+                PointerCanceled="OnTranslateButtonPointerCanceled"
+                PointerCaptureLost="OnTranslateButtonPointerCaptureLost">
             <FontIcon Glyph="&#xE8C1;"
                       FontSize="14"
                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />

@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using WinRT.Interop;
 
@@ -58,9 +60,30 @@ public sealed partial class PopButtonWindow : Window
     [LibraryImport("user32.dll")]
     private static partial int GetDpiForWindow(IntPtr hWnd);
 
+    [LibraryImport("user32.dll", EntryPoint = "LoadCursorW", SetLastError = true)]
+    private static partial IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
+
+    [LibraryImport("user32.dll")]
+    private static partial IntPtr SetCursor(IntPtr hCursor);
+
+    // Standard cursor constants
+    private const int IDC_ARROW = 32512;
+    private const int IDC_HAND = 32649;
+
     private readonly IntPtr _hwnd;
     private readonly AppWindow? _appWindow;
     private bool _isVisible;
+
+    // Hover/pressed interaction state
+    private const double BaseOpacity = 0.75;
+    private const double HoverOpacity = 1.0;
+    private const double PressedOpacity = 0.85;
+    private bool _isPointerOver;
+    private bool _isPressed;
+
+    // Cached cursor handles
+    private static readonly IntPtr _arrowCursor = LoadCursor(IntPtr.Zero, (IntPtr)IDC_ARROW);
+    private static readonly IntPtr _handCursor = LoadCursor(IntPtr.Zero, (IntPtr)IDC_HAND);
 
     /// <summary>
     /// Fired when the user clicks the translate button.
@@ -131,6 +154,11 @@ public sealed partial class PopButtonWindow : Window
     /// <param name="screenY">Screen Y coordinate of the selection end point</param>
     public void ShowAt(int screenX, int screenY)
     {
+        // Reset interaction state when showing
+        _isPointerOver = false;
+        _isPressed = false;
+        RootGrid.Opacity = BaseOpacity;
+
         var dpi = GetDpiForWindow(_hwnd);
         var scale = dpi / 96.0;
         var physicalSize = (int)(30 * scale);
@@ -180,6 +208,11 @@ public sealed partial class PopButtonWindow : Window
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_HIDEWINDOW);
         _isVisible = false;
 
+        // Reset interaction state when hiding to avoid stale visuals
+        _isPointerOver = false;
+        _isPressed = false;
+        RootGrid.Opacity = BaseOpacity;
+
         Debug.WriteLine("[PopButton] Hidden");
     }
 
@@ -198,5 +231,68 @@ public sealed partial class PopButtonWindow : Window
     {
         Debug.WriteLine("[PopButton] Translate button clicked");
         OnClicked?.Invoke();
+    }
+
+    private void OnTranslateButtonPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        _isPointerOver = true;
+        UpdateInteractionVisuals();
+    }
+
+    private void OnTranslateButtonPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        _isPointerOver = false;
+        _isPressed = false;
+        UpdateInteractionVisuals();
+    }
+
+    private void OnTranslateButtonPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _isPressed = true;
+        UpdateInteractionVisuals();
+    }
+
+    private void OnTranslateButtonPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _isPressed = false;
+        UpdateInteractionVisuals();
+    }
+
+    private void OnTranslateButtonPointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        _isPressed = false;
+        UpdateInteractionVisuals();
+    }
+
+    private void OnTranslateButtonPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        _isPressed = false;
+        _isPointerOver = false;
+        UpdateInteractionVisuals();
+    }
+
+    /// <summary>
+    /// Update opacity and cursor based on current pointer state.
+    /// </summary>
+    private void UpdateInteractionVisuals()
+    {
+        if (_isPressed)
+        {
+            // Pressed state: slightly less opaque than hover
+            RootGrid.Opacity = PressedOpacity;
+            SetCursor(_handCursor);
+        }
+        else if (_isPointerOver)
+        {
+            // Hover state: fully opaque with hand cursor
+            RootGrid.Opacity = HoverOpacity;
+            SetCursor(_handCursor);
+        }
+        else
+        {
+            // Default state: semi-transparent with arrow cursor
+            RootGrid.Opacity = BaseOpacity;
+            SetCursor(_arrowCursor);
+        }
     }
 }

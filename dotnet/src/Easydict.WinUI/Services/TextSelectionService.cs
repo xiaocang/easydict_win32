@@ -157,8 +157,8 @@ public static class TextSelectionService
             Debug.WriteLine($"[TextSelectionService] Failed to get process name: {ex.Message}");
         }
 
-        var isElectron = processName != null && ElectronProcessNames.Contains(processName);
-        var isTerminal = processName != null && TerminalProcessNames.Contains(processName);
+        var isElectron = IsElectronApp(processName);
+        var isTerminal = IsTerminalApp(processName);
 
         // Track if we already tried clipboard for Electron to avoid double Ctrl+C
         bool clipboardAlreadyAttempted = false;
@@ -325,47 +325,17 @@ public static class TextSelectionService
     }
 
     /// <summary>
-    /// Checks if the foreground window belongs to an Electron app.
+    /// Checks if the given process name belongs to an Electron app.
     /// </summary>
-    private static bool IsElectronApp()
-    {
-        try
-        {
-            var hWnd = GetForegroundWindow();
-            if (hWnd == IntPtr.Zero) return false;
-
-            if (GetWindowThreadProcessId(hWnd, out uint processId) == 0) return false;
-
-            using var process = Process.GetProcessById((int)processId);
-            return ElectronProcessNames.Contains(process.ProcessName);
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    private static bool IsElectronApp(string? processName)
+        => processName != null && ElectronProcessNames.Contains(processName);
 
     /// <summary>
-    /// Checks if the foreground window belongs to a terminal app.
+    /// Checks if the given process name belongs to a terminal app.
     /// Ctrl+C sends SIGINT in terminal apps, so we should not use clipboard method.
     /// </summary>
-    private static bool IsTerminalApp()
-    {
-        try
-        {
-            var hWnd = GetForegroundWindow();
-            if (hWnd == IntPtr.Zero) return false;
-
-            if (GetWindowThreadProcessId(hWnd, out uint processId) == 0) return false;
-
-            using var process = Process.GetProcessById((int)processId);
-            return TerminalProcessNames.Contains(process.ProcessName);
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    private static bool IsTerminalApp(string? processName)
+        => processName != null && TerminalProcessNames.Contains(processName);
 
     /// <summary>
     /// Gets selected text using clipboard method (Ctrl+C).

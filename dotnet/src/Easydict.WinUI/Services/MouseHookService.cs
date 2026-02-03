@@ -199,10 +199,10 @@ public sealed partial class MouseHookService : IDisposable
     {
         if (nCode >= 0)
         {
-            // Read the POINT directly from unmanaged memory without allocating a boxed copy.
-            // Marshal.PtrToStructure<MSLLHOOKSTRUCT> allocates on every call; since this callback
-            // fires on every mouse message (including WM_MOUSEMOVE at high frequency), the
-            // allocation pressure causes GC pauses that manifest as UI micro-stutters.
+            // Read the POINT directly from unmanaged memory to avoid the marshalling overhead
+            // of Marshal.PtrToStructure<MSLLHOOKSTRUCT>, which copies the entire struct on every
+            // call. Since this callback fires on every mouse message (including WM_MOUSEMOVE at
+            // high frequency), the repeated marshalling adds measurable overhead to the hot path.
             var pt = ((MSLLHOOKSTRUCT*)lParam)->pt;
             ProcessMouseMessage((int)wParam, pt);
         }
@@ -275,8 +275,10 @@ public sealed partial class MouseHookService : IDisposable
                 else
                 {
                     // Non-drag click — check for multi-click (double/triple).
-                    // Use cached double-click time to avoid P/Invoke on every click.
-                    var clickResult = ClickDetector.OnClick(pt, Environment.TickCount64, _cachedDoubleClickTime);
+                    // Use cached double-click time; fall back to P/Invoke if Install() wasn't called
+                    // (e.g. unit tests calling ProcessMouseMessage directly).
+                    var dct = _cachedDoubleClickTime != 0 ? _cachedDoubleClickTime : GetDoubleClickTime();
+                    var clickResult = ClickDetector.OnClick(pt, Environment.TickCount64, dct);
                     if (clickResult.ClickCount >= 2)
                     {
                         // Start/restart a short timer to allow for additional clicks
@@ -323,7 +325,8 @@ public sealed partial class MouseHookService : IDisposable
             {
                 // Wait slightly longer than the system double-click time
                 // to allow additional clicks (double → triple)
-                var delay = (int)_cachedDoubleClickTime + 50;
+                var dctTimer = _cachedDoubleClickTime != 0 ? _cachedDoubleClickTime : GetDoubleClickTime();
+                var delay = (int)dctTimer + 50;
                 await Task.Delay(delay, ct);
 
                 if (!ct.IsCancellationRequested)

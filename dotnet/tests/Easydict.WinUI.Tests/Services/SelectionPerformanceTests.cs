@@ -14,11 +14,28 @@ namespace Easydict.WinUI.Tests.Services;
 /// Each test asserts a maximum time budget derived from the requirement that
 /// low-level hook callbacks must return within ~200ms to avoid Windows
 /// removing the hook, but we target much tighter budgets for smooth UX.
+///
+/// Tests include JIT warmup iterations and GC collection before measurement
+/// to reduce noise. Parallelization is disabled to prevent cross-test
+/// interference on shared CI runners.
 /// </summary>
 [Trait("Category", "Performance")]
+[Collection("Performance")] // Disable xUnit parallel execution for this class
 public class SelectionPerformanceTests
 {
     private static POINT Pt(int x, int y) => new() { x = x, y = y };
+
+    /// <summary>
+    /// Run a warmup pass to ensure JIT compilation is complete, then collect
+    /// GC garbage to reduce measurement noise.
+    /// </summary>
+    private static void WarmUpAndCollect(Action warmup)
+    {
+        warmup();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+    }
 
     // --- DragDetector throughput ---
 
@@ -30,6 +47,13 @@ public class SelectionPerformanceTests
         var detector = new DragDetector();
         detector.OnLeftButtonDown(Pt(0, 0));
 
+        WarmUpAndCollect(() =>
+        {
+            for (int i = 0; i < 100; i++)
+                detector.OnMouseMove(Pt(i % 5, i % 5));
+        });
+
+        detector.OnLeftButtonDown(Pt(0, 0));
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 10_000; i++)
         {
@@ -46,6 +70,16 @@ public class SelectionPerformanceTests
     {
         // Full drag cycle: down → move → up. Measures per-selection overhead.
         var detector = new DragDetector();
+
+        WarmUpAndCollect(() =>
+        {
+            for (int i = 0; i < 100; i++)
+            {
+                detector.OnLeftButtonDown(Pt(0, 0));
+                detector.OnMouseMove(Pt(100, 0));
+                detector.OnLeftButtonUp(Pt(100, 0));
+            }
+        });
 
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 10_000; i++)
@@ -69,6 +103,12 @@ public class SelectionPerformanceTests
         var detector = new MultiClickDetector();
         var pt = Pt(100, 100);
 
+        WarmUpAndCollect(() =>
+        {
+            for (int i = 0; i < 100; i++)
+                detector.OnClick(pt, 1000 + i * 100, 500);
+        });
+
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 10_000; i++)
         {
@@ -86,6 +126,16 @@ public class SelectionPerformanceTests
         // Simulates rapid double-clicking (e.g. selecting words quickly).
         var detector = new MultiClickDetector();
         var pt = Pt(100, 100);
+
+        WarmUpAndCollect(() =>
+        {
+            for (int i = 0; i < 100; i++)
+            {
+                detector.OnClick(pt, i * 600, 500);
+                detector.OnClick(pt, i * 600 + 200, 500);
+                detector.Reset();
+            }
+        });
 
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 5_000; i++)
@@ -110,6 +160,12 @@ public class SelectionPerformanceTests
         // should have minimal overhead — no WindowFromPoint/GetAncestor calls.
         using var service = new MouseHookService();
 
+        WarmUpAndCollect(() =>
+        {
+            for (int i = 0; i < 100; i++)
+                service.ProcessMouseMessage(0x0200, Pt(i, i));
+        });
+
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 10_000; i++)
         {
@@ -129,6 +185,16 @@ public class SelectionPerformanceTests
         int mouseDownCount = 0;
         service.OnMouseDown += () => mouseDownCount++;
 
+        WarmUpAndCollect(() =>
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                service.ProcessMouseMessage(0x0201, Pt(100, 100));
+                service.ProcessMouseMessage(0x0202, Pt(100, 100));
+            }
+        });
+
+        mouseDownCount = 0; // reset after warmup
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 1_000; i++)
         {
@@ -151,6 +217,17 @@ public class SelectionPerformanceTests
         int dragCount = 0;
         service.OnDragSelectionEnd += _ => dragCount++;
 
+        WarmUpAndCollect(() =>
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                service.ProcessMouseMessage(0x0201, Pt(0, 0));
+                service.ProcessMouseMessage(0x0200, Pt(100, 0));
+                service.ProcessMouseMessage(0x0202, Pt(100, 0));
+            }
+        });
+
+        dragCount = 0; // reset after warmup
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 1_000; i++)
         {
@@ -178,6 +255,14 @@ public class SelectionPerformanceTests
         service.OnRightMouseDown += () => totalEvents++;
         service.OnKeyDown += () => totalEvents++;
 
+        WarmUpAndCollect(() =>
+        {
+            service.ProcessMouseMessage(0x020A, Pt(0, 0));
+            service.ProcessMouseMessage(0x0204, Pt(0, 0));
+            service.ProcessKeyboardMessage(0x0100);
+        });
+
+        totalEvents = 0; // reset after warmup
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 10_000; i++)
         {
@@ -211,17 +296,18 @@ public class SelectionPerformanceTests
     public void MultiClickDetector_StateSize_IsMinimal()
     {
         // Verify the detector doesn't accumulate unbounded state.
+        // Clicks are spaced 1000ms apart with a 500ms double-click window,
+        // so each click exceeds the time threshold and resets the counter.
         var detector = new MultiClickDetector();
 
-        // Simulate 10k clicks — state should not grow
         for (int i = 0; i < 10_000; i++)
         {
-            detector.OnClick(Pt(100, 100), i * 100, 500);
+            detector.OnClick(Pt(100, 100), i * 1000, 500);
         }
 
-        // ClickCount should be bounded (resets when time/distance threshold exceeded)
-        detector.ClickCount.Should().BeLessThan(100,
-            "click count should reset periodically, not accumulate unboundedly");
+        // Each click resets to 1 because elapsed (1000ms) > doubleClickTime (500ms)
+        detector.ClickCount.Should().Be(1,
+            "click count should reset when time between clicks exceeds double-click window");
     }
 
     // --- Timing constant sanity checks ---

@@ -78,6 +78,10 @@
 
 - **TTS（文字转语音）** - 使用 Windows Speech Synthesis 朗读原文和译文
 
+- **Windows 右键菜单** - 在 Windows 资源管理器中右键选择"使用 Easydict 翻译"，通过命名管道 IPC 将剪贴板文本发送到主窗口
+
+> **注意：** 暂不支持划词悬浮图标翻译。请使用全局快捷键（`Ctrl+Alt+M`）或右键菜单代替。
+
 ### 截图
 
 ![总览](screenshot/overview.png)
@@ -185,7 +189,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | 翻译服务 | 25+ | 17 |
 | OCR 截图翻译 | 支持 | 不支持 |
 | TTS | 支持 | 支持 |
-| 划词翻译 | 支持 | 支持 |
+| 划词翻译 | 支持（悬浮图标） | 快捷键 + 右键菜单 |
 | 窗口类型 | 3 | 3 |
 | 全局快捷键 | 10+ | 6 |
 | LLM 流式翻译 | 支持 | 支持 |

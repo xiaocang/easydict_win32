@@ -78,6 +78,10 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **TTS (Text-to-Speech)** - Play source and translated text using Windows Speech Synthesis
 
+- **Windows Context Menu** - Right-click "Translate with Easydict" in Windows Explorer, sends clipboard text to main window via named pipe IPC
+
+> **Note:** Mouse selection floating icon translation (划词悬浮图标翻译) is not yet supported. Use global hotkeys (`Ctrl+Alt+M`) or the right-click context menu instead.
+
 ### Screenshots
 
 ![Overview](screenshot/overview.png)
@@ -185,7 +189,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Translation Services | 25+ | 17 |
 | OCR Screenshot Translation | Yes | No |
 | TTS | Yes | Yes |
-| Selection Translation | Yes | Yes |
+| Selection Translation | Yes (floating icon) | Hotkey + Context Menu |
 | Window Types | 3 | 3 |
 | Global Hotkeys | 10+ | 6 |
 | LLM Streaming | Yes | Yes |

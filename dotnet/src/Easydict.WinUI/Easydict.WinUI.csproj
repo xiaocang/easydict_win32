@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Version>0.2.3</Version>
-        <AssemblyVersion>0.2.3.0</AssemblyVersion>
-        <FileVersion>0.2.3.0</FileVersion>
+        <Version>0.3.0</Version>
+        <AssemblyVersion>0.3.0.0</AssemblyVersion>
+        <FileVersion>0.3.0.0</FileVersion>
 
         <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
         <!-- MinVersion must be > 10.0.17134.0 for Windows Store submission -->

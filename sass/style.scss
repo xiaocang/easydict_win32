@@ -146,6 +146,24 @@ img { max-width: 100%; height: auto; }
     margin-bottom: 16px;
   }
 
+  .hero-inspired {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 0.88rem;
+    color: $text-muted;
+    margin-bottom: 8px;
+
+    a {
+      color: $text-muted;
+      text-decoration: underline;
+      &:hover { color: $primary; }
+    }
+
+    svg { vertical-align: middle; }
+  }
+
   .hero-alt-download {
     font-size: 0.88rem;
     color: $text-muted;

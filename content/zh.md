@@ -8,64 +8,24 @@ path = "zh"
 screenshot = "img/overview.png"
 +++
 
-这是 [Easydict](https://github.com/tisfeng/Easydict) 的 Windows 移植版本，原版是一款 macOS 翻译词典应用。本项目使用 **Vibe Coding** — AI 辅助编程，将 Swift/SwiftUI 代码库迁移到 .NET 8 + WinUI 3。
-
-虽然功能尚未完全对齐 macOS 版本，但此移植版填补了 Windows 用户对便捷翻译工具的需求，支持全局快捷键和多种翻译服务。
+强大的 Windows 翻译词典应用，移植自广受好评的 macOS 应用 [Easydict](https://github.com/tisfeng/Easydict)。支持 17+ 翻译服务、全局快捷键、划词翻译，界面简洁现代。
 
 ## 功能特性
 
+- **多种翻译服务** — Google 翻译、必应、DeepL、OpenAI、Gemini、DeepSeek、Ollama 等，多项服务无需 API 密钥即可使用。
 
+- **LLM 流式翻译** — AI 服务翻译结果实时显示。
 
-## 安装
+- **划词翻译** — 在任意应用中选择文本，点击浮动按钮即可翻译。
 
-### 系统要求
+- **多种窗口模式** — 主窗口、紧凑迷你窗口、常驻固定窗口，适配不同使用场景。
 
-- Windows 10 版本 2004（内部版本 19041）或更高版本
-- x64 或 ARM64 处理器
+- **全局快捷键** — 通过 `Ctrl+Alt+T`、`Ctrl+Alt+D`、`Ctrl+Alt+M` 等快捷键快速唤起。
 
-### 下载
+- **剪贴板监听** — 自动翻译复制的文本。
 
-从 [Releases](https://github.com/xiaocang/easydict_win32/releases) 页面下载。
+- **深色 / 浅色主题** — 跟随 Windows 系统主题自动切换。
 
-#### 便携版（推荐）
+- **文字转语音** — 使用 Windows 语音合成朗读发音。
 
-**文件：** `easydict_win32-vX.Y.Z-x64.zip`
-
-- 无需安装 - 解压即用
-- 无需管理员权限
-- 自包含（内含 .NET 运行时）
-- 首次运行可能触发 Windows SmartScreen 警告 - 点击「更多信息」→「仍要运行」
-
-```powershell
-# 解压并运行
-Expand-Archive easydict_win32-v1.0.0-x64.zip -DestinationPath Easydict
-.\Easydict\Easydict.WinUI.exe
-```
-
-#### 验证下载（可选）
-
-每个发布版本都包含 SHA256 校验和文件。
-
-```bash
-# Linux/macOS/WSL
-sha256sum -c checksums-x64.sha256 --ignore-missing
-
-# PowerShell
-$expected = (Get-Content checksums-x64.sha256 | Select-String "easydict_win32").ToString().Split()[0]
-$actual = (Get-FileHash easydict_win32-v1.0.0-x64.zip -Algorithm SHA256).Hash.ToLower()
-if ($expected -eq $actual) { "OK" } else { "FAILED" }
-```
-
-### 从源码构建
-
-```powershell
-# 克隆仓库
-git clone https://github.com/xiaocang/easydict_win32.git
-cd easydict_win32/dotnet
-
-# 构建
-dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release
-
-# 运行
-dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
-```
+- **系统托盘** — 最小化到托盘后台运行。

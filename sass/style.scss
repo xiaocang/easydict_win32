@@ -143,7 +143,19 @@ img { max-width: 100%; height: auto; }
     gap: 14px;
     justify-content: center;
     flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .hero-alt-download {
+    font-size: 0.88rem;
+    color: $text-muted;
     margin-bottom: 48px;
+
+    a {
+      color: $text-muted;
+      text-decoration: underline;
+      &:hover { color: $primary; }
+    }
   }
 }
 
@@ -398,6 +410,11 @@ img { max-width: 100%; height: auto; }
       width: 100%;
       justify-content: center;
     }
+  }
+
+  .download-card-primary {
+    border-color: rgba($primary, 0.3);
+    background: lighten($bg-card, 3%);
   }
 }
 

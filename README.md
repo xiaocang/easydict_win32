@@ -74,6 +74,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **High DPI Support** - Per-Monitor V2 DPI awareness
 
+- **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window
+
 - **Dark/Light Theme** - Follows system theme
 
 - **TTS (Text-to-Speech)** - Play source and translated text using Windows Speech Synthesis

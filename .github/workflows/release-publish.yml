@@ -260,11 +260,62 @@ jobs:
           # Cleanup temp directory
           Remove-Item -Path $tempDir -Recurse -Force
 
+      # Build EXE installer using Inno Setup (no code signing needed)
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          # Verify installation
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            Write-Error "Inno Setup installation failed - ISCC.exe not found"
+            exit 1
+          }
+          Write-Host "Inno Setup installed: $iscc"
+
+      - name: Build EXE installer
+        shell: pwsh
+        run: |
+          $publishDir = (Resolve-Path "dotnet/publish/${{ matrix.platform }}").Path
+          $issFile = (Resolve-Path "dotnet/installer/Easydict.iss").Path
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+
+          # Remove PDB files before packaging (same as ZIP)
+          Get-ChildItem -Path $publishDir -Filter "*.pdb" -Recurse | Remove-Item -Force
+
+          & $iscc `
+            /DAppVersion=${{ steps.version.outputs.BASE_VERSION }} `
+            /DTag=${{ steps.version.outputs.VERSION }} `
+            /DPlatform=${{ matrix.platform }} `
+            "/DPublishDir=$publishDir" `
+            $issFile
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup compilation failed"
+            exit 1
+          }
+
+          $outputFile = "dotnet/installer-output/Easydict-v${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-setup.unsigned.exe"
+          if (Test-Path $outputFile) {
+            $sizeMB = [math]::Round((Get-Item $outputFile).Length / 1MB, 2)
+            Write-Host "EXE installer created: $outputFile ($sizeMB MB)"
+          } else {
+            Write-Error "Expected installer not found: $outputFile"
+            exit 1
+          }
+
       - name: Upload ZIP as artifact
         uses: actions/upload-artifact@v4
         with:
           name: easydict-zip-${{ matrix.platform }}
           path: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          retention-days: 7
+
+      - name: Upload EXE installer as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easydict-installer-${{ matrix.platform }}
+          path: dotnet/installer-output/Easydict-v${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-setup.unsigned.exe
           retention-days: 7
 
       - name: Upload MSIX as artifact
@@ -293,6 +344,13 @@ jobs:
         with:
           pattern: easydict-zip-*
           path: zip-packages
+          merge-multiple: true
+
+      - name: Download all EXE installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: easydict-installer-*
+          path: installer-packages
           merge-multiple: true
 
       - name: Create MSIX Bundle
@@ -385,6 +443,7 @@ jobs:
           files: |
             Easydict-${{ github.ref_name }}.unsigned.msixbundle
             zip-packages/*.zip
+            installer-packages/*.exe
           generate_release_notes: true
 
   publish-winget:
@@ -396,8 +455,9 @@ jobs:
     if: ${{ !github.event.release.prerelease }}
 
     steps:
-      # Note: WinGet submission targets x64 only as it's the most common architecture.
-      # x86 and arm64 builds are available in GitHub Releases for manual download.
+      # Note: WinGet submission targets the x64 EXE installer.
+      # Inno Setup EXE installers are natively supported by winget (InstallerType: inno).
+      # No code signing certificate is required.
       # WINGET_TOKEN requires a GitHub PAT with public_repo scope.
       # Create at: https://github.com/settings/tokens
       # Then add as repository secret: Settings > Secrets > Actions > New repository secret
@@ -405,5 +465,5 @@ jobs:
         uses: vedantmgoyal2009/winget-releaser@v2
         with:
           identifier: xiaocang.EasydictforWindows
-          installers-regex: 'easydict_win32-v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?-x64\.zip$'
+          installers-regex: 'Easydict-v[0-9]+\.[0-9]+\.[0-9]+-x64-setup\.unsigned\.exe$'
           token: ${{ secrets.WINGET_TOKEN }}

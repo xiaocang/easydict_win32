@@ -5,6 +5,9 @@
 
 # MSIX packaging directory
 msix/
+
+# EXE installer output
+installer-output/
 # Build output directories
 bin/
 obj/

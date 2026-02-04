@@ -8,6 +8,7 @@
 .PHONY: msix msix-x64 msix-x86 msix-arm64 msix-all
 .PHONY: fix-msix-minversion
 .PHONY: cert-generate cert-install sign sign-all
+.PHONY: installer-x64 installer-x86 installer-arm64 installer
 
 # Certificate configuration
 # CERT_PASSWORD must be explicitly provided for cert-related targets
@@ -200,6 +201,25 @@ endif
 	@pwsh -ExecutionPolicy Bypass -File scripts/Fix-MsixMinVersion.ps1 -MsixPath "$(MSIX)"
 
 # ============================================================
+# EXE Installer (requires Inno Setup 6: https://jrsoftware.org/isinfo.php)
+# ============================================================
+
+# Create EXE installer for x64
+installer-x64: publish-x64
+	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform x64 -Version $(VERSION)
+
+# Create EXE installer for x86
+installer-x86: publish-x86
+	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform x86 -Version $(VERSION)
+
+# Create EXE installer for ARM64
+installer-arm64: publish-arm64
+	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform arm64 -Version $(VERSION)
+
+# Create EXE installer for default platform (x64)
+installer: installer-x64
+
+# ============================================================
 # Run application
 # ============================================================
 
@@ -251,6 +271,12 @@ help:
 	@echo "  make sign CERT=... CERT_PASSWORD=... MSIX=... - Sign MSIX package"
 	@echo "  make sign-all CERT=... CERT_PASSWORD=...      - Sign all MSIX packages"
 	@echo "  make fix-msix-minversion MSIX=...             - Fix MinVersion in MSIX (WindowsAppSDK #5598)"
+	@echo ""
+	@echo "EXE Installer (requires Inno Setup 6):"
+	@echo "  make installer      - Create EXE installer (x64)"
+	@echo "  make installer-x64  - Create EXE installer for x64"
+	@echo "  make installer-x86  - Create EXE installer for x86"
+	@echo "  make installer-arm64 - Create EXE installer for ARM64"
 	@echo ""
 	@echo "Variables:"
 	@echo "  VERSION=X.Y.Z.W   - Set version for MSIX package (default: 0.1.0.0)"

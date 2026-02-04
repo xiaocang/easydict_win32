@@ -1,0 +1,14 @@
+name: Trigger Pages Deploy on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger pages deployment
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          event-type: release-published

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <span class="hero-badge">Open Source &middot; Free</span>
+    <h1>
+      {{ page.title }}
+    </h1>
+    <p class="hero-desc">{{ page.description }}</p>
+    <div class="hero-actions">
+      <a href="{{ config.extra.store_url }}" target="_blank" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
+        Get it from Microsoft Store
+      </a>
+      <a href="{{ config.extra.github_url }}" target="_blank" class="btn btn-outline">
+        <svg viewBox="0 0 16 16" fill="currentColor" width="18" height="18"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        Source Code
+      </a>
+    </div>
+    <p class="hero-alt-download">
+      Also available as <a href="{{ config.extra.portable_url }}" target="_blank">portable ZIP</a> (no install needed)
+    </p>
+  </div>
+</section>
+
+<!-- Screenshot -->
+{% if page.extra.screenshot %}
+<section class="screenshot-section">
+  <div class="container">
+    <div class="screenshot-wrapper">
+      <img src="{{ get_url(path=page.extra.screenshot) }}" alt="Easydict Screenshot">
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- Main content from markdown -->
+<section class="readme-content" id="features">
+  <div class="container">
+    <div class="content-body">
+      {{ page.content | safe }}
+    </div>
+  </div>
+</section>
+
+<!-- Download -->
+<section class="download" id="download">
+  <div class="container">
+    <div class="section-header">
+      <h2>Get Easydict</h2>
+      <p>Install from the Microsoft Store for the best experience.</p>
+    </div>
+    <div class="download-cards">
+      <div class="download-card download-card-primary">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#0078D4" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
+        </div>
+        <h3>Microsoft Store</h3>
+        <p>Recommended &middot; Auto-updates &middot; One-click install</p>
+        <a href="{{ config.extra.store_url }}" target="_blank" class="btn btn-primary">
+          Install Now
+        </a>
+      </div>
+      <div class="download-card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#6B7280" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </div>
+        <h3>Portable Version</h3>
+        <p>No installation required &middot; ZIP archive</p>
+        <a href="{{ config.extra.portable_url }}" target="_blank" class="btn btn-secondary">
+          Download ZIP
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

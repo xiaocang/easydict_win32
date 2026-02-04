@@ -1,6 +1,6 @@
-using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Easydict.TranslationService;
 
 namespace Easydict.WinUI.Services;
 
@@ -591,21 +591,30 @@ public sealed class SettingsService
     }
 
     /// <summary>
-    /// Detects restricted network by combining timezone + network probe.
-    /// Only runs when:
-    ///   1. Locale-based detection did NOT already flag China (those users already get Bing)
-    ///   2. User hasn't explicitly configured services yet (first launch)
+    /// Called when an international-only service fails with a network error during translation.
+    /// The translation failure itself serves as the network probe — no extra HTTP request needed.
+    /// Migrates default services from Google to Bing when:
+    ///   1. Locale didn't already detect China (those users already get Bing)
+    ///   2. User hasn't explicitly configured services yet (first launch defaults)
     ///   3. Timezone is China Standard Time (narrows scope to UTC+8 region)
-    ///   4. Google Translate is actually unreachable (confirms network restriction)
-    /// If all conditions are met, switches defaults from Google to Bing.
+    /// This avoids false positives: Singapore/HK users won't trigger this because their
+    /// international services work fine and never produce network errors.
     /// </summary>
-    public async Task CheckRestrictedNetworkAsync()
+    public void NotifyInternationalServiceFailed(string serviceId, TranslationErrorCode errorCode)
     {
+        // Only act on network-related failures
+        if (errorCode is not (TranslationErrorCode.NetworkError or TranslationErrorCode.Timeout))
+            return;
+
+        // Only act on international-only services
+        if (!IsInternationalOnlyService(serviceId))
+            return;
+
         // Skip if locale already detected China — defaults are already Bing
         if (IsChinaRegion())
             return;
 
-        // Skip if user has already saved settings (their choices should be respected)
+        // Skip if user has already explicitly configured services
         if (_settings.ContainsKey(nameof(EnableInternationalServices)))
             return;
 
@@ -613,13 +622,9 @@ public sealed class SettingsService
         if (!IsChineseTimezone())
             return;
 
-        // Both conditions met: Chinese timezone + not detected by locale.
-        // Now probe Google to confirm network restriction.
-        if (await IsGoogleReachableAsync())
-            return;
-
         System.Diagnostics.Debug.WriteLine(
-            "[SettingsService] Chinese timezone + Google unreachable → applying China defaults");
+            $"[SettingsService] International service '{serviceId}' failed with {errorCode} " +
+            "in Chinese timezone → applying China defaults");
 
         // Switch Google → Bing in all window enabled services
         ReplaceInList(MiniWindowEnabledServices, "google", "bing");
@@ -634,21 +639,6 @@ public sealed class SettingsService
         var index = list.IndexOf(oldValue);
         if (index >= 0)
             list[index] = newValue;
-    }
-
-    private static async Task<bool> IsGoogleReachableAsync()
-    {
-        try
-        {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            using var request = new HttpRequestMessage(HttpMethod.Head, "https://translate.googleapis.com");
-            using var response = await client.SendAsync(request);
-            return true; // Any response (even 4xx) means the host is reachable
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private T GetValue<T>(string key, T defaultValue)

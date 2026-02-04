@@ -303,12 +303,15 @@ public sealed partial class ServiceResultItem : UserControl
         var error = serviceResult.Error!;
         var message = error.Message;
 
-        // Append region hint for international services that fail with network errors
+        // Append region hint for international services that fail with network errors.
+        // Also notify SettingsService so it can lazily migrate defaults (timezone + failure = China network).
         var serviceId = serviceResult.ServiceId;
         if (!string.IsNullOrEmpty(serviceId) &&
             SettingsService.IsInternationalOnlyService(serviceId) &&
             error.ErrorCode is TranslationErrorCode.NetworkError or TranslationErrorCode.Timeout)
         {
+            SettingsService.Instance.NotifyInternationalServiceFailed(serviceId, error.ErrorCode);
+
             var loc = LocalizationService.Instance;
             var hint = loc.GetString("InternationalServiceUnavailableHint");
             if (!string.IsNullOrEmpty(hint))

@@ -1,3 +1,4 @@
+using Easydict.TranslationService;
 using Easydict.WinUI.Services;
 using FluentAssertions;
 using Xunit;
@@ -512,43 +513,62 @@ public class SettingsServiceTests
 
     #endregion
 
-    #region CheckRestrictedNetworkAsync Guard Tests
+    #region NotifyInternationalServiceFailed Tests
 
     [Fact]
-    public async Task CheckRestrictedNetworkAsync_SkipsWhenChinaLocaleDetected()
+    public void NotifyInternationalServiceFailed_DoesNotThrow()
     {
-        // If IsChinaRegion() returns true, the method should return immediately
-        // without making any network calls or changing settings.
-        // We verify by checking that settings remain unchanged after the call.
+        // The method should never throw regardless of environment
+        var act = () => _settings.NotifyInternationalServiceFailed("google", TranslationErrorCode.NetworkError);
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void NotifyInternationalServiceFailed_IgnoresNonNetworkErrors()
+    {
+        // Non-network errors should not trigger migration
         var originalMini = new List<string>(_settings.MiniWindowEnabledServices);
-        var originalMain = new List<string>(_settings.MainWindowEnabledServices);
-        var originalFixed = new List<string>(_settings.FixedWindowEnabledServices);
         var originalIntl = _settings.EnableInternationalServices;
 
         try
         {
-            await _settings.CheckRestrictedNetworkAsync();
+            _settings.NotifyInternationalServiceFailed("google", TranslationErrorCode.InvalidApiKey);
+            _settings.NotifyInternationalServiceFailed("google", TranslationErrorCode.UnsupportedLanguage);
+            _settings.NotifyInternationalServiceFailed("google", TranslationErrorCode.RateLimited);
+            _settings.NotifyInternationalServiceFailed("google", TranslationErrorCode.Unknown);
 
-            // If IsChinaRegion() is true, settings should not change
-            // If IsChinaRegion() is false, the method continues to other checks
-            // Either way, this should not throw
+            // Settings should remain unchanged for non-network errors
+            _settings.MiniWindowEnabledServices.Should().BeEquivalentTo(originalMini);
+            _settings.EnableInternationalServices.Should().Be(originalIntl);
         }
         finally
         {
             _settings.MiniWindowEnabledServices = originalMini;
-            _settings.MainWindowEnabledServices = originalMain;
-            _settings.FixedWindowEnabledServices = originalFixed;
             _settings.EnableInternationalServices = originalIntl;
-            _settings.Save();
         }
     }
 
     [Fact]
-    public async Task CheckRestrictedNetworkAsync_DoesNotThrow()
+    public void NotifyInternationalServiceFailed_IgnoresNonInternationalServices()
     {
-        // The method should handle all internal errors gracefully
-        var act = () => _settings.CheckRestrictedNetworkAsync();
-        await act.Should().NotThrowAsync();
+        // China-compatible services should not trigger migration
+        var originalMini = new List<string>(_settings.MiniWindowEnabledServices);
+        var originalIntl = _settings.EnableInternationalServices;
+
+        try
+        {
+            _settings.NotifyInternationalServiceFailed("bing", TranslationErrorCode.NetworkError);
+            _settings.NotifyInternationalServiceFailed("deepseek", TranslationErrorCode.Timeout);
+
+            // Settings should remain unchanged
+            _settings.MiniWindowEnabledServices.Should().BeEquivalentTo(originalMini);
+            _settings.EnableInternationalServices.Should().Be(originalIntl);
+        }
+        finally
+        {
+            _settings.MiniWindowEnabledServices = originalMini;
+            _settings.EnableInternationalServices = originalIntl;
+        }
     }
 
     #endregion

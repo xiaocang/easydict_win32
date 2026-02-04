@@ -216,79 +216,119 @@ img { max-width: 100%; height: auto; }
   }
 }
 
-// Features
-.features {
+// README content section (rendered from master branch markdown)
+.readme-content {
   padding: 80px 0;
 
-  .section-header {
-    text-align: center;
-    margin-bottom: 56px;
+  .content-body {
+    max-width: 800px;
+    margin: 0 auto;
 
     h2 {
-      font-size: 2.2rem;
+      font-size: 1.8rem;
       font-weight: 700;
-      margin-bottom: 12px;
+      margin-top: 48px;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid $border-light;
       letter-spacing: -0.01em;
-    }
 
-    p {
-      font-size: 1.05rem;
-      color: $text-muted;
-      max-width: 480px;
-      margin: 0 auto;
-    }
-  }
-
-  .features-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-  }
-
-  .feature-card {
-    background: #fff;
-    border-radius: $radius;
-    padding: 32px 28px;
-    border: 1px solid $border-light;
-    transition: all 0.25s;
-
-    &:hover {
-      box-shadow: $shadow;
-      transform: translateY(-3px);
-      border-color: transparent;
-    }
-
-    .feature-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 18px;
-      font-size: 1.5rem;
+      &:first-child { margin-top: 0; }
     }
 
     h3 {
-      font-size: 1.1rem;
+      font-size: 1.25rem;
       font-weight: 650;
+      margin-top: 32px;
+      margin-bottom: 12px;
+      color: $text-dark;
+    }
+
+    h4 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-top: 24px;
       margin-bottom: 8px;
     }
 
     p {
-      font-size: 0.9rem;
+      font-size: 0.95rem;
       color: $text-muted;
-      line-height: 1.65;
+      line-height: 1.75;
+      margin-bottom: 14px;
     }
+
+    ul, ol {
+      padding-left: 24px;
+      margin-bottom: 16px;
+    }
+
+    li {
+      font-size: 0.95rem;
+      color: $text-muted;
+      line-height: 1.75;
+      margin-bottom: 6px;
+    }
+
+    strong {
+      color: $text-dark;
+      font-weight: 600;
+    }
+
+    code {
+      background: rgba($primary, 0.06);
+      color: $primary-dark;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.88rem;
+    }
+
+    pre {
+      background: $bg-dark;
+      color: $text-light;
+      padding: 20px 24px;
+      border-radius: $radius;
+      overflow-x: auto;
+      margin-bottom: 20px;
+
+      code {
+        background: none;
+        color: inherit;
+        padding: 0;
+        font-size: 0.85rem;
+      }
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 0.9rem;
+
+      th, td {
+        padding: 10px 16px;
+        text-align: left;
+        border-bottom: 1px solid $border-light;
+      }
+
+      th {
+        font-weight: 600;
+        color: $text-dark;
+        background: rgba($primary, 0.03);
+      }
+
+      td { color: $text-muted; }
+    }
+
+    img {
+      border-radius: $radius;
+      box-shadow: $shadow;
+      margin: 12px 0;
+    }
+
+    a { text-decoration: underline; }
   }
 }
-
-.icon-translate { background: rgba(#0078D4, 0.1); }
-.icon-services { background: rgba(#00B7C3, 0.1); }
-.icon-ocr { background: rgba(#E74C3C, 0.1); }
-.icon-hotkey { background: rgba(#F39C12, 0.1); }
-.icon-theme { background: rgba(#9B59B6, 0.1); }
-.icon-open { background: rgba(#27AE60, 0.1); }
 
 // Download section
 .download {

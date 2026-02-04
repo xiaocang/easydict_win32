@@ -6,13 +6,9 @@
   <div class="container">
     <span class="hero-badge">Open Source &middot; Free</span>
     <h1>
-      Easy to <span class="highlight">Look Up Words</span><br>
-      or Translate Text
+      {{ page.title }}
     </h1>
-    <p class="hero-desc">
-      A powerful Windows dictionary &amp; translation app with 17+ services,
-      global hotkeys, selection translation, and dark mode support.
-    </p>
+    <p class="hero-desc">{{ page.description }}</p>
     <div class="hero-actions">
       <a href="{{ config.extra.store_url }}" target="_blank" class="btn btn-primary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
@@ -30,44 +26,22 @@
   </div>
 </section>
 
-<!-- Features -->
-<section class="features" id="features">
+<!-- Screenshot -->
+{% if page.extra.screenshot %}
+<section class="screenshot-section">
   <div class="container">
-    <div class="section-header">
-      <h2>Powerful Features</h2>
-      <p>Built for productivity — translate anything, anywhere on Windows.</p>
+    <div class="screenshot-wrapper">
+      <img src="{{ get_url(path=page.extra.screenshot) }}" alt="Easydict Screenshot">
     </div>
-    <div class="features-grid">
-      <div class="feature-card">
-        <div class="feature-icon icon-translate">&#x1F30D;</div>
-        <h3>Multiple Translation Modes</h3>
-        <p>Input translation, mouse selection with floating popup, clipboard monitoring, and global hotkeys for instant access.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon icon-services">&#x1F517;</div>
-        <h3>17+ Translation Services</h3>
-        <p>Google, DeepL, OpenAI, Gemini, local Ollama, Baidu, Alibaba, Tencent, Volcano, Niutrans, Caiyun, and more.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon icon-hotkey">&#x2328;</div>
-        <h3>Global Hotkeys</h3>
-        <p>Quickly access translation with Ctrl+Alt shortcuts. Supports main window, mini window, and fixed window modes.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon icon-theme">&#x1F3A8;</div>
-        <h3>Dark &amp; Light Themes</h3>
-        <p>Follows your Windows system theme automatically. Compact mini window mode for a clean workspace.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon icon-ocr">&#x1F50A;</div>
-        <h3>Text-to-Speech</h3>
-        <p>Built-in TTS powered by Windows Speech Synthesis. Hear the pronunciation of any translated text.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon icon-open">&#x1F513;</div>
-        <h3>Open Source &amp; Free</h3>
-        <p>Licensed under GPL-3.0. Fully transparent, community-driven, and free to use forever.</p>
-      </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- Main content from master README -->
+<section class="readme-content" id="features">
+  <div class="container">
+    <div class="content-body">
+      {{ page.content | safe }}
     </div>
   </div>
 </section>
@@ -81,7 +55,9 @@
     </div>
     <div class="download-cards">
       <div class="download-card">
-        <div class="card-icon">&#x1F6CD;</div>
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#0078D4" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
+        </div>
         <h3>Microsoft Store</h3>
         <p>Recommended &middot; Auto-updates</p>
         <a href="{{ config.extra.store_url }}" target="_blank" class="btn btn-primary">
@@ -89,7 +65,9 @@
         </a>
       </div>
       <div class="download-card">
-        <div class="card-icon">&#x1F4E6;</div>
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#00B7C3" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </div>
         <h3>Portable Version</h3>
         <p>No installation required &middot; ZIP archive</p>
         <a href="{{ config.extra.portable_url }}" target="_blank" class="btn btn-secondary">

@@ -21,6 +21,13 @@ public sealed partial class MouseHookService : IDisposable
     private const int WM_SYSKEYDOWN = 0x0104;
 
     /// <summary>
+    /// Marker value set in dwExtraInfo of synthetic keyboard events sent by TextSelectionService.
+    /// The keyboard hook skips firing OnKeyDown for events with this marker, preventing
+    /// our own Ctrl+C from dismissing the pop button and cancelling the clipboard read.
+    /// </summary>
+    internal const nint EASYDICT_SYNTHETIC_KEY = 0x4541_5344; // "EASD"
+
+    /// <summary>
     /// Minimum drag distance in pixels to consider a mouse gesture as text selection.
     /// Prevents short clicks from being misidentified as drags.
     /// </summary>
@@ -63,6 +70,16 @@ public sealed partial class MouseHookService : IDisposable
     {
         public POINT pt;
         public uint mouseData;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KBDLLHOOKSTRUCT
+    {
+        public uint vkCode;
+        public uint scanCode;
         public uint flags;
         public uint time;
         public IntPtr dwExtraInfo;
@@ -209,11 +226,15 @@ public sealed partial class MouseHookService : IDisposable
         return CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
     }
 
-    private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    private unsafe IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0)
         {
-            ProcessKeyboardMessage((int)wParam);
+            var extraInfo = ((KBDLLHOOKSTRUCT*)lParam)->dwExtraInfo;
+            if (extraInfo != EASYDICT_SYNTHETIC_KEY)
+            {
+                ProcessKeyboardMessage((int)wParam);
+            }
         }
         return CallNextHookEx(_keyboardHookId, nCode, wParam, lParam);
     }

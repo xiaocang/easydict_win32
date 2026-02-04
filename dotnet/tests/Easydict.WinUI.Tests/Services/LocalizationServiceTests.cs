@@ -113,6 +113,9 @@ public class LocalizationServiceTests
     [InlineData("InputPlaceholder")]
     [InlineData("Settings")]
     [InlineData("Copy")]
+    [InlineData("EnableInternationalServices")]
+    [InlineData("EnableInternationalServicesDescription")]
+    [InlineData("InternationalServiceUnavailableHint")]
     public void AllLanguages_HaveRequiredKey(string key)
     {
         foreach (var lang in SupportedLanguages)
@@ -122,6 +125,26 @@ public class LocalizationServiceTests
             content.Should().Contain($"name=\"{key}\"",
                 $"{lang}/Resources.resw should contain key '{key}'");
         }
+    }
+
+    [Theory]
+    [InlineData("en-US", "Bing Translate")]
+    [InlineData("zh-CN", "必应翻译")]
+    [InlineData("zh-TW", "Bing 翻譯")]
+    [InlineData("ja-JP", "Bing翻訳")]
+    [InlineData("ko-KR", "Bing 번역")]
+    [InlineData("fr-FR", "Bing Traduction")]
+    [InlineData("de-DE", "Bing Übersetzer")]
+    public void InternationalServiceUnavailableHint_MentionsBingAlternative(string language, string bingName)
+    {
+        var reswPath = Path.Combine(StringsPath, language, "Resources.resw");
+        var content = File.ReadAllText(reswPath);
+
+        // The hint should mention Bing as a regional alternative
+        content.Should().Contain($"name=\"InternationalServiceUnavailableHint\"",
+            $"{language} should have InternationalServiceUnavailableHint key");
+        content.Should().Contain(bingName,
+            $"{language} hint should mention Bing Translate ({bingName}) as alternative");
     }
 
     #endregion

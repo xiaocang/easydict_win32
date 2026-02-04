@@ -9,6 +9,13 @@
     <Platform>x64</Platform>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <UseWinUI>true</UseWinUI>
+    <!-- Disable ALL Windows App SDK auto-initializers (module constructor).
+         The SDK generates a <Module>.cctor() via WindowsAppRuntimeAutoInitializer that calls
+         DeploymentManagerAutoInitializer and BootstrapAutoInitializer. On CI runners without the
+         Windows App SDK runtime, this throws TypeInitializationException / COMException
+         (REGDB_E_CLASSNOTREG) before any test can execute. Test code only exercises pure logic
+         types and does not need the SDK runtime. -->
+    <WindowsAppSdkAutoInitialize>false</WindowsAppSdkAutoInitialize>
   </PropertyGroup>
 
   <ItemGroup>

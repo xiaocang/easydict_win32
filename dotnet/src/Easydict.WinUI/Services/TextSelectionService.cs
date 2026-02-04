@@ -138,15 +138,18 @@ public static class TextSelectionService
     /// </summary>
     public static async Task<string?> GetSelectedTextAsync(CancellationToken cancellationToken = default)
     {
-        // Log process name for diagnostics
-        var isElectron = false;
+        // Identify the foreground process once to avoid redundant P/Invoke + Process.GetProcessById
+        // calls. Previously, GetForegroundWindow was called 3+ times and Process.GetProcessById
+        // 2-3 times per selection, each allocating process handles.
+        string? processName = null;
         try
         {
             var hWnd = GetForegroundWindow();
             if (hWnd != IntPtr.Zero && GetWindowThreadProcessId(hWnd, out uint processId) != 0)
             {
                 using var process = Process.GetProcessById((int)processId);
-                Debug.WriteLine($"[TextSelectionService] Target app: {process.ProcessName}");
+                processName = process.ProcessName;
+                Debug.WriteLine($"[TextSelectionService] Target app: {processName}");
             }
         }
         catch (Exception ex)
@@ -154,11 +157,13 @@ public static class TextSelectionService
             Debug.WriteLine($"[TextSelectionService] Failed to get process name: {ex.Message}");
         }
 
+        var isElectron = IsElectronApp(processName);
+        var isTerminal = IsTerminalApp(processName);
+
         // Track if we already tried clipboard for Electron to avoid double Ctrl+C
         bool clipboardAlreadyAttempted = false;
 
         // For Electron apps, use clipboard method first since UIA doesn't work reliably
-        isElectron = IsElectronApp();
         if (isElectron)
         {
             Debug.WriteLine("[TextSelectionService] Detected Electron app, using clipboard method");
@@ -219,7 +224,7 @@ public static class TextSelectionService
         // This is required for modern UI apps (UWP, WinUI, etc.) that don't support TextPattern
         // BUT: Do NOT use clipboard method for terminal apps (Ctrl+C = SIGINT)
         // AND: Skip if we already tried clipboard for Electron (avoid double Ctrl+C in one call)
-        if (IsTerminalApp())
+        if (isTerminal)
         {
             Debug.WriteLine("[TextSelectionService] Terminal app detected, skipping clipboard fallback to avoid SIGINT");
             return null;
@@ -320,47 +325,17 @@ public static class TextSelectionService
     }
 
     /// <summary>
-    /// Checks if the foreground window belongs to an Electron app.
+    /// Checks if the given process name belongs to an Electron app.
     /// </summary>
-    private static bool IsElectronApp()
-    {
-        try
-        {
-            var hWnd = GetForegroundWindow();
-            if (hWnd == IntPtr.Zero) return false;
-
-            if (GetWindowThreadProcessId(hWnd, out uint processId) == 0) return false;
-
-            using var process = Process.GetProcessById((int)processId);
-            return ElectronProcessNames.Contains(process.ProcessName);
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    private static bool IsElectronApp(string? processName)
+        => processName != null && ElectronProcessNames.Contains(processName);
 
     /// <summary>
-    /// Checks if the foreground window belongs to a terminal app.
+    /// Checks if the given process name belongs to a terminal app.
     /// Ctrl+C sends SIGINT in terminal apps, so we should not use clipboard method.
     /// </summary>
-    private static bool IsTerminalApp()
-    {
-        try
-        {
-            var hWnd = GetForegroundWindow();
-            if (hWnd == IntPtr.Zero) return false;
-
-            if (GetWindowThreadProcessId(hWnd, out uint processId) == 0) return false;
-
-            using var process = Process.GetProcessById((int)processId);
-            return TerminalProcessNames.Contains(process.ProcessName);
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    private static bool IsTerminalApp(string? processName)
+        => processName != null && TerminalProcessNames.Contains(processName);
 
     /// <summary>
     /// Gets selected text using clipboard method (Ctrl+C).

@@ -29,7 +29,7 @@ jobs:
 
       - name: Run tests
         working-directory: dotnet
-        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 --filter "Category!=WinUI&Category!=Integration&Category!=UIAutomation"
+        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 --filter "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

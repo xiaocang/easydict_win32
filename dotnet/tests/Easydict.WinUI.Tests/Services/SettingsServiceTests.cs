@@ -579,7 +579,7 @@ public class SettingsServiceTests
     public void IsChinaRegion_DoesNotUseTimezoneAlone()
     {
         // IsChinaRegion should be locale-only; timezone is handled separately
-        // by IsChineseTimezone + CheckRestrictedNetworkAsync.
+        // by IsChineseTimezone + NotifyInternationalServiceFailed (lazy probe).
         // Verify that the method exists and returns a consistent result.
         var result1 = SettingsService.IsChinaRegion();
         var result2 = SettingsService.IsChinaRegion();

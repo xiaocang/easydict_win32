@@ -193,6 +193,14 @@ public sealed class SettingsService
     /// </summary>
     public event EventHandler<bool>? EnableInternationalServicesChanged;
 
+    /// <summary>
+    /// True once the user has explicitly saved settings from the Settings page.
+    /// Only set by the Settings page save handler — NOT by automatic Save() calls
+    /// (window move, theme change, etc.). Used by <see cref="NotifyInternationalServiceFailed"/>
+    /// to avoid overriding the user's explicit service choices.
+    /// </summary>
+    public bool HasUserConfiguredServices { get; set; }
+
     // HTTP Proxy settings
     /// <summary>
     /// Enable HTTP proxy for translation network requests.
@@ -385,6 +393,10 @@ public sealed class SettingsService
         // International services setting: auto-detect based on region (off for China, on elsewhere).
         EnableInternationalServices = GetValue(nameof(EnableInternationalServices), !IsChinaRegion());
 
+        // Flag: true once user has explicitly saved settings from the Settings page.
+        // Used by NotifyInternationalServiceFailed to avoid overriding user choices.
+        HasUserConfiguredServices = GetValue(nameof(HasUserConfiguredServices), false);
+
         // HTTP Proxy settings
         ProxyEnabled = GetValue(nameof(ProxyEnabled), false);
         ProxyUri = GetValue(nameof(ProxyUri), "");
@@ -492,6 +504,7 @@ public sealed class SettingsService
 
         // International services setting
         _settings[nameof(EnableInternationalServices)] = EnableInternationalServices;
+        _settings[nameof(HasUserConfiguredServices)] = HasUserConfiguredServices;
 
         // HTTP Proxy settings
         _settings[nameof(ProxyEnabled)] = ProxyEnabled;
@@ -531,7 +544,8 @@ public sealed class SettingsService
     /// <summary>
     /// Detects whether the system is configured for China mainland based on locale/region settings.
     /// This is a synchronous, locale-only check used for default property initialization.
-    /// For devices with non-Chinese locale in China, see <see cref="CheckRestrictedNetworkAsync"/>.
+    /// For devices with non-Chinese locale in China, see <see cref="NotifyInternationalServiceFailed"/>
+    /// which combines timezone detection with actual translation failure as a lazy probe.
     /// </summary>
     public static bool IsChinaRegion()
     {
@@ -614,8 +628,10 @@ public sealed class SettingsService
         if (IsChinaRegion())
             return;
 
-        // Skip if user has already explicitly configured services
-        if (_settings.ContainsKey(nameof(EnableInternationalServices)))
+        // Skip if user has explicitly saved settings from the Settings page.
+        // This flag is only set by the Settings page save handler, NOT by
+        // automatic Save() calls (window move, theme change, etc.).
+        if (HasUserConfiguredServices)
             return;
 
         // Skip if timezone is not Chinese — no reason to suspect restricted network

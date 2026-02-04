@@ -300,7 +300,12 @@ public sealed partial class ServiceResultItem : UserControl
     /// </summary>
     private static string GetErrorDisplayText(ServiceQueryResult serviceResult)
     {
-        var error = serviceResult.Error!;
+        var error = serviceResult.Error;
+        if (error == null)
+        {
+            return string.Empty;
+        }
+
         var message = error.Message;
 
         // Append region hint for international services that fail with network errors.
@@ -316,7 +321,12 @@ public sealed partial class ServiceResultItem : UserControl
             var hint = loc.GetString("InternationalServiceUnavailableHint");
             if (!string.IsNullOrEmpty(hint))
             {
-                message = $"{message}\n\n{hint}";
+                message = $"{message}\n{hint}";
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ServiceResultItem] InternationalServiceUnavailableHint localization string is missing");
             }
         }
 

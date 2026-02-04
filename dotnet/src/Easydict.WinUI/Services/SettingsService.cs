@@ -650,11 +650,27 @@ public sealed class SettingsService
         Save();
     }
 
+    /// <summary>
+    /// Replaces all occurrences of <paramref name="oldValue"/> in <paramref name="list"/>
+    /// with <paramref name="newValue"/>. If <paramref name="newValue"/> already exists,
+    /// removes <paramref name="oldValue"/> instead to avoid duplicates.
+    /// </summary>
     private static void ReplaceInList(List<string> list, string oldValue, string newValue)
     {
-        var index = list.IndexOf(oldValue);
-        if (index >= 0)
-            list[index] = newValue;
+        var hasNewValue = list.Contains(newValue);
+        for (var i = list.Count - 1; i >= 0; i--)
+        {
+            if (list[i] == oldValue)
+            {
+                if (hasNewValue)
+                    list.RemoveAt(i);     // bing already present → just remove google
+                else
+                {
+                    list[i] = newValue;   // replace first google → bing
+                    hasNewValue = true;   // subsequent googles should be removed
+                }
+            }
+        }
     }
 
     private T GetValue<T>(string key, T defaultValue)

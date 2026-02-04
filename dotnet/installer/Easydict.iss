@@ -4,6 +4,7 @@
 ;
 ; Usage:
 ;   iscc /DAppVersion=0.3.0 /DPlatform=x64 /DPublishDir=..\publish\x64 Easydict.iss
+;   iscc /DAppVersion=0.3.0 /DTag=0.3.0-rc.1 /DPlatform=x64 /DPublishDir=..\publish\x64 Easydict.iss
 ;
 ; Prerequisites:
 ;   - Inno Setup 6.x (https://jrsoftware.org/isinfo.php)
@@ -19,6 +20,12 @@
 
 #ifndef PublishDir
   #define PublishDir "..\publish\" + Platform
+#endif
+
+; Tag is used in the output filename (e.g. "0.3.0" or "0.3.0-rc.1")
+; Defaults to AppVersion when no prerelease suffix exists.
+#ifndef Tag
+  #define Tag AppVersion
 #endif
 
 #define AppName "Easydict"
@@ -41,7 +48,7 @@ DefaultGroupName={#AppFullName}
 AllowNoIcons=yes
 ; Output settings
 OutputDir=..\installer-output
-OutputBaseFilename=Easydict-v{#AppVersion}-{#Platform}-setup
+OutputBaseFilename=Easydict-v{#Tag}-{#Platform}-setup.unsigned
 ; Compression
 Compression=lzma2/ultra64
 SolidCompression=yes

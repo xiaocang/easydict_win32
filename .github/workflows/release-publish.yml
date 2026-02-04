@@ -285,6 +285,7 @@ jobs:
 
           & $iscc `
             /DAppVersion=${{ steps.version.outputs.BASE_VERSION }} `
+            /DTag=${{ steps.version.outputs.VERSION }} `
             /DPlatform=${{ matrix.platform }} `
             "/DPublishDir=$publishDir" `
             $issFile
@@ -294,7 +295,7 @@ jobs:
             exit 1
           }
 
-          $outputFile = "dotnet/installer-output/Easydict-v${{ steps.version.outputs.BASE_VERSION }}-${{ matrix.platform }}-setup.exe"
+          $outputFile = "dotnet/installer-output/Easydict-v${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-setup.unsigned.exe"
           if (Test-Path $outputFile) {
             $sizeMB = [math]::Round((Get-Item $outputFile).Length / 1MB, 2)
             Write-Host "EXE installer created: $outputFile ($sizeMB MB)"
@@ -314,7 +315,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: easydict-installer-${{ matrix.platform }}
-          path: dotnet/installer-output/Easydict-v${{ steps.version.outputs.BASE_VERSION }}-${{ matrix.platform }}-setup.exe
+          path: dotnet/installer-output/Easydict-v${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-setup.unsigned.exe
           retention-days: 7
 
       - name: Upload MSIX as artifact
@@ -464,5 +465,5 @@ jobs:
         uses: vedantmgoyal2009/winget-releaser@v2
         with:
           identifier: xiaocang.EasydictforWindows
-          installers-regex: 'Easydict-v[0-9]+\.[0-9]+\.[0-9]+-x64-setup\.exe$'
+          installers-regex: 'Easydict-v[0-9]+\.[0-9]+\.[0-9]+-x64-setup\.unsigned\.exe$'
           token: ${{ secrets.WINGET_TOKEN }}

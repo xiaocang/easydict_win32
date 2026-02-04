@@ -8,6 +8,7 @@
 # Usage:
 #   .\Build-Installer.ps1 -Platform x64
 #   .\Build-Installer.ps1 -Platform arm64 -Version 1.0.0
+#   .\Build-Installer.ps1 -Platform x64 -Tag 1.0.0-rc.1 -Version 1.0.0
 #   .\Build-Installer.ps1 -Platform x64 -IsccPath "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
 param(
@@ -15,6 +16,9 @@ param(
     [string]$Platform = "x64",
 
     [string]$Version = "",
+
+    # Tag for the output filename (e.g. "1.0.0-rc.1"). Defaults to Version.
+    [string]$Tag = "",
 
     [string]$IsccPath = ""
 )
@@ -36,6 +40,11 @@ if (-not $Version) {
         exit 1
     }
     Write-Host "Auto-detected version: $Version"
+}
+
+# Default Tag to Version if not specified
+if (-not $Tag) {
+    $Tag = $Version
 }
 
 # Find Inno Setup compiler (ISCC.exe)
@@ -68,6 +77,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Platform:    $Platform"
 Write-Host "Version:     $Version"
+Write-Host "Tag:         $Tag"
 Write-Host "Publish Dir: $PublishDir"
 Write-Host "ISCC:        $IsccPath"
 Write-Host ""
@@ -93,6 +103,7 @@ New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 Write-Host "Building installer..." -ForegroundColor Green
 & $IsccPath `
     /DAppVersion=$Version `
+    /DTag=$Tag `
     /DPlatform=$Platform `
     "/DPublishDir=$PublishDir" `
     $IssFile
@@ -103,7 +114,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Show result
-$outputFile = Join-Path $outputDir "Easydict-v${Version}-${Platform}-setup.exe"
+$outputFile = Join-Path $outputDir "Easydict-v${Tag}-${Platform}-setup.unsigned.exe"
 if (Test-Path $outputFile) {
     $sizeMB = [math]::Round((Get-Item $outputFile).Length / 1MB, 2)
     Write-Host ""

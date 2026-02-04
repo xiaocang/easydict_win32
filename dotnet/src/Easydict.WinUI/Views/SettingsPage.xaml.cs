@@ -621,6 +621,7 @@ public sealed partial class SettingsPage : Page
 
         // Save international services setting
         _settings.EnableInternationalServices = EnableInternationalServicesToggle.IsOn;
+        _settings.HasUserConfiguredServices = true;
 
         _settings.FirstLanguage = firstLang;
         _settings.SecondLanguage = secondLang;

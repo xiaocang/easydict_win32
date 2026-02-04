@@ -506,6 +506,9 @@
   <data name="EnableInternationalServicesDescription" xml:space="preserve">
     <value>일부 서비스(Google, DeepL, OpenAI, Gemini 등)는 국제 네트워크 접근이 필요하며, 일부 지역에서는 사용할 수 없을 수 있습니다.</value>
   </data>
+  <data name="InternationalServiceUnavailableHint" xml:space="preserve">
+    <value>이 서비스는 귀하의 지역에서 사용할 수 없을 수 있습니다. Bing 번역 또는 다른 지역 호환 서비스를 사용해 보세요. 설정에서 활성화된 서비스를 변경할 수 있습니다.</value>
+  </data>
 
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">

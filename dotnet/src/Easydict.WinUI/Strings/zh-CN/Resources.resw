@@ -547,6 +547,9 @@
   <data name="EnableInternationalServicesDescription" xml:space="preserve">
     <value>部分服务（Google、DeepL、OpenAI、Gemini 等）需要国际网络访问，可能在部分地区不可用。</value>
   </data>
+  <data name="InternationalServiceUnavailableHint" xml:space="preserve">
+    <value>此服务在您所在的地区可能不可用。请尝试使用必应翻译或其他国内可用的翻译服务。您可以在设置中更改启用的服务。</value>
+  </data>
 
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">

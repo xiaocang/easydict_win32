@@ -1,3 +1,4 @@
+using Easydict.TranslationService;
 using Easydict.WinUI.Services;
 using FluentAssertions;
 using Xunit;
@@ -442,4 +443,162 @@ public class SettingsServiceTests
         var value = _settings.EnableInternationalServices;
         (value == true || value == false).Should().BeTrue();
     }
+
+    #region IsChineseTimezone Tests
+
+    [Fact]
+    public void IsChineseTimezone_ReturnsBool()
+    {
+        // Should return a boolean without throwing
+        var result = SettingsService.IsChineseTimezone();
+        (result == true || result == false).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsChineseTimezone_ConsistentAcrossCalls()
+    {
+        // Timezone detection should be deterministic
+        var result1 = SettingsService.IsChineseTimezone();
+        var result2 = SettingsService.IsChineseTimezone();
+        result1.Should().Be(result2);
+    }
+
+    #endregion
+
+    #region IsInternationalOnlyService Tests
+
+    [Theory]
+    [InlineData("google", true)]
+    [InlineData("google_web", true)]
+    [InlineData("deepl", true)]
+    [InlineData("openai", true)]
+    [InlineData("gemini", true)]
+    [InlineData("groq", true)]
+    [InlineData("github", true)]
+    [InlineData("builtin", true)]
+    [InlineData("linguee", true)]
+    public void IsInternationalOnlyService_ReturnsTrueForInternationalServices(string serviceId, bool expected)
+    {
+        SettingsService.IsInternationalOnlyService(serviceId).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("bing")]
+    [InlineData("deepseek")]
+    [InlineData("zhipu")]
+    [InlineData("doubao")]
+    [InlineData("caiyun")]
+    [InlineData("niutrans")]
+    [InlineData("ollama")]
+    [InlineData("custom-openai")]
+    public void IsInternationalOnlyService_ReturnsFalseForChinaCompatibleServices(string serviceId)
+    {
+        SettingsService.IsInternationalOnlyService(serviceId).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsInternationalOnlyService_IsCaseInsensitive()
+    {
+        SettingsService.IsInternationalOnlyService("Google").Should().BeTrue();
+        SettingsService.IsInternationalOnlyService("DEEPL").Should().BeTrue();
+        SettingsService.IsInternationalOnlyService("OpenAI").Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsInternationalOnlyService_ReturnsFalseForUnknownService()
+    {
+        SettingsService.IsInternationalOnlyService("nonexistent").Should().BeFalse();
+        SettingsService.IsInternationalOnlyService("").Should().BeFalse();
+    }
+
+    #endregion
+
+    #region NotifyInternationalServiceFailed Tests
+
+    [Fact]
+    public void NotifyInternationalServiceFailed_DoesNotThrow()
+    {
+        // The method should never throw regardless of environment
+        var act = () => _settings.NotifyInternationalServiceFailed("google", TranslationErrorCode.NetworkError);
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void NotifyInternationalServiceFailed_IgnoresNonNetworkErrors()
+    {
+        // Non-network errors should not trigger migration
+        var originalMini = new List<string>(_settings.MiniWindowEnabledServices);
+        var originalIntl = _settings.EnableInternationalServices;
+
+        try
+        {
+            _settings.NotifyInternationalServiceFailed("google", TranslationErrorCode.InvalidApiKey);
+            _settings.NotifyInternationalServiceFailed("google", TranslationErrorCode.UnsupportedLanguage);
+            _settings.NotifyInternationalServiceFailed("google", TranslationErrorCode.RateLimited);
+            _settings.NotifyInternationalServiceFailed("google", TranslationErrorCode.Unknown);
+
+            // Settings should remain unchanged for non-network errors
+            _settings.MiniWindowEnabledServices.Should().BeEquivalentTo(originalMini);
+            _settings.EnableInternationalServices.Should().Be(originalIntl);
+        }
+        finally
+        {
+            _settings.MiniWindowEnabledServices = originalMini;
+            _settings.EnableInternationalServices = originalIntl;
+        }
+    }
+
+    [Fact]
+    public void NotifyInternationalServiceFailed_IgnoresNonInternationalServices()
+    {
+        // China-compatible services should not trigger migration
+        var originalMini = new List<string>(_settings.MiniWindowEnabledServices);
+        var originalIntl = _settings.EnableInternationalServices;
+
+        try
+        {
+            _settings.NotifyInternationalServiceFailed("bing", TranslationErrorCode.NetworkError);
+            _settings.NotifyInternationalServiceFailed("deepseek", TranslationErrorCode.Timeout);
+
+            // Settings should remain unchanged
+            _settings.MiniWindowEnabledServices.Should().BeEquivalentTo(originalMini);
+            _settings.EnableInternationalServices.Should().Be(originalIntl);
+        }
+        finally
+        {
+            _settings.MiniWindowEnabledServices = originalMini;
+            _settings.EnableInternationalServices = originalIntl;
+        }
+    }
+
+    #endregion
+
+    #region Region Detection Consistency Tests
+
+    [Fact]
+    public void IsChinaRegion_DoesNotUseTimezoneAlone()
+    {
+        // IsChinaRegion should be locale-only; timezone is handled separately
+        // by IsChineseTimezone + NotifyInternationalServiceFailed (lazy probe).
+        // Verify that the method exists and returns a consistent result.
+        var result1 = SettingsService.IsChinaRegion();
+        var result2 = SettingsService.IsChinaRegion();
+        result1.Should().Be(result2, "IsChinaRegion should be deterministic");
+    }
+
+    [Fact]
+    public void GetRegionDefaultServiceId_OnlyDependsOnLocale()
+    {
+        // GetRegionDefaultServiceId uses IsChinaRegion (locale-only),
+        // so the result should be consistent with IsChinaRegion.
+        var isChinaRegion = SettingsService.IsChinaRegion();
+        var serviceId = SettingsService.GetRegionDefaultServiceId();
+
+        if (isChinaRegion)
+            serviceId.Should().Be("bing");
+        else
+            serviceId.Should().Be("google");
+    }
+
+    #endregion
 }

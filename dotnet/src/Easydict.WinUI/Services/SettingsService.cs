@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Easydict.TranslationService;
 
 namespace Easydict.WinUI.Services;
 
@@ -191,6 +192,14 @@ public sealed class SettingsService
     /// Raised when <see cref="EnableInternationalServices"/> changes.
     /// </summary>
     public event EventHandler<bool>? EnableInternationalServicesChanged;
+
+    /// <summary>
+    /// True once the user has explicitly saved settings from the Settings page.
+    /// Only set by the Settings page save handler — NOT by automatic Save() calls
+    /// (window move, theme change, etc.). Used by <see cref="NotifyInternationalServiceFailed"/>
+    /// to avoid overriding the user's explicit service choices.
+    /// </summary>
+    public bool HasUserConfiguredServices { get; set; }
 
     // HTTP Proxy settings
     /// <summary>
@@ -384,6 +393,10 @@ public sealed class SettingsService
         // International services setting: auto-detect based on region (off for China, on elsewhere).
         EnableInternationalServices = GetValue(nameof(EnableInternationalServices), !IsChinaRegion());
 
+        // Flag: true once user has explicitly saved settings from the Settings page.
+        // Used by NotifyInternationalServiceFailed to avoid overriding user choices.
+        HasUserConfiguredServices = GetValue(nameof(HasUserConfiguredServices), false);
+
         // HTTP Proxy settings
         ProxyEnabled = GetValue(nameof(ProxyEnabled), false);
         ProxyUri = GetValue(nameof(ProxyUri), "");
@@ -491,6 +504,7 @@ public sealed class SettingsService
 
         // International services setting
         _settings[nameof(EnableInternationalServices)] = EnableInternationalServices;
+        _settings[nameof(HasUserConfiguredServices)] = HasUserConfiguredServices;
 
         // HTTP Proxy settings
         _settings[nameof(ProxyEnabled)] = ProxyEnabled;
@@ -529,6 +543,9 @@ public sealed class SettingsService
 
     /// <summary>
     /// Detects whether the system is configured for China mainland based on locale/region settings.
+    /// This is a synchronous, locale-only check used for default property initialization.
+    /// For devices with non-Chinese locale in China, see <see cref="NotifyInternationalServiceFailed"/>
+    /// which combines timezone detection with actual translation failure as a lazy probe.
     /// </summary>
     public static bool IsChinaRegion()
     {
@@ -553,11 +570,107 @@ public sealed class SettingsService
     }
 
     /// <summary>
+    /// Checks whether the system timezone is set to China Standard Time (UTC+8 Beijing/Shanghai).
+    /// Note: This timezone is shared by other regions (HK, Singapore, Malaysia, etc.),
+    /// so it must NOT be used alone as a China indicator.
+    /// </summary>
+    public static bool IsChineseTimezone()
+    {
+        try
+        {
+            var tz = TimeZoneInfo.Local;
+            return tz.Id.Equals("China Standard Time", StringComparison.OrdinalIgnoreCase) ||
+                   tz.Id.Equals("Asia/Shanghai", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Returns the default service ID appropriate for the current region.
     /// </summary>
     public static string GetRegionDefaultServiceId()
     {
         return IsChinaRegion() ? "bing" : "google";
+    }
+
+    /// <summary>
+    /// Checks if a service ID belongs to the international-only set.
+    /// </summary>
+    public static bool IsInternationalOnlyService(string serviceId)
+    {
+        return InternationalOnlyServices.Contains(serviceId);
+    }
+
+    /// <summary>
+    /// Called when an international-only service fails with a network error during translation.
+    /// The translation failure itself serves as the network probe — no extra HTTP request needed.
+    /// Migrates default services from Google to Bing when:
+    ///   1. Locale didn't already detect China (those users already get Bing)
+    ///   2. User hasn't explicitly configured services yet (first launch defaults)
+    ///   3. Timezone is China Standard Time (narrows scope to UTC+8 region)
+    /// This avoids false positives: Singapore/HK users won't trigger this because their
+    /// international services work fine and never produce network errors.
+    /// </summary>
+    public void NotifyInternationalServiceFailed(string serviceId, TranslationErrorCode errorCode)
+    {
+        // Only act on network-related failures
+        if (errorCode is not (TranslationErrorCode.NetworkError or TranslationErrorCode.Timeout))
+            return;
+
+        // Only act on international-only services
+        if (!IsInternationalOnlyService(serviceId))
+            return;
+
+        // Skip if locale already detected China — defaults are already Bing
+        if (IsChinaRegion())
+            return;
+
+        // Skip if user has explicitly saved settings from the Settings page.
+        // This flag is only set by the Settings page save handler, NOT by
+        // automatic Save() calls (window move, theme change, etc.).
+        if (HasUserConfiguredServices)
+            return;
+
+        // Skip if timezone is not Chinese — no reason to suspect restricted network
+        if (!IsChineseTimezone())
+            return;
+
+        System.Diagnostics.Debug.WriteLine(
+            $"[SettingsService] International service '{serviceId}' failed with {errorCode} " +
+            "in Chinese timezone → applying China defaults");
+
+        // Switch Google → Bing in all window enabled services
+        ReplaceInList(MiniWindowEnabledServices, "google", "bing");
+        ReplaceInList(MainWindowEnabledServices, "google", "bing");
+        ReplaceInList(FixedWindowEnabledServices, "google", "bing");
+        EnableInternationalServices = false;
+        Save();
+    }
+
+    /// <summary>
+    /// Replaces all occurrences of <paramref name="oldValue"/> in <paramref name="list"/>
+    /// with <paramref name="newValue"/>. If <paramref name="newValue"/> already exists,
+    /// removes <paramref name="oldValue"/> instead to avoid duplicates.
+    /// </summary>
+    private static void ReplaceInList(List<string> list, string oldValue, string newValue)
+    {
+        var hasNewValue = list.Contains(newValue);
+        for (var i = list.Count - 1; i >= 0; i--)
+        {
+            if (list[i] == oldValue)
+            {
+                if (hasNewValue)
+                    list.RemoveAt(i);     // bing already present → just remove google
+                else
+                {
+                    list[i] = newValue;   // replace first google → bing
+                    hasNewValue = true;   // subsequent googles should be removed
+                }
+            }
+        }
     }
 
     private T GetValue<T>(string key, T defaultValue)

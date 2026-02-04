@@ -861,6 +861,40 @@ When bumping the app version, update these 2 files:
 
 `README.md` (English) and `README_ZH.md` (Chinese) must always stay in sync. When modifying either file, apply the corresponding changes to the other file to keep both versions consistent in structure and content. This includes but is not limited to: feature descriptions, installation instructions, configuration guides, screenshots, and links.
 
+## GitHub PR Review
+
+When `gh` CLI is not available (e.g., in sandbox environments), use WebFetch to retrieve PR comments via the GitHub REST API:
+
+```
+# Inline review comments (with diff context, file path, line number)
+https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/comments
+
+# Top-level PR reviews (approve/request changes/comment)
+https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews
+
+# Conversation-tab comments (non-inline)
+https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments
+
+# PR details (title, body, state, base branch)
+https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}
+```
+
+For paginated results (>30 comments), append `?per_page=100&page=2` etc.
+
+Each review comment object includes:
+- `body` — the comment text
+- `path` — file path the comment refers to
+- `line` / `original_line` — line number in the diff
+- `diff_hunk` — surrounding diff context
+- `created_at` — timestamp (use to identify stale vs current comments)
+- `in_reply_to_id` — threads replies to a parent comment
+
+When processing PR comments:
+1. Fetch all comments via WebFetch from `https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/comments`
+2. Group by `path` and `line` to understand per-file feedback
+3. Skip comments from earlier revisions that have already been addressed (check if the referenced code still exists)
+4. Address remaining comments, commit, and push
+
 ## Claude Code Cloud Environment: Git Push
 
 In the Claude Code cloud (sandbox) environment, `git push` commands may be blocked by the tool permission system on the first few attempts. The workaround:

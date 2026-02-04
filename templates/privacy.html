@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Policy — {{ config.title }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="{{ config.base_url }}" class="nav-brand">
+      <img src="{{ get_url(path='img/favicon.svg') }}" alt="Easydict">
+      Easydict
+    </a>
+    <ul class="nav-links">
+      <li><a href="{{ config.base_url }}">Home</a></li>
+      <li><a href="{{ config.base_url }}#features">Features</a></li>
+      <li><a href="{{ config.base_url }}#download">Download</a></li>
+    </ul>
+    <a href="{{ config.extra.github_url }}" target="_blank" class="nav-github" title="GitHub">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-content container">
+  <h1>Privacy Policy</h1>
+  <p class="page-meta">Last updated: January 1, 2025</p>
+
+  <h2>Introduction</h2>
+  <p>
+    Easydict for Windows ("we", "our", or "the app") is an open-source translation and dictionary application.
+    We are committed to protecting your privacy. This policy explains what data the app handles and how it is processed.
+  </p>
+
+  <h2>Data Collection</h2>
+  <p>Easydict for Windows does <strong>not</strong> collect, store, or transmit any personal data to our servers. We do not operate any backend servers or analytics services.</p>
+
+  <h3>Text You Translate</h3>
+  <p>
+    When you use a translation service (e.g., Google Translate, DeepL, OpenAI), the text you input is sent directly
+    from your device to the respective third-party service provider. Easydict acts only as a client — we do not
+    intercept, log, or store any of your translation content.
+  </p>
+
+  <h3>API Keys</h3>
+  <p>
+    If you configure custom API keys for translation services, those keys are stored locally on your device only.
+    They are never transmitted to any server controlled by us.
+  </p>
+
+  <h3>Clipboard Access</h3>
+  <p>
+    If you enable clipboard monitoring, the app reads your clipboard content locally to provide automatic translation.
+    Clipboard content is processed entirely on your device and is not stored or transmitted beyond the translation request.
+  </p>
+
+  <h2>Third-Party Services</h2>
+  <p>
+    Easydict connects to third-party translation APIs based on your configuration. Each service has its own privacy policy:
+  </p>
+  <ul>
+    <li><a href="https://policies.google.com/privacy" target="_blank">Google Translate</a></li>
+    <li><a href="https://www.deepl.com/privacy" target="_blank">DeepL</a></li>
+    <li><a href="https://openai.com/privacy/" target="_blank">OpenAI</a></li>
+    <li><a href="https://ai.google.dev/terms" target="_blank">Google Gemini</a></li>
+  </ul>
+  <p>
+    We recommend reviewing the privacy policies of any translation services you choose to use.
+  </p>
+
+  <h2>Local Storage</h2>
+  <p>
+    All application settings, preferences, and history are stored locally on your device. No data is synced
+    to cloud services by Easydict.
+  </p>
+
+  <h2>Microsoft Store</h2>
+  <p>
+    If you installed Easydict from the Microsoft Store, Microsoft may collect telemetry data
+    as described in their <a href="https://privacy.microsoft.com/privacystatement" target="_blank">Privacy Statement</a>.
+    This is outside the control of Easydict.
+  </p>
+
+  <h2>Open Source</h2>
+  <p>
+    Easydict is open-source software. You can review the complete source code at
+    <a href="https://github.com/xiaocang/easydict_win32" target="_blank">github.com/xiaocang/easydict_win32</a>
+    to verify our privacy practices.
+  </p>
+
+  <h2>Changes to This Policy</h2>
+  <p>
+    We may update this privacy policy from time to time. Changes will be reflected on this page with an updated
+    "Last updated" date.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    If you have questions or concerns about this privacy policy, please open an issue on our
+    <a href="https://github.com/xiaocang/easydict_win32/issues" target="_blank">GitHub Issues</a> page.
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+base_url = "https://xiaocang.github.io/easydict_win32"
+title = "Easydict for Windows"
+description = "Easy to look up words or translate text — A powerful Windows translation & dictionary app"
+compile_sass = true
+minify_html = true
+generate_feeds = false
+build_search_index = false
+
+[markdown]
+highlight_code = false
+
+[extra]
+github_url = "https://github.com/xiaocang/easydict_win32"
+issues_url = "https://github.com/xiaocang/easydict_win32/issues"
+store_url = "https://apps.microsoft.com/detail/9p7nqvxf9dzj"
+release_url = "https://github.com/xiaocang/easydict_win32/releases"
+portable_url = "https://github.com/xiaocang/easydict_win32/releases/latest"

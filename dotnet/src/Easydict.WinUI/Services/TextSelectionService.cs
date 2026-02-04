@@ -579,20 +579,24 @@ public static class TextSelectionService
         // Ctrl down
         inputs[0].type = INPUT_KEYBOARD;
         inputs[0].U.ki.wVk = VK_CONTROL;
+        inputs[0].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
 
         // C down
         inputs[1].type = INPUT_KEYBOARD;
         inputs[1].U.ki.wVk = VK_C;
+        inputs[1].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
 
         // C up
         inputs[2].type = INPUT_KEYBOARD;
         inputs[2].U.ki.wVk = VK_C;
         inputs[2].U.ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs[2].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
 
         // Ctrl up
         inputs[3].type = INPUT_KEYBOARD;
         inputs[3].U.ki.wVk = VK_CONTROL;
         inputs[3].U.ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs[3].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
 
         var inputSize = Marshal.SizeOf<INPUT>();
         Debug.WriteLine($"[TextSelectionService] INPUT struct size: {inputSize}");

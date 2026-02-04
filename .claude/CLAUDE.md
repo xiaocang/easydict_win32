@@ -863,24 +863,23 @@ When bumping the app version, update these 2 files:
 
 ## GitHub PR Review
 
-Use the `gh` CLI to fetch and address PR review comments.
+When `gh` CLI is not available (e.g., in sandbox environments), use WebFetch to retrieve PR comments via the GitHub REST API:
 
-```bash
-# List all review comments on a PR (with diff context)
-gh api repos/{owner}/{repo}/pulls/{pr_number}/comments
-
-# List top-level PR reviews (approve/request changes/comment)
-gh api repos/{owner}/{repo}/pulls/{pr_number}/reviews
-
-# List issue-style comments (non-inline, on the conversation tab)
-gh api repos/{owner}/{repo}/issues/{pr_number}/comments
-
-# View PR details (title, body, state, base branch, etc.)
-gh pr view {pr_number}
-
-# View PR diff
-gh pr diff {pr_number}
 ```
+# Inline review comments (with diff context, file path, line number)
+https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/comments
+
+# Top-level PR reviews (approve/request changes/comment)
+https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews
+
+# Conversation-tab comments (non-inline)
+https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments
+
+# PR details (title, body, state, base branch)
+https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}
+```
+
+For paginated results (>30 comments), append `?per_page=100&page=2` etc.
 
 Each review comment object includes:
 - `body` — the comment text
@@ -891,7 +890,7 @@ Each review comment object includes:
 - `in_reply_to_id` — threads replies to a parent comment
 
 When processing PR comments:
-1. Fetch all comments with `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments`
+1. Fetch all comments via WebFetch from `https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/comments`
 2. Group by `path` and `line` to understand per-file feedback
 3. Skip comments from earlier revisions that have already been addressed (check if the referenced code still exists)
 4. Address remaining comments, commit, and push

@@ -861,6 +861,41 @@ When bumping the app version, update these 2 files:
 
 `README.md` (English) and `README_ZH.md` (Chinese) must always stay in sync. When modifying either file, apply the corresponding changes to the other file to keep both versions consistent in structure and content. This includes but is not limited to: feature descriptions, installation instructions, configuration guides, screenshots, and links.
 
+## GitHub PR Review
+
+Use the `gh` CLI to fetch and address PR review comments.
+
+```bash
+# List all review comments on a PR (with diff context)
+gh api repos/{owner}/{repo}/pulls/{pr_number}/comments
+
+# List top-level PR reviews (approve/request changes/comment)
+gh api repos/{owner}/{repo}/pulls/{pr_number}/reviews
+
+# List issue-style comments (non-inline, on the conversation tab)
+gh api repos/{owner}/{repo}/issues/{pr_number}/comments
+
+# View PR details (title, body, state, base branch, etc.)
+gh pr view {pr_number}
+
+# View PR diff
+gh pr diff {pr_number}
+```
+
+Each review comment object includes:
+- `body` — the comment text
+- `path` — file path the comment refers to
+- `line` / `original_line` — line number in the diff
+- `diff_hunk` — surrounding diff context
+- `created_at` — timestamp (use to identify stale vs current comments)
+- `in_reply_to_id` — threads replies to a parent comment
+
+When processing PR comments:
+1. Fetch all comments with `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments`
+2. Group by `path` and `line` to understand per-file feedback
+3. Skip comments from earlier revisions that have already been addressed (check if the referenced code still exists)
+4. Address remaining comments, commit, and push
+
 ## Claude Code Cloud Environment: Git Push
 
 In the Claude Code cloud (sandbox) environment, `git push` commands may be blocked by the tool permission system on the first few attempts. The workaround:

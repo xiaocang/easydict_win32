@@ -44,7 +44,8 @@ jobs:
             --no-restore `
             --output ./publish/x64 `
             -p:Platform=x64 `
-            -p:PublishTrimmed=false
+            -p:PublishTrimmed=false `
+            -p:WindowsAppSDKSelfContained=false
 
       # ── MSIX Packaging (same pipeline as release) ──
       - name: Verify MSIX assets

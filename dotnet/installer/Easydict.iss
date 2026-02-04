@@ -101,10 +101,6 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 ; Launch after install
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppFullName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
-[UninstallDelete]
-; Clean up user data directory on uninstall (optional - settings, logs, etc.)
-Type: filesandirs; Name: "{localappdata}\Easydict"
-
 [Code]
 // Kill running instances before install to avoid locked files
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -114,5 +110,15 @@ begin
   if CurStep = ssInstall then
   begin
     Exec('taskkill', '/F /IM Easydict.WinUI.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+end;
+
+// Clean up user data directory on uninstall
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    if DirExists(ExpandConstant('{localappdata}\Easydict')) then
+      DelTree(ExpandConstant('{localappdata}\Easydict'), True, True, True);
   end;
 end;

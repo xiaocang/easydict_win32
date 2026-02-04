@@ -547,6 +547,9 @@
   <data name="EnableInternationalServicesDescription" xml:space="preserve">
     <value>Some services (Google, DeepL, OpenAI, Gemini, etc.) require international network access and may not be available in all regions.</value>
   </data>
+  <data name="InternationalServiceUnavailableHint" xml:space="preserve">
+    <value>This service may not be available in your region. Try using Bing Translate or other region-compatible services instead. You can change enabled services in Settings.</value>
+  </data>
 
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">

@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -529,6 +530,8 @@ public sealed class SettingsService
 
     /// <summary>
     /// Detects whether the system is configured for China mainland based on locale/region settings.
+    /// This is a synchronous, locale-only check used for default property initialization.
+    /// For devices with non-Chinese locale in China, see <see cref="CheckRestrictedNetworkAsync"/>.
     /// </summary>
     public static bool IsChinaRegion()
     {
@@ -553,11 +556,99 @@ public sealed class SettingsService
     }
 
     /// <summary>
+    /// Checks whether the system timezone is set to China Standard Time (UTC+8 Beijing/Shanghai).
+    /// Note: This timezone is shared by other regions (HK, Singapore, Malaysia, etc.),
+    /// so it must NOT be used alone as a China indicator.
+    /// </summary>
+    public static bool IsChineseTimezone()
+    {
+        try
+        {
+            var tz = TimeZoneInfo.Local;
+            return tz.Id.Equals("China Standard Time", StringComparison.OrdinalIgnoreCase) ||
+                   tz.Id.Equals("Asia/Shanghai", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Returns the default service ID appropriate for the current region.
     /// </summary>
     public static string GetRegionDefaultServiceId()
     {
         return IsChinaRegion() ? "bing" : "google";
+    }
+
+    /// <summary>
+    /// Checks if a service ID belongs to the international-only set.
+    /// </summary>
+    public static bool IsInternationalOnlyService(string serviceId)
+    {
+        return InternationalOnlyServices.Contains(serviceId);
+    }
+
+    /// <summary>
+    /// Detects restricted network by combining timezone + network probe.
+    /// Only runs when:
+    ///   1. Locale-based detection did NOT already flag China (those users already get Bing)
+    ///   2. User hasn't explicitly configured services yet (first launch)
+    ///   3. Timezone is China Standard Time (narrows scope to UTC+8 region)
+    ///   4. Google Translate is actually unreachable (confirms network restriction)
+    /// If all conditions are met, switches defaults from Google to Bing.
+    /// </summary>
+    public async Task CheckRestrictedNetworkAsync()
+    {
+        // Skip if locale already detected China — defaults are already Bing
+        if (IsChinaRegion())
+            return;
+
+        // Skip if user has already saved settings (their choices should be respected)
+        if (_settings.ContainsKey(nameof(EnableInternationalServices)))
+            return;
+
+        // Skip if timezone is not Chinese — no reason to suspect restricted network
+        if (!IsChineseTimezone())
+            return;
+
+        // Both conditions met: Chinese timezone + not detected by locale.
+        // Now probe Google to confirm network restriction.
+        if (await IsGoogleReachableAsync())
+            return;
+
+        System.Diagnostics.Debug.WriteLine(
+            "[SettingsService] Chinese timezone + Google unreachable → applying China defaults");
+
+        // Switch Google → Bing in all window enabled services
+        ReplaceInList(MiniWindowEnabledServices, "google", "bing");
+        ReplaceInList(MainWindowEnabledServices, "google", "bing");
+        ReplaceInList(FixedWindowEnabledServices, "google", "bing");
+        EnableInternationalServices = false;
+        Save();
+    }
+
+    private static void ReplaceInList(List<string> list, string oldValue, string newValue)
+    {
+        var index = list.IndexOf(oldValue);
+        if (index >= 0)
+            list[index] = newValue;
+    }
+
+    private static async Task<bool> IsGoogleReachableAsync()
+    {
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            using var request = new HttpRequestMessage(HttpMethod.Head, "https://translate.googleapis.com");
+            using var response = await client.SendAsync(request);
+            return true; // Any response (even 4xx) means the host is reachable
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private T GetValue<T>(string key, T defaultValue)

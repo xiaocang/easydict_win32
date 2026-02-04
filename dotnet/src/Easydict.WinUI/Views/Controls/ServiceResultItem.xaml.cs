@@ -1,3 +1,4 @@
+using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Input;
@@ -150,7 +151,7 @@ public sealed partial class ServiceResultItem : UserControl
         }
         else if (_serviceResult.Error != null)
         {
-            ErrorText.Text = _serviceResult.Error.Message;
+            ErrorText.Text = GetErrorDisplayText(_serviceResult);
             ErrorText.Visibility = Visibility.Visible;
             ResultText.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
@@ -291,6 +292,32 @@ public sealed partial class ServiceResultItem : UserControl
         PlayIcon.Glyph = "\uE71A"; // Stop icon
         tts.PlaybackEnded += ResetIcon;
         await tts.SpeakAsync(result.TranslatedText, result.TargetLanguage);
+    }
+
+    /// <summary>
+    /// Returns the error message to display, with a region-aware hint appended
+    /// when an international-only service fails with a network error or timeout.
+    /// </summary>
+    private static string GetErrorDisplayText(ServiceQueryResult serviceResult)
+    {
+        var error = serviceResult.Error!;
+        var message = error.Message;
+
+        // Append region hint for international services that fail with network errors
+        var serviceId = serviceResult.ServiceId;
+        if (!string.IsNullOrEmpty(serviceId) &&
+            SettingsService.IsInternationalOnlyService(serviceId) &&
+            error.ErrorCode is TranslationErrorCode.NetworkError or TranslationErrorCode.Timeout)
+        {
+            var loc = LocalizationService.Instance;
+            var hint = loc.GetString("InternationalServiceUnavailableHint");
+            if (!string.IsNullOrEmpty(hint))
+            {
+                message = $"{message}\n\n{hint}";
+            }
+        }
+
+        return message;
     }
 
     private void OnCopyClicked(object sender, RoutedEventArgs e)

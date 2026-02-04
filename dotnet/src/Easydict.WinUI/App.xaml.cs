@@ -241,6 +241,20 @@ namespace Easydict.WinUI
             LogToFile("[OnLaunched] Initializing services...");
             InitializeServices();
             LogToFile("[OnLaunched] Launch complete!");
+
+            // On first launch, detect restricted network (Chinese timezone + Google blocked)
+            // and auto-switch defaults from Google to Bing. Skips if user already has saved settings.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await SettingsService.Instance.CheckRestrictedNetworkAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Restricted network check failed: {ex.Message}");
+                }
+            });
         }
 
         private void InitializeServices()

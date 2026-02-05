@@ -1,5 +1,5 @@
 +++
 title = "Privacy Policy"
 template = "privacy.html"
-date = 2025-01-01
+date = 2026-02-04
 +++

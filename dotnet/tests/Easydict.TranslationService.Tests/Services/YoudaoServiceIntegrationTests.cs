@@ -164,6 +164,32 @@ public class YoudaoServiceIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task TranslateAsync_ChineseSentenceWithoutPunctuation_ReturnsRelevantTranslation()
+    {
+        // This is the bug case: Chinese sentence without punctuation was incorrectly
+        // treated as a word and sent to dictionary API, returning unrelated results
+        var request = new TranslationRequest
+        {
+            Text = "今天天气怎么样",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        var result = await _service.TranslateAsync(request);
+
+        result.Should().NotBeNull();
+        result.TranslatedText.Should().NotBeNullOrWhiteSpace();
+        result.TranslatedText.Should().MatchRegex(@"[a-zA-Z]+",
+            "translation should contain English letters");
+
+        // The translation should be about weather, not some random sentence
+        // Accept common variations: weather, today, how
+        result.TranslatedText.ToLowerInvariant().Should().ContainAny(
+            "weather", "today", "how",
+            "translation should be semantically related to the input about weather");
+    }
+
+    [Fact]
     public async Task TranslateAsync_MultilineSentence_ReturnsTranslation()
     {
         var request = new TranslationRequest
@@ -191,6 +217,16 @@ public class YoudaoServiceIntegrationTests : IDisposable
     [InlineData("Hello, world!", false)]
     [InlineData("This is a sentence.", false)]
     [InlineData("Line1\nLine2", false)]
+    // Chinese sentences without punctuation should NOT be treated as words
+    [InlineData("今天天气怎么样", false)]
+    [InlineData("今天天气很好", false)]
+    // Chinese sentences with punctuation
+    [InlineData("今天天气很好。", false)]
+    [InlineData("你好！", false)]
+    [InlineData("你好吗？", false)]
+    // Single Chinese words should be treated as words
+    [InlineData("你好", true)]
+    [InlineData("苹果", true)]
     public void IsWordQuery_ReturnsExpectedResult(string text, bool expected)
     {
         YoudaoService.IsWordQuery(text).Should().Be(expected);

@@ -303,10 +303,23 @@ public class YoudaoServiceTests
         result.WordResult.Definitions![0].Meanings.Should().Contain("苹果；苹果公司");
     }
 
+    // Mock response for the dynamic sign key endpoint
+    private static readonly string _mockKeyResponse = """
+        {
+            "code": 0,
+            "msg": "OK",
+            "data": {
+                "secretKey": "mockSecretKeyForTesting123"
+            }
+        }
+        """;
+
     [Fact]
     public async Task TranslateAsync_WebTranslate_ParsesTranslatedText()
     {
         // Arrange - Long sentence goes to web translate API
+        // First response is for the key endpoint, second is for translation
+        _mockHandler.EnqueueJsonResponse(_mockKeyResponse);
         var response = """
             {
                 "translateResult": [
@@ -341,6 +354,8 @@ public class YoudaoServiceTests
     [Fact]
     public async Task TranslateAsync_WebTranslate_HandlesMultipleParagraphs()
     {
+        // First response is for the key endpoint, second is for translation
+        _mockHandler.EnqueueJsonResponse(_mockKeyResponse);
         var response = """
             {
                 "translateResult": [

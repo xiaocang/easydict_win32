@@ -22,10 +22,18 @@ public sealed class YoudaoService : BaseTranslationService
     private const string OpenApiEndpoint = "https://openapi.youdao.com/api";
     private const string DictVoiceBaseUrl = "https://dict.youdao.com/dictvoice?audio=";
 
+    // Endpoint to fetch dynamic sign key for webtranslate
+    private const string WebTranslateKeyEndpoint = "https://dict.youdao.com/webtranslate/key";
+    // Fixed sign key used only to fetch the dynamic key
+    private const string InitialSignKey = "asdjnjfenknafdfsdfsd";
     // AES decryption keys for webtranslate response (from tisfeng/Easydict)
     private const string AesKeySource = "ydsecret://query/key/B*RGygVywfNBwpmBaZg*WT7SIOUP2T0C9WHMZN39j^DAdaZhAnxvGcCY6VYFwnHl";
     private const string AesIvSource = "ydsecret://query/iv/C@lZe2YzHtZ2CYgaXKSVfsb7Y4QWHjITPPZ0nQp87fBeJ!Iv6v^6fvi2WN@bYpJ4";
-    private const string WebTranslateSignKey = "asdjnjfenknafdfsdfsd";
+
+    // Cached dynamic sign key and its expiration
+    private string? _cachedSignKey;
+    private DateTime _signKeyExpiration = DateTime.MinValue;
+    private readonly object _signKeyLock = new();
 
     private static readonly IReadOnlyList<Language> _youdaoLanguages =
     [
@@ -134,14 +142,44 @@ public sealed class YoudaoService : BaseTranslationService
         if (trimmed.Length > 50)
             return false;
 
-        // Contains line breaks or sentence-ending punctuation (indicates a sentence, not a word)
-        if (trimmed.Contains('\n') || trimmed.Contains('.') || trimmed.Contains('!') || trimmed.Contains('?'))
+        // Contains line breaks or sentence-ending punctuation (English and CJK)
+        if (trimmed.Contains('\n') ||
+            trimmed.Contains('.') || trimmed.Contains('!') || trimmed.Contains('?') ||
+            trimmed.Contains('。') || trimmed.Contains('！') || trimmed.Contains('？'))
             return false;
 
-        // For English: letters, hyphens, apostrophes, spaces
-        // For other languages: allow more characters but keep it short
+        // Count CJK characters (Chinese, Japanese, Korean)
+        var cjkCount = trimmed.Count(IsCJKCharacter);
+
+        if (cjkCount > 0)
+        {
+            // For CJK text: treat as word only if very short (1-3 characters)
+            // Longer CJK strings are likely sentences or phrases that need translation
+            return cjkCount <= 3 && cjkCount == trimmed.Length;
+        }
+
+        // For English/Latin: letters, hyphens, apostrophes, spaces
         var wordChars = trimmed.Count(c => char.IsLetter(c) || c == '-' || c == '\'' || c == ' ');
         return wordChars >= trimmed.Length * 0.8;
+    }
+
+    /// <summary>
+    /// Check if a character is a CJK (Chinese, Japanese, Korean) character.
+    /// </summary>
+    private static bool IsCJKCharacter(char c)
+    {
+        // CJK Unified Ideographs (Chinese characters used in Chinese, Japanese, Korean)
+        // U+4E00 to U+9FFF: CJK Unified Ideographs
+        // U+3400 to U+4DBF: CJK Unified Ideographs Extension A
+        // Also include common Japanese Hiragana and Katakana
+        // U+3040 to U+309F: Hiragana
+        // U+30A0 to U+30FF: Katakana
+        // U+AC00 to U+D7AF: Korean Hangul Syllables
+        return (c >= '\u4E00' && c <= '\u9FFF') ||  // CJK Unified Ideographs
+               (c >= '\u3400' && c <= '\u4DBF') ||  // CJK Extension A
+               (c >= '\u3040' && c <= '\u309F') ||  // Hiragana
+               (c >= '\u30A0' && c <= '\u30FF') ||  // Katakana
+               (c >= '\uAC00' && c <= '\uD7AF');    // Korean Hangul
     }
 
     /// <summary>
@@ -233,6 +271,84 @@ public sealed class YoudaoService : BaseTranslationService
     }
 
     /// <summary>
+    /// Fetch the dynamic sign key from Youdao API.
+    /// The key is cached for 5 minutes to avoid excessive requests.
+    /// </summary>
+    private async Task<string> GetDynamicSignKeyAsync(CancellationToken cancellationToken)
+    {
+        // Check if we have a valid cached key
+        lock (_signKeyLock)
+        {
+            if (_cachedSignKey != null && DateTime.UtcNow < _signKeyExpiration)
+            {
+                return _cachedSignKey;
+            }
+        }
+
+        // Fetch new key using the initial sign key
+        var mysticTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        var signStr = $"client=fanyideskweb&mysticTime={mysticTime}&product=webfanyi&key={InitialSignKey}";
+        var sign = ComputeMd5(signStr);
+
+        var url = $"{WebTranslateKeyEndpoint}?keyid=webfanyi-key-getter&sign={sign}&client=fanyideskweb&product=webfanyi&appVersion=1.0.0&vendor=web&pointParam=client,mysticTime,product&mysticTime={mysticTime}&keyfrom=fanyi.web";
+
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+        httpRequest.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        httpRequest.Headers.Add("Referer", "https://fanyi.youdao.com/");
+        httpRequest.Headers.Add("Origin", "https://fanyi.youdao.com");
+
+        using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new TranslationException($"Failed to fetch Youdao sign key: {response.StatusCode}")
+            {
+                ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                ServiceId = ServiceId
+            };
+        }
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        if (!root.TryGetProperty("code", out var code) || code.GetInt32() != 0)
+        {
+            var msg = root.TryGetProperty("msg", out var msgProp) ? msgProp.GetString() : "Unknown error";
+            throw new TranslationException($"Youdao key API error: {msg}")
+            {
+                ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                ServiceId = ServiceId
+            };
+        }
+
+        if (!root.TryGetProperty("data", out var data) ||
+            !data.TryGetProperty("secretKey", out var secretKey))
+        {
+            throw new TranslationException("Invalid Youdao key API response")
+            {
+                ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                ServiceId = ServiceId
+            };
+        }
+
+        var key = secretKey.GetString() ?? throw new TranslationException("Empty secret key from Youdao API")
+        {
+            ErrorCode = TranslationErrorCode.ServiceUnavailable,
+            ServiceId = ServiceId
+        };
+
+        // Cache the key for 5 minutes
+        lock (_signKeyLock)
+        {
+            _cachedSignKey = key;
+            _signKeyExpiration = DateTime.UtcNow.AddMinutes(5);
+        }
+
+        return key;
+    }
+
+    /// <summary>
     /// Translate using Youdao webtranslate API (matching tisfeng/Easydict implementation).
     /// Response is AES encrypted and needs to be decrypted.
     /// </summary>
@@ -240,12 +356,15 @@ public sealed class YoudaoService : BaseTranslationService
         TranslationRequest request,
         CancellationToken cancellationToken)
     {
+        // Fetch dynamic sign key first
+        var signKey = await GetDynamicSignKeyAsync(cancellationToken);
+
         var fromCode = GetYoudaoLanguageCode(request.FromLanguage);
         var toCode = GetYoudaoLanguageCode(request.ToLanguage);
 
-        // Generate sign parameters for webtranslate endpoint
+        // Generate sign parameters for webtranslate endpoint using dynamic key
         var mysticTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-        var signStr = $"client=fanyideskweb&mysticTime={mysticTime}&product=webfanyi&key={WebTranslateSignKey}";
+        var signStr = $"client=fanyideskweb&mysticTime={mysticTime}&product=webfanyi&key={signKey}";
         var sign = ComputeMd5(signStr);
 
         var formData = new Dictionary<string, string>

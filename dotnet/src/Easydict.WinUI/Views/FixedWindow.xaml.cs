@@ -811,20 +811,34 @@ public sealed partial class FixedWindow : Window
 
         // Final update with complete result
         var finalText = sb.ToString().Trim();
+
+        // Create initial result
+        var result = new TranslationResult
+        {
+            TranslatedText = finalText,
+            OriginalText = request.Text,
+            DetectedLanguage = detectedLanguage,
+            TargetLanguage = targetLanguage,
+            ServiceName = serviceResult.ServiceDisplayName,
+            TimingMs = stopwatch.ElapsedMilliseconds
+        };
+
+        // Enrich with phonetics from Youdao if missing (for word queries)
+        try
+        {
+            result = await manager.EnrichPhoneticsIfMissingAsync(result, request, ct);
+        }
+        catch
+        {
+            // Best-effort: continue with original result if enrichment fails
+        }
+
         DispatcherQueue.TryEnqueue(() =>
         {
             if (_isClosing) return;
             serviceResult.IsStreaming = false;
             serviceResult.StreamingText = "";
-            serviceResult.Result = new TranslationResult
-            {
-                TranslatedText = finalText,
-                OriginalText = request.Text,
-                DetectedLanguage = detectedLanguage,
-                TargetLanguage = targetLanguage,
-                ServiceName = serviceResult.ServiceDisplayName,
-                TimingMs = stopwatch.ElapsedMilliseconds
-            };
+            serviceResult.Result = result;
             serviceResult.ApplyAutoCollapseLogic();
             // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
             DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());

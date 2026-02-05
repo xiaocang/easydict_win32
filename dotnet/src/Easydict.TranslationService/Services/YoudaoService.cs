@@ -14,7 +14,8 @@ namespace Easydict.TranslationService.Services;
 /// </summary>
 public sealed class YoudaoService : BaseTranslationService
 {
-    private const string WebDictEndpoint = "https://dict.youdao.com/jsonapi_v4";
+    // Updated to use jsonapi_s with jsonversion=4 (matches tisfeng/Easydict implementation)
+    private const string WebDictEndpoint = "https://dict.youdao.com/jsonapi_s";
     private const string WebTranslateEndpoint = "https://fanyi.youdao.com/translate_o";
     private const string OpenApiEndpoint = "https://openapi.youdao.com/api";
     private const string DictVoiceBaseUrl = "https://dict.youdao.com/dictvoice?audio=";
@@ -101,8 +102,9 @@ public sealed class YoudaoService : BaseTranslationService
 
     /// <summary>
     /// Check if query text looks like a single word or short phrase suitable for dictionary lookup.
+    /// This is public so TranslationManager can use it for phonetic enrichment triggering.
     /// </summary>
-    private static bool IsWordQuery(string text)
+    public static bool IsWordQuery(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
             return false;
@@ -125,14 +127,39 @@ public sealed class YoudaoService : BaseTranslationService
 
     /// <summary>
     /// Translate using Youdao web dictionary API (provides phonetics and definitions).
+    /// Uses POST to jsonapi_s endpoint with sign authentication (matching tisfeng/Easydict).
     /// </summary>
     private async Task<TranslationResult> TranslateWithWebDictAsync(
         TranslationRequest request,
         CancellationToken cancellationToken)
     {
-        var url = $"{WebDictEndpoint}?q={HttpUtility.UrlEncode(request.Text)}&le=en&t=2&client=web&sign=&keyfrom=webdict";
+        // Compute sign parameters (algorithm from tisfeng/Easydict)
+        var ww = request.Text + "webdict";
+        var time = ww.Length % 10;
+        var salt = ComputeMd5(ww);
+        var key = "Mk6hqtUp33DGGtoS63tTJbMUYjRrG1Lu";
+        var sign = ComputeMd5($"web{request.Text}{time}{key}{salt}");
 
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+        // Determine foreign language code (only en/ja/fr/ko supported for dict lookup)
+        var le = GetDictForeignLanguage(request);
+
+        var url = $"{WebDictEndpoint}?doctype=json&jsonversion=4";
+
+        var formData = new Dictionary<string, string>
+        {
+            { "q", request.Text },
+            { "le", le },
+            { "client", "web" },
+            { "t", time.ToString() },
+            { "sign", sign },
+            { "keyfrom", "webdict" }
+        };
+
+        using var content = new FormUrlEncodedContent(formData);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = content
+        };
         httpRequest.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
         httpRequest.Headers.Add("Referer", "https://dict.youdao.com/");
 
@@ -151,6 +178,39 @@ public sealed class YoudaoService : BaseTranslationService
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return ParseWebDictResponse(json, request);
+    }
+
+    /// <summary>
+    /// Determine the foreign language code for dictionary lookup.
+    /// Only en/ja/fr/ko are supported for Youdao dict API.
+    /// </summary>
+    private static string GetDictForeignLanguage(TranslationRequest request)
+    {
+        // If from Chinese, use target language; otherwise use source language
+        var targetLang = request.FromLanguage switch
+        {
+            Language.SimplifiedChinese or Language.TraditionalChinese => request.ToLanguage,
+            _ => request.FromLanguage
+        };
+
+        return targetLang switch
+        {
+            Language.English => "en",
+            Language.Japanese => "ja",
+            Language.French => "fr",
+            Language.Korean => "ko",
+            _ => "en"  // Default to English
+        };
+    }
+
+    /// <summary>
+    /// Compute MD5 hash for web dict sign calculation.
+    /// </summary>
+    private static string ComputeMd5(string input)
+    {
+        var bytes = Encoding.UTF8.GetBytes(input);
+        var hash = MD5.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     /// <summary>
@@ -252,78 +312,62 @@ public sealed class YoudaoService : BaseTranslationService
         var root = doc.RootElement;
 
         // Extract phonetics (US/UK)
+        // Handle both object and array formats for simple.word (API may return either)
         List<Phonetic>? phonetics = null;
         if (root.TryGetProperty("simple", out var simple) &&
-            simple.TryGetProperty("word", out var word))
+            simple.TryGetProperty("word", out var wordElement))
         {
-            phonetics = [];
+            // Normalize: if word is an array, use the first element
+            var word = wordElement.ValueKind == JsonValueKind.Array && wordElement.GetArrayLength() > 0
+                ? wordElement[0]
+                : wordElement;
 
-            if (word.TryGetProperty("usphone", out var usphone))
-            {
-                var usText = usphone.GetString();
-                if (!string.IsNullOrEmpty(usText))
-                {
-                    string? audioUrl = null;
-                    
-                    // Add audio URL if available
-                    if (word.TryGetProperty("usspeech", out var usspeech))
-                    {
-                        var audioPath = usspeech.GetString();
-                        if (!string.IsNullOrEmpty(audioPath))
-                        {
-                            audioUrl = DictVoiceBaseUrl + HttpUtility.UrlEncode(audioPath);
-                        }
-                    }
-                    
-                    phonetics.Add(new Phonetic { Text = usText, Accent = "US", AudioUrl = audioUrl });
-                }
-            }
+            phonetics = ExtractPhoneticsFromWord(word);
+        }
 
-            if (word.TryGetProperty("ukphone", out var ukphone))
-            {
-                var ukText = ukphone.GetString();
-                if (!string.IsNullOrEmpty(ukText))
-                {
-                    string? audioUrl = null;
-                    
-                    // Add audio URL if available
-                    if (word.TryGetProperty("ukspeech", out var ukspeech))
-                    {
-                        var audioPath = ukspeech.GetString();
-                        if (!string.IsNullOrEmpty(audioPath))
-                        {
-                            audioUrl = DictVoiceBaseUrl + HttpUtility.UrlEncode(audioPath);
-                        }
-                    }
-                    
-                    phonetics.Add(new Phonetic { Text = ukText, Accent = "UK", AudioUrl = audioUrl });
-                }
-            }
+        // Also try ec.word for phonetics if simple.word didn't have them
+        if ((phonetics == null || phonetics.Count == 0) &&
+            root.TryGetProperty("ec", out var ecForPhonetics) &&
+            ecForPhonetics.TryGetProperty("word", out var ecWordElement))
+        {
+            var ecWord = ecWordElement.ValueKind == JsonValueKind.Array && ecWordElement.GetArrayLength() > 0
+                ? ecWordElement[0]
+                : ecWordElement;
+
+            phonetics = ExtractPhoneticsFromWord(ecWord);
         }
 
         // Extract definitions by part of speech
+        // Handle both object and array formats for ec.word (API may return either)
         List<Definition>? definitions = null;
         if (root.TryGetProperty("ec", out var ec) &&
-            ec.TryGetProperty("word", out var ecWord) &&
-            ecWord.TryGetProperty("trs", out var trs) &&
-            trs.ValueKind == JsonValueKind.Array)
+            ec.TryGetProperty("word", out var ecWordForDef))
         {
-            definitions = [];
-            foreach (var tr in trs.EnumerateArray())
+            // Normalize: if word is an array, use the first element
+            var ecWordObj = ecWordForDef.ValueKind == JsonValueKind.Array && ecWordForDef.GetArrayLength() > 0
+                ? ecWordForDef[0]
+                : ecWordForDef;
+
+            if (ecWordObj.TryGetProperty("trs", out var trs) &&
+                trs.ValueKind == JsonValueKind.Array)
             {
-                if (tr.TryGetProperty("pos", out var pos) &&
-                    tr.TryGetProperty("tran", out var tran))
+                definitions = [];
+                foreach (var tr in trs.EnumerateArray())
                 {
-                    var partOfSpeech = pos.GetString();
-                    var meaning = tran.GetString();
-                    
-                    if (!string.IsNullOrEmpty(meaning))
+                    if (tr.TryGetProperty("pos", out var pos) &&
+                        tr.TryGetProperty("tran", out var tran))
                     {
-                        definitions.Add(new Definition
+                        var partOfSpeech = pos.GetString();
+                        var meaning = tran.GetString();
+                        
+                        if (!string.IsNullOrEmpty(meaning))
                         {
-                            PartOfSpeech = partOfSpeech,
-                            Meanings = [meaning]
-                        });
+                            definitions.Add(new Definition
+                            {
+                                PartOfSpeech = partOfSpeech,
+                                Meanings = [meaning]
+                            });
+                        }
                     }
                 }
             }
@@ -545,6 +589,58 @@ public sealed class YoudaoService : BaseTranslationService
             ServiceName = DisplayName,
             WordResult = wordResult
         };
+    }
+
+    /// <summary>
+    /// Extract US/UK phonetics from a word JSON element.
+    /// </summary>
+    private static List<Phonetic>? ExtractPhoneticsFromWord(JsonElement word)
+    {
+        var phonetics = new List<Phonetic>();
+
+        if (word.TryGetProperty("usphone", out var usphone))
+        {
+            var usText = usphone.GetString();
+            if (!string.IsNullOrEmpty(usText))
+            {
+                string? audioUrl = null;
+                
+                // Add audio URL if available
+                if (word.TryGetProperty("usspeech", out var usspeech))
+                {
+                    var audioPath = usspeech.GetString();
+                    if (!string.IsNullOrEmpty(audioPath))
+                    {
+                        audioUrl = DictVoiceBaseUrl + HttpUtility.UrlEncode(audioPath);
+                    }
+                }
+                
+                phonetics.Add(new Phonetic { Text = usText, Accent = "US", AudioUrl = audioUrl });
+            }
+        }
+
+        if (word.TryGetProperty("ukphone", out var ukphone))
+        {
+            var ukText = ukphone.GetString();
+            if (!string.IsNullOrEmpty(ukText))
+            {
+                string? audioUrl = null;
+                
+                // Add audio URL if available
+                if (word.TryGetProperty("ukspeech", out var ukspeech))
+                {
+                    var audioPath = ukspeech.GetString();
+                    if (!string.IsNullOrEmpty(audioPath))
+                    {
+                        audioUrl = DictVoiceBaseUrl + HttpUtility.UrlEncode(audioPath);
+                    }
+                }
+                
+                phonetics.Add(new Phonetic { Text = ukText, Accent = "UK", AudioUrl = audioUrl });
+            }
+        }
+
+        return phonetics.Count > 0 ? phonetics : null;
     }
 
     /// <summary>

@@ -202,6 +202,108 @@ public class YoudaoServiceTests
     }
 
     [Fact]
+    public async Task TranslateAsync_WebDict_ParsesArrayFormatSimpleWord()
+    {
+        // Arrange - Youdao API v4 sometimes returns simple.word as an array
+        var response = """
+            {
+                "simple": {
+                    "word": [
+                        {
+                            "usphone": "həˈloʊ",
+                            "usspeech": "hello&type=2",
+                            "ukphone": "həˈləʊ",
+                            "ukspeech": "hello&type=1"
+                        }
+                    ]
+                },
+                "ec": {
+                    "word": {
+                        "trs": [
+                            {
+                                "pos": "int.",
+                                "tran": "喂；你好"
+                            }
+                        ]
+                    }
+                }
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(response);
+
+        var request = new TranslationRequest
+        {
+            Text = "hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert - Should correctly parse phonetics from array format
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.Phonetics.Should().NotBeNull();
+        result.WordResult.Phonetics.Should().HaveCount(2);
+
+        var usPhonetic = result.WordResult.Phonetics!.First(p => p.Accent == "US");
+        usPhonetic.Text.Should().Be("həˈloʊ");
+
+        var ukPhonetic = result.WordResult.Phonetics!.First(p => p.Accent == "UK");
+        ukPhonetic.Text.Should().Be("həˈləʊ");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_WebDict_ParsesArrayFormatEcWord()
+    {
+        // Arrange - Youdao API v4 sometimes returns ec.word as an array
+        var response = """
+            {
+                "simple": {
+                    "word": {}
+                },
+                "ec": {
+                    "word": [
+                        {
+                            "usphone": "ˈæpəl",
+                            "usspeech": "apple&type=2",
+                            "trs": [
+                                {
+                                    "pos": "n.",
+                                    "tran": "苹果；苹果公司"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(response);
+
+        var request = new TranslationRequest
+        {
+            Text = "apple",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert - Should correctly parse phonetics and definitions from ec.word array format
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.Phonetics.Should().NotBeNull();
+        result.WordResult.Phonetics.Should().HaveCount(1);
+        result.WordResult.Phonetics![0].Text.Should().Be("ˈæpəl");
+        result.WordResult.Phonetics![0].Accent.Should().Be("US");
+
+        result.WordResult.Definitions.Should().NotBeNull();
+        result.WordResult.Definitions.Should().HaveCount(1);
+        result.WordResult.Definitions![0].PartOfSpeech.Should().Be("n.");
+        result.WordResult.Definitions![0].Meanings.Should().Contain("苹果；苹果公司");
+    }
+
+    [Fact]
     public async Task TranslateAsync_WebTranslate_ParsesTranslatedText()
     {
         // Arrange - Long sentence goes to web translate API
@@ -464,5 +566,21 @@ public class YoudaoServiceTests
         targetPhonetics.Should().HaveCount(2);
         targetPhonetics.Should().Contain(p => p.Accent == "US");
         targetPhonetics.Should().Contain(p => p.Accent == "UK");
+    }
+
+    [Theory]
+    [InlineData("hello", true)]
+    [InlineData("hello world", true)]  // Short phrase is allowed
+    [InlineData("test-driven", true)]  // Hyphenated words
+    [InlineData("don't", true)]        // Apostrophes
+    [InlineData("This is a test sentence.", false)]  // Contains period
+    [InlineData("Hello!", false)]      // Contains exclamation
+    [InlineData("What?", false)]       // Contains question mark
+    [InlineData("Line one\nLine two", false)]  // Contains newline
+    [InlineData("", false)]            // Empty string
+    [InlineData("   ", false)]         // Whitespace only
+    public void IsWordQuery_ReturnsExpectedResult(string text, bool expected)
+    {
+        YoudaoService.IsWordQuery(text).Should().Be(expected);
     }
 }

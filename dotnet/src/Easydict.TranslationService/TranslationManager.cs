@@ -167,6 +167,7 @@ public sealed class TranslationManager : IDisposable
 
     /// <summary>
     /// Translate text using the specified or default service.
+    /// Automatically enriches phonetics from Youdao if the result lacks target phonetics for word queries.
     /// </summary>
     public async Task<TranslationResult> TranslateAsync(
         TranslationRequest request,
@@ -197,11 +198,74 @@ public sealed class TranslationManager : IDisposable
         // Perform translation with retry
         var result = await TranslateWithRetryAsync(service, request, cancellationToken);
 
+        // Enrich phonetics if missing (only for word queries, and not from youdao itself)
+        if (serviceId != "youdao")
+        {
+            result = await EnrichPhoneticsIfMissingAsync(result, request, cancellationToken);
+        }
+
         // Cache the result
         if (!request.BypassCache)
         {
             var cacheKey = GetCacheKey(request, serviceId);
             _cache.Set(cacheKey, result, _cacheOptions);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Enrich a translation result with phonetics from Youdao if the result lacks target phonetics.
+    /// This is useful for streaming services that don't return phonetics, or for any service result
+    /// that needs phonetic data. Only triggers for English word/phrase queries.
+    /// </summary>
+    /// <param name="result">The translation result to potentially enrich.</param>
+    /// <param name="request">The original translation request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The original result with phonetics added, or unchanged if enrichment not needed/failed.</returns>
+    public async Task<TranslationResult> EnrichPhoneticsIfMissingAsync(
+        TranslationResult result,
+        TranslationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        // Only enrich for word queries (not sentences)
+        if (!YoudaoService.IsWordQuery(request.Text))
+            return result;
+
+        // Only enrich if there are no target phonetics (US/UK/dest)
+        var targetPhonetics = PhoneticDisplayHelper.GetTargetPhonetics(result);
+        if (targetPhonetics.Count > 0)
+            return result;
+
+        // Try to get phonetics from Youdao
+        try
+        {
+            if (_services.TryGetValue("youdao", out var youdaoService))
+            {
+                var youdaoResult = await youdaoService.TranslateAsync(request, cancellationToken);
+                var youdaoPhonetics = youdaoResult?.WordResult?.Phonetics;
+
+                if (youdaoPhonetics != null && youdaoPhonetics.Count > 0)
+                {
+                    // Merge phonetics into the original result
+                    var existingPhonetics = result.WordResult?.Phonetics?.ToList() ?? [];
+                    var mergedPhonetics = existingPhonetics.Concat(youdaoPhonetics).ToList();
+
+                    var newWordResult = new WordResult
+                    {
+                        Phonetics = mergedPhonetics,
+                        Definitions = result.WordResult?.Definitions,
+                        Examples = result.WordResult?.Examples
+                    };
+
+                    return result with { WordResult = newWordResult };
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Best-effort: swallow errors and return original result
+            System.Diagnostics.Debug.WriteLine($"[TranslationManager] Phonetic enrichment failed: {ex.Message}");
         }
 
         return result;

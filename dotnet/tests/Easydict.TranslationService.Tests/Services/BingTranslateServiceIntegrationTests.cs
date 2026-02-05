@@ -10,6 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// No API key required — uses EPT mode (Edge PDF Translator) for relaxed rate limits.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "bing")]
 public class BingTranslateServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

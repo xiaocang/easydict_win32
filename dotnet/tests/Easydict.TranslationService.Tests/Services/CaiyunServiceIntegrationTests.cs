@@ -10,6 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// Requires CAIYUN_API_KEY environment variable to be set.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "caiyun")]
 public class CaiyunServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

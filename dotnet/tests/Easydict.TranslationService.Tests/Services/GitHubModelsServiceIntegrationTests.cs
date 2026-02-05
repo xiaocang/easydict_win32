@@ -10,6 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// Requires GITHUB_MODELS_API_KEY environment variable to be set.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "github-models")]
 public class GitHubModelsServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

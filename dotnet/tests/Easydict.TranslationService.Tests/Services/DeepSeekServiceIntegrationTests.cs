@@ -10,6 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// Requires DEEPSEEK_API_KEY environment variable to be set.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "deepseek")]
 public class DeepSeekServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

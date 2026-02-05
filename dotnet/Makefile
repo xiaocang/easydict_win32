@@ -3,7 +3,7 @@
 # Optional: WinApp CLI (for MSIX packaging)
 
 .PHONY: all build build-release build-debug test clean restore run help
-.PHONY: test-translation test-winui test-ui test-verbose run-release
+.PHONY: test-translation test-winui test-ui test-integration test-verbose run-release
 .PHONY: publish publish-x64 publish-x86 publish-arm64
 .PHONY: msix msix-x64 msix-x86 msix-arm64 msix-all
 .PHONY: fix-msix-minversion
@@ -55,6 +55,22 @@ test-winui:
 # Run UI automation tests (requires app to be installed or EASYDICT_EXE_PATH set)
 test-ui:
 	dotnet test tests/Easydict.UIAutomation.Tests --logger "console;verbosity=detailed" --filter "Category=UIAutomation"
+
+# Integration test service filter (default: all)
+# Available services: google, openai, deepl, deepseek, groq, zhipu, github-models,
+#                     gemini, doubao, caiyun, niutrans, linguee, bing, youdao, phonetic
+SERVICE ?= all
+
+# Run integration tests (all services by default)
+# Usage: make test-integration
+#        make test-integration SERVICE=google
+#        make test-integration SERVICE=openai
+test-integration:
+ifeq ($(SERVICE),all)
+	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=detailed" --filter "Category=Integration"
+else
+	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=detailed" --filter "Category=Integration&Service=$(SERVICE)"
+endif
 
 # Run tests with verbose output
 test-verbose:
@@ -252,6 +268,8 @@ help:
 	@echo "  make test-translation - Run TranslationService tests only"
 	@echo "  make test-winui   - Run WinUI tests only"
 	@echo "  make test-ui      - Run UI automation tests (requires installed app)"
+	@echo "  make test-integration - Run integration tests (all services)"
+	@echo "  make test-integration SERVICE=google - Run integration tests for specific service"
 	@echo "  make test-verbose - Run tests with verbose output"
 	@echo ""
 	@echo "Publishing:"
@@ -282,6 +300,10 @@ help:
 	@echo "  VERSION=X.Y.Z.W   - Set version for MSIX package (default: 0.1.0.0)"
 	@echo "  CERT_PASSWORD=... - Certificate password (required for cert/sign targets)"
 	@echo "  CERT_PATH=...     - Certificate file path (default: ./certs/dev.pfx)"
+	@echo "  SERVICE=...       - Integration test service filter (default: all)"
+	@echo "                      Available: google, openai, deepl, deepseek, groq, zhipu,"
+	@echo "                      github-models, gemini, doubao, caiyun, niutrans, linguee,"
+	@echo "                      bing, youdao, phonetic"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean        - Clean build artifacts"

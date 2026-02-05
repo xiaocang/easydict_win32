@@ -10,6 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// No API key required.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "google")]
 public class GoogleTranslateServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

@@ -217,7 +217,7 @@ public sealed class TranslationManager : IDisposable
     /// <summary>
     /// Enrich a translation result with phonetics from Youdao if the result lacks target phonetics.
     /// This is useful for streaming services that don't return phonetics, or for any service result
-    /// that needs phonetic data. Only triggers for English word/phrase queries.
+    /// that needs phonetic data. Only triggers when target language is English and result is a word/phrase.
     /// </summary>
     /// <param name="result">The translation result to potentially enrich.</param>
     /// <param name="request">The original translation request.</param>
@@ -228,8 +228,14 @@ public sealed class TranslationManager : IDisposable
         TranslationRequest request,
         CancellationToken cancellationToken = default)
     {
-        // Only enrich for word queries (not sentences)
-        if (!YoudaoService.IsWordQuery(request.Text))
+        // Only enrich when target language is English
+        // US/UK phonetics are only meaningful for English words
+        if (request.ToLanguage != Language.English)
+            return result;
+
+        // Only enrich if the translated text looks like a word/phrase (not a sentence)
+        var translatedText = result.TranslatedText?.Trim();
+        if (string.IsNullOrEmpty(translatedText) || !YoudaoService.IsWordQuery(translatedText))
             return result;
 
         // Only enrich if there are no target phonetics (US/UK/dest)
@@ -237,12 +243,20 @@ public sealed class TranslationManager : IDisposable
         if (targetPhonetics.Count > 0)
             return result;
 
-        // Try to get phonetics from Youdao
+        // Try to get phonetics from Youdao by looking up the TRANSLATED English text
         try
         {
             if (_services.TryGetValue("youdao", out var youdaoService))
             {
-                var youdaoResult = await youdaoService.TranslateAsync(request, cancellationToken);
+                // Create a request to look up the English translation in Youdao
+                var phoneticRequest = new TranslationRequest
+                {
+                    Text = translatedText,
+                    FromLanguage = Language.English,
+                    ToLanguage = Language.SimplifiedChinese
+                };
+
+                var youdaoResult = await youdaoService.TranslateAsync(phoneticRequest, cancellationToken);
                 var youdaoPhonetics = youdaoResult?.WordResult?.Phonetics;
 
                 if (youdaoPhonetics != null && youdaoPhonetics.Count > 0)

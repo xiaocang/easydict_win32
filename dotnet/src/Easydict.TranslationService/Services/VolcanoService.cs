@@ -144,7 +144,7 @@ public sealed class VolcanoService : BaseTranslationService
         httpRequest.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
         httpRequest.Headers.Add("Host", Host);
         httpRequest.Headers.Add("X-Date", xDate);
-        httpRequest.Headers.Add("Authorization", authorization);
+        httpRequest.Headers.TryAddWithoutValidation("Authorization", authorization);
 
         using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -270,8 +270,8 @@ public sealed class VolcanoService : BaseTranslationService
         // 6. Signature
         var signature = HexEncode(HmacSha256(kSigning, stringToSign));
 
-        // 7. Authorization header (note: two spaces before SignedHeaders per spec)
-        return $"{Algorithm} Credential={_accessKeyId}/{credentialScope},  SignedHeaders={signedHeaders}, Signature={signature}";
+        // 7. Authorization header
+        return $"{Algorithm} Credential={_accessKeyId}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
     }
 
     private static byte[] HmacSha256(byte[] key, string data)

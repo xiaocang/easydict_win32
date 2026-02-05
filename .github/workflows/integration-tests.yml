@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: 'Service to test (all, google, openai, deepl, deepseek, groq, zhipu, github-models, gemini, doubao, caiyun, niutrans, linguee, bing, youdao, phonetic)'
+        description: 'Service to test (all, google, openai, deepl, deepseek, groq, zhipu, github-models, gemini, doubao, caiyun, niutrans, volcano, linguee, bing, youdao, phonetic)'
         required: false
         default: 'all'
         type: choice
@@ -24,6 +24,7 @@ on:
           - doubao
           - caiyun
           - niutrans
+          - volcano
           - linguee
           - bing
           - youdao
@@ -76,6 +77,8 @@ jobs:
           NIUTRANS_API_KEY: ${{ secrets.NIUTRANS_API_KEY }}
           DOUBAO_API_KEY: ${{ secrets.DOUBAO_API_KEY }}
           GITHUB_MODELS_API_KEY: ${{ secrets.GITHUB_MODELS_API_KEY }}
+          VOLCANO_ACCESS_KEY_ID: ${{ secrets.VOLCANO_ACCESS_KEY_ID }}
+          VOLCANO_SECRET_ACCESS_KEY: ${{ secrets.VOLCANO_SECRET_ACCESS_KEY }}
         run: |
           $service = "${{ inputs.service || 'all' }}"
           if ($service -eq "all") {

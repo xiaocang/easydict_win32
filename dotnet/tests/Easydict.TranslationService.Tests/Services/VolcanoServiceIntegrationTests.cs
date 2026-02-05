@@ -10,6 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// Requires VOLCANO_ACCESS_KEY_ID and VOLCANO_SECRET_ACCESS_KEY environment variables to be set.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "volcano")]
 public class VolcanoServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

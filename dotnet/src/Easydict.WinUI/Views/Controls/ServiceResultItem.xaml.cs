@@ -176,9 +176,18 @@ public sealed partial class ServiceResultItem : UserControl
     /// <summary>
     /// Populates the phonetic badges panel from WordResult phonetics data.
     /// Each badge shows: [accent label] [phonetic text] [speaker icon].
+    /// Only displays phonetics when the target language is English.
     /// </summary>
     private void UpdatePhonetics(TranslationResult result)
     {
+        // Only show phonetics when target language is English
+        // US/UK phonetics are English pronunciation, only meaningful for English translations
+        if (result.TargetLanguage != TranslationLanguage.English)
+        {
+            PhoneticPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         var phonetics = result.WordResult?.Phonetics;
         if (phonetics == null || phonetics.Count == 0)
         {
@@ -188,9 +197,11 @@ public sealed partial class ServiceResultItem : UserControl
 
         PhoneticPanel.Children.Clear();
 
-        // Only display target language phonetics (dest, US, UK)
-        // Filters out source language romanization (src) to avoid showing pinyin next to English translations
-        var displayablePhonetics = PhoneticDisplayHelper.GetTargetPhonetics(result);
+        // Only display target language phonetics (US, UK) for English target
+        var displayablePhonetics = PhoneticDisplayHelper.GetTargetPhonetics(result)
+            .Where(p => p.Accent == "US" || p.Accent == "UK")
+            .ToList();
+
         foreach (var phonetic in displayablePhonetics)
         {
             var badge = CreatePhoneticBadge(phonetic, result);

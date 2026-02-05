@@ -136,6 +136,9 @@ public sealed partial class SettingsPage : Page
         DoubaoModelBox.Header = loc.GetString("Model");
         CaiyunKeyBox.Header = loc.GetString("ApiKey");
         NiuTransKeyBox.Header = loc.GetString("ApiKey");
+        YoudaoAppKeyBox.Header = loc.GetString("AppKey");
+        YoudaoAppSecretBox.Header = loc.GetString("AppSecret");
+        YoudaoUseOfficialApiToggle.Header = loc.GetString("UseOfficialApi");
 
         // Refresh button for Ollama
         RefreshOllamaButton.Content = loc.GetString("Refresh");
@@ -267,6 +270,9 @@ public sealed partial class SettingsPage : Page
         DoubaoModelBox.TextChanged += OnSettingChanged;
         CaiyunKeyBox.PasswordChanged += OnSettingChanged;
         NiuTransKeyBox.PasswordChanged += OnSettingChanged;
+        YoudaoAppKeyBox.PasswordChanged += OnSettingChanged;
+        YoudaoAppSecretBox.PasswordChanged += OnSettingChanged;
+        YoudaoUseOfficialApiToggle.Toggled += OnSettingChanged;
 
         // CheckBox changes
         DeepLFreeCheck.Checked += OnSettingChanged;
@@ -360,6 +366,11 @@ public sealed partial class SettingsPage : Page
 
         // NiuTrans settings
         NiuTransKeyBox.Password = _settings.NiuTransApiKey ?? string.Empty;
+
+        // Youdao settings
+        YoudaoAppKeyBox.Password = _settings.YoudaoAppKey ?? string.Empty;
+        YoudaoAppSecretBox.Password = _settings.YoudaoAppSecret ?? string.Empty;
+        YoudaoUseOfficialApiToggle.IsOn = _settings.YoudaoUseOfficialApi;
 
         // HTTP Proxy settings
         ProxyEnabledToggle.IsOn = _settings.ProxyEnabled;
@@ -703,6 +714,13 @@ public sealed partial class SettingsPage : Page
         // Save NiuTrans settings
         var niutransKey = NiuTransKeyBox.Password;
         _settings.NiuTransApiKey = string.IsNullOrWhiteSpace(niutransKey) ? null : niutransKey;
+
+        // Save Youdao settings
+        var youdaoAppKey = YoudaoAppKeyBox.Password;
+        _settings.YoudaoAppKey = string.IsNullOrWhiteSpace(youdaoAppKey) ? null : youdaoAppKey;
+        var youdaoAppSecret = YoudaoAppSecretBox.Password;
+        _settings.YoudaoAppSecret = string.IsNullOrWhiteSpace(youdaoAppSecret) ? null : youdaoAppSecret;
+        _settings.YoudaoUseOfficialApi = YoudaoUseOfficialApiToggle.IsOn;
 
         // Save HTTP Proxy settings (already validated above)
         _settings.ProxyEnabled = ProxyEnabledToggle.IsOn;

@@ -244,6 +244,18 @@
   <data name="NiuTransDescription" xml:space="preserve">
     <value>NiuTrans supports 450+ language pairs. Get your API key from niutrans.com</value>
   </data>
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>Use Official API</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>Youdao provides phonetic transcriptions for English words. Without API keys, uses free web dictionary. With API keys, enables official API for higher limits. Get API keys from ai.youdao.com</value>
+  </data>
   <data name="FreeServicesTitle" xml:space="preserve">
     <value>Free Services (No Configuration Required)</value>
   </data>

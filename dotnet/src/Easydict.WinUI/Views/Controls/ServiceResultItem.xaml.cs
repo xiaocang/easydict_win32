@@ -204,9 +204,22 @@ public sealed partial class ServiceResultItem : UserControl
 
     /// <summary>
     /// Creates a single phonetic badge with accent label, phonetic text, and TTS button.
+    /// Includes accessibility properties for screen readers.
     /// </summary>
     private Border CreatePhoneticBadge(Phonetic phonetic, TranslationResult result)
     {
+        // Build accessibility description
+        var accentLabel = GetAccentDisplayLabel(phonetic.Accent);
+        var accentDescription = phonetic.Accent switch
+        {
+            "US" => "American pronunciation",
+            "UK" => "British pronunciation",
+            "dest" => "Target language pronunciation",
+            "src" => "Source language pronunciation",
+            _ => "Pronunciation"
+        };
+        var accessibleName = $"{accentDescription}: {phonetic.Text}";
+
         var badge = new Border
         {
             Background = FindThemeBrush("PhoneticBadgeBackgroundBrush")
@@ -215,6 +228,11 @@ public sealed partial class ServiceResultItem : UserControl
             Padding = new Thickness(6, 2, 4, 2)
         };
 
+        // Set accessibility properties on the badge
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(badge, accessibleName);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(badge,
+            "Click the speaker button to hear pronunciation");
+
         var panel = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -222,7 +240,6 @@ public sealed partial class ServiceResultItem : UserControl
         };
 
         // Accent label (e.g., "美", "英", "src", "dest")
-        var accentLabel = GetAccentDisplayLabel(phonetic.Accent);
         if (!string.IsNullOrEmpty(accentLabel))
         {
             panel.Children.Add(new TextBlock

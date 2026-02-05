@@ -244,6 +244,18 @@
   <data name="NiuTransDescription" xml:space="preserve">
     <value>小牛翻译支持 450+ 种语言对。从 niutrans.com 获取您的 API 密钥</value>
   </data>
+  <data name="AppKey" xml:space="preserve">
+    <value>应用密钥</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>应用密钥密码</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>使用官方 API</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>有道词典提供英文单词的音标。无需 API 密钥即可使用免费网页版词典。配置 API 密钥后可使用官方 API 以获得更高的使用限制。从 ai.youdao.com 获取 API 密钥</value>
+  </data>
   <data name="FreeServicesTitle" xml:space="preserve">
     <value>免费服务（无需配置）</value>
   </data>

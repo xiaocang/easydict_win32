@@ -154,10 +154,7 @@ public class PhoneticTranscriptionTests : IDisposable
     }
 
     [Fact]
-    public void MiniWindow_ChineseTranslation_ShowsPhoneticBadges()
-    {
-        // Ensure app is ready before sending hotkey
-        _ = _launcher.GetMainWindow();DoesNotShowSourcePhonetics()
+    public void MiniWindow_ChineseTranslation_DoesNotShowSourcePhonetics()
     {
         // Ensure app is ready before sending hotkey
         _ = _launcher.GetMainWindow();
@@ -202,12 +199,15 @@ public class PhoneticTranscriptionTests : IDisposable
         var phoneticPanels = miniWindow.FindAllDescendants(cf => cf.ByAutomationId("PhoneticPanel"));
         var visiblePanels = phoneticPanels?.Where(p => !p.IsOffscreen && p.FindAllChildren().Length > 0).ToArray();
         visiblePanels.Should().BeNullOrEmpty("PhoneticPanel should be empty/hidden when only src phonetics available");
-        
+
         _output.WriteLine($"Verified: No phonetic badges shown in mini window for Chinese→English translation");
 
         // Visual regression comparison
         var comparison = VisualRegressionHelper.CompareWithBaseline(
-            pathResult, "phonetic_mini_chinese_translation_filtered
+            pathResult, "phonetic_mini_chinese_translation_filtered");
+
+        if (comparison == null)
+        {
             _output.WriteLine("No baseline found — screenshot saved as baseline candidate for manual review.");
         }
         else

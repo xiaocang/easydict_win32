@@ -23,6 +23,7 @@ public sealed partial class ServiceResultItem : UserControl
     private bool _isHovering;
     private string? _cachedServiceId;
     private BitmapImage? _cachedIcon;
+    private HashSet<string>? _alreadyShownPhonetics;
 
     /// <summary>
     /// Event raised when the expand/collapse state is toggled.
@@ -63,6 +64,42 @@ public sealed partial class ServiceResultItem : UserControl
 
             UpdateUI();
         }
+    }
+
+    /// <summary>
+    /// Set of phonetic keys (e.g., "US:/həˈloʊ/") that have already been shown
+    /// by a previous service. These phonetics will be hidden to avoid duplication.
+    /// </summary>
+    public HashSet<string>? AlreadyShownPhonetics
+    {
+        get => _alreadyShownPhonetics;
+        set
+        {
+            _alreadyShownPhonetics = value;
+            // Re-render phonetics when this changes
+            if (_serviceResult?.Result != null)
+            {
+                UpdatePhonetics(_serviceResult.Result);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the phonetic keys that this item is currently displaying.
+    /// Used by parent views to track shown phonetics for deduplication.
+    /// </summary>
+    public IEnumerable<string> GetDisplayedPhoneticKeys()
+    {
+        if (_serviceResult?.Result == null) return Enumerable.Empty<string>();
+
+        var result = _serviceResult.Result;
+        if (result.TargetLanguage != TranslationLanguage.English) return Enumerable.Empty<string>();
+
+        var phonetics = PhoneticDisplayHelper.GetTargetPhonetics(result)
+            .Where(p => p.Accent == "US" || p.Accent == "UK")
+            .Where(p => !string.IsNullOrEmpty(p.Text));
+
+        return phonetics.Select(p => $"{p.Accent}:{p.Text}");
     }
 
     private void OnServiceResultPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -177,6 +214,7 @@ public sealed partial class ServiceResultItem : UserControl
     /// Populates the phonetic badges panel from WordResult phonetics data.
     /// Each badge shows: [accent label] [phonetic text] [speaker icon].
     /// Only displays phonetics when the target language is English.
+    /// Filters out phonetics that have already been shown by a previous service.
     /// </summary>
     private void UpdatePhonetics(TranslationResult result)
     {
@@ -198,8 +236,11 @@ public sealed partial class ServiceResultItem : UserControl
         PhoneticPanel.Children.Clear();
 
         // Get target-related phonetics (dest/US/UK) and then display only US/UK accents
+        // Filter out phonetics that have already been shown by a previous service
         var displayablePhonetics = PhoneticDisplayHelper.GetTargetPhonetics(result)
             .Where(p => p.Accent == "US" || p.Accent == "UK")
+            .Where(p => !string.IsNullOrEmpty(p.Text))
+            .Where(p => _alreadyShownPhonetics == null || !_alreadyShownPhonetics.Contains($"{p.Accent}:{p.Text}"))
             .ToList();
 
         foreach (var phonetic in displayablePhonetics)
@@ -255,7 +296,7 @@ public sealed partial class ServiceResultItem : UserControl
             panel.Children.Add(new TextBlock
             {
                 Text = accentLabel,
-                FontSize = 11,
+                FontSize = 10,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Foreground = FindThemeBrush("PhoneticBadgeTextBrush")
                     ?? new SolidColorBrush(Microsoft.UI.Colors.Purple),
@@ -267,7 +308,7 @@ public sealed partial class ServiceResultItem : UserControl
         panel.Children.Add(new TextBlock
         {
             Text = PhoneticDisplayHelper.FormatPhoneticText(phonetic.Text!),
-            FontSize = 11,
+            FontSize = 10,
             Foreground = FindThemeBrush("PhoneticBadgeTextBrush")
                 ?? new SolidColorBrush(Microsoft.UI.Colors.Purple),
             VerticalAlignment = VerticalAlignment.Center,
@@ -288,7 +329,7 @@ public sealed partial class ServiceResultItem : UserControl
         var speakerIcon = new FontIcon
         {
             Glyph = "\uE767", // Volume icon
-            FontSize = 11,
+            FontSize = 10,
             Foreground = FindThemeBrush("PhoneticBadgeTextBrush")
                 ?? new SolidColorBrush(Microsoft.UI.Colors.Purple)
         };

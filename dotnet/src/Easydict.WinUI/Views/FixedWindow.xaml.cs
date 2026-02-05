@@ -368,6 +368,7 @@ public sealed partial class FixedWindow : Window
                 serviceResult.Result = result;
                 serviceResult.IsLoading = false;
                 serviceResult.ApplyAutoCollapseLogic();
+                UpdatePhoneticDeduplication();
                 RequestResize();
             }
         }
@@ -667,6 +668,7 @@ public sealed partial class FixedWindow : Window
                             serviceResult.Result = result;
                             serviceResult.IsLoading = false;
                             serviceResult.ApplyAutoCollapseLogic();
+                            UpdatePhoneticDeduplication();
                             // Coalesced resize so ServiceResultItem.UpdateUI() completes first
                             RequestResize();
                         });
@@ -842,6 +844,7 @@ public sealed partial class FixedWindow : Window
             serviceResult.StreamingText = "";
             serviceResult.Result = result;
             serviceResult.ApplyAutoCollapseLogic();
+            UpdatePhoneticDeduplication();
             // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
             DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
         });
@@ -1113,6 +1116,30 @@ public sealed partial class FixedWindow : Window
         if (this.Content is FrameworkElement root)
         {
             root.RequestedTheme = theme;
+        }
+    }
+
+    /// <summary>
+    /// Updates phonetic deduplication across all service result controls.
+    /// The first service showing a phonetic displays it; subsequent services with
+    /// the same phonetic will have it hidden to avoid duplication.
+    /// </summary>
+    private void UpdatePhoneticDeduplication()
+    {
+        var shownPhonetics = new HashSet<string>();
+
+        foreach (var control in _resultControls)
+        {
+            // Set which phonetics have already been shown (before this control)
+            control.AlreadyShownPhonetics = shownPhonetics.Count > 0
+                ? new HashSet<string>(shownPhonetics)
+                : null;
+
+            // Collect phonetics displayed by this control for subsequent controls
+            foreach (var key in control.GetDisplayedPhoneticKeys())
+            {
+                shownPhonetics.Add(key);
+            }
         }
     }
 }

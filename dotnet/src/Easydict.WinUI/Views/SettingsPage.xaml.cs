@@ -425,6 +425,40 @@ public sealed partial class SettingsPage : Page
         // Set version from assembly metadata
         var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = $"Version {version?.ToString(3) ?? "Unknown"}";
+
+        // Restore test status indicators
+        RestoreTestStatusIndicators();
+    }
+
+    /// <summary>
+    /// Restores test success indicators based on persisted ServiceTestStatus.
+    /// </summary>
+    private void RestoreTestStatusIndicators()
+    {
+        var statusMap = new Dictionary<string, TextBlock>
+        {
+            ["deepl"] = DeepLStatusText,
+            ["openai"] = OpenAIStatusText,
+            ["deepseek"] = DeepSeekStatusText,
+            ["groq"] = GroqStatusText,
+            ["zhipu"] = ZhipuStatusText,
+            ["github"] = GitHubModelsStatusText,
+            ["gemini"] = GeminiStatusText,
+            ["custom-openai"] = CustomOpenAIStatusText,
+            ["ollama"] = OllamaStatusText,
+            ["builtin"] = BuiltInStatusText,
+            ["doubao"] = DoubaoStatusText,
+            ["caiyun"] = CaiyunStatusText,
+            ["niutrans"] = NiuTransStatusText
+        };
+
+        foreach (var (serviceId, indicator) in statusMap)
+        {
+            if (_settings.ServiceTestStatus.TryGetValue(serviceId, out var passed) && passed)
+            {
+                indicator.Visibility = Visibility.Visible;
+            }
+        }
     }
 
     /// <summary>
@@ -1216,7 +1250,8 @@ public sealed partial class SettingsPage : Page
     /// <param name="serviceId">The service ID to test.</param>
     /// <param name="configureAction">Action to configure the service with current UI values.</param>
     /// <param name="testButton">The test button to disable during testing.</param>
-    private async Task TestServiceAsync(string serviceId, Action<ITranslationService> configureAction, Button testButton)
+    /// <param name="statusIndicator">Optional TextBlock to show success indicator.</param>
+    private async Task TestServiceAsync(string serviceId, Action<ITranslationService> configureAction, Button testButton, TextBlock? statusIndicator = null)
     {
         var loc = LocalizationService.Instance;
         var originalContent = testButton.Content;
@@ -1262,6 +1297,16 @@ public sealed partial class SettingsPage : Page
             // Run the test translation
             var result = await service.TranslateAsync(request);
 
+            // Show success indicator on expander header
+            if (statusIndicator != null)
+            {
+                statusIndicator.Visibility = Visibility.Visible;
+            }
+
+            // Save test success status
+            _settings.ServiceTestStatus[serviceId] = true;
+            _settings.Save();
+
             // Show success
             var successDialog = new ContentDialog
             {
@@ -1274,6 +1319,14 @@ public sealed partial class SettingsPage : Page
         }
         catch (TranslationException ex)
         {
+            // Clear test passed status and hide indicator
+            _settings.ServiceTestStatus.Remove(serviceId);
+            _settings.Save();
+            if (statusIndicator != null)
+            {
+                statusIndicator.Visibility = Visibility.Collapsed;
+            }
+
             var errorDialog = new ContentDialog
             {
                 Title = loc.GetString("TestFailedTitle"),
@@ -1285,6 +1338,14 @@ public sealed partial class SettingsPage : Page
         }
         catch (Exception ex)
         {
+            // Clear test passed status and hide indicator
+            _settings.ServiceTestStatus.Remove(serviceId);
+            _settings.Save();
+            if (statusIndicator != null)
+            {
+                statusIndicator.Visibility = Visibility.Collapsed;
+            }
+
             var errorDialog = new ContentDialog
             {
                 Title = loc.GetString("TestFailedTitle"),
@@ -1315,7 +1376,7 @@ public sealed partial class SettingsPage : Page
                     string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
                     useWebFirst: DeepLFreeCheck.IsChecked ?? true);
             }
-        }, TestDeepLButton);
+        }, TestDeepLButton, DeepLStatusText);
     }
 
     /// <summary>
@@ -1336,7 +1397,7 @@ public sealed partial class SettingsPage : Page
                     string.IsNullOrWhiteSpace(endpoint) ? "https://api.openai.com/v1/chat/completions" : endpoint,
                     model);
             }
-        }, TestOpenAIButton);
+        }, TestOpenAIButton, OpenAIStatusText);
     }
 
     /// <summary>
@@ -1352,7 +1413,7 @@ public sealed partial class SettingsPage : Page
                 var model = GetEditableComboValue(DeepSeekModelCombo, "deepseek-chat");
                 deepseek.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
             }
-        }, TestDeepSeekButton);
+        }, TestDeepSeekButton, DeepSeekStatusText);
     }
 
     /// <summary>
@@ -1368,7 +1429,7 @@ public sealed partial class SettingsPage : Page
                 var model = GetEditableComboValue(GroqModelCombo, "llama-3.3-70b-versatile");
                 groq.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
             }
-        }, TestGroqButton);
+        }, TestGroqButton, GroqStatusText);
     }
 
     /// <summary>
@@ -1384,7 +1445,7 @@ public sealed partial class SettingsPage : Page
                 var model = GetEditableComboValue(ZhipuModelCombo, "glm-4-flash-250414");
                 zhipu.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
             }
-        }, TestZhipuButton);
+        }, TestZhipuButton, ZhipuStatusText);
     }
 
     /// <summary>
@@ -1400,7 +1461,7 @@ public sealed partial class SettingsPage : Page
                 var model = GetEditableComboValue(GitHubModelsModelCombo, "gpt-4.1");
                 github.Configure(string.IsNullOrWhiteSpace(token) ? "" : token, model: model);
             }
-        }, TestGitHubModelsButton);
+        }, TestGitHubModelsButton, GitHubModelsStatusText);
     }
 
     /// <summary>
@@ -1416,7 +1477,7 @@ public sealed partial class SettingsPage : Page
                 var model = GetEditableComboValue(GeminiModelCombo, "gemini-2.5-flash");
                 gemini.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model);
             }
-        }, TestGeminiButton);
+        }, TestGeminiButton, GeminiStatusText);
     }
 
     /// <summary>
@@ -1436,7 +1497,7 @@ public sealed partial class SettingsPage : Page
                     string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
                     string.IsNullOrWhiteSpace(model) ? "gpt-3.5-turbo" : model);
             }
-        }, TestCustomOpenAIButton);
+        }, TestCustomOpenAIButton, CustomOpenAIStatusText);
     }
 
     /// <summary>
@@ -1454,7 +1515,7 @@ public sealed partial class SettingsPage : Page
                     string.IsNullOrWhiteSpace(endpoint) ? "http://localhost:11434/v1/chat/completions" : endpoint,
                     model);
             }
-        }, TestOllamaButton);
+        }, TestOllamaButton, OllamaStatusText);
     }
 
     /// <summary>
@@ -1469,7 +1530,7 @@ public sealed partial class SettingsPage : Page
                 var model = GetEditableComboValue(BuiltInModelCombo, "llama-3.3-70b-versatile");
                 builtin.Configure(model);
             }
-        }, TestBuiltInButton);
+        }, TestBuiltInButton, BuiltInStatusText);
     }
 
     /// <summary>
@@ -1489,7 +1550,7 @@ public sealed partial class SettingsPage : Page
                     string.IsNullOrWhiteSpace(endpoint) ? "https://ark.cn-beijing.volces.com/api/v3/responses" : endpoint,
                     string.IsNullOrWhiteSpace(model) ? "doubao-seed-translation-250915" : model);
             }
-        }, TestDoubaoButton);
+        }, TestDoubaoButton, DoubaoStatusText);
     }
 
     /// <summary>
@@ -1504,7 +1565,7 @@ public sealed partial class SettingsPage : Page
                 var apiKey = CaiyunKeyBox.Password;
                 caiyun.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey);
             }
-        }, TestCaiyunButton);
+        }, TestCaiyunButton, CaiyunStatusText);
     }
 
     /// <summary>
@@ -1519,7 +1580,7 @@ public sealed partial class SettingsPage : Page
                 var apiKey = NiuTransKeyBox.Password;
                 niutrans.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey);
             }
-        }, TestNiuTransButton);
+        }, TestNiuTransButton, NiuTransStatusText);
     }
 
     #endregion

@@ -233,21 +233,31 @@
                 <!-- DeepL -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="DeepL" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="DeepL" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="DeepLStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="DeepLKeyBox" Header="API Key (Optional)" Width="350" PlaceholderText="Enter your DeepL API key" HorizontalAlignment="Left" />
                         <CheckBox x:Name="DeepLFreeCheck" Content="Use Free API (no API key required for web translation)" />
                         <TextBlock Text="Leave API key empty to use free web translation. Pro API key gives higher limits."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestDeepLButton" Content="Test" Click="OnTestDeepL" Padding="12,6" />
+                        <Button x:Name="TestDeepLButton" Content="Test" Click="OnTestDeepL" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- OpenAI -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="OpenAI" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="OpenAI" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="OpenAIStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="OpenAIKeyBox" Header="API Key" Width="350" PlaceholderText="sk-..." HorizontalAlignment="Left" />
@@ -261,14 +271,19 @@
                         </ComboBox>
                         <TextBlock Text="You can type a custom model name directly."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <Button x:Name="TestOpenAIButton" Content="Test" Click="OnTestOpenAI" Padding="12,6" />
+                        <Button x:Name="TestOpenAIButton" Content="Test" Click="OnTestOpenAI" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- DeepSeek -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="DeepSeek" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="DeepSeek" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="DeepSeekStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="DeepSeekKeyBox" Header="API Key" Width="350" PlaceholderText="sk-..." HorizontalAlignment="Left" />
@@ -278,14 +293,19 @@
                         </ComboBox>
                         <TextBlock Text="Get your API key from platform.deepseek.com. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestDeepSeekButton" Content="Test" Click="OnTestDeepSeek" Padding="12,6" />
+                        <Button x:Name="TestDeepSeekButton" Content="Test" Click="OnTestDeepSeek" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- Groq -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="Groq" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="Groq" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="GroqStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="GroqKeyBox" Header="API Key" Width="350" PlaceholderText="gsk_..." HorizontalAlignment="Left" />
@@ -297,14 +317,19 @@
                         </ComboBox>
                         <TextBlock Text="Groq provides fast inference. Get your API key from console.groq.com. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestGroqButton" Content="Test" Click="OnTestGroq" Padding="12,6" />
+                        <Button x:Name="TestGroqButton" Content="Test" Click="OnTestGroq" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- Zhipu (智谱) -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="Zhipu (智谱)" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="Zhipu (智谱)" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="ZhipuStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="ZhipuKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Zhipu API key" HorizontalAlignment="Left" />
@@ -316,14 +341,19 @@
                         </ComboBox>
                         <TextBlock Text="Get your API key from open.bigmodel.cn. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestZhipuButton" Content="Test" Click="OnTestZhipu" Padding="12,6" />
+                        <Button x:Name="TestZhipuButton" Content="Test" Click="OnTestZhipu" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- GitHub Models -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="GitHub Models" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="GitHub Models" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="GitHubModelsStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="GitHubModelsTokenBox" Header="GitHub Token" Width="350" PlaceholderText="ghp_..." HorizontalAlignment="Left" />
@@ -337,14 +367,19 @@
                         </ComboBox>
                         <TextBlock Text="Use your GitHub personal access token. Get one from github.com/settings/tokens. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestGitHubModelsButton" Content="Test" Click="OnTestGitHubModels" Padding="12,6" />
+                        <Button x:Name="TestGitHubModelsButton" Content="Test" Click="OnTestGitHubModels" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- Gemini -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="Gemini" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="Gemini" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="GeminiStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="GeminiKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Gemini API key" HorizontalAlignment="Left" />
@@ -360,14 +395,19 @@
                         </ComboBox>
                         <TextBlock Text="Get your API key from aistudio.google.com. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestGeminiButton" Content="Test" Click="OnTestGemini" Padding="12,6" />
+                        <Button x:Name="TestGeminiButton" Content="Test" Click="OnTestGemini" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- Custom OpenAI Compatible -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="Custom OpenAI Compatible" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="Custom OpenAI Compatible" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="CustomOpenAIStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <TextBox x:Name="CustomOpenAIEndpointBox" Header="Endpoint (Required)" Width="450"
@@ -377,14 +417,19 @@
                                  PlaceholderText="gpt-3.5-turbo" HorizontalAlignment="Left" />
                         <TextBlock Text="Configure any OpenAI-compatible API endpoint (e.g., local LLM servers, other AI providers)."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestCustomOpenAIButton" Content="Test" Click="OnTestCustomOpenAI" Padding="12,6" />
+                        <Button x:Name="TestCustomOpenAIButton" Content="Test" Click="OnTestCustomOpenAI" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- Ollama (Local) -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="Ollama (Local LLM)" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="Ollama (Local LLM)" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="OllamaStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <TextBox x:Name="OllamaEndpointBox" Header="Endpoint" Width="450"
@@ -394,7 +439,7 @@
                             <Button x:Name="RefreshOllamaButton" Content="Refresh" Click="OnRefreshOllamaModels"
                                     VerticalAlignment="Bottom" Padding="12,6" />
                             <Button x:Name="TestOllamaButton" Content="Test" Click="OnTestOllama"
-                                    VerticalAlignment="Bottom" Padding="12,6" />
+                                    VerticalAlignment="Bottom" Padding="8,4" />
                         </StackPanel>
                         <TextBlock Text="Ollama must be running locally. Click Refresh to load available models."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -404,7 +449,12 @@
                 <!-- Built-in AI -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="Built-in AI" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="Built-in AI" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="BuiltInStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <ComboBox x:Name="BuiltInModelCombo" Header="Model" Width="280" IsEditable="True">
@@ -415,14 +465,19 @@
                         </ComboBox>
                         <TextBlock Text="Built-in AI uses Groq cloud service. No API key required. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestBuiltInButton" Content="Test" Click="OnTestBuiltIn" Padding="12,6" />
+                        <Button x:Name="TestBuiltInButton" Content="Test" Click="OnTestBuiltIn" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- Doubao (豆包) -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="Doubao (豆包)" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="Doubao (豆包)" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="DoubaoStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="DoubaoKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Doubao API key" HorizontalAlignment="Left" />
@@ -432,33 +487,43 @@
                                  PlaceholderText="doubao-seed-translation-250915" HorizontalAlignment="Left" />
                         <TextBlock Text="ByteDance's Doubao translation service. Get your API key from console.volcengine.com"
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestDoubaoButton" Content="Test" Click="OnTestDoubao" Padding="12,6" />
+                        <Button x:Name="TestDoubaoButton" Content="Test" Click="OnTestDoubao" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- Caiyun (彩云小译) -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="Caiyun (彩云小译)" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="Caiyun (彩云小译)" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="CaiyunStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="CaiyunKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Caiyun API key" HorizontalAlignment="Left" />
                         <TextBlock Text="Get your API key from fanyi.caiyunapp.com"
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <Button x:Name="TestCaiyunButton" Content="Test" Click="OnTestCaiyun" Padding="12,6" />
+                        <Button x:Name="TestCaiyunButton" Content="Test" Click="OnTestCaiyun" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 
                 <!-- NiuTrans (小牛翻译) -->
                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
-                        <TextBlock Text="NiuTrans (小牛翻译)" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="NiuTrans (小牛翻译)" FontWeight="SemiBold" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="NiuTransStatusText" Text="✅" FontWeight="SemiBold"
+                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="NiuTransKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your NiuTrans API key" HorizontalAlignment="Left" />
                         <TextBlock Text="NiuTrans supports 450+ language pairs. Get your API key from niutrans.com"
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestNiuTransButton" Content="Test" Click="OnTestNiuTrans" Padding="12,6" />
+                        <Button x:Name="TestNiuTransButton" Content="Test" Click="OnTestNiuTrans" Padding="8,4" />
                     </StackPanel>
                 </Expander>
 

@@ -9,6 +9,10 @@ on:
       - 'dotnet/src/Easydict.WinUI/Services/TextSelectionService.cs'
       - 'dotnet/src/Easydict.WinUI/Views/PopButtonWindow.xaml.cs'
       - 'dotnet/tests/Easydict.WinUI.Tests/Services/SelectionPerformanceTests.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/SettingsService.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/TranslationManagerService.cs'
+      - 'dotnet/src/Easydict.TranslationService/TranslationManager.cs'
+      - 'dotnet/tests/Easydict.TranslationService.Tests/StartupPerformanceTests.cs'
   pull_request:
     branches: [master]
     paths:
@@ -17,6 +21,10 @@ on:
       - 'dotnet/src/Easydict.WinUI/Services/TextSelectionService.cs'
       - 'dotnet/src/Easydict.WinUI/Views/PopButtonWindow.xaml.cs'
       - 'dotnet/tests/Easydict.WinUI.Tests/Services/SelectionPerformanceTests.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/SettingsService.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/TranslationManagerService.cs'
+      - 'dotnet/src/Easydict.TranslationService/TranslationManager.cs'
+      - 'dotnet/tests/Easydict.TranslationService.Tests/StartupPerformanceTests.cs'
   workflow_dispatch:
 
 jobs:
@@ -62,3 +70,41 @@ jobs:
         with:
           name: benchmark-results
           path: dotnet/**/TestResults/benchmark-results.trx
+
+  startup-benchmark:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: dotnet/global.json
+
+      - name: Restore dependencies
+        working-directory: dotnet
+        run: dotnet restore tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj
+
+      - name: Build (Release)
+        working-directory: dotnet
+        run: dotnet build tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj -c Release
+
+      - name: Run startup performance benchmarks
+        working-directory: dotnet
+        run: >-
+          dotnet test tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj
+          --no-build
+          -c Release
+          --filter "Category=Performance"
+          --verbosity normal
+          --logger "trx;LogFileName=startup-benchmark-results.trx"
+          --logger "console;verbosity=detailed"
+
+      - name: Upload startup benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: startup-benchmark-results
+          path: dotnet/**/TestResults/startup-benchmark-results.trx

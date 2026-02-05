@@ -10,14 +10,16 @@ using Xunit.Abstractions;
 namespace Easydict.TranslationService.Tests;
 
 /// <summary>
-/// Startup performance regression tests.
+/// Startup performance regression tests (manual-trigger only).
 /// Each test measures the elapsed time of a specific startup-critical operation,
-/// outputs the timing via <see cref="ITestOutputHelper"/> for CI comparison,
+/// outputs the timing via <see cref="ITestOutputHelper"/> for before/after comparison,
 /// and asserts an upper-bound budget to catch regressions.
 ///
-/// Run with:
-///   dotnet test tests/Easydict.TranslationService.Tests --filter "FullyQualifiedName~StartupPerformanceTests" -v n
+/// These tests are excluded from automatic CI runs.
+/// Trigger manually with:
+///   dotnet test tests/Easydict.TranslationService.Tests --filter "Category=Performance" -v n
 /// </summary>
+[Trait("Category", "Performance")]
 public class StartupPerformanceTests : IDisposable
 {
     private readonly ITestOutputHelper _output;

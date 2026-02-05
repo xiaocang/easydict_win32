@@ -241,6 +241,11 @@ namespace Easydict.WinUI
             LogToFile("[OnLaunched] Initializing services...");
             InitializeServices();
             LogToFile("[OnLaunched] Launch complete!");
+
+            // Run region detection asynchronously after startup completes.
+            // On first launch this detects China region and switches defaults (Google → Bing).
+            // For returning users with saved settings this is a no-op.
+            _ = SettingsService.Instance.InitializeRegionDefaultsAsync();
         }
 
         private void InitializeServices()

@@ -15,6 +15,7 @@ public sealed class SettingsService
 
     private readonly string _settingsFilePath;
     private Dictionary<string, object?> _settings = new();
+    private volatile bool _needsRegionDetection;
 
 
     private SettingsService()
@@ -131,13 +132,13 @@ public sealed class SettingsService
     /// List of enabled translation services for MiniWindow.
     /// Each service result is displayed in a collapsible panel.
     /// </summary>
-    public List<string> MiniWindowEnabledServices { get; set; } = [GetRegionDefaultServiceId()];
+    public List<string> MiniWindowEnabledServices { get; set; } = ["google"];
 
     /// <summary>
     /// List of enabled translation services for MainWindow.
     /// Each service result is displayed in a collapsible panel.
     /// </summary>
-    public List<string> MainWindowEnabledServices { get; set; } = [GetRegionDefaultServiceId()];
+    public List<string> MainWindowEnabledServices { get; set; } = ["google"];
 
     // Fixed window settings
     public string ShowFixedWindowHotkey { get; set; } = "Ctrl+Alt+F";
@@ -150,7 +151,7 @@ public sealed class SettingsService
     /// List of enabled translation services for FixedWindow.
     /// Each service result is displayed in a collapsible panel.
     /// </summary>
-    public List<string> FixedWindowEnabledServices { get; set; } = [GetRegionDefaultServiceId()];
+    public List<string> FixedWindowEnabledServices { get; set; } = ["google"];
 
     /// <summary>
     /// Per-service EnabledQuery setting for MainWindow.
@@ -174,7 +175,7 @@ public sealed class SettingsService
     /// Enable international services that may not be accessible in all regions.
     /// Auto-detected from system region; persisted value is used once saved.
     /// </summary>
-    private bool _enableInternationalServices = !IsChinaRegion();
+    private bool _enableInternationalServices = true; // Optimistic default; corrected by InitializeRegionDefaultsAsync
     public bool EnableInternationalServices
     {
         get => _enableInternationalServices;
@@ -374,8 +375,8 @@ public sealed class SettingsService
         MiniWindowWidthDips = GetValue(nameof(MiniWindowWidthDips), 320.0);
         MiniWindowHeightDips = GetValue(nameof(MiniWindowHeightDips), 200.0);
         MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
-        MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), [GetRegionDefaultServiceId()]);
-        MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), [GetRegionDefaultServiceId()]);
+        MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), ["google"]);
+        MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), ["google"]);
 
         // Fixed window settings
         ShowFixedWindowHotkey = GetValue(nameof(ShowFixedWindowHotkey), "Ctrl+Alt+F");
@@ -383,15 +384,24 @@ public sealed class SettingsService
         FixedWindowYDips = GetValue(nameof(FixedWindowYDips), 0.0);
         FixedWindowWidthDips = GetValue(nameof(FixedWindowWidthDips), 320.0);
         FixedWindowHeightDips = GetValue(nameof(FixedWindowHeightDips), 280.0);
-        FixedWindowEnabledServices = GetStringList(nameof(FixedWindowEnabledServices), [GetRegionDefaultServiceId()]);
+        FixedWindowEnabledServices = GetStringList(nameof(FixedWindowEnabledServices), ["google"]);
 
         // EnabledQuery settings per window (which services auto-query vs. query on demand)
         MainWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(MainWindowServiceEnabledQuery));
         MiniWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(MiniWindowServiceEnabledQuery));
         FixedWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(FixedWindowServiceEnabledQuery));
 
-        // International services setting: auto-detect based on region (off for China, on elsewhere).
-        EnableInternationalServices = GetValue(nameof(EnableInternationalServices), !IsChinaRegion());
+        // International services: use optimistic default (true) during sync construction.
+        // Actual region detection runs asynchronously via InitializeRegionDefaultsAsync().
+        if (_settings.ContainsKey(nameof(EnableInternationalServices)))
+        {
+            EnableInternationalServices = GetValue(nameof(EnableInternationalServices), true);
+        }
+        else
+        {
+            EnableInternationalServices = true;
+            _needsRegionDetection = true;
+        }
 
         // Flag: true once user has explicitly saved settings from the Settings page.
         // Used by NotifyInternationalServiceFailed to avoid overriding user choices.
@@ -530,6 +540,35 @@ public sealed class SettingsService
             // Re-throw the exception so callers know save failed
             throw;
         }
+    }
+
+    /// <summary>
+    /// Asynchronously detects the system region and applies appropriate defaults.
+    /// Must be called once after application startup completes.
+    /// On first launch (no saved EnableInternationalServices), detects whether the system
+    /// is in China and switches default services from Google to Bing if so.
+    /// For returning users with saved settings, this is a no-op.
+    /// </summary>
+    public async Task InitializeRegionDefaultsAsync()
+    {
+        if (!_needsRegionDetection)
+            return;
+
+        var isChinaRegion = await Task.Run(() => IsChinaRegion());
+
+        System.Diagnostics.Debug.WriteLine(
+            $"[SettingsService] Async region detection complete: IsChinaRegion={isChinaRegion}");
+
+        if (isChinaRegion)
+        {
+            EnableInternationalServices = false;
+            ReplaceInList(MiniWindowEnabledServices, "google", "bing");
+            ReplaceInList(MainWindowEnabledServices, "google", "bing");
+            ReplaceInList(FixedWindowEnabledServices, "google", "bing");
+            Save();
+        }
+
+        _needsRegionDetection = false;
     }
 
     /// <summary>

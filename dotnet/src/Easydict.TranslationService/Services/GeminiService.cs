@@ -169,7 +169,8 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
         };
 
         // Gemini uses API key as query parameter, not header
-        var endpoint = $"{BaseUrl}/models/{_model}:streamGenerateContent?key={_apiKey}";
+        // alt=sse enables Server-Sent Events format for proper streaming
+        var endpoint = $"{BaseUrl}/models/{_model}:streamGenerateContent?alt=sse&key={_apiKey}";
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
         httpRequest.Content = new StringContent(
@@ -245,11 +246,13 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
 
                 // Gemini response format: candidates[0].content.parts[0].text
                 if (doc.RootElement.TryGetProperty("candidates", out var candidates) &&
+                    candidates.ValueKind == JsonValueKind.Array &&
                     candidates.GetArrayLength() > 0)
                 {
                     var firstCandidate = candidates[0];
                     if (firstCandidate.TryGetProperty("content", out var content) &&
                         content.TryGetProperty("parts", out var parts) &&
+                        parts.ValueKind == JsonValueKind.Array &&
                         parts.GetArrayLength() > 0)
                     {
                         var firstPart = parts[0];

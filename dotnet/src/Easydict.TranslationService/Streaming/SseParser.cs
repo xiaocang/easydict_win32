@@ -59,6 +59,7 @@ public static class SseParser
             var root = doc.RootElement;
 
             if (root.TryGetProperty("choices", out var choices) &&
+                choices.ValueKind == JsonValueKind.Array &&
                 choices.GetArrayLength() > 0)
             {
                 var firstChoice = choices[0];

@@ -204,8 +204,7 @@ public sealed partial class ServiceResultItem : UserControl
 
         foreach (var phonetic in displayablePhonetics)
         {
-            var badge = CreatePhoneticBadge(phonetic, result);
-            PhoneticPanel.Children.Add(badge);
+            PhoneticPanel.Children.Add(CreatePhoneticBadge(phonetic, result));
         }
 
         PhoneticPanel.Visibility = PhoneticPanel.Children.Count > 0

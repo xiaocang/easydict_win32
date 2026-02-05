@@ -139,6 +139,7 @@ public sealed partial class ServiceResultItem : UserControl
                 : _serviceResult.StreamingText;
             ResultText.Visibility = Visibility.Visible;
             ErrorText.Visibility = Visibility.Collapsed;
+            PhoneticPanel.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = Visibility.Collapsed; // Don't show buttons during streaming
         }
         else if (_serviceResult.Result != null)
@@ -148,12 +149,14 @@ public sealed partial class ServiceResultItem : UserControl
             ErrorText.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
             ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
+            UpdatePhonetics(_serviceResult.Result);
         }
         else if (_serviceResult.Error != null)
         {
             ErrorText.Text = GetErrorDisplayText(_serviceResult);
             ErrorText.Visibility = Visibility.Visible;
             ResultText.Visibility = Visibility.Collapsed;
+            PhoneticPanel.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
             ReplaceButton.Visibility = Visibility.Collapsed;
             PlayButton.Visibility = Visibility.Collapsed;
@@ -163,8 +166,147 @@ public sealed partial class ServiceResultItem : UserControl
             ResultText.Text = "";
             ResultText.Visibility = Visibility.Collapsed;
             ErrorText.Visibility = Visibility.Collapsed;
+            PhoneticPanel.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = Visibility.Collapsed;
         }
+    }
+
+    /// <summary>
+    /// Populates the phonetic badges panel from WordResult phonetics data.
+    /// Each badge shows: [accent label] [phonetic text] [speaker icon].
+    /// </summary>
+    private void UpdatePhonetics(TranslationResult result)
+    {
+        var phonetics = result.WordResult?.Phonetics;
+        if (phonetics == null || phonetics.Count == 0)
+        {
+            PhoneticPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        PhoneticPanel.Children.Clear();
+
+        foreach (var phonetic in phonetics)
+        {
+            if (string.IsNullOrEmpty(phonetic.Text))
+                continue;
+
+            var badge = CreatePhoneticBadge(phonetic, result);
+            PhoneticPanel.Children.Add(badge);
+        }
+
+        PhoneticPanel.Visibility = PhoneticPanel.Children.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Creates a single phonetic badge with accent label, phonetic text, and TTS button.
+    /// </summary>
+    private Border CreatePhoneticBadge(Phonetic phonetic, TranslationResult result)
+    {
+        var badge = new Border
+        {
+            Background = FindThemeBrush("PhoneticBadgeBackgroundBrush")
+                ?? new SolidColorBrush(Microsoft.UI.Colors.LightGray),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6, 2, 4, 2)
+        };
+
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 2
+        };
+
+        // Accent label (e.g., "美", "英", "src", "dest")
+        var accentLabel = GetAccentDisplayLabel(phonetic.Accent);
+        if (!string.IsNullOrEmpty(accentLabel))
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = accentLabel,
+                FontSize = 11,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = FindThemeBrush("PhoneticBadgeTextBrush")
+                    ?? new SolidColorBrush(Microsoft.UI.Colors.Purple),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+        }
+
+        // Phonetic text
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"/{phonetic.Text}/",
+            FontSize = 11,
+            Foreground = FindThemeBrush("PhoneticBadgeTextBrush")
+                ?? new SolidColorBrush(Microsoft.UI.Colors.Purple),
+            VerticalAlignment = VerticalAlignment.Center,
+            IsTextSelectionEnabled = true
+        });
+
+        // TTS speaker button
+        var speakerButton = new Button
+        {
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Width = 22,
+            Height = 22,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var speakerIcon = new FontIcon
+        {
+            Glyph = "\uE767", // Volume icon
+            FontSize = 11,
+            Foreground = FindThemeBrush("PhoneticBadgeTextBrush")
+                ?? new SolidColorBrush(Microsoft.UI.Colors.Purple)
+        };
+        speakerButton.Content = speakerIcon;
+
+        // Determine which language to use for TTS based on accent
+        var ttsLanguage = phonetic.Accent == "dest"
+            ? result.TargetLanguage
+            : (result.DetectedLanguage != Language.Auto ? result.DetectedLanguage : Language.English);
+        var ttsText = phonetic.Accent == "dest"
+            ? result.TranslatedText
+            : result.OriginalText;
+
+        speakerButton.Click += async (s, e) =>
+        {
+            var tts = TextToSpeechService.Instance;
+
+            void ResetIcon()
+            {
+                tts.PlaybackEnded -= ResetIcon;
+                DispatcherQueue.TryEnqueue(() => speakerIcon.Glyph = "\uE767");
+            }
+
+            speakerIcon.Glyph = "\uE71A"; // Stop icon
+            tts.PlaybackEnded += ResetIcon;
+            await tts.SpeakAsync(ttsText, ttsLanguage);
+        };
+
+        panel.Children.Add(speakerButton);
+        badge.Child = panel;
+        return badge;
+    }
+
+    /// <summary>
+    /// Maps phonetic accent codes to display labels.
+    /// </summary>
+    private static string? GetAccentDisplayLabel(string? accent)
+    {
+        return accent switch
+        {
+            "US" => "美",
+            "UK" => "英",
+            "src" => "原",
+            "dest" => "译",
+            null or "" => null,
+            _ => accent
+        };
     }
 
     private void OnHeaderPointerPressed(object sender, PointerRoutedEventArgs e)

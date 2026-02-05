@@ -24,6 +24,10 @@
             <Color x:Key="StatusErrorColor">#D13438</Color>
             <Color x:Key="AccentColor">#0078D4</Color>
 
+            <!-- Phonetic Badge Colors -->
+            <Color x:Key="PhoneticBadgeBackgroundColor">#F0E6F6</Color>
+            <Color x:Key="PhoneticBadgeTextColor">#7B2D8E</Color>
+
             <!-- Settings UI -->
             <Color x:Key="AddMinusBackgroundColor">#EAEAE9</Color>
             <Color x:Key="ListBorderColor">#DEDEDE</Color>
@@ -46,6 +50,8 @@
             <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
             <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
             <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+            <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="{StaticResource PhoneticBadgeBackgroundColor}" />
+            <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource PhoneticBadgeTextColor}" />
         </ResourceDictionary>
 
         <!-- Dark Theme Colors -->
@@ -71,6 +77,10 @@
             <!-- Button accent — medium blue that supports white text on top -->
             <Color x:Key="AccentColor">#2B88D8</Color>
 
+            <!-- Phonetic Badge Colors — muted purple for dark backgrounds -->
+            <Color x:Key="PhoneticBadgeBackgroundColor">#352842</Color>
+            <Color x:Key="PhoneticBadgeTextColor">#CDA4E0</Color>
+
             <!-- Settings UI -->
             <Color x:Key="AddMinusBackgroundColor">#2E3140</Color>
             <Color x:Key="ListBorderColor">#3A3D4A</Color>
@@ -93,6 +103,8 @@
             <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
             <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
             <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+            <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="{StaticResource PhoneticBadgeBackgroundColor}" />
+            <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource PhoneticBadgeTextColor}" />
         </ResourceDictionary>
 
         <!-- HighContrast Theme (fallback to Light theme values) -->
@@ -113,6 +125,8 @@
             <Color x:Key="AddMinusBackgroundColor">#E0E0E0</Color>
             <Color x:Key="ListBorderColor">#000000</Color>
             <Color x:Key="ActionButtonIconColor">#999999</Color>
+            <Color x:Key="PhoneticBadgeBackgroundColor">#F0E6F6</Color>
+            <Color x:Key="PhoneticBadgeTextColor">#7B2D8E</Color>
 
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
             <SolidColorBrush x:Key="MainBorderBrush" Color="{StaticResource MainBorderColor}" />
@@ -130,6 +144,8 @@
             <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
             <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
             <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+            <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="{StaticResource PhoneticBadgeBackgroundColor}" />
+            <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource PhoneticBadgeTextColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

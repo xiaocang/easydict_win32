@@ -287,4 +287,154 @@ public class GoogleTranslateServiceTests
         result.Alternatives.Should().Contain("Hi");
         result.Alternatives.Should().Contain("Hey");
     }
+
+    [Fact]
+    public async Task TranslateAsync_ExtractsSourcePhonetic()
+    {
+        // Arrange - dj=1 format includes src_translit for source romanization
+        var googleResponse = """
+            {
+                "sentences": [
+                    {"trans": "Hello", "orig": "你好", "src_translit": "nǐ hǎo"}
+                ],
+                "src": "zh-CN"
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(googleResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.Phonetics.Should().NotBeNull();
+        result.WordResult.Phonetics!.Should().Contain(p => p.Text == "nǐ hǎo" && p.Accent == "src");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ExtractsTargetPhonetic()
+    {
+        // Arrange - dj=1 format includes translit for target romanization
+        var googleResponse = """
+            {
+                "sentences": [
+                    {"trans": "你好", "orig": "hello", "translit": "nǐ hǎo"}
+                ],
+                "src": "en"
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(googleResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.Phonetics.Should().NotBeNull();
+        result.WordResult.Phonetics!.Should().Contain(p => p.Text == "nǐ hǎo" && p.Accent == "dest");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ExtractsBothPhonetics()
+    {
+        // Arrange - response with both src_translit and translit
+        var googleResponse = """
+            {
+                "sentences": [
+                    {"trans": "你好", "orig": "hello", "src_translit": "hello", "translit": "nǐ hǎo"}
+                ],
+                "src": "en"
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(googleResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.Phonetics.Should().HaveCount(2);
+        result.WordResult.Phonetics![0].Accent.Should().Be("src");
+        result.WordResult.Phonetics[0].Text.Should().Be("hello");
+        result.WordResult.Phonetics[1].Accent.Should().Be("dest");
+        result.WordResult.Phonetics[1].Text.Should().Be("nǐ hǎo");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_NoPhonetics_WhenNotPresent()
+    {
+        // Arrange - response without transliteration
+        var googleResponse = """
+            {
+                "sentences": [{"trans": "Hello", "orig": "Bonjour"}],
+                "src": "fr"
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(googleResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Bonjour",
+            FromLanguage = Language.French,
+            ToLanguage = Language.English
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert
+        result.WordResult.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ConcatenatesMultiSentencePhonetics()
+    {
+        // Arrange - multiple sentences each with src_translit
+        var googleResponse = """
+            {
+                "sentences": [
+                    {"trans": "Hello. ", "orig": "你好。", "src_translit": "nǐ hǎo. "},
+                    {"trans": "Thank you.", "orig": "谢谢。", "src_translit": "xièxiè."}
+                ],
+                "src": "zh-CN"
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(googleResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "你好。谢谢。",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.Phonetics.Should().NotBeNull();
+        result.WordResult.Phonetics!.Should().Contain(p => p.Text == "nǐ hǎo. xièxiè." && p.Accent == "src");
+    }
 }

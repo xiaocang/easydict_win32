@@ -131,6 +131,9 @@ public sealed class GoogleTranslateService : BaseTranslationService
             detectedLang = LanguageCodes.FromIso639(srcCode);
         }
 
+        // Extract phonetics from src_translit (source romanization)
+        var phonetics = ExtractPhonetics(root);
+
         // Get alternatives if available
         List<string>? alternatives = null;
         if (root.TryGetProperty("alternative_translations", out var altTrans))
@@ -153,6 +156,16 @@ public sealed class GoogleTranslateService : BaseTranslationService
             }
         }
 
+        // Build WordResult if we have phonetics
+        WordResult? wordResult = null;
+        if (phonetics != null)
+        {
+            wordResult = new WordResult
+            {
+                Phonetics = phonetics
+            };
+        }
+
         return new TranslationResult
         {
             TranslatedText = translatedText,
@@ -160,8 +173,57 @@ public sealed class GoogleTranslateService : BaseTranslationService
             DetectedLanguage = detectedLang,
             TargetLanguage = request.ToLanguage,
             ServiceName = DisplayName,
-            Alternatives = alternatives?.Count > 0 ? alternatives : null
+            Alternatives = alternatives?.Count > 0 ? alternatives : null,
+            WordResult = wordResult
         };
+    }
+
+    /// <summary>
+    /// Extract phonetic transliterations from the dj=1 response.
+    /// The sentences array may contain entries with src_translit (source romanization)
+    /// and translit (target romanization).
+    /// </summary>
+    private static List<Phonetic>? ExtractPhonetics(JsonElement root)
+    {
+        if (!root.TryGetProperty("sentences", out var sentences))
+            return null;
+
+        string? srcTranslit = null;
+        string? translit = null;
+
+        foreach (var sentence in sentences.EnumerateArray())
+        {
+            if (sentence.TryGetProperty("src_translit", out var srcT))
+            {
+                var text = srcT.GetString();
+                if (!string.IsNullOrEmpty(text))
+                    srcTranslit = (srcTranslit ?? "") + text;
+            }
+
+            if (sentence.TryGetProperty("translit", out var t))
+            {
+                var text = t.GetString();
+                if (!string.IsNullOrEmpty(text))
+                    translit = (translit ?? "") + text;
+            }
+        }
+
+        if (srcTranslit == null && translit == null)
+            return null;
+
+        var phonetics = new List<Phonetic>();
+
+        if (!string.IsNullOrEmpty(srcTranslit))
+        {
+            phonetics.Add(new Phonetic { Text = srcTranslit, Accent = "src" });
+        }
+
+        if (!string.IsNullOrEmpty(translit))
+        {
+            phonetics.Add(new Phonetic { Text = translit, Accent = "dest" });
+        }
+
+        return phonetics.Count > 0 ? phonetics : null;
     }
 }
 

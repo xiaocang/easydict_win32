@@ -17,6 +17,7 @@ public sealed class YoudaoService : BaseTranslationService
 {
     // Updated to use jsonapi_s with jsonversion=4 (matches tisfeng/Easydict implementation)
     private const string WebDictEndpoint = "https://dict.youdao.com/jsonapi_s";
+    // Web translate endpoint with sign authentication
     private const string WebTranslateEndpoint = "https://fanyi.youdao.com/translate_o";
     private const string OpenApiEndpoint = "https://openapi.youdao.com/api";
     private const string DictVoiceBaseUrl = "https://dict.youdao.com/dictvoice?audio=";
@@ -228,6 +229,7 @@ public sealed class YoudaoService : BaseTranslationService
 
     /// <summary>
     /// Translate using Youdao web translate API (simple translation, no dictionary data).
+    /// Uses translate_o endpoint with sign authentication.
     /// </summary>
     private async Task<TranslationResult> TranslateWithWebAsync(
         TranslationRequest request,
@@ -236,13 +238,30 @@ public sealed class YoudaoService : BaseTranslationService
         var fromCode = GetYoudaoLanguageCode(request.FromLanguage);
         var toCode = GetYoudaoLanguageCode(request.ToLanguage);
 
+        // Generate sign parameters for translate_o endpoint
+        var ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        var salt = ts + new Random().Next(0, 10).ToString();
+        var userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+        var bv = ComputeMd5(userAgent);
+        // Sign key from Youdao web client
+        var signKey = "Ygy_4c=r#e#4EX^NUGUc5";
+        var sign = ComputeMd5("fanyideskweb" + request.Text + salt + signKey);
+
         var formData = new Dictionary<string, string>
         {
             { "i", request.Text },
             { "from", fromCode },
             { "to", toCode },
+            { "smartresult", "dict" },
             { "client", "fanyideskweb" },
-            { "keyfrom", "fanyi.web" }
+            { "salt", salt },
+            { "sign", sign },
+            { "lts", ts },
+            { "bv", bv },
+            { "doctype", "json" },
+            { "version", "2.1" },
+            { "keyfrom", "fanyi.web" },
+            { "action", "FY_BY_REALTlME" }
         };
 
         using var content = new FormUrlEncodedContent(formData);
@@ -250,8 +269,10 @@ public sealed class YoudaoService : BaseTranslationService
         {
             Content = content
         };
-        httpRequest.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        httpRequest.Headers.Add("User-Agent", userAgent);
         httpRequest.Headers.Add("Referer", "https://fanyi.youdao.com/");
+        httpRequest.Headers.Add("Origin", "https://fanyi.youdao.com");
+        httpRequest.Headers.Add("Cookie", "OUTFOX_SEARCH_USER_ID=0@0.0.0.0");
 
         using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
 
@@ -425,6 +446,26 @@ public sealed class YoudaoService : BaseTranslationService
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+
+        // Check for error code
+        if (root.TryGetProperty("errorCode", out var errorCode))
+        {
+            var code = errorCode.ValueKind == JsonValueKind.Number
+                ? errorCode.GetInt32().ToString()
+                : errorCode.GetString();
+            if (code != "0")
+            {
+                throw new TranslationException($"Youdao web translate error: {code}")
+                {
+                    ErrorCode = code switch
+                    {
+                        "50" => TranslationErrorCode.RateLimited,
+                        _ => TranslationErrorCode.ServiceUnavailable
+                    },
+                    ServiceId = ServiceId
+                };
+            }
+        }
 
         var translatedText = request.Text;
         if (root.TryGetProperty("translateResult", out var translateResult) &&

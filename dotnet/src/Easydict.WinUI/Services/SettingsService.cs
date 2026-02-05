@@ -95,6 +95,10 @@ public sealed class SettingsService
     public string? YoudaoAppSecret { get; set; }
     public bool YoudaoUseOfficialApi { get; set; } = false;
 
+    // Volcano settings
+    public string? VolcanoAccessKeyId { get; set; }
+    public string? VolcanoSecretAccessKey { get; set; }
+
     // Linguee settings (no API key needed)
 
     // Behavior settings
@@ -362,6 +366,10 @@ public sealed class SettingsService
         // NiuTrans settings
         NiuTransApiKey = GetValue<string?>(nameof(NiuTransApiKey), null);
 
+        // Volcano settings
+        VolcanoAccessKeyId = GetValue<string?>(nameof(VolcanoAccessKeyId), null);
+        VolcanoSecretAccessKey = GetValue<string?>(nameof(VolcanoSecretAccessKey), null);
+
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
@@ -487,6 +495,10 @@ public sealed class SettingsService
 
         // NiuTrans settings
         _settings[nameof(NiuTransApiKey)] = NiuTransApiKey ?? string.Empty;
+
+        // Volcano settings
+        _settings[nameof(VolcanoAccessKeyId)] = VolcanoAccessKeyId ?? string.Empty;
+        _settings[nameof(VolcanoSecretAccessKey)] = VolcanoSecretAccessKey ?? string.Empty;
 
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;

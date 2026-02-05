@@ -298,6 +298,17 @@ public sealed class TranslationManagerService : IDisposable
             }
         });
 
+        // Configure Volcano
+        _translationManager.ConfigureService("volcano", service =>
+        {
+            if (service is VolcanoService volcano)
+            {
+                volcano.Configure(
+                    _settings.VolcanoAccessKeyId ?? "",
+                    _settings.VolcanoSecretAccessKey ?? "");
+            }
+        });
+
         // Linguee doesn't need configuration (no API key)
 
         Debug.WriteLine("[TranslationManagerService] Services configured");

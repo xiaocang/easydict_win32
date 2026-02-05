@@ -84,7 +84,19 @@ public sealed class YoudaoService : BaseTranslationService
         {
             try
             {
-                return await TranslateWithWebDictAsync(request, cancellationToken);
+                var dictResult = await TranslateWithWebDictAsync(request, cancellationToken);
+
+                // Check if dictionary returned a meaningful result (has definitions or translated text differs from original)
+                var hasDefinitions = dictResult.WordResult?.Definitions?.Count > 0;
+                var hasTranslation = dictResult.TranslatedText != request.Text;
+
+                if (hasDefinitions || hasTranslation)
+                {
+                    return dictResult;
+                }
+
+                // No meaningful result from dictionary, fall back to web translate
+                System.Diagnostics.Debug.WriteLine($"[Youdao] Web dict returned no translation for '{request.Text}', falling back to translate");
             }
             catch (TranslationException)
             {

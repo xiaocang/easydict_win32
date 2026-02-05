@@ -45,4 +45,23 @@ public static class PhoneticDisplayHelper
 
         return phonetics.Where(p => !string.IsNullOrEmpty(p.Text)).ToList();
     }
+
+    /// <summary>
+    /// Extracts only target-language phonetics from a TranslationResult.
+    /// Filters for "dest", "US", or "UK" accents and excludes source language phonetics.
+    /// Returns an empty list if no target phonetics are available.
+    /// </summary>
+    public static IReadOnlyList<Phonetic> GetTargetPhonetics(TranslationResult? result)
+    {
+        var phonetics = result?.WordResult?.Phonetics;
+        if (phonetics == null || phonetics.Count == 0)
+            return [];
+
+        // Only include phonetics that are explicitly marked as target language
+        // dest = target language accent, US/UK = English accents (typically target for Chinese input)
+        return phonetics
+            .Where(p => !string.IsNullOrEmpty(p.Text) && 
+                       (p.Accent == "dest" || p.Accent == "US" || p.Accent == "UK"))
+            .ToList();
+    }
 }

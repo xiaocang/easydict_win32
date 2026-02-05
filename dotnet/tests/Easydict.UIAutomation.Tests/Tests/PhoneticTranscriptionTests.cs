@@ -11,8 +11,9 @@ namespace Easydict.UIAutomation.Tests.Tests;
 
 /// <summary>
 /// Tests for phonetic transcription badge display in translation results.
-/// Translates Chinese text (which produces romanization phonetics from Google)
-/// and verifies the phonetic badges appear in the UI.
+/// After filtering implementation, only target language phonetics (dest, US, UK) are displayed.
+/// Source language romanization (src) is no longer shown to avoid confusion when translating
+/// Chinese to English (where pinyin would appear next to English translation).
 /// </summary>
 [Trait("Category", "UIAutomation")]
 [Collection("UIAutomation")]
@@ -39,7 +40,7 @@ public class PhoneticTranscriptionTests : IDisposable
     }
 
     [Fact]
-    public void MainWindow_ChineseTranslation_ShowsPhoneticBadges()
+    public void MainWindow_ChineseTranslation_DoesNotShowSourcePhonetics()
     {
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
@@ -52,6 +53,7 @@ public class PhoneticTranscriptionTests : IDisposable
         inputBox.Should().NotBeNull("InputTextBox must exist on main window");
 
         // Type Chinese text and press Enter to translate
+        // Google returns only src_translit (pinyin), which should now be hidden
         inputBox!.Click();
         Thread.Sleep(300);
         inputBox.Text = ChineseInputText;
@@ -64,29 +66,25 @@ public class PhoneticTranscriptionTests : IDisposable
         Keyboard.Type(VirtualKeyShort.ENTER);
 
         // Wait for translation results (Chinese requires romanization processing)
-        _output.WriteLine($"Waiting {TranslationWaitMs}ms for translation results with phonetics...");
+        _output.WriteLine($"Waiting {TranslationWaitMs}ms for translation results...");
         Thread.Sleep(TranslationWaitMs);
 
         var pathAfterTranslate = ScreenshotHelper.CaptureWindow(window, "31_phonetic_after_translate");
         _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
 
-        // Assert that phonetic badges are actually displayed
+        // Assert that source phonetic badges are NOT displayed (filtered out)
+        // Chinese→English from Google only returns src phonetics (pinyin), not target phonetics
         var phoneticPanels = window.FindAllDescendants(cf => cf.ByAutomationId("PhoneticPanel"));
-        phoneticPanels.Should().NotBeNull("PhoneticPanel elements should exist");
+        phoneticPanels.Should().NotBeNull("PhoneticPanel elements should exist in DOM");
         
-        var visiblePanels = phoneticPanels.Where(p => !p.IsOffscreen).ToArray();
-        visiblePanels.Should().NotBeEmpty("At least one PhoneticPanel should be visible");
+        var visiblePanels = phoneticPanels.Where(p => !p.IsOffscreen && p.FindAllChildren().Length > 0).ToArray();
+        visiblePanels.Should().BeEmpty("PhoneticPanel should be empty/hidden when only src phonetics are available");
         
-        foreach (var panel in visiblePanels)
-        {
-            var children = panel.FindAllChildren();
-            children.Should().NotBeEmpty($"PhoneticPanel should contain badge elements");
-            _output.WriteLine($"PhoneticPanel has {children.Length} badge(s)");
-        }
+        _output.WriteLine($"Verified: No phonetic badges shown for Chinese→English translation (source romanization filtered)");
 
         // Visual regression comparison
         var comparison = VisualRegressionHelper.CompareWithBaseline(
-            pathAfterTranslate, "phonetic_chinese_translation");
+            pathAfterTranslate, "phonetic_chinese_translation_filtered");
 
         if (comparison == null)
         {
@@ -159,6 +157,9 @@ public class PhoneticTranscriptionTests : IDisposable
     public void MiniWindow_ChineseTranslation_ShowsPhoneticBadges()
     {
         // Ensure app is ready before sending hotkey
+        _ = _launcher.GetMainWindow();DoesNotShowSourcePhonetics()
+    {
+        // Ensure app is ready before sending hotkey
         _ = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
@@ -197,24 +198,16 @@ public class PhoneticTranscriptionTests : IDisposable
         var pathResult = ScreenshotHelper.CaptureWindow(miniWindow, "34_phonetic_mini_chinese");
         _output.WriteLine($"Screenshot saved: {pathResult}");
 
-        // Assert that phonetic badges are displayed in mini window
+        // Assert that source phonetic badges are NOT displayed in mini window (filtered out)
         var phoneticPanels = miniWindow.FindAllDescendants(cf => cf.ByAutomationId("PhoneticPanel"));
-        var visiblePanels = phoneticPanels?.Where(p => !p.IsOffscreen).ToArray();
-        visiblePanels.Should().NotBeNullOrEmpty("At least one PhoneticPanel should be visible in mini window");
+        var visiblePanels = phoneticPanels?.Where(p => !p.IsOffscreen && p.FindAllChildren().Length > 0).ToArray();
+        visiblePanels.Should().BeNullOrEmpty("PhoneticPanel should be empty/hidden when only src phonetics available");
         
-        foreach (var panel in visiblePanels!)
-        {
-            var children = panel.FindAllChildren();
-            children.Should().NotBeEmpty($"PhoneticPanel should contain badge elements");
-            _output.WriteLine($"PhoneticPanel has {children.Length} badge(s)");
-        }
+        _output.WriteLine($"Verified: No phonetic badges shown in mini window for Chinese→English translation");
 
         // Visual regression comparison
         var comparison = VisualRegressionHelper.CompareWithBaseline(
-            pathResult, "phonetic_mini_chinese_translation");
-
-        if (comparison == null)
-        {
+            pathResult, "phonetic_mini_chinese_translation_filtered
             _output.WriteLine("No baseline found — screenshot saved as baseline candidate for manual review.");
         }
         else

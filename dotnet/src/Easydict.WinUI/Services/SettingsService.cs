@@ -90,6 +90,11 @@ public sealed class SettingsService
     // NiuTrans settings
     public string? NiuTransApiKey { get; set; }
 
+    // Youdao settings
+    public string? YoudaoAppKey { get; set; }
+    public string? YoudaoAppSecret { get; set; }
+    public bool YoudaoUseOfficialApi { get; set; } = false;
+
     // Linguee settings (no API key needed)
 
     // Behavior settings

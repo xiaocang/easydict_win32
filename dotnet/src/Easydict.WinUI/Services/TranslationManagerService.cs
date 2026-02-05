@@ -286,6 +286,18 @@ public sealed class TranslationManagerService : IDisposable
             }
         });
 
+        // Configure Youdao
+        _translationManager.ConfigureService("youdao", service =>
+        {
+            if (service is YoudaoService youdao)
+            {
+                youdao.Configure(
+                    _settings.YoudaoAppKey,
+                    _settings.YoudaoAppSecret,
+                    _settings.YoudaoUseOfficialApi);
+            }
+        });
+
         // Linguee doesn't need configuration (no API key)
 
         Debug.WriteLine("[TranslationManagerService] Services configured");

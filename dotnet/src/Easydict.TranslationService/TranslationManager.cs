@@ -88,6 +88,7 @@ public sealed class TranslationManager : IDisposable
         RegisterService(new GoogleWebTranslateService(_httpClient));
         RegisterService(new BingTranslateService(_httpClient));
         RegisterService(new DeepLService(_httpClient));
+        RegisterService(new YoudaoService(_httpClient));
 
         // Register streaming LLM services
         RegisterService(new OpenAIService(_httpClient));

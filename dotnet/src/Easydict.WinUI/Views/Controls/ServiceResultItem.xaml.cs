@@ -188,7 +188,9 @@ public sealed partial class ServiceResultItem : UserControl
 
         PhoneticPanel.Children.Clear();
 
-        var displayablePhonetics = phonetics.Where(p => !string.IsNullOrEmpty(p.Text));
+        // Only display target language phonetics (dest, US, UK)
+        // Filters out source language romanization (src) to avoid showing pinyin next to English translations
+        var displayablePhonetics = PhoneticDisplayHelper.GetTargetPhonetics(result);
         foreach (var phonetic in displayablePhonetics)
         {
             var badge = CreatePhoneticBadge(phonetic, result);

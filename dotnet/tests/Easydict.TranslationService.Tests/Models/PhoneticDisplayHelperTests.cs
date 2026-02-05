@@ -204,4 +204,143 @@ public class PhoneticDisplayHelperTests
     }
 
     #endregion
+
+    #region GetTargetPhonetics Tests
+
+    [Fact]
+    public void GetTargetPhonetics_NullResult_ReturnsEmpty()
+    {
+        PhoneticDisplayHelper.GetTargetPhonetics(null).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetTargetPhonetics_NoWordResult_ReturnsEmpty()
+    {
+        var result = new TranslationResult
+        {
+            TranslatedText = "Hello",
+            OriginalText = "你好",
+            ServiceName = "Google"
+        };
+
+        PhoneticDisplayHelper.GetTargetPhonetics(result).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetTargetPhonetics_OnlySourcePhonetic_ReturnsEmpty()
+    {
+        var result = new TranslationResult
+        {
+            TranslatedText = "Hello",
+            OriginalText = "你好",
+            ServiceName = "Google",
+            WordResult = new WordResult
+            {
+                Phonetics =
+                [
+                    new Phonetic { Text = "nǐ hǎo", Accent = "src" }
+                ]
+            }
+        };
+
+        PhoneticDisplayHelper.GetTargetPhonetics(result).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetTargetPhonetics_DestPhonetic_ReturnsIt()
+    {
+        var result = new TranslationResult
+        {
+            TranslatedText = "你好",
+            OriginalText = "hello",
+            ServiceName = "Google",
+            WordResult = new WordResult
+            {
+                Phonetics =
+                [
+                    new Phonetic { Text = "nǐ hǎo", Accent = "dest" }
+                ]
+            }
+        };
+
+        var phonetics = PhoneticDisplayHelper.GetTargetPhonetics(result);
+        phonetics.Should().HaveCount(1);
+        phonetics[0].Text.Should().Be("nǐ hǎo");
+        phonetics[0].Accent.Should().Be("dest");
+    }
+
+    [Fact]
+    public void GetTargetPhonetics_USUKAccents_ReturnsAll()
+    {
+        var result = new TranslationResult
+        {
+            TranslatedText = "你好",
+            OriginalText = "hello",
+            ServiceName = "Google Dict",
+            WordResult = new WordResult
+            {
+                Phonetics =
+                [
+                    new Phonetic { Text = "heˈloʊ", Accent = "US" },
+                    new Phonetic { Text = "heˈləʊ", Accent = "UK" }
+                ]
+            }
+        };
+
+        var phonetics = PhoneticDisplayHelper.GetTargetPhonetics(result);
+        phonetics.Should().HaveCount(2);
+        phonetics[0].Accent.Should().Be("US");
+        phonetics[1].Accent.Should().Be("UK");
+    }
+
+    [Fact]
+    public void GetTargetPhonetics_MixedSourceAndTarget_ReturnsOnlyTarget()
+    {
+        var result = new TranslationResult
+        {
+            TranslatedText = "Hello",
+            OriginalText = "你好",
+            ServiceName = "Google",
+            WordResult = new WordResult
+            {
+                Phonetics =
+                [
+                    new Phonetic { Text = "nǐ hǎo", Accent = "src" },
+                    new Phonetic { Text = "heˈloʊ", Accent = "US" },
+                    new Phonetic { Text = "heˈləʊ", Accent = "UK" }
+                ]
+            }
+        };
+
+        var phonetics = PhoneticDisplayHelper.GetTargetPhonetics(result);
+        phonetics.Should().HaveCount(2);
+        phonetics[0].Accent.Should().Be("US");
+        phonetics[1].Accent.Should().Be("UK");
+    }
+
+    [Fact]
+    public void GetTargetPhonetics_FiltersEmptyAndNullText()
+    {
+        var result = new TranslationResult
+        {
+            TranslatedText = "Hello",
+            OriginalText = "你好",
+            ServiceName = "Google",
+            WordResult = new WordResult
+            {
+                Phonetics =
+                [
+                    new Phonetic { Text = null, Accent = "dest" },
+                    new Phonetic { Text = "", Accent = "US" },
+                    new Phonetic { Text = "heˈloʊ", Accent = "US" }
+                ]
+            }
+        };
+
+        var phonetics = PhoneticDisplayHelper.GetTargetPhonetics(result);
+        phonetics.Should().HaveCount(1);
+        phonetics[0].Text.Should().Be("heˈloʊ");
+    }
+
+    #endregion
 }

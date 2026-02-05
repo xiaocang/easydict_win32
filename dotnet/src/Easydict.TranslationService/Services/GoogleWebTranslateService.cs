@@ -226,7 +226,8 @@ public sealed class GoogleWebTranslateService : BaseTranslationService
                     var phoneticText = lastSentence[3].GetString();
                     if (!string.IsNullOrEmpty(phoneticText))
                     {
-                        return new Phonetic { Text = phoneticText };
+                        // Mark as source language phonetic (e.g., pinyin for Chinese)
+                        return new Phonetic { Text = phoneticText, Accent = "src" };
                     }
                 }
             }

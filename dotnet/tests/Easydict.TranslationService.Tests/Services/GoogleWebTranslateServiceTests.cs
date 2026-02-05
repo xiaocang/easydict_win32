@@ -203,6 +203,7 @@ public class GoogleWebTranslateServiceTests
         result.WordResult!.Phonetics.Should().NotBeNull();
         result.WordResult.Phonetics.Should().HaveCount(1);
         result.WordResult.Phonetics![0].Text.Should().Be("nǐ hǎo");
+        result.WordResult.Phonetics![0].Accent.Should().Be("src", "GoogleWeb phonetics are source language romanization");
     }
 
     [Fact]

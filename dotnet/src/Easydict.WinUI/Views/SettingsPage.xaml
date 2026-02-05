@@ -240,6 +240,7 @@
                         <CheckBox x:Name="DeepLFreeCheck" Content="Use Free API (no API key required for web translation)" />
                         <TextBlock Text="Leave API key empty to use free web translation. Pro API key gives higher limits."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <Button x:Name="TestDeepLButton" Content="Test" Click="OnTestDeepL" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -260,6 +261,7 @@
                         </ComboBox>
                         <TextBlock Text="You can type a custom model name directly."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Button x:Name="TestOpenAIButton" Content="Test" Click="OnTestOpenAI" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -276,6 +278,7 @@
                         </ComboBox>
                         <TextBlock Text="Get your API key from platform.deepseek.com. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <Button x:Name="TestDeepSeekButton" Content="Test" Click="OnTestDeepSeek" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -294,6 +297,7 @@
                         </ComboBox>
                         <TextBlock Text="Groq provides fast inference. Get your API key from console.groq.com. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <Button x:Name="TestGroqButton" Content="Test" Click="OnTestGroq" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -312,6 +316,7 @@
                         </ComboBox>
                         <TextBlock Text="Get your API key from open.bigmodel.cn. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <Button x:Name="TestZhipuButton" Content="Test" Click="OnTestZhipu" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -332,6 +337,7 @@
                         </ComboBox>
                         <TextBlock Text="Use your GitHub personal access token. Get one from github.com/settings/tokens. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <Button x:Name="TestGitHubModelsButton" Content="Test" Click="OnTestGitHubModels" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -354,6 +360,7 @@
                         </ComboBox>
                         <TextBlock Text="Get your API key from aistudio.google.com. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <Button x:Name="TestGeminiButton" Content="Test" Click="OnTestGemini" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -370,6 +377,7 @@
                                  PlaceholderText="gpt-3.5-turbo" HorizontalAlignment="Left" />
                         <TextBlock Text="Configure any OpenAI-compatible API endpoint (e.g., local LLM servers, other AI providers)."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <Button x:Name="TestCustomOpenAIButton" Content="Test" Click="OnTestCustomOpenAI" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -384,6 +392,8 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <ComboBox x:Name="OllamaModelCombo" Header="Model" Width="200" IsEditable="True" />
                             <Button x:Name="RefreshOllamaButton" Content="Refresh" Click="OnRefreshOllamaModels"
+                                    VerticalAlignment="Bottom" Padding="12,6" />
+                            <Button x:Name="TestOllamaButton" Content="Test" Click="OnTestOllama"
                                     VerticalAlignment="Bottom" Padding="12,6" />
                         </StackPanel>
                         <TextBlock Text="Ollama must be running locally. Click Refresh to load available models."
@@ -405,6 +415,7 @@
                         </ComboBox>
                         <TextBlock Text="Built-in AI uses Groq cloud service. No API key required. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <Button x:Name="TestBuiltInButton" Content="Test" Click="OnTestBuiltIn" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -421,6 +432,7 @@
                                  PlaceholderText="doubao-seed-translation-250915" HorizontalAlignment="Left" />
                         <TextBlock Text="ByteDance's Doubao translation service. Get your API key from console.volcengine.com"
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <Button x:Name="TestDoubaoButton" Content="Test" Click="OnTestDoubao" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -433,6 +445,7 @@
                         <PasswordBox x:Name="CaiyunKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Caiyun API key" HorizontalAlignment="Left" />
                         <TextBlock Text="Get your API key from fanyi.caiyunapp.com"
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Button x:Name="TestCaiyunButton" Content="Test" Click="OnTestCaiyun" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 
@@ -445,6 +458,7 @@
                         <PasswordBox x:Name="NiuTransKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your NiuTrans API key" HorizontalAlignment="Left" />
                         <TextBlock Text="NiuTrans supports 450+ language pairs. Get your API key from niutrans.com"
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <Button x:Name="TestNiuTransButton" Content="Test" Click="OnTestNiuTrans" Padding="12,6" />
                     </StackPanel>
                 </Expander>
 

@@ -593,4 +593,27 @@
   <data name="Cancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
+
+  <!-- Service Test Button -->
+  <data name="Test" xml:space="preserve">
+    <value>Test</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>Testing...</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>Test Successful</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>Configuration is valid. Translation completed in {0}ms.</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>Test Failed</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>Configuration test failed: {0}</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>Please configure the service first (API key, endpoint, etc.).</value>
+  </data>
 </root>

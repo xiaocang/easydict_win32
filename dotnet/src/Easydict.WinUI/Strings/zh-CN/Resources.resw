@@ -593,4 +593,27 @@
   <data name="Cancel" xml:space="preserve">
     <value>取消</value>
   </data>
+
+  <!-- Service Test Button -->
+  <data name="Test" xml:space="preserve">
+    <value>测试</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>测试中...</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>测试成功</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>配置有效。翻译完成，耗时 {0} 毫秒。</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>测试失败</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>配置测试失败：{0}</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>请先配置服务（API 密钥、端点等）。</value>
+  </data>
 </root>

@@ -43,13 +43,6 @@ public static class PhoneticDisplayHelper
         if (phonetics == null || phonetics.Count == 0)
             return [];
 
-        var displayable = new List<Phonetic>();
-        foreach (var p in phonetics)
-        {
-            if (!string.IsNullOrEmpty(p.Text))
-                displayable.Add(p);
-        }
-
-        return displayable;
+        return phonetics.Where(p => !string.IsNullOrEmpty(p.Text)).ToList();
     }
 }

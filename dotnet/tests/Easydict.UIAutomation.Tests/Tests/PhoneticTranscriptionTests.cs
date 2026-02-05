@@ -70,6 +70,20 @@ public class PhoneticTranscriptionTests : IDisposable
         var pathAfterTranslate = ScreenshotHelper.CaptureWindow(window, "31_phonetic_after_translate");
         _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
 
+        // Assert that phonetic badges are actually displayed
+        var phoneticPanels = window.FindAllDescendants(cf => cf.ByAutomationId("PhoneticPanel"));
+        phoneticPanels.Should().NotBeNull("PhoneticPanel elements should exist");
+        
+        var visiblePanels = phoneticPanels.Where(p => !p.IsOffscreen).ToArray();
+        visiblePanels.Should().NotBeEmpty("At least one PhoneticPanel should be visible");
+        
+        foreach (var panel in visiblePanels)
+        {
+            var children = panel.FindAllChildren();
+            children.Should().NotBeEmpty($"PhoneticPanel should contain badge elements");
+            _output.WriteLine($"PhoneticPanel has {children.Length} badge(s)");
+        }
+
         // Visual regression comparison
         var comparison = VisualRegressionHelper.CompareWithBaseline(
             pathAfterTranslate, "phonetic_chinese_translation");
@@ -114,6 +128,18 @@ public class PhoneticTranscriptionTests : IDisposable
 
         var pathAfterTranslate = ScreenshotHelper.CaptureWindow(window, "33_phonetic_en_to_zh");
         _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
+
+        // Assert that phonetic badges are displayed for target language
+        var phoneticPanels = window.FindAllDescendants(cf => cf.ByAutomationId("PhoneticPanel"));
+        var visiblePanels = phoneticPanels?.Where(p => !p.IsOffscreen).ToArray();
+        visiblePanels.Should().NotBeNullOrEmpty("At least one PhoneticPanel should be visible for target phonetics");
+        
+        foreach (var panel in visiblePanels!)
+        {
+            var children = panel.FindAllChildren();
+            children.Should().NotBeEmpty($"PhoneticPanel should contain badge elements");
+            _output.WriteLine($"PhoneticPanel has {children.Length} badge(s)");
+        }
 
         // Visual regression comparison
         var comparison = VisualRegressionHelper.CompareWithBaseline(
@@ -170,6 +196,18 @@ public class PhoneticTranscriptionTests : IDisposable
 
         var pathResult = ScreenshotHelper.CaptureWindow(miniWindow, "34_phonetic_mini_chinese");
         _output.WriteLine($"Screenshot saved: {pathResult}");
+
+        // Assert that phonetic badges are displayed in mini window
+        var phoneticPanels = miniWindow.FindAllDescendants(cf => cf.ByAutomationId("PhoneticPanel"));
+        var visiblePanels = phoneticPanels?.Where(p => !p.IsOffscreen).ToArray();
+        visiblePanels.Should().NotBeNullOrEmpty("At least one PhoneticPanel should be visible in mini window");
+        
+        foreach (var panel in visiblePanels!)
+        {
+            var children = panel.FindAllChildren();
+            children.Should().NotBeEmpty($"PhoneticPanel should contain badge elements");
+            _output.WriteLine($"PhoneticPanel has {children.Length} badge(s)");
+        }
 
         // Visual regression comparison
         var comparison = VisualRegressionHelper.CompareWithBaseline(

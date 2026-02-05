@@ -188,8 +188,8 @@ public sealed class GoogleTranslateService : BaseTranslationService
         if (!root.TryGetProperty("sentences", out var sentences))
             return null;
 
-        string? srcTranslit = null;
-        string? translit = null;
+        StringBuilder? srcBuilder = null;
+        StringBuilder? translitBuilder = null;
 
         foreach (var sentence in sentences.EnumerateArray())
         {
@@ -197,16 +197,23 @@ public sealed class GoogleTranslateService : BaseTranslationService
             {
                 var text = srcT.GetString();
                 if (!string.IsNullOrEmpty(text))
-                    srcTranslit = (srcTranslit ?? "") + text;
+                {
+                    (srcBuilder ??= new StringBuilder()).Append(text);
+                }
             }
 
             if (sentence.TryGetProperty("translit", out var t))
             {
                 var text = t.GetString();
                 if (!string.IsNullOrEmpty(text))
-                    translit = (translit ?? "") + text;
+                {
+                    (translitBuilder ??= new StringBuilder()).Append(text);
+                }
             }
         }
+
+        string? srcTranslit = srcBuilder?.Length > 0 ? srcBuilder.ToString() : null;
+        string? translit = translitBuilder?.Length > 0 ? translitBuilder.ToString() : null;
 
         if (srcTranslit == null && translit == null)
             return null;

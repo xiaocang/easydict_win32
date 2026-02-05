@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
+using System.Linq;
 
 namespace Easydict.WinUI.Views.Controls;
 
@@ -187,11 +188,9 @@ public sealed partial class ServiceResultItem : UserControl
 
         PhoneticPanel.Children.Clear();
 
-        foreach (var phonetic in phonetics)
+        var displayablePhonetics = phonetics.Where(p => !string.IsNullOrEmpty(p.Text));
+        foreach (var phonetic in displayablePhonetics)
         {
-            if (string.IsNullOrEmpty(phonetic.Text))
-                continue;
-
             var badge = CreatePhoneticBadge(phonetic, result);
             PhoneticPanel.Children.Add(badge);
         }
@@ -268,28 +267,61 @@ public sealed partial class ServiceResultItem : UserControl
 
         // Determine which language to use for TTS based on accent
         // Use alias to avoid conflict with FrameworkElement.Language (string)
-        var ttsLanguage = phonetic.Accent == "dest"
-            ? result.TargetLanguage
-            : (result.DetectedLanguage != TranslationLanguage.Auto
+        TranslationLanguage ttsLanguage;
+        string ttsText;
+
+        if (phonetic.Accent == "dest")
+        {
+            // Destination accent: use translated text in target language
+            ttsLanguage = result.TargetLanguage;
+            ttsText = result.TranslatedText;
+        }
+        else if (phonetic.Accent == "US" || phonetic.Accent == "UK")
+        {
+            // English accents ("US"/"UK"): use English translation
+            ttsLanguage = TranslationLanguage.English;
+            ttsText = result.TranslatedText;
+        }
+        else
+        {
+            // Fallback: use original text with detected language
+            ttsLanguage = result.DetectedLanguage != TranslationLanguage.Auto
                 ? result.DetectedLanguage
-                : TranslationLanguage.English);
-        var ttsText = phonetic.Accent == "dest"
-            ? result.TranslatedText
-            : result.OriginalText;
+                : TranslationLanguage.English;
+            ttsText = result.OriginalText;
+        }
 
         speakerButton.Click += async (s, e) =>
         {
             var tts = TextToSpeechService.Instance;
 
-            void ResetIcon()
+            // Reset the icon back to the speaker glyph on the UI thread.
+            void ResetIconGlyph()
             {
-                tts.PlaybackEnded -= ResetIcon;
                 DispatcherQueue.TryEnqueue(() => speakerIcon.Glyph = "\uE767");
             }
 
+            // Handler for playback completion; unsubscribes itself and resets the icon.
+            void OnPlaybackEnded()
+            {
+                tts.PlaybackEnded -= OnPlaybackEnded;
+                ResetIconGlyph();
+            }
+
             speakerIcon.Glyph = "\uE71A"; // Stop icon
-            tts.PlaybackEnded += ResetIcon;
-            await tts.SpeakAsync(ttsText, ttsLanguage);
+            tts.PlaybackEnded += OnPlaybackEnded;
+
+            try
+            {
+                await tts.SpeakAsync(ttsText, ttsLanguage);
+            }
+            finally
+            {
+                // Ensure we always detach the handler and reset the icon,
+                // even if SpeakAsync fails, is cancelled, or playback ends early.
+                tts.PlaybackEnded -= OnPlaybackEnded;
+                ResetIconGlyph();
+            }
         };
 
         panel.Children.Add(speakerButton);
@@ -422,15 +454,33 @@ public sealed partial class ServiceResultItem : UserControl
 
         var tts = TextToSpeechService.Instance;
 
-        void ResetIcon()
+        // Reset the icon back to the play glyph on the UI thread.
+        void ResetIconGlyph()
         {
-            tts.PlaybackEnded -= ResetIcon;
             DispatcherQueue.TryEnqueue(() => PlayIcon.Glyph = "\uE768");
         }
 
+        // Handler for playback completion; unsubscribes itself and resets the icon.
+        void OnPlaybackEnded()
+        {
+            tts.PlaybackEnded -= OnPlaybackEnded;
+            ResetIconGlyph();
+        }
+
         PlayIcon.Glyph = "\uE71A"; // Stop icon
-        tts.PlaybackEnded += ResetIcon;
-        await tts.SpeakAsync(result.TranslatedText, result.TargetLanguage);
+        tts.PlaybackEnded += OnPlaybackEnded;
+
+        try
+        {
+            await tts.SpeakAsync(result.TranslatedText, result.TargetLanguage);
+        }
+        finally
+        {
+            // Ensure we always detach the handler and reset the icon,
+            // even if SpeakAsync fails, is cancelled, or playback ends early.
+            tts.PlaybackEnded -= OnPlaybackEnded;
+            ResetIconGlyph();
+        }
     }
 
     /// <summary>

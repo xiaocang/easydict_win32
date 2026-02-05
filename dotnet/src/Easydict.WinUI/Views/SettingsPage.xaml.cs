@@ -3,6 +3,7 @@ using System.Text.Json;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
+using TranslationLanguage = Easydict.TranslationService.Models.Language;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml;
@@ -1254,8 +1255,8 @@ public sealed partial class SettingsPage : Page
             var request = new TranslationRequest
             {
                 Text = "hello",
-                FromLanguage = Language.English,
-                ToLanguage = Language.SimplifiedChinese
+                FromLanguage = TranslationLanguage.English,
+                ToLanguage = TranslationLanguage.SimplifiedChinese
             };
 
             // Run the test translation

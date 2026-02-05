@@ -1,6 +1,7 @@
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
+using TranslationLanguage = Easydict.TranslationService.Models.Language;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -266,9 +267,12 @@ public sealed partial class ServiceResultItem : UserControl
         speakerButton.Content = speakerIcon;
 
         // Determine which language to use for TTS based on accent
+        // Use alias to avoid conflict with FrameworkElement.Language (string)
         var ttsLanguage = phonetic.Accent == "dest"
             ? result.TargetLanguage
-            : (result.DetectedLanguage != Language.Auto ? result.DetectedLanguage : Language.English);
+            : (result.DetectedLanguage != TranslationLanguage.Auto
+                ? result.DetectedLanguage
+                : TranslationLanguage.English);
         var ttsText = phonetic.Accent == "dest"
             ? result.TranslatedText
             : result.OriginalText;

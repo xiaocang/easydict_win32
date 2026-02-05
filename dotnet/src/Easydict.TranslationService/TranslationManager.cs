@@ -119,6 +119,7 @@ public sealed class TranslationManager : IDisposable
         RegisterService(new DoubaoService(_httpClient));
         RegisterService(new CaiyunService(_httpClient));
         RegisterService(new NiuTransService(_httpClient));
+        RegisterService(new VolcanoService(_httpClient));
         RegisterService(new LingueeService(_httpClient));
     }
 

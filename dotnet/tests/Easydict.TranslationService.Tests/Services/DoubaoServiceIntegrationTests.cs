@@ -10,6 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// Requires DOUBAO_API_KEY environment variable to be set.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "doubao")]
 public class DoubaoServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

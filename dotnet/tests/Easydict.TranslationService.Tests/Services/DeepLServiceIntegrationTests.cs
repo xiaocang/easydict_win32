@@ -10,6 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// Uses web translation by default; optionally uses official API if DEEPL_API_KEY is set.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "deepl")]
 public class DeepLServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

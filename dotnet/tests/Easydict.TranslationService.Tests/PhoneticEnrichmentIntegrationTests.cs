@@ -15,6 +15,7 @@ namespace Easydict.TranslationService.Tests;
 /// 3. Result lacks target phonetics (US/UK)
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "phonetic")]
 public class PhoneticEnrichmentIntegrationTests : IDisposable
 {
     private readonly TranslationManager _manager;

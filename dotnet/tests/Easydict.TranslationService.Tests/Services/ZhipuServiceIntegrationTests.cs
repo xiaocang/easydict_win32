@@ -10,6 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// Requires ZHIPU_API_KEY environment variable to be set.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "zhipu")]
 public class ZhipuServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

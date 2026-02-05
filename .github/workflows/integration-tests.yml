@@ -5,7 +5,36 @@ name: Integration Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to test (all, google, openai, deepl, deepseek, groq, zhipu, github-models, gemini, doubao, caiyun, niutrans, linguee, bing, youdao, phonetic)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - google
+          - openai
+          - deepl
+          - deepseek
+          - groq
+          - zhipu
+          - github-models
+          - gemini
+          - doubao
+          - caiyun
+          - niutrans
+          - linguee
+          - bing
+          - youdao
+          - phonetic
   workflow_call:
+    inputs:
+      service:
+        description: 'Service to test (default: all)'
+        required: false
+        default: 'all'
+        type: string
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
@@ -14,7 +43,7 @@ env:
 
 jobs:
   integration-tests:
-    name: Integration Tests
+    name: Integration Tests (${{ inputs.service || 'all' }})
     runs-on: windows-latest
 
     steps:
@@ -47,7 +76,15 @@ jobs:
           NIUTRANS_API_KEY: ${{ secrets.NIUTRANS_API_KEY }}
           DOUBAO_API_KEY: ${{ secrets.DOUBAO_API_KEY }}
           GITHUB_MODELS_API_KEY: ${{ secrets.GITHUB_MODELS_API_KEY }}
-        run: dotnet test tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --configuration Release --no-build --verbosity normal --filter "Category=Integration" --logger "trx;LogFileName=integration-test-results.trx"
+        run: |
+          $service = "${{ inputs.service || 'all' }}"
+          if ($service -eq "all") {
+            $filter = "Category=Integration"
+          } else {
+            $filter = "Category=Integration&Service=$service"
+          }
+          Write-Host "Running integration tests with filter: $filter"
+          dotnet test tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --configuration Release --no-build --verbosity normal --filter "$filter" --logger "trx;LogFileName=integration-test-results.trx"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

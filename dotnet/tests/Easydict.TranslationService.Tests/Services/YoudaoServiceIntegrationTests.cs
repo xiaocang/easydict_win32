@@ -11,6 +11,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// No API key required for web APIs.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "youdao")]
 public class YoudaoServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

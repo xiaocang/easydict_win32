@@ -10,6 +10,7 @@ namespace Easydict.TranslationService.Tests.Services;
 /// Requires NIUTRANS_API_KEY environment variable to be set.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Service", "niutrans")]
 public class NiuTransServiceIntegrationTests : IDisposable
 {
     private readonly HttpClient _httpClient;

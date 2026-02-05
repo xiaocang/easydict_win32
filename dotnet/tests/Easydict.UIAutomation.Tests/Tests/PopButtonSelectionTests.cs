@@ -481,7 +481,9 @@ public class PopButtonSelectionTests : IDisposable
     }
 
     /// <summary>
-    /// Navigate to Settings and enable the MouseSelectionTranslate toggle.
+    /// Navigate to Settings, scroll to the Behavior section, and enable the
+    /// MouseSelectionTranslate toggle. The toggle is not visible without scrolling
+    /// because the Behavior section is near the bottom of the settings page.
     /// Returns true if the toggle was found and enabled.
     /// </summary>
     private bool TryEnableMouseSelectionTranslate()
@@ -491,29 +493,68 @@ public class PopButtonSelectionTests : IDisposable
             var window = _launcher.GetMainWindow();
             Thread.Sleep(2000);
 
-            // Navigate to Settings page
-            var settingsNav = Retry.WhileNull(
-                () => window.FindFirstDescendant(c => c.ByName("Settings")),
+            // Navigate to Settings page via the SettingsButton (AutomationId)
+            var settingsButton = Retry.WhileNull(
+                () => window.FindFirstDescendant(c => c.ByAutomationId("SettingsButton")),
                 TimeSpan.FromSeconds(10)).Result;
 
-            if (settingsNav == null)
+            if (settingsButton == null)
             {
-                _output.WriteLine("Settings navigation item not found");
+                _output.WriteLine("SettingsButton not found by AutomationId");
                 return false;
             }
 
-            settingsNav.Click();
-            Thread.Sleep(1500);
+            settingsButton.Click();
+            _output.WriteLine("Clicked SettingsButton, waiting for settings page...");
+            Thread.Sleep(2000);
 
-            // Try to find the toggle by AutomationId
-            var toggle = Retry.WhileNull(
-                () => window.FindFirstDescendant(c => c.ByName("MouseSelectionTranslateToggle")),
+            // Capture settings page for debugging
+            ScreenshotHelper.CaptureWindow(window, "e2e_settings_before_scroll");
+
+            // Find the MainScrollViewer to scroll down to Behavior section
+            var scrollViewer = Retry.WhileNull(
+                () => window.FindFirstDescendant(c => c.ByAutomationId("MainScrollViewer")),
                 TimeSpan.FromSeconds(5)).Result;
+
+            if (scrollViewer == null)
+            {
+                _output.WriteLine("MainScrollViewer not found — cannot scroll to Behavior section");
+                return false;
+            }
+
+            // Scroll down to the Behavior section. The section order is:
+            // Language Prefs → Enabled Services → Service Config → HTTP Proxy → Behavior
+            // Need ~5 scroll gestures of -10 each to reach Behavior section.
+            Mouse.MoveTo(scrollViewer.GetClickablePoint());
+            for (int i = 0; i < 5; i++)
+            {
+                Mouse.Scroll(-10);
+                Thread.Sleep(500);
+            }
+
+            _output.WriteLine("Scrolled to Behavior section");
+            ScreenshotHelper.CaptureWindow(window, "e2e_settings_behavior_section");
+
+            // Try to find the toggle by AutomationId first, then by header text
+            var toggle = Retry.WhileNull(
+                () => window.FindFirstDescendant(c => c.ByAutomationId("MouseSelectionTranslateToggle")),
+                TimeSpan.FromSeconds(3)).Result;
 
             if (toggle == null)
             {
-                // Try by header text
+                _output.WriteLine("Toggle not found by AutomationId, trying header text...");
                 toggle = window.FindFirstDescendant(c => c.ByName("Mouse selection translate"));
+            }
+
+            if (toggle == null)
+            {
+                // Scroll a bit more in case we haven't reached the toggle yet
+                _output.WriteLine("Toggle not visible, scrolling more...");
+                Mouse.Scroll(-10);
+                Thread.Sleep(500);
+
+                toggle = window.FindFirstDescendant(c => c.ByAutomationId("MouseSelectionTranslateToggle"))
+                      ?? window.FindFirstDescendant(c => c.ByName("Mouse selection translate"));
             }
 
             if (toggle != null)
@@ -523,22 +564,26 @@ public class PopButtonSelectionTests : IDisposable
                     toggleButton.ToggleState == FlaUI.Core.Definitions.ToggleState.Off)
                 {
                     toggleButton.Toggle();
-                    _output.WriteLine("MouseSelectionTranslate toggle enabled");
+                    _output.WriteLine("MouseSelectionTranslate toggle enabled (was Off → On)");
                     Thread.Sleep(500);
                 }
                 else if (toggleButton != null)
                 {
-                    _output.WriteLine("MouseSelectionTranslate toggle already enabled");
+                    _output.WriteLine($"MouseSelectionTranslate toggle already On (state={toggleButton.ToggleState})");
                 }
                 else
                 {
                     _output.WriteLine("Element found but could not be used as ToggleButton");
                     return false;
                 }
+
+                // Capture confirmation screenshot
+                ScreenshotHelper.CaptureWindow(window, "e2e_settings_toggle_enabled");
                 return true;
             }
 
-            _output.WriteLine("MouseSelectionTranslate toggle not found");
+            _output.WriteLine("MouseSelectionTranslate toggle not found after scrolling");
+            ScreenshotHelper.CaptureWindow(window, "e2e_settings_toggle_not_found");
             return false;
         }
         catch (Exception ex)

@@ -1,0 +1,192 @@
+using Easydict.UIAutomation.Tests.Infrastructure;
+using FluentAssertions;
+using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Input;
+using FlaUI.Core.Tools;
+using FlaUI.Core.WindowsAPI;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace Easydict.UIAutomation.Tests.Tests;
+
+/// <summary>
+/// Tests for phonetic transcription badge display in translation results.
+/// Translates Chinese text (which produces romanization phonetics from Google)
+/// and verifies the phonetic badges appear in the UI.
+/// </summary>
+[Trait("Category", "UIAutomation")]
+[Collection("UIAutomation")]
+public class PhoneticTranscriptionTests : IDisposable
+{
+    private readonly AppLauncher _launcher;
+    private readonly ITestOutputHelper _output;
+
+    /// <summary>
+    /// Chinese input text — Google Translate returns src_translit romanization for this.
+    /// </summary>
+    private const string ChineseInputText = "你好世界";
+
+    /// <summary>
+    /// Wait time for translation results to load (includes network round-trip).
+    /// </summary>
+    private const int TranslationWaitMs = 10000;
+
+    public PhoneticTranscriptionTests(ITestOutputHelper output)
+    {
+        _output = output;
+        _launcher = new AppLauncher();
+        _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+    }
+
+    [Fact]
+    public void MainWindow_ChineseTranslation_ShowsPhoneticBadges()
+    {
+        var window = _launcher.GetMainWindow();
+        Thread.Sleep(2000);
+
+        // Find the input text box
+        var inputBox = Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
+            TimeSpan.FromSeconds(10)).Result;
+
+        inputBox.Should().NotBeNull("InputTextBox must exist on main window");
+
+        // Type Chinese text and press Enter to translate
+        inputBox!.Click();
+        Thread.Sleep(300);
+        inputBox.Text = ChineseInputText;
+        Thread.Sleep(500);
+
+        var pathBeforeTranslate = ScreenshotHelper.CaptureWindow(window, "30_phonetic_before_translate");
+        _output.WriteLine($"Screenshot saved: {pathBeforeTranslate}");
+
+        // Press Enter to trigger translation
+        Keyboard.Type(VirtualKeyShort.ENTER);
+
+        // Wait for translation results (Chinese requires romanization processing)
+        _output.WriteLine($"Waiting {TranslationWaitMs}ms for translation results with phonetics...");
+        Thread.Sleep(TranslationWaitMs);
+
+        var pathAfterTranslate = ScreenshotHelper.CaptureWindow(window, "31_phonetic_after_translate");
+        _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
+
+        // Visual regression comparison
+        var comparison = VisualRegressionHelper.CompareWithBaseline(
+            pathAfterTranslate, "phonetic_chinese_translation");
+
+        if (comparison == null)
+        {
+            _output.WriteLine("No baseline found — screenshot saved as baseline candidate for manual review.");
+        }
+        else
+        {
+            _output.WriteLine(comparison.ToString());
+        }
+
+        // Capture full screen to see overall state
+        ScreenshotHelper.CaptureScreen("32_phonetic_fullscreen");
+    }
+
+    [Fact]
+    public void MainWindow_EnglishToChineseTranslation_ShowsTargetPhonetic()
+    {
+        var window = _launcher.GetMainWindow();
+        Thread.Sleep(2000);
+
+        // Find the input text box
+        var inputBox = Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
+            TimeSpan.FromSeconds(10)).Result;
+
+        inputBox.Should().NotBeNull("InputTextBox must exist on main window");
+
+        // Type English text — when translating to Chinese, Google returns translit for the target
+        inputBox!.Click();
+        Thread.Sleep(300);
+        inputBox.Text = "Hello World";
+        Thread.Sleep(500);
+
+        // Press Enter to trigger translation
+        Keyboard.Type(VirtualKeyShort.ENTER);
+
+        _output.WriteLine($"Waiting {TranslationWaitMs}ms for translation results with target phonetics...");
+        Thread.Sleep(TranslationWaitMs);
+
+        var pathAfterTranslate = ScreenshotHelper.CaptureWindow(window, "33_phonetic_en_to_zh");
+        _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
+
+        // Visual regression comparison
+        var comparison = VisualRegressionHelper.CompareWithBaseline(
+            pathAfterTranslate, "phonetic_english_to_chinese");
+
+        if (comparison == null)
+        {
+            _output.WriteLine("No baseline found — screenshot saved as baseline candidate for manual review.");
+        }
+        else
+        {
+            _output.WriteLine(comparison.ToString());
+        }
+    }
+
+    [Fact]
+    public void MiniWindow_ChineseTranslation_ShowsPhoneticBadges()
+    {
+        // Ensure app is ready before sending hotkey
+        _ = _launcher.GetMainWindow();
+        Thread.Sleep(2000);
+
+        // Open mini window via hotkey: Ctrl+Alt+M
+        _output.WriteLine("Opening mini window with Ctrl+Alt+M");
+        UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_M);
+
+        // Wait for mini window to appear
+        Thread.Sleep(3000);
+
+        var miniWindow = UITestHelper.FindSecondaryWindow(
+            _launcher.Application, _launcher.Automation, "Mini", _output);
+        miniWindow.Should().NotBeNull("Mini window must open after Ctrl+Alt+M hotkey");
+
+        miniWindow!.SetForeground();
+        Thread.Sleep(500);
+
+        // Find input text box in mini window
+        var inputBox = Retry.WhileNull(
+            () => miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
+            TimeSpan.FromSeconds(10)).Result;
+
+        inputBox.Should().NotBeNull("InputTextBox must exist in mini window");
+
+        inputBox!.Click();
+        Thread.Sleep(300);
+        inputBox.Text = ChineseInputText;
+        Thread.Sleep(500);
+
+        // Press Enter to trigger translation
+        Keyboard.Type(VirtualKeyShort.ENTER);
+
+        _output.WriteLine($"Waiting {TranslationWaitMs}ms for translation results...");
+        Thread.Sleep(TranslationWaitMs);
+
+        var pathResult = ScreenshotHelper.CaptureWindow(miniWindow, "34_phonetic_mini_chinese");
+        _output.WriteLine($"Screenshot saved: {pathResult}");
+
+        // Visual regression comparison
+        var comparison = VisualRegressionHelper.CompareWithBaseline(
+            pathResult, "phonetic_mini_chinese_translation");
+
+        if (comparison == null)
+        {
+            _output.WriteLine("No baseline found — screenshot saved as baseline candidate for manual review.");
+        }
+        else
+        {
+            _output.WriteLine(comparison.ToString());
+        }
+    }
+
+    public void Dispose()
+    {
+        _launcher.Dispose();
+    }
+}

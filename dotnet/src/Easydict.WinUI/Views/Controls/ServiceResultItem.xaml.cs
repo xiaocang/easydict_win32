@@ -237,7 +237,7 @@ public sealed partial class ServiceResultItem : UserControl
         // Phonetic text
         panel.Children.Add(new TextBlock
         {
-            Text = $"/{phonetic.Text}/",
+            Text = PhoneticDisplayHelper.FormatPhoneticText(phonetic.Text!),
             FontSize = 11,
             Foreground = FindThemeBrush("PhoneticBadgeTextBrush")
                 ?? new SolidColorBrush(Microsoft.UI.Colors.Purple),
@@ -295,18 +295,11 @@ public sealed partial class ServiceResultItem : UserControl
 
     /// <summary>
     /// Maps phonetic accent codes to display labels.
+    /// Delegates to PhoneticDisplayHelper for testability.
     /// </summary>
     private static string? GetAccentDisplayLabel(string? accent)
     {
-        return accent switch
-        {
-            "US" => "美",
-            "UK" => "英",
-            "src" => "原",
-            "dest" => "译",
-            null or "" => null,
-            _ => accent
-        };
+        return PhoneticDisplayHelper.GetAccentDisplayLabel(accent);
     }
 
     private void OnHeaderPointerPressed(object sender, PointerRoutedEventArgs e)

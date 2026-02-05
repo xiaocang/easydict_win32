@@ -124,6 +124,7 @@
                     <!-- Phonetic Transcription Badges -->
                     <StackPanel
                         x:Name="PhoneticPanel"
+                        AutomationProperties.AutomationId="PhoneticPanel"
                         Grid.Row="1"
                         Orientation="Horizontal"
                         Spacing="6"

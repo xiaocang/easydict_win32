@@ -17,10 +17,15 @@ public sealed class YoudaoService : BaseTranslationService
 {
     // Updated to use jsonapi_s with jsonversion=4 (matches tisfeng/Easydict implementation)
     private const string WebDictEndpoint = "https://dict.youdao.com/jsonapi_s";
-    // Web translate endpoint with sign authentication
-    private const string WebTranslateEndpoint = "https://fanyi.youdao.com/translate_o";
+    // Web translate endpoint (webtranslate with AES encryption, matching tisfeng/Easydict)
+    private const string WebTranslateEndpoint = "https://dict.youdao.com/webtranslate";
     private const string OpenApiEndpoint = "https://openapi.youdao.com/api";
     private const string DictVoiceBaseUrl = "https://dict.youdao.com/dictvoice?audio=";
+
+    // AES decryption keys for webtranslate response (from tisfeng/Easydict)
+    private const string AesKeySource = "ydsecret://query/key/B*RGygVywfNBwpmBaZg*WT7SIOUP2T0C9WHMZN39j^DAdaZhAnxvGcCY6VYFwnHl";
+    private const string AesIvSource = "ydsecret://query/iv/C@lZe2YzHtZ2CYgaXKSVfsb7Y4QWHjITPPZ0nQp87fBeJ!Iv6v^6fvi2WN@bYpJ4";
+    private const string WebTranslateSignKey = "asdjnjfenknafdfsdfsd";
 
     private static readonly IReadOnlyList<Language> _youdaoLanguages =
     [
@@ -228,8 +233,8 @@ public sealed class YoudaoService : BaseTranslationService
     }
 
     /// <summary>
-    /// Translate using Youdao web translate API (simple translation, no dictionary data).
-    /// Uses translate_o endpoint with sign authentication.
+    /// Translate using Youdao webtranslate API (matching tisfeng/Easydict implementation).
+    /// Response is AES encrypted and needs to be decrypted.
     /// </summary>
     private async Task<TranslationResult> TranslateWithWebAsync(
         TranslationRequest request,
@@ -238,30 +243,26 @@ public sealed class YoudaoService : BaseTranslationService
         var fromCode = GetYoudaoLanguageCode(request.FromLanguage);
         var toCode = GetYoudaoLanguageCode(request.ToLanguage);
 
-        // Generate sign parameters for translate_o endpoint
-        var ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-        var salt = ts + new Random().Next(0, 10).ToString();
-        var userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-        var bv = ComputeMd5(userAgent);
-        // Sign key from Youdao web client
-        var signKey = "Ygy_4c=r#e#4EX^NUGUc5";
-        var sign = ComputeMd5("fanyideskweb" + request.Text + salt + signKey);
+        // Generate sign parameters for webtranslate endpoint
+        var mysticTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        var signStr = $"client=fanyideskweb&mysticTime={mysticTime}&product=webfanyi&key={WebTranslateSignKey}";
+        var sign = ComputeMd5(signStr);
 
         var formData = new Dictionary<string, string>
         {
             { "i", request.Text },
             { "from", fromCode },
             { "to", toCode },
-            { "smartresult", "dict" },
-            { "client", "fanyideskweb" },
-            { "salt", salt },
+            { "dictResult", "true" },
+            { "keyid", "webfanyi" },
             { "sign", sign },
-            { "lts", ts },
-            { "bv", bv },
-            { "doctype", "json" },
-            { "version", "2.1" },
-            { "keyfrom", "fanyi.web" },
-            { "action", "FY_BY_REALTlME" }
+            { "client", "fanyideskweb" },
+            { "product", "webfanyi" },
+            { "appVersion", "1.0.0" },
+            { "vendor", "web" },
+            { "pointParam", "client,mysticTime,product" },
+            { "mysticTime", mysticTime },
+            { "keyfrom", "fanyi.web" }
         };
 
         using var content = new FormUrlEncodedContent(formData);
@@ -269,7 +270,7 @@ public sealed class YoudaoService : BaseTranslationService
         {
             Content = content
         };
-        httpRequest.Headers.Add("User-Agent", userAgent);
+        httpRequest.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         httpRequest.Headers.Add("Referer", "https://fanyi.youdao.com/");
         httpRequest.Headers.Add("Origin", "https://fanyi.youdao.com");
         httpRequest.Headers.Add("Cookie", "OUTFOX_SEARCH_USER_ID=0@0.0.0.0");
@@ -287,8 +288,66 @@ public sealed class YoudaoService : BaseTranslationService
             };
         }
 
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        // Check if response is plain JSON error (starts with '{') or encrypted data
+        string json;
+        if (responseText.TrimStart().StartsWith('{'))
+        {
+            // Response is already plain JSON (likely an error response)
+            json = responseText;
+        }
+        else
+        {
+            // Response is encrypted, decrypt it
+            json = DecryptWebTranslateResponse(responseText);
+        }
+
         return ParseWebTranslateResponse(json, request);
+    }
+
+    /// <summary>
+    /// Decrypt the AES-encrypted response from webtranslate endpoint.
+    /// </summary>
+    private static string DecryptWebTranslateResponse(string encryptedText)
+    {
+        try
+        {
+            // Compute AES key and IV from the source strings using MD5
+            var keyBytes = MD5.HashData(Encoding.UTF8.GetBytes(AesKeySource));
+            var ivBytes = MD5.HashData(Encoding.UTF8.GetBytes(AesIvSource));
+
+            // Decode base64 with URL-safe alphabet (replace - with +, _ with /)
+            var base64 = encryptedText.Replace('-', '+').Replace('_', '/');
+
+            // Add padding if necessary
+            var padding = base64.Length % 4;
+            if (padding > 0)
+            {
+                base64 += new string('=', 4 - padding);
+            }
+
+            var encryptedBytes = Convert.FromBase64String(base64);
+
+            // Decrypt using AES-128-CBC
+            using var aes = Aes.Create();
+            aes.Key = keyBytes;
+            aes.IV = ivBytes;
+            aes.Mode = CipherMode.CBC;
+            aes.Padding = PaddingMode.PKCS7;
+
+            using var decryptor = aes.CreateDecryptor();
+            var decryptedBytes = decryptor.TransformFinalBlock(encryptedBytes, 0, encryptedBytes.Length);
+            return Encoding.UTF8.GetString(decryptedBytes);
+        }
+        catch (Exception ex)
+        {
+            throw new TranslationException($"Failed to decrypt Youdao response: {ex.Message}", ex)
+            {
+                ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                ServiceId = "youdao"
+            };
+        }
     }
 
     /// <summary>
@@ -447,19 +506,19 @@ public sealed class YoudaoService : BaseTranslationService
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        // Check for error code
-        if (root.TryGetProperty("errorCode", out var errorCode))
+        // Check for error code (webtranslate uses "code", translate_o uses "errorCode")
+        if (root.TryGetProperty("code", out var codeElement))
         {
-            var code = errorCode.ValueKind == JsonValueKind.Number
-                ? errorCode.GetInt32().ToString()
-                : errorCode.GetString();
-            if (code != "0")
+            var code = codeElement.ValueKind == JsonValueKind.Number
+                ? codeElement.GetInt32()
+                : int.TryParse(codeElement.GetString(), out var parsed) ? parsed : 0;
+            if (code != 0)
             {
                 throw new TranslationException($"Youdao web translate error: {code}")
                 {
                     ErrorCode = code switch
                     {
-                        "50" => TranslationErrorCode.RateLimited,
+                        50 => TranslationErrorCode.RateLimited,
                         _ => TranslationErrorCode.ServiceUnavailable
                     },
                     ServiceId = ServiceId
@@ -467,17 +526,21 @@ public sealed class YoudaoService : BaseTranslationService
             }
         }
 
-        var translatedText = request.Text;
+        string? translatedText = null;
         if (root.TryGetProperty("translateResult", out var translateResult) &&
             translateResult.ValueKind == JsonValueKind.Array &&
             translateResult.GetArrayLength() > 0)
         {
             var sb = new StringBuilder();
-            foreach (var paragraph in translateResult.EnumerateArray())
+            foreach (var item in translateResult.EnumerateArray())
             {
-                if (paragraph.ValueKind == JsonValueKind.Array)
+                // Handle both formats:
+                // 1. Nested array: [[{tgt, src}, ...], ...]
+                // 2. Flat array: [{tgt, src}, ...]
+                if (item.ValueKind == JsonValueKind.Array)
                 {
-                    foreach (var segment in paragraph.EnumerateArray())
+                    // Nested array format
+                    foreach (var segment in item.EnumerateArray())
                     {
                         if (segment.TryGetProperty("tgt", out var tgt))
                         {
@@ -489,11 +552,35 @@ public sealed class YoudaoService : BaseTranslationService
                         }
                     }
                 }
+                else if (item.ValueKind == JsonValueKind.Object)
+                {
+                    // Flat array format
+                    if (item.TryGetProperty("tgt", out var tgt))
+                    {
+                        var text = tgt.GetString();
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            sb.Append(text);
+                        }
+                    }
+                }
             }
             if (sb.Length > 0)
             {
                 translatedText = sb.ToString();
             }
+        }
+
+        // If no translation found, throw an error with the response for debugging
+        if (string.IsNullOrEmpty(translatedText))
+        {
+            // Truncate json for error message (max 500 chars)
+            var jsonPreview = json.Length > 500 ? json[..500] + "..." : json;
+            throw new TranslationException($"Youdao web translate returned no result. Response: {jsonPreview}")
+            {
+                ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                ServiceId = ServiceId
+            };
         }
 
         return new TranslationResult

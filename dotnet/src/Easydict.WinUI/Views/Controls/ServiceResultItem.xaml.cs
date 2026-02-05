@@ -197,7 +197,7 @@ public sealed partial class ServiceResultItem : UserControl
 
         PhoneticPanel.Children.Clear();
 
-        // Only display target language phonetics (US, UK) for English target
+        // Get target-related phonetics (dest/US/UK) and then display only US/UK accents
         var displayablePhonetics = PhoneticDisplayHelper.GetTargetPhonetics(result)
             .Where(p => p.Accent == "US" || p.Accent == "UK")
             .ToList();

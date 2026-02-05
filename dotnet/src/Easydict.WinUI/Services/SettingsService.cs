@@ -177,6 +177,12 @@ public sealed class SettingsService
     public Dictionary<string, bool> FixedWindowServiceEnabledQuery { get; set; } = new();
 
     /// <summary>
+    /// Tracks whether each service passed its last configuration test.
+    /// Persisted to show test success indicators on settings page.
+    /// </summary>
+    public Dictionary<string, bool> ServiceTestStatus { get; set; } = new();
+
+    /// <summary>
     /// Enable international services that may not be accessible in all regions.
     /// Auto-detected from system region; persisted value is used once saved.
     /// </summary>
@@ -396,6 +402,9 @@ public sealed class SettingsService
         MiniWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(MiniWindowServiceEnabledQuery));
         FixedWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(FixedWindowServiceEnabledQuery));
 
+        // Service test status
+        ServiceTestStatus = GetStringBoolDictionary(nameof(ServiceTestStatus));
+
         // International services: use optimistic default (true) during sync construction.
         // Actual region detection runs asynchronously via InitializeRegionDefaultsAsync().
         if (_settings.ContainsKey(nameof(EnableInternationalServices)))
@@ -516,6 +525,9 @@ public sealed class SettingsService
         _settings[nameof(MainWindowServiceEnabledQuery)] = MainWindowServiceEnabledQuery;
         _settings[nameof(MiniWindowServiceEnabledQuery)] = MiniWindowServiceEnabledQuery;
         _settings[nameof(FixedWindowServiceEnabledQuery)] = FixedWindowServiceEnabledQuery;
+
+        // Service test status
+        _settings[nameof(ServiceTestStatus)] = ServiceTestStatus;
 
         // International services setting
         _settings[nameof(EnableInternationalServices)] = EnableInternationalServices;
@@ -805,6 +817,19 @@ public sealed class SettingsService
             catch { }
         }
         return new Dictionary<string, bool>();
+    }
+
+    /// <summary>
+    /// Clears the test passed status for a service when translation fails.
+    /// This ensures the success indicator is removed if the service stops working.
+    /// </summary>
+    /// <param name="serviceId">The service ID whose test status should be cleared</param>
+    public void ClearServiceTestStatus(string serviceId)
+    {
+        if (ServiceTestStatus.Remove(serviceId))
+        {
+            Save();
+        }
     }
 }
 

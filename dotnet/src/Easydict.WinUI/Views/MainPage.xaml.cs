@@ -708,6 +708,7 @@ namespace Easydict.WinUI.Views
                             serviceResult.IsStreaming = false;
                             serviceResult.ApplyAutoCollapseLogic();
                         });
+                        SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
                         return (bool?)false; // Error
                     }
                     catch (Exception ex)
@@ -724,6 +725,7 @@ namespace Easydict.WinUI.Views
                             serviceResult.IsStreaming = false;
                             serviceResult.ApplyAutoCollapseLogic();
                         });
+                        SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
                         return (bool?)false; // Error
                     }
                 });

@@ -1,5 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
+using Easydict.TranslationService;
+using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services;
+using TranslationLanguage = Easydict.TranslationService.Models.Language;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml;
@@ -142,6 +146,22 @@ public sealed partial class SettingsPage : Page
 
         // Refresh button for Ollama
         RefreshOllamaButton.Content = loc.GetString("Refresh");
+
+        // Test buttons for all services
+        var testButtonText = loc.GetString("Test");
+        TestDeepLButton.Content = testButtonText;
+        TestOpenAIButton.Content = testButtonText;
+        TestDeepSeekButton.Content = testButtonText;
+        TestGroqButton.Content = testButtonText;
+        TestZhipuButton.Content = testButtonText;
+        TestGitHubModelsButton.Content = testButtonText;
+        TestGeminiButton.Content = testButtonText;
+        TestCustomOpenAIButton.Content = testButtonText;
+        TestOllamaButton.Content = testButtonText;
+        TestBuiltInButton.Content = testButtonText;
+        TestDoubaoButton.Content = testButtonText;
+        TestCaiyunButton.Content = testButtonText;
+        TestNiuTransButton.Content = testButtonText;
 
         // Free Services section
         if (FreeServicesHeaderText != null)
@@ -405,6 +425,40 @@ public sealed partial class SettingsPage : Page
         // Set version from assembly metadata
         var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = $"Version {version?.ToString(3) ?? "Unknown"}";
+
+        // Restore test status indicators
+        RestoreTestStatusIndicators();
+    }
+
+    /// <summary>
+    /// Restores test success indicators based on persisted ServiceTestStatus.
+    /// </summary>
+    private void RestoreTestStatusIndicators()
+    {
+        var statusMap = new Dictionary<string, TextBlock>
+        {
+            ["deepl"] = DeepLStatusText,
+            ["openai"] = OpenAIStatusText,
+            ["deepseek"] = DeepSeekStatusText,
+            ["groq"] = GroqStatusText,
+            ["zhipu"] = ZhipuStatusText,
+            ["github"] = GitHubModelsStatusText,
+            ["gemini"] = GeminiStatusText,
+            ["custom-openai"] = CustomOpenAIStatusText,
+            ["ollama"] = OllamaStatusText,
+            ["builtin"] = BuiltInStatusText,
+            ["doubao"] = DoubaoStatusText,
+            ["caiyun"] = CaiyunStatusText,
+            ["niutrans"] = NiuTransStatusText
+        };
+
+        foreach (var (serviceId, indicator) in statusMap)
+        {
+            if (_settings.ServiceTestStatus.TryGetValue(serviceId, out var passed) && passed)
+            {
+                indicator.Visibility = Visibility.Visible;
+            }
+        }
     }
 
     /// <summary>
@@ -1187,6 +1241,349 @@ public sealed partial class SettingsPage : Page
         }
         return dict;
     }
+
+    #region Service Test Handlers
+
+    /// <summary>
+    /// Test a translation service with current UI configuration.
+    /// </summary>
+    /// <param name="serviceId">The service ID to test.</param>
+    /// <param name="configureAction">Action to configure the service with current UI values.</param>
+    /// <param name="testButton">The test button to disable during testing.</param>
+    /// <param name="statusIndicator">Optional TextBlock to show success indicator.</param>
+    private async Task TestServiceAsync(string serviceId, Action<ITranslationService> configureAction, Button testButton, TextBlock? statusIndicator = null)
+    {
+        var loc = LocalizationService.Instance;
+        var originalContent = testButton.Content;
+
+        testButton.IsEnabled = false;
+        testButton.Content = loc.GetString("Testing");
+
+        try
+        {
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            var manager = handle.Manager;
+
+            if (!manager.Services.TryGetValue(serviceId, out var service))
+            {
+                throw new TranslationException($"Service '{serviceId}' not found");
+            }
+
+            // Configure the service with current UI values
+            configureAction(service);
+
+            // Check if configured
+            if (!service.IsConfigured)
+            {
+                var notConfiguredDialog = new ContentDialog
+                {
+                    Title = loc.GetString("TestFailedTitle"),
+                    Content = loc.GetString("TestNotConfigured"),
+                    CloseButtonText = loc.GetString("OK"),
+                    XamlRoot = this.XamlRoot
+                };
+                await notConfiguredDialog.ShowAsync();
+                return;
+            }
+
+            // Create a simple test request
+            var request = new TranslationRequest
+            {
+                Text = "hello",
+                FromLanguage = TranslationLanguage.English,
+                ToLanguage = TranslationLanguage.SimplifiedChinese
+            };
+
+            // Run the test translation
+            var result = await service.TranslateAsync(request);
+
+            // Show success indicator on expander header
+            if (statusIndicator != null)
+            {
+                statusIndicator.Visibility = Visibility.Visible;
+            }
+
+            // Save test success status
+            _settings.ServiceTestStatus[serviceId] = true;
+            _settings.Save();
+
+            // Show success
+            var successDialog = new ContentDialog
+            {
+                Title = loc.GetString("TestSuccessTitle"),
+                Content = string.Format(loc.GetString("TestSuccessMessage"), result.TimingMs),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await successDialog.ShowAsync();
+        }
+        catch (TranslationException ex)
+        {
+            // Clear test passed status and hide indicator
+            _settings.ServiceTestStatus.Remove(serviceId);
+            _settings.Save();
+            if (statusIndicator != null)
+            {
+                statusIndicator.Visibility = Visibility.Collapsed;
+            }
+
+            var errorDialog = new ContentDialog
+            {
+                Title = loc.GetString("TestFailedTitle"),
+                Content = string.Format(loc.GetString("TestFailedMessage"), ex.Message),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await errorDialog.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            // Clear test passed status and hide indicator
+            _settings.ServiceTestStatus.Remove(serviceId);
+            _settings.Save();
+            if (statusIndicator != null)
+            {
+                statusIndicator.Visibility = Visibility.Collapsed;
+            }
+
+            var errorDialog = new ContentDialog
+            {
+                Title = loc.GetString("TestFailedTitle"),
+                Content = string.Format(loc.GetString("TestFailedMessage"), ex.Message),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await errorDialog.ShowAsync();
+        }
+        finally
+        {
+            testButton.Content = originalContent;
+            testButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Test DeepL configuration.
+    /// </summary>
+    private async void OnTestDeepL(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("deepl", service =>
+        {
+            if (service is DeepLService deepl)
+            {
+                var apiKey = DeepLKeyBox.Password;
+                deepl.Configure(
+                    string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
+                    useWebFirst: DeepLFreeCheck.IsChecked ?? true);
+            }
+        }, TestDeepLButton, DeepLStatusText);
+    }
+
+    /// <summary>
+    /// Test OpenAI configuration.
+    /// </summary>
+    private async void OnTestOpenAI(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("openai", service =>
+        {
+            if (service is OpenAIService openai)
+            {
+                var apiKey = OpenAIKeyBox.Password;
+                var endpoint = OpenAIEndpointBox.Text?.Trim();
+                var model = GetEditableComboValue(OpenAIModelCombo, "gpt-4o-mini");
+
+                openai.Configure(
+                    string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey,
+                    string.IsNullOrWhiteSpace(endpoint) ? "https://api.openai.com/v1/chat/completions" : endpoint,
+                    model);
+            }
+        }, TestOpenAIButton, OpenAIStatusText);
+    }
+
+    /// <summary>
+    /// Test DeepSeek configuration.
+    /// </summary>
+    private async void OnTestDeepSeek(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("deepseek", service =>
+        {
+            if (service is DeepSeekService deepseek)
+            {
+                var apiKey = DeepSeekKeyBox.Password;
+                var model = GetEditableComboValue(DeepSeekModelCombo, "deepseek-chat");
+                deepseek.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
+            }
+        }, TestDeepSeekButton, DeepSeekStatusText);
+    }
+
+    /// <summary>
+    /// Test Groq configuration.
+    /// </summary>
+    private async void OnTestGroq(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("groq", service =>
+        {
+            if (service is GroqService groq)
+            {
+                var apiKey = GroqKeyBox.Password;
+                var model = GetEditableComboValue(GroqModelCombo, "llama-3.3-70b-versatile");
+                groq.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
+            }
+        }, TestGroqButton, GroqStatusText);
+    }
+
+    /// <summary>
+    /// Test Zhipu configuration.
+    /// </summary>
+    private async void OnTestZhipu(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("zhipu", service =>
+        {
+            if (service is ZhipuService zhipu)
+            {
+                var apiKey = ZhipuKeyBox.Password;
+                var model = GetEditableComboValue(ZhipuModelCombo, "glm-4-flash-250414");
+                zhipu.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
+            }
+        }, TestZhipuButton, ZhipuStatusText);
+    }
+
+    /// <summary>
+    /// Test GitHub Models configuration.
+    /// </summary>
+    private async void OnTestGitHubModels(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("github", service =>
+        {
+            if (service is GitHubModelsService github)
+            {
+                var token = GitHubModelsTokenBox.Password;
+                var model = GetEditableComboValue(GitHubModelsModelCombo, "gpt-4.1");
+                github.Configure(string.IsNullOrWhiteSpace(token) ? "" : token, model: model);
+            }
+        }, TestGitHubModelsButton, GitHubModelsStatusText);
+    }
+
+    /// <summary>
+    /// Test Gemini configuration.
+    /// </summary>
+    private async void OnTestGemini(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("gemini", service =>
+        {
+            if (service is GeminiService gemini)
+            {
+                var apiKey = GeminiKeyBox.Password;
+                var model = GetEditableComboValue(GeminiModelCombo, "gemini-2.5-flash");
+                gemini.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model);
+            }
+        }, TestGeminiButton, GeminiStatusText);
+    }
+
+    /// <summary>
+    /// Test Custom OpenAI configuration.
+    /// </summary>
+    private async void OnTestCustomOpenAI(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("custom-openai", service =>
+        {
+            if (service is CustomOpenAIService customOpenai)
+            {
+                var endpoint = CustomOpenAIEndpointBox.Text?.Trim() ?? "";
+                var apiKey = CustomOpenAIKeyBox.Password;
+                var model = CustomOpenAIModelBox.Text?.Trim();
+                customOpenai.Configure(
+                    endpoint,
+                    string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
+                    string.IsNullOrWhiteSpace(model) ? "gpt-3.5-turbo" : model);
+            }
+        }, TestCustomOpenAIButton, CustomOpenAIStatusText);
+    }
+
+    /// <summary>
+    /// Test Ollama configuration.
+    /// </summary>
+    private async void OnTestOllama(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("ollama", service =>
+        {
+            if (service is OllamaService ollama)
+            {
+                var endpoint = OllamaEndpointBox.Text?.Trim();
+                var model = OllamaModelCombo.Text?.Trim() ?? "llama3.2";
+                ollama.Configure(
+                    string.IsNullOrWhiteSpace(endpoint) ? "http://localhost:11434/v1/chat/completions" : endpoint,
+                    model);
+            }
+        }, TestOllamaButton, OllamaStatusText);
+    }
+
+    /// <summary>
+    /// Test Built-in AI configuration.
+    /// </summary>
+    private async void OnTestBuiltIn(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("builtin", service =>
+        {
+            if (service is BuiltInAIService builtin)
+            {
+                var model = GetEditableComboValue(BuiltInModelCombo, "llama-3.3-70b-versatile");
+                builtin.Configure(model);
+            }
+        }, TestBuiltInButton, BuiltInStatusText);
+    }
+
+    /// <summary>
+    /// Test Doubao configuration.
+    /// </summary>
+    private async void OnTestDoubao(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("doubao", service =>
+        {
+            if (service is DoubaoService doubao)
+            {
+                var apiKey = DoubaoKeyBox.Password;
+                var endpoint = DoubaoEndpointBox.Text?.Trim();
+                var model = DoubaoModelBox.Text?.Trim();
+                doubao.Configure(
+                    string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey,
+                    string.IsNullOrWhiteSpace(endpoint) ? "https://ark.cn-beijing.volces.com/api/v3/responses" : endpoint,
+                    string.IsNullOrWhiteSpace(model) ? "doubao-seed-translation-250915" : model);
+            }
+        }, TestDoubaoButton, DoubaoStatusText);
+    }
+
+    /// <summary>
+    /// Test Caiyun configuration.
+    /// </summary>
+    private async void OnTestCaiyun(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("caiyun", service =>
+        {
+            if (service is CaiyunService caiyun)
+            {
+                var apiKey = CaiyunKeyBox.Password;
+                caiyun.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey);
+            }
+        }, TestCaiyunButton, CaiyunStatusText);
+    }
+
+    /// <summary>
+    /// Test NiuTrans configuration.
+    /// </summary>
+    private async void OnTestNiuTrans(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("niutrans", service =>
+        {
+            if (service is NiuTransService niutrans)
+            {
+                var apiKey = NiuTransKeyBox.Password;
+                niutrans.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey);
+            }
+        }, TestNiuTransButton, NiuTransStatusText);
+    }
+
+    #endregion
 }
 
 /// <summary>

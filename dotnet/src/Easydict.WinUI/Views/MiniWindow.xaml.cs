@@ -807,6 +807,7 @@ public sealed partial class MiniWindow : Window
                         // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
                         DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
                     });
+                    SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
                 }
                 catch (Exception ex)
                 {
@@ -824,6 +825,7 @@ public sealed partial class MiniWindow : Window
                         // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
                         DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
                     });
+                    SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
                 }
             });
 

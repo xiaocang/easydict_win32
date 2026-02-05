@@ -1,3 +1,4 @@
+using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using FluentAssertions;
@@ -18,13 +19,12 @@ public class PhoneticEnrichmentIntegrationTests : IDisposable
 
     public PhoneticEnrichmentIntegrationTests()
     {
-        var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        _manager = new TranslationManager(httpClient);
+        _manager = new TranslationManager();
     }
 
     public void Dispose()
     {
-        // TranslationManager doesn't implement IDisposable, but HttpClient is managed internally
+        _manager.Dispose();
     }
 
     #region EnrichPhoneticsIfMissingAsync Tests
@@ -188,7 +188,7 @@ public class PhoneticEnrichmentIntegrationTests : IDisposable
         };
 
         // Translate using Google (which doesn't return US/UK phonetics for single words)
-        var result = await _manager.TranslateAsync(request, serviceId: "google");
+        var result = await _manager.TranslateAsync(request, default, "google");
 
         // After enrichment, should have phonetics
         // Note: This depends on whether Google returns target phonetics

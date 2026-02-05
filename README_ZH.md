@@ -50,6 +50,7 @@
   - 智谱 AI
   - GitHub Models（免费）
   - 豆包（字节跳动翻译专用模型）
+  - 火山翻译（字节跳动）
   - 彩云小译（支持繁体中文）
   - 小牛翻译（450+ 语种，支持繁体中文）
   - Linguee 词典（带上下文例句）
@@ -177,7 +178,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ### 中优先级
 
 - [ ] **更多翻译服务**
-  - [ ] 火山翻译（字节跳动，可能与豆包重叠）
+  - [x] ~~火山翻译~~（字节跳动）✅ **已实现**
 
 - [ ] **AI 工具**
   - [ ] 文本润色
@@ -205,7 +206,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | 功能 | macOS | Windows |
 |------|-------|---------|
-| 翻译服务 | 25+ | 17 |
+| 翻译服务 | 25+ | 18 |
 | OCR 截图翻译 | 支持 | 不支持 |
 | TTS | 支持 | 支持 |
 | 划词翻译 | 支持 | 支持 |

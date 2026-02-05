@@ -236,5 +236,43 @@ public class PhoneticEnrichmentIntegrationTests : IDisposable
             "Youdao should provide US/UK phonetics for the English translation");
     }
 
+    [Fact]
+    public async Task TranslateAsync_YoudaoEnglishToChinese_ReturnsPhonetics()
+    {
+        // Youdao English→Chinese should return phonetics directly (not via enrichment)
+        // because the dict API returns phonetics for the English source word.
+        var request = new TranslationRequest
+        {
+            Text = "hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        TranslationResult? result = null;
+        try
+        {
+            result = await _manager.TranslateAsync(request, default, "youdao");
+        }
+        catch (TranslationException)
+        {
+            // Skip test if Youdao API is unavailable
+            return;
+        }
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.TranslatedText.Should().NotBeNullOrWhiteSpace();
+
+        // Youdao English→Chinese should return phonetics for the English SOURCE word
+        // These come directly from Youdao's dict response (not enrichment)
+        var allPhonetics = result.WordResult?.Phonetics;
+        allPhonetics.Should().NotBeNullOrEmpty(
+            "Youdao English→Chinese should return phonetics for the English word");
+
+        // Verify at least one US or UK phonetic
+        allPhonetics.Should().Contain(p => p.Accent == "US" || p.Accent == "UK",
+            "Youdao should provide US/UK phonetics for English words");
+    }
+
     #endregion
 }

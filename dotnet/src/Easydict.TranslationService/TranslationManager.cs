@@ -37,6 +37,8 @@ public sealed class TranslationManager : IDisposable
     private readonly Dictionary<string, ITranslationService> _services = new();
     private readonly IMemoryCache _cache;
     private readonly MemoryCacheEntryOptions _cacheOptions;
+    private readonly IMemoryCache _phoneticCache;
+    private readonly MemoryCacheEntryOptions _phoneticCacheOptions;
     private readonly HttpClient _httpClient;
 
     private string _defaultServiceId = "google";
@@ -82,6 +84,16 @@ public sealed class TranslationManager : IDisposable
             .SetSize(1)
             .SetSlidingExpiration(TimeSpan.FromHours(1))
             .SetAbsoluteExpiration(TimeSpan.FromDays(1));
+
+        _phoneticCache = new MemoryCache(new MemoryCacheOptions
+        {
+            SizeLimit = 500 // Max 500 cached phonetic lookups
+        });
+
+        _phoneticCacheOptions = new MemoryCacheEntryOptions()
+            .SetSize(1)
+            .SetSlidingExpiration(TimeSpan.FromHours(2))
+            .SetAbsoluteExpiration(TimeSpan.FromDays(7));
 
         // Register default services
         RegisterService(new GoogleTranslateService(_httpClient));
@@ -198,11 +210,8 @@ public sealed class TranslationManager : IDisposable
         // Perform translation with retry
         var result = await TranslateWithRetryAsync(service, request, cancellationToken);
 
-        // Enrich phonetics if missing (only for word queries, and not from youdao itself)
-        if (serviceId != "youdao")
-        {
-            result = await EnrichPhoneticsIfMissingAsync(result, request, cancellationToken);
-        }
+        // Enrich phonetics if missing (only for word queries targeting English)
+        result = await EnrichPhoneticsIfMissingAsync(result, request, cancellationToken);
 
         // Cache the result
         if (!request.BypassCache)
@@ -243,6 +252,14 @@ public sealed class TranslationManager : IDisposable
         if (targetPhonetics.Count > 0)
             return result;
 
+        // Check phonetic cache first
+        var phoneticCacheKey = GetPhoneticCacheKey(translatedText);
+        if (_phoneticCache.TryGetValue(phoneticCacheKey, out IReadOnlyList<Phonetic>? cachedPhonetics)
+            && cachedPhonetics != null && cachedPhonetics.Count > 0)
+        {
+            return MergePhoneticsIntoResult(result, cachedPhonetics);
+        }
+
         // Try to get phonetics from Youdao by looking up the TRANSLATED English text
         try
         {
@@ -261,18 +278,9 @@ public sealed class TranslationManager : IDisposable
 
                 if (youdaoPhonetics != null && youdaoPhonetics.Count > 0)
                 {
-                    // Merge phonetics into the original result
-                    var existingPhonetics = result.WordResult?.Phonetics?.ToList() ?? [];
-                    var mergedPhonetics = existingPhonetics.Concat(youdaoPhonetics).ToList();
-
-                    var newWordResult = new WordResult
-                    {
-                        Phonetics = mergedPhonetics,
-                        Definitions = result.WordResult?.Definitions,
-                        Examples = result.WordResult?.Examples
-                    };
-
-                    return result with { WordResult = newWordResult };
+                    // Cache the phonetics for future use
+                    _phoneticCache.Set(phoneticCacheKey, youdaoPhonetics, _phoneticCacheOptions);
+                    return MergePhoneticsIntoResult(result, youdaoPhonetics);
                 }
             }
         }
@@ -283,6 +291,28 @@ public sealed class TranslationManager : IDisposable
         }
 
         return result;
+    }
+
+    private static TranslationResult MergePhoneticsIntoResult(
+        TranslationResult result,
+        IReadOnlyList<Phonetic> phoneticsToAdd)
+    {
+        var existingPhonetics = result.WordResult?.Phonetics?.ToList() ?? [];
+        var mergedPhonetics = existingPhonetics.Concat(phoneticsToAdd).ToList();
+
+        var newWordResult = new WordResult
+        {
+            Phonetics = mergedPhonetics,
+            Definitions = result.WordResult?.Definitions,
+            Examples = result.WordResult?.Examples
+        };
+
+        return result with { WordResult = newWordResult };
+    }
+
+    private static string GetPhoneticCacheKey(string englishWord)
+    {
+        return $"phonetic:{englishWord.ToLowerInvariant().Trim()}";
     }
 
     /// <summary>
@@ -386,6 +416,7 @@ public sealed class TranslationManager : IDisposable
     public void Dispose()
     {
         _cache.Dispose();
+        _phoneticCache.Dispose();
         _httpClient.Dispose();
     }
 }

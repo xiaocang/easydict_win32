@@ -15,18 +15,24 @@
   <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="从 Microsoft 获取" width="200" />
 </a>
 
+## 目录
+
+- [简介](#简介)
+- [功能](#功能)
+- [安装](#安装)
+- [技术栈](#技术栈)
+- [待办事项](#待办事项)
+- [与 macOS 版本对比](#与-macos-版本对比)
+- [许可证](#许可证)
+- [致谢](#致谢)
+
 ## 简介
 
-这是 [Easydict](https://github.com/tisfeng/Easydict) 的 Windows 移植版本，原版是一款 macOS 翻译词典应用。本项目使用 **Vibe Coding** — AI 辅助编程，将 Swift/SwiftUI 代码库迁移到 .NET 8 + WinUI 3。
+这是 [Easydict](https://github.com/tisfeng/Easydict) 的 Windows 移植版本，原版是一款 macOS 翻译词典应用。本项目使用 **Vibe Coding** — AI 辅助编程，将 Swift/SwiftUI 代码库迁移到 .NET + WinUI 3。
 
 虽然功能尚未完全对齐 macOS 版本，但此移植版填补了 Windows 用户对便捷翻译工具的需求，支持全局快捷键和多种翻译服务。
 
-## 技术栈
-
-- **.NET 8** - 运行时框架
-- **WinUI 3 (Windows App SDK)** - 现代 Windows UI 框架
-- **C# 12** - 编程语言
-- **xUnit + FluentAssertions** - 单元测试
+<p align="right"><a href="#目录">回到顶部</a></p>
 
 ## 功能
 
@@ -91,6 +97,8 @@
 | ![主窗口](screenshot/main-window.png) | ![所有窗口](screenshot/all-windows.png) | ![设置](screenshot/settings.png) |
 | 完整翻译界面 | 主窗口 + 迷你窗口 + 固定窗口及快捷键设置 | 服务配置 |
 
+<p align="right"><a href="#目录">回到顶部</a></p>
+
 ## 安装
 
 ### 系统要求
@@ -145,6 +153,17 @@ dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release
 dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ```
 
+<p align="right"><a href="#目录">回到顶部</a></p>
+
+## 技术栈
+
+- **.NET** - 运行时框架
+- **WinUI 3 (Windows App SDK)** - 现代 Windows UI 框架
+- **C#** - 编程语言
+- **xUnit + FluentAssertions** - 单元测试
+
+<p align="right"><a href="#目录">回到顶部</a></p>
+
 ## 待办事项
 
 ### 高优先级
@@ -180,6 +199,8 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - [x] **Windows 商店** - 已上架 Microsoft Store
 - [ ] **winget** - 发布到 Windows 包管理器
 
+<p align="right"><a href="#目录">回到顶部</a></p>
+
 ## 与 macOS 版本对比
 
 | 功能 | macOS | Windows |
@@ -193,9 +214,13 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | LLM 流式翻译 | 支持 | 支持 |
 | 繁体中文 | 支持 | 支持 |
 
+<p align="right"><a href="#目录">回到顶部</a></p>
+
 ## 许可证
 
 GPL-3.0 - 仅供学习和交流使用。使用源代码时必须包含许可证和版权声明。
+
+<p align="right"><a href="#目录">回到顶部</a></p>
 
 ## 致谢
 

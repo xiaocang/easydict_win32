@@ -15,18 +15,24 @@
   <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200" />
 </a>
 
+## Table of Contents
+
+- [Introduction](#introduction)
+- [Features](#features)
+- [Installation](#installation)
+- [Tech Stack](#tech-stack)
+- [TODO](#todo)
+- [Comparison with macOS Version](#comparison-with-macos-version)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
 ## Introduction
 
-This is a Windows port of [Easydict](https://github.com/tisfeng/Easydict), originally a macOS translation dictionary app. The project was developed using **Vibe Coding** - AI-assisted programming to migrate the Swift/SwiftUI codebase to .NET 8 + WinUI 3.
+This is a Windows port of [Easydict](https://github.com/tisfeng/Easydict), originally a macOS translation dictionary app. The project was developed using **Vibe Coding** - AI-assisted programming to migrate the Swift/SwiftUI codebase to .NET + WinUI 3.
 
 While the feature set is not yet complete compared to the macOS version, this port fills the gap for Windows users who want a convenient translation tool with global hotkey support and multiple translation services.
 
-## Tech Stack
-
-- **.NET 8** - Runtime framework
-- **WinUI 3 (Windows App SDK)** - Modern Windows UI framework
-- **C# 12** - Programming language
-- **xUnit + FluentAssertions** - Unit testing
+<p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
 ## Features
 
@@ -91,6 +97,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 | ![Main Window](screenshot/main-window.png) | ![All Windows](screenshot/all-windows.png) | ![Settings](screenshot/settings.png) |
 | Full translation interface | Main + Mini + Fixed windows with hotkey settings | Service configuration |
 
+<p align="right"><a href="#table-of-contents">Back to Top</a></p>
+
 ## Installation
 
 ### System Requirements
@@ -145,6 +153,17 @@ dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release
 dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ```
 
+<p align="right"><a href="#table-of-contents">Back to Top</a></p>
+
+## Tech Stack
+
+- **.NET** - Runtime framework
+- **WinUI 3 (Windows App SDK)** - Modern Windows UI framework
+- **C#** - Programming language
+- **xUnit + FluentAssertions** - Unit testing
+
+<p align="right"><a href="#table-of-contents">Back to Top</a></p>
+
 ## TODO
 
 ### High Priority
@@ -180,6 +199,8 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - [x] **Windows Store** - Published to Microsoft Store
 - [ ] **winget** - Publish to Windows Package Manager
 
+<p align="right"><a href="#table-of-contents">Back to Top</a></p>
+
 ## Comparison with macOS Version
 
 | Feature | macOS | Windows |
@@ -193,9 +214,13 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | LLM Streaming | Yes | Yes |
 | Traditional Chinese | Yes | Yes |
 
+<p align="right"><a href="#table-of-contents">Back to Top</a></p>
+
 ## License
 
 GPL-3.0 - For learning and communication purposes only. License and copyright notice must be included when using source code.
+
+<p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
 ## Acknowledgements
 

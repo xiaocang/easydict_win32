@@ -14,7 +14,7 @@ namespace Easydict.UIAutomation.Tests.Infrastructure;
 /// </summary>
 public sealed class NotepadTestTarget : IDisposable
 {
-    private readonly Application _notepad;
+    private readonly Application _notepad = null!;
     private readonly UIA3Automation _automation;
     private bool _isDisposed;
 
@@ -30,21 +30,33 @@ public sealed class NotepadTestTarget : IDisposable
     {
         TextContent = textContent;
         _automation = new UIA3Automation();
-        _notepad = Application.Launch("notepad.exe");
 
-        var window = _notepad.GetMainWindow(_automation, TimeSpan.FromSeconds(10));
-        if (window == null)
-            throw new InvalidOperationException("Notepad main window did not appear");
+        try
+        {
+            _notepad = Application.Launch("notepad.exe");
 
-        var edit = FindEditElement(window);
-        if (edit == null)
-            throw new InvalidOperationException("Could not find Notepad text edit area");
+            var window = _notepad.GetMainWindow(_automation, TimeSpan.FromSeconds(10));
+            if (window == null)
+                throw new InvalidOperationException("Notepad main window did not appear");
 
-        // Focus and type the test text
-        edit.Focus();
-        Thread.Sleep(300);
-        Keyboard.Type(textContent);
-        Thread.Sleep(300);
+            var edit = FindEditElement(window);
+            if (edit == null)
+                throw new InvalidOperationException("Could not find Notepad text edit area");
+
+            // Focus and type the test text
+            edit.Focus();
+            Thread.Sleep(300);
+            Keyboard.Type(textContent);
+            Thread.Sleep(300);
+        }
+        catch
+        {
+            // Constructor failed after launching resources — clean up to prevent
+            // orphaned Notepad processes and leaked UIA automation handles.
+            try { _notepad?.Kill(); } catch { /* Best-effort cleanup of Notepad process */ }
+            _automation.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -116,7 +128,8 @@ public sealed class NotepadTestTarget : IDisposable
         }
         catch
         {
-            try { _notepad.Kill(); } catch { }
+            // Close() may throw if the process already exited or is inaccessible — fall back to Kill()
+            try { _notepad.Kill(); } catch { /* Ignore: process may already be terminated */ }
         }
 
         _automation.Dispose();

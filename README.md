@@ -50,6 +50,7 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Zhipu AI
   - GitHub Models (free)
   - Doubao (ByteDance translation-specialized model)
+  - Volcano Engine (火山翻译, ByteDance)
   - Caiyun (彩云小译, Traditional Chinese supported)
   - NiuTrans (小牛翻译, 450+ languages, Traditional Chinese supported)
   - Linguee Dictionary (with context examples)
@@ -177,7 +178,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ### Medium Priority
 
 - [ ] **More Translation Services**
-  - [ ] Volcano (ByteDance, may overlap with Doubao)
+  - [x] ~~Volcano Engine~~ (火山翻译, ByteDance) ✅ **Implemented**
 
 - [ ] **AI Tools**
   - [ ] Text Polishing
@@ -205,7 +206,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | Feature | macOS | Windows |
 |---------|-------|---------|
-| Translation Services | 25+ | 17 |
+| Translation Services | 25+ | 18 |
 | OCR Screenshot Translation | Yes | No |
 | TTS | Yes | Yes |
 | Selection Translation | Yes | Yes |

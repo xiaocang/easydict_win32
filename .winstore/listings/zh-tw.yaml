@@ -1,0 +1,64 @@
+language: zh-tw
+title: Easydict Windows 版
+shortTitle: Easydict
+sortTitle: Easydict
+voiceTitle: 易詞典
+shortDescription: 輕鬆查詞翻譯
+description: |-
+  Easydict Windows 版是一款免費開源的翻譯和詞典工具，提供 18 種翻譯服務的即時存取。完整原始碼已在 GitHub 上以 GPL-3.0 授權條款開放。無論您需要快速查詞、全文翻譯，還是支援即時串流輸出的 AI 翻譯，Easydict 都能滿足您的需求。
+
+  本應用程式是熱門 macOS Easydict 應用程式的 Windows 移植版，採用現代 .NET 和 WinUI 3 技術建構，提供原生 Windows 體驗。
+
+  核心亮點：
+
+  - 18 種翻譯服務：Google 翻譯、Google 詞典、Bing 翻譯、DeepL、OpenAI、Gemini、DeepSeek、Groq、智譜 AI、GitHub Models、豆包、火山翻譯、彩雲小譯、小牛翻譯、Linguee、Ollama 等
+  - AI 串流翻譯：即時觀看 LLM 翻譯結果逐字生成
+  - 多種視窗模式：完整主視窗、精巧迷你視窗或常駐固定視窗
+  - 劃詞翻譯：在任意位置選取文字，點擊浮動翻譯按鈕即可翻譯
+  - 全域快速鍵：透過可自訂的鍵盤快速鍵隨時隨地翻譯
+  - 系統匣：安靜地在背景執行，需要時隨時可用
+  - 剪貼簿監聽：自動翻譯複製的文字
+  - 深色/淺色主題：跟隨 Windows 系統主題
+  - 文字轉語音：朗讀原文和翻譯結果
+  - 高 DPI 支援：在任何顯示器上都清晰銳利
+
+  適合學生、職場人士、翻譯工作者以及需要快速、可靠多語言翻譯的所有人。
+features:
+- 18 種翻譯服務，包括 Google、Bing、DeepL、OpenAI、Gemini、DeepSeek 和火山翻譯
+- AI 服務即時串流翻譯
+- 多種視窗模式：主視窗、迷你視窗和固定視窗
+- 劃詞翻譯，選取文字點擊浮動按鈕即可翻譯
+- 全域快速鍵，從任意應用程式中即時翻譯
+- 系統匣整合，支援背景執行
+- 剪貼簿監聽，自動翻譯
+- 深色和淺色主題，跟隨系統設定
+- 文字轉語音，朗讀原文和譯文
+- HTTP 代理支援
+- 透過 Ollama 支援本機 LLM
+- 自訂 OpenAI 相容服務支援
+- 高 DPI 和多顯示器支援
+keywords:
+- 翻譯
+- 詞典
+- 翻譯器
+- 開源
+- 大型語言模型
+- 多語言
+- 劃詞翻譯
+releaseNotes: ''
+copyrightAndTrademarkInfo: Copyright (c) xiaocang. 基於 GPL-3.0 授權條款。
+additionalLicenseTerms: ''
+developedBy: xiaocang
+images:
+  overview:
+    fileName: ../../screenshot/overview.png
+    description: 主視窗與迷你視窗快速翻譯
+  main-window:
+    fileName: ../../screenshot/main-window.png
+    description: 完整翻譯介面，支援多種翻譯服務
+  all-windows:
+    fileName: ../../screenshot/all-windows.png
+    description: 所有視窗模式：主視窗、迷你視窗、固定視窗及快速鍵設定
+  settings:
+    fileName: ../../screenshot/settings.png
+    description: 設定頁面：翻譯服務配置

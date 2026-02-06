@@ -1,0 +1,64 @@
+language: fr-fr
+title: Easydict pour Windows
+shortTitle: Easydict
+sortTitle: Easydict
+voiceTitle: Easy Dict
+shortDescription: Recherchez facilement des mots ou traduisez du texte
+description: |-
+  Easydict pour Windows est un outil de traduction et de dictionnaire gratuit et open source, offrant un accès instantané à 18 services de traduction. Le code source complet est disponible sur GitHub sous licence GPL-3.0. Que vous ayez besoin de rechercher rapidement un mot, de traduire un texte intégral ou d'utiliser des traductions alimentées par l'IA avec streaming en temps réel, Easydict répond à tous vos besoins.
+
+  Version Windows de la populaire application macOS Easydict, construite avec les technologies modernes .NET et WinUI 3 pour une expérience Windows native.
+
+  Points forts :
+
+  - 18 services de traduction : Google Traduction, Google Dictionnaire, Bing Traduction, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama et plus encore
+  - Traduction IA en streaming : regardez les traductions LLM apparaître en temps réel
+  - Modes de fenêtre multiples : fenêtre principale complète, mini-fenêtre compacte ou fenêtre fixe persistante
+  - Traduction par sélection : sélectionnez du texte n'importe où et cliquez sur le bouton flottant pour traduire instantanément
+  - Raccourcis clavier globaux : traduisez de n'importe où avec des raccourcis personnalisables
+  - Zone de notification : fonctionne discrètement en arrière-plan, toujours prêt
+  - Surveillance du presse-papiers : traduction automatique du texte copié
+  - Thème sombre/clair : suit le thème système de Windows
+  - Synthèse vocale : écoutez le texte source et traduit
+  - Support haute résolution : net et précis sur tout écran
+
+  Parfait pour les étudiants, les professionnels, les traducteurs et tous ceux qui ont besoin de traductions rapides et fiables dans plusieurs langues.
+features:
+- 18 services de traduction dont Google, Bing, DeepL, OpenAI, Gemini, DeepSeek et Volcano Engine
+- Traduction en streaming en temps réel avec les services IA
+- 'Modes de fenêtre multiples : principale, mini et fixe'
+- Traduction par sélection avec bouton flottant
+- Raccourcis clavier globaux pour une traduction instantanée depuis toute application
+- Intégration à la zone de notification pour fonctionner en arrière-plan
+- Surveillance du presse-papiers avec traduction automatique
+- Thèmes sombre et clair suivant les paramètres système
+- Synthèse vocale pour le texte source et traduit
+- Support du proxy HTTP
+- Support des LLM locaux via Ollama
+- Support des services personnalisés compatibles OpenAI
+- Support haute résolution et multi-écrans
+keywords:
+- traduction
+- dictionnaire
+- traducteur
+- open source
+- LLM
+- multilingue
+- traduire
+releaseNotes: ''
+copyrightAndTrademarkInfo: Copyright (c) xiaocang. Licence GPL-3.0.
+additionalLicenseTerms: ''
+developedBy: xiaocang
+images:
+  overview:
+    fileName: ../../screenshot/overview.png
+    description: Fenêtre principale et mini-fenêtre pour une traduction rapide
+  main-window:
+    fileName: ../../screenshot/main-window.png
+    description: Interface de traduction complète avec plusieurs services
+  all-windows:
+    fileName: ../../screenshot/all-windows.png
+    description: 'Tous les modes de fenêtre : principale, mini, fixe et paramètres des raccourcis'
+  settings:
+    fileName: ../../screenshot/settings.png
+    description: 'Page de paramètres : configuration des services de traduction'

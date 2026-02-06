@@ -358,7 +358,7 @@ public sealed partial class MiniWindow : Window
     private void OnServiceCollapseToggled(object? sender, ServiceQueryResult result)
     {
         // Trigger window resize when collapse state changes
-        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+        RequestResize();
     }
 
     /// <summary>
@@ -438,7 +438,7 @@ public sealed partial class MiniWindow : Window
             serviceResult.IsLoading = false;
             serviceResult.IsStreaming = false;
             serviceResult.ApplyAutoCollapseLogic();
-            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+            RequestResize();
         }
         catch (Exception ex)
         {
@@ -450,7 +450,7 @@ public sealed partial class MiniWindow : Window
             serviceResult.IsLoading = false;
             serviceResult.IsStreaming = false;
             serviceResult.ApplyAutoCollapseLogic();
-            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+            RequestResize();
         }
         finally
         {
@@ -541,7 +541,7 @@ public sealed partial class MiniWindow : Window
     private void OnTextChanged(object sender, TextChangedEventArgs e)
     {
         // Delay to allow layout to complete
-        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+        RequestResize();
     }
 
     /// <summary>
@@ -838,8 +838,7 @@ public sealed partial class MiniWindow : Window
                         serviceResult.IsLoading = false;
                         serviceResult.IsStreaming = false;
                         serviceResult.ApplyAutoCollapseLogic();
-                        // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
-                        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+                        RequestResize();
                     });
                     SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
                 }
@@ -856,8 +855,7 @@ public sealed partial class MiniWindow : Window
                         serviceResult.IsLoading = false;
                         serviceResult.IsStreaming = false;
                         serviceResult.ApplyAutoCollapseLogic();
-                        // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
-                        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+                        RequestResize();
                     });
                     SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
                 }
@@ -955,8 +953,8 @@ public sealed partial class MiniWindow : Window
                 {
                     if (_isClosing) return;
                     serviceResult.StreamingText = currentText;
-                    // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
-                    DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+                    // RequestResize() enqueues to next tick so ServiceResultItem.UpdateUI() completes first
+                    RequestResize();
                 });
                 lastUpdateTime = now;
             }
@@ -996,8 +994,8 @@ public sealed partial class MiniWindow : Window
             serviceResult.Result = result;
             serviceResult.ApplyAutoCollapseLogic();
             UpdatePhoneticDeduplication();
-            // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
-            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+            // RequestResize() enqueues to next tick so ServiceResultItem.UpdateUI() completes first
+            RequestResize();
         });
     }
 
@@ -1238,7 +1236,7 @@ public sealed partial class MiniWindow : Window
         InputTextBox.Focus(FocusState.Programmatic);
 
         // Resize window to fit existing content (delayed to allow layout to complete)
-        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+        RequestResize();
     }
 
     /// <summary>

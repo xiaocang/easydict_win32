@@ -169,6 +169,7 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
     {
         using var reader = new StreamReader(stream);
 
+
         while (!reader.EndOfStream)
         {
             var line = await reader.ReadLineAsync(cancellationToken);

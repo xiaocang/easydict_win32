@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
@@ -40,6 +41,7 @@ public sealed class TranslationManager : IDisposable
     private readonly IMemoryCache _phoneticCache;
     private readonly MemoryCacheEntryOptions _phoneticCacheOptions;
     private readonly HttpClient _httpClient;
+    private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<Phonetic>?>>> _phoneticFlightTracker = new();
 
     private string _defaultServiceId = "google";
 
@@ -267,28 +269,22 @@ public sealed class TranslationManager : IDisposable
             return MergePhoneticsIntoResult(result, cachedPhonetics);
         }
 
-        // Try to get phonetics from Youdao by looking up the TRANSLATED English text
+        // Deduplicate concurrent requests for the same word using flight tracker.
+        // When multiple streaming services finish near-simultaneously for the same English word,
+        // only one Youdao API call is made; the others await the same in-flight task.
+        var lazyTask = _phoneticFlightTracker.GetOrAdd(
+            phoneticCacheKey,
+            _ => new Lazy<Task<IReadOnlyList<Phonetic>?>>(
+                () => FetchPhoneticsAsync(translatedText, cancellationToken)));
+
         try
         {
-            if (_services.TryGetValue("youdao", out var youdaoService))
+            var phonetics = await lazyTask.Value;
+
+            if (phonetics != null && phonetics.Count > 0)
             {
-                // Create a request to look up the English translation in Youdao
-                var phoneticRequest = new TranslationRequest
-                {
-                    Text = translatedText,
-                    FromLanguage = Language.English,
-                    ToLanguage = Language.SimplifiedChinese
-                };
-
-                var youdaoResult = await youdaoService.TranslateAsync(phoneticRequest, cancellationToken);
-                var youdaoPhonetics = youdaoResult?.WordResult?.Phonetics;
-
-                if (youdaoPhonetics != null && youdaoPhonetics.Count > 0)
-                {
-                    // Cache the phonetics for future use
-                    _phoneticCache.Set(phoneticCacheKey, youdaoPhonetics, _phoneticCacheOptions);
-                    return MergePhoneticsIntoResult(result, youdaoPhonetics);
-                }
+                _phoneticCache.Set(phoneticCacheKey, phonetics, _phoneticCacheOptions);
+                return MergePhoneticsIntoResult(result, phonetics);
             }
         }
         catch (Exception ex)
@@ -296,8 +292,33 @@ public sealed class TranslationManager : IDisposable
             // Best-effort: swallow errors and return original result
             System.Diagnostics.Debug.WriteLine($"[TranslationManager] Phonetic enrichment failed: {ex.Message}");
         }
+        finally
+        {
+            // Remove from tracker so future requests can retry if needed
+            _phoneticFlightTracker.TryRemove(phoneticCacheKey, out _);
+        }
 
         return result;
+    }
+
+    /// <summary>
+    /// Fetch phonetics for an English word from the Youdao service.
+    /// </summary>
+    private async Task<IReadOnlyList<Phonetic>?> FetchPhoneticsAsync(
+        string englishWord, CancellationToken cancellationToken)
+    {
+        if (!_services.TryGetValue("youdao", out var youdaoService))
+            return null;
+
+        var request = new TranslationRequest
+        {
+            Text = englishWord,
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        var youdaoResult = await youdaoService.TranslateAsync(request, cancellationToken);
+        return youdaoResult?.WordResult?.Phonetics;
     }
 
     private static TranslationResult MergePhoneticsIntoResult(
@@ -422,6 +443,7 @@ public sealed class TranslationManager : IDisposable
 
     public void Dispose()
     {
+        _phoneticFlightTracker.Clear();
         _cache.Dispose();
         _phoneticCache.Dispose();
         _httpClient.Dispose();

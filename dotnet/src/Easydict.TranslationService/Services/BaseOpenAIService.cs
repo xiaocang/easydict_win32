@@ -17,7 +17,7 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     /// <summary>
     /// Common set of languages supported by most LLM services.
     /// </summary>
-    protected static readonly IReadOnlyList<Language> OpenAILanguages = new[]
+    public static readonly IReadOnlyList<Language> OpenAILanguages = new[]
     {
         Language.SimplifiedChinese,
         Language.TraditionalChinese,
@@ -57,7 +57,7 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     /// System prompt from macOS StreamService.translationSystemPrompt.
     /// Instructs the model to act as a translation expert.
     /// </summary>
-    protected const string TranslationSystemPrompt = """
+    public const string TranslationSystemPrompt = """
         You are a translation expert proficient in various languages, focusing solely on translating text without interpretation. You accurately understand the meanings of proper nouns, idioms, metaphors, allusions, and other obscure words in sentences, translating them appropriately based on the context and language environment. The translation should be natural and fluent. Only return the translated text, without including redundant quotes or additional notes.
         """;
 
@@ -103,14 +103,8 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         TranslationRequest request,
         CancellationToken cancellationToken = default)
     {
-        var sb = new StringBuilder();
-
-        await foreach (var chunk in TranslateStreamAsync(request, cancellationToken))
-        {
-            sb.Append(chunk);
-        }
-
-        var translatedText = CleanupResult(sb.ToString());
+        var translatedText = CleanupResult(
+            await ConsumeStreamAsync(TranslateStreamAsync(request, cancellationToken), cancellationToken));
 
         return new TranslationResult
         {
@@ -234,63 +228,4 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         }
     }
 
-    /// <summary>
-    /// Create appropriate exception from HTTP error response.
-    /// </summary>
-    private TranslationException CreateErrorFromResponse(System.Net.HttpStatusCode statusCode, string errorBody)
-    {
-        var errorCode = statusCode switch
-        {
-            System.Net.HttpStatusCode.Unauthorized => TranslationErrorCode.InvalidApiKey,
-            System.Net.HttpStatusCode.Forbidden => TranslationErrorCode.InvalidApiKey,
-            System.Net.HttpStatusCode.TooManyRequests => TranslationErrorCode.RateLimited,
-            System.Net.HttpStatusCode.BadRequest => TranslationErrorCode.InvalidResponse,
-            System.Net.HttpStatusCode.InternalServerError => TranslationErrorCode.ServiceUnavailable,
-            System.Net.HttpStatusCode.ServiceUnavailable => TranslationErrorCode.ServiceUnavailable,
-            System.Net.HttpStatusCode.GatewayTimeout => TranslationErrorCode.Timeout,
-            _ => TranslationErrorCode.Unknown
-        };
-
-        // Try to extract error message from response
-        var message = $"API error ({(int)statusCode}): {statusCode}";
-        try
-        {
-            using var doc = JsonDocument.Parse(errorBody);
-            if (doc.RootElement.TryGetProperty("error", out var error))
-            {
-                if (error.TryGetProperty("message", out var msgElement))
-                {
-                    message = msgElement.GetString() ?? message;
-                }
-            }
-        }
-        catch (JsonException)
-        {
-            // Use default message
-        }
-
-        return new TranslationException(message)
-        {
-            ErrorCode = errorCode,
-            ServiceId = ServiceId
-        };
-    }
-
-    /// <summary>
-    /// Clean up the final translation result.
-    /// Removes common artifacts like quotes and whitespace.
-    /// </summary>
-    protected virtual string CleanupResult(string text)
-    {
-        var result = text.Trim();
-
-        // Remove surrounding quotes if present
-        if (result.Length >= 2 &&
-            result.StartsWith('"') && result.EndsWith('"'))
-        {
-            result = result[1..^1].Trim();
-        }
-
-        return result;
-    }
 }

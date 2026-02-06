@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Easydict.WinUI.Views;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Services;
@@ -12,12 +14,22 @@ public sealed class FixedWindowService : IDisposable
 {
     private static FixedWindowService? _instance;
     private FixedWindow? _fixedWindow;
-    private bool _isDisposed;
+    private volatile bool _isDisposed;
 
     /// <summary>
     /// Gets the singleton instance of FixedWindowService.
+    /// Must be accessed from the UI thread.
     /// </summary>
-    public static FixedWindowService Instance => _instance ??= new FixedWindowService();
+    public static FixedWindowService Instance
+    {
+        get
+        {
+            Debug.Assert(
+                DispatcherQueue.GetForCurrentThread() != null,
+                "FixedWindowService.Instance must be accessed from the UI thread");
+            return _instance ??= new FixedWindowService();
+        }
+    }
 
     private FixedWindowService()
     {

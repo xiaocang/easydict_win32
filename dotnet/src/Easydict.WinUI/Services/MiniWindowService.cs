@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Easydict.WinUI.Views;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Services;
@@ -11,12 +13,22 @@ public sealed class MiniWindowService : IDisposable
 {
     private static MiniWindowService? _instance;
     private MiniWindow? _miniWindow;
-    private bool _isDisposed;
+    private volatile bool _isDisposed;
 
     /// <summary>
     /// Gets the singleton instance of MiniWindowService.
+    /// Must be accessed from the UI thread.
     /// </summary>
-    public static MiniWindowService Instance => _instance ??= new MiniWindowService();
+    public static MiniWindowService Instance
+    {
+        get
+        {
+            Debug.Assert(
+                DispatcherQueue.GetForCurrentThread() != null,
+                "MiniWindowService.Instance must be accessed from the UI thread");
+            return _instance ??= new MiniWindowService();
+        }
+    }
 
     private MiniWindowService()
     {

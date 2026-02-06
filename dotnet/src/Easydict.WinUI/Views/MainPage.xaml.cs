@@ -23,6 +23,7 @@ namespace Easydict.WinUI.Views
         // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
         // Other code may Cancel() but must NOT Dispose().
         private CancellationTokenSource? _currentQueryCts;
+        private CancellationTokenSource? _manualQueryCts;
         private Task? _currentQueryTask;
         private readonly SettingsService _settings = SettingsService.Instance;
         private readonly List<ServiceQueryResult> _serviceResults = new();
@@ -318,16 +319,24 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
+            // Create new CTS, cancel any previous manual query
+            var cts = new CancellationTokenSource();
+            var oldCts = Interlocked.Exchange(ref _manualQueryCts, cts);
+            oldCts?.Cancel();
+            oldCts?.Dispose();
+
             // Mark as loading and queried
             serviceResult.IsLoading = true;
             serviceResult.MarkQueried();
 
             try
             {
+                var ct = cts.Token;
+
                 // Detect language (use cached if available from recent query)
                 var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
                     ? _lastDetectedLanguage
-                    : await _detectionService.DetectAsync(inputText, CancellationToken.None);
+                    : await _detectionService.DetectAsync(inputText, ct);
 
                 // Get target language
                 var targetLanguage = GetTargetLanguage();
@@ -347,16 +356,21 @@ namespace Easydict.WinUI.Views
                 if (manager.IsStreamingService(serviceResult.ServiceId))
                 {
                     await ExecuteStreamingTranslationForServiceAsync(
-                        manager, serviceResult, request, detectedLanguage, targetLanguage, CancellationToken.None);
+                        manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
                 }
                 else
                 {
-                    var result = await manager.TranslateAsync(request, CancellationToken.None, serviceResult.ServiceId);
+                    var result = await manager.TranslateAsync(request, ct, serviceResult.ServiceId);
                     serviceResult.Result = result;
                     serviceResult.IsLoading = false;
                     serviceResult.ApplyAutoCollapseLogic();
                     UpdatePhoneticDeduplication();
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = false;
             }
             catch (TranslationException ex)
             {
@@ -376,11 +390,21 @@ namespace Easydict.WinUI.Views
                 serviceResult.IsStreaming = false;
                 serviceResult.ApplyAutoCollapseLogic();
             }
+            finally
+            {
+                Interlocked.CompareExchange(ref _manualQueryCts, null, cts);
+                cts.Dispose();
+            }
         }
 
         private async Task CleanupResourcesAsync()
         {
             CancelCurrentQuery();
+
+            // Cancel any in-flight manual queries
+            var manualCts = Interlocked.Exchange(ref _manualQueryCts, null);
+            manualCts?.Cancel();
+            manualCts?.Dispose();
 
             var task = _currentQueryTask;
             var detectionService = _detectionService;  // Capture before nulling
@@ -594,6 +618,11 @@ namespace Easydict.WinUI.Views
                 }
                 // Don't dispose - let the query's finally block dispose it
             }
+
+            // Cancel any in-flight manual queries (stale text)
+            var oldManualCts = Interlocked.Exchange(ref _manualQueryCts, null);
+            oldManualCts?.Cancel();
+            oldManualCts?.Dispose();
 
             var ct = currentCts.Token;
 

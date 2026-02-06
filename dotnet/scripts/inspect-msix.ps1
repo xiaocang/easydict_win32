@@ -1,4 +1,4 @@
-$msixPath = ".\msix\Easydict-v0.2.0-x64.msix"
+$msixPath = ".\msix\Easydict-v0.3.2-x64.msix"
 $zipPath = Join-Path $env:TEMP "msix-inspect.zip"
 $extractDir = Join-Path $env:TEMP "msix-inspect"
 

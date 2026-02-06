@@ -2,7 +2,7 @@
 # Package, sign, reinstall, and run Easydict MSIX
 
 param(
-    [string]$Version = "0.2.0",
+    [string]$Version = "0.3.2",
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
     [string]$CertPath = ".\certs\dev-signing.pfx",

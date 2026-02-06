@@ -3,8 +3,8 @@
 ; No code signing certificate required.
 ;
 ; Usage:
-;   iscc /DAppVersion=0.3.0 /DPlatform=x64 /DPublishDir=..\publish\x64 Easydict.iss
-;   iscc /DAppVersion=0.3.0 /DTag=0.3.0-rc.1 /DPlatform=x64 /DPublishDir=..\publish\x64 Easydict.iss
+;   iscc /DAppVersion=0.3.2 /DPlatform=x64 /DPublishDir=..\publish\x64 Easydict.iss
+;   iscc /DAppVersion=0.3.2 /DTag=0.3.2-rc.1 /DPlatform=x64 /DPublishDir=..\publish\x64 Easydict.iss
 ;
 ; Prerequisites:
 ;   - Inno Setup 6.x (https://jrsoftware.org/isinfo.php)
@@ -22,7 +22,7 @@
   #define PublishDir "..\publish\" + Platform
 #endif
 
-; Tag is used in the output filename (e.g. "0.3.0" or "0.3.0-rc.1")
+; Tag is used in the output filename (e.g. "0.3.2" or "0.3.2-rc.1")
 ; Defaults to AppVersion when no prerelease suffix exists.
 #ifndef Tag
   #define Tag AppVersion

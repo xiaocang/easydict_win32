@@ -17,6 +17,14 @@ public class YoudaoServiceIntegrationTests : IDisposable
     private readonly HttpClient _httpClient;
     private readonly YoudaoService _service;
 
+    // Retry configuration for transient errors
+    private const int MaxRetries = 3;
+    private static readonly TimeSpan[] RetryDelays = [
+        TimeSpan.FromSeconds(1),
+        TimeSpan.FromSeconds(2),
+        TimeSpan.FromSeconds(4)
+    ];
+
     public YoudaoServiceIntegrationTests()
     {
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
@@ -26,6 +34,52 @@ public class YoudaoServiceIntegrationTests : IDisposable
     public void Dispose()
     {
         _httpClient.Dispose();
+    }
+
+    /// <summary>
+    /// Execute a translation request with retry logic for transient errors.
+    /// </summary>
+    private async Task<TranslationResult> TranslateWithRetryAsync(TranslationRequest request)
+    {
+        Exception? lastException = null;
+
+        for (int attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            try
+            {
+                return await _service.TranslateAsync(request);
+            }
+            catch (TranslationException ex) when (IsTransientError(ex) && attempt < MaxRetries)
+            {
+                lastException = ex;
+                await Task.Delay(RetryDelays[attempt]);
+            }
+        }
+
+        throw lastException ?? new InvalidOperationException("Unexpected retry logic error");
+    }
+
+    /// <summary>
+    /// Check if the exception is a transient error that can be retried.
+    /// </summary>
+    private static bool IsTransientError(TranslationException ex)
+    {
+        // Retry on service unavailable, rate limited, or common transient HTTP errors
+        if (ex.ErrorCode == TranslationErrorCode.ServiceUnavailable ||
+            ex.ErrorCode == TranslationErrorCode.RateLimited)
+        {
+            return true;
+        }
+
+        // Also check for common transient error messages
+        var message = ex.Message.ToLowerInvariant();
+        return message.Contains("badgateway") ||
+               message.Contains("bad gateway") ||
+               message.Contains("502") ||
+               message.Contains("503") ||
+               message.Contains("504") ||
+               message.Contains("serviceunavailable") ||
+               message.Contains("timeout");
     }
 
     #region Web Dictionary Tests (Single Words with Phonetics)
@@ -40,7 +94,7 @@ public class YoudaoServiceIntegrationTests : IDisposable
             ToLanguage = Language.SimplifiedChinese
         };
 
-        var result = await _service.TranslateAsync(request);
+        var result = await TranslateWithRetryAsync(request);
 
         result.Should().NotBeNull();
         result.TranslatedText.Should().NotBeNullOrWhiteSpace();
@@ -68,7 +122,7 @@ public class YoudaoServiceIntegrationTests : IDisposable
             ToLanguage = Language.SimplifiedChinese
         };
 
-        var result = await _service.TranslateAsync(request);
+        var result = await TranslateWithRetryAsync(request);
 
         result.Should().NotBeNull();
         result.WordResult.Should().NotBeNull();
@@ -92,7 +146,7 @@ public class YoudaoServiceIntegrationTests : IDisposable
             ToLanguage = Language.SimplifiedChinese
         };
 
-        var result = await _service.TranslateAsync(request);
+        var result = await TranslateWithRetryAsync(request);
 
         result.Should().NotBeNull();
         result.WordResult.Should().NotBeNull();
@@ -114,7 +168,7 @@ public class YoudaoServiceIntegrationTests : IDisposable
             ToLanguage = Language.SimplifiedChinese
         };
 
-        var result = await _service.TranslateAsync(request);
+        var result = await TranslateWithRetryAsync(request);
 
         result.Should().NotBeNull();
         result.TranslatedText.Should().NotBeNullOrWhiteSpace();
@@ -136,7 +190,7 @@ public class YoudaoServiceIntegrationTests : IDisposable
             ToLanguage = Language.SimplifiedChinese
         };
 
-        var result = await _service.TranslateAsync(request);
+        var result = await TranslateWithRetryAsync(request);
 
         result.Should().NotBeNull();
         result.TranslatedText.Should().NotBeNullOrWhiteSpace();
@@ -155,7 +209,7 @@ public class YoudaoServiceIntegrationTests : IDisposable
             ToLanguage = Language.English
         };
 
-        var result = await _service.TranslateAsync(request);
+        var result = await TranslateWithRetryAsync(request);
 
         result.Should().NotBeNull();
         result.TranslatedText.Should().NotBeNullOrWhiteSpace();
@@ -175,7 +229,7 @@ public class YoudaoServiceIntegrationTests : IDisposable
             ToLanguage = Language.English
         };
 
-        var result = await _service.TranslateAsync(request);
+        var result = await TranslateWithRetryAsync(request);
 
         result.Should().NotBeNull();
         result.TranslatedText.Should().NotBeNullOrWhiteSpace();
@@ -199,7 +253,7 @@ public class YoudaoServiceIntegrationTests : IDisposable
             ToLanguage = Language.SimplifiedChinese
         };
 
-        var result = await _service.TranslateAsync(request);
+        var result = await TranslateWithRetryAsync(request);
 
         result.Should().NotBeNull();
         result.TranslatedText.Should().NotBeNullOrWhiteSpace();
@@ -246,7 +300,7 @@ public class YoudaoServiceIntegrationTests : IDisposable
             ToLanguage = Language.SimplifiedChinese
         };
 
-        var result = await _service.TranslateAsync(request);
+        var result = await TranslateWithRetryAsync(request);
 
         // Use PhoneticDisplayHelper to filter target phonetics
         var targetPhonetics = PhoneticDisplayHelper.GetTargetPhonetics(result);

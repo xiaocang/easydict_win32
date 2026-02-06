@@ -34,9 +34,10 @@
         <!-- Self-Contained Deployment: Include .NET runtime in the app -->
         <SelfContained>true</SelfContained>
         <!-- Self-Contained Windows App SDK: Bundle native runtime DLLs so the
-             portable ZIP works without a system-installed Windows App SDK runtime.
-             For MSIX, the framework package declared in Package.appxmanifest takes
-             precedence, so these bundled DLLs are ignored in packaged mode. -->
+             portable ZIP/EXE works without a system-installed Windows App SDK runtime.
+             For MSIX builds, override with -p:WindowsAppSDKSelfContained=false so the
+             framework package dependency (Microsoft.WindowsAppRuntime) is used instead;
+             bundled DLLs conflict with the framework package and cause launch failures. -->
         <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
         <!-- Trim unused code to reduce size -->
         <PublishTrimmed>false</PublishTrimmed>

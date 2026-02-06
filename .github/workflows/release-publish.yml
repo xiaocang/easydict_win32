@@ -88,8 +88,8 @@ jobs:
         working-directory: dotnet
         run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }}
 
-      # Build and publish the application
-      - name: Publish WinUI App
+      # Build and publish the application (portable: ZIP and EXE)
+      - name: Publish WinUI App (portable)
         working-directory: dotnet
         run: |
           dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
@@ -102,11 +102,28 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
+      # Publish again for MSIX without bundled Windows App SDK DLLs.
+      # MSIX declares a framework package dependency (Microsoft.WindowsAppRuntime)
+      # so bundled DLLs are redundant and cause launch failures.
+      - name: Publish WinUI App (MSIX)
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --no-restore `
+            --output ./publish-msix/${{ matrix.platform }} `
+            -p:Version=${{ steps.version.outputs.BASE_VERSION }} `
+            -p:Platform=${{ matrix.platform }} `
+            -p:PublishTrimmed=false `
+            -p:WindowsAppSDKSelfContained=false
+
       # Verify MSIX assets are present in publish output
       - name: Verify MSIX assets
         shell: pwsh
         run: |
-          $publishDir = "dotnet/publish/${{ matrix.platform }}"
+          $publishDir = "dotnet/publish-msix/${{ matrix.platform }}"
           $requiredAssets = @(
             "Assets/SplashScreen.scale-100.png",
             "Assets/LockScreenLogo.scale-100.png",
@@ -137,7 +154,7 @@ jobs:
       - name: Verify targetsize icons
         shell: pwsh
         run: |
-          $publishDir = "dotnet/publish/${{ matrix.platform }}"
+          $publishDir = "dotnet/publish-msix/${{ matrix.platform }}"
           $targetsize = Get-ChildItem "$publishDir\Assets" -Filter "*targetsize*.png"
           Write-Host "Found $($targetsize.Count) targetsize icons"
           if ($targetsize.Count -lt 10) {
@@ -151,7 +168,7 @@ jobs:
       - name: Fix resources.pri for MSIX
         shell: pwsh
         run: |
-          $publishDir = "dotnet/publish/${{ matrix.platform }}"
+          $publishDir = "dotnet/publish-msix/${{ matrix.platform }}"
           $sourcePri = Join-Path $publishDir "Easydict.WinUI.pri"
           $targetPri = Join-Path $publishDir "resources.pri"
 
@@ -187,7 +204,7 @@ jobs:
           # bundles all runtime files. Using --self-contained would cause winapp to
           # try building its own runtime deployment, which fails in CI.
           winapp package `
-            ./publish/${{ matrix.platform }} `
+            ./publish-msix/${{ matrix.platform }} `
             --output ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix `
             --manifest src/Easydict.WinUI/Package.appxmanifest `
             --skip-pri `

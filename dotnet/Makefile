@@ -5,6 +5,7 @@
 .PHONY: all build build-release build-debug test clean restore run help
 .PHONY: test-translation test-winui test-ui test-integration test-verbose run-release
 .PHONY: publish publish-x64 publish-x86 publish-arm64
+.PHONY: publish-msix-x64 publish-msix-x86 publish-msix-arm64
 .PHONY: msix msix-x64 msix-x86 msix-arm64 msix-all
 .PHONY: fix-msix-minversion
 .PHONY: cert-generate cert-install sign sign-all
@@ -85,7 +86,7 @@ clean:
 	rm -rf tests/Easydict.TranslationService.Tests/bin tests/Easydict.TranslationService.Tests/obj
 	rm -rf tests/Easydict.WinUI.Tests/bin tests/Easydict.WinUI.Tests/obj
 	rm -rf tests/Easydict.UIAutomation.Tests/bin tests/Easydict.UIAutomation.Tests/obj
-	rm -rf publish msix
+	rm -rf publish publish-msix msix
 
 # Publish for distribution (portable)
 publish: restore
@@ -100,6 +101,17 @@ publish-x86: restore
 
 publish-arm64: restore
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64
+
+# Publish for MSIX (without bundled Windows App SDK DLLs)
+# MSIX declares a framework package dependency so bundled DLLs are redundant and cause launch failures.
+publish-msix-x64: restore
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:WindowsAppSDKSelfContained=false
+
+publish-msix-x86: restore
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:WindowsAppSDKSelfContained=false
+
+publish-msix-arm64: restore
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:WindowsAppSDKSelfContained=false
 
 # ============================================================
 # MSIX Packaging (requires WinApp CLI: winget install Microsoft.winappcli)
@@ -127,7 +139,7 @@ endif
 
 # Create MSIX package for x64
 # Uses shell-local variable to avoid race conditions with parallel builds
-msix-x64: publish-x64
+msix-x64: publish-msix-x64
 	@mkdir -p msix
 	@TMP_MANIFEST=$$(mktemp); \
 	echo "Creating temp manifest for x64 architecture..."; \
@@ -135,14 +147,14 @@ msix-x64: publish-x64
 	sed -i 's/ProcessorArchitecture="[^"]*"/ProcessorArchitecture="x64"/' $$TMP_MANIFEST; \
 	sed -i 's/Version="[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*"/Version="$(VERSION)"/' $$TMP_MANIFEST; \
 	winapp pack \
-		--input ./publish/x64 \
+		--input ./publish-msix/x64 \
 		--output ./msix/Easydict-x64.msix \
 		--manifest $$TMP_MANIFEST \
 		--verbose; \
 	rm -f $$TMP_MANIFEST
 
 # Create MSIX package for x86
-msix-x86: publish-x86
+msix-x86: publish-msix-x86
 	@mkdir -p msix
 	@TMP_MANIFEST=$$(mktemp); \
 	echo "Creating temp manifest for x86 architecture..."; \
@@ -150,14 +162,14 @@ msix-x86: publish-x86
 	sed -i 's/ProcessorArchitecture="[^"]*"/ProcessorArchitecture="x86"/' $$TMP_MANIFEST; \
 	sed -i 's/Version="[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*"/Version="$(VERSION)"/' $$TMP_MANIFEST; \
 	winapp pack \
-		--input ./publish/x86 \
+		--input ./publish-msix/x86 \
 		--output ./msix/Easydict-x86.msix \
 		--manifest $$TMP_MANIFEST \
 		--verbose; \
 	rm -f $$TMP_MANIFEST
 
 # Create MSIX package for ARM64
-msix-arm64: publish-arm64
+msix-arm64: publish-msix-arm64
 	@mkdir -p msix
 	@TMP_MANIFEST=$$(mktemp); \
 	echo "Creating temp manifest for arm64 architecture..."; \
@@ -165,7 +177,7 @@ msix-arm64: publish-arm64
 	sed -i 's/ProcessorArchitecture="[^"]*"/ProcessorArchitecture="arm64"/' $$TMP_MANIFEST; \
 	sed -i 's/Version="[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*"/Version="$(VERSION)"/' $$TMP_MANIFEST; \
 	winapp pack \
-		--input ./publish/arm64 \
+		--input ./publish-msix/arm64 \
 		--output ./msix/Easydict-arm64.msix \
 		--manifest $$TMP_MANIFEST \
 		--verbose; \
@@ -272,11 +284,16 @@ help:
 	@echo "  make test-integration SERVICE=google - Run integration tests for specific service"
 	@echo "  make test-verbose - Run tests with verbose output"
 	@echo ""
-	@echo "Publishing:"
+	@echo "Publishing (portable, with bundled Windows App SDK):"
 	@echo "  make publish      - Publish for distribution (portable)"
 	@echo "  make publish-x64  - Publish for x64"
 	@echo "  make publish-x86  - Publish for x86"
 	@echo "  make publish-arm64 - Publish for ARM64"
+	@echo ""
+	@echo "Publishing (MSIX, without bundled Windows App SDK):"
+	@echo "  make publish-msix-x64  - Publish for x64 (MSIX)"
+	@echo "  make publish-msix-x86  - Publish for x86 (MSIX)"
+	@echo "  make publish-msix-arm64 - Publish for ARM64 (MSIX)"
 	@echo ""
 	@echo "MSIX Packaging (requires WinApp CLI):"
 	@echo "  make msix         - Create MSIX package (x64)"

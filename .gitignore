@@ -9,9 +9,11 @@ dotnet/**/TestResults/
 # Publish output
 dotnet/publish/
 publish/
+publish-msix/
 
 # Temporary build output
 dotnet/temp_build_output*/
+tmp/
 
 # Common build artifacts
 **/*.dll

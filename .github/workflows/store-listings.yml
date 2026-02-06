@@ -74,6 +74,12 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          # Install powershell-yaml module for YAML parsing
+          if (-not (Get-Module -ListAvailable -Name powershell-yaml)) {
+            Install-Module -Name powershell-yaml -Force -Scope CurrentUser
+          }
+          Import-Module powershell-yaml
+
           $config = Get-Content .winstore/store-config.json -Raw | ConvertFrom-Json
           $languages = $config.listing.languages
 
@@ -86,12 +92,12 @@ jobs:
           "@
 
           foreach ($lang in $languages) {
-            $file = ".winstore/listings/$lang.json"
+            $file = ".winstore/listings/$lang.yaml"
             if (Test-Path $file) {
-              $listing = Get-Content $file -Raw | ConvertFrom-Json
-              $summary += "`n| $lang | ``$lang.json`` | $($listing.title) |"
+              $listing = Get-Content $file -Raw | ConvertFrom-Yaml
+              $summary += "`n| $lang | ``$lang.yaml`` | $($listing.title) |"
             } else {
-              $summary += "`n| $lang | ``$lang.json`` | Missing |"
+              $summary += "`n| $lang | ``$lang.yaml`` | Missing |"
             }
           }
 

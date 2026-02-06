@@ -156,10 +156,10 @@ public sealed class DeepLService : BaseTranslationService
         TranslationRequest request,
         CancellationToken cancellationToken)
     {
-        var targetCode = GetDeepLWebLanguageCode(request.ToLanguage);
+        var targetCode = GetDeepLLanguageCode(request.ToLanguage, isWeb: true);
         var sourceCode = request.FromLanguage == Language.Auto
             ? "auto"
-            : GetDeepLWebLanguageCode(request.FromLanguage);
+            : GetDeepLLanguageCode(request.FromLanguage, isWeb: true);
 
         // Generate anti-detection values (matching macOS implementation)
         var requestId = GetRandomRequestId();
@@ -385,9 +385,10 @@ public sealed class DeepLService : BaseTranslationService
     }
 
     /// <summary>
-    /// Get language code for official DeepL API.
+    /// Get language code for DeepL API or web JSON-RPC.
+    /// The only difference is Portuguese: API uses "PT", web uses "PT-PT".
     /// </summary>
-    private static string GetDeepLLanguageCode(Language language) => language switch
+    private static string GetDeepLLanguageCode(Language language, bool isWeb = false) => language switch
     {
         Language.SimplifiedChinese => "ZH",
         Language.TraditionalChinese => "ZH-HANT",
@@ -396,40 +397,7 @@ public sealed class DeepLService : BaseTranslationService
         Language.Korean => "KO",
         Language.French => "FR",
         Language.Spanish => "ES",
-        Language.Portuguese => "PT",
-        Language.Italian => "IT",
-        Language.German => "DE",
-        Language.Russian => "RU",
-        Language.Dutch => "NL",
-        Language.Polish => "PL",
-        Language.Bulgarian => "BG",
-        Language.Czech => "CS",
-        Language.Danish => "DA",
-        Language.Finnish => "FI",
-        Language.Greek => "EL",
-        Language.Hungarian => "HU",
-        Language.Indonesian => "ID",
-        Language.Norwegian => "NB",
-        Language.Romanian => "RO",
-        Language.Swedish => "SV",
-        Language.Turkish => "TR",
-        Language.Ukrainian => "UK",
-        _ => language.ToIso639().ToUpper()
-    };
-
-    /// <summary>
-    /// Get language code for DeepL web JSON-RPC (slightly different format).
-    /// </summary>
-    private static string GetDeepLWebLanguageCode(Language language) => language switch
-    {
-        Language.SimplifiedChinese => "ZH",
-        Language.TraditionalChinese => "ZH-HANT",
-        Language.English => "EN",
-        Language.Japanese => "JA",
-        Language.Korean => "KO",
-        Language.French => "FR",
-        Language.Spanish => "ES",
-        Language.Portuguese => "PT-PT",
+        Language.Portuguese => isWeb ? "PT-PT" : "PT",
         Language.Italian => "IT",
         Language.German => "DE",
         Language.Russian => "RU",

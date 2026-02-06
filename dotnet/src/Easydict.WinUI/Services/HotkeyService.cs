@@ -26,8 +26,8 @@ public sealed class HotkeyService : IDisposable
 
     private readonly Window _window;
     private readonly nint _hwnd;
-    private bool _isDisposed;
-    private bool _isInitialized;
+    private volatile bool _isDisposed;
+    private volatile bool _isInitialized;
 
     // Window subclass delegate - must keep reference to prevent GC
     private delegate nint SubclassProc(nint hWnd, uint uMsg, nint wParam, nint lParam, nuint uIdSubclass, nuint dwRefData);

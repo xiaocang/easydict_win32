@@ -8,7 +8,7 @@ path = "zh"
 screenshot = "img/overview.png"
 +++
 
-强大的 Windows 翻译词典应用，移植自广受好评的 macOS 应用 [Easydict](https://github.com/tisfeng/Easydict)。支持 18 种翻译服务、全局快捷键、划词翻译，界面简洁现代。
+强大的 Windows 翻译词典应用，移植自广受好评的 macOS 应用 [Easydict](https://github.com/tisfeng/Easydict)。支持 18+ 种翻译服务、全局快捷键、划词翻译，界面简洁现代。
 
 ## 功能特性
 

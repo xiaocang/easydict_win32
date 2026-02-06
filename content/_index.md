@@ -7,7 +7,7 @@ template = "index.html"
 screenshot = "img/overview.png"
 +++
 
-A powerful Windows translation & dictionary app, ported from the popular macOS app [Easydict](https://github.com/tisfeng/Easydict). Supports 18 translation services, global hotkeys, and mouse selection translation — all in a clean, modern interface.
+A powerful Windows translation & dictionary app, ported from the popular macOS app [Easydict](https://github.com/tisfeng/Easydict). Supports 18+ translation services, global hotkeys, and mouse selection translation — all in a clean, modern interface.
 
 ## Features
 

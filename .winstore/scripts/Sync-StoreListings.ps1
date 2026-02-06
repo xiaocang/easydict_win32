@@ -3,7 +3,7 @@
     Synchronize store listing metadata to Microsoft Partner Center using the msstore CLI.
 
 .DESCRIPTION
-    Reads listing JSON files from .winstore/listings/ and updates the Microsoft Store
+    Reads listing YAML files from .winstore/listings/ and updates the Microsoft Store
     listing for each configured language via the Microsoft Store Developer CLI (msstore).
 
     This script can:
@@ -42,6 +42,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Install powershell-yaml module if not available
+if (-not (Get-Module -ListAvailable -Name powershell-yaml)) {
+    Write-Host "Installing powershell-yaml module..." -ForegroundColor Cyan
+    Install-Module -Name powershell-yaml -Force -Scope CurrentUser
+}
+Import-Module powershell-yaml
 
 # Resolve paths
 $winStorePath = Split-Path -Parent $PSScriptRoot
@@ -153,7 +160,7 @@ $allWarnings = @()
 $processedCount = 0
 
 foreach ($lang in $targetLanguages) {
-    $listingFile = Join-Path $listingsPath "$lang.json"
+    $listingFile = Join-Path $listingsPath "$lang.yaml"
 
     if (-not (Test-Path $listingFile)) {
         Write-Warning "Listing file not found for language: $lang (expected: $listingFile)"
@@ -162,7 +169,7 @@ foreach ($lang in $targetLanguages) {
     }
 
     Write-Host "--- Processing: $lang ---" -ForegroundColor Yellow
-    $listing = Get-Content $listingFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    $listing = Get-Content $listingFile -Raw -Encoding UTF8 | ConvertFrom-Yaml
 
     # Always validate
     $result = Test-Listing -listing $listing -lang $lang

@@ -9,7 +9,7 @@
 <a href="./README.md">English</a> &nbsp;&nbsp;|&nbsp;&nbsp; <a href="./README_ZH.md">中文</a>
 </div>
 
-[![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml)
+[![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) ![Source:Test LOC](https://img.shields.io/badge/source%3Atest_LOC-1.2%3A1-brightgreen)
 
 <a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
   <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="从 Microsoft 获取" width="200" />
@@ -21,6 +21,7 @@
 - [功能](#功能)
 - [安装](#安装)
 - [技术栈](#技术栈)
+- [翻译服务集成测试](#翻译服务集成测试)
 - [待办事项](#待办事项)
 - [与 macOS 版本对比](#与-macos-版本对比)
 - [许可证](#许可证)
@@ -162,6 +163,34 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - **WinUI 3 (Windows App SDK)** - 现代 Windows UI 框架
 - **C#** - 编程语言
 - **xUnit + FluentAssertions** - 单元测试
+
+<p align="right"><a href="#目录">回到顶部</a></p>
+
+## 翻译服务集成测试
+
+| 服务 | 协议 | 状态 | 备注 |
+|------|------|:----:|------|
+| Google 翻译 | REST | ✅ | 免费，无需 API Key |
+| 必应翻译 | REST | ✅ | 免费，无需 API Key |
+| 有道 | REST | ✅ | Web + OpenAPI |
+| OpenAI | OpenAI API | ✅ | |
+| DeepSeek | OpenAI API | ✅ | |
+| Gemini | Gemini API | ✅ | 自定义 SSE 流式协议 |
+| 智谱 AI | OpenAI API | ✅ | |
+| 火山翻译 | REST | ✅ | HMAC-SHA256 签名 |
+| Groq | OpenAI API | — | OpenAI 兼容，缺少 API Key |
+| GitHub Models | OpenAI API | — | OpenAI 兼容，缺少 API Key |
+| 豆包 | Custom SSE | — | 缺少 API Key |
+| DeepL | REST | — | 缺少 API Key |
+| 彩云小译 | REST | — | 缺少 API Key |
+| 小牛翻译 | REST | — | 缺少 API Key |
+| Linguee | REST | — | 未测试 |
+| Google 词典 | REST | — | 未测试 |
+| Ollama | OpenAI API | — | 需要本地 Ollama 环境 |
+| 内置 AI | OpenAI API | — | 内置密钥 |
+| 自定义 OpenAI | OpenAI API | — | 用户自定义端点 |
+
+> 标记为 **OpenAI API** 的服务均继承自 `BaseOpenAIService`，共享相同的 OpenAI 兼容实现，因此未测试的服务预期行为一致。
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 

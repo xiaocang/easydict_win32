@@ -9,7 +9,7 @@
 <a href="./README.md">English</a> &nbsp;&nbsp;|&nbsp;&nbsp; <a href="./README_ZH.md">中文</a>
 </div>
 
-[![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml)
+[![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) ![Source:Test LOC](https://img.shields.io/badge/source%3Atest_LOC-1.2%3A1-brightgreen)
 
 <a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
   <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200" />
@@ -21,6 +21,7 @@
 - [Features](#features)
 - [Installation](#installation)
 - [Tech Stack](#tech-stack)
+- [Translation Service Integration Tests](#translation-service-integration-tests)
 - [TODO](#todo)
 - [Comparison with macOS Version](#comparison-with-macos-version)
 - [License](#license)
@@ -162,6 +163,34 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - **WinUI 3 (Windows App SDK)** - Modern Windows UI framework
 - **C#** - Programming language
 - **xUnit + FluentAssertions** - Unit testing
+
+<p align="right"><a href="#table-of-contents">Back to Top</a></p>
+
+## Translation Service Integration Tests
+
+| Service | Protocol | Status | Notes |
+|---------|----------|:------:|-------|
+| Google Translate | REST | ✅ | Free, no API key |
+| Bing Translate | REST | ✅ | Free, no API key |
+| Youdao | REST | ✅ | Web + OpenAPI |
+| OpenAI | OpenAI API | ✅ | |
+| DeepSeek | OpenAI API | ✅ | |
+| Gemini | Gemini API | ✅ | Custom SSE streaming |
+| Zhipu AI | OpenAI API | ✅ | |
+| Volcano Engine | REST | ✅ | HMAC-SHA256 signing |
+| Groq | OpenAI API | — | OpenAI-compatible, missing API key |
+| GitHub Models | OpenAI API | — | OpenAI-compatible, missing API key |
+| Doubao | Custom SSE | — | Missing API key |
+| DeepL | REST | — | Missing API key |
+| Caiyun | REST | — | Missing API key |
+| NiuTrans | REST | — | Missing API key |
+| Linguee | REST | — | Not tested |
+| Google Dict | REST | — | Not tested |
+| Ollama | OpenAI API | — | Requires local Ollama setup |
+| BuiltIn AI | OpenAI API | — | Embedded key |
+| Custom OpenAI | OpenAI API | — | User-defined endpoint |
+
+> Services marked **OpenAI API** extend `BaseOpenAIService` and share the same OpenAI-compatible implementation, so untested ones are expected to work similarly.
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 

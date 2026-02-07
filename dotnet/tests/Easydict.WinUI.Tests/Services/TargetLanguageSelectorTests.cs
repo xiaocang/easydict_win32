@@ -17,16 +17,24 @@ public class TargetLanguageSelectorTests : IDisposable
     private readonly SettingsService _settings;
     private readonly LanguageDetectionService _detectionService;
     private readonly TargetLanguageSelector _selector;
+    private readonly string _originalFirstLanguage;
+    private readonly string _originalSecondLanguage;
 
     public TargetLanguageSelectorTests()
     {
         _settings = SettingsService.Instance;
+        _originalFirstLanguage = _settings.FirstLanguage;
+        _originalSecondLanguage = _settings.SecondLanguage;
+        _settings.FirstLanguage = "zh";
+        _settings.SecondLanguage = "en";
         _detectionService = new LanguageDetectionService(_settings);
         _selector = new TargetLanguageSelector(_settings);
     }
 
     public void Dispose()
     {
+        _settings.FirstLanguage = _originalFirstLanguage;
+        _settings.SecondLanguage = _originalSecondLanguage;
         _detectionService.Dispose();
     }
 

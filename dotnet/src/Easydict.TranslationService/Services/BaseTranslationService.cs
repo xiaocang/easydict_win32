@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using Easydict.TranslationService.Models;
@@ -176,12 +177,10 @@ public abstract class BaseTranslationService : ITranslationService
         try
         {
             using var doc = JsonDocument.Parse(errorBody);
-            if (doc.RootElement.TryGetProperty("error", out var error))
+            if (doc.RootElement.TryGetProperty("error", out var error) &&
+                error.TryGetProperty("message", out var msgElement))
             {
-                if (error.TryGetProperty("message", out var msgElement))
-                {
-                    message = msgElement.GetString() ?? message;
-                }
+                message = msgElement.GetString() ?? message;
             }
         }
         catch (JsonException)

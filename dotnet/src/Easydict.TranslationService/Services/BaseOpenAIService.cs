@@ -17,7 +17,7 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     /// <summary>
     /// Common set of languages supported by most LLM services.
     /// </summary>
-    public static readonly IReadOnlyList<Language> OpenAILanguages = new[]
+    internal static readonly IReadOnlyList<Language> OpenAILanguages = new[]
     {
         Language.SimplifiedChinese,
         Language.TraditionalChinese,
@@ -57,7 +57,7 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     /// System prompt from macOS StreamService.translationSystemPrompt.
     /// Instructs the model to act as a translation expert.
     /// </summary>
-    public const string TranslationSystemPrompt = """
+    internal const string TranslationSystemPrompt = """
         You are a translation expert proficient in various languages, focusing solely on translating text without interpretation. You accurately understand the meanings of proper nouns, idioms, metaphors, allusions, and other obscure words in sentences, translating them appropriately based on the context and language environment. The translation should be natural and fluent. Only return the translated text, without including redundant quotes or additional notes.
         """;
 

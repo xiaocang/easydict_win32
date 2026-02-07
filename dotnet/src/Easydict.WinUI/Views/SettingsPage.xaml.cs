@@ -26,6 +26,7 @@ public sealed partial class SettingsPage : Page
     private bool _isLoading = true; // Prevent change detection during initial load
     private bool _handlersRegistered; // Guard to prevent duplicate event handler registration
     private bool _hasUnsavedChanges; // Track whether any settings have been modified since last save
+    private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
 
     // Service selection collections for each window (populated from TranslationManager.Services)
     private readonly ObservableCollection<ServiceCheckItem> _mainWindowServices = [];
@@ -577,7 +578,7 @@ public sealed partial class SettingsPage : Page
                 XamlRoot = this.XamlRoot
             };
 
-            var result = await dialog.ShowAsync();
+            var result = await ShowDialogAsync(dialog);
 
             if (result == ContentDialogResult.Primary)
             {
@@ -617,7 +618,7 @@ public sealed partial class SettingsPage : Page
             CloseButtonText = loc.GetString("OK"),
             XamlRoot = this.XamlRoot
         };
-        await dialog.ShowAsync();
+        await ShowDialogAsync(dialog);
     }
 
     /// <summary>
@@ -648,7 +649,7 @@ public sealed partial class SettingsPage : Page
                 CloseButtonText = loc.GetString("OK"),
                 XamlRoot = this.XamlRoot
             };
-            await errorDialog.ShowAsync();
+            await ShowDialogAsync(errorDialog);
             return false;
         }
 
@@ -663,7 +664,7 @@ public sealed partial class SettingsPage : Page
                 CloseButtonText = loc.GetString("OK"),
                 XamlRoot = this.XamlRoot
             };
-            await errorDialog.ShowAsync();
+            await ShowDialogAsync(errorDialog);
             return false;
         }
         if (ProxyEnabledToggle.IsOn && !string.IsNullOrWhiteSpace(proxyUri))
@@ -677,7 +678,7 @@ public sealed partial class SettingsPage : Page
                     CloseButtonText = loc.GetString("OK"),
                     XamlRoot = this.XamlRoot
                 };
-                await errorDialog.ShowAsync();
+                await ShowDialogAsync(errorDialog);
                 return false;
             }
         }
@@ -908,7 +909,7 @@ public sealed partial class SettingsPage : Page
                 CloseButtonText = loc.GetString("OK"),
                 XamlRoot = this.XamlRoot
             };
-            await errorDialog.ShowAsync();
+            await ShowDialogAsync(errorDialog);
         }
         finally
         {
@@ -1206,7 +1207,7 @@ public sealed partial class SettingsPage : Page
                 CloseButtonText = loc.GetString("OK"),
                 XamlRoot = this.XamlRoot
             };
-            await dialog.ShowAsync();
+            await ShowDialogAsync(dialog);
         }
         catch (Exception ex)
         {
@@ -1221,7 +1222,7 @@ public sealed partial class SettingsPage : Page
                 CloseButtonText = loc.GetString("OK"),
                 XamlRoot = this.XamlRoot
             };
-            await errorDialog.ShowAsync();
+            await ShowDialogAsync(errorDialog);
         }
     }
 
@@ -1282,7 +1283,7 @@ public sealed partial class SettingsPage : Page
                     CloseButtonText = loc.GetString("OK"),
                     XamlRoot = this.XamlRoot
                 };
-                await notConfiguredDialog.ShowAsync();
+                await ShowDialogAsync(notConfiguredDialog);
                 return;
             }
 
@@ -1315,7 +1316,7 @@ public sealed partial class SettingsPage : Page
                 CloseButtonText = loc.GetString("OK"),
                 XamlRoot = this.XamlRoot
             };
-            await successDialog.ShowAsync();
+            await ShowDialogAsync(successDialog);
         }
         catch (TranslationException ex)
         {
@@ -1334,7 +1335,7 @@ public sealed partial class SettingsPage : Page
                 CloseButtonText = loc.GetString("OK"),
                 XamlRoot = this.XamlRoot
             };
-            await errorDialog.ShowAsync();
+            await ShowDialogAsync(errorDialog);
         }
         catch (Exception ex)
         {
@@ -1353,7 +1354,7 @@ public sealed partial class SettingsPage : Page
                 CloseButtonText = loc.GetString("OK"),
                 XamlRoot = this.XamlRoot
             };
-            await errorDialog.ShowAsync();
+            await ShowDialogAsync(errorDialog);
         }
         finally
         {
@@ -1581,6 +1582,28 @@ public sealed partial class SettingsPage : Page
                 niutrans.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey);
             }
         }, TestNiuTransButton, NiuTransStatusText);
+    }
+
+    /// <summary>
+    /// Shows a ContentDialog, hiding any currently-open dialog first.
+    /// WinUI 3 allows only one ContentDialog open at a time per XamlRoot.
+    /// </summary>
+    private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
+    {
+        _currentDialog?.Hide();
+        _currentDialog = dialog;
+
+        try
+        {
+            return await dialog.ShowAsync();
+        }
+        finally
+        {
+            if (_currentDialog == dialog)
+            {
+                _currentDialog = null;
+            }
+        }
     }
 
     #endregion

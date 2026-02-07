@@ -23,10 +23,23 @@ public sealed class MiniWindowService : IDisposable
     {
         get
         {
+            AssertUIThread();
+            return _instance ??= new MiniWindowService();
+        }
+    }
+
+    [Conditional("DEBUG")]
+    private static void AssertUIThread()
+    {
+        try
+        {
             Debug.Assert(
                 DispatcherQueue.GetForCurrentThread() != null,
                 "MiniWindowService.Instance must be accessed from the UI thread");
-            return _instance ??= new MiniWindowService();
+        }
+        catch
+        {
+            // DispatcherQueue unavailable (e.g., unit tests without Windows App SDK).
         }
     }
 

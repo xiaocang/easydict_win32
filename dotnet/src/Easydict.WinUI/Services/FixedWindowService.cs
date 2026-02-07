@@ -24,10 +24,23 @@ public sealed class FixedWindowService : IDisposable
     {
         get
         {
+            AssertUIThread();
+            return _instance ??= new FixedWindowService();
+        }
+    }
+
+    [Conditional("DEBUG")]
+    private static void AssertUIThread()
+    {
+        try
+        {
             Debug.Assert(
                 DispatcherQueue.GetForCurrentThread() != null,
                 "FixedWindowService.Instance must be accessed from the UI thread");
-            return _instance ??= new FixedWindowService();
+        }
+        catch
+        {
+            // DispatcherQueue unavailable (e.g., unit tests without Windows App SDK).
         }
     }
 

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Tests;
@@ -29,7 +30,7 @@ internal static class WinUITestHelper
             window.Close();
             return true;
         }
-        catch
+        catch (COMException)
         {
             return false;
         }

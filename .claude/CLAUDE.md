@@ -524,6 +524,17 @@ finally
 }
 ```
 
+#### COM Object Lifecycle Guards
+```csharp
+// WinUI 3 COM objects (ContentDialog, Window) can become invalid between check and use.
+// Wrap lifecycle calls in try/catch (COMException).
+try { _currentDialog?.Hide(); } catch (COMException) { }
+
+// In test helpers, catch the specific expected exception
+catch (COMException) { return false; }   // ✓ specific
+catch { return false; }                   // ✗ too broad
+```
+
 ### 5. WinUI 3 / XAML Code-Behind Patterns
 
 #### Page Lifecycle Management

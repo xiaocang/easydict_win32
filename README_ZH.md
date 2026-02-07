@@ -183,12 +183,12 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | 豆包 | Custom SSE | — | 缺少 API Key |
 | DeepL | REST | — | 缺少 API Key |
 | 彩云小译 | REST | — | 缺少 API Key |
-| 小牛翻译 | REST | — | 缺少 API Key |
+| 小牛翻译 | REST | ✅ | |
 | Linguee | REST | — | 未测试 |
-| Google 词典 | REST | — | 未测试 |
+| Google 词典 | REST | ✅ | |
 | Ollama | OpenAI API | — | 需要本地 Ollama 环境 |
 | 内置 AI | OpenAI API | — | 内置密钥 |
-| 自定义 OpenAI | OpenAI API | — | 用户自定义端点 |
+| 自定义 OpenAI | OpenAI API | — | OpenAI 兼容，用户自定义端点 |
 
 > 标记为 **OpenAI API** 的服务均继承自 `BaseOpenAIService`，共享相同的 OpenAI 兼容实现，因此未测试的服务预期行为一致。
 

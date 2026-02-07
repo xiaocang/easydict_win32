@@ -183,12 +183,12 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Doubao | Custom SSE | — | Missing API key |
 | DeepL | REST | — | Missing API key |
 | Caiyun | REST | — | Missing API key |
-| NiuTrans | REST | — | Missing API key |
+| NiuTrans | REST | ✅ | |
 | Linguee | REST | — | Not tested |
-| Google Dict | REST | — | Not tested |
+| Google Dict | REST | ✅ | |
 | Ollama | OpenAI API | — | Requires local Ollama setup |
 | BuiltIn AI | OpenAI API | — | Embedded key |
-| Custom OpenAI | OpenAI API | — | User-defined endpoint |
+| Custom OpenAI | OpenAI API | — | OpenAI-compatible, user-defined endpoint |
 
 > Services marked **OpenAI API** extend `BaseOpenAIService` and share the same OpenAI-compatible implementation, so untested ones are expected to work similarly.
 

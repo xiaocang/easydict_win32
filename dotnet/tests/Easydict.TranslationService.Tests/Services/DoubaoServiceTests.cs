@@ -387,6 +387,37 @@ public class DoubaoServiceTests
         auth.Should().Be("Bearer my-doubao-key");
     }
 
+    [Fact]
+    public async Task TranslateAsync_TrimsWhitespace_WhenNoSurroundingQuotes()
+    {
+        // Arrange
+        _service.Configure("test-key");
+
+        var sseContent = new StringBuilder();
+        sseContent.AppendLine("event: response.output_text.delta");
+        sseContent.AppendLine("""data: {"delta":"  Hello World \n"}""");
+        sseContent.AppendLine();
+        sseContent.AppendLine("data: [DONE]");
+
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(sseContent.ToString(), Encoding.UTF8, "text/event-stream")
+        };
+        _mockHandler.EnqueueResponse(response);
+
+        var request = new TranslationRequest
+        {
+            Text = "你好世界",
+            ToLanguage = Language.English
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert - whitespace should be trimmed even without surrounding quotes
+        result.TranslatedText.Should().Be("Hello World");
+    }
+
     [Theory]
     [InlineData(Language.SimplifiedChinese, "zh")]
     [InlineData(Language.TraditionalChinese, "zh-Hant")]

@@ -133,6 +133,27 @@ jobs:
           Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow
           Write-Host "Windows App Runtime installed"
 
+      # ── WinUI Unit Tests (require Windows App Runtime) ──
+      - name: Build WinUI Unit Tests
+        working-directory: dotnet
+        run: |
+          dotnet build tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj `
+            --configuration Release `
+            -p:Platform=x64 `
+            -p:WindowsAppSdkAutoInitialize=true
+
+      - name: Run WinUI Unit Tests
+        working-directory: dotnet
+        run: |
+          dotnet test tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj `
+            --configuration Release `
+            --no-build `
+            --verbosity normal `
+            --logger "trx;LogFileName=winui-test-results.trx" `
+            --logger "console;verbosity=detailed" `
+            -p:Platform=x64 `
+            --filter "Category=WinUI"
+
       - name: Install MSIX package (register from extracted layout)
         shell: pwsh
         run: |

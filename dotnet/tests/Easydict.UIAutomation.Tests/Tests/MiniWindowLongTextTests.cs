@@ -60,10 +60,7 @@ public class MiniWindowLongTextTests : IDisposable
     public void MiniWindow_LongText_InputDisplaysCorrectly()
     {
         var miniWindow = OpenMiniWindow();
-        if (miniWindow == null) return;
-
         var inputBox = FindInputTextBox(miniWindow);
-        if (inputBox == null) return;
 
         // Capture initial empty state
         var pathEmpty = ScreenshotHelper.CaptureWindow(miniWindow, "30_mini_longtext_empty");
@@ -97,10 +94,7 @@ public class MiniWindowLongTextTests : IDisposable
     public void MiniWindow_LongText_TranslationResizesWindow()
     {
         var miniWindow = OpenMiniWindow();
-        if (miniWindow == null) return;
-
         var inputBox = FindInputTextBox(miniWindow);
-        if (inputBox == null) return;
 
         // Record initial height
         var initialHeight = miniWindow.BoundingRectangle.Height;
@@ -144,10 +138,7 @@ public class MiniWindowLongTextTests : IDisposable
     public void MiniWindow_LongText_StreamingProgressScreenshots()
     {
         var miniWindow = OpenMiniWindow();
-        if (miniWindow == null) return;
-
         var inputBox = FindInputTextBox(miniWindow);
-        if (inputBox == null) return;
 
         // Input long text
         inputBox.Click();
@@ -196,10 +187,7 @@ public class MiniWindowLongTextTests : IDisposable
     public void MiniWindow_LongText_WindowHeightWithinBounds()
     {
         var miniWindow = OpenMiniWindow();
-        if (miniWindow == null) return;
-
         var inputBox = FindInputTextBox(miniWindow);
-        if (inputBox == null) return;
 
         // Input long text and translate
         inputBox.Click();
@@ -218,9 +206,8 @@ public class MiniWindowLongTextTests : IDisposable
 
         // MiniWindow has height constraints: 200-800 DIPs (ResizeWindowToContent)
         // At 100% DPI: 200-800px, at 150% DPI: 300-1200px, at 200% DPI: 400-1600px
-        // Use generous bounds to account for DPI scaling
-        windowRect.Height.Should().BeGreaterThanOrEqualTo(150,
-            "Window height should be at least the minimum (~200 DIPs at any DPI)");
+        windowRect.Height.Should().BeGreaterThanOrEqualTo(200,
+            "Window height should be at least the minimum (200 DIPs at 100% DPI)");
         windowRect.Height.Should().BeLessThanOrEqualTo(1700,
             "Window height should not exceed the maximum (~800 DIPs at 200% DPI)");
 
@@ -236,9 +223,8 @@ public class MiniWindowLongTextTests : IDisposable
 
     /// <summary>
     /// Open MiniWindow via Ctrl+Alt+M hotkey and return the window reference.
-    /// Returns null (with skip message) if the window cannot be found.
     /// </summary>
-    private Window? OpenMiniWindow()
+    private Window OpenMiniWindow()
     {
         // Ensure app is ready
         _ = _launcher.GetMainWindow();
@@ -252,13 +238,9 @@ public class MiniWindowLongTextTests : IDisposable
         var miniWindow = UITestHelper.FindSecondaryWindow(
             _launcher.Application, _launcher.Automation, "Mini", _output);
 
-        if (miniWindow == null)
-        {
-            _output.WriteLine("SKIP: Mini window did not open after Ctrl+Alt+M hotkey");
-            return null;
-        }
+        miniWindow.Should().NotBeNull("Mini window must open after Ctrl+Alt+M hotkey");
 
-        miniWindow.SetForeground();
+        miniWindow!.SetForeground();
         Thread.Sleep(500);
 
         _output.WriteLine($"Mini window found: \"{miniWindow.Title}\" " +
@@ -268,24 +250,16 @@ public class MiniWindowLongTextTests : IDisposable
 
     /// <summary>
     /// Find the InputTextBox in the given window.
-    /// Returns null (with assertion message) if not found.
     /// </summary>
-    private TextBox? FindInputTextBox(Window window)
+    private TextBox FindInputTextBox(Window window)
     {
         var inputBox = Retry.WhileNull(
             () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
             TimeSpan.FromSeconds(10)).Result;
 
-        if (inputBox == null)
-        {
-            _output.WriteLine("SKIP: InputTextBox not found in mini window");
-        }
-        else
-        {
-            inputBox.Should().NotBeNull("InputTextBox must exist in mini window");
-        }
+        inputBox.Should().NotBeNull("InputTextBox must exist in mini window");
 
-        return inputBox;
+        return inputBox!;
     }
 
     private void LogVisualRegressionResult(VisualComparisonResult? result)

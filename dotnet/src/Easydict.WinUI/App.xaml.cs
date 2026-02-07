@@ -357,12 +357,10 @@ namespace Easydict.WinUI
                 {
                     ShowAndActivateWindow();
 
-                    if (!string.IsNullOrWhiteSpace(text))
+                    if (!string.IsNullOrWhiteSpace(text)
+                        && _window?.Content is Frame frame && frame.Content is MainPage mainPage)
                     {
-                        if (_window?.Content is Frame frame && frame.Content is MainPage mainPage)
-                        {
-                            mainPage.SetTextAndTranslate(text);
-                        }
+                        mainPage.SetTextAndTranslate(text);
                     }
                 });
             }

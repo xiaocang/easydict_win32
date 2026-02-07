@@ -325,7 +325,7 @@ namespace Easydict.WinUI.Views
             // Don't dispose oldCts - let the owning invocation's finally block dispose it
             var cts = new CancellationTokenSource();
             var oldCts = Interlocked.Exchange(ref _manualQueryCts, cts);
-            oldCts?.Cancel();
+            try { oldCts?.Cancel(); } catch (ObjectDisposedException) { }
 
             // Mark as loading and queried
             serviceResult.IsLoading = true;
@@ -373,6 +373,7 @@ namespace Easydict.WinUI.Views
             {
                 serviceResult.IsLoading = false;
                 serviceResult.IsStreaming = false;
+                serviceResult.ClearQueried(); // Allow retry after cancellation
             }
             catch (TranslationException ex)
             {
@@ -406,7 +407,7 @@ namespace Easydict.WinUI.Views
             // Cancel any in-flight manual queries
             // Don't dispose - let the owning OnServiceQueryRequested's finally block dispose it
             var manualCts = Interlocked.Exchange(ref _manualQueryCts, null);
-            manualCts?.Cancel();
+            try { manualCts?.Cancel(); } catch (ObjectDisposedException) { }
 
             var task = _currentQueryTask;
             var detectionService = _detectionService;  // Capture before nulling
@@ -624,7 +625,7 @@ namespace Easydict.WinUI.Views
             // Cancel any in-flight manual queries (stale text)
             // Don't dispose - let the owning OnServiceQueryRequested's finally block dispose it
             var oldManualCts = Interlocked.Exchange(ref _manualQueryCts, null);
-            oldManualCts?.Cancel();
+            try { oldManualCts?.Cancel(); } catch (ObjectDisposedException) { }
 
             var ct = currentCts.Token;
 

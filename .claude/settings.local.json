@@ -47,7 +47,8 @@
       "Bash(gh api:*)",
       "Bash(dotnet restore:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)"
     ],
     "deny": [
       "Bash(git push:*)",

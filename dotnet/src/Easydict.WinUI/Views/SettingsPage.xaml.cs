@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
@@ -1616,7 +1617,7 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
     {
-        _currentDialog?.Hide();
+        try { _currentDialog?.Hide(); } catch (COMException) { }
         _currentDialog = dialog;
 
         try

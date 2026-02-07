@@ -161,6 +161,12 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     /// </summary>
     public void MarkQueried() => HasQueried = true;
 
+    /// <summary>
+    /// Clear the queried state so the service can be retried.
+    /// Used when a manual query is cancelled before producing a result.
+    /// </summary>
+    public void ClearQueried() => HasQueried = false;
+
     // Computed properties for UI binding
 
     /// <summary>

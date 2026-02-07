@@ -1246,6 +1246,31 @@ public sealed partial class SettingsPage : Page
     #region Service Test Handlers
 
     /// <summary>
+    /// Creates a fresh, isolated service instance for testing.
+    /// This ensures the test uses current UI values without modifying the shared service.
+    /// </summary>
+    private static ITranslationService? CreateFreshService(string serviceId, HttpClient httpClient)
+    {
+        return serviceId switch
+        {
+            "deepl" => new DeepLService(httpClient),
+            "openai" => new OpenAIService(httpClient),
+            "ollama" => new OllamaService(httpClient),
+            "deepseek" => new DeepSeekService(httpClient),
+            "groq" => new GroqService(httpClient),
+            "zhipu" => new ZhipuService(httpClient),
+            "github" => new GitHubModelsService(httpClient),
+            "gemini" => new GeminiService(httpClient),
+            "custom-openai" => new CustomOpenAIService(httpClient),
+            "builtin" => new BuiltInAIService(httpClient),
+            "doubao" => new DoubaoService(httpClient),
+            "caiyun" => new CaiyunService(httpClient),
+            "niutrans" => new NiuTransService(httpClient),
+            _ => null
+        };
+    }
+
+    /// <summary>
     /// Test a translation service with current UI configuration.
     /// </summary>
     /// <param name="serviceId">The service ID to test.</param>
@@ -1262,15 +1287,16 @@ public sealed partial class SettingsPage : Page
 
         try
         {
+            // Create an isolated service instance so the test uses UI values
+            // and doesn't modify the shared service in TranslationManager.
             using var handle = TranslationManagerService.Instance.AcquireHandle();
-            var manager = handle.Manager;
-
-            if (!manager.Services.TryGetValue(serviceId, out var service))
+            var service = CreateFreshService(serviceId, handle.Manager.SharedHttpClient);
+            if (service == null)
             {
                 throw new TranslationException($"Service '{serviceId}' not found");
             }
 
-            // Configure the service with current UI values
+            // Configure the fresh instance with current UI values
             configureAction(service);
 
             // Check if configured

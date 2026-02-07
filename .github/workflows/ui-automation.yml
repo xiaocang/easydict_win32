@@ -13,8 +13,9 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
-  ui-automation:
-    name: MSIX + UI Automation
+  # ── Job 1: Shared Build & Package ──
+  build:
+    name: Build & Package
     runs-on: windows-latest
 
     steps:
@@ -29,7 +30,6 @@ jobs:
       - name: Setup WinApp CLI
         uses: microsoft/setup-WinAppCli@v0.1
 
-      # ── Build & Publish (x64, same as release) ──
       - name: Restore dependencies
         working-directory: dotnet
         run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-x64
@@ -47,7 +47,6 @@ jobs:
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
 
-      # ── MSIX Packaging (same pipeline as release) ──
       - name: Verify MSIX assets
         shell: pwsh
         run: |
@@ -117,12 +116,40 @@ jobs:
           dotnet/scripts/Fix-MsixMinVersion.ps1 `
             -MsixPath "dotnet/msix/Easydict-ui-test-x64.msix"
 
-      # ── Install MSIX ──
-      - name: Enable Developer Mode (sideloading)
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: dotnet/publish/x64
+          retention-days: 1
+
+      - name: Upload MSIX package
+        uses: actions/upload-artifact@v4
+        with:
+          name: msix-package
+          path: dotnet/msix/
+          retention-days: 1
+
+      - name: Revert manifest changes
+        if: always()
         shell: pwsh
         run: |
-          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" `
-            /t REG_DWORD /v AllowDevelopmentWithoutDevLicense /d 1 /f
+          git checkout -- dotnet/src/Easydict.WinUI/Package.appxmanifest
+
+  # ── Job 2: WinUI Unit Tests (parallel) ──
+  winui-tests:
+    name: WinUI Unit Tests
+    runs-on: windows-latest
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: dotnet/global.json
 
       - name: Install Windows App Runtime
         shell: pwsh
@@ -133,7 +160,6 @@ jobs:
           Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow
           Write-Host "Windows App Runtime installed"
 
-      # ── WinUI Unit Tests (require Windows App Runtime) ──
       - name: Build WinUI Unit Tests
         working-directory: dotnet
         run: |
@@ -153,6 +179,50 @@ jobs:
             --logger "console;verbosity=detailed" `
             -p:Platform=x64 `
             --filter "Category=WinUI"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: winui-test-results
+          path: dotnet/**/TestResults/*.trx
+          retention-days: 30
+
+  # ── Job 3: UI Automation Tests (parallel) ──
+  ui-automation:
+    name: UI Automation
+    runs-on: windows-latest
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: dotnet/global.json
+
+      - name: Download MSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: msix-package
+          path: dotnet/msix
+
+      - name: Enable Developer Mode (sideloading)
+        shell: pwsh
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" `
+            /t REG_DWORD /v AllowDevelopmentWithoutDevLicense /d 1 /f
+
+      - name: Install Windows App Runtime
+        shell: pwsh
+        run: |
+          $url = "https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-x64.exe"
+          $installer = Join-Path $env:TEMP "windowsappruntimeinstall-x64.exe"
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow
+          Write-Host "Windows App Runtime installed"
 
       - name: Install MSIX package (register from extracted layout)
         shell: pwsh
@@ -197,7 +267,6 @@ jobs:
           # Export for later steps
           echo "EASYDICT_PACKAGE_FAMILY_NAME=$($pkg.PackageFamilyName)" >> $env:GITHUB_ENV
 
-      # ── Build & Run UI Automation Tests ──
       - name: Restore UI test dependencies
         working-directory: dotnet
         run: dotnet restore tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj
@@ -225,7 +294,6 @@ jobs:
             -p:Platform=x64 `
             --filter "Category=UIAutomation"
 
-      # ── Collect Artifacts ──
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()
@@ -249,7 +317,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ui-test-results
+          name: ui-automation-test-results
           path: dotnet/**/TestResults/*.trx
           retention-days: 30
 
@@ -261,7 +329,6 @@ jobs:
           path: dotnet/msix/Easydict-ui-test-x64.msix
           retention-days: 7
 
-      # ── Cleanup ──
       - name: Uninstall MSIX package
         if: always()
         shell: pwsh
@@ -273,9 +340,3 @@ jobs:
           } else {
             Write-Host "Package already uninstalled"
           }
-
-      - name: Revert manifest changes
-        if: always()
-        shell: pwsh
-        run: |
-          git checkout -- dotnet/src/Easydict.WinUI/Package.appxmanifest

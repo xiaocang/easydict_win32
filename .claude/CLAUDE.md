@@ -645,6 +645,21 @@ previousCts?.Cancel();
 Interlocked.CompareExchange(ref _currentQueryCts, null, currentCts);
 ```
 
+#### CancellationTokenSource Ownership
+```csharp
+// CTS fields use ownership comments to clarify lifecycle
+// Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
+// Other code may Cancel() but must NOT Dispose().
+private CancellationTokenSource? _currentQueryCts;
+
+// Owner creates and disposes
+using var currentCts = new CancellationTokenSource();
+var previousCts = Interlocked.Exchange(ref _currentQueryCts, currentCts);
+
+// Non-owner sites: guard Cancel() against race with owner's Dispose()
+try { previousCts?.Cancel(); } catch (ObjectDisposedException) { }
+```
+
 #### Volatile Fields for Visibility
 ```csharp
 // Use volatile for flags checked across threads

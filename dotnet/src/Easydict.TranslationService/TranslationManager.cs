@@ -272,20 +272,28 @@ public sealed class TranslationManager : IDisposable
         // Deduplicate concurrent requests for the same word using flight tracker.
         // When multiple streaming services finish near-simultaneously for the same English word,
         // only one Youdao API call is made; the others await the same in-flight task.
+        //
+        // The shared task uses CancellationToken.None so that one caller's cancellation
+        // doesn't kill the fetch for all waiters. Each caller applies its own token via WaitAsync.
         var lazyTask = _phoneticFlightTracker.GetOrAdd(
             phoneticCacheKey,
             _ => new Lazy<Task<IReadOnlyList<Phonetic>?>>(
-                () => FetchPhoneticsAsync(translatedText, cancellationToken)));
+                () => FetchPhoneticsAsync(translatedText, CancellationToken.None)));
 
         try
         {
-            var phonetics = await lazyTask.Value;
+            var phonetics = await lazyTask.Value.WaitAsync(cancellationToken);
 
             if (phonetics != null && phonetics.Count > 0)
             {
                 _phoneticCache.Set(phoneticCacheKey, phonetics, _phoneticCacheOptions);
                 return MergePhoneticsIntoResult(result, phonetics);
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // This caller was cancelled, but the shared fetch continues for other waiters
+            return result;
         }
         catch (Exception ex)
         {
@@ -294,8 +302,12 @@ public sealed class TranslationManager : IDisposable
         }
         finally
         {
-            // Remove from tracker so future requests can retry if needed
-            _phoneticFlightTracker.TryRemove(phoneticCacheKey, out _);
+            // Only remove from tracker when the shared task has completed (not when a single caller cancels).
+            // This prevents a cancelled caller from evicting the entry while others are still waiting.
+            if (lazyTask.IsValueCreated && lazyTask.Value.IsCompleted)
+            {
+                _phoneticFlightTracker.TryRemove(phoneticCacheKey, out _);
+            }
         }
 
         return result;

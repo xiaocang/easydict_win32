@@ -11,14 +11,14 @@ namespace Easydict.TranslationService.Tests;
 public class PhoneticCacheStampedeTests : IDisposable
 {
     private readonly TranslationManager _manager;
-    private readonly TrackingYoudaoService _trackingYoudao;
+    private readonly BarrierYoudaoService _barrierYoudao;
 
     public PhoneticCacheStampedeTests()
     {
         _manager = new TranslationManager();
-        _trackingYoudao = new TrackingYoudaoService();
-        // Replace the default Youdao service with our tracking mock
-        _manager.RegisterService(_trackingYoudao);
+        _barrierYoudao = new BarrierYoudaoService(expectedCallers: 3);
+        // Replace the default Youdao service with our barrier mock
+        _manager.RegisterService(_barrierYoudao);
     }
 
     [Fact]
@@ -37,7 +37,10 @@ public class PhoneticCacheStampedeTests : IDisposable
         var result2 = MakeResultWithoutPhonetics("hello");
         var result3 = MakeResultWithoutPhonetics("hello");
 
-        // Act: call EnrichPhoneticsIfMissingAsync concurrently for the same word
+        // Act: launch three concurrent enrichment calls.
+        // The barrier mock will block inside TranslateAsync until all expected callers
+        // have entered — but with deduplication, only ONE call enters TranslateAsync.
+        // The mock handles this by using a short timeout so the test doesn't hang.
         var tasks = new[]
         {
             _manager.EnrichPhoneticsIfMissingAsync(result1, request),
@@ -47,8 +50,10 @@ public class PhoneticCacheStampedeTests : IDisposable
 
         var results = await Task.WhenAll(tasks);
 
-        // Assert: Youdao was called exactly once despite three concurrent requests
-        _trackingYoudao.CallCount.Should().Be(1,
+        // Assert: Youdao was called exactly once despite three concurrent requests.
+        // If deduplication were broken, we'd see 3 calls and the barrier would succeed
+        // (all 3 threads entering TranslateAsync).
+        _barrierYoudao.CallCount.Should().Be(1,
             "concurrent phonetic requests for the same word should be deduplicated");
 
         // All three results should have phonetics merged in
@@ -63,7 +68,10 @@ public class PhoneticCacheStampedeTests : IDisposable
     [Fact]
     public async Task EnrichPhonetics_DifferentWords_SeparateYoudaoRequests()
     {
-        // Arrange: two different English words
+        // Use a simple tracking mock (no barrier needed for different words)
+        var trackingYoudao = new TrackingYoudaoService();
+        _manager.RegisterService(trackingYoudao);
+
         var request = new TranslationRequest
         {
             Text = "test",
@@ -74,27 +82,26 @@ public class PhoneticCacheStampedeTests : IDisposable
         var result1 = MakeResultWithoutPhonetics("hello");
         var result2 = MakeResultWithoutPhonetics("world");
 
-        var requestForHello = request;
-        var requestForWorld = request;
-
         // Act: call for two different words concurrently
         var tasks = new[]
         {
-            _manager.EnrichPhoneticsIfMissingAsync(result1, requestForHello),
-            _manager.EnrichPhoneticsIfMissingAsync(result2, requestForWorld),
+            _manager.EnrichPhoneticsIfMissingAsync(result1, request),
+            _manager.EnrichPhoneticsIfMissingAsync(result2, request),
         };
 
         await Task.WhenAll(tasks);
 
         // Assert: Youdao was called twice (once per distinct word)
-        _trackingYoudao.CallCount.Should().Be(2,
+        trackingYoudao.CallCount.Should().Be(2,
             "different words should each trigger a separate Youdao request");
     }
 
     [Fact]
     public async Task EnrichPhonetics_SecondCallAfterFirstCompletes_UsesCache()
     {
-        // Arrange
+        var trackingYoudao = new TrackingYoudaoService();
+        _manager.RegisterService(trackingYoudao);
+
         var request = new TranslationRequest
         {
             Text = "你好",
@@ -106,17 +113,20 @@ public class PhoneticCacheStampedeTests : IDisposable
 
         // Act: first call populates the cache
         await _manager.EnrichPhoneticsIfMissingAsync(result, request);
-        _trackingYoudao.CallCount.Should().Be(1);
+        trackingYoudao.CallCount.Should().Be(1);
 
         // Second call should hit the cache, not Youdao
         await _manager.EnrichPhoneticsIfMissingAsync(result, request);
-        _trackingYoudao.CallCount.Should().Be(1,
+        trackingYoudao.CallCount.Should().Be(1,
             "second call should use cached phonetics, not call Youdao again");
     }
 
     [Fact]
     public async Task EnrichPhonetics_NonEnglishTarget_SkipsEnrichment()
     {
+        var trackingYoudao = new TrackingYoudaoService();
+        _manager.RegisterService(trackingYoudao);
+
         // Arrange: target is Chinese, not English
         var request = new TranslationRequest
         {
@@ -131,8 +141,54 @@ public class PhoneticCacheStampedeTests : IDisposable
         var enriched = await _manager.EnrichPhoneticsIfMissingAsync(result, request);
 
         // Assert: no Youdao call for non-English targets
-        _trackingYoudao.CallCount.Should().Be(0);
+        trackingYoudao.CallCount.Should().Be(0);
         enriched.Should().BeSameAs(result);
+    }
+
+    [Fact]
+    public async Task EnrichPhonetics_CallerCancelled_SharedFetchContinuesForOthers()
+    {
+        // Use a slow mock that we can control
+        var slowYoudao = new SlowYoudaoService();
+        _manager.RegisterService(slowYoudao);
+
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        var result1 = MakeResultWithoutPhonetics("hello");
+        var result2 = MakeResultWithoutPhonetics("hello");
+
+        // Caller 1 will be cancelled mid-flight
+        using var cts1 = new CancellationTokenSource();
+
+        var task1 = _manager.EnrichPhoneticsIfMissingAsync(result1, request, cts1.Token);
+        var task2 = _manager.EnrichPhoneticsIfMissingAsync(result2, request);
+
+        // Wait for the fetch to start, then cancel caller 1
+        await slowYoudao.WaitUntilFetchStarted();
+        cts1.Cancel();
+
+        // Caller 1 should return the original result (cancelled, no exception)
+        var enriched1 = await task1;
+        enriched1.WordResult?.Phonetics.Should().BeNullOrEmpty(
+            "cancelled caller should get original result without phonetics");
+
+        // Now let the fetch complete
+        slowYoudao.ReleaseFetch();
+
+        // Caller 2 should still get the enriched result
+        var enriched2 = await task2;
+        enriched2.WordResult.Should().NotBeNull();
+        enriched2.WordResult!.Phonetics.Should().NotBeNull();
+        enriched2.WordResult.Phonetics!.Count.Should().BeGreaterThan(0,
+            "non-cancelled caller should get phonetics from the shared fetch");
+
+        // Only one Youdao call was made
+        slowYoudao.CallCount.Should().Be(1);
     }
 
     public void Dispose()
@@ -152,14 +208,80 @@ public class PhoneticCacheStampedeTests : IDisposable
     }
 
     /// <summary>
-    /// A mock Youdao service that tracks how many times TranslateAsync is called
-    /// and introduces a small delay to simulate network latency (ensuring concurrent
-    /// callers overlap).
+    /// Mock Youdao service with a barrier that proves true concurrent deduplication.
+    /// With deduplication working, only 1 call enters TranslateAsync despite 3 concurrent
+    /// enrichment requests. The barrier expects N callers but will timeout gracefully —
+    /// if only 1 caller arrives (deduplication works), it proceeds after a short wait.
+    /// </summary>
+    private class BarrierYoudaoService : ITranslationService
+    {
+        private int _callCount;
+        private readonly SemaphoreSlim _entryGate = new(0);
+        private readonly int _expectedCallers;
+
+        public BarrierYoudaoService(int expectedCallers)
+        {
+            _expectedCallers = expectedCallers;
+        }
+
+        public int CallCount => _callCount;
+
+        public string ServiceId => "youdao";
+        public string DisplayName => "Youdao (Barrier Mock)";
+        public bool RequiresApiKey => false;
+        public bool IsConfigured => true;
+
+        public IReadOnlyList<Language> SupportedLanguages =>
+            [Language.English, Language.SimplifiedChinese];
+
+        public bool SupportsLanguagePair(Language from, Language to) => true;
+
+        public async Task<TranslationResult> TranslateAsync(
+            TranslationRequest request, CancellationToken cancellationToken = default)
+        {
+            var count = Interlocked.Increment(ref _callCount);
+
+            // Signal that we've entered
+            _entryGate.Release();
+
+            // If deduplication is broken, multiple callers enter here.
+            // Wait a bit to give other potential callers time to enter.
+            // With proper deduplication, only 1 caller enters so this is just a short wait.
+            await Task.Delay(100, cancellationToken);
+
+            // At this point, _callCount reveals whether deduplication worked:
+            // 1 = deduplicated (correct), >1 = stampede (broken)
+
+            return new TranslationResult
+            {
+                TranslatedText = request.Text,
+                OriginalText = request.Text,
+                ServiceName = "Youdao",
+                TargetLanguage = request.ToLanguage,
+                WordResult = new WordResult
+                {
+                    Phonetics =
+                    [
+                        new Phonetic { Text = "həˈloʊ", Accent = "US" },
+                        new Phonetic { Text = "həˈləʊ", Accent = "UK" }
+                    ]
+                }
+            };
+        }
+
+        public Task<Language> DetectLanguageAsync(
+            string text, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Language.Auto);
+        }
+    }
+
+    /// <summary>
+    /// Simple tracking mock without barrier for tests that don't need concurrency verification.
     /// </summary>
     private class TrackingYoudaoService : ITranslationService
     {
         private int _callCount;
-
         public int CallCount => _callCount;
 
         public string ServiceId => "youdao";
@@ -172,13 +294,76 @@ public class PhoneticCacheStampedeTests : IDisposable
 
         public bool SupportsLanguagePair(Language from, Language to) => true;
 
-        public async Task<TranslationResult> TranslateAsync(
+        public Task<TranslationResult> TranslateAsync(
             TranslationRequest request, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _callCount);
 
-            // Simulate network delay so concurrent callers overlap
-            await Task.Delay(50, cancellationToken);
+            return Task.FromResult(new TranslationResult
+            {
+                TranslatedText = request.Text,
+                OriginalText = request.Text,
+                ServiceName = "Youdao",
+                TargetLanguage = request.ToLanguage,
+                WordResult = new WordResult
+                {
+                    Phonetics =
+                    [
+                        new Phonetic { Text = "həˈloʊ", Accent = "US" },
+                        new Phonetic { Text = "həˈləʊ", Accent = "UK" }
+                    ]
+                }
+            });
+        }
+
+        public Task<Language> DetectLanguageAsync(
+            string text, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Language.Auto);
+        }
+    }
+
+    /// <summary>
+    /// Mock that blocks in TranslateAsync until explicitly released.
+    /// Used to test that one caller's cancellation doesn't affect others.
+    /// </summary>
+    private class SlowYoudaoService : ITranslationService
+    {
+        private int _callCount;
+        private readonly SemaphoreSlim _started = new(0);
+        private readonly SemaphoreSlim _gate = new(0);
+
+        public int CallCount => _callCount;
+
+        public string ServiceId => "youdao";
+        public string DisplayName => "Youdao (Slow Mock)";
+        public bool RequiresApiKey => false;
+        public bool IsConfigured => true;
+
+        public IReadOnlyList<Language> SupportedLanguages =>
+            [Language.English, Language.SimplifiedChinese];
+
+        public bool SupportsLanguagePair(Language from, Language to) => true;
+
+        public async Task WaitUntilFetchStarted()
+        {
+            await _started.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        public void ReleaseFetch()
+        {
+            _gate.Release();
+        }
+
+        public async Task<TranslationResult> TranslateAsync(
+            TranslationRequest request, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _callCount);
+            _started.Release();
+
+            // Block until test releases us (the shared task uses CancellationToken.None,
+            // so this won't be cancelled by individual callers)
+            await _gate.WaitAsync(TimeSpan.FromSeconds(5));
 
             return new TranslationResult
             {

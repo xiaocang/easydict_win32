@@ -1216,7 +1216,14 @@ public sealed partial class MiniWindow : Window
         _appWindow?.Show();
 
         // Try to bring window to front using multiple methods
-        _appWindow?.MoveInZOrderAtTop();
+        try
+        {
+            _appWindow?.MoveInZOrderAtTop();
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"MiniWindow: MoveInZOrderAtTop failed: {ex.Message}");
+        }
 
         // Use Win32 SetForegroundWindow to forcefully bring window to front
         var hWnd = WindowNative.GetWindowHandle(this);

@@ -43,6 +43,8 @@ public sealed partial class MiniWindow : Window
     // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
     // Other code may Cancel() but must NOT Dispose().
     private CancellationTokenSource? _currentQueryCts;
+    // Owned by OnServiceQueryRequested() - only that method creates and disposes via its finally block.
+    // Other code may Cancel() but must NOT Dispose().
     private CancellationTokenSource? _manualQueryCts;
     private Task? _currentQueryTask;
     private readonly SettingsService _settings = SettingsService.Instance;
@@ -376,10 +378,10 @@ public sealed partial class MiniWindow : Window
         }
 
         // Create new CTS, cancel any previous manual query
+        // Don't dispose oldCts - let the owning invocation's finally block dispose it
         var cts = new CancellationTokenSource();
         var oldCts = Interlocked.Exchange(ref _manualQueryCts, cts);
         oldCts?.Cancel();
-        oldCts?.Dispose();
 
         // Mark as loading and queried
         serviceResult.IsLoading = true;
@@ -610,9 +612,9 @@ public sealed partial class MiniWindow : Window
         CancelCurrentQuery();
 
         // Cancel any in-flight manual queries
+        // Don't dispose - let the owning OnServiceQueryRequested's finally block dispose it
         var manualCts = Interlocked.Exchange(ref _manualQueryCts, null);
         manualCts?.Cancel();
-        manualCts?.Dispose();
 
         var task = _currentQueryTask;
         var detectionService = _detectionService;  // Capture before nulling
@@ -724,9 +726,9 @@ public sealed partial class MiniWindow : Window
         }
 
         // Cancel any in-flight manual queries (stale text)
+        // Don't dispose - let the owning OnServiceQueryRequested's finally block dispose it
         var oldManualCts = Interlocked.Exchange(ref _manualQueryCts, null);
         oldManualCts?.Cancel();
-        oldManualCts?.Dispose();
 
         var ct = currentCts.Token;
 

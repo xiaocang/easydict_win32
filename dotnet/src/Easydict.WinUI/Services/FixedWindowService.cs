@@ -14,7 +14,7 @@ public sealed class FixedWindowService : IDisposable
 {
     private static FixedWindowService? _instance;
     private FixedWindow? _fixedWindow;
-    private volatile bool _isDisposed;
+    private bool _isDisposed;
 
     /// <summary>
     /// Gets the singleton instance of FixedWindowService.

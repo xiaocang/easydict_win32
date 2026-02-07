@@ -13,7 +13,7 @@ public sealed class MiniWindowService : IDisposable
 {
     private static MiniWindowService? _instance;
     private MiniWindow? _miniWindow;
-    private volatile bool _isDisposed;
+    private bool _isDisposed;
 
     /// <summary>
     /// Gets the singleton instance of MiniWindowService.

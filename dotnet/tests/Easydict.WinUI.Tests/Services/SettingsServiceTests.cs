@@ -11,6 +11,7 @@ namespace Easydict.WinUI.Tests.Services;
 /// These tests verify property behavior and defaults using the singleton instance.
 /// </summary>
 [Trait("Category", "WinUI")]
+[Collection("SettingsService")]
 public class SettingsServiceTests
 {
     private readonly SettingsService _settings;

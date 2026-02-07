@@ -12,6 +12,7 @@ namespace Easydict.WinUI.Tests.Services;
 /// translation is always prevented via first↔second language reversal.
 /// </summary>
 [Trait("Category", "WinUI")]
+[Collection("SettingsService")]
 public class TargetLanguageSelectorTests : IDisposable
 {
     private readonly SettingsService _settings;

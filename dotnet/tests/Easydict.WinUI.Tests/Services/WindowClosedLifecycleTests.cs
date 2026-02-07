@@ -45,9 +45,11 @@ public class WindowClosedLifecycleTests : IDisposable
     /// which nullifies the field via the handler pattern used in
     /// MiniWindowService.cs:122 and FixedWindowService.cs:123.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public void Close_SetsFieldToNull()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange — mirrors: _miniWindow = new MiniWindow();
         Window? window = CreateTrackedWindow();
         var windowToClose = window;
@@ -66,9 +68,11 @@ public class WindowClosedLifecycleTests : IDisposable
     /// After close, null-conditional access returns default value.
     /// Mirrors: IsVisible => _miniWindow?.IsVisible ?? false
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public void Close_NullCoalescingReturnsDefaultAfterClose()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         Window? window = CreateTrackedWindow();
         var windowToClose = window;
@@ -89,9 +93,11 @@ public class WindowClosedLifecycleTests : IDisposable
     /// After close nullifies the field, a new window can be created.
     /// Mirrors the EnsureWindowCreated() lazy-creation pattern.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public void Close_NewWindowCanBeCreatedAfterClose()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange — first window
         Window? window = CreateTrackedWindow();
         var windowToClose = window;
@@ -113,9 +119,11 @@ public class WindowClosedLifecycleTests : IDisposable
     /// Multiple create-close-recreate cycles work correctly,
     /// ensuring the pattern is robust across repeated use.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public void Close_MultipleCloseRecreateCycles()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         Window? window = null;
 
         for (var i = 0; i < 3; i++)
@@ -142,9 +150,11 @@ public class WindowClosedLifecycleTests : IDisposable
     /// EnsureWindowCreated() → check AppWindow.IsVisible → close → field is null → recreate.
     /// Uses WindowNative + Win32Interop to obtain AppWindow, mirroring the real services.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public void SimulatedServiceLifecycle_EnsureWindowCreatedAndIsVisible()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Simulate service state
         Window? serviceWindow = null;
 

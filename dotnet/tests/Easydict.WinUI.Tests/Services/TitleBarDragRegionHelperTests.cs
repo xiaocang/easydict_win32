@@ -30,9 +30,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         _testWindow?.Close();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Constructor_WithValidParameters_CreatesInstance()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var window = CreateTestWindow();
         var appWindow = GetAppWindow(window);
@@ -46,9 +48,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         helper.Should().NotBeNull();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Constructor_WithNullWindow_ThrowsArgumentNullException()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var appWindow = CreateTestAppWindow();
         var titleBar = new Grid();
@@ -62,9 +66,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
             .WithParameterName("window");
     }
 
-    [Fact]
+    [SkippableFact]
     public void Constructor_WithNullAppWindow_ThrowsArgumentNullException()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var window = CreateTestWindow();
         var titleBar = new Grid();
@@ -78,9 +84,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
             .WithParameterName("appWindow");
     }
 
-    [Fact]
+    [SkippableFact]
     public void Constructor_WithNullTitleBarRegion_ThrowsArgumentNullException()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var window = CreateTestWindow();
         var appWindow = GetAppWindow(window);
@@ -94,9 +102,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
             .WithParameterName("titleBarRegion");
     }
 
-    [Fact]
+    [SkippableFact]
     public void Constructor_WithNullPassthroughElements_ThrowsArgumentNullException()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var window = CreateTestWindow();
         var appWindow = GetAppWindow(window);
@@ -110,9 +120,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
             .WithParameterName("passthroughElements");
     }
 
-    [Fact]
+    [SkippableFact]
     public void Constructor_WithNullWindowName_ThrowsArgumentNullException()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var window = CreateTestWindow();
         var appWindow = GetAppWindow(window);
@@ -127,9 +139,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
             .WithParameterName("windowName");
     }
 
-    [Fact]
+    [SkippableFact]
     public void Initialize_WithValidWindow_DoesNotThrow()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
@@ -141,9 +155,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Initialize_WithNoContent_DoesNotThrow()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var window = new Window(); // No content set
         var appWindow = GetAppWindow(window);
@@ -158,9 +174,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Dispose_CanBeCalledMultipleTimes()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
@@ -178,9 +196,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Cleanup_CanBeCalledMultipleTimes()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
@@ -198,9 +218,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Dispose_CallsCleanup()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
@@ -217,9 +239,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act2.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void UpdateDragRegions_BeforeInitialize_DoesNotThrow()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
@@ -231,9 +255,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void UpdateDragRegions_AfterDispose_DoesNotThrow()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
@@ -247,9 +273,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Dispose_IsThreadSafe()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
@@ -267,9 +295,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         await act.Should().NotThrowAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Cleanup_IsThreadSafe()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
@@ -287,9 +317,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         await act.Should().NotThrowAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Initialize_WithAlreadyLoadedContent_CallsUpdateDragRegions()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
 
@@ -308,9 +340,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void UpdateDragRegions_WithZeroSizedElements_DoesNotThrow()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
 
@@ -333,9 +367,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void UpdateDragRegions_WithEmptyPassthroughArray_DoesNotThrow()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, _) = CreateFullTestSetup();
         var emptyButtons = Array.Empty<FrameworkElement>();
@@ -349,9 +385,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Constructor_WithDefaultWindowName_DoesNotThrow()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var window = CreateTestWindow();
         var appWindow = GetAppWindow(window);
@@ -365,9 +403,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Initialize_CalledMultipleTimes_DoesNotThrow()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
@@ -384,9 +424,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Initialize_AfterDispose_DoesNotThrow()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");
@@ -400,9 +442,11 @@ public class TitleBarDragRegionHelperTests : IDisposable
         act.Should().NotThrow();
     }
 
-    [Fact]
+    [SkippableFact]
     public void Initialize_AfterCleanup_CanReinitialize()
     {
+        Skip.IfNot(WinUITestHelper.CanCreateWindow, WinUITestHelper.SkipReason);
+
         // Arrange
         var (window, appWindow, titleBar, buttons) = CreateFullTestSetup();
         var helper = new TitleBarDragRegionHelper(window, appWindow, titleBar, buttons, "Test");

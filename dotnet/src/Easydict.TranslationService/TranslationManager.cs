@@ -129,6 +129,12 @@ public sealed class TranslationManager : IDisposable
     public IReadOnlyDictionary<string, ITranslationService> Services => _services;
 
     /// <summary>
+    /// The shared HttpClient configured with proxy settings.
+    /// Used to create isolated service instances for testing.
+    /// </summary>
+    public HttpClient SharedHttpClient => _httpClient;
+
+    /// <summary>
     /// The default service ID to use for translation.
     /// </summary>
     public string DefaultServiceId

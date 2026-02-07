@@ -1,0 +1,64 @@
+name: Update Badges
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'dotnet/src/**/*.cs'
+      - 'dotnet/tests/**/*.cs'
+  workflow_dispatch:
+
+jobs:
+  update-badges:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Calculate source:test LOC ratio
+        id: ratio
+        run: |
+          src_lines=$(find dotnet/src -name '*.cs' -exec cat {} + | wc -l)
+          test_lines=$(find dotnet/tests -name '*.cs' -exec cat {} + | wc -l)
+          ratio=$(awk "BEGIN {printf \"%.1f\", $src_lines / $test_lines}")
+          echo "src_lines=$src_lines" >> $GITHUB_OUTPUT
+          echo "test_lines=$test_lines" >> $GITHUB_OUTPUT
+          echo "ratio=$ratio" >> $GITHUB_OUTPUT
+          echo "Source: $src_lines lines, Test: $test_lines lines, Ratio: ${ratio}:1"
+
+      - name: Update badge data
+        env:
+          RATIO: ${{ steps.ratio.outputs.ratio }}
+        run: |
+          cat > /tmp/source-test-ratio.json << EOF
+          {
+            "schemaVersion": 1,
+            "label": "source:test LOC",
+            "message": "${RATIO}:1",
+            "color": "brightgreen"
+          }
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin badges 2>/dev/null || true
+          if git show-ref --verify --quiet refs/remotes/origin/badges; then
+            git checkout badges
+          else
+            git checkout --orphan badges
+            git rm -rf .
+          fi
+
+          cp /tmp/source-test-ratio.json source-test-ratio.json
+          git add source-test-ratio.json
+
+          if git diff --cached --quiet; then
+            echo "No changes to badge"
+          else
+            git commit -m "Update source:test LOC badge (${RATIO}:1)"
+            git push origin badges
+          fi

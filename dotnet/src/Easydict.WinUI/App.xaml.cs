@@ -347,22 +347,28 @@ namespace Easydict.WinUI
 
         private async void OnTranslateSelectionHotkey()
         {
-            TextInsertionService.CaptureSourceWindow();
-
-            // Get selected text from clipboard
-            var text = await ClipboardService.GetTextAsync();
-            if (!string.IsNullOrWhiteSpace(text))
+            try
             {
+                TextInsertionService.CaptureSourceWindow();
+
+                var text = await TextSelectionService.GetSelectedTextAsync();
+
                 _window?.DispatcherQueue.TryEnqueue(() =>
                 {
                     ShowAndActivateWindow();
 
-                    // Send text to MainPage for translation
-                    if (_window?.Content is Frame frame && frame.Content is MainPage mainPage)
+                    if (!string.IsNullOrWhiteSpace(text))
                     {
-                        mainPage.SetTextAndTranslate(text);
+                        if (_window?.Content is Frame frame && frame.Content is MainPage mainPage)
+                        {
+                            mainPage.SetTextAndTranslate(text);
+                        }
                     }
                 });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] OnTranslateSelectionHotkey error: {ex.Message}");
             }
         }
 

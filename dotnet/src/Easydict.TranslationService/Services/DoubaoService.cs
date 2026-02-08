@@ -155,7 +155,7 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
         HttpResponseMessage response;
         try
         {
-            response = await HttpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            response = await HttpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {
@@ -171,7 +171,7 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
             // Handle error status codes
             if (!response.IsSuccessStatusCode)
             {
-                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 throw response.StatusCode switch
                 {
                     HttpStatusCode.Unauthorized => new TranslationException("Invalid API key or authentication failed.")
@@ -198,8 +198,8 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
             }
 
             // Parse SSE stream
-            var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await foreach (var chunk in ParseDoubaoStreamAsync(stream, cancellationToken))
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await foreach (var chunk in ParseDoubaoStreamAsync(stream, cancellationToken).ConfigureAwait(false))
             {
                 yield return chunk;
             }
@@ -219,7 +219,7 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
 
         while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
         {
-            var line = await reader.ReadLineAsync(cancellationToken);
+            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (string.IsNullOrEmpty(line))
             {
                 currentEvent = null;

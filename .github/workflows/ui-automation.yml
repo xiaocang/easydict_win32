@@ -199,10 +199,10 @@ jobs:
       matrix:
         shard:
           - name: "PopButton & Advanced"
-            filter: "Category=UIAutomation & (ClassName~PopButton | ClassName~MiniWindowLongText | ClassName~PhoneticTranscription)"
+            filter: "Category=UIAutomation & (FullyQualifiedName~PopButton | FullyQualifiedName~MiniWindowLongText | FullyQualifiedName~PhoneticTranscription)"
             suffix: "shard-1"
           - name: "Core & Settings"
-            filter: "Category=UIAutomation & (ClassName~MainWindow | ClassName~Translation | ClassName~WindowLifecycle | ClassName~SettingsPage | ClassName~DarkMode)"
+            filter: "Category=UIAutomation & (FullyQualifiedName~MainWindowTests. | FullyQualifiedName~TranslationTests. | FullyQualifiedName~WindowLifecycle | FullyQualifiedName~SettingsPage | FullyQualifiedName~DarkMode)"
             suffix: "shard-2"
 
     steps:

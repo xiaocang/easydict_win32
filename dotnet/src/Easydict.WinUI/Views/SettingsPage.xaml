@@ -334,8 +334,8 @@
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="ZhipuKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Zhipu API key" HorizontalAlignment="Left" />
                         <ComboBox x:Name="ZhipuModelCombo" Header="Model" Width="280" IsEditable="True">
-                            <ComboBoxItem Content="glm-4-flash-250414" Tag="glm-4-flash-250414" />
                             <ComboBoxItem Content="glm-4.5-flash" Tag="glm-4.5-flash" />
+                            <ComboBoxItem Content="glm-4-flash-250414" Tag="glm-4-flash-250414" />
                             <ComboBoxItem Content="glm-4.7" Tag="glm-4.7" />
                             <ComboBoxItem Content="glm-4.5-air" Tag="glm-4.5-air" />
                         </ComboBox>

@@ -64,7 +64,7 @@ public sealed class SettingsService
 
     // Zhipu settings
     public string? ZhipuApiKey { get; set; }
-    public string ZhipuModel { get; set; } = "glm-4-flash-250414";
+    public string ZhipuModel { get; set; } = "glm-4.5-flash";
 
     // GitHub Models settings
     public string? GitHubModelsToken { get; set; }
@@ -340,7 +340,7 @@ public sealed class SettingsService
 
         // Zhipu settings
         ZhipuApiKey = GetValue<string?>(nameof(ZhipuApiKey), null);
-        ZhipuModel = GetValue(nameof(ZhipuModel), "glm-4-flash-250414");
+        ZhipuModel = GetValue(nameof(ZhipuModel), "glm-4.5-flash");
 
         // GitHub Models settings
         GitHubModelsToken = GetValue<string?>(nameof(GitHubModelsToken), null);

@@ -8,15 +8,15 @@ namespace Easydict.TranslationService.Services;
 public sealed class ZhipuService : BaseOpenAIService
 {
     private const string DefaultEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
-    private const string DefaultModel = "glm-4-flash-250414";
+    private const string DefaultModel = "glm-4.5-flash";
 
     /// <summary>
     /// Available Zhipu models.
     /// </summary>
     public static readonly string[] AvailableModels = new[]
     {
-        "glm-4-flash-250414",
         "glm-4.5-flash",
+        "glm-4-flash-250414",
         "glm-4.7",
         "glm-4.5-air"
     };

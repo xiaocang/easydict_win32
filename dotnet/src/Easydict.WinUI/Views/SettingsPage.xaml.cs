@@ -721,7 +721,7 @@ public sealed partial class SettingsPage : Page
         // Save Zhipu settings
         var zhipuKey = ZhipuKeyBox.Password;
         _settings.ZhipuApiKey = string.IsNullOrWhiteSpace(zhipuKey) ? null : zhipuKey;
-        _settings.ZhipuModel = GetEditableComboValue(ZhipuModelCombo, "glm-4-flash-250414");
+        _settings.ZhipuModel = GetEditableComboValue(ZhipuModelCombo, "glm-4.5-flash");
 
         // Save GitHub Models settings
         var githubToken = GitHubModelsTokenBox.Password;
@@ -1470,7 +1470,7 @@ public sealed partial class SettingsPage : Page
             if (service is ZhipuService zhipu)
             {
                 var apiKey = ZhipuKeyBox.Password;
-                var model = GetEditableComboValue(ZhipuModelCombo, "glm-4-flash-250414");
+                var model = GetEditableComboValue(ZhipuModelCombo, "glm-4.5-flash");
                 zhipu.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey, model: model);
             }
         }, TestZhipuButton, ZhipuStatusText);

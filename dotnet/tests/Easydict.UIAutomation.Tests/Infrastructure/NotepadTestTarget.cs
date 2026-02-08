@@ -43,10 +43,22 @@ public sealed class NotepadTestTarget : IDisposable
             if (edit == null)
                 throw new InvalidOperationException("Could not find Notepad text edit area");
 
-            // Focus and type the test text
+            // Focus and set the test text
             edit.Focus();
             Thread.Sleep(300);
-            Keyboard.Type(textContent);
+
+            // Prefer UIA ValuePattern — sets text directly via the accessibility API,
+            // independent of keyboard focus and input method state.
+            var valuePattern = edit.Patterns.Value.PatternOrDefault;
+            if (valuePattern != null)
+            {
+                valuePattern.SetValue(textContent);
+            }
+            else
+            {
+                // Fallback: type via keyboard simulation (fragile — depends on focus)
+                Keyboard.Type(textContent);
+            }
             Thread.Sleep(300);
         }
         catch

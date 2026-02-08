@@ -39,7 +39,10 @@ public sealed partial class FixedWindow : Window
     private bool _suppressTargetLanguageSelectionChanged;
     private bool _suppressSourceLanguageSelectionChanged;
     private TitleBarDragRegionHelper? _titleBarHelper;
-    private bool _resizePending;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _resizeThrottleTimer;
+    private bool _resizePending;      // resize requested but not yet executed
+    private bool _resizeThrottling;   // inside cooldown window
+    private const int ResizeThrottleMs = 150;
 
     /// <summary>
     /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -312,7 +315,7 @@ public sealed partial class FixedWindow : Window
     private void OnServiceCollapseToggled(object? sender, ServiceQueryResult result)
     {
         // Trigger window resize when collapse state changes
-        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+        RequestResize();
     }
 
     /// <summary>
@@ -378,7 +381,7 @@ public sealed partial class FixedWindow : Window
             serviceResult.IsLoading = false;
             serviceResult.IsStreaming = false;
             serviceResult.ApplyAutoCollapseLogic();
-            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+            RequestResize();
         }
         catch (Exception ex)
         {
@@ -390,7 +393,7 @@ public sealed partial class FixedWindow : Window
             serviceResult.IsLoading = false;
             serviceResult.IsStreaming = false;
             serviceResult.ApplyAutoCollapseLogic();
-            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+            RequestResize();
         }
     }
 
@@ -414,7 +417,7 @@ public sealed partial class FixedWindow : Window
     private void OnTextChanged(object sender, TextChangedEventArgs e)
     {
         // Delay to allow layout to complete
-        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+        RequestResize();
     }
 
     /// <summary>
@@ -429,9 +432,6 @@ public sealed partial class FixedWindow : Window
             // Get DPI scale
             var hWnd = WindowNative.GetWindowHandle(this);
             var scale = DpiHelper.GetScaleFactorForWindow(hWnd);
-
-            // Force layout update before measuring
-            content.UpdateLayout();
 
             // Get current window width in DIPs for proper measurement
             var currentSize = _appWindow.Size;
@@ -460,25 +460,58 @@ public sealed partial class FixedWindow : Window
     }
 
     /// <summary>
-    /// Request a coalesced resize to prevent multiple queued resize calls.
+    /// Request a throttled resize. Leading edge fires on next dispatcher tick;
+    /// subsequent calls within <see cref="ResizeThrottleMs"/> are absorbed,
+    /// with a trailing-edge resize when the cooldown expires.
     /// </summary>
     private void RequestResize()
     {
-        if (_resizePending) return;
+        if (_isClosing) return;
         _resizePending = true;
-        if (!DispatcherQueue.TryEnqueue(() =>
+        if (!_resizeThrottling)
         {
-            _resizePending = false;
-            ResizeWindowToContent();
-        }))
+            _resizeThrottling = true;
+            DispatcherQueue.TryEnqueue(ExecutePendingResize);
+        }
+    }
+
+    private void ExecutePendingResize()
+    {
+        if (_isClosing) return;
+        _resizePending = false;
+        ResizeWindowToContent();
+        EnsureResizeTimer();
+        _resizeThrottleTimer!.Start();
+    }
+
+    private void EnsureResizeTimer()
+    {
+        if (_resizeThrottleTimer != null) return;
+        _resizeThrottleTimer = DispatcherQueue.CreateTimer();
+        _resizeThrottleTimer.Interval = TimeSpan.FromMilliseconds(ResizeThrottleMs);
+        _resizeThrottleTimer.IsRepeating = false;
+        _resizeThrottleTimer.Tick += OnResizeThrottleTimerTick;
+    }
+
+    private void OnResizeThrottleTimerTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        _resizeThrottling = false;
+        if (_resizePending && !_isClosing)
         {
-            // If dispatcher is shutting down, allow future resize attempts
-            _resizePending = false;
+            RequestResize();
         }
     }
 
     private async Task CleanupResourcesAsync()
     {
+        // Clean up resize throttle timer
+        if (_resizeThrottleTimer != null)
+        {
+            _resizeThrottleTimer.Stop();
+            _resizeThrottleTimer.Tick -= OnResizeThrottleTimerTick;
+            _resizeThrottleTimer = null;
+        }
+
         // Clean up title bar drag region helper
         _titleBarHelper?.Dispose();
         _titleBarHelper = null;
@@ -687,8 +720,7 @@ public sealed partial class FixedWindow : Window
                         serviceResult.IsLoading = false;
                         serviceResult.IsStreaming = false;
                         serviceResult.ApplyAutoCollapseLogic();
-                        // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
-                        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+                        DispatcherQueue.TryEnqueue(() => RequestResize());
                     });
                     SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
                 }
@@ -705,8 +737,7 @@ public sealed partial class FixedWindow : Window
                         serviceResult.IsLoading = false;
                         serviceResult.IsStreaming = false;
                         serviceResult.ApplyAutoCollapseLogic();
-                        // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
-                        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+                        DispatcherQueue.TryEnqueue(() => RequestResize());
                     });
                     SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
                 }
@@ -804,8 +835,7 @@ public sealed partial class FixedWindow : Window
                 {
                     if (_isClosing) return;
                     serviceResult.StreamingText = currentText;
-                    // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
-                    DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+                    DispatcherQueue.TryEnqueue(() => RequestResize());
                 });
                 lastUpdateTime = now;
             }
@@ -846,7 +876,7 @@ public sealed partial class FixedWindow : Window
             serviceResult.ApplyAutoCollapseLogic();
             UpdatePhoneticDeduplication();
             // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
-            DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+            DispatcherQueue.TryEnqueue(() => RequestResize());
         });
     }
 
@@ -1060,8 +1090,8 @@ public sealed partial class FixedWindow : Window
         this.Activate();
         InputTextBox.Focus(FocusState.Programmatic);
 
-        // Resize window to fit existing content (delayed to allow layout to complete)
-        DispatcherQueue.TryEnqueue(() => ResizeWindowToContent());
+        // Resize window to fit existing content
+        RequestResize();
     }
 
     /// <summary>

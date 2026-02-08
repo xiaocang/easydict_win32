@@ -395,9 +395,10 @@ public sealed partial class MiniWindow : Window
             var ct = cts.Token;
 
             // Detect language (use cached if available from recent query)
+            // Run detection on thread pool to avoid blocking UI thread
             var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
                 ? _lastDetectedLanguage
-                : await _detectionService.DetectAsync(inputText, ct);
+                : await Task.Run(() => _detectionService.DetectAsync(inputText, ct));
 
             // Get target language
             var targetLanguage = GetTargetLanguage();
@@ -421,7 +422,9 @@ public sealed partial class MiniWindow : Window
             }
             else
             {
-                var result = await manager.TranslateAsync(request, ct, serviceResult.ServiceId);
+                // Run on thread pool to avoid blocking UI thread
+                var result = await Task.Run(
+                    () => manager.TranslateAsync(request, ct, serviceResult.ServiceId));
                 serviceResult.Result = result;
                 serviceResult.IsLoading = false;
                 serviceResult.ApplyAutoCollapseLogic();
@@ -782,11 +785,12 @@ public sealed partial class MiniWindow : Window
             }
 
             // Detect language (only when source = Auto)
+            // Run detection on thread pool to avoid blocking UI thread
             var sourceLanguage = GetSourceLanguage();
             TranslationLanguage detectedLanguage;
             if (sourceLanguage == TranslationLanguage.Auto)
             {
-                detectedLanguage = await detectionService.DetectAsync(inputText, ct);
+                detectedLanguage = await Task.Run(() => detectionService.DetectAsync(inputText, ct));
                 UpdateDetectedLanguageDisplay(detectedLanguage);
             }
             else
@@ -843,8 +847,10 @@ public sealed partial class MiniWindow : Window
                     else
                     {
                         // Non-streaming path for traditional services
-                        var result = await manager.TranslateAsync(
-                            request, ct, serviceResult.ServiceId);
+                        // Run on thread pool to avoid blocking UI thread with
+                        // HTTP response processing, JSON parsing, and retry logic
+                        var result = await Task.Run(
+                            () => manager.TranslateAsync(request, ct, serviceResult.ServiceId));
 
                         DispatcherQueue.TryEnqueue(() =>
                         {
@@ -972,8 +978,10 @@ public sealed partial class MiniWindow : Window
             serviceResult.StreamingText = "";
         });
 
+        // Use ConfigureAwait(false) to avoid resuming on UI thread for each chunk.
+        // DispatcherQueue.TryEnqueue is safe to call from any thread.
         await foreach (var chunk in manager.TranslateStreamAsync(
-            request, ct, serviceResult.ServiceId))
+            request, ct, serviceResult.ServiceId).ConfigureAwait(false))
         {
             sb.Append(chunk);
 
@@ -1010,9 +1018,10 @@ public sealed partial class MiniWindow : Window
         };
 
         // Enrich with phonetics from Youdao if missing (for word queries)
+        // Run on thread pool to avoid blocking UI thread
         try
         {
-            result = await manager.EnrichPhoneticsIfMissingAsync(result, request, ct);
+            result = await Task.Run(() => manager.EnrichPhoneticsIfMissingAsync(result, request, ct));
         }
         catch
         {

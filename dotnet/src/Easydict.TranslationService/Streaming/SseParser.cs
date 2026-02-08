@@ -28,7 +28,7 @@ public static class SseParser
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var line = await reader.ReadLineAsync(cancellationToken);
+            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
 
             if (string.IsNullOrEmpty(line))
                 continue;

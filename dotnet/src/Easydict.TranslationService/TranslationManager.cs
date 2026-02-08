@@ -401,7 +401,7 @@ public sealed class TranslationManager : IDisposable
         if (service is IStreamTranslationService streamService)
         {
             // Use streaming path
-            await foreach (var chunk in streamService.TranslateStreamAsync(request, cancellationToken))
+            await foreach (var chunk in streamService.TranslateStreamAsync(request, cancellationToken).ConfigureAwait(false))
             {
                 yield return chunk;
             }
@@ -409,7 +409,7 @@ public sealed class TranslationManager : IDisposable
         else
         {
             // Fallback to non-streaming - yield entire result at once
-            var result = await service.TranslateAsync(request, cancellationToken);
+            var result = await service.TranslateAsync(request, cancellationToken).ConfigureAwait(false);
             yield return result.TranslatedText;
         }
     }

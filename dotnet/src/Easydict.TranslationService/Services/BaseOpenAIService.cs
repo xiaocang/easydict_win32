@@ -145,7 +145,7 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             response = await HttpClient.SendAsync(
                 httpRequest,
                 HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {
@@ -160,12 +160,12 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         {
             if (!response.IsSuccessStatusCode)
             {
-                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 throw CreateErrorFromResponse(response.StatusCode, errorBody);
             }
 
-            var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await foreach (var chunk in SseParser.ParseStreamAsync(stream, cancellationToken))
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await foreach (var chunk in SseParser.ParseStreamAsync(stream, cancellationToken).ConfigureAwait(false))
             {
                 yield return chunk;
             }

@@ -102,9 +102,24 @@ public sealed partial class ServiceResultItem : UserControl
         return phonetics.Select(p => $"{p.Accent}:{p.Text}");
     }
 
+    /// <summary>
+    /// Coalesce multiple PropertyChanged events into a single UpdateUI call.
+    /// Setting StreamingText fires 3 PropertyChanged events (StreamingText, DisplayText,
+    /// ContentVisibility) — without coalescing, each enqueues a redundant full UpdateUI().
+    /// </summary>
+    private bool _updateUIPending;
+
     private void OnServiceResultPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        DispatcherQueue.TryEnqueue(() => UpdateUI());
+        if (!_updateUIPending)
+        {
+            _updateUIPending = true;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _updateUIPending = false;
+                UpdateUI();
+            });
+        }
     }
 
     private void UpdateUI()

@@ -132,7 +132,7 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
             response = await HttpClient.SendAsync(
                 httpRequest,
                 HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {
@@ -147,12 +147,12 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
         {
             if (!response.IsSuccessStatusCode)
             {
-                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 throw CreateErrorFromResponse(response.StatusCode, errorBody);
             }
 
-            var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await foreach (var chunk in ParseGeminiStreamAsync(stream, cancellationToken))
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await foreach (var chunk in ParseGeminiStreamAsync(stream, cancellationToken).ConfigureAwait(false))
             {
                 yield return chunk;
             }
@@ -172,7 +172,7 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
 
         while (!reader.EndOfStream)
         {
-            var line = await reader.ReadLineAsync(cancellationToken);
+            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line == null) break;
 
             // Gemini streams JSON objects, sometimes prefixed with "data: "

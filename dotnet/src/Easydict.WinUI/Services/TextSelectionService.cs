@@ -92,7 +92,7 @@ public static class TextSelectionService
     private const int UiaExecutionTimeoutMs = 800;
 
     /// <summary>
-    /// Runs a function on the dispatcher thread and awaits the result.
+    /// Runs a synchronous function on the dispatcher thread and awaits the result.
     /// Unlike TryEnqueue + Task.Delay, this guarantees the work completes before continuing.
     /// </summary>
     private static Task<T?> RunOnDispatcherAsync<T>(DispatcherQueue dispatcher, Func<T?> func)
@@ -101,6 +101,25 @@ public static class TextSelectionService
         if (!dispatcher.TryEnqueue(() =>
         {
             try { tcs.SetResult(func()); }
+            catch (Exception ex) { tcs.SetException(ex); }
+        }))
+        {
+            tcs.SetException(new InvalidOperationException("Failed to enqueue on dispatcher"));
+        }
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// Runs an async function on the dispatcher thread and awaits the result.
+    /// This avoids blocking the UI thread with .GetAwaiter().GetResult() when
+    /// calling WinRT async APIs (e.g., Clipboard.GetTextAsync) on the dispatcher.
+    /// </summary>
+    private static Task<T?> RunOnDispatcherAsync<T>(DispatcherQueue dispatcher, Func<Task<T?>> asyncFunc)
+    {
+        var tcs = new TaskCompletionSource<T?>();
+        if (!dispatcher.TryEnqueue(async () =>
+        {
+            try { tcs.SetResult(await asyncFunc()); }
             catch (Exception ex) { tcs.SetException(ex); }
         }))
         {
@@ -372,12 +391,12 @@ public static class TextSelectionService
             string? originalClipboard = null;
             try
             {
-                originalClipboard = await RunOnDispatcherAsync<string?>(dispatcherQueue, () =>
+                originalClipboard = await RunOnDispatcherAsync<string?>(dispatcherQueue, async () =>
                 {
                     var dataPackage = Clipboard.GetContent();
                     if (dataPackage.Contains(StandardDataFormats.Text))
                     {
-                        var text = dataPackage.GetTextAsync().AsTask().GetAwaiter().GetResult();
+                        var text = await dataPackage.GetTextAsync();
                         Debug.WriteLine($"[TextSelectionService] Original clipboard: '{text?.Substring(0, Math.Min(50, text?.Length ?? 0))}...'");
                         return text;
                     }
@@ -454,12 +473,12 @@ public static class TextSelectionService
             string? selectedText = null;
             try
             {
-                selectedText = await RunOnDispatcherAsync<string?>(dispatcherQueue, () =>
+                selectedText = await RunOnDispatcherAsync<string?>(dispatcherQueue, async () =>
                 {
                     var dataPackage = Clipboard.GetContent();
                     if (dataPackage.Contains(StandardDataFormats.Text))
                     {
-                        var text = dataPackage.GetTextAsync().AsTask().GetAwaiter().GetResult();
+                        var text = await dataPackage.GetTextAsync();
                         Debug.WriteLine($"[TextSelectionService] After SendCtrlC clipboard: '{text?.Substring(0, Math.Min(50, text?.Length ?? 0))}...'");
                         return text;
                     }
@@ -533,11 +552,11 @@ public static class TextSelectionService
                 Debug.WriteLine($"[TextSelectionService] ClipWait: Sequence changed from {baselineSequence} to {currentSequence}");
                 try
                 {
-                    var text = await RunOnDispatcherAsync<string?>(dispatcherQueue, () =>
+                    var text = await RunOnDispatcherAsync<string?>(dispatcherQueue, async () =>
                     {
                         var content = Clipboard.GetContent();
                         if (content.Contains(StandardDataFormats.Text))
-                            return content.GetTextAsync().AsTask().GetAwaiter().GetResult();
+                            return await content.GetTextAsync();
                         return null;
                     });
 

@@ -188,11 +188,22 @@ jobs:
           path: dotnet/**/TestResults/*.trx
           retention-days: 30
 
-  # ── Job 3: UI Automation Tests (parallel) ──
+  # ── Job 3: UI Automation Tests (parallel, 2 shards) ──
   ui-automation:
-    name: UI Automation
+    name: UI Automation (${{ matrix.shard.name }})
     runs-on: windows-latest
     needs: build
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: "PopButton & Advanced"
+            filter: "Category=UIAutomation & (ClassName~PopButton | ClassName~MiniWindowLongText | ClassName~PhoneticTranscription)"
+            suffix: "shard-1"
+          - name: "Core & Settings"
+            filter: "Category=UIAutomation & (ClassName~MainWindow | ClassName~Translation | ClassName~WindowLifecycle | ClassName~SettingsPage | ClassName~DarkMode)"
+            suffix: "shard-2"
 
     steps:
       - name: Checkout code
@@ -292,13 +303,13 @@ jobs:
             --logger "trx;LogFileName=ui-test-results.trx" `
             --logger "console;verbosity=detailed" `
             -p:Platform=x64 `
-            --filter "Category=UIAutomation"
+            --filter "${{ matrix.shard.filter }}"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ui-screenshots
+          name: ui-screenshots-${{ matrix.shard.suffix }}
           path: |
             screenshots/
           retention-days: 30
@@ -307,7 +318,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: baseline-candidates
+          name: baseline-candidates-${{ matrix.shard.suffix }}
           path: |
             screenshots/baseline-candidates/
           retention-days: 30
@@ -317,7 +328,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ui-automation-test-results
+          name: ui-automation-test-results-${{ matrix.shard.suffix }}
           path: dotnet/**/TestResults/*.trx
           retention-days: 30
 
@@ -325,7 +336,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ui-test-msix
+          name: ui-test-msix-${{ matrix.shard.suffix }}
           path: dotnet/msix/Easydict-ui-test-x64.msix
           retention-days: 7
 

@@ -82,14 +82,15 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
         TranslationRequest request,
         CancellationToken cancellationToken = default)
     {
-        var chunks = new List<string>();
-        await foreach (var chunk in TranslateStreamAsync(request, cancellationToken))
-        {
-            chunks.Add(chunk);
-        }
+        var translatedText = CleanupResult(
+            await ConsumeStreamAsync(TranslateStreamAsync(request, cancellationToken), cancellationToken));
 
-        var translatedText = string.Join("", chunks).Trim();
-        translatedText = RemoveSurroundingQuotes(translatedText);
+        // Additional cleanup: remove surrounding single quotes (Doubao-specific)
+        if (translatedText.Length >= 2 &&
+            translatedText.StartsWith('\'') && translatedText.EndsWith('\''))
+        {
+            translatedText = translatedText[1..^1].Trim();
+        }
 
         return new TranslationResult
         {
@@ -313,22 +314,4 @@ public sealed class DoubaoService : BaseTranslationService, IStreamTranslationSe
         _ => language.ToIso639()
     };
 
-    /// <summary>
-    /// Remove surrounding quotes from translated text if present.
-    /// </summary>
-    private static string RemoveSurroundingQuotes(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-            return text;
-
-        var trimmed = text.Trim();
-        if (trimmed.Length >= 2 &&
-            ((trimmed[0] == '"' && trimmed[^1] == '"') ||
-             (trimmed[0] == '\'' && trimmed[^1] == '\'')))
-        {
-            return trimmed[1..^1];
-        }
-
-        return text;
-    }
 }

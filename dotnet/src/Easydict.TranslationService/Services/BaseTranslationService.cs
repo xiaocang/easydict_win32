@@ -1,4 +1,8 @@
 using System.Diagnostics;
+using System.Net;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Json;
 using Easydict.TranslationService.Models;
 
 namespace Easydict.TranslationService.Services;
@@ -130,6 +134,80 @@ public abstract class BaseTranslationService : ITranslationService
     protected virtual string GetLanguageCode(Language language)
     {
         return language.ToIso639();
+    }
+
+    /// <summary>
+    /// Clean up the final translation result.
+    /// Removes common artifacts like surrounding quotes and whitespace.
+    /// </summary>
+    protected static string CleanupResult(string text)
+    {
+        var result = text.Trim();
+
+        // Remove surrounding double quotes if present
+        if (result.Length >= 2 &&
+            result.StartsWith('"') && result.EndsWith('"'))
+        {
+            result = result[1..^1].Trim();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Create appropriate exception from HTTP error response.
+    /// Parses JSON error body to extract meaningful error messages.
+    /// </summary>
+    protected TranslationException CreateErrorFromResponse(HttpStatusCode statusCode, string errorBody)
+    {
+        var errorCode = statusCode switch
+        {
+            HttpStatusCode.Unauthorized => TranslationErrorCode.InvalidApiKey,
+            HttpStatusCode.Forbidden => TranslationErrorCode.InvalidApiKey,
+            HttpStatusCode.TooManyRequests => TranslationErrorCode.RateLimited,
+            HttpStatusCode.BadRequest => TranslationErrorCode.InvalidResponse,
+            HttpStatusCode.InternalServerError => TranslationErrorCode.ServiceUnavailable,
+            HttpStatusCode.ServiceUnavailable => TranslationErrorCode.ServiceUnavailable,
+            HttpStatusCode.GatewayTimeout => TranslationErrorCode.Timeout,
+            _ => TranslationErrorCode.Unknown
+        };
+
+        // Try to extract error message from response
+        var message = $"API error ({(int)statusCode}): {statusCode}";
+        try
+        {
+            using var doc = JsonDocument.Parse(errorBody);
+            if (doc.RootElement.TryGetProperty("error", out var error) &&
+                error.TryGetProperty("message", out var msgElement))
+            {
+                message = msgElement.GetString() ?? message;
+            }
+        }
+        catch (JsonException)
+        {
+            // Use default message
+        }
+
+        return new TranslationException(message)
+        {
+            ErrorCode = errorCode,
+            ServiceId = ServiceId
+        };
+    }
+
+    /// <summary>
+    /// Consume all chunks from an async stream and concatenate them.
+    /// Utility for streaming services that need a non-streaming fallback.
+    /// </summary>
+    protected static async Task<string> ConsumeStreamAsync(
+        IAsyncEnumerable<string> stream, CancellationToken cancellationToken)
+    {
+        var sb = new StringBuilder();
+        await foreach (var chunk in stream.WithCancellation(cancellationToken))
+        {
+            sb.Append(chunk);
+        }
+        return sb.ToString();
     }
 }
 

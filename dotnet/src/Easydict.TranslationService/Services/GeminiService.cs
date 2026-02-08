@@ -15,13 +15,6 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
     private const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta";
 
     /// <summary>
-    /// System prompt for translation.
-    /// </summary>
-    private const string TranslationSystemPrompt = """
-        You are a translation expert proficient in various languages, focusing solely on translating text without interpretation. You accurately understand the meanings of proper nouns, idioms, metaphors, allusions, and other obscure words in sentences, translating them appropriately based on the context and language environment. The translation should be natural and fluent. Only return the translated text, without including redundant quotes or additional notes.
-        """;
-
-    /// <summary>
     /// Available Gemini models.
     /// </summary>
     public static readonly string[] AvailableModels = new[]
@@ -36,45 +29,6 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
         "gemini-3-pro-preview"
     };
 
-    /// <summary>
-    /// Languages supported by Gemini.
-    /// </summary>
-    private static readonly IReadOnlyList<Language> _geminiLanguages = new[]
-    {
-        Language.SimplifiedChinese,
-        Language.TraditionalChinese,
-        Language.English,
-        Language.Japanese,
-        Language.Korean,
-        Language.French,
-        Language.Spanish,
-        Language.Portuguese,
-        Language.Italian,
-        Language.German,
-        Language.Russian,
-        Language.Arabic,
-        Language.Dutch,
-        Language.Polish,
-        Language.Vietnamese,
-        Language.Thai,
-        Language.Indonesian,
-        Language.Turkish,
-        Language.Swedish,
-        Language.Danish,
-        Language.Norwegian,
-        Language.Finnish,
-        Language.Greek,
-        Language.Czech,
-        Language.Romanian,
-        Language.Hungarian,
-        Language.Ukrainian,
-        Language.Hebrew,
-        Language.Hindi,
-        Language.Bengali,
-        Language.Tamil,
-        Language.Persian
-    };
-
     private string _apiKey = "";
     private string _model = DefaultModel;
     private double _temperature = 0.3;
@@ -85,7 +39,7 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
     public override string DisplayName => "Gemini";
     public override bool RequiresApiKey => true;
     public override bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
-    public override IReadOnlyList<Language> SupportedLanguages => _geminiLanguages;
+    public override IReadOnlyList<Language> SupportedLanguages => BaseOpenAIService.OpenAILanguages;
 
     /// <summary>
     /// This is a streaming service.
@@ -112,14 +66,8 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
         TranslationRequest request,
         CancellationToken cancellationToken = default)
     {
-        var sb = new StringBuilder();
-
-        await foreach (var chunk in TranslateStreamAsync(request, cancellationToken))
-        {
-            sb.Append(chunk);
-        }
-
-        var translatedText = CleanupResult(sb.ToString());
+        var translatedText = CleanupResult(
+            await ConsumeStreamAsync(TranslateStreamAsync(request, cancellationToken), cancellationToken));
 
         return new TranslationResult
         {
@@ -160,7 +108,7 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
             },
             systemInstruction = new
             {
-                parts = new[] { new { text = TranslationSystemPrompt } }
+                parts = new[] { new { text = BaseOpenAIService.TranslationSystemPrompt } }
             },
             generationConfig = new
             {
@@ -220,7 +168,6 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var reader = new StreamReader(stream);
-        var buffer = new StringBuilder();
 
         while (!reader.EndOfStream)
         {
@@ -288,55 +235,4 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
         }
     }
 
-    private TranslationException CreateErrorFromResponse(System.Net.HttpStatusCode statusCode, string errorBody)
-    {
-        var errorCode = statusCode switch
-        {
-            System.Net.HttpStatusCode.Unauthorized => TranslationErrorCode.InvalidApiKey,
-            System.Net.HttpStatusCode.Forbidden => TranslationErrorCode.InvalidApiKey,
-            System.Net.HttpStatusCode.TooManyRequests => TranslationErrorCode.RateLimited,
-            System.Net.HttpStatusCode.BadRequest => TranslationErrorCode.InvalidResponse,
-            System.Net.HttpStatusCode.InternalServerError => TranslationErrorCode.ServiceUnavailable,
-            System.Net.HttpStatusCode.ServiceUnavailable => TranslationErrorCode.ServiceUnavailable,
-            System.Net.HttpStatusCode.GatewayTimeout => TranslationErrorCode.Timeout,
-            _ => TranslationErrorCode.Unknown
-        };
-
-        var message = $"API error ({(int)statusCode}): {statusCode}";
-        try
-        {
-            using var doc = JsonDocument.Parse(errorBody);
-            if (doc.RootElement.TryGetProperty("error", out var error))
-            {
-                if (error.TryGetProperty("message", out var msgElement))
-                {
-                    message = msgElement.GetString() ?? message;
-                }
-            }
-        }
-        catch (JsonException)
-        {
-            // Use default message
-        }
-
-        return new TranslationException(message)
-        {
-            ErrorCode = errorCode,
-            ServiceId = ServiceId
-        };
-    }
-
-    private static string CleanupResult(string text)
-    {
-        var result = text.Trim();
-
-        // Remove surrounding quotes if present
-        if (result.Length >= 2 &&
-            result.StartsWith('"') && result.EndsWith('"'))
-        {
-            result = result[1..^1].Trim();
-        }
-
-        return result;
-    }
 }

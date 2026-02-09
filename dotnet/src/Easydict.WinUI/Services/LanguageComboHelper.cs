@@ -155,8 +155,9 @@ public static class LanguageComboHelper
 
     /// <summary>
     /// Populate a source language combo box with Auto Detect + active languages.
+    /// If <paramref name="defaultTag"/> is specified, selects that language; otherwise defaults to Auto Detect.
     /// </summary>
-    public static void PopulateSourceCombo(ComboBox combo, LocalizationService loc)
+    public static void PopulateSourceCombo(ComboBox combo, LocalizationService loc, string? defaultTag = null)
     {
         combo.Items.Clear();
 
@@ -176,13 +177,16 @@ public static class LanguageComboHelper
             });
         }
 
-        combo.SelectedIndex = 0; // Default to Auto Detect
+        // Try to select the requested tag, fall back to Auto Detect
+        int idx = defaultTag != null ? FindItemByTag(combo, defaultTag) : -1;
+        combo.SelectedIndex = idx >= 0 ? idx : 0;
     }
 
     /// <summary>
     /// Populate a target language combo box with active languages (no Auto).
+    /// If <paramref name="defaultTag"/> is specified, selects that language; otherwise defaults to first item.
     /// </summary>
-    public static void PopulateTargetCombo(ComboBox combo, LocalizationService loc)
+    public static void PopulateTargetCombo(ComboBox combo, LocalizationService loc, string? defaultTag = null)
     {
         combo.Items.Clear();
 
@@ -195,8 +199,23 @@ public static class LanguageComboHelper
             });
         }
 
+        int idx = defaultTag != null ? FindItemByTag(combo, defaultTag) : -1;
         if (combo.Items.Count > 0)
-            combo.SelectedIndex = 0;
+            combo.SelectedIndex = idx >= 0 ? idx : 0;
+    }
+
+    /// <summary>
+    /// Find the index of an item in a combo box by its Tag string.
+    /// Returns -1 if not found.
+    /// </summary>
+    private static int FindItemByTag(ComboBox combo, string tag)
+    {
+        for (int i = 0; i < combo.Items.Count; i++)
+        {
+            if (combo.Items[i] is ComboBoxItem item && item.Tag as string == tag)
+                return i;
+        }
+        return -1;
     }
 
     /// <summary>

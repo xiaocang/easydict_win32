@@ -105,6 +105,14 @@ public sealed class FixedWindowService : IDisposable
     }
 
     /// <summary>
+    /// Refresh language combo boxes when SelectedLanguages changes.
+    /// </summary>
+    public void RefreshLanguageCombos()
+    {
+        _fixedWindow?.RefreshLanguageCombos();
+    }
+
+    /// <summary>
     /// Apply theme to the fixed window.
     /// </summary>
     public void ApplyTheme(ElementTheme theme)

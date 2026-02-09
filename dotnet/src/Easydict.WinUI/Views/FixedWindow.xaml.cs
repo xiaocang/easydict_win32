@@ -68,9 +68,6 @@ public sealed partial class FixedWindow : Window
         // Handle window events
         this.Closed += OnWindowClosed;
 
-        // Apply settings
-        ApplySettings();
-
         // Initialize service result controls
         InitializeServiceResults();
 
@@ -83,8 +80,9 @@ public sealed partial class FixedWindow : Window
             content.Loaded += (s, e) =>
             {
                 _isLoaded = true;
-                // Apply localization after content is loaded
+                // Apply localization first (populates combos), then settings (selects saved language)
                 ApplyLocalization();
+                ApplySettings();
             };
         }
 
@@ -1119,6 +1117,17 @@ public sealed partial class FixedWindow : Window
     public void RefreshServiceResults()
     {
         InitializeServiceResults();
+    }
+
+    /// <summary>
+    /// Refresh language combo boxes when SelectedLanguages changes in settings.
+    /// Repopulates combos and restores the saved target language selection.
+    /// </summary>
+    public void RefreshLanguageCombos()
+    {
+        if (!_isLoaded) return;
+        ApplyLocalization();
+        ApplySettings();
     }
 
     /// <summary>

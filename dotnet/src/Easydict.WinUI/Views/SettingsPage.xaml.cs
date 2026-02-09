@@ -39,6 +39,9 @@ public sealed partial class SettingsPage : Page
     // Available language checkbox items for the ItemsRepeater
     private List<LanguageCheckboxItem> _languageItems = [];
 
+    // Snapshot of SelectedLanguages at page load, restored on discard
+    private List<string> _originalSelectedLanguages = [];
+
     // Navigation sections for the floating sidebar
     private List<NavSection> _navSections = [];
     private int _currentSectionIndex = -1;
@@ -215,6 +218,9 @@ public sealed partial class SettingsPage : Page
         MainWindowServicesPanel.ItemsSource = _mainWindowServices;
         MiniWindowServicesPanel.ItemsSource = _miniWindowServices;
         FixedWindowServicesPanel.ItemsSource = _fixedWindowServices;
+
+        // Snapshot original SelectedLanguages for discard/restore
+        _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
 
         // Populate available languages checkbox grid
         PopulateLanguageCheckboxGrid();
@@ -587,7 +593,8 @@ public sealed partial class SettingsPage : Page
             }
             else if (result == ContentDialogResult.Secondary)
             {
-                // Discard changes and go back
+                // Discard changes — restore SelectedLanguages to pre-edit snapshot
+                _settings.SelectedLanguages = _originalSelectedLanguages;
                 _hasUnsavedChanges = false;
             }
             else
@@ -824,6 +831,10 @@ public sealed partial class SettingsPage : Page
         // Refresh window service results to pick up new EnabledQuery settings
         MiniWindowService.Instance.RefreshServiceResults();
         FixedWindowService.Instance.RefreshServiceResults();
+
+        // Refresh language combos in open windows to pick up SelectedLanguages changes
+        MiniWindowService.Instance.RefreshLanguageCombos();
+        FixedWindowService.Instance.RefreshLanguageCombos();
 
         // If proxy settings changed, recreate manager with new proxy (includes service configuration)
         // Otherwise, just reconfigure services with new settings (API keys, models, endpoints)
@@ -1651,15 +1662,9 @@ public sealed partial class SettingsPage : Page
         var selectedSet = new HashSet<string>(_settings.SelectedLanguages, StringComparer.OrdinalIgnoreCase);
 
         // Determine which group the user's FirstLanguage belongs to
-        int firstLangGroup = 0;
-        foreach (var entry in LanguageComboHelper.AllLanguages)
-        {
-            if (string.Equals(entry.Tag, _settings.FirstLanguage, StringComparison.OrdinalIgnoreCase))
-            {
-                firstLangGroup = entry.GroupOrder;
-                break;
-            }
-        }
+        var firstLangGroup = LanguageComboHelper.AllLanguages
+            .FirstOrDefault(e => string.Equals(e.Tag, _settings.FirstLanguage, StringComparison.OrdinalIgnoreCase))
+            .GroupOrder;
 
         _languageItems = LanguageComboHelper.AllLanguages
             .OrderBy(e => e.GroupOrder == firstLangGroup ? 0 : 1) // User's group first
@@ -1737,13 +1742,11 @@ public sealed partial class SettingsPage : Page
         // Check if First/Second language was unchecked — reset if so
         var firstLang = GetSelectedTag(FirstLanguageCombo) ?? _settings.FirstLanguage;
         var secondLang = GetSelectedTag(SecondLanguageCombo) ?? _settings.SecondLanguage;
-        var needsComboRebuild = false;
 
         if (!newSelectedLanguages.Contains(firstLang, StringComparer.OrdinalIgnoreCase))
         {
             // Reset First Language to the first available selected language (prefer "zh")
             firstLang = newSelectedLanguages.Contains("zh") ? "zh" : newSelectedLanguages[0];
-            needsComboRebuild = true;
         }
 
         if (!newSelectedLanguages.Contains(secondLang, StringComparer.OrdinalIgnoreCase))
@@ -1751,28 +1754,24 @@ public sealed partial class SettingsPage : Page
             // Reset Second Language to a still-selected language that differs from First
             secondLang = newSelectedLanguages.FirstOrDefault(t =>
                 !string.Equals(t, firstLang, StringComparison.OrdinalIgnoreCase)) ?? newSelectedLanguages[0];
-            needsComboRebuild = true;
         }
 
         // Update settings temporarily for combo helpers to pick up
         _settings.SelectedLanguages = newSelectedLanguages;
 
-        // Rebuild First/Second Language combos
-        if (needsComboRebuild || true) // Always rebuild since available languages changed
+        // Always rebuild First/Second Language combos since available languages changed
+        _isLoading = true;
+        try
         {
-            _isLoading = true;
-            try
-            {
-                var loc = LocalizationService.Instance;
-                PopulateSettingsLanguageCombo(FirstLanguageCombo, loc);
-                PopulateSettingsLanguageCombo(SecondLanguageCombo, loc);
-                SelectComboByTag(FirstLanguageCombo, firstLang);
-                SelectComboByTag(SecondLanguageCombo, secondLang);
-            }
-            finally
-            {
-                _isLoading = false;
-            }
+            var loc = LocalizationService.Instance;
+            PopulateSettingsLanguageCombo(FirstLanguageCombo, loc);
+            PopulateSettingsLanguageCombo(SecondLanguageCombo, loc);
+            SelectComboByTag(FirstLanguageCombo, firstLang);
+            SelectComboByTag(SecondLanguageCombo, secondLang);
+        }
+        finally
+        {
+            _isLoading = false;
         }
 
         OnSettingChanged(null!, null!);

@@ -98,10 +98,10 @@ namespace Easydict.WinUI.Views
                 _detectionService = new LanguageDetectionService(_settings);
             }
             SetLoading(false);
-            ApplySettings();
 
-            // Apply localization to all UI elements
+            // Apply localization first (populates combos), then settings (selects saved language)
             ApplyLocalization();
+            ApplySettings();
 
             // Initialize service result controls based on enabled services
             InitializeServiceResults();

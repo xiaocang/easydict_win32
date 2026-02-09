@@ -101,6 +101,10 @@ While the feature set is not yet complete compared to the macOS version, this po
 | ![Main Window](screenshot/main-window.png) | ![All Windows](screenshot/all-windows.png) | ![Settings](screenshot/settings.png) |
 | Full translation interface | Main + Mini + Fixed windows with hotkey settings | Service configuration |
 
+![Light & Dark Mode](screenshot/light-dark-mode.png)
+
+*Light & Dark Mode — Mini Window (Quick Translate)*
+
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
 ## Installation

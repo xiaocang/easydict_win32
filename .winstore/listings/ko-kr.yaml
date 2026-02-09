@@ -64,3 +64,6 @@ images:
   settings:
     fileName: ../../screenshot/settings.png
     description: '설정 페이지: 번역 서비스 구성'
+  light-dark-mode:
+    fileName: ../../screenshot/light-dark-mode.png
+    description: 라이트 및 다크 모드 미니 창 (빠른 번역)

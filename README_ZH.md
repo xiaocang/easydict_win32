@@ -101,6 +101,10 @@
 | ![主窗口](screenshot/main-window.png) | ![所有窗口](screenshot/all-windows.png) | ![设置](screenshot/settings.png) |
 | 完整翻译界面 | 主窗口 + 迷你窗口 + 固定窗口及快捷键设置 | 服务配置 |
 
+![浅色与深色模式](screenshot/light-dark-mode.png)
+
+*浅色与深色模式 — 迷你窗口（快速翻译）*
+
 <p align="right"><a href="#目录">回到顶部</a></p>
 
 ## 安装

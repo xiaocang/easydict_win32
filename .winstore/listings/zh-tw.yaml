@@ -64,3 +64,6 @@ images:
   settings:
     fileName: ../../screenshot/settings.png
     description: 設定頁面：翻譯服務配置
+  light-dark-mode:
+    fileName: ../../screenshot/light-dark-mode.png
+    description: 淺色與深色模式迷你視窗（快速翻譯）

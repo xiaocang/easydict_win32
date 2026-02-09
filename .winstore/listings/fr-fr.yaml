@@ -64,3 +64,6 @@ images:
   settings:
     fileName: ../../screenshot/settings.png
     description: 'Page de paramètres : configuration des services de traduction'
+  light-dark-mode:
+    fileName: ../../screenshot/light-dark-mode.png
+    description: Mini-fenêtre en mode clair et sombre (traduction rapide)

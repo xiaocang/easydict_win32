@@ -116,19 +116,10 @@
                 x:Name="SourceLangCombo"
                 Grid.Column="0"
                 MinWidth="130"
-                SelectedIndex="0"
                 SelectionChanged="OnSourceLanguageChanged"
                 VerticalAlignment="Center"
                 ToolTipService.ToolTip="Source Language">
-                <ComboBoxItem Content="Auto Detect" Tag="auto" />
-                <ComboBoxItem Content="English" Tag="en" />
-                <ComboBoxItem Content="Chinese" Tag="zh" />
-                <ComboBoxItem Content="Chinese (Traditional)" Tag="zh-tw" />
-                <ComboBoxItem Content="Japanese" Tag="ja" />
-                <ComboBoxItem Content="Korean" Tag="ko" />
-                <ComboBoxItem Content="French" Tag="fr" />
-                <ComboBoxItem Content="German" Tag="de" />
-                <ComboBoxItem Content="Spanish" Tag="es" />
+                <!-- Populated dynamically in code-behind -->
             </ComboBox>
 
             <!-- Swap Languages Button -->
@@ -152,18 +143,10 @@
                 x:Name="TargetLangCombo"
                 Grid.Column="2"
                 MinWidth="130"
-                SelectedIndex="1"
                 SelectionChanged="OnTargetLanguageChanged"
                 VerticalAlignment="Center"
                 ToolTipService.ToolTip="Target Language">
-                <ComboBoxItem Content="English" Tag="en" />
-                <ComboBoxItem Content="Chinese" Tag="zh" />
-                <ComboBoxItem Content="Chinese (Traditional)" Tag="zh-tw" />
-                <ComboBoxItem Content="Japanese" Tag="ja" />
-                <ComboBoxItem Content="Korean" Tag="ko" />
-                <ComboBoxItem Content="French" Tag="fr" />
-                <ComboBoxItem Content="German" Tag="de" />
-                <ComboBoxItem Content="Spanish" Tag="es" />
+                <!-- Populated dynamically in code-behind -->
             </ComboBox>
 
             <!-- Translate Button (Right) -->
@@ -209,18 +192,9 @@
                     x:Name="SourceLangComboNarrow"
                     Grid.Column="0"
                     HorizontalAlignment="Stretch"
-                    SelectedIndex="0"
                     SelectionChanged="OnSourceLanguageChanged"
                     ToolTipService.ToolTip="Source Language">
-                    <ComboBoxItem Content="Auto Detect" Tag="auto" />
-                    <ComboBoxItem Content="English" Tag="en" />
-                    <ComboBoxItem Content="Chinese" Tag="zh" />
-                    <ComboBoxItem Content="Chinese (Traditional)" Tag="zh-tw" />
-                    <ComboBoxItem Content="Japanese" Tag="ja" />
-                    <ComboBoxItem Content="Korean" Tag="ko" />
-                    <ComboBoxItem Content="French" Tag="fr" />
-                    <ComboBoxItem Content="German" Tag="de" />
-                    <ComboBoxItem Content="Spanish" Tag="es" />
+                    <!-- Populated dynamically in code-behind -->
                 </ComboBox>
 
                 <!-- Swap Button (Narrow) -->
@@ -243,17 +217,9 @@
                     x:Name="TargetLangComboNarrow"
                     Grid.Column="2"
                     HorizontalAlignment="Stretch"
-                    SelectedIndex="1"
                     SelectionChanged="OnTargetLanguageChanged"
                     ToolTipService.ToolTip="Target Language">
-                    <ComboBoxItem Content="English" Tag="en" />
-                    <ComboBoxItem Content="Chinese" Tag="zh" />
-                    <ComboBoxItem Content="Chinese (Traditional)" Tag="zh-tw" />
-                    <ComboBoxItem Content="Japanese" Tag="ja" />
-                    <ComboBoxItem Content="Korean" Tag="ko" />
-                    <ComboBoxItem Content="French" Tag="fr" />
-                    <ComboBoxItem Content="German" Tag="de" />
-                    <ComboBoxItem Content="Spanish" Tag="es" />
+                    <!-- Populated dynamically in code-behind -->
                 </ComboBox>
             </Grid>
 

@@ -49,7 +49,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:api.github.com)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git -C \"C:\\\\Users\\\\johnn\\\\Documents\\\\work\\\\easydict_win32\" log --all --reverse --format=\"%ai %s\")"
     ],
     "deny": [
       "Bash(git push:*)",

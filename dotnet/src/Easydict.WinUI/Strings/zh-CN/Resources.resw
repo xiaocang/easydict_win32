@@ -125,6 +125,117 @@
   <data name="LangSpanish" xml:space="preserve">
     <value>西班牙语</value>
   </data>
+  <data name="LangClassicalChinese" xml:space="preserve">
+    <value>文言文</value>
+  </data>
+  <data name="LangDutch" xml:space="preserve">
+    <value>荷兰语</value>
+  </data>
+  <data name="LangSwedish" xml:space="preserve">
+    <value>瑞典语</value>
+  </data>
+  <data name="LangNorwegian" xml:space="preserve">
+    <value>挪威语</value>
+  </data>
+  <data name="LangDanish" xml:space="preserve">
+    <value>丹麦语</value>
+  </data>
+  <data name="LangPortuguese" xml:space="preserve">
+    <value>葡萄牙语</value>
+  </data>
+  <data name="LangItalian" xml:space="preserve">
+    <value>意大利语</value>
+  </data>
+  <data name="LangRomanian" xml:space="preserve">
+    <value>罗马尼亚语</value>
+  </data>
+  <data name="LangRussian" xml:space="preserve">
+    <value>俄语</value>
+  </data>
+  <data name="LangPolish" xml:space="preserve">
+    <value>波兰语</value>
+  </data>
+  <data name="LangCzech" xml:space="preserve">
+    <value>捷克语</value>
+  </data>
+  <data name="LangUkrainian" xml:space="preserve">
+    <value>乌克兰语</value>
+  </data>
+  <data name="LangBulgarian" xml:space="preserve">
+    <value>保加利亚语</value>
+  </data>
+  <data name="LangSlovak" xml:space="preserve">
+    <value>斯洛伐克语</value>
+  </data>
+  <data name="LangSlovenian" xml:space="preserve">
+    <value>斯洛文尼亚语</value>
+  </data>
+  <data name="LangEstonian" xml:space="preserve">
+    <value>爱沙尼亚语</value>
+  </data>
+  <data name="LangLatvian" xml:space="preserve">
+    <value>拉脱维亚语</value>
+  </data>
+  <data name="LangLithuanian" xml:space="preserve">
+    <value>立陶宛语</value>
+  </data>
+  <data name="LangGreek" xml:space="preserve">
+    <value>希腊语</value>
+  </data>
+  <data name="LangHungarian" xml:space="preserve">
+    <value>匈牙利语</value>
+  </data>
+  <data name="LangFinnish" xml:space="preserve">
+    <value>芬兰语</value>
+  </data>
+  <data name="LangTurkish" xml:space="preserve">
+    <value>土耳其语</value>
+  </data>
+  <data name="LangArabic" xml:space="preserve">
+    <value>阿拉伯语</value>
+  </data>
+  <data name="LangPersian" xml:space="preserve">
+    <value>波斯语</value>
+  </data>
+  <data name="LangHebrew" xml:space="preserve">
+    <value>希伯来语</value>
+  </data>
+  <data name="LangHindi" xml:space="preserve">
+    <value>印地语</value>
+  </data>
+  <data name="LangBengali" xml:space="preserve">
+    <value>孟加拉语</value>
+  </data>
+  <data name="LangTamil" xml:space="preserve">
+    <value>泰米尔语</value>
+  </data>
+  <data name="LangTelugu" xml:space="preserve">
+    <value>泰卢固语</value>
+  </data>
+  <data name="LangUrdu" xml:space="preserve">
+    <value>乌尔都语</value>
+  </data>
+  <data name="LangVietnamese" xml:space="preserve">
+    <value>越南语</value>
+  </data>
+  <data name="LangThai" xml:space="preserve">
+    <value>泰语</value>
+  </data>
+  <data name="LangIndonesian" xml:space="preserve">
+    <value>印尼语</value>
+  </data>
+  <data name="LangMalay" xml:space="preserve">
+    <value>马来语</value>
+  </data>
+  <data name="LangFilipino" xml:space="preserve">
+    <value>菲律宾语</value>
+  </data>
+  <data name="AvailableLanguages" xml:space="preserve">
+    <value>可用语言</value>
+  </data>
+  <data name="AvailableLanguagesDesc" xml:space="preserve">
+    <value>选择在源语言/目标语言选择器中可用的语言。至少需要选择2种语言。</value>
+  </data>
 
   <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">

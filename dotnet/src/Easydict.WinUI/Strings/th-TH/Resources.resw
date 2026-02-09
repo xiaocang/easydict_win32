@@ -1,0 +1,597 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>1.3</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AppName" xml:space="preserve">
+    <value>Easydict</value>
+  </data>
+  <data name="SourceText" xml:space="preserve">
+    <value>&#xE02;&#xE49;&#xE2D;&#xE04;&#xE27;&#xE32;&#xE21;&#xE15;&#xE49;&#xE19;&#xE09;&#xE1A;&#xE31;&#xE1A;</value>
+  </data>
+  <data name="TranslationResults" xml:space="preserve">
+    <value>&#xE1C;&#xE25;&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;</value>
+  </data>
+  <data name="InputPlaceholder" xml:space="preserve">
+    <value>&#xE1E;&#xE34;&#xE21;&#xE1E;&#xE4C;&#xE2B;&#xE23;&#xE37;&#xE2D;&#xE27;&#xE32;&#xE07;&#xE02;&#xE49;&#xE2D;&#xE04;&#xE27;&#xE32;&#xE21;&#xE17;&#xE35;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;...</value>
+  </data>
+  <data name="TranslationPlaceholder" xml:space="preserve">
+    <value>&#xE1C;&#xE25;&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE08;&#xE30;&#xE1B;&#xE23;&#xE32;&#xE01;&#xE0F;&#xE17;&#xE35;&#xE48;&#xE19;&#xE35;&#xE48;...</value>
+  </data>
+  <data name="SettingsTooltip" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;</value>
+  </data>
+  <data name="TranslateTooltip" xml:space="preserve">
+    <value>&#xE41;&#xE1B;&#xE25;</value>
+  </data>
+  <data name="SwapLanguagesTooltip" xml:space="preserve">
+    <value>&#xE2A;&#xE25;&#xE31;&#xE1A;&#xE20;&#xE32;&#xE29;&#xE32;&#xE15;&#xE49;&#xE19;&#xE17;&#xE32;&#xE07;&#xE41;&#xE25;&#xE30;&#xE1B;&#xE25;&#xE32;&#xE22;&#xE17;&#xE32;&#xE07;</value>
+  </data>
+  <data name="SourceLanguageTooltip" xml:space="preserve">
+    <value>&#xE20;&#xE32;&#xE29;&#xE32;&#xE15;&#xE49;&#xE19;&#xE17;&#xE32;&#xE07;</value>
+  </data>
+  <data name="TargetLanguageTooltip" xml:space="preserve">
+    <value>&#xE20;&#xE32;&#xE29;&#xE32;&#xE1B;&#xE25;&#xE32;&#xE22;&#xE17;&#xE32;&#xE07;</value>
+  </data>
+  <data name="StatusConnected" xml:space="preserve">
+    <value>&#xE40;&#xE0A;&#xE37;&#xE48;&#xE2D;&#xE21;&#xE15;&#xE48;&#xE2D;&#xE41;&#xE25;&#xE49;&#xE27;</value>
+  </data>
+  <data name="StatusDisconnected" xml:space="preserve">
+    <value>&#xE44;&#xE21;&#xE48;&#xE44;&#xE14;&#xE49;&#xE40;&#xE0A;&#xE37;&#xE48;&#xE2D;&#xE21;&#xE15;&#xE48;&#xE2D;</value>
+  </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>&#xE01;&#xE33;&#xE25;&#xE31;&#xE07;&#xE40;&#xE23;&#xE34;&#xE48;&#xE21;&#xE15;&#xE49;&#xE19;...</value>
+  </data>
+  <data name="StatusReady" xml:space="preserve">
+    <value>&#xE1E;&#xE23;&#xE49;&#xE2D;&#xE21;</value>
+  </data>
+  <data name="StatusTranslating" xml:space="preserve">
+    <value>&#xE01;&#xE33;&#xE25;&#xE31;&#xE07;&#xE41;&#xE1B;&#xE25;...</value>
+  </data>
+  <data name="StatusError" xml:space="preserve">
+    <value>&#xE02;&#xE49;&#xE2D;&#xE1C;&#xE34;&#xE14;&#xE1E;&#xE25;&#xE32;&#xE14;</value>
+  </data>
+  <data name="LangAutoDetect" xml:space="preserve">
+    <value>&#xE15;&#xE23;&#xE27;&#xE08;&#xE08;&#xE31;&#xE1A;&#xE2D;&#xE31;&#xE15;&#xE42;&#xE19;&#xE21;&#xE31;&#xE15;&#xE34;</value>
+  </data>
+  <data name="LangEnglish" xml:space="preserve">
+    <value>&#xE2D;&#xE31;&#xE07;&#xE01;&#xE24;&#xE29;</value>
+  </data>
+  <data name="LangChinese" xml:space="preserve">
+    <value>&#xE08;&#xE35;&#xE19;</value>
+  </data>
+  <data name="LangChineseSimplified" xml:space="preserve">
+    <value>&#xE08;&#xE35;&#xE19; (&#xE15;&#xE31;&#xE27;&#xE22;&#xE48;&#xE2D;)</value>
+  </data>
+  <data name="LangChineseTraditional" xml:space="preserve">
+    <value>&#xE08;&#xE35;&#xE19; (&#xE15;&#xE31;&#xE27;&#xE40;&#xE15;&#xE47;&#xE21;)</value>
+  </data>
+  <data name="LangJapanese" xml:space="preserve">
+    <value>&#xE0D;&#xE35;&#xE48;&#xE1B;&#xE38;&#xE48;&#xE19;</value>
+  </data>
+  <data name="LangKorean" xml:space="preserve">
+    <value>&#xE40;&#xE01;&#xE32;&#xE2B;&#xE25;&#xE35;</value>
+  </data>
+  <data name="LangFrench" xml:space="preserve">
+    <value>&#xE1D;&#xE23;&#xE31;&#xE48;&#xE07;&#xE40;&#xE28;&#xE2A;</value>
+  </data>
+  <data name="LangGerman" xml:space="preserve">
+    <value>&#xE40;&#xE22;&#xE2D;&#xE23;&#xE21;&#xE31;&#xE19;</value>
+  </data>
+  <data name="LangSpanish" xml:space="preserve">
+    <value>&#xE2A;&#xE40;&#xE1B;&#xE19;</value>
+  </data>
+  <data name="Settings" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;</value>
+  </data>
+  <data name="TranslationService" xml:space="preserve">
+    <value>&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE20;&#xE32;&#xE29;&#xE32;</value>
+  </data>
+  <data name="EnabledServices" xml:space="preserve">
+    <value>&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE17;&#xE35;&#xE48;&#xE40;&#xE1B;&#xE34;&#xE14;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;</value>
+  </data>
+  <data name="EnabledServicesDescription" xml:space="preserve">
+    <value>&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE08;&#xE30;&#xE41;&#xE2A;&#xE14;&#xE07;&#xE43;&#xE19;&#xE41;&#xE15;&#xE48;&#xE25;&#xE30;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07; &#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE2B;&#xE25;&#xE32;&#xE22;&#xE23;&#xE32;&#xE22;&#xE01;&#xE32;&#xE23;&#xE08;&#xE30;&#xE17;&#xE33;&#xE07;&#xE32;&#xE19;&#xE1E;&#xE23;&#xE49;&#xE2D;&#xE21;&#xE01;&#xE31;&#xE19;</value>
+  </data>
+  <data name="MainWindow" xml:space="preserve">
+    <value>&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;&#xE2B;&#xE25;&#xE31;&#xE01;</value>
+  </data>
+  <data name="MiniWindow" xml:space="preserve">
+    <value>&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;&#xE02;&#xE19;&#xE32;&#xE14;&#xE40;&#xE25;&#xE47;&#xE01;</value>
+  </data>
+  <data name="FixedWindow" xml:space="preserve">
+    <value>&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;&#xE04;&#xE07;&#xE17;&#xE35;&#xE48;</value>
+  </data>
+  <data name="Auto" xml:space="preserve">
+    <value>&#xE2D;&#xE31;&#xE15;&#xE42;&#xE19;&#xE21;&#xE31;&#xE15;&#xE34;</value>
+  </data>
+  <data name="Manual" xml:space="preserve">
+    <value>&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="LanguagePreferences" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;&#xE20;&#xE32;&#xE29;&#xE32;</value>
+  </data>
+  <data name="FirstLanguage" xml:space="preserve">
+    <value>&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE2B;&#xE19;&#xE36;&#xE48;&#xE07;</value>
+  </data>
+  <data name="SecondLanguage" xml:space="preserve">
+    <value>&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE2A;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="LanguagePreferencesDescription" xml:space="preserve">
+    <value>&#xE40;&#xE21;&#xE37;&#xE48;&#xE2D;&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE15;&#xE23;&#xE27;&#xE08;&#xE1E;&#xE1A;&#xE15;&#xE23;&#xE07;&#xE01;&#xE31;&#xE1A;&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE2B;&#xE19;&#xE36;&#xE48;&#xE07; &#xE40;&#xE1B;&#xE49;&#xE32;&#xE2B;&#xE21;&#xE32;&#xE22;&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE08;&#xE30;&#xE40;&#xE1B;&#xE47;&#xE19;&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE2A;&#xE2D;&#xE07; &#xE41;&#xE25;&#xE30;&#xE43;&#xE19;&#xE17;&#xE32;&#xE07;&#xE01;&#xE25;&#xE31;&#xE1A;&#xE01;&#xE31;&#xE19;</value>
+  </data>
+  <data name="AutoSelectTargetLanguage" xml:space="preserve">
+    <value>&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE20;&#xE32;&#xE29;&#xE32;&#xE1B;&#xE25;&#xE32;&#xE22;&#xE17;&#xE32;&#xE07;&#xE2D;&#xE31;&#xE15;&#xE42;&#xE19;&#xE21;&#xE31;&#xE15;&#xE34;&#xE15;&#xE32;&#xE21;&#xE20;&#xE32;&#xE29;&#xE32;&#xE15;&#xE49;&#xE19;&#xE17;&#xE32;&#xE07;&#xE17;&#xE35;&#xE48;&#xE15;&#xE23;&#xE27;&#xE08;&#xE1E;&#xE1A;</value>
+  </data>
+  <data name="ServiceConfiguration" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;</value>
+  </data>
+  <data name="ServiceConfigurationDescription" xml:space="preserve">
+    <value>&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32; API key, endpoint &#xE41;&#xE25;&#xE30; model &#xE2A;&#xE33;&#xE2B;&#xE23;&#xE31;&#xE1A;&#xE41;&#xE15;&#xE48;&#xE25;&#xE30;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE20;&#xE32;&#xE29;&#xE32;</value>
+  </data>
+  <data name="ApiKey" xml:space="preserve">
+    <value>API Key</value>
+  </data>
+  <data name="ApiKeyOptional" xml:space="preserve">
+    <value>API Key (&#xE44;&#xE21;&#xE48;&#xE1A;&#xE31;&#xE07;&#xE04;&#xE31;&#xE1A;)</value>
+  </data>
+  <data name="Endpoint" xml:space="preserve">
+    <value>Endpoint</value>
+  </data>
+  <data name="EndpointOptional" xml:space="preserve">
+    <value>Endpoint (&#xE44;&#xE21;&#xE48;&#xE1A;&#xE31;&#xE07;&#xE04;&#xE31;&#xE1A;)</value>
+  </data>
+  <data name="EndpointRequired" xml:space="preserve">
+    <value>Endpoint (&#xE08;&#xE33;&#xE40;&#xE1B;&#xE47;&#xE19;)</value>
+  </data>
+  <data name="Model" xml:space="preserve">
+    <value>Model</value>
+  </data>
+  <data name="Refresh" xml:space="preserve">
+    <value>&#xE23;&#xE35;&#xE40;&#xE1F;&#xE23;&#xE0A;</value>
+  </data>
+  <data name="DeepLDescription" xml:space="preserve">
+    <value>&#xE40;&#xE27;&#xE49;&#xE19; API key &#xE27;&#xE48;&#xE32;&#xE07;&#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE43;&#xE0A;&#xE49;&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE40;&#xE27;&#xE47;&#xE1A;&#xE1F;&#xE23;&#xE35; API key Pro &#xE21;&#xE35;&#xE02;&#xE35;&#xE14;&#xE08;&#xE33;&#xE01;&#xE31;&#xE14;&#xE17;&#xE35;&#xE48;&#xE2A;&#xE39;&#xE07;&#xE01;&#xE27;&#xE48;&#xE32;</value>
+  </data>
+  <data name="DeepLFreeOption" xml:space="preserve">
+    <value>&#xE43;&#xE0A;&#xE49; API &#xE1F;&#xE23;&#xE35; (&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE40;&#xE27;&#xE47;&#xE1A;&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; API key)</value>
+  </data>
+  <data name="OpenAIDescription" xml:space="preserve">
+    <value>&#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE1E;&#xE34;&#xE21;&#xE1E;&#xE4C;&#xE0A;&#xE37;&#xE48;&#xE2D; model &#xE17;&#xE35;&#xE48;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;&#xE44;&#xE14;&#xE49;&#xE42;&#xE14;&#xE22;&#xE15;&#xE23;&#xE07;</value>
+  </data>
+  <data name="DeepSeekDescription" xml:space="preserve">
+    <value>&#xE23;&#xE31;&#xE1A; API key &#xE08;&#xE32;&#xE01; platform.deepseek.com &#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE1E;&#xE34;&#xE21;&#xE1E;&#xE4C;&#xE0A;&#xE37;&#xE48;&#xE2D; model &#xE17;&#xE35;&#xE48;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="GroqDescription" xml:space="preserve">
+    <value>Groq &#xE43;&#xE2B;&#xE49;&#xE01;&#xE32;&#xE23;&#xE2D;&#xE19;&#xE38;&#xE21;&#xE32;&#xE19;&#xE17;&#xE35;&#xE48;&#xE23;&#xE27;&#xE14;&#xE40;&#xE23;&#xE47;&#xE27; &#xE23;&#xE31;&#xE1A; API key &#xE08;&#xE32;&#xE01; console.groq.com &#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE1E;&#xE34;&#xE21;&#xE1E;&#xE4C;&#xE0A;&#xE37;&#xE48;&#xE2D; model &#xE17;&#xE35;&#xE48;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="ZhipuDescription" xml:space="preserve">
+    <value>&#xE23;&#xE31;&#xE1A; API key &#xE08;&#xE32;&#xE01; open.bigmodel.cn &#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE1E;&#xE34;&#xE21;&#xE1E;&#xE4C;&#xE0A;&#xE37;&#xE48;&#xE2D; model &#xE17;&#xE35;&#xE48;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="GitHubModelsDescription" xml:space="preserve">
+    <value>&#xE43;&#xE0A;&#xE49; personal access token &#xE02;&#xE2D;&#xE07; GitHub &#xE23;&#xE31;&#xE1A;&#xE44;&#xE14;&#xE49;&#xE08;&#xE32;&#xE01; github.com/settings/tokens &#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE1E;&#xE34;&#xE21;&#xE1E;&#xE4C;&#xE0A;&#xE37;&#xE48;&#xE2D; model &#xE17;&#xE35;&#xE48;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="GeminiDescription" xml:space="preserve">
+    <value>&#xE23;&#xE31;&#xE1A; API key &#xE08;&#xE32;&#xE01; aistudio.google.com &#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE1E;&#xE34;&#xE21;&#xE1E;&#xE4C;&#xE0A;&#xE37;&#xE48;&#xE2D; model &#xE17;&#xE35;&#xE48;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="CustomOpenAIDescription" xml:space="preserve">
+    <value>&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32; endpoint API &#xE17;&#xE35;&#xE48;&#xE40;&#xE02;&#xE49;&#xE32;&#xE01;&#xE31;&#xE19;&#xE44;&#xE14;&#xE49;&#xE01;&#xE31;&#xE1A; OpenAI (&#xE40;&#xE0A;&#xE48;&#xE19; &#xE40;&#xE0B;&#xE34;&#xE23;&#xE4C;&#xE1F;&#xE40;&#xE27;&#xE2D;&#xE23;&#xE4C; LLM &#xE43;&#xE19;&#xE40;&#xE04;&#xE23;&#xE37;&#xE48;&#xE2D;&#xE07; &#xE1C;&#xE39;&#xE49;&#xE43;&#xE2B;&#xE49;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23; AI &#xE2D;&#xE37;&#xE48;&#xE19;)</value>
+  </data>
+  <data name="OllamaDescription" xml:space="preserve">
+    <value>Ollama &#xE15;&#xE49;&#xE2D;&#xE07;&#xE17;&#xE33;&#xE07;&#xE32;&#xE19;&#xE2D;&#xE22;&#xE39;&#xE48;&#xE43;&#xE19;&#xE40;&#xE04;&#xE23;&#xE37;&#xE48;&#xE2D;&#xE07; &#xE04;&#xE25;&#xE34;&#xE01;&#xE23;&#xE35;&#xE40;&#xE1F;&#xE23;&#xE0A;&#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE42;&#xE2B;&#xE25;&#xE14; model &#xE17;&#xE35;&#xE48;&#xE21;&#xE35;&#xE2D;&#xE22;&#xE39;&#xE48;</value>
+  </data>
+  <data name="BuiltInAIDescription" xml:space="preserve">
+    <value>AI &#xE43;&#xE19;&#xE15;&#xE31;&#xE27;&#xE43;&#xE0A;&#xE49;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE04;&#xE25;&#xE32;&#xE27;&#xE14;&#xE4C; Groq &#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; API key &#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE1E;&#xE34;&#xE21;&#xE1E;&#xE4C;&#xE0A;&#xE37;&#xE48;&#xE2D; model &#xE17;&#xE35;&#xE48;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="DoubaoDescription" xml:space="preserve">
+    <value>&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE20;&#xE32;&#xE29;&#xE32; Doubao &#xE08;&#xE32;&#xE01; ByteDance &#xE23;&#xE31;&#xE1A; API key &#xE08;&#xE32;&#xE01; console.volcengine.com</value>
+  </data>
+  <data name="CaiyunDescription" xml:space="preserve">
+    <value>&#xE23;&#xE31;&#xE1A; API key &#xE08;&#xE32;&#xE01; fanyi.caiyunapp.com</value>
+  </data>
+  <data name="NiuTransDescription" xml:space="preserve">
+    <value>NiuTrans &#xE23;&#xE2D;&#xE07;&#xE23;&#xE31;&#xE1A;&#xE04;&#xE39;&#xE48;&#xE20;&#xE32;&#xE29;&#xE32;&#xE21;&#xE32;&#xE01;&#xE01;&#xE27;&#xE48;&#xE32; 450 &#xE04;&#xE39;&#xE48; &#xE23;&#xE31;&#xE1A; API key &#xE08;&#xE32;&#xE01; niutrans.com</value>
+  </data>
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>&#xE43;&#xE0A;&#xE49; API &#xE2D;&#xE22;&#xE48;&#xE32;&#xE07;&#xE40;&#xE1B;&#xE47;&#xE19;&#xE17;&#xE32;&#xE07;&#xE01;&#xE32;&#xE23;</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>Youdao &#xE43;&#xE2B;&#xE49;&#xE01;&#xE32;&#xE23;&#xE16;&#xE2D;&#xE14;&#xE40;&#xE2A;&#xE35;&#xE22;&#xE07;&#xE2A;&#xE33;&#xE2B;&#xE23;&#xE31;&#xE1A;&#xE04;&#xE33;&#xE20;&#xE32;&#xE29;&#xE32;&#xE2D;&#xE31;&#xE07;&#xE01;&#xE24;&#xE29; &#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; API key &#xE2A;&#xE33;&#xE2B;&#xE23;&#xE31;&#xE1A;&#xE1E;&#xE08;&#xE19;&#xE32;&#xE19;&#xE38;&#xE01;&#xE23;&#xE21;&#xE40;&#xE27;&#xE47;&#xE1A;&#xE1F;&#xE23;&#xE35; &#xE43;&#xE2A;&#xE48; API key &#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE43;&#xE0A;&#xE49; API &#xE2D;&#xE22;&#xE48;&#xE32;&#xE07;&#xE40;&#xE1B;&#xE47;&#xE19;&#xE17;&#xE32;&#xE07;&#xE01;&#xE32;&#xE23;&#xE17;&#xE35;&#xE48;&#xE21;&#xE35;&#xE02;&#xE35;&#xE14;&#xE08;&#xE33;&#xE01;&#xE31;&#xE14;&#xE2A;&#xE39;&#xE07;&#xE01;&#xE27;&#xE48;&#xE32; &#xE23;&#xE31;&#xE1A; API key &#xE08;&#xE32;&#xE01; ai.youdao.com</value>
+  </data>
+  <data name="FreeServicesTitle" xml:space="preserve">
+    <value>&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE1F;&#xE23;&#xE35; (&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32;)</value>
+  </data>
+  <data name="FreeServicesDescription" xml:space="preserve">
+    <value>Google Translate &#xE41;&#xE25;&#xE30; Linguee Dictionary &#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE44;&#xE14;&#xE49;&#xE17;&#xE31;&#xE19;&#xE17;&#xE35;&#xE42;&#xE14;&#xE22;&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; API key</value>
+  </data>
+  <data name="HttpProxy" xml:space="preserve">
+    <value>HTTP Proxy</value>
+  </data>
+  <data name="UseHttpProxy" xml:space="preserve">
+    <value>&#xE43;&#xE0A;&#xE49; HTTP Proxy</value>
+  </data>
+  <data name="ProxyUrl" xml:space="preserve">
+    <value>URL &#xE02;&#xE2D;&#xE07; Proxy</value>
+  </data>
+  <data name="BypassProxyForLocalhost" xml:space="preserve">
+    <value>&#xE02;&#xE49;&#xE32;&#xE21; proxy &#xE2A;&#xE33;&#xE2B;&#xE23;&#xE31;&#xE1A; localhost</value>
+  </data>
+  <data name="ProxyDescription" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19; proxy &#xE08;&#xE30;&#xE21;&#xE35;&#xE1C;&#xE25;&#xE2B;&#xE25;&#xE31;&#xE07;&#xE08;&#xE32;&#xE01;&#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;&#xE41;&#xE2D;&#xE1B; &#xE01;&#xE32;&#xE23;&#xE02;&#xE49;&#xE32;&#xE21; localhost &#xE0A;&#xE48;&#xE27;&#xE22;&#xE43;&#xE2B;&#xE49; Ollama &#xE17;&#xE33;&#xE07;&#xE32;&#xE19;&#xE44;&#xE14;&#xE49;&#xE42;&#xE14;&#xE22;&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; proxy</value>
+  </data>
+  <data name="Behavior" xml:space="preserve">
+    <value>&#xE1E;&#xE24;&#xE15;&#xE34;&#xE01;&#xE23;&#xE23;&#xE21;</value>
+  </data>
+  <data name="MinimizeToTray" xml:space="preserve">
+    <value>&#xE22;&#xE48;&#xE2D;&#xE25;&#xE07;&#xE43;&#xE19;&#xE16;&#xE32;&#xE14;&#xE23;&#xE30;&#xE1A;&#xE1A;</value>
+  </data>
+  <data name="MonitorClipboard" xml:space="preserve">
+    <value>&#xE15;&#xE23;&#xE27;&#xE08;&#xE2A;&#xE2D;&#xE1A;&#xE04;&#xE25;&#xE34;&#xE1B;&#xE1A;&#xE2D;&#xE23;&#xE4C;&#xE14;</value>
+  </data>
+  <data name="AlwaysOnTop" xml:space="preserve">
+    <value>&#xE41;&#xE2A;&#xE14;&#xE07;&#xE14;&#xE49;&#xE32;&#xE19;&#xE1A;&#xE19;&#xE40;&#xE2A;&#xE21;&#xE2D;</value>
+  </data>
+  <data name="LaunchAtStartup" xml:space="preserve">
+    <value>&#xE40;&#xE1B;&#xE34;&#xE14;&#xE40;&#xE21;&#xE37;&#xE48;&#xE2D;&#xE40;&#xE23;&#xE34;&#xE48;&#xE21;&#xE15;&#xE49;&#xE19; Windows</value>
+  </data>
+  <data name="Hotkeys" xml:space="preserve">
+    <value>&#xE04;&#xE35;&#xE22;&#xE4C;&#xE25;&#xE31;&#xE14;</value>
+  </data>
+  <data name="ShowWindow" xml:space="preserve">
+    <value>&#xE41;&#xE2A;&#xE14;&#xE07;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;</value>
+  </data>
+  <data name="TranslateSelection" xml:space="preserve">
+    <value>&#xE41;&#xE1B;&#xE25;&#xE02;&#xE49;&#xE2D;&#xE04;&#xE27;&#xE32;&#xE21;&#xE17;&#xE35;&#xE48;&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;</value>
+  </data>
+  <data name="ShowMiniWindow" xml:space="preserve">
+    <value>&#xE41;&#xE2A;&#xE14;&#xE07;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;&#xE02;&#xE19;&#xE32;&#xE14;&#xE40;&#xE25;&#xE47;&#xE01;</value>
+  </data>
+  <data name="ShowFixedWindow" xml:space="preserve">
+    <value>&#xE41;&#xE2A;&#xE14;&#xE07;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;&#xE04;&#xE07;&#xE17;&#xE35;&#xE48;</value>
+  </data>
+  <data name="HotkeysDescription" xml:space="preserve">
+    <value>&#xE2B;&#xE21;&#xE32;&#xE22;&#xE40;&#xE2B;&#xE15;&#xE38;: &#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;&#xE41;&#xE2D;&#xE1B;&#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE43;&#xE0A;&#xE49;&#xE01;&#xE32;&#xE23;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19;&#xE41;&#xE1B;&#xE25;&#xE07;&#xE04;&#xE35;&#xE22;&#xE4C;&#xE25;&#xE31;&#xE14; &#xE04;&#xE35;&#xE22;&#xE4C;&#xE25;&#xE31;&#xE14;&#xE2A;&#xE25;&#xE31;&#xE1A;&#xE43;&#xE0A;&#xE49;&#xE1B;&#xE38;&#xE48;&#xE21;&#xE40;&#xE14;&#xE35;&#xE22;&#xE27;&#xE01;&#xE31;&#xE19;&#xE1E;&#xE23;&#xE49;&#xE2D;&#xE21; Shift (&#xE40;&#xE0A;&#xE48;&#xE19; Ctrl+Alt+Shift+M)</value>
+  </data>
+  <data name="About" xml:space="preserve">
+    <value>&#xE40;&#xE01;&#xE35;&#xE48;&#xE22;&#xE27;&#xE01;&#xE31;&#xE1A;</value>
+  </data>
+  <data name="EasydictForWindows" xml:space="preserve">
+    <value>Easydict &#xE2A;&#xE33;&#xE2B;&#xE23;&#xE31;&#xE1A; Windows</value>
+  </data>
+  <data name="GitHubRepository" xml:space="preserve">
+    <value>&#xE04;&#xE25;&#xE31;&#xE07; GitHub</value>
+  </data>
+  <data name="IssueFeedback" xml:space="preserve">
+    <value>&#xE41;&#xE08;&#xE49;&#xE07;&#xE1B;&#xE31;&#xE0D;&#xE2B;&#xE32;</value>
+  </data>
+  <data name="InspiredBy" xml:space="preserve">
+    <value>&#xE44;&#xE14;&#xE49;&#xE41;&#xE23;&#xE07;&#xE1A;&#xE31;&#xE19;&#xE14;&#xE32;&#xE25;&#xE43;&#xE08;&#xE08;&#xE32;&#xE01;</value>
+  </data>
+  <data name="EasydictForMacOS" xml:space="preserve">
+    <value>Easydict &#xE2A;&#xE33;&#xE2B;&#xE23;&#xE31;&#xE1A; macOS</value>
+  </data>
+  <data name="License" xml:space="preserve">
+    <value>&#xE2A;&#xE31;&#xE0D;&#xE0D;&#xE32;&#xE2D;&#xE19;&#xE38;&#xE0D;&#xE32;&#xE15;: GPL-3.0</value>
+  </data>
+  <data name="SaveSettings" xml:space="preserve">
+    <value>&#xE1A;&#xE31;&#xE19;&#xE17;&#xE36;&#xE01;&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;</value>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>&#xE22;&#xE49;&#xE2D;&#xE19;&#xE01;&#xE25;&#xE31;&#xE1A;</value>
+  </data>
+  <data name="BackToTop" xml:space="preserve">
+    <value>&#xE01;&#xE25;&#xE31;&#xE1A;&#xE14;&#xE49;&#xE32;&#xE19;&#xE1A;&#xE19;</value>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>&#xE04;&#xE31;&#xE14;&#xE25;&#xE2D;&#xE01;</value>
+  </data>
+  <data name="InsertReplace" xml:space="preserve">
+    <value>&#xE41;&#xE17;&#xE23;&#xE01;/&#xE41;&#xE17;&#xE19;&#xE17;&#xE35;&#xE48;</value>
+  </data>
+  <data name="CopyAll" xml:space="preserve">
+    <value>&#xE04;&#xE31;&#xE14;&#xE25;&#xE2D;&#xE01;&#xE17;&#xE31;&#xE49;&#xE07;&#xE2B;&#xE21;&#xE14;</value>
+  </data>
+  <data name="TranslationFailed" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE25;&#xE49;&#xE21;&#xE40;&#xE2B;&#xE25;&#xE27;</value>
+  </data>
+  <data name="ServiceNotInitialized" xml:space="preserve">
+    <value>&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE22;&#xE31;&#xE07;&#xE44;&#xE21;&#xE48;&#xE44;&#xE14;&#xE49;&#xE40;&#xE23;&#xE34;&#xE48;&#xE21;&#xE15;&#xE49;&#xE19;</value>
+  </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>&#xE44;&#xE21;&#xE48;&#xE21;&#xE35;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE17;&#xE35;&#xE48;&#xE40;&#xE1B;&#xE34;&#xE14;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19; &#xE44;&#xE1B;&#xE17;&#xE35;&#xE48;&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;&#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE40;&#xE1B;&#xE34;&#xE14;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} &#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE40;&#xE2A;&#xE23;&#xE47;&#xE08;&#xE2A;&#xE34;&#xE49;&#xE19;</value>
+  </data>
+  <data name="InvalidLanguageSelection" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE20;&#xE32;&#xE29;&#xE32;&#xE44;&#xE21;&#xE48;&#xE16;&#xE39;&#xE01;&#xE15;&#xE49;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE2B;&#xE19;&#xE36;&#xE48;&#xE07;&#xE41;&#xE25;&#xE30;&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE2A;&#xE2D;&#xE07;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE44;&#xE21;&#xE48;&#xE40;&#xE2B;&#xE21;&#xE37;&#xE2D;&#xE19;&#xE01;&#xE31;&#xE19;</value>
+  </data>
+  <data name="InvalidProxyUrl" xml:space="preserve">
+    <value>URL &#xE02;&#xE2D;&#xE07; Proxy &#xE44;&#xE21;&#xE48;&#xE16;&#xE39;&#xE01;&#xE15;&#xE49;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>URL &#xE02;&#xE2D;&#xE07; proxy &#xE44;&#xE21;&#xE48;&#xE16;&#xE39;&#xE01;&#xE15;&#xE49;&#xE2D;&#xE07; &#xE01;&#xE23;&#xE38;&#xE13;&#xE32;&#xE43;&#xE2A;&#xE48; URL &#xE17;&#xE35;&#xE48;&#xE16;&#xE39;&#xE01;&#xE15;&#xE49;&#xE2D;&#xE07; (&#xE40;&#xE0A;&#xE48;&#xE19; http://127.0.0.1:7890)</value>
+  </data>
+  <data name="SettingsSaved" xml:space="preserve">
+    <value>&#xE1A;&#xE31;&#xE19;&#xE17;&#xE36;&#xE01;&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;&#xE41;&#xE25;&#xE49;&#xE27;</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;&#xE02;&#xE2D;&#xE07;&#xE04;&#xE38;&#xE13;&#xE44;&#xE14;&#xE49;&#xE23;&#xE31;&#xE1A;&#xE01;&#xE32;&#xE23;&#xE1A;&#xE31;&#xE19;&#xE17;&#xE36;&#xE01;&#xE40;&#xE23;&#xE35;&#xE22;&#xE1A;&#xE23;&#xE49;&#xE2D;&#xE22;&#xE41;&#xE25;&#xE49;&#xE27;</value>
+  </data>
+  <data name="RestartRequired" xml:space="preserve">
+    <value>&#xE15;&#xE49;&#xE2D;&#xE07;&#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;</value>
+  </data>
+  <data name="CannotConnectToOllama" xml:space="preserve">
+    <value>&#xE44;&#xE21;&#xE48;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE40;&#xE0A;&#xE37;&#xE48;&#xE2D;&#xE21;&#xE15;&#xE48;&#xE2D; Ollama</value>
+  </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>&#xE44;&#xE21;&#xE48;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE14;&#xE36;&#xE07;&#xE23;&#xE32;&#xE22;&#xE01;&#xE32;&#xE23; model &#xE08;&#xE32;&#xE01; Ollama &#xE15;&#xE23;&#xE27;&#xE08;&#xE2A;&#xE2D;&#xE1A;&#xE43;&#xE2B;&#xE49;&#xE41;&#xE19;&#xE48;&#xE43;&#xE08;&#xE27;&#xE48;&#xE32; Ollama &#xE01;&#xE33;&#xE25;&#xE31;&#xE07;&#xE17;&#xE33;&#xE07;&#xE32;&#xE19;&#xE41;&#xE25;&#xE30;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE40;&#xE02;&#xE49;&#xE32;&#xE16;&#xE36;&#xE07;&#xE44;&#xE14;&#xE49;</value>
+  </data>
+  <data name="Copied" xml:space="preserve">
+    <value>&#xE04;&#xE31;&#xE14;&#xE25;&#xE2D;&#xE01;&#xE41;&#xE25;&#xE49;&#xE27;!</value>
+  </data>
+  <data name="DetectedLanguage" xml:space="preserve">
+    <value>&#xE15;&#xE23;&#xE27;&#xE08;&#xE1E;&#xE1A;: {0}</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>&#xE15;&#xE01;&#xE25;&#xE07;</value>
+  </data>
+  <data name="ServiceGoogle" xml:space="preserve">
+    <value>Google Translate</value>
+  </data>
+  <data name="ServiceDeepL" xml:space="preserve">
+    <value>DeepL</value>
+  </data>
+  <data name="ServiceOpenAI" xml:space="preserve">
+    <value>OpenAI</value>
+  </data>
+  <data name="ServiceOllama" xml:space="preserve">
+    <value>Ollama (&#xE43;&#xE19;&#xE40;&#xE04;&#xE23;&#xE37;&#xE48;&#xE2D;&#xE07;)</value>
+  </data>
+  <data name="ServiceBuiltIn" xml:space="preserve">
+    <value>AI &#xE43;&#xE19;&#xE15;&#xE31;&#xE27;</value>
+  </data>
+  <data name="ServiceDeepSeek" xml:space="preserve">
+    <value>DeepSeek</value>
+  </data>
+  <data name="ServiceGroq" xml:space="preserve">
+    <value>Groq</value>
+  </data>
+  <data name="ServiceZhipu" xml:space="preserve">
+    <value>Zhipu</value>
+  </data>
+  <data name="ServiceGitHubModels" xml:space="preserve">
+    <value>GitHub Models</value>
+  </data>
+  <data name="ServiceGemini" xml:space="preserve">
+    <value>Gemini</value>
+  </data>
+  <data name="ServiceCustomOpenAI" xml:space="preserve">
+    <value>OpenAI &#xE17;&#xE35;&#xE48;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;</value>
+  </data>
+  <data name="ServiceDoubao" xml:space="preserve">
+    <value>Doubao</value>
+  </data>
+  <data name="ServiceCaiyun" xml:space="preserve">
+    <value>Caiyun</value>
+  </data>
+  <data name="ServiceNiuTrans" xml:space="preserve">
+    <value>NiuTrans</value>
+  </data>
+  <data name="ServiceLinguee" xml:space="preserve">
+    <value>&#xE1E;&#xE08;&#xE19;&#xE32;&#xE19;&#xE38;&#xE01;&#xE23;&#xE21; Linguee</value>
+  </data>
+  <data name="TrayShow" xml:space="preserve">
+    <value>&#xE41;&#xE2A;&#xE14;&#xE07;</value>
+  </data>
+  <data name="TrayShowMini" xml:space="preserve">
+    <value>&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;&#xE02;&#xE19;&#xE32;&#xE14;&#xE40;&#xE25;&#xE47;&#xE01;</value>
+  </data>
+  <data name="TrayShowFixed" xml:space="preserve">
+    <value>&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;&#xE04;&#xE07;&#xE17;&#xE35;&#xE48;</value>
+  </data>
+  <data name="TraySettings" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;</value>
+  </data>
+  <data name="TrayExit" xml:space="preserve">
+    <value>&#xE2D;&#xE2D;&#xE01;</value>
+  </data>
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>&#xE41;&#xE1B;&#xE25;&#xE14;&#xE48;&#xE27;&#xE19;</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>&#xE41;&#xE1B;&#xE25;&#xE04;&#xE07;&#xE17;&#xE35;&#xE48;</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>&#xE1B;&#xE31;&#xE01;&#xE2B;&#xE21;&#xE38;&#xE14;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07; (&#xE41;&#xE2A;&#xE14;&#xE07;&#xE14;&#xE49;&#xE32;&#xE19;&#xE1A;&#xE19;&#xE40;&#xE2A;&#xE21;&#xE2D;)</value>
+  </data>
+  <data name="UILanguage" xml:space="preserve">
+    <value>&#xE20;&#xE32;&#xE29;&#xE32;&#xE02;&#xE2D;&#xE07;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE08;&#xE2D;</value>
+  </data>
+  <data name="RestartRequiredMessage" xml:space="preserve">
+    <value>&#xE01;&#xE23;&#xE38;&#xE13;&#xE32;&#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;&#xE41;&#xE2D;&#xE1B;&#xE1E;&#xE25;&#xE34;&#xE40;&#xE04;&#xE0A;&#xE31;&#xE19;&#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE43;&#xE2B;&#xE49;&#xE01;&#xE32;&#xE23;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19;&#xE20;&#xE32;&#xE29;&#xE32;&#xE21;&#xE35;&#xE1C;&#xE25;</value>
+  </data>
+  <data name="UILangEnglish" xml:space="preserve">
+    <value>&#xE2D;&#xE31;&#xE07;&#xE01;&#xE24;&#xE29;</value>
+  </data>
+  <data name="UILangChineseSimplified" xml:space="preserve">
+    <value>&#xE08;&#xE35;&#xE19; (&#xE15;&#xE31;&#xE27;&#xE22;&#xE48;&#xE2D;)</value>
+  </data>
+  <data name="BehaviorHeader.Text" xml:space="preserve">
+    <value>&#xE1E;&#xE24;&#xE15;&#xE34;&#xE01;&#xE23;&#xE23;&#xE21;</value>
+  </data>
+  <data name="UILanguageCombo.Header" xml:space="preserve">
+    <value>&#xE20;&#xE32;&#xE29;&#xE32;&#xE02;&#xE2D;&#xE07;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE08;&#xE2D;</value>
+  </data>
+  <data name="UILangEnglishItem.Content" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="UILangChineseItem.Content" xml:space="preserve">
+    <value>&#x7B80;&#x4F53;&#x4E2D;&#x6587;</value>
+  </data>
+  <data name="UILangJapaneseItem.Content" xml:space="preserve">
+    <value>&#x65E5;&#x672C;&#x8A9E;</value>
+  </data>
+  <data name="UILangKoreanItem.Content" xml:space="preserve">
+    <value>&#xD55C;&#xAD6D;&#xC5B4;</value>
+  </data>
+  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
+    <value>&#x7E41;&#x9AD4;&#x4E2D;&#x6587;</value>
+  </data>
+  <data name="UILangFrenchItem.Content" xml:space="preserve">
+    <value>Fran&#xE7;ais</value>
+  </data>
+  <data name="UILangGermanItem.Content" xml:space="preserve">
+    <value>Deutsch</value>
+  </data>
+  <data name="UILangVietnameseItem.Content" xml:space="preserve">
+    <value>Ti&#x1EBF;ng Vi&#x1EC7;t</value>
+  </data>
+  <data name="UILangThaiItem.Content" xml:space="preserve">
+    <value>&#xE44;&#xE17;&#xE22;</value>
+  </data>
+  <data name="UILangArabicItem.Content" xml:space="preserve">
+    <value>&#x627;&#x644;&#x639;&#x631;&#x628;&#x64A;&#x629;</value>
+  </data>
+  <data name="UILangIndonesianItem.Content" xml:space="preserve">
+    <value>Bahasa Indonesia</value>
+  </data>
+  <data name="UILangItalianItem.Content" xml:space="preserve">
+    <value>Italiano</value>
+  </data>
+  <data name="UILangMalayItem.Content" xml:space="preserve">
+    <value>Bahasa Melayu</value>
+  </data>
+  <data name="UILangHindiItem.Content" xml:space="preserve">
+    <value>&#x939;&#x93F;&#x928;&#x94D;&#x926;&#x940;</value>
+  </data>
+  <data name="UILangDanishItem.Content" xml:space="preserve">
+    <value>Dansk</value>
+  </data>
+  <data name="UILanguageDescription.Text" xml:space="preserve">
+    <value>&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE41;&#xE2A;&#xE14;&#xE07;&#xE2A;&#xE33;&#xE2B;&#xE23;&#xE31;&#xE1A;&#xE2D;&#xE34;&#xE19;&#xE40;&#xE17;&#xE2D;&#xE23;&#xE4C;&#xE40;&#xE1F;&#xE2A;&#xE41;&#xE2D;&#xE1B;&#xE1E;&#xE25;&#xE34;&#xE40;&#xE04;&#xE0A;&#xE31;&#xE19; &#xE15;&#xE49;&#xE2D;&#xE07;&#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;</value>
+  </data>
+  <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
+    <value>&#xE22;&#xE48;&#xE2D;&#xE25;&#xE07;&#xE43;&#xE19;&#xE16;&#xE32;&#xE14;&#xE23;&#xE30;&#xE1A;&#xE1A;</value>
+  </data>
+  <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
+    <value>&#xE15;&#xE23;&#xE27;&#xE08;&#xE2A;&#xE2D;&#xE1A;&#xE04;&#xE25;&#xE34;&#xE1B;&#xE1A;&#xE2D;&#xE23;&#xE4C;&#xE14;</value>
+  </data>
+  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
+    <value>&#xE41;&#xE1B;&#xE25;&#xE14;&#xE49;&#xE27;&#xE22;&#xE01;&#xE32;&#xE23;&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE40;&#xE21;&#xE32;&#xE2A;&#xE4C; (&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE02;&#xE49;&#xE2D;&#xE04;&#xE27;&#xE32;&#xE21; &#x2192; &#xE04;&#xE25;&#xE34;&#xE01;&#xE44;&#xE2D;&#xE04;&#xE2D;&#xE19;&#xE25;&#xE2D;&#xE22;)</value>
+  </data>
+  <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
+    <value>&#xE41;&#xE2A;&#xE14;&#xE07;&#xE14;&#xE49;&#xE32;&#xE19;&#xE1A;&#xE19;&#xE40;&#xE2A;&#xE21;&#xE2D;</value>
+  </data>
+  <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
+    <value>&#xE40;&#xE1B;&#xE34;&#xE14;&#xE40;&#xE21;&#xE37;&#xE48;&#xE2D;&#xE40;&#xE23;&#xE34;&#xE48;&#xE21;&#xE15;&#xE49;&#xE19; Windows</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>&#xE1B;&#xE34;&#xE14;</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>&#xE0B;&#xE48;&#xE2D;&#xE19; (Ctrl+Alt+F &#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE41;&#xE2A;&#xE14;&#xE07;&#xE2D;&#xE35;&#xE01;&#xE04;&#xE23;&#xE31;&#xE49;&#xE07;)</value>
+  </data>
+  <data name="EnableInternationalServices" xml:space="preserve">
+    <value>&#xE40;&#xE1B;&#xE34;&#xE14;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE2A;&#xE32;&#xE01;&#xE25;</value>
+  </data>
+  <data name="EnableInternationalServicesDescription" xml:space="preserve">
+    <value>&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE1A;&#xE32;&#xE07;&#xE2D;&#xE22;&#xE48;&#xE32;&#xE07; (Google, DeepL, OpenAI, Gemini &#xE2F;&#xE25;&#xE2F;) &#xE15;&#xE49;&#xE2D;&#xE07;&#xE01;&#xE32;&#xE23;&#xE01;&#xE32;&#xE23;&#xE40;&#xE02;&#xE49;&#xE32;&#xE16;&#xE36;&#xE07;&#xE40;&#xE04;&#xE23;&#xE37;&#xE2D;&#xE02;&#xE48;&#xE32;&#xE22;&#xE2A;&#xE32;&#xE01;&#xE25;&#xE41;&#xE25;&#xE30;&#xE2D;&#xE32;&#xE08;&#xE44;&#xE21;&#xE48;&#xE1E;&#xE23;&#xE49;&#xE2D;&#xE21;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE43;&#xE19;&#xE17;&#xE38;&#xE01;&#xE20;&#xE39;&#xE21;&#xE34;&#xE20;&#xE32;&#xE04;</value>
+  </data>
+  <data name="InternationalServiceUnavailableHint" xml:space="preserve">
+    <value>&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE19;&#xE35;&#xE49;&#xE2D;&#xE32;&#xE08;&#xE44;&#xE21;&#xE48;&#xE1E;&#xE23;&#xE49;&#xE2D;&#xE21;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE43;&#xE19;&#xE20;&#xE39;&#xE21;&#xE34;&#xE20;&#xE32;&#xE04;&#xE02;&#xE2D;&#xE07;&#xE04;&#xE38;&#xE13; &#xE25;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; Bing Translate &#xE2B;&#xE23;&#xE37;&#xE2D;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE17;&#xE35;&#xE48;&#xE40;&#xE02;&#xE49;&#xE32;&#xE01;&#xE31;&#xE19;&#xE44;&#xE14;&#xE49;&#xE01;&#xE31;&#xE1A;&#xE20;&#xE39;&#xE21;&#xE34;&#xE20;&#xE32;&#xE04;&#xE2D;&#xE37;&#xE48;&#xE19; &#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE17;&#xE35;&#xE48;&#xE40;&#xE1B;&#xE34;&#xE14;&#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE43;&#xE19;&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;</value>
+  </data>
+  <data name="AppTheme" xml:space="preserve">
+    <value>&#xE18;&#xE35;&#xE21;&#xE41;&#xE2D;&#xE1B;</value>
+  </data>
+  <data name="AppThemeDescription" xml:space="preserve">
+    <value>&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE23;&#xE39;&#xE1B;&#xE25;&#xE31;&#xE01;&#xE29;&#xE13;&#xE4C;&#xE02;&#xE2D;&#xE07; Easydict &#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE23;&#xE30;&#xE1A;&#xE1A;&#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE43;&#xE0A;&#xE49;&#xE18;&#xE35;&#xE21; Windows</value>
+  </data>
+  <data name="ThemeSystem" xml:space="preserve">
+    <value>&#xE23;&#xE30;&#xE1A;&#xE1A;</value>
+  </data>
+  <data name="ThemeLight" xml:space="preserve">
+    <value>&#xE2A;&#xE27;&#xE48;&#xE32;&#xE07;</value>
+  </data>
+  <data name="ThemeDark" xml:space="preserve">
+    <value>&#xE21;&#xE37;&#xE14;</value>
+  </data>
+  <data name="UnsavedChangesTitle" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19;&#xE41;&#xE1B;&#xE25;&#xE07;&#xE17;&#xE35;&#xE48;&#xE22;&#xE31;&#xE07;&#xE44;&#xE21;&#xE48;&#xE44;&#xE14;&#xE49;&#xE1A;&#xE31;&#xE19;&#xE17;&#xE36;&#xE01;</value>
+  </data>
+  <data name="UnsavedChangesMessage" xml:space="preserve">
+    <value>&#xE04;&#xE38;&#xE13;&#xE21;&#xE35;&#xE01;&#xE32;&#xE23;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19;&#xE41;&#xE1B;&#xE25;&#xE07;&#xE17;&#xE35;&#xE48;&#xE22;&#xE31;&#xE07;&#xE44;&#xE21;&#xE48;&#xE44;&#xE14;&#xE49;&#xE1A;&#xE31;&#xE19;&#xE17;&#xE36;&#xE01; &#xE04;&#xE38;&#xE13;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE01;&#xE32;&#xE23;&#xE1A;&#xE31;&#xE19;&#xE17;&#xE36;&#xE01;&#xE01;&#xE48;&#xE2D;&#xE19;&#xE2D;&#xE2D;&#xE01;&#xE2B;&#xE23;&#xE37;&#xE2D;&#xE44;&#xE21;&#xE48;?</value>
+  </data>
+  <data name="DontSave" xml:space="preserve">
+    <value>&#xE44;&#xE21;&#xE48;&#xE1A;&#xE31;&#xE19;&#xE17;&#xE36;&#xE01;</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>&#xE22;&#xE01;&#xE40;&#xE25;&#xE34;&#xE01;</value>
+  </data>
+  <data name="Test" xml:space="preserve">
+    <value>&#xE17;&#xE14;&#xE2A;&#xE2D;&#xE1A;</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>&#xE01;&#xE33;&#xE25;&#xE31;&#xE07;&#xE17;&#xE14;&#xE2A;&#xE2D;&#xE1A;...</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>&#xE17;&#xE14;&#xE2A;&#xE2D;&#xE1A;&#xE2A;&#xE33;&#xE40;&#xE23;&#xE47;&#xE08;</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32;&#xE16;&#xE39;&#xE01;&#xE15;&#xE49;&#xE2D;&#xE07; &#xE41;&#xE1B;&#xE25;&#xE40;&#xE2A;&#xE23;&#xE47;&#xE08;&#xE43;&#xE19; {0} &#xE21;&#xE34;&#xE25;&#xE25;&#xE34;&#xE27;&#xE34;&#xE19;&#xE32;&#xE17;&#xE35;</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>&#xE17;&#xE14;&#xE2A;&#xE2D;&#xE1A;&#xE25;&#xE49;&#xE21;&#xE40;&#xE2B;&#xE25;&#xE27;</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>&#xE01;&#xE32;&#xE23;&#xE17;&#xE14;&#xE2A;&#xE2D;&#xE1A;&#xE01;&#xE32;&#xE23;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32;&#xE25;&#xE49;&#xE21;&#xE40;&#xE2B;&#xE25;&#xE27;: {0}</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>&#xE01;&#xE23;&#xE38;&#xE13;&#xE32;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE01;&#xE48;&#xE2D;&#xE19; (API key, endpoint &#xE2F;&#xE25;&#xE2F;)</value>
+  </data>
+</root>

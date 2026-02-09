@@ -20,7 +20,8 @@ public class LocalizationServiceTests
     /// All supported UI languages that must have resource files.
     /// </summary>
     private static readonly string[] SupportedLanguages =
-        { "en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "fr-FR", "de-DE" };
+        { "en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "fr-FR", "de-DE",
+          "vi-VN", "th-TH", "ar-SA", "id-ID", "it-IT", "ms-MY", "hi-IN", "da-DK" };
 
     #region Resource File Structure Tests
 
@@ -39,6 +40,14 @@ public class LocalizationServiceTests
     [InlineData("ko-KR")]
     [InlineData("fr-FR")]
     [InlineData("de-DE")]
+    [InlineData("vi-VN")]
+    [InlineData("th-TH")]
+    [InlineData("ar-SA")]
+    [InlineData("id-ID")]
+    [InlineData("it-IT")]
+    [InlineData("ms-MY")]
+    [InlineData("hi-IN")]
+    [InlineData("da-DK")]
     public void LanguageFolder_Exists(string language)
     {
         var languagePath = Path.Combine(StringsPath, language);
@@ -54,6 +63,14 @@ public class LocalizationServiceTests
     [InlineData("ko-KR")]
     [InlineData("fr-FR")]
     [InlineData("de-DE")]
+    [InlineData("vi-VN")]
+    [InlineData("th-TH")]
+    [InlineData("ar-SA")]
+    [InlineData("id-ID")]
+    [InlineData("it-IT")]
+    [InlineData("ms-MY")]
+    [InlineData("hi-IN")]
+    [InlineData("da-DK")]
     public void ResourcesResw_Exists(string language)
     {
         var reswPath = Path.Combine(StringsPath, language, "Resources.resw");

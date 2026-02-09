@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>1.3</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AppName" xml:space="preserve"><value>Easydict</value></data>
+  <data name="SourceText" xml:space="preserve"><value>Kildetekst</value></data>
+  <data name="TranslationResults" xml:space="preserve"><value>Oversættelsesresultater</value></data>
+  <data name="InputPlaceholder" xml:space="preserve"><value>Indtast eller indsæt tekst til oversættelse...</value></data>
+  <data name="TranslationPlaceholder" xml:space="preserve"><value>Oversættelsen vises her...</value></data>
+  <data name="SettingsTooltip" xml:space="preserve"><value>Indstillinger</value></data>
+  <data name="TranslateTooltip" xml:space="preserve"><value>Oversæt</value></data>
+  <data name="SwapLanguagesTooltip" xml:space="preserve"><value>Byt kilde- og målsprog</value></data>
+  <data name="SourceLanguageTooltip" xml:space="preserve"><value>Kildesprog</value></data>
+  <data name="TargetLanguageTooltip" xml:space="preserve"><value>Målsprog</value></data>
+  <data name="StatusConnected" xml:space="preserve"><value>Forbundet</value></data>
+  <data name="StatusDisconnected" xml:space="preserve"><value>Afbrudt</value></data>
+  <data name="StatusInitializing" xml:space="preserve"><value>Initialiserer...</value></data>
+  <data name="StatusReady" xml:space="preserve"><value>Klar</value></data>
+  <data name="StatusTranslating" xml:space="preserve"><value>Oversætter...</value></data>
+  <data name="StatusError" xml:space="preserve"><value>Fejl</value></data>
+  <data name="LangAutoDetect" xml:space="preserve"><value>Automatisk registrering</value></data>
+  <data name="LangEnglish" xml:space="preserve"><value>Engelsk</value></data>
+  <data name="LangChinese" xml:space="preserve"><value>Kinesisk</value></data>
+  <data name="LangChineseSimplified" xml:space="preserve"><value>Kinesisk (forenklet)</value></data>
+  <data name="LangChineseTraditional" xml:space="preserve"><value>Kinesisk (traditionelt)</value></data>
+  <data name="LangJapanese" xml:space="preserve"><value>Japansk</value></data>
+  <data name="LangKorean" xml:space="preserve"><value>Koreansk</value></data>
+  <data name="LangFrench" xml:space="preserve"><value>Fransk</value></data>
+  <data name="LangGerman" xml:space="preserve"><value>Tysk</value></data>
+  <data name="LangSpanish" xml:space="preserve"><value>Spansk</value></data>
+  <data name="Settings" xml:space="preserve"><value>Indstillinger</value></data>
+  <data name="TranslationService" xml:space="preserve"><value>Oversættelsestjeneste</value></data>
+  <data name="EnabledServices" xml:space="preserve"><value>Aktiverede tjenester</value></data>
+  <data name="EnabledServicesDescription" xml:space="preserve"><value>Vælg hvilke oversættelsestjenester der skal vises i hvert vindue. Flere tjenester kører parallelt.</value></data>
+  <data name="MainWindow" xml:space="preserve"><value>Hovedvindue</value></data>
+  <data name="MiniWindow" xml:space="preserve"><value>Minivindue</value></data>
+  <data name="FixedWindow" xml:space="preserve"><value>Fast vindue</value></data>
+  <data name="Auto" xml:space="preserve"><value>Automatisk</value></data>
+  <data name="Manual" xml:space="preserve"><value>Manuel</value></data>
+  <data name="LanguagePreferences" xml:space="preserve"><value>Sprogpræferencer</value></data>
+  <data name="FirstLanguage" xml:space="preserve"><value>Første sprog</value></data>
+  <data name="SecondLanguage" xml:space="preserve"><value>Andet sprog</value></data>
+  <data name="LanguagePreferencesDescription" xml:space="preserve"><value>Når det registrerede sprog matcher dit Første sprog, vil oversættelsesmålet være dit Andet sprog og omvendt.</value></data>
+  <data name="AutoSelectTargetLanguage" xml:space="preserve"><value>Vælg automatisk målsprog baseret på registreret kildesprog</value></data>
+  <data name="ServiceConfiguration" xml:space="preserve"><value>Tjenestekonfiguration</value></data>
+  <data name="ServiceConfigurationDescription" xml:space="preserve"><value>Konfigurer API-nøgler, endpoints og modeller for hver oversættelsestjeneste.</value></data>
+  <data name="ApiKey" xml:space="preserve"><value>API-nøgle</value></data>
+  <data name="ApiKeyOptional" xml:space="preserve"><value>API-nøgle (valgfri)</value></data>
+  <data name="Endpoint" xml:space="preserve"><value>Endpoint</value></data>
+  <data name="EndpointOptional" xml:space="preserve"><value>Endpoint (valgfri)</value></data>
+  <data name="EndpointRequired" xml:space="preserve"><value>Endpoint (påkrævet)</value></data>
+  <data name="Model" xml:space="preserve"><value>Model</value></data>
+  <data name="Refresh" xml:space="preserve"><value>Opdater</value></data>
+  <data name="DeepLDescription" xml:space="preserve"><value>Lad API-nøglen være tom for at bruge gratis weboversættelse. Pro API-nøgle giver højere grænser.</value></data>
+  <data name="DeepLFreeOption" xml:space="preserve"><value>Brug gratis API (weboversættelse kræver ingen API-nøgle)</value></data>
+  <data name="OpenAIDescription" xml:space="preserve"><value>Du kan skrive et brugerdefineret modelnavn direkte.</value></data>
+  <data name="DeepSeekDescription" xml:space="preserve"><value>Hent din API-nøgle fra platform.deepseek.com. Du kan skrive et brugerdefineret modelnavn.</value></data>
+  <data name="GroqDescription" xml:space="preserve"><value>Groq leverer hurtig inferens. Hent din API-nøgle fra console.groq.com. Du kan skrive et brugerdefineret modelnavn.</value></data>
+  <data name="ZhipuDescription" xml:space="preserve"><value>Hent din API-nøgle fra open.bigmodel.cn. Du kan skrive et brugerdefineret modelnavn.</value></data>
+  <data name="GitHubModelsDescription" xml:space="preserve"><value>Brug dit personlige GitHub-adgangstoken. Hent det fra github.com/settings/tokens. Du kan skrive et brugerdefineret modelnavn.</value></data>
+  <data name="GeminiDescription" xml:space="preserve"><value>Hent din API-nøgle fra aistudio.google.com. Du kan skrive et brugerdefineret modelnavn.</value></data>
+  <data name="CustomOpenAIDescription" xml:space="preserve"><value>Konfigurer ethvert OpenAI-kompatibelt API-endpoint (f.eks. lokale LLM-servere, andre AI-udbydere).</value></data>
+  <data name="OllamaDescription" xml:space="preserve"><value>Ollama skal køre lokalt. Klik Opdater for at indlæse tilgængelige modeller.</value></data>
+  <data name="BuiltInAIDescription" xml:space="preserve"><value>Indbygget AI bruger Groq-cloudtjenesten. Ingen API-nøgle påkrævet. Du kan skrive et brugerdefineret modelnavn.</value></data>
+  <data name="DoubaoDescription" xml:space="preserve"><value>ByteDances Doubao-oversættelsestjeneste. Hent din API-nøgle fra console.volcengine.com</value></data>
+  <data name="CaiyunDescription" xml:space="preserve"><value>Hent din API-nøgle fra fanyi.caiyunapp.com</value></data>
+  <data name="NiuTransDescription" xml:space="preserve"><value>NiuTrans understøtter over 450 sprogpar. Hent din API-nøgle fra niutrans.com</value></data>
+  <data name="AppKey" xml:space="preserve"><value>App-nøgle</value></data>
+  <data name="AppSecret" xml:space="preserve"><value>App-hemmelighed</value></data>
+  <data name="UseOfficialApi" xml:space="preserve"><value>Brug officiel API</value></data>
+  <data name="YoudaoDescription" xml:space="preserve"><value>Youdao giver fonetisk transskription for engelske ord. Uden API-nøgler bruges gratis webopslag. Med API-nøgler aktiveres officiel API for højere grænser. Hent API-nøgler fra ai.youdao.com</value></data>
+  <data name="FreeServicesTitle" xml:space="preserve"><value>Gratis tjenester (ingen konfiguration påkrævet)</value></data>
+  <data name="FreeServicesDescription" xml:space="preserve"><value>Google Translate og Linguee Dictionary fungerer med det samme uden API-nøgler.</value></data>
+  <data name="HttpProxy" xml:space="preserve"><value>HTTP-proxy</value></data>
+  <data name="UseHttpProxy" xml:space="preserve"><value>Brug HTTP-proxy</value></data>
+  <data name="ProxyUrl" xml:space="preserve"><value>Proxy-URL</value></data>
+  <data name="BypassProxyForLocalhost" xml:space="preserve"><value>Omgå proxy for localhost</value></data>
+  <data name="ProxyDescription" xml:space="preserve"><value>Proxyændringer træder i kraft efter genstart af appen. Localhost-omgåelse sikrer, at Ollama fungerer uden proxy.</value></data>
+  <data name="Behavior" xml:space="preserve"><value>Adfærd</value></data>
+  <data name="MinimizeToTray" xml:space="preserve"><value>Minimer til systembakke</value></data>
+  <data name="MonitorClipboard" xml:space="preserve"><value>Overvåg udklipsholder for tekst</value></data>
+  <data name="AlwaysOnTop" xml:space="preserve"><value>Altid øverst</value></data>
+  <data name="LaunchAtStartup" xml:space="preserve"><value>Start ved Windows-opstart</value></data>
+  <data name="Hotkeys" xml:space="preserve"><value>Genvejstaster</value></data>
+  <data name="ShowWindow" xml:space="preserve"><value>Vis vindue</value></data>
+  <data name="TranslateSelection" xml:space="preserve"><value>Oversæt markering</value></data>
+  <data name="ShowMiniWindow" xml:space="preserve"><value>Vis minivindue</value></data>
+  <data name="ShowFixedWindow" xml:space="preserve"><value>Vis fast vindue</value></data>
+  <data name="HotkeysDescription" xml:space="preserve"><value>Bemærk: Genstart appen for at anvende genvejstastændringer. Skiftetaster bruger samme tast med Shift (f.eks. Ctrl+Alt+Shift+M).</value></data>
+  <data name="About" xml:space="preserve"><value>Om</value></data>
+  <data name="EasydictForWindows" xml:space="preserve"><value>Easydict til Windows</value></data>
+  <data name="GitHubRepository" xml:space="preserve"><value>GitHub-repository</value></data>
+  <data name="IssueFeedback" xml:space="preserve"><value>Rapporter problem</value></data>
+  <data name="InspiredBy" xml:space="preserve"><value>Inspireret af</value></data>
+  <data name="EasydictForMacOS" xml:space="preserve"><value>Easydict til macOS</value></data>
+  <data name="License" xml:space="preserve"><value>Licens: GPL-3.0</value></data>
+  <data name="SaveSettings" xml:space="preserve"><value>Gem indstillinger</value></data>
+  <data name="Back" xml:space="preserve"><value>Tilbage</value></data>
+  <data name="BackToTop" xml:space="preserve"><value>Tilbage til toppen</value></data>
+  <data name="Copy" xml:space="preserve"><value>Kopier</value></data>
+  <data name="InsertReplace" xml:space="preserve"><value>Indsæt/Erstat</value></data>
+  <data name="CopyAll" xml:space="preserve"><value>Kopier alt</value></data>
+  <data name="TranslationFailed" xml:space="preserve"><value>Oversættelse mislykkedes</value></data>
+  <data name="ServiceNotInitialized" xml:space="preserve"><value>Tjeneste ikke initialiseret</value></data>
+  <data name="NoServicesEnabled" xml:space="preserve"><value>Ingen tjenester aktiveret. Gå til Indstillinger for at aktivere tjenester.</value></data>
+  <data name="ServiceResultsComplete" xml:space="preserve"><value>{0} tjeneste(r) fuldført</value></data>
+  <data name="InvalidLanguageSelection" xml:space="preserve"><value>Ugyldigt sprogvalg</value></data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve"><value>Første sprog og Andet sprog kan ikke være ens.</value></data>
+  <data name="InvalidProxyUrl" xml:space="preserve"><value>Ugyldig proxy-URL</value></data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve"><value>Proxy-URL'en er ugyldig. Indtast venligst en gyldig URL (f.eks. http://127.0.0.1:7890).</value></data>
+  <data name="SettingsSaved" xml:space="preserve"><value>Indstillinger gemt</value></data>
+  <data name="SettingsSavedMessage" xml:space="preserve"><value>Dine indstillinger er blevet gemt.</value></data>
+  <data name="RestartRequired" xml:space="preserve"><value>Genstart påkrævet</value></data>
+  <data name="CannotConnectToOllama" xml:space="preserve"><value>Kan ikke oprette forbindelse til Ollama</value></data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve"><value>Kunne ikke hente modeller fra Ollama. Sørg for, at Ollama kører og er tilgængelig.</value></data>
+  <data name="Copied" xml:space="preserve"><value>Kopieret!</value></data>
+  <data name="DetectedLanguage" xml:space="preserve"><value>Registreret: {0}</value></data>
+  <data name="OK" xml:space="preserve"><value>OK</value></data>
+  <data name="ServiceGoogle" xml:space="preserve"><value>Google Translate</value></data>
+  <data name="ServiceDeepL" xml:space="preserve"><value>DeepL</value></data>
+  <data name="ServiceOpenAI" xml:space="preserve"><value>OpenAI</value></data>
+  <data name="ServiceOllama" xml:space="preserve"><value>Ollama (lokal)</value></data>
+  <data name="ServiceBuiltIn" xml:space="preserve"><value>Indbygget AI</value></data>
+  <data name="ServiceDeepSeek" xml:space="preserve"><value>DeepSeek</value></data>
+  <data name="ServiceGroq" xml:space="preserve"><value>Groq</value></data>
+  <data name="ServiceZhipu" xml:space="preserve"><value>Zhipu</value></data>
+  <data name="ServiceGitHubModels" xml:space="preserve"><value>GitHub Models</value></data>
+  <data name="ServiceGemini" xml:space="preserve"><value>Gemini</value></data>
+  <data name="ServiceCustomOpenAI" xml:space="preserve"><value>Brugerdefineret OpenAI</value></data>
+  <data name="ServiceDoubao" xml:space="preserve"><value>Doubao</value></data>
+  <data name="ServiceCaiyun" xml:space="preserve"><value>Caiyun</value></data>
+  <data name="ServiceNiuTrans" xml:space="preserve"><value>NiuTrans</value></data>
+  <data name="ServiceLinguee" xml:space="preserve"><value>Linguee-ordbog</value></data>
+  <data name="TrayShow" xml:space="preserve"><value>Vis</value></data>
+  <data name="TrayShowMini" xml:space="preserve"><value>Minivindue</value></data>
+  <data name="TrayShowFixed" xml:space="preserve"><value>Fast vindue</value></data>
+  <data name="TraySettings" xml:space="preserve"><value>Indstillinger</value></data>
+  <data name="TrayExit" xml:space="preserve"><value>Afslut</value></data>
+  <data name="QuickTranslate" xml:space="preserve"><value>Hurtigoversættelse</value></data>
+  <data name="FixedTranslate" xml:space="preserve"><value>Fast oversættelse</value></data>
+  <data name="PinWindowTooltip" xml:space="preserve"><value>Fastgør vindue (bliv øverst)</value></data>
+  <data name="UILanguage" xml:space="preserve"><value>Grænsefladesprog</value></data>
+  <data name="RestartRequiredMessage" xml:space="preserve"><value>Genstart venligst applikationen for at sprogændringen træder i kraft.</value></data>
+  <data name="UILangEnglish" xml:space="preserve"><value>Engelsk</value></data>
+  <data name="UILangChineseSimplified" xml:space="preserve"><value>Kinesisk (forenklet)</value></data>
+  <data name="BehaviorHeader.Text" xml:space="preserve"><value>Adfærd</value></data>
+  <data name="UILanguageCombo.Header" xml:space="preserve"><value>Grænsefladesprog</value></data>
+  <data name="UILangEnglishItem.Content" xml:space="preserve"><value>English</value></data>
+  <data name="UILangChineseItem.Content" xml:space="preserve"><value>简体中文</value></data>
+  <data name="UILangJapaneseItem.Content" xml:space="preserve"><value>日本語</value></data>
+  <data name="UILangKoreanItem.Content" xml:space="preserve"><value>한국어</value></data>
+  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve"><value>繁體中文</value></data>
+  <data name="UILangFrenchItem.Content" xml:space="preserve"><value>Français</value></data>
+  <data name="UILangGermanItem.Content" xml:space="preserve"><value>Deutsch</value></data>
+  <data name="UILangVietnameseItem.Content" xml:space="preserve"><value>Tiếng Việt</value></data>
+  <data name="UILangThaiItem.Content" xml:space="preserve"><value>ไทย</value></data>
+  <data name="UILangArabicItem.Content" xml:space="preserve"><value>العربية</value></data>
+  <data name="UILangIndonesianItem.Content" xml:space="preserve"><value>Bahasa Indonesia</value></data>
+  <data name="UILangItalianItem.Content" xml:space="preserve"><value>Italiano</value></data>
+  <data name="UILangMalayItem.Content" xml:space="preserve"><value>Bahasa Melayu</value></data>
+  <data name="UILangHindiItem.Content" xml:space="preserve"><value>हिन्दी</value></data>
+  <data name="UILangDanishItem.Content" xml:space="preserve"><value>Dansk</value></data>
+  <data name="UILanguageDescription.Text" xml:space="preserve"><value>Vælg visningssprog for applikationens grænseflade. Genstart påkrævet.</value></data>
+  <data name="MinimizeToTrayToggle.Header" xml:space="preserve"><value>Minimer til systembakke</value></data>
+  <data name="ClipboardMonitorToggle.Header" xml:space="preserve"><value>Overvåg udklipsholder for tekst</value></data>
+  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve"><value>Oversæt med musemarkering (vælg tekst → klik svæveikon)</value></data>
+  <data name="AlwaysOnTopToggle.Header" xml:space="preserve"><value>Altid øverst</value></data>
+  <data name="LaunchAtStartupToggle.Header" xml:space="preserve"><value>Start ved Windows-opstart</value></data>
+  <data name="Close" xml:space="preserve"><value>Luk</value></data>
+  <data name="HideWindow" xml:space="preserve"><value>Skjul (Ctrl+Alt+F for at vise igen)</value></data>
+  <data name="EnableInternationalServices" xml:space="preserve"><value>Aktiver internationale tjenester</value></data>
+  <data name="EnableInternationalServicesDescription" xml:space="preserve"><value>Nogle tjenester (Google, DeepL, OpenAI, Gemini osv.) kræver international netværksadgang og er muligvis ikke tilgængelige i alle regioner.</value></data>
+  <data name="InternationalServiceUnavailableHint" xml:space="preserve"><value>Denne tjeneste er muligvis ikke tilgængelig i din region. Prøv Bing Translate eller andre regionskompatible tjenester. Du kan ændre aktiverede tjenester i Indstillinger.</value></data>
+  <data name="AppTheme" xml:space="preserve"><value>App-tema</value></data>
+  <data name="AppThemeDescription" xml:space="preserve"><value>Vælg udseende for Easydict. Vælg System for at følge Windows-temaet.</value></data>
+  <data name="ThemeSystem" xml:space="preserve"><value>System</value></data>
+  <data name="ThemeLight" xml:space="preserve"><value>Lyst</value></data>
+  <data name="ThemeDark" xml:space="preserve"><value>Mørkt</value></data>
+  <data name="UnsavedChangesTitle" xml:space="preserve"><value>Ikke-gemte ændringer</value></data>
+  <data name="UnsavedChangesMessage" xml:space="preserve"><value>Du har ikke-gemte ændringer. Vil du gemme dem, inden du forlader?</value></data>
+  <data name="DontSave" xml:space="preserve"><value>Gem ikke</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Annuller</value></data>
+  <data name="Test" xml:space="preserve"><value>Test</value></data>
+  <data name="Testing" xml:space="preserve"><value>Tester...</value></data>
+  <data name="TestSuccessTitle" xml:space="preserve"><value>Test lykkedes</value></data>
+  <data name="TestSuccessMessage" xml:space="preserve"><value>Konfiguration er gyldig. Oversættelse fuldført på {0}ms.</value></data>
+  <data name="TestFailedTitle" xml:space="preserve"><value>Test mislykkedes</value></data>
+  <data name="TestFailedMessage" xml:space="preserve"><value>Konfigurationstest mislykkedes: {0}</value></data>
+  <data name="TestNotConfigured" xml:space="preserve"><value>Konfigurer venligst tjenesten først (API-nøgle, endpoint osv.).</value></data>
+</root>

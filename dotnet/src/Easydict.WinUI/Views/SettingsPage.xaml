@@ -604,6 +604,14 @@
                             <ComboBoxItem x:Uid="UILangKoreanItem" Content="한국어" Tag="ko-KR" />
                             <ComboBoxItem x:Uid="UILangFrenchItem" Content="Français" Tag="fr-FR" />
                             <ComboBoxItem x:Uid="UILangGermanItem" Content="Deutsch" Tag="de-DE" />
+                            <ComboBoxItem x:Uid="UILangVietnameseItem" Content="Tiếng Việt" Tag="vi-VN" />
+                            <ComboBoxItem x:Uid="UILangThaiItem" Content="ไทย" Tag="th-TH" />
+                            <ComboBoxItem x:Uid="UILangArabicItem" Content="العربية" Tag="ar-SA" />
+                            <ComboBoxItem x:Uid="UILangIndonesianItem" Content="Bahasa Indonesia" Tag="id-ID" />
+                            <ComboBoxItem x:Uid="UILangItalianItem" Content="Italiano" Tag="it-IT" />
+                            <ComboBoxItem x:Uid="UILangMalayItem" Content="Bahasa Melayu" Tag="ms-MY" />
+                            <ComboBoxItem x:Uid="UILangHindiItem" Content="हिन्दी" Tag="hi-IN" />
+                            <ComboBoxItem x:Uid="UILangDanishItem" Content="Dansk" Tag="da-DK" />
                         </ComboBox>
                         <TextBlock x:Uid="UILanguageDescription"
                                    Text="Select the display language for the application interface. Restart required."

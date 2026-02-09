@@ -34,6 +34,7 @@ public sealed partial class FixedWindow : Window
     private AppWindow? _appWindow;
     private OverlappedPresenter? _presenter;
     private bool _isLoaded;
+    private bool _isQuerying;
     private volatile bool _isClosing;
     private readonly TargetLanguageSelector _targetLanguageSelector;
     private bool _suppressTargetLanguageSelectionChanged;
@@ -565,10 +566,18 @@ public sealed partial class FixedWindow : Window
     {
         if (_isClosing) return;
 
-        TranslateButton.IsEnabled = !loading;
-        LoadingRing.IsActive = loading;
-        LoadingRing.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
-        TranslateIcon.Visibility = loading ? Visibility.Collapsed : Visibility.Visible;
+        _isQuerying = loading;
+
+        var loc = LocalizationService.Instance;
+        ToolTipService.SetToolTip(TranslateButton,
+            loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip"));
+
+        // Swap icon: show cancel (X) glyph during query, translate glyph otherwise
+        TranslateIcon.Glyph = loading ? "\uE711" : "\uE8C1";
+
+        // Hide progress ring (cancel icon replaces it)
+        LoadingRing.IsActive = false;
+        LoadingRing.Visibility = Visibility.Collapsed;
     }
     
     private async Task StartQueryAsync()
@@ -709,7 +718,13 @@ public sealed partial class FixedWindow : Window
                 }
                 catch (OperationCanceledException)
                 {
-                    // Cancelled, ignore
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        serviceResult.IsLoading = false;
+                        serviceResult.IsStreaming = false;
+                        serviceResult.ClearQueried();
+                    });
                 }
                 catch (TranslationException ex)
                 {
@@ -755,11 +770,13 @@ public sealed partial class FixedWindow : Window
         }
         catch (OperationCanceledException)
         {
-            // Cancelled, ignore
+            // Query was cancelled - reset all service results that may be stuck in loading state
+            ResetAllServiceResultsLoadingState();
         }
         catch (Exception ex)
         {
             StatusText.Text = $"{LocalizationService.Instance.GetString("StatusError")}: {ex.Message}";
+            ResetAllServiceResultsLoadingState();
         }
         finally
         {
@@ -792,6 +809,20 @@ public sealed partial class FixedWindow : Window
         }
 
         return trackedTask;
+    }
+
+    /// <summary>
+    /// Reset all service results to clear loading/streaming state.
+    /// Called when an exception occurs before per-service tasks can handle cleanup.
+    /// </summary>
+    private void ResetAllServiceResultsLoadingState()
+    {
+        foreach (var serviceResult in _serviceResults)
+        {
+            serviceResult.IsLoading = false;
+            serviceResult.IsStreaming = false;
+            serviceResult.StreamingText = "";
+        }
     }
 
     /// <summary>
@@ -940,6 +971,12 @@ public sealed partial class FixedWindow : Window
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)
     {
+        if (_isQuerying)
+        {
+            CancelCurrentQuery();
+            return;
+        }
+
         await StartQueryTrackedAsync();
     }
 

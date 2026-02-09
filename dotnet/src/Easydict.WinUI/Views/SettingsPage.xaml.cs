@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Easydict.TranslationService;
@@ -33,6 +35,9 @@ public sealed partial class SettingsPage : Page
     private readonly ObservableCollection<ServiceCheckItem> _mainWindowServices = [];
     private readonly ObservableCollection<ServiceCheckItem> _miniWindowServices = [];
     private readonly ObservableCollection<ServiceCheckItem> _fixedWindowServices = [];
+
+    // Available language checkbox items for the ItemsRepeater
+    private List<LanguageCheckboxItem> _languageItems = [];
 
     // Navigation sections for the floating sidebar
     private List<NavSection> _navSections = [];
@@ -85,29 +90,14 @@ public sealed partial class SettingsPage : Page
         SecondLanguageCombo.Header = loc.GetString("SecondLanguage");
         AutoSelectTargetToggle.Header = loc.GetString("AutoSelectTargetLanguage");
 
-        // Localize Language ComboBox items (these already have emoji flags)
-        // Keep emoji, translate language names
-        if (FirstLanguageCombo.Items.Count >= 7)
-        {
-            ((ComboBoxItem)FirstLanguageCombo.Items[0]).Content = $"🇨🇳 {loc.GetString("LangChineseSimplified")}";
-            ((ComboBoxItem)FirstLanguageCombo.Items[1]).Content = $"🇺🇸 {loc.GetString("LangEnglish")}";
-            ((ComboBoxItem)FirstLanguageCombo.Items[2]).Content = $"🇯🇵 {loc.GetString("LangJapanese")}";
-            ((ComboBoxItem)FirstLanguageCombo.Items[3]).Content = $"🇰🇷 {loc.GetString("LangKorean")}";
-            ((ComboBoxItem)FirstLanguageCombo.Items[4]).Content = $"🇫🇷 {loc.GetString("LangFrench")}";
-            ((ComboBoxItem)FirstLanguageCombo.Items[5]).Content = $"🇩🇪 {loc.GetString("LangGerman")}";
-            ((ComboBoxItem)FirstLanguageCombo.Items[6]).Content = $"🇪🇸 {loc.GetString("LangSpanish")}";
-        }
+        // First/Second Language combos are populated dynamically in OnPageLoaded
+        // via PopulateSettingsLanguageCombo() — no hardcoded localization needed
 
-        if (SecondLanguageCombo.Items.Count >= 7)
-        {
-            ((ComboBoxItem)SecondLanguageCombo.Items[0]).Content = $"🇺🇸 {loc.GetString("LangEnglish")}";
-            ((ComboBoxItem)SecondLanguageCombo.Items[1]).Content = $"🇨🇳 {loc.GetString("LangChineseSimplified")}";
-            ((ComboBoxItem)SecondLanguageCombo.Items[2]).Content = $"🇯🇵 {loc.GetString("LangJapanese")}";
-            ((ComboBoxItem)SecondLanguageCombo.Items[3]).Content = $"🇰🇷 {loc.GetString("LangKorean")}";
-            ((ComboBoxItem)SecondLanguageCombo.Items[4]).Content = $"🇫🇷 {loc.GetString("LangFrench")}";
-            ((ComboBoxItem)SecondLanguageCombo.Items[5]).Content = $"🇩🇪 {loc.GetString("LangGerman")}";
-            ((ComboBoxItem)SecondLanguageCombo.Items[6]).Content = $"🇪🇸 {loc.GetString("LangSpanish")}";
-        }
+        // Available Languages section
+        if (AvailableLanguagesHeaderText != null)
+            AvailableLanguagesHeaderText.Text = loc.GetString("AvailableLanguages");
+        if (AvailableLanguagesDescText != null)
+            AvailableLanguagesDescText.Text = loc.GetString("AvailableLanguagesDesc");
 
         // Service Configuration section
         if (ServiceConfigurationHeaderText != null)
@@ -225,6 +215,14 @@ public sealed partial class SettingsPage : Page
         MainWindowServicesPanel.ItemsSource = _mainWindowServices;
         MiniWindowServicesPanel.ItemsSource = _miniWindowServices;
         FixedWindowServicesPanel.ItemsSource = _fixedWindowServices;
+
+        // Populate available languages checkbox grid
+        PopulateLanguageCheckboxGrid();
+
+        // Populate First/Second Language combos dynamically
+        var loc = LocalizationService.Instance;
+        PopulateSettingsLanguageCombo(FirstLanguageCombo, loc);
+        PopulateSettingsLanguageCombo(SecondLanguageCombo, loc);
 
         LoadSettings();
         InitializeNavigation();
@@ -693,6 +691,12 @@ public sealed partial class SettingsPage : Page
         _settings.FirstLanguage = firstLang;
         _settings.SecondLanguage = secondLang;
         _settings.AutoSelectTargetLanguage = AutoSelectTargetToggle.IsOn;
+
+        // Save selected languages from checkbox grid
+        _settings.SelectedLanguages = _languageItems
+            .Where(item => item.IsSelected)
+            .Select(item => item.Tag)
+            .ToList();
 
         // Save DeepL settings
         var deepLKey = DeepLKeyBox.Password;
@@ -1630,6 +1634,198 @@ public sealed partial class SettingsPage : Page
             {
                 _currentDialog = null;
             }
+        }
+    }
+
+    #endregion
+
+    #region Available Languages Checkbox
+
+    /// <summary>
+    /// Build the language checkbox items from AllLanguages, sorted by group
+    /// with the user's FirstLanguage group shown first.
+    /// </summary>
+    private void PopulateLanguageCheckboxGrid()
+    {
+        var loc = LocalizationService.Instance;
+        var selectedSet = new HashSet<string>(_settings.SelectedLanguages, StringComparer.OrdinalIgnoreCase);
+
+        // Determine which group the user's FirstLanguage belongs to
+        int firstLangGroup = 0;
+        foreach (var entry in LanguageComboHelper.AllLanguages)
+        {
+            if (string.Equals(entry.Tag, _settings.FirstLanguage, StringComparison.OrdinalIgnoreCase))
+            {
+                firstLangGroup = entry.GroupOrder;
+                break;
+            }
+        }
+
+        _languageItems = LanguageComboHelper.AllLanguages
+            .OrderBy(e => e.GroupOrder == firstLangGroup ? 0 : 1) // User's group first
+            .ThenBy(e => e.GroupOrder) // Then by group order
+            .Select(entry =>
+            {
+                var emoji = entry.Language.GetFlagEmoji();
+                var name = loc.GetString(entry.LocalizationKey);
+                var isEnglish = entry.Tag == "en";
+
+                var item = new LanguageCheckboxItem
+                {
+                    Language = entry.Language,
+                    Tag = entry.Tag,
+                    DisplayText = $"{emoji} {name}",
+                    IsEnabled = !isEnglish, // English is always selected and disabled
+                    IsSelected = isEnglish || selectedSet.Contains(entry.Tag)
+                };
+
+                item.PropertyChanged += OnLanguageCheckboxChanged;
+                return item;
+            })
+            .ToList();
+
+        // Set up the ItemTemplate programmatically since LanguageCheckboxItem is a private inner class
+        LanguageCheckboxGrid.ItemTemplate = CreateLanguageCheckboxTemplate();
+        LanguageCheckboxGrid.ItemsSource = _languageItems;
+    }
+
+    /// <summary>
+    /// Creates a DataTemplate for language checkbox items using XamlReader.
+    /// Uses Binding (not x:Bind) since the model type is private.
+    /// </summary>
+    private static Microsoft.UI.Xaml.DataTemplate CreateLanguageCheckboxTemplate()
+    {
+        var xaml = """
+            <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+                <CheckBox Content="{Binding DisplayText}"
+                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                          IsEnabled="{Binding IsEnabled}"
+                          MinWidth="160" Padding="4,0" />
+            </DataTemplate>
+            """;
+        return (Microsoft.UI.Xaml.DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
+    }
+
+    /// <summary>
+    /// Handle checkbox changes in the Available Languages grid.
+    /// Validates minimum selection and updates dependent combos.
+    /// </summary>
+    private void OnLanguageCheckboxChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_isLoading || e.PropertyName != nameof(LanguageCheckboxItem.IsSelected)) return;
+        if (sender is not LanguageCheckboxItem changedItem) return;
+
+        // Count currently selected languages
+        var selectedCount = _languageItems.Count(item => item.IsSelected);
+
+        // Enforce minimum of 2 selected languages
+        if (selectedCount < 2 && !changedItem.IsSelected)
+        {
+            // Revert the uncheck
+            _isLoading = true;
+            changedItem.IsSelected = true;
+            _isLoading = false;
+            return;
+        }
+
+        // Build new selected languages list
+        var newSelectedLanguages = _languageItems
+            .Where(item => item.IsSelected)
+            .Select(item => item.Tag)
+            .ToList();
+
+        // Check if First/Second language was unchecked — reset if so
+        var firstLang = GetSelectedTag(FirstLanguageCombo) ?? _settings.FirstLanguage;
+        var secondLang = GetSelectedTag(SecondLanguageCombo) ?? _settings.SecondLanguage;
+        var needsComboRebuild = false;
+
+        if (!newSelectedLanguages.Contains(firstLang, StringComparer.OrdinalIgnoreCase))
+        {
+            // Reset First Language to the first available selected language (prefer "zh")
+            firstLang = newSelectedLanguages.Contains("zh") ? "zh" : newSelectedLanguages[0];
+            needsComboRebuild = true;
+        }
+
+        if (!newSelectedLanguages.Contains(secondLang, StringComparer.OrdinalIgnoreCase))
+        {
+            // Reset Second Language to a still-selected language that differs from First
+            secondLang = newSelectedLanguages.FirstOrDefault(t =>
+                !string.Equals(t, firstLang, StringComparison.OrdinalIgnoreCase)) ?? newSelectedLanguages[0];
+            needsComboRebuild = true;
+        }
+
+        // Update settings temporarily for combo helpers to pick up
+        _settings.SelectedLanguages = newSelectedLanguages;
+
+        // Rebuild First/Second Language combos
+        if (needsComboRebuild || true) // Always rebuild since available languages changed
+        {
+            _isLoading = true;
+            try
+            {
+                var loc = LocalizationService.Instance;
+                PopulateSettingsLanguageCombo(FirstLanguageCombo, loc);
+                PopulateSettingsLanguageCombo(SecondLanguageCombo, loc);
+                SelectComboByTag(FirstLanguageCombo, firstLang);
+                SelectComboByTag(SecondLanguageCombo, secondLang);
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+        }
+
+        OnSettingChanged(null!, null!);
+    }
+
+    /// <summary>
+    /// Populate a settings First/Second language combo with active languages (flag emoji + name).
+    /// Unlike the window combos, these don't have Auto Detect.
+    /// </summary>
+    private static void PopulateSettingsLanguageCombo(ComboBox combo, LocalizationService loc)
+    {
+        combo.Items.Clear();
+        foreach (var entry in LanguageComboHelper.SelectableLanguages)
+        {
+            var emoji = entry.Language.GetFlagEmoji();
+            var name = loc.GetString(entry.LocalizationKey);
+            combo.Items.Add(new ComboBoxItem
+            {
+                Content = $"{emoji} {name}",
+                Tag = entry.Tag
+            });
+        }
+    }
+
+    /// <summary>
+    /// Model class for language checkbox items in the Available Languages grid.
+    /// </summary>
+    private sealed class LanguageCheckboxItem : INotifyPropertyChanged
+    {
+        public TranslationLanguage Language { get; init; }
+        public string Tag { get; init; } = string.Empty;
+        public string DisplayText { get; init; } = string.Empty;
+        public bool IsEnabled { get; init; } = true;
+
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (_isSelected != value)
+                {
+                    _isSelected = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 

@@ -37,6 +37,12 @@ public sealed class SettingsService
     public string SecondLanguage { get; set; } = "en";  // English
     public bool AutoSelectTargetLanguage { get; set; } = true;
 
+    /// <summary>
+    /// Languages available in source/target pickers across all windows.
+    /// Users configure this in Settings → Available Languages.
+    /// </summary>
+    public List<string> SelectedLanguages { get; set; } = ["zh", "en", "ja", "ko", "fr", "de", "es"];
+
     // API Keys
     public string? DeepLApiKey { get; set; }
     public bool DeepLUseFreeApi { get; set; } = true;
@@ -294,6 +300,7 @@ public sealed class SettingsService
         FirstLanguage = GetValue(nameof(FirstLanguage), "zh");
         SecondLanguage = GetValue(nameof(SecondLanguage), "en");
         AutoSelectTargetLanguage = GetValue(nameof(AutoSelectTargetLanguage), true);
+        SelectedLanguages = GetStringList(nameof(SelectedLanguages), ["zh", "en", "ja", "ko", "fr", "de", "es"]);
 
         // Migration: Import old TargetLanguage if FirstLanguage not explicitly set
         if (_settings.ContainsKey("TargetLanguage") && !_settings.ContainsKey("FirstLanguage"))
@@ -443,6 +450,7 @@ public sealed class SettingsService
         _settings[nameof(FirstLanguage)] = FirstLanguage;
         _settings[nameof(SecondLanguage)] = SecondLanguage;
         _settings[nameof(AutoSelectTargetLanguage)] = AutoSelectTargetLanguage;
+        _settings[nameof(SelectedLanguages)] = SelectedLanguages;
 
         _settings[nameof(DeepLApiKey)] = DeepLApiKey ?? string.Empty;
         _settings[nameof(DeepLUseFreeApi)] = DeepLUseFreeApi;

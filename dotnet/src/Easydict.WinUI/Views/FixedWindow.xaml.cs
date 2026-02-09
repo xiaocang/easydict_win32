@@ -111,22 +111,18 @@ public sealed partial class FixedWindow : Window
         // Window title - keep "Easydict" brand name, only localize "Fixed"
         this.Title = $"Easydict ᵇᵉᵗᵃ {loc.GetString("FixedTranslate")}";
 
-        // Source Language ComboBox items - 9 items: Auto + 8 languages
-        if (SourceLangCombo.Items.Count >= 9)
+        // Populate language combos dynamically from user's selected languages
+        _suppressSourceLanguageSelectionChanged = true;
+        _suppressTargetLanguageSelectionChanged = true;
+        try
         {
-            ((ComboBoxItem)SourceLangCombo.Items[0]).Content = loc.GetString("Auto");
-            for (int i = 0; i < LanguageComboHelper.SelectableLanguages.Length; i++)
-            {
-                ((ComboBoxItem)SourceLangCombo.Items[i + 1]).Content =
-                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
-            }
+            LanguageComboHelper.PopulateSourceCombo(SourceLangCombo, loc);
+            LanguageComboHelper.PopulateTargetCombo(TargetLangCombo, loc);
         }
-
-        // Target Language ComboBox items - 8 items (dynamically rebuilt)
-        for (int i = 0; i < TargetLangCombo.Items.Count && i < LanguageComboHelper.SelectableLanguages.Length; i++)
+        finally
         {
-            ((ComboBoxItem)TargetLangCombo.Items[i]).Content =
-                loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
+            _suppressSourceLanguageSelectionChanged = false;
+            _suppressTargetLanguageSelectionChanged = false;
         }
 
         // Placeholders

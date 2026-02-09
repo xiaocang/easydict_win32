@@ -46,13 +46,7 @@
                             Header="First Language"
                             Width="250"
                             HorizontalAlignment="Left">
-                            <ComboBoxItem Content="🇨🇳 Chinese (Simplified)" Tag="zh" />
-                            <ComboBoxItem Content="🇺🇸 English" Tag="en" />
-                            <ComboBoxItem Content="🇯🇵 Japanese" Tag="ja" />
-                            <ComboBoxItem Content="🇰🇷 Korean" Tag="ko" />
-                            <ComboBoxItem Content="🇫🇷 French" Tag="fr" />
-                            <ComboBoxItem Content="🇩🇪 German" Tag="de" />
-                            <ComboBoxItem Content="🇪🇸 Spanish" Tag="es" />
+                            <!-- Populated dynamically in code-behind -->
                         </ComboBox>
 
                         <!-- Second Language -->
@@ -61,13 +55,7 @@
                             Header="Second Language"
                             Width="250"
                             HorizontalAlignment="Left">
-                            <ComboBoxItem Content="🇺🇸 English" Tag="en" />
-                            <ComboBoxItem Content="🇨🇳 Chinese (Simplified)" Tag="zh" />
-                            <ComboBoxItem Content="🇯🇵 Japanese" Tag="ja" />
-                            <ComboBoxItem Content="🇰🇷 Korean" Tag="ko" />
-                            <ComboBoxItem Content="🇫🇷 French" Tag="fr" />
-                            <ComboBoxItem Content="🇩🇪 German" Tag="de" />
-                            <ComboBoxItem Content="🇪🇸 Spanish" Tag="es" />
+                            <!-- Populated dynamically in code-behind -->
                         </ComboBox>
 
                         <!-- Explanation -->
@@ -87,6 +75,24 @@
                             IsOn="True" />
                     </StackPanel>
                 </Border>
+
+                <!-- Available Languages -->
+                <Expander x:Name="AvailableLanguagesExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock x:Name="AvailableLanguagesHeaderText" Text="Available Languages" FontWeight="SemiBold" />
+                    </Expander.Header>
+                    <StackPanel Spacing="8" Padding="4">
+                        <TextBlock x:Name="AvailableLanguagesDescText"
+                                   Text="Select languages available in source/target pickers. At least 2 required."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <ItemsRepeater x:Name="LanguageCheckboxGrid">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout MinItemWidth="180" MinColumnSpacing="8" MinRowSpacing="4"
+                                                   ItemsStretch="Fill" MaximumRowsOrColumns="4" />
+                            </ItemsRepeater.Layout>
+                        </ItemsRepeater>
+                    </StackPanel>
+                </Expander>
             </StackPanel>
 
             <!-- Enabled Services for Each Window -->

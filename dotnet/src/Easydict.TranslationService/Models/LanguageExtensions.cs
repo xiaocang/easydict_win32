@@ -77,6 +77,57 @@ public static class LanguageExtensions
     };
 
     /// <summary>
+    /// Get flag emoji for a language.
+    /// </summary>
+    public static string GetFlagEmoji(this Language lang) => lang switch
+    {
+        Language.SimplifiedChinese => "\U0001F1E8\U0001F1F3",  // 🇨🇳
+        Language.TraditionalChinese => "\U0001F1F9\U0001F1FC",  // 🇹🇼
+        Language.ClassicalChinese => "\U0001F1E8\U0001F1F3",    // 🇨🇳
+        Language.English => "\U0001F1FA\U0001F1F8",              // 🇺🇸
+        Language.Japanese => "\U0001F1EF\U0001F1F5",             // 🇯🇵
+        Language.Korean => "\U0001F1F0\U0001F1F7",               // 🇰🇷
+        Language.French => "\U0001F1EB\U0001F1F7",               // 🇫🇷
+        Language.Spanish => "\U0001F1EA\U0001F1F8",              // 🇪🇸
+        Language.Portuguese => "\U0001F1E7\U0001F1F7",           // 🇧🇷
+        Language.Italian => "\U0001F1EE\U0001F1F9",              // 🇮🇹
+        Language.German => "\U0001F1E9\U0001F1EA",               // 🇩🇪
+        Language.Russian => "\U0001F1F7\U0001F1FA",              // 🇷🇺
+        Language.Arabic => "\U0001F1F8\U0001F1E6",               // 🇸🇦
+        Language.Swedish => "\U0001F1F8\U0001F1EA",              // 🇸🇪
+        Language.Romanian => "\U0001F1F7\U0001F1F4",             // 🇷🇴
+        Language.Thai => "\U0001F1F9\U0001F1ED",                 // 🇹🇭
+        Language.Dutch => "\U0001F1F3\U0001F1F1",                // 🇳🇱
+        Language.Hungarian => "\U0001F1ED\U0001F1FA",            // 🇭🇺
+        Language.Greek => "\U0001F1EC\U0001F1F7",                // 🇬🇷
+        Language.Danish => "\U0001F1E9\U0001F1F0",               // 🇩🇰
+        Language.Finnish => "\U0001F1EB\U0001F1EE",              // 🇫🇮
+        Language.Polish => "\U0001F1F5\U0001F1F1",               // 🇵🇱
+        Language.Czech => "\U0001F1E8\U0001F1FF",                // 🇨🇿
+        Language.Turkish => "\U0001F1F9\U0001F1F7",              // 🇹🇷
+        Language.Ukrainian => "\U0001F1FA\U0001F1E6",            // 🇺🇦
+        Language.Bulgarian => "\U0001F1E7\U0001F1EC",            // 🇧🇬
+        Language.Indonesian => "\U0001F1EE\U0001F1E9",           // 🇮🇩
+        Language.Malay => "\U0001F1F2\U0001F1FE",                // 🇲🇾
+        Language.Vietnamese => "\U0001F1FB\U0001F1F3",           // 🇻🇳
+        Language.Persian => "\U0001F1EE\U0001F1F7",              // 🇮🇷
+        Language.Hindi => "\U0001F1EE\U0001F1F3",                // 🇮🇳
+        Language.Telugu => "\U0001F1EE\U0001F1F3",               // 🇮🇳
+        Language.Tamil => "\U0001F1EE\U0001F1F3",                // 🇮🇳
+        Language.Urdu => "\U0001F1F5\U0001F1F0",                 // 🇵🇰
+        Language.Filipino => "\U0001F1F5\U0001F1ED",             // 🇵🇭
+        Language.Bengali => "\U0001F1E7\U0001F1E9",              // 🇧🇩
+        Language.Norwegian => "\U0001F1F3\U0001F1F4",            // 🇳🇴
+        Language.Hebrew => "\U0001F1EE\U0001F1F1",               // 🇮🇱
+        Language.Slovak => "\U0001F1F8\U0001F1F0",               // 🇸🇰
+        Language.Slovenian => "\U0001F1F8\U0001F1EE",            // 🇸🇮
+        Language.Estonian => "\U0001F1EA\U0001F1EA",              // 🇪🇪
+        Language.Latvian => "\U0001F1F1\U0001F1FB",              // 🇱🇻
+        Language.Lithuanian => "\U0001F1F1\U0001F1F9",           // 🇱🇹
+        _ => "\U0001F310"                                        // 🌐
+    };
+
+    /// <summary>
     /// Convert language to simplified code for settings storage.
     /// Uses 2-letter ISO codes where possible.
     /// </summary>

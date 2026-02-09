@@ -125,6 +125,117 @@
   <data name="LangSpanish" xml:space="preserve">
     <value>Spanish</value>
   </data>
+  <data name="LangClassicalChinese" xml:space="preserve">
+    <value>Classical Chinese</value>
+  </data>
+  <data name="LangDutch" xml:space="preserve">
+    <value>Dutch</value>
+  </data>
+  <data name="LangSwedish" xml:space="preserve">
+    <value>Swedish</value>
+  </data>
+  <data name="LangNorwegian" xml:space="preserve">
+    <value>Norwegian</value>
+  </data>
+  <data name="LangDanish" xml:space="preserve">
+    <value>Danish</value>
+  </data>
+  <data name="LangPortuguese" xml:space="preserve">
+    <value>Portuguese</value>
+  </data>
+  <data name="LangItalian" xml:space="preserve">
+    <value>Italian</value>
+  </data>
+  <data name="LangRomanian" xml:space="preserve">
+    <value>Romanian</value>
+  </data>
+  <data name="LangRussian" xml:space="preserve">
+    <value>Russian</value>
+  </data>
+  <data name="LangPolish" xml:space="preserve">
+    <value>Polish</value>
+  </data>
+  <data name="LangCzech" xml:space="preserve">
+    <value>Czech</value>
+  </data>
+  <data name="LangUkrainian" xml:space="preserve">
+    <value>Ukrainian</value>
+  </data>
+  <data name="LangBulgarian" xml:space="preserve">
+    <value>Bulgarian</value>
+  </data>
+  <data name="LangSlovak" xml:space="preserve">
+    <value>Slovak</value>
+  </data>
+  <data name="LangSlovenian" xml:space="preserve">
+    <value>Slovenian</value>
+  </data>
+  <data name="LangEstonian" xml:space="preserve">
+    <value>Estonian</value>
+  </data>
+  <data name="LangLatvian" xml:space="preserve">
+    <value>Latvian</value>
+  </data>
+  <data name="LangLithuanian" xml:space="preserve">
+    <value>Lithuanian</value>
+  </data>
+  <data name="LangGreek" xml:space="preserve">
+    <value>Greek</value>
+  </data>
+  <data name="LangHungarian" xml:space="preserve">
+    <value>Hungarian</value>
+  </data>
+  <data name="LangFinnish" xml:space="preserve">
+    <value>Finnish</value>
+  </data>
+  <data name="LangTurkish" xml:space="preserve">
+    <value>Turkish</value>
+  </data>
+  <data name="LangArabic" xml:space="preserve">
+    <value>Arabic</value>
+  </data>
+  <data name="LangPersian" xml:space="preserve">
+    <value>Persian</value>
+  </data>
+  <data name="LangHebrew" xml:space="preserve">
+    <value>Hebrew</value>
+  </data>
+  <data name="LangHindi" xml:space="preserve">
+    <value>Hindi</value>
+  </data>
+  <data name="LangBengali" xml:space="preserve">
+    <value>Bengali</value>
+  </data>
+  <data name="LangTamil" xml:space="preserve">
+    <value>Tamil</value>
+  </data>
+  <data name="LangTelugu" xml:space="preserve">
+    <value>Telugu</value>
+  </data>
+  <data name="LangUrdu" xml:space="preserve">
+    <value>Urdu</value>
+  </data>
+  <data name="LangVietnamese" xml:space="preserve">
+    <value>Vietnamese</value>
+  </data>
+  <data name="LangThai" xml:space="preserve">
+    <value>Thai</value>
+  </data>
+  <data name="LangIndonesian" xml:space="preserve">
+    <value>Indonesian</value>
+  </data>
+  <data name="LangMalay" xml:space="preserve">
+    <value>Malay</value>
+  </data>
+  <data name="LangFilipino" xml:space="preserve">
+    <value>Filipino</value>
+  </data>
+  <data name="AvailableLanguages" xml:space="preserve">
+    <value>Available Languages</value>
+  </data>
+  <data name="AvailableLanguagesDesc" xml:space="preserve">
+    <value>Select languages available in source/target pickers. At least 2 required.</value>
+  </data>
 
   <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">

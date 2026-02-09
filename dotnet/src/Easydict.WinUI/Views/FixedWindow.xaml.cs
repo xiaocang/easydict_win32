@@ -718,7 +718,13 @@ public sealed partial class FixedWindow : Window
                 }
                 catch (OperationCanceledException)
                 {
-                    // Cancelled, ignore
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        serviceResult.IsLoading = false;
+                        serviceResult.IsStreaming = false;
+                        serviceResult.ClearQueried();
+                    });
                 }
                 catch (TranslationException ex)
                 {
@@ -764,11 +770,13 @@ public sealed partial class FixedWindow : Window
         }
         catch (OperationCanceledException)
         {
-            // Cancelled, ignore
+            // Query was cancelled - reset all service results that may be stuck in loading state
+            ResetAllServiceResultsLoadingState();
         }
         catch (Exception ex)
         {
             StatusText.Text = $"{LocalizationService.Instance.GetString("StatusError")}: {ex.Message}";
+            ResetAllServiceResultsLoadingState();
         }
         finally
         {
@@ -801,6 +809,20 @@ public sealed partial class FixedWindow : Window
         }
 
         return trackedTask;
+    }
+
+    /// <summary>
+    /// Reset all service results to clear loading/streaming state.
+    /// Called when an exception occurs before per-service tasks can handle cleanup.
+    /// </summary>
+    private void ResetAllServiceResultsLoadingState()
+    {
+        foreach (var serviceResult in _serviceResults)
+        {
+            serviceResult.IsLoading = false;
+            serviceResult.IsStreaming = false;
+            serviceResult.StreamingText = "";
+        }
     }
 
     /// <summary>

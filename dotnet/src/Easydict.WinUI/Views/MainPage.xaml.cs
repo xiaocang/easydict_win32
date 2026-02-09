@@ -739,6 +739,7 @@ namespace Easydict.WinUI.Views
                             if (_isClosing) return;
                             serviceResult.IsLoading = false;
                             serviceResult.IsStreaming = false;
+                            serviceResult.ClearQueried();
                         });
                         return (bool?)null; // Cancelled, don't count
                     }

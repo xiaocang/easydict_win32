@@ -21,6 +21,7 @@ description: |-
   - Dunkles/Helles Design: Folgt dem Windows-Systemdesign
   - Text-zu-Sprache: Quell- und übersetzten Text anhören
   - Hohe DPI-Unterstützung: Gestochen scharf auf jedem Display
+  - Über 40 Sprachen: Anpassbare Sprachauswahl — wählen Sie aus über 40 Sprachen aus Ostasien, Europa, dem Nahen Osten, Südasien und Südostasien für die Quell-/Zielsprachauswahl
 
   Perfekt für Studenten, Berufstätige, Übersetzer und alle, die schnelle, zuverlässige Übersetzungen in mehreren Sprachen benötigen.
 features:
@@ -36,6 +37,7 @@ features:
 - HTTP-Proxy-Unterstützung
 - Lokale LLM-Unterstützung über Ollama
 - Unterstützung benutzerdefinierter OpenAI-kompatibler Dienste
+- Über 40 anpassbare Quell- und Zielsprachen
 - Hohe DPI- und Multi-Monitor-Unterstützung
 keywords:
 - Übersetzer

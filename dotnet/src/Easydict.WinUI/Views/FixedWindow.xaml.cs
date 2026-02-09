@@ -68,9 +68,6 @@ public sealed partial class FixedWindow : Window
         // Handle window events
         this.Closed += OnWindowClosed;
 
-        // Apply settings
-        ApplySettings();
-
         // Initialize service result controls
         InitializeServiceResults();
 
@@ -83,8 +80,9 @@ public sealed partial class FixedWindow : Window
             content.Loaded += (s, e) =>
             {
                 _isLoaded = true;
-                // Apply localization after content is loaded
+                // Apply localization first (populates combos), then settings (selects saved language)
                 ApplyLocalization();
+                ApplySettings();
             };
         }
 
@@ -111,22 +109,18 @@ public sealed partial class FixedWindow : Window
         // Window title - keep "Easydict" brand name, only localize "Fixed"
         this.Title = $"Easydict ᵇᵉᵗᵃ {loc.GetString("FixedTranslate")}";
 
-        // Source Language ComboBox items - 9 items: Auto + 8 languages
-        if (SourceLangCombo.Items.Count >= 9)
+        // Populate language combos dynamically from user's selected languages
+        _suppressSourceLanguageSelectionChanged = true;
+        _suppressTargetLanguageSelectionChanged = true;
+        try
         {
-            ((ComboBoxItem)SourceLangCombo.Items[0]).Content = loc.GetString("Auto");
-            for (int i = 0; i < LanguageComboHelper.SelectableLanguages.Length; i++)
-            {
-                ((ComboBoxItem)SourceLangCombo.Items[i + 1]).Content =
-                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
-            }
+            LanguageComboHelper.PopulateSourceCombo(SourceLangCombo, loc);
+            LanguageComboHelper.PopulateTargetCombo(TargetLangCombo, loc);
         }
-
-        // Target Language ComboBox items - 8 items (dynamically rebuilt)
-        for (int i = 0; i < TargetLangCombo.Items.Count && i < LanguageComboHelper.SelectableLanguages.Length; i++)
+        finally
         {
-            ((ComboBoxItem)TargetLangCombo.Items[i]).Content =
-                loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
+            _suppressSourceLanguageSelectionChanged = false;
+            _suppressTargetLanguageSelectionChanged = false;
         }
 
         // Placeholders
@@ -1123,6 +1117,17 @@ public sealed partial class FixedWindow : Window
     public void RefreshServiceResults()
     {
         InitializeServiceResults();
+    }
+
+    /// <summary>
+    /// Refresh language combo boxes when SelectedLanguages changes in settings.
+    /// Repopulates combos and restores the saved target language selection.
+    /// </summary>
+    public void RefreshLanguageCombos()
+    {
+        if (!_isLoaded) return;
+        ApplyLocalization();
+        ApplySettings();
     }
 
     /// <summary>

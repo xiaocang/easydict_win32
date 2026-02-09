@@ -104,6 +104,14 @@ public sealed class MiniWindowService : IDisposable
     }
 
     /// <summary>
+    /// Refresh language combo boxes when SelectedLanguages changes.
+    /// </summary>
+    public void RefreshLanguageCombos()
+    {
+        _miniWindow?.RefreshLanguageCombos();
+    }
+
+    /// <summary>
     /// Apply theme to the mini window.
     /// </summary>
     public void ApplyTheme(ElementTheme theme)

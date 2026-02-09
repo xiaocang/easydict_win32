@@ -122,6 +122,117 @@
   <data name="LangSpanish" xml:space="preserve">
     <value>Espagnol</value>
   </data>
+  <data name="LangClassicalChinese" xml:space="preserve">
+    <value>Chinois classique</value>
+  </data>
+  <data name="LangDutch" xml:space="preserve">
+    <value>Néerlandais</value>
+  </data>
+  <data name="LangSwedish" xml:space="preserve">
+    <value>Suédois</value>
+  </data>
+  <data name="LangNorwegian" xml:space="preserve">
+    <value>Norvégien</value>
+  </data>
+  <data name="LangDanish" xml:space="preserve">
+    <value>Danois</value>
+  </data>
+  <data name="LangPortuguese" xml:space="preserve">
+    <value>Portugais</value>
+  </data>
+  <data name="LangItalian" xml:space="preserve">
+    <value>Italien</value>
+  </data>
+  <data name="LangRomanian" xml:space="preserve">
+    <value>Roumain</value>
+  </data>
+  <data name="LangRussian" xml:space="preserve">
+    <value>Russe</value>
+  </data>
+  <data name="LangPolish" xml:space="preserve">
+    <value>Polonais</value>
+  </data>
+  <data name="LangCzech" xml:space="preserve">
+    <value>Tchèque</value>
+  </data>
+  <data name="LangUkrainian" xml:space="preserve">
+    <value>Ukrainien</value>
+  </data>
+  <data name="LangBulgarian" xml:space="preserve">
+    <value>Bulgare</value>
+  </data>
+  <data name="LangSlovak" xml:space="preserve">
+    <value>Slovaque</value>
+  </data>
+  <data name="LangSlovenian" xml:space="preserve">
+    <value>Slovène</value>
+  </data>
+  <data name="LangEstonian" xml:space="preserve">
+    <value>Estonien</value>
+  </data>
+  <data name="LangLatvian" xml:space="preserve">
+    <value>Letton</value>
+  </data>
+  <data name="LangLithuanian" xml:space="preserve">
+    <value>Lituanien</value>
+  </data>
+  <data name="LangGreek" xml:space="preserve">
+    <value>Grec</value>
+  </data>
+  <data name="LangHungarian" xml:space="preserve">
+    <value>Hongrois</value>
+  </data>
+  <data name="LangFinnish" xml:space="preserve">
+    <value>Finnois</value>
+  </data>
+  <data name="LangTurkish" xml:space="preserve">
+    <value>Turc</value>
+  </data>
+  <data name="LangArabic" xml:space="preserve">
+    <value>Arabe</value>
+  </data>
+  <data name="LangPersian" xml:space="preserve">
+    <value>Persan</value>
+  </data>
+  <data name="LangHebrew" xml:space="preserve">
+    <value>Hébreu</value>
+  </data>
+  <data name="LangHindi" xml:space="preserve">
+    <value>Hindi</value>
+  </data>
+  <data name="LangBengali" xml:space="preserve">
+    <value>Bengali</value>
+  </data>
+  <data name="LangTamil" xml:space="preserve">
+    <value>Tamoul</value>
+  </data>
+  <data name="LangTelugu" xml:space="preserve">
+    <value>Télougou</value>
+  </data>
+  <data name="LangUrdu" xml:space="preserve">
+    <value>Ourdou</value>
+  </data>
+  <data name="LangVietnamese" xml:space="preserve">
+    <value>Vietnamien</value>
+  </data>
+  <data name="LangThai" xml:space="preserve">
+    <value>Thaï</value>
+  </data>
+  <data name="LangIndonesian" xml:space="preserve">
+    <value>Indonésien</value>
+  </data>
+  <data name="LangMalay" xml:space="preserve">
+    <value>Malais</value>
+  </data>
+  <data name="LangFilipino" xml:space="preserve">
+    <value>Filipino</value>
+  </data>
+  <data name="AvailableLanguages" xml:space="preserve">
+    <value>Langues disponibles</value>
+  </data>
+  <data name="AvailableLanguagesDesc" xml:space="preserve">
+    <value>Sélectionnez les langues disponibles dans les sélecteurs source/cible. Au moins 2 requises.</value>
+  </data>
 
   <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
@@ -563,5 +674,87 @@
   </data>
   <data name="Cancel" xml:space="preserve">
     <value>Annuler</value>
+  </data>
+
+  <!-- Service Testing UI -->
+  <data name="Test" xml:space="preserve">
+    <value>Tester</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>Test en cours...</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>Veuillez d'abord configurer le service (clé API, point de terminaison, etc.).</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>Test réussi</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>La configuration est valide. Traduction terminée en {0}ms.</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>Échec du test</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>Échec du test de configuration : {0}</value>
+  </data>
+
+  <!-- Youdao Service -->
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>Utiliser l'API officielle</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>Youdao fournit les transcriptions phonétiques des mots anglais. Sans clés API, utilise le dictionnaire web gratuit. Avec des clés API, active l'API officielle pour des limites plus élevées. Obtenez les clés API sur ai.youdao.com</value>
+  </data>
+
+  <!-- Window Chrome -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>Traduction rapide</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>Traduction fixe</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>Épingler la fenêtre (garder au premier plan)</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Fermer</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>Masquer (Ctrl+Alt+F pour réafficher)</value>
+  </data>
+
+  <!-- Status & Feedback -->
+  <data name="OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>Initialisation...</value>
+  </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>Aucun service activé. Allez dans les paramètres pour activer des services.</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} service(s) terminé(s)</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>Vos paramètres ont été enregistrés avec succès.</value>
+  </data>
+
+  <!-- Validation Messages -->
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>La première langue et la deuxième langue ne peuvent pas être identiques.</value>
+  </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>L'URL du proxy n'est pas valide. Veuillez entrer une URL valide (ex. : http://127.0.0.1:7890).</value>
+  </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>Impossible de récupérer les modèles depuis Ollama. Assurez-vous qu'Ollama est en cours d'exécution et accessible.</value>
   </data>
 </root>

@@ -445,6 +445,45 @@ public class SettingsServiceTests
         (value == true || value == false).Should().BeTrue();
     }
 
+    #region SelectedLanguages Tests
+
+    [Fact]
+    public void SelectedLanguages_HasDefaultValue()
+    {
+        _settings.SelectedLanguages.Should().NotBeNull();
+        _settings.SelectedLanguages.Should().Contain("zh");
+        _settings.SelectedLanguages.Should().Contain("en");
+        _settings.SelectedLanguages.Should().Contain("ja");
+        _settings.SelectedLanguages.Should().Contain("ko");
+        _settings.SelectedLanguages.Should().Contain("fr");
+        _settings.SelectedLanguages.Should().Contain("de");
+        _settings.SelectedLanguages.Should().Contain("es");
+    }
+
+    [Fact]
+    public void SelectedLanguages_CanBeSet()
+    {
+        var original = new List<string>(_settings.SelectedLanguages);
+        try
+        {
+            var newLanguages = new List<string> { "zh", "en", "ja" };
+            _settings.SelectedLanguages = newLanguages;
+            _settings.SelectedLanguages.Should().BeEquivalentTo(newLanguages);
+        }
+        finally
+        {
+            _settings.SelectedLanguages = original;
+        }
+    }
+
+    [Fact]
+    public void SelectedLanguages_ContainsAtLeastTwoLanguages()
+    {
+        _settings.SelectedLanguages.Should().HaveCountGreaterOrEqualTo(2);
+    }
+
+    #endregion
+
     #region IsChineseTimezone Tests
 
     [Fact]

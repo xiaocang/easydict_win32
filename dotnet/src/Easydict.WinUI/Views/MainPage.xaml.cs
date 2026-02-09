@@ -98,10 +98,10 @@ namespace Easydict.WinUI.Views
                 _detectionService = new LanguageDetectionService(_settings);
             }
             SetLoading(false);
-            ApplySettings();
 
-            // Apply localization to all UI elements
+            // Apply localization first (populates combos), then settings (selects saved language)
             ApplyLocalization();
+            ApplySettings();
 
             // Initialize service result controls based on enabled services
             InitializeServiceResults();
@@ -151,37 +151,26 @@ namespace Easydict.WinUI.Views
 
         /// <summary>
         /// Apply localization to all UI elements using LocalizationService.
+        /// Also dynamically populates language combo boxes from user's selected languages.
         /// </summary>
         private void ApplyLocalization()
         {
             var loc = LocalizationService.Instance;
 
-            // Source Language ComboBoxes (Wide layout) - 9 items: Auto + 8 languages
-            ((ComboBoxItem)SourceLangCombo.Items[0]).Content = loc.GetString("LangAutoDetect");
-            for (int i = 0; i < LanguageComboHelper.SelectableLanguages.Length; i++)
+            // Populate language combos dynamically from user's selected languages
+            _suppressSourceLanguageSelectionChanged = true;
+            _suppressTargetLanguageSelectionChanged = true;
+            try
             {
-                ((ComboBoxItem)SourceLangCombo.Items[i + 1]).Content =
-                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
+                LanguageComboHelper.PopulateSourceCombo(SourceLangCombo, loc);
+                LanguageComboHelper.PopulateSourceCombo(SourceLangComboNarrow, loc);
+                LanguageComboHelper.PopulateTargetCombo(TargetLangCombo, loc);
+                LanguageComboHelper.PopulateTargetCombo(TargetLangComboNarrow, loc);
             }
-
-            // Source Language ComboBoxes (Narrow layout) - 9 items: Auto + 8 languages
-            ((ComboBoxItem)SourceLangComboNarrow.Items[0]).Content = loc.GetString("LangAutoDetect");
-            for (int i = 0; i < LanguageComboHelper.SelectableLanguages.Length; i++)
+            finally
             {
-                ((ComboBoxItem)SourceLangComboNarrow.Items[i + 1]).Content =
-                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
-            }
-
-            // Target Language ComboBoxes - 8 items (dynamically rebuilt, but localize initial XAML items)
-            for (int i = 0; i < TargetLangCombo.Items.Count && i < LanguageComboHelper.SelectableLanguages.Length; i++)
-            {
-                ((ComboBoxItem)TargetLangCombo.Items[i]).Content =
-                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
-            }
-            for (int i = 0; i < TargetLangComboNarrow.Items.Count && i < LanguageComboHelper.SelectableLanguages.Length; i++)
-            {
-                ((ComboBoxItem)TargetLangComboNarrow.Items[i]).Content =
-                    loc.GetString(LanguageComboHelper.SelectableLanguages[i].LocalizationKey);
+                _suppressSourceLanguageSelectionChanged = false;
+                _suppressTargetLanguageSelectionChanged = false;
             }
 
             // Input placeholder

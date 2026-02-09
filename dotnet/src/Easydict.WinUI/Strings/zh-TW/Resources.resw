@@ -122,6 +122,117 @@
   <data name="LangSpanish" xml:space="preserve">
     <value>西班牙語</value>
   </data>
+  <data name="LangClassicalChinese" xml:space="preserve">
+    <value>文言文</value>
+  </data>
+  <data name="LangDutch" xml:space="preserve">
+    <value>荷蘭語</value>
+  </data>
+  <data name="LangSwedish" xml:space="preserve">
+    <value>瑞典語</value>
+  </data>
+  <data name="LangNorwegian" xml:space="preserve">
+    <value>挪威語</value>
+  </data>
+  <data name="LangDanish" xml:space="preserve">
+    <value>丹麥語</value>
+  </data>
+  <data name="LangPortuguese" xml:space="preserve">
+    <value>葡萄牙語</value>
+  </data>
+  <data name="LangItalian" xml:space="preserve">
+    <value>義大利語</value>
+  </data>
+  <data name="LangRomanian" xml:space="preserve">
+    <value>羅馬尼亞語</value>
+  </data>
+  <data name="LangRussian" xml:space="preserve">
+    <value>俄語</value>
+  </data>
+  <data name="LangPolish" xml:space="preserve">
+    <value>波蘭語</value>
+  </data>
+  <data name="LangCzech" xml:space="preserve">
+    <value>捷克語</value>
+  </data>
+  <data name="LangUkrainian" xml:space="preserve">
+    <value>烏克蘭語</value>
+  </data>
+  <data name="LangBulgarian" xml:space="preserve">
+    <value>保加利亞語</value>
+  </data>
+  <data name="LangSlovak" xml:space="preserve">
+    <value>斯洛伐克語</value>
+  </data>
+  <data name="LangSlovenian" xml:space="preserve">
+    <value>斯洛維尼亞語</value>
+  </data>
+  <data name="LangEstonian" xml:space="preserve">
+    <value>愛沙尼亞語</value>
+  </data>
+  <data name="LangLatvian" xml:space="preserve">
+    <value>拉脫維亞語</value>
+  </data>
+  <data name="LangLithuanian" xml:space="preserve">
+    <value>立陶宛語</value>
+  </data>
+  <data name="LangGreek" xml:space="preserve">
+    <value>希臘語</value>
+  </data>
+  <data name="LangHungarian" xml:space="preserve">
+    <value>匈牙利語</value>
+  </data>
+  <data name="LangFinnish" xml:space="preserve">
+    <value>芬蘭語</value>
+  </data>
+  <data name="LangTurkish" xml:space="preserve">
+    <value>土耳其語</value>
+  </data>
+  <data name="LangArabic" xml:space="preserve">
+    <value>阿拉伯語</value>
+  </data>
+  <data name="LangPersian" xml:space="preserve">
+    <value>波斯語</value>
+  </data>
+  <data name="LangHebrew" xml:space="preserve">
+    <value>希伯來語</value>
+  </data>
+  <data name="LangHindi" xml:space="preserve">
+    <value>印地語</value>
+  </data>
+  <data name="LangBengali" xml:space="preserve">
+    <value>孟加拉語</value>
+  </data>
+  <data name="LangTamil" xml:space="preserve">
+    <value>泰米爾語</value>
+  </data>
+  <data name="LangTelugu" xml:space="preserve">
+    <value>泰盧固語</value>
+  </data>
+  <data name="LangUrdu" xml:space="preserve">
+    <value>烏爾都語</value>
+  </data>
+  <data name="LangVietnamese" xml:space="preserve">
+    <value>越南語</value>
+  </data>
+  <data name="LangThai" xml:space="preserve">
+    <value>泰語</value>
+  </data>
+  <data name="LangIndonesian" xml:space="preserve">
+    <value>印尼語</value>
+  </data>
+  <data name="LangMalay" xml:space="preserve">
+    <value>馬來語</value>
+  </data>
+  <data name="LangFilipino" xml:space="preserve">
+    <value>菲律賓語</value>
+  </data>
+  <data name="AvailableLanguages" xml:space="preserve">
+    <value>可用語言</value>
+  </data>
+  <data name="AvailableLanguagesDesc" xml:space="preserve">
+    <value>選擇在來源語言/目標語言選擇器中可用的語言。至少需要選擇2種語言。</value>
+  </data>
 
   <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
@@ -563,5 +674,87 @@
   </data>
   <data name="Cancel" xml:space="preserve">
     <value>取消</value>
+  </data>
+
+  <!-- Service Testing UI -->
+  <data name="Test" xml:space="preserve">
+    <value>測試</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>測試中...</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>請先設定服務（API 金鑰、端點等）。</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>測試成功</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>設定有效。翻譯在 {0}ms 內完成。</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>測試失敗</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>設定測試失敗：{0}</value>
+  </data>
+
+  <!-- Youdao Service -->
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>使用官方 API</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>有道提供英語單字的音標。未設定 API 金鑰時使用免費網頁字典。設定 API 金鑰後可使用官方 API 以獲得更高配額。前往 ai.youdao.com 取得 API 金鑰</value>
+  </data>
+
+  <!-- Window Chrome -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>快速翻譯</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>固定翻譯</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>釘選視窗（保持在最上層）</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>關閉</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>隱藏（Ctrl+Alt+F 再次顯示）</value>
+  </data>
+
+  <!-- Status & Feedback -->
+  <data name="OK" xml:space="preserve">
+    <value>確定</value>
+  </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>正在初始化...</value>
+  </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>未啟用任何服務。請前往設定啟用服務。</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} 個服務已完成</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>您的設定已成功儲存。</value>
+  </data>
+
+  <!-- Validation Messages -->
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>第一語言與第二語言不能相同。</value>
+  </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>代理伺服器網址無效。請輸入有效的網址（例如：http://127.0.0.1:7890）。</value>
+  </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>無法從 Ollama 取得模型。請確認 Ollama 正在執行且可以存取。</value>
   </data>
 </root>

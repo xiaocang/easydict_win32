@@ -88,6 +88,8 @@
 
 - **TTS（文字转语音）** - 使用 Windows Speech Synthesis 朗读原文和译文
 
+- **40+ 语种支持** - 在设置中自定义可用语种，从 40 多种语言中选择显示在源语言/目标语言选择器中的语种，涵盖东亚、欧洲、中东、南亚和东南亚语言
+
 ### 截图
 
 ![总览](screenshot/overview.png)
@@ -98,6 +100,10 @@
 |--------|---------|------|
 | ![主窗口](screenshot/main-window.png) | ![所有窗口](screenshot/all-windows.png) | ![设置](screenshot/settings.png) |
 | 完整翻译界面 | 主窗口 + 迷你窗口 + 固定窗口及快捷键设置 | 服务配置 |
+
+![浅色与深色模式](screenshot/light-dark-mode.png)
+
+*浅色与深色模式 — 迷你窗口（快速翻译）*
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 

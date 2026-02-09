@@ -21,6 +21,7 @@ description: |-
   - Thème sombre/clair : suit le thème système de Windows
   - Synthèse vocale : écoutez le texte source et traduit
   - Support haute résolution : net et précis sur tout écran
+  - Plus de 40 langues : sélection de langues personnalisable — choisissez les langues à afficher dans les sélecteurs source/cible parmi plus de 40 options couvrant l'Asie de l'Est, l'Europe, le Moyen-Orient, l'Asie du Sud et l'Asie du Sud-Est
 
   Parfait pour les étudiants, les professionnels, les traducteurs et tous ceux qui ont besoin de traductions rapides et fiables dans plusieurs langues.
 features:
@@ -36,6 +37,7 @@ features:
 - Support du proxy HTTP
 - Support des LLM locaux via Ollama
 - Support des services personnalisés compatibles OpenAI
+- Plus de 40 langues personnalisables pour les sélecteurs source et cible
 - Support haute résolution et multi-écrans
 keywords:
 - traduction
@@ -62,3 +64,6 @@ images:
   settings:
     fileName: ../../screenshot/settings.png
     description: 'Page de paramètres : configuration des services de traduction'
+  light-dark-mode:
+    fileName: ../../screenshot/light-dark-mode.png
+    description: Mini-fenêtre en mode clair et sombre (traduction rapide)

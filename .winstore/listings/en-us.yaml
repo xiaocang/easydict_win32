@@ -21,6 +21,7 @@ description: |-
   - Dark/Light Theme: Follows your Windows system theme
   - Text-to-Speech: Listen to source and translated text
   - High DPI Support: Crystal clear on any display
+  - 40+ Languages: Customizable language selection — choose which languages appear in source/target pickers from over 40 options spanning East Asian, European, Middle Eastern, South Asian, and Southeast Asian languages
 
   Perfect for students, professionals, translators, and anyone who needs quick, reliable translations across multiple languages.
 features:
@@ -36,6 +37,7 @@ features:
 - HTTP proxy support for network configuration
 - Support for local LLM via Ollama
 - Custom OpenAI-compatible service support
+- 40+ customizable languages for source and target pickers
 - High DPI and multi-monitor support
 keywords:
 - translate
@@ -62,3 +64,6 @@ images:
   settings:
     fileName: ../../screenshot/settings.png
     description: Settings page with service configuration
+  light-dark-mode:
+    fileName: ../../screenshot/light-dark-mode.png
+    description: Light and Dark mode Mini Window (Quick Translate)

@@ -21,6 +21,7 @@ description: |-
   - 深色/淺色主題：跟隨 Windows 系統主題
   - 文字轉語音：朗讀原文和翻譯結果
   - 高 DPI 支援：在任何顯示器上都清晰銳利
+  - 40+ 語種支援：可自訂語言選擇，從 40 多種語言中選擇顯示在來源語言/目標語言選擇器中的語種，涵蓋東亞、歐洲、中東、南亞和東南亞語言
 
   適合學生、職場人士、翻譯工作者以及需要快速、可靠多語言翻譯的所有人。
 features:
@@ -36,6 +37,7 @@ features:
 - HTTP 代理支援
 - 透過 Ollama 支援本機 LLM
 - 自訂 OpenAI 相容服務支援
+- 40+ 可自訂來源語言和目標語言
 - 高 DPI 和多顯示器支援
 keywords:
 - 翻譯
@@ -62,3 +64,6 @@ images:
   settings:
     fileName: ../../screenshot/settings.png
     description: 設定頁面：翻譯服務配置
+  light-dark-mode:
+    fileName: ../../screenshot/light-dark-mode.png
+    description: 淺色與深色模式迷你視窗（快速翻譯）

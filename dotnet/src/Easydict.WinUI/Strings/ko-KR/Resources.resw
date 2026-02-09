@@ -122,6 +122,117 @@
   <data name="LangSpanish" xml:space="preserve">
     <value>스페인어</value>
   </data>
+  <data name="LangClassicalChinese" xml:space="preserve">
+    <value>한문</value>
+  </data>
+  <data name="LangDutch" xml:space="preserve">
+    <value>네덜란드어</value>
+  </data>
+  <data name="LangSwedish" xml:space="preserve">
+    <value>스웨덴어</value>
+  </data>
+  <data name="LangNorwegian" xml:space="preserve">
+    <value>노르웨이어</value>
+  </data>
+  <data name="LangDanish" xml:space="preserve">
+    <value>덴마크어</value>
+  </data>
+  <data name="LangPortuguese" xml:space="preserve">
+    <value>포르투갈어</value>
+  </data>
+  <data name="LangItalian" xml:space="preserve">
+    <value>이탈리아어</value>
+  </data>
+  <data name="LangRomanian" xml:space="preserve">
+    <value>루마니아어</value>
+  </data>
+  <data name="LangRussian" xml:space="preserve">
+    <value>러시아어</value>
+  </data>
+  <data name="LangPolish" xml:space="preserve">
+    <value>폴란드어</value>
+  </data>
+  <data name="LangCzech" xml:space="preserve">
+    <value>체코어</value>
+  </data>
+  <data name="LangUkrainian" xml:space="preserve">
+    <value>우크라이나어</value>
+  </data>
+  <data name="LangBulgarian" xml:space="preserve">
+    <value>불가리아어</value>
+  </data>
+  <data name="LangSlovak" xml:space="preserve">
+    <value>슬로바키아어</value>
+  </data>
+  <data name="LangSlovenian" xml:space="preserve">
+    <value>슬로베니아어</value>
+  </data>
+  <data name="LangEstonian" xml:space="preserve">
+    <value>에스토니아어</value>
+  </data>
+  <data name="LangLatvian" xml:space="preserve">
+    <value>라트비아어</value>
+  </data>
+  <data name="LangLithuanian" xml:space="preserve">
+    <value>리투아니아어</value>
+  </data>
+  <data name="LangGreek" xml:space="preserve">
+    <value>그리스어</value>
+  </data>
+  <data name="LangHungarian" xml:space="preserve">
+    <value>헝가리어</value>
+  </data>
+  <data name="LangFinnish" xml:space="preserve">
+    <value>핀란드어</value>
+  </data>
+  <data name="LangTurkish" xml:space="preserve">
+    <value>터키어</value>
+  </data>
+  <data name="LangArabic" xml:space="preserve">
+    <value>아랍어</value>
+  </data>
+  <data name="LangPersian" xml:space="preserve">
+    <value>페르시아어</value>
+  </data>
+  <data name="LangHebrew" xml:space="preserve">
+    <value>히브리어</value>
+  </data>
+  <data name="LangHindi" xml:space="preserve">
+    <value>힌디어</value>
+  </data>
+  <data name="LangBengali" xml:space="preserve">
+    <value>벵골어</value>
+  </data>
+  <data name="LangTamil" xml:space="preserve">
+    <value>타밀어</value>
+  </data>
+  <data name="LangTelugu" xml:space="preserve">
+    <value>텔루구어</value>
+  </data>
+  <data name="LangUrdu" xml:space="preserve">
+    <value>우르두어</value>
+  </data>
+  <data name="LangVietnamese" xml:space="preserve">
+    <value>베트남어</value>
+  </data>
+  <data name="LangThai" xml:space="preserve">
+    <value>태국어</value>
+  </data>
+  <data name="LangIndonesian" xml:space="preserve">
+    <value>인도네시아어</value>
+  </data>
+  <data name="LangMalay" xml:space="preserve">
+    <value>말레이어</value>
+  </data>
+  <data name="LangFilipino" xml:space="preserve">
+    <value>필리핀어</value>
+  </data>
+  <data name="AvailableLanguages" xml:space="preserve">
+    <value>사용 가능한 언어</value>
+  </data>
+  <data name="AvailableLanguagesDesc" xml:space="preserve">
+    <value>소스 언어/대상 언어 선택기에서 사용할 수 있는 언어를 선택하세요. 최소 2개 필요합니다.</value>
+  </data>
 
   <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
@@ -563,5 +674,87 @@
   </data>
   <data name="Cancel" xml:space="preserve">
     <value>취소</value>
+  </data>
+
+  <!-- Service Testing UI -->
+  <data name="Test" xml:space="preserve">
+    <value>테스트</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>테스트 중...</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>먼저 서비스를 구성해 주세요 (API 키, 엔드포인트 등).</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>테스트 성공</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>구성이 유효합니다. 번역이 {0}ms 만에 완료되었습니다.</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>테스트 실패</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>구성 테스트 실패: {0}</value>
+  </data>
+
+  <!-- Youdao Service -->
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>공식 API 사용</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>유다오는 영어 단어의 발음 기호를 제공합니다. API 키 미설정 시 무료 웹 사전을 사용합니다. API 키를 설정하면 공식 API를 사용하여 더 높은 사용량을 제공합니다. API 키는 ai.youdao.com에서 받으세요</value>
+  </data>
+
+  <!-- Window Chrome -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>빠른 번역</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>고정 번역</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>창 고정 (항상 위에 표시)</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>닫기</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>숨기기 (Ctrl+Alt+F로 다시 표시)</value>
+  </data>
+
+  <!-- Status & Feedback -->
+  <data name="OK" xml:space="preserve">
+    <value>확인</value>
+  </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>초기화 중...</value>
+  </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>활성화된 서비스가 없습니다. 설정에서 서비스를 활성화하세요.</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0}개 서비스 완료</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>설정이 성공적으로 저장되었습니다.</value>
+  </data>
+
+  <!-- Validation Messages -->
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>제1언어와 제2언어는 같을 수 없습니다.</value>
+  </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>프록시 URL이 유효하지 않습니다. 올바른 URL을 입력하세요 (예: http://127.0.0.1:7890).</value>
+  </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>Ollama에서 모델을 가져올 수 없습니다. Ollama가 실행 중이고 접근 가능한지 확인하세요.</value>
   </data>
 </root>

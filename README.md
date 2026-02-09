@@ -88,6 +88,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **TTS (Text-to-Speech)** - Play source and translated text using Windows Speech Synthesis
 
+- **40+ Languages** - Customizable language selection in Settings — choose which languages appear in source/target pickers from 40+ options spanning East Asian, European, Middle Eastern, South Asian, and Southeast Asian languages
+
 ### Screenshots
 
 ![Overview](screenshot/overview.png)

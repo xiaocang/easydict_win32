@@ -220,7 +220,8 @@ protected override Task<TranslationResult> TranslateInternalAsync(
 
 ### Windows Store (`.winstore/`)
 - App is published on Microsoft Store: https://apps.microsoft.com/detail/9p7nqvxf9dzj
-- Store listing metadata is maintained as JSON files in `.winstore/listings/`, one per language (en-us, zh-cn, zh-tw, ja-jp, ko-kr, fr-fr, de-de)
+- Store listing metadata is maintained as YAML files in `.winstore/listings/`, one per language (en-us, zh-cn, zh-tw, ja-jp, ko-kr, fr-fr, de-de)
+- **Store listings only support 7 languages** (en-us, zh-cn, zh-tw, ja-jp, ko-kr, fr-fr, de-de), which is a smaller set than the app's 15 UI languages. Do NOT add new store listing languages without explicit approval.
 - `en-us` is the primary language; update it first, then translate to others
 - **Keywords must NOT contain third-party product names** (DeepL, OpenAI, ChatGPT, Gemini, DeepSeek, etc.) per Microsoft Store policy; these names are allowed in `description` and `features` only
 - Description must emphasize "free and open-source" and GPL-3.0 in the first sentence

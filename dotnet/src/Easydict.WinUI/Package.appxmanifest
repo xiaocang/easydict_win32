@@ -37,6 +37,14 @@
     <Resource Language="ko-kr"/>
     <Resource Language="fr-fr"/>
     <Resource Language="de-de"/>
+    <Resource Language="vi-vn"/>
+    <Resource Language="th-th"/>
+    <Resource Language="ar-sa"/>
+    <Resource Language="id-id"/>
+    <Resource Language="it-it"/>
+    <Resource Language="ms-my"/>
+    <Resource Language="hi-in"/>
+    <Resource Language="da-dk"/>
   </Resources>
 
   <Applications>

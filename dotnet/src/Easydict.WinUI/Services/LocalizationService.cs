@@ -6,7 +6,8 @@ namespace Easydict.WinUI.Services;
 /// <summary>
 /// Provides localization services using WindowsAppSDK ResourceManager API.
 /// Supports runtime language switching without application restart.
-/// Supported languages: English, Chinese (Simplified/Traditional), Japanese, Korean, French, German.
+/// Supported languages: English, Chinese (Simplified/Traditional), Japanese, Korean, French, German,
+/// Vietnamese, Thai, Arabic, Indonesian, Italian, Malay, Hindi, Danish.
 /// </summary>
 public sealed class LocalizationService
 {
@@ -22,7 +23,8 @@ public sealed class LocalizationService
     /// Supported UI languages.
     /// </summary>
     public static readonly string[] SupportedLanguages =
-        { "en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "fr-FR", "de-DE" };
+        { "en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "fr-FR", "de-DE",
+          "vi-VN", "th-TH", "ar-SA", "id-ID", "it-IT", "ms-MY", "hi-IN", "da-DK" };
 
     private LocalizationService()
     {
@@ -217,6 +219,14 @@ public sealed class LocalizationService
                 if (systemLang.StartsWith("ko")) return "ko-KR";
                 if (systemLang.StartsWith("fr")) return "fr-FR";
                 if (systemLang.StartsWith("de")) return "de-DE";
+                if (systemLang.StartsWith("vi")) return "vi-VN";
+                if (systemLang.StartsWith("th")) return "th-TH";
+                if (systemLang.StartsWith("ar")) return "ar-SA";
+                if (systemLang.StartsWith("id")) return "id-ID";
+                if (systemLang.StartsWith("it")) return "it-IT";
+                if (systemLang.StartsWith("ms")) return "ms-MY";
+                if (systemLang.StartsWith("hi")) return "hi-IN";
+                if (systemLang.StartsWith("da")) return "da-DK";
                 if (systemLang.StartsWith("en")) return "en-US";
             }
         }
@@ -245,6 +255,14 @@ public sealed class LocalizationService
             "ko-KR" => "한국어",
             "fr-FR" => "Français",
             "de-DE" => "Deutsch",
+            "vi-VN" => "Tiếng Việt",
+            "th-TH" => "ไทย",
+            "ar-SA" => "العربية",
+            "id-ID" => "Bahasa Indonesia",
+            "it-IT" => "Italiano",
+            "ms-MY" => "Bahasa Melayu",
+            "hi-IN" => "हिन्दी",
+            "da-DK" => "Dansk",
             _ => languageCode
         };
     }

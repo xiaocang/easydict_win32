@@ -27,18 +27,10 @@
       </xsd:complexType>
     </xsd:element>
   </xsd:schema>
-  <resheader name="resmimetype">
-    <value>text/microsoft-resx</value>
-  </resheader>
-  <resheader name="version">
-    <value>1.3</value>
-  </resheader>
-  <resheader name="reader">
-    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </resheader>
-  <resheader name="writer">
-    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </resheader>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>1.3</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
 
   <!-- App Name -->
   <data name="AppName" xml:space="preserve">
@@ -47,442 +39,367 @@
 
   <!-- Main Page -->
   <data name="SourceText" xml:space="preserve">
-    <value>Quelltext</value>
+    <value>Testo di origine</value>
   </data>
   <data name="TranslationResults" xml:space="preserve">
-    <value>Übersetzungsergebnisse</value>
+    <value>Risultati della traduzione</value>
   </data>
   <data name="InputPlaceholder" xml:space="preserve">
-    <value>Text zum Übersetzen eingeben oder einfügen...</value>
+    <value>Inserisci o incolla il testo da tradurre...</value>
   </data>
   <data name="TranslationPlaceholder" xml:space="preserve">
-    <value>Übersetzung erscheint hier...</value>
+    <value>La traduzione apparir&#224; qui...</value>
   </data>
   <data name="SettingsTooltip" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>Impostazioni</value>
   </data>
   <data name="TranslateTooltip" xml:space="preserve">
-    <value>Übersetzen</value>
+    <value>Traduci</value>
   </data>
   <data name="SwapLanguagesTooltip" xml:space="preserve">
-    <value>Quell- und Zielsprache tauschen</value>
+    <value>Scambia lingua di origine e di destinazione</value>
   </data>
   <data name="SourceLanguageTooltip" xml:space="preserve">
-    <value>Quellsprache</value>
+    <value>Lingua di origine</value>
   </data>
   <data name="TargetLanguageTooltip" xml:space="preserve">
-    <value>Zielsprache</value>
+    <value>Lingua di destinazione</value>
   </data>
 
   <!-- Status -->
   <data name="StatusConnected" xml:space="preserve">
-    <value>Verbunden</value>
+    <value>Connesso</value>
   </data>
   <data name="StatusDisconnected" xml:space="preserve">
-    <value>Getrennt</value>
+    <value>Disconnesso</value>
+  </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>Inizializzazione...</value>
   </data>
   <data name="StatusReady" xml:space="preserve">
-    <value>Bereit</value>
+    <value>Pronto</value>
   </data>
   <data name="StatusTranslating" xml:space="preserve">
-    <value>Übersetze...</value>
+    <value>Traduzione in corso...</value>
   </data>
   <data name="StatusError" xml:space="preserve">
-    <value>Fehler</value>
+    <value>Errore</value>
   </data>
 
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
-    <value>Automatisch erkennen</value>
+    <value>Rilevamento automatico</value>
   </data>
   <data name="LangEnglish" xml:space="preserve">
-    <value>Englisch</value>
+    <value>Inglese</value>
   </data>
   <data name="LangChinese" xml:space="preserve">
-    <value>Chinesisch</value>
+    <value>Cinese</value>
   </data>
   <data name="LangChineseSimplified" xml:space="preserve">
-    <value>Chinesisch (Vereinfacht)</value>
+    <value>Cinese (Semplificato)</value>
   </data>
   <data name="LangChineseTraditional" xml:space="preserve">
-    <value>Chinesisch (Traditionell)</value>
+    <value>Cinese (Tradizionale)</value>
   </data>
   <data name="LangJapanese" xml:space="preserve">
-    <value>Japanisch</value>
+    <value>Giapponese</value>
   </data>
   <data name="LangKorean" xml:space="preserve">
-    <value>Koreanisch</value>
+    <value>Coreano</value>
   </data>
   <data name="LangFrench" xml:space="preserve">
-    <value>Französisch</value>
+    <value>Francese</value>
   </data>
   <data name="LangGerman" xml:space="preserve">
-    <value>Deutsch</value>
+    <value>Tedesco</value>
   </data>
   <data name="LangSpanish" xml:space="preserve">
-    <value>Spanisch</value>
-  </data>
-  <data name="LangClassicalChinese" xml:space="preserve">
-    <value>Klassisches Chinesisch</value>
-  </data>
-  <data name="LangDutch" xml:space="preserve">
-    <value>Niederländisch</value>
-  </data>
-  <data name="LangSwedish" xml:space="preserve">
-    <value>Schwedisch</value>
-  </data>
-  <data name="LangNorwegian" xml:space="preserve">
-    <value>Norwegisch</value>
-  </data>
-  <data name="LangDanish" xml:space="preserve">
-    <value>Dänisch</value>
-  </data>
-  <data name="LangPortuguese" xml:space="preserve">
-    <value>Portugiesisch</value>
-  </data>
-  <data name="LangItalian" xml:space="preserve">
-    <value>Italienisch</value>
-  </data>
-  <data name="LangRomanian" xml:space="preserve">
-    <value>Rumänisch</value>
-  </data>
-  <data name="LangRussian" xml:space="preserve">
-    <value>Russisch</value>
-  </data>
-  <data name="LangPolish" xml:space="preserve">
-    <value>Polnisch</value>
-  </data>
-  <data name="LangCzech" xml:space="preserve">
-    <value>Tschechisch</value>
-  </data>
-  <data name="LangUkrainian" xml:space="preserve">
-    <value>Ukrainisch</value>
-  </data>
-  <data name="LangBulgarian" xml:space="preserve">
-    <value>Bulgarisch</value>
-  </data>
-  <data name="LangSlovak" xml:space="preserve">
-    <value>Slowakisch</value>
-  </data>
-  <data name="LangSlovenian" xml:space="preserve">
-    <value>Slowenisch</value>
-  </data>
-  <data name="LangEstonian" xml:space="preserve">
-    <value>Estnisch</value>
-  </data>
-  <data name="LangLatvian" xml:space="preserve">
-    <value>Lettisch</value>
-  </data>
-  <data name="LangLithuanian" xml:space="preserve">
-    <value>Litauisch</value>
-  </data>
-  <data name="LangGreek" xml:space="preserve">
-    <value>Griechisch</value>
-  </data>
-  <data name="LangHungarian" xml:space="preserve">
-    <value>Ungarisch</value>
-  </data>
-  <data name="LangFinnish" xml:space="preserve">
-    <value>Finnisch</value>
-  </data>
-  <data name="LangTurkish" xml:space="preserve">
-    <value>Türkisch</value>
-  </data>
-  <data name="LangArabic" xml:space="preserve">
-    <value>Arabisch</value>
-  </data>
-  <data name="LangPersian" xml:space="preserve">
-    <value>Persisch</value>
-  </data>
-  <data name="LangHebrew" xml:space="preserve">
-    <value>Hebräisch</value>
-  </data>
-  <data name="LangHindi" xml:space="preserve">
-    <value>Hindi</value>
-  </data>
-  <data name="LangBengali" xml:space="preserve">
-    <value>Bengalisch</value>
-  </data>
-  <data name="LangTamil" xml:space="preserve">
-    <value>Tamil</value>
-  </data>
-  <data name="LangTelugu" xml:space="preserve">
-    <value>Telugu</value>
-  </data>
-  <data name="LangUrdu" xml:space="preserve">
-    <value>Urdu</value>
-  </data>
-  <data name="LangVietnamese" xml:space="preserve">
-    <value>Vietnamesisch</value>
-  </data>
-  <data name="LangThai" xml:space="preserve">
-    <value>Thailändisch</value>
-  </data>
-  <data name="LangIndonesian" xml:space="preserve">
-    <value>Indonesisch</value>
-  </data>
-  <data name="LangMalay" xml:space="preserve">
-    <value>Malaiisch</value>
-  </data>
-  <data name="LangFilipino" xml:space="preserve">
-    <value>Filipino</value>
-  </data>
-  <data name="AvailableLanguages" xml:space="preserve">
-    <value>Verfügbare Sprachen</value>
-  </data>
-  <data name="AvailableLanguagesDesc" xml:space="preserve">
-    <value>Wählen Sie die in den Quell-/Zielsprachauswahlfeldern verfügbaren Sprachen. Mindestens 2 erforderlich.</value>
+    <value>Spagnolo</value>
   </data>
 
   <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>Impostazioni</value>
   </data>
   <data name="TranslationService" xml:space="preserve">
-    <value>Übersetzungsdienst</value>
+    <value>Servizio di traduzione</value>
   </data>
   <data name="EnabledServices" xml:space="preserve">
-    <value>Aktivierte Dienste</value>
+    <value>Servizi abilitati</value>
   </data>
   <data name="EnabledServicesDescription" xml:space="preserve">
-    <value>Wählen Sie aus, welche Übersetzungsdienste in jedem Fenster angezeigt werden. Mehrere Dienste werden parallel ausgeführt.</value>
+    <value>Seleziona i servizi di traduzione da visualizzare in ogni finestra. Pi&#249; servizi verranno eseguiti in parallelo.</value>
   </data>
   <data name="MainWindow" xml:space="preserve">
-    <value>Hauptfenster</value>
+    <value>Finestra principale</value>
   </data>
   <data name="MiniWindow" xml:space="preserve">
-    <value>Mini-Fenster</value>
+    <value>Finestra mini</value>
   </data>
   <data name="FixedWindow" xml:space="preserve">
-    <value>Fixiertes Fenster</value>
+    <value>Finestra fissa</value>
   </data>
   <data name="Auto" xml:space="preserve">
-    <value>Automatisch</value>
+    <value>Automatico</value>
   </data>
   <data name="Manual" xml:space="preserve">
-    <value>Manuell</value>
+    <value>Manuale</value>
   </data>
 
   <!-- Language Preferences -->
   <data name="LanguagePreferences" xml:space="preserve">
-    <value>Spracheinstellungen</value>
+    <value>Preferenze lingua</value>
   </data>
   <data name="FirstLanguage" xml:space="preserve">
-    <value>Erste Sprache</value>
+    <value>Prima lingua</value>
   </data>
   <data name="SecondLanguage" xml:space="preserve">
-    <value>Zweite Sprache</value>
+    <value>Seconda lingua</value>
   </data>
   <data name="LanguagePreferencesDescription" xml:space="preserve">
-    <value>Wenn die erkannte Sprache Ihrer Ersten Sprache entspricht, wird die Übersetzung in Ihre Zweite Sprache erfolgen und umgekehrt.</value>
+    <value>Quando la lingua rilevata corrisponde alla Prima lingua, l'obiettivo della traduzione sar&#224; la Seconda lingua e viceversa.</value>
   </data>
   <data name="AutoSelectTargetLanguage" xml:space="preserve">
-    <value>Zielsprache automatisch basierend auf erkannter Quelle auswählen</value>
+    <value>Seleziona automaticamente la lingua di destinazione in base alla lingua di origine rilevata</value>
   </data>
 
   <!-- Service Configuration -->
   <data name="ServiceConfiguration" xml:space="preserve">
-    <value>Dienstkonfiguration</value>
+    <value>Configurazione del servizio</value>
   </data>
   <data name="ServiceConfigurationDescription" xml:space="preserve">
-    <value>Konfigurieren Sie API-Schlüssel, Endpunkte und Modelle für jeden Übersetzungsdienst.</value>
+    <value>Configura le chiavi API, gli endpoint e i modelli per ogni servizio di traduzione.</value>
   </data>
   <data name="ApiKey" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>Chiave API</value>
   </data>
   <data name="ApiKeyOptional" xml:space="preserve">
-    <value>API-Schlüssel (Optional)</value>
+    <value>Chiave API (Opzionale)</value>
   </data>
   <data name="Endpoint" xml:space="preserve">
-    <value>Endpunkt</value>
+    <value>Endpoint</value>
   </data>
   <data name="EndpointOptional" xml:space="preserve">
-    <value>Endpunkt (Optional)</value>
+    <value>Endpoint (Opzionale)</value>
   </data>
   <data name="EndpointRequired" xml:space="preserve">
-    <value>Endpunkt (Erforderlich)</value>
+    <value>Endpoint (Obbligatorio)</value>
   </data>
   <data name="Model" xml:space="preserve">
-    <value>Modell</value>
+    <value>Modello</value>
   </data>
   <data name="Refresh" xml:space="preserve">
-    <value>Aktualisieren</value>
+    <value>Aggiorna</value>
   </data>
 
   <!-- Service Descriptions -->
   <data name="DeepLDescription" xml:space="preserve">
-    <value>Lassen Sie den API-Schlüssel leer, um die kostenlose Web-Übersetzung zu nutzen. Pro-API-Schlüssel bieten höhere Limits.</value>
+    <value>Lascia la chiave API vuota per usare la traduzione web gratuita. La chiave API Pro offre limiti pi&#249; elevati.</value>
   </data>
   <data name="DeepLFreeOption" xml:space="preserve">
-    <value>Kostenlose API verwenden (kein API-Schlüssel für Web-Übersetzung erforderlich)</value>
+    <value>Usa API gratuita (la traduzione web non richiede chiave API)</value>
   </data>
   <data name="OpenAIDescription" xml:space="preserve">
-    <value>Sie können einen benutzerdefinierten Modellnamen direkt eingeben.</value>
+    <value>Puoi digitare direttamente un nome di modello personalizzato.</value>
   </data>
   <data name="DeepSeekDescription" xml:space="preserve">
-    <value>Holen Sie sich Ihren API-Schlüssel von platform.deepseek.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>Ottieni la tua chiave API da platform.deepseek.com. Puoi digitare un nome di modello personalizzato.</value>
   </data>
   <data name="GroqDescription" xml:space="preserve">
-    <value>Groq bietet schnelle Inferenz. Holen Sie sich Ihren API-Schlüssel von console.groq.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>Groq fornisce inferenza veloce. Ottieni la tua chiave API da console.groq.com. Puoi digitare un nome di modello personalizzato.</value>
   </data>
   <data name="ZhipuDescription" xml:space="preserve">
-    <value>Holen Sie sich Ihren API-Schlüssel von open.bigmodel.cn. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>Ottieni la tua chiave API da open.bigmodel.cn. Puoi digitare un nome di modello personalizzato.</value>
   </data>
   <data name="GitHubModelsDescription" xml:space="preserve">
-    <value>Verwenden Sie Ihr GitHub-Personal-Access-Token. Erstellen Sie eines unter github.com/settings/tokens. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>Usa il tuo token di accesso personale GitHub. Ottienilo da github.com/settings/tokens. Puoi digitare un nome di modello personalizzato.</value>
   </data>
   <data name="GeminiDescription" xml:space="preserve">
-    <value>Holen Sie sich Ihren API-Schlüssel von aistudio.google.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>Ottieni la tua chiave API da aistudio.google.com. Puoi digitare un nome di modello personalizzato.</value>
   </data>
   <data name="CustomOpenAIDescription" xml:space="preserve">
-    <value>Konfigurieren Sie jeden OpenAI-kompatiblen API-Endpunkt (z.B. lokale LLM-Server, andere KI-Anbieter).</value>
+    <value>Configura qualsiasi endpoint API compatibile con OpenAI (ad es. server LLM locali, altri provider AI).</value>
   </data>
   <data name="OllamaDescription" xml:space="preserve">
-    <value>Ollama muss lokal ausgeführt werden. Klicken Sie auf Aktualisieren, um verfügbare Modelle zu laden.</value>
+    <value>Ollama deve essere in esecuzione localmente. Clicca Aggiorna per caricare i modelli disponibili.</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>Integrierte KI verwendet den Groq-Cloud-Dienst. Kein API-Schlüssel erforderlich. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>L'AI integrata usa il servizio cloud Groq. Non richiede chiave API. Puoi digitare un nome di modello personalizzato.</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
-    <value>ByteDances Doubao-Übersetzungsdienst. Holen Sie sich Ihren API-Schlüssel von console.volcengine.com</value>
+    <value>Servizio di traduzione Doubao di ByteDance. Ottieni la tua chiave API da console.volcengine.com</value>
   </data>
   <data name="CaiyunDescription" xml:space="preserve">
-    <value>Holen Sie sich Ihren API-Schlüssel von fanyi.caiyunapp.com</value>
+    <value>Ottieni la tua chiave API da fanyi.caiyunapp.com</value>
   </data>
   <data name="NiuTransDescription" xml:space="preserve">
-    <value>NiuTrans unterstützt über 450 Sprachpaare. Holen Sie sich Ihren API-Schlüssel von niutrans.com</value>
+    <value>NiuTrans supporta oltre 450 coppie di lingue. Ottieni la tua chiave API da niutrans.com</value>
+  </data>
+  <data name="AppKey" xml:space="preserve">
+    <value>Chiave App</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>Segreto App</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>Usa API ufficiale</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>Youdao fornisce trascrizioni fonetiche per parole inglesi. Senza chiavi API, usa il dizionario web gratuito. Con chiavi API, abilita l'API ufficiale per limiti pi&#249; elevati. Ottieni le chiavi API da ai.youdao.com</value>
   </data>
   <data name="FreeServicesTitle" xml:space="preserve">
-    <value>Kostenlose Dienste (Keine Konfiguration erforderlich)</value>
+    <value>Servizi gratuiti (Nessuna configurazione richiesta)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google Translate und Linguee Dictionary funktionieren sofort ohne API-Schlüssel.</value>
+    <value>Google Translate e Linguee Dictionary funzionano subito senza chiavi API.</value>
   </data>
 
   <!-- HTTP Proxy -->
   <data name="HttpProxy" xml:space="preserve">
-    <value>HTTP-Proxy</value>
+    <value>Proxy HTTP</value>
   </data>
   <data name="UseHttpProxy" xml:space="preserve">
-    <value>HTTP-Proxy verwenden</value>
+    <value>Usa proxy HTTP</value>
   </data>
   <data name="ProxyUrl" xml:space="preserve">
-    <value>Proxy-URL</value>
+    <value>URL del proxy</value>
   </data>
   <data name="BypassProxyForLocalhost" xml:space="preserve">
-    <value>Proxy für localhost umgehen</value>
+    <value>Bypassa il proxy per localhost</value>
   </data>
   <data name="ProxyDescription" xml:space="preserve">
-    <value>Proxy-Änderungen werden nach Neustart der App wirksam. Localhost-Umgehung stellt sicher, dass Ollama ohne Proxy funktioniert.</value>
+    <value>Le modifiche al proxy hanno effetto dopo il riavvio dell'app. Il bypass di localhost garantisce il funzionamento di Ollama senza proxy.</value>
   </data>
 
   <!-- Behavior -->
   <data name="Behavior" xml:space="preserve">
-    <value>Verhalten</value>
+    <value>Comportamento</value>
   </data>
   <data name="MinimizeToTray" xml:space="preserve">
-    <value>In Taskleiste minimieren</value>
+    <value>Minimizza nella barra di sistema</value>
   </data>
   <data name="MonitorClipboard" xml:space="preserve">
-    <value>Zwischenablage auf Text überwachen</value>
+    <value>Monitora gli appunti per il testo</value>
   </data>
   <data name="AlwaysOnTop" xml:space="preserve">
-    <value>Immer im Vordergrund</value>
+    <value>Sempre in primo piano</value>
   </data>
   <data name="LaunchAtStartup" xml:space="preserve">
-    <value>Bei Windows-Start ausführen</value>
+    <value>Avvia all'avvio di Windows</value>
   </data>
 
   <!-- Hotkeys -->
   <data name="Hotkeys" xml:space="preserve">
-    <value>Tastenkürzel</value>
+    <value>Tasti rapidi</value>
   </data>
   <data name="ShowWindow" xml:space="preserve">
-    <value>Fenster anzeigen</value>
+    <value>Mostra finestra</value>
   </data>
   <data name="TranslateSelection" xml:space="preserve">
-    <value>Auswahl übersetzen</value>
+    <value>Traduci selezione</value>
   </data>
   <data name="ShowMiniWindow" xml:space="preserve">
-    <value>Mini-Fenster anzeigen</value>
+    <value>Mostra finestra mini</value>
   </data>
   <data name="ShowFixedWindow" xml:space="preserve">
-    <value>Fixiertes Fenster anzeigen</value>
+    <value>Mostra finestra fissa</value>
   </data>
   <data name="HotkeysDescription" xml:space="preserve">
-    <value>Hinweis: Starten Sie die App neu, um Tastenkürzel-Änderungen anzuwenden. Umschalt-Tastenkürzel verwenden dieselbe Taste mit zusätzlicher Umschalttaste (z.B. Strg+Alt+Umschalt+M).</value>
+    <value>Nota: Riavvia l'app per applicare le modifiche ai tasti rapidi. I tasti di commutazione usano lo stesso tasto con Shift (ad es. Ctrl+Alt+Shift+M).</value>
   </data>
 
   <!-- About -->
   <data name="About" xml:space="preserve">
-    <value>Über</value>
+    <value>Informazioni</value>
   </data>
   <data name="EasydictForWindows" xml:space="preserve">
-    <value>Easydict für Windows</value>
+    <value>Easydict per Windows</value>
   </data>
   <data name="GitHubRepository" xml:space="preserve">
-    <value>GitHub-Repository</value>
+    <value>Repository GitHub</value>
   </data>
   <data name="IssueFeedback" xml:space="preserve">
-    <value>Problem melden</value>
+    <value>Segnala un problema</value>
   </data>
   <data name="InspiredBy" xml:space="preserve">
-    <value>Inspiriert von</value>
+    <value>Ispirato da</value>
   </data>
   <data name="EasydictForMacOS" xml:space="preserve">
-    <value>Easydict für macOS</value>
+    <value>Easydict per macOS</value>
   </data>
   <data name="License" xml:space="preserve">
-    <value>Lizenz: GPL-3.0</value>
+    <value>Licenza: GPL-3.0</value>
   </data>
 
   <!-- Buttons -->
   <data name="SaveSettings" xml:space="preserve">
-    <value>Einstellungen speichern</value>
+    <value>Salva impostazioni</value>
   </data>
   <data name="Back" xml:space="preserve">
-    <value>Zurück</value>
+    <value>Indietro</value>
   </data>
   <data name="BackToTop" xml:space="preserve">
-    <value>Nach oben</value>
+    <value>Torna in alto</value>
   </data>
   <data name="Copy" xml:space="preserve">
-    <value>Kopieren</value>
+    <value>Copia</value>
   </data>
   <data name="InsertReplace" xml:space="preserve">
-    <value>Einfügen/Ersetzen</value>
+    <value>Inserisci/Sostituisci</value>
   </data>
   <data name="CopyAll" xml:space="preserve">
-    <value>Alle kopieren</value>
+    <value>Copia tutto</value>
   </data>
 
   <!-- Messages -->
   <data name="TranslationFailed" xml:space="preserve">
-    <value>Übersetzung fehlgeschlagen</value>
+    <value>Traduzione fallita</value>
   </data>
   <data name="ServiceNotInitialized" xml:space="preserve">
-    <value>Dienst nicht initialisiert</value>
+    <value>Servizio non inizializzato</value>
+  </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>Nessun servizio abilitato. Vai alle Impostazioni per abilitare i servizi.</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} servizio/i completato/i</value>
   </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
-    <value>Ungültige Sprachauswahl</value>
+    <value>Selezione lingua non valida</value>
+  </data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>La Prima lingua e la Seconda lingua non possono essere uguali.</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
-    <value>Ungültige Proxy-URL</value>
+    <value>URL proxy non valido</value>
+  </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>L'URL del proxy non &#232; valido. Inserisci un URL valido (ad es. http://127.0.0.1:7890).</value>
   </data>
   <data name="SettingsSaved" xml:space="preserve">
-    <value>Einstellungen gespeichert</value>
+    <value>Impostazioni salvate</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>Le impostazioni sono state salvate con successo.</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
-    <value>Neustart erforderlich</value>
+    <value>Riavvio necessario</value>
   </data>
   <data name="CannotConnectToOllama" xml:space="preserve">
-    <value>Verbindung zu Ollama nicht möglich</value>
+    <value>Impossibile connettersi a Ollama</value>
+  </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>Impossibile recuperare i modelli da Ollama. Assicurati che Ollama sia in esecuzione e accessibile.</value>
   </data>
   <data name="Copied" xml:space="preserve">
-    <value>Kopiert!</value>
+    <value>Copiato!</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
-    <value>Erkannt: {0}</value>
+    <value>Rilevata: {0}</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>OK</value>
   </data>
 
   <!-- Service Names -->
@@ -496,10 +413,10 @@
     <value>OpenAI</value>
   </data>
   <data name="ServiceOllama" xml:space="preserve">
-    <value>Ollama (Lokal)</value>
+    <value>Ollama (Locale)</value>
   </data>
   <data name="ServiceBuiltIn" xml:space="preserve">
-    <value>Integrierte KI</value>
+    <value>AI integrata</value>
   </data>
   <data name="ServiceDeepSeek" xml:space="preserve">
     <value>DeepSeek</value>
@@ -517,7 +434,7 @@
     <value>Gemini</value>
   </data>
   <data name="ServiceCustomOpenAI" xml:space="preserve">
-    <value>Benutzerdefiniertes OpenAI</value>
+    <value>OpenAI personalizzato</value>
   </data>
   <data name="ServiceDoubao" xml:space="preserve">
     <value>Doubao</value>
@@ -529,76 +446,87 @@
     <value>NiuTrans</value>
   </data>
   <data name="ServiceLinguee" xml:space="preserve">
-    <value>Linguee Wörterbuch</value>
+    <value>Dizionario Linguee</value>
   </data>
 
   <!-- Tray Menu -->
   <data name="TrayShow" xml:space="preserve">
-    <value>Anzeigen</value>
+    <value>Mostra</value>
   </data>
   <data name="TrayShowMini" xml:space="preserve">
-    <value>Mini-Fenster</value>
+    <value>Finestra mini</value>
   </data>
   <data name="TrayShowFixed" xml:space="preserve">
-    <value>Fixiertes Fenster</value>
+    <value>Finestra fissa</value>
   </data>
   <data name="TraySettings" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>Impostazioni</value>
   </data>
   <data name="TrayExit" xml:space="preserve">
-    <value>Beenden</value>
+    <value>Esci</value>
+  </data>
+
+  <!-- Window Titles -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>Traduzione rapida</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>Traduzione fissa</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>Fissa finestra (rimani in primo piano)</value>
   </data>
 
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
-    <value>Oberflächensprache</value>
+    <value>Lingua dell'interfaccia</value>
   </data>
   <data name="RestartRequiredMessage" xml:space="preserve">
-    <value>Bitte starten Sie die Anwendung neu, damit die Sprachänderung wirksam wird.</value>
+    <value>Riavvia l'applicazione per applicare la modifica della lingua.</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
-    <value>Englisch</value>
+    <value>Inglese</value>
   </data>
   <data name="UILangChineseSimplified" xml:space="preserve">
-    <value>Chinesisch (Vereinfacht)</value>
+    <value>Cinese (Semplificato)</value>
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
   <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>Verhalten</value>
+    <value>Comportamento</value>
   </data>
   <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>Oberflächensprache</value>
+    <value>Lingua dell'interfaccia</value>
   </data>
   <data name="UILangEnglishItem.Content" xml:space="preserve">
     <value>English</value>
   </data>
   <data name="UILangChineseItem.Content" xml:space="preserve">
-    <value>简体中文</value>
+    <value>&#31616;&#20307;&#20013;&#25991;</value>
   </data>
   <data name="UILangJapaneseItem.Content" xml:space="preserve">
-    <value>日本語</value>
+    <value>&#26085;&#26412;&#35486;</value>
   </data>
   <data name="UILangKoreanItem.Content" xml:space="preserve">
-    <value>한국어</value>
+    <value>&#54620;&#44397;&#50612;</value>
   </data>
   <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
-    <value>繁體中文</value>
+    <value>&#32321;&#39636;&#20013;&#25991;</value>
   </data>
   <data name="UILangFrenchItem.Content" xml:space="preserve">
-    <value>Français</value>
+    <value>Fran&#231;ais</value>
   </data>
   <data name="UILangGermanItem.Content" xml:space="preserve">
     <value>Deutsch</value>
   </data>
   <data name="UILangVietnameseItem.Content" xml:space="preserve">
-    <value>Tiếng Việt</value>
+    <value>Ti&#7871;ng Vi&#7879;t</value>
   </data>
   <data name="UILangThaiItem.Content" xml:space="preserve">
-    <value>ไทย</value>
+    <value>&#3652;&#3607;&#3618;</value>
   </data>
   <data name="UILangArabicItem.Content" xml:space="preserve">
-    <value>العربية</value>
+    <value>&#1575;&#1604;&#1593;&#1585;&#1576;&#1610;&#1577;</value>
   </data>
   <data name="UILangIndonesianItem.Content" xml:space="preserve">
     <value>Bahasa Indonesia</value>
@@ -610,69 +538,98 @@
     <value>Bahasa Melayu</value>
   </data>
   <data name="UILangHindiItem.Content" xml:space="preserve">
-    <value>हिन्दी</value>
+    <value>&#2361;&#2367;&#2344;&#2381;&#2342;&#2368;</value>
   </data>
   <data name="UILangDanishItem.Content" xml:space="preserve">
     <value>Dansk</value>
   </data>
   <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>Wählen Sie die Anzeigesprache für die Anwendungsoberfläche. Neustart erforderlich.</value>
+    <value>Seleziona la lingua di visualizzazione per l'interfaccia dell'applicazione. Riavvio necessario.</value>
   </data>
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>In Taskleiste minimieren</value>
+    <value>Minimizza nella barra di sistema</value>
   </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>Zwischenablage auf Text überwachen</value>
+    <value>Monitora gli appunti per il testo</value>
   </data>
   <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
-    <value>Mausauswahl-Übersetzung (Text auswählen → schwebendes Symbol anklicken)</value>
+    <value>Traduci con selezione mouse (seleziona testo &#8594; clicca icona fluttuante)</value>
   </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>Immer im Vordergrund</value>
+    <value>Sempre in primo piano</value>
   </data>
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>Bei Windows-Start ausführen</value>
+    <value>Avvia all'avvio di Windows</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Chiudi</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>Nascondi (Ctrl+Alt+F per mostrare di nuovo)</value>
   </data>
 
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">
-    <value>Internationale Dienste aktivieren</value>
+    <value>Abilita servizi internazionali</value>
   </data>
   <data name="EnableInternationalServicesDescription" xml:space="preserve">
-    <value>Einige Dienste (Google, DeepL, OpenAI, Gemini usw.) erfordern internationalen Netzwerkzugang und sind möglicherweise nicht in allen Regionen verfügbar.</value>
+    <value>Alcuni servizi (Google, DeepL, OpenAI, Gemini, ecc.) richiedono accesso alla rete internazionale e potrebbero non essere disponibili in tutte le regioni.</value>
   </data>
   <data name="InternationalServiceUnavailableHint" xml:space="preserve">
-    <value>Dieser Dienst ist in Ihrer Region möglicherweise nicht verfügbar. Versuchen Sie stattdessen Bing Übersetzer oder andere regionskompatible Dienste. Sie können die aktivierten Dienste in den Einstellungen ändern.</value>
+    <value>Questo servizio potrebbe non essere disponibile nella tua regione. Prova a usare Bing Translate o altri servizi compatibili. Puoi modificare i servizi abilitati nelle Impostazioni.</value>
   </data>
 
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
-    <value>App-Design</value>
+    <value>Tema dell'app</value>
   </data>
   <data name="AppThemeDescription" xml:space="preserve">
-    <value>Wählen Sie das Erscheinungsbild von Easydict. Wählen Sie System, um dem Windows-Design zu folgen.</value>
+    <value>Scegli l'aspetto di Easydict. Seleziona Sistema per seguire il tema di Windows.</value>
   </data>
   <data name="ThemeSystem" xml:space="preserve">
-    <value>System</value>
+    <value>Sistema</value>
   </data>
   <data name="ThemeLight" xml:space="preserve">
-    <value>Hell</value>
+    <value>Chiaro</value>
   </data>
   <data name="ThemeDark" xml:space="preserve">
-    <value>Dunkel</value>
+    <value>Scuro</value>
   </data>
 
   <!-- Unsaved Changes Dialog -->
   <data name="UnsavedChangesTitle" xml:space="preserve">
-    <value>Nicht gespeicherte Änderungen</value>
+    <value>Modifiche non salvate</value>
   </data>
   <data name="UnsavedChangesMessage" xml:space="preserve">
-    <value>Sie haben nicht gespeicherte Änderungen. Möchten Sie diese vor dem Verlassen speichern?</value>
+    <value>Hai delle modifiche non salvate. Vuoi salvarle prima di uscire?</value>
   </data>
   <data name="DontSave" xml:space="preserve">
-    <value>Nicht speichern</value>
+    <value>Non salvare</value>
   </data>
   <data name="Cancel" xml:space="preserve">
-    <value>Abbrechen</value>
+    <value>Annulla</value>
+  </data>
+
+  <!-- Service Test Button -->
+  <data name="Test" xml:space="preserve">
+    <value>Test</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>Test in corso...</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>Test riuscito</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>Configurazione valida. Traduzione completata in {0}ms.</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>Test fallito</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>Test di configurazione fallito: {0}</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>Configura prima il servizio (chiave API, endpoint, ecc.).</value>
   </data>
 </root>

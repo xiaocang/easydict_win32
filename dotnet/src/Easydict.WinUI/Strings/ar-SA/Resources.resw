@@ -47,442 +47,367 @@
 
   <!-- Main Page -->
   <data name="SourceText" xml:space="preserve">
-    <value>Quelltext</value>
+    <value>النص المصدر</value>
   </data>
   <data name="TranslationResults" xml:space="preserve">
-    <value>Übersetzungsergebnisse</value>
+    <value>نتائج الترجمة</value>
   </data>
   <data name="InputPlaceholder" xml:space="preserve">
-    <value>Text zum Übersetzen eingeben oder einfügen...</value>
+    <value>أدخل أو الصق النص للترجمة...</value>
   </data>
   <data name="TranslationPlaceholder" xml:space="preserve">
-    <value>Übersetzung erscheint hier...</value>
+    <value>ستظهر الترجمة هنا...</value>
   </data>
   <data name="SettingsTooltip" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>الإعدادات</value>
   </data>
   <data name="TranslateTooltip" xml:space="preserve">
-    <value>Übersetzen</value>
+    <value>ترجمة</value>
   </data>
   <data name="SwapLanguagesTooltip" xml:space="preserve">
-    <value>Quell- und Zielsprache tauschen</value>
+    <value>تبديل لغة المصدر والهدف</value>
   </data>
   <data name="SourceLanguageTooltip" xml:space="preserve">
-    <value>Quellsprache</value>
+    <value>لغة المصدر</value>
   </data>
   <data name="TargetLanguageTooltip" xml:space="preserve">
-    <value>Zielsprache</value>
+    <value>لغة الهدف</value>
   </data>
 
   <!-- Status -->
   <data name="StatusConnected" xml:space="preserve">
-    <value>Verbunden</value>
+    <value>متصل</value>
   </data>
   <data name="StatusDisconnected" xml:space="preserve">
-    <value>Getrennt</value>
+    <value>غير متصل</value>
+  </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>جارٍ التهيئة...</value>
   </data>
   <data name="StatusReady" xml:space="preserve">
-    <value>Bereit</value>
+    <value>جاهز</value>
   </data>
   <data name="StatusTranslating" xml:space="preserve">
-    <value>Übersetze...</value>
+    <value>جارٍ الترجمة...</value>
   </data>
   <data name="StatusError" xml:space="preserve">
-    <value>Fehler</value>
+    <value>خطأ</value>
   </data>
 
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
-    <value>Automatisch erkennen</value>
+    <value>اكتشاف تلقائي</value>
   </data>
   <data name="LangEnglish" xml:space="preserve">
-    <value>Englisch</value>
+    <value>الإنجليزية</value>
   </data>
   <data name="LangChinese" xml:space="preserve">
-    <value>Chinesisch</value>
+    <value>الصينية</value>
   </data>
   <data name="LangChineseSimplified" xml:space="preserve">
-    <value>Chinesisch (Vereinfacht)</value>
+    <value>الصينية (المبسّطة)</value>
   </data>
   <data name="LangChineseTraditional" xml:space="preserve">
-    <value>Chinesisch (Traditionell)</value>
+    <value>الصينية (التقليدية)</value>
   </data>
   <data name="LangJapanese" xml:space="preserve">
-    <value>Japanisch</value>
+    <value>اليابانية</value>
   </data>
   <data name="LangKorean" xml:space="preserve">
-    <value>Koreanisch</value>
+    <value>الكورية</value>
   </data>
   <data name="LangFrench" xml:space="preserve">
-    <value>Französisch</value>
+    <value>الفرنسية</value>
   </data>
   <data name="LangGerman" xml:space="preserve">
-    <value>Deutsch</value>
+    <value>الألمانية</value>
   </data>
   <data name="LangSpanish" xml:space="preserve">
-    <value>Spanisch</value>
-  </data>
-  <data name="LangClassicalChinese" xml:space="preserve">
-    <value>Klassisches Chinesisch</value>
-  </data>
-  <data name="LangDutch" xml:space="preserve">
-    <value>Niederländisch</value>
-  </data>
-  <data name="LangSwedish" xml:space="preserve">
-    <value>Schwedisch</value>
-  </data>
-  <data name="LangNorwegian" xml:space="preserve">
-    <value>Norwegisch</value>
-  </data>
-  <data name="LangDanish" xml:space="preserve">
-    <value>Dänisch</value>
-  </data>
-  <data name="LangPortuguese" xml:space="preserve">
-    <value>Portugiesisch</value>
-  </data>
-  <data name="LangItalian" xml:space="preserve">
-    <value>Italienisch</value>
-  </data>
-  <data name="LangRomanian" xml:space="preserve">
-    <value>Rumänisch</value>
-  </data>
-  <data name="LangRussian" xml:space="preserve">
-    <value>Russisch</value>
-  </data>
-  <data name="LangPolish" xml:space="preserve">
-    <value>Polnisch</value>
-  </data>
-  <data name="LangCzech" xml:space="preserve">
-    <value>Tschechisch</value>
-  </data>
-  <data name="LangUkrainian" xml:space="preserve">
-    <value>Ukrainisch</value>
-  </data>
-  <data name="LangBulgarian" xml:space="preserve">
-    <value>Bulgarisch</value>
-  </data>
-  <data name="LangSlovak" xml:space="preserve">
-    <value>Slowakisch</value>
-  </data>
-  <data name="LangSlovenian" xml:space="preserve">
-    <value>Slowenisch</value>
-  </data>
-  <data name="LangEstonian" xml:space="preserve">
-    <value>Estnisch</value>
-  </data>
-  <data name="LangLatvian" xml:space="preserve">
-    <value>Lettisch</value>
-  </data>
-  <data name="LangLithuanian" xml:space="preserve">
-    <value>Litauisch</value>
-  </data>
-  <data name="LangGreek" xml:space="preserve">
-    <value>Griechisch</value>
-  </data>
-  <data name="LangHungarian" xml:space="preserve">
-    <value>Ungarisch</value>
-  </data>
-  <data name="LangFinnish" xml:space="preserve">
-    <value>Finnisch</value>
-  </data>
-  <data name="LangTurkish" xml:space="preserve">
-    <value>Türkisch</value>
-  </data>
-  <data name="LangArabic" xml:space="preserve">
-    <value>Arabisch</value>
-  </data>
-  <data name="LangPersian" xml:space="preserve">
-    <value>Persisch</value>
-  </data>
-  <data name="LangHebrew" xml:space="preserve">
-    <value>Hebräisch</value>
-  </data>
-  <data name="LangHindi" xml:space="preserve">
-    <value>Hindi</value>
-  </data>
-  <data name="LangBengali" xml:space="preserve">
-    <value>Bengalisch</value>
-  </data>
-  <data name="LangTamil" xml:space="preserve">
-    <value>Tamil</value>
-  </data>
-  <data name="LangTelugu" xml:space="preserve">
-    <value>Telugu</value>
-  </data>
-  <data name="LangUrdu" xml:space="preserve">
-    <value>Urdu</value>
-  </data>
-  <data name="LangVietnamese" xml:space="preserve">
-    <value>Vietnamesisch</value>
-  </data>
-  <data name="LangThai" xml:space="preserve">
-    <value>Thailändisch</value>
-  </data>
-  <data name="LangIndonesian" xml:space="preserve">
-    <value>Indonesisch</value>
-  </data>
-  <data name="LangMalay" xml:space="preserve">
-    <value>Malaiisch</value>
-  </data>
-  <data name="LangFilipino" xml:space="preserve">
-    <value>Filipino</value>
-  </data>
-  <data name="AvailableLanguages" xml:space="preserve">
-    <value>Verfügbare Sprachen</value>
-  </data>
-  <data name="AvailableLanguagesDesc" xml:space="preserve">
-    <value>Wählen Sie die in den Quell-/Zielsprachauswahlfeldern verfügbaren Sprachen. Mindestens 2 erforderlich.</value>
+    <value>الإسبانية</value>
   </data>
 
   <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>الإعدادات</value>
   </data>
   <data name="TranslationService" xml:space="preserve">
-    <value>Übersetzungsdienst</value>
+    <value>خدمة الترجمة</value>
   </data>
   <data name="EnabledServices" xml:space="preserve">
-    <value>Aktivierte Dienste</value>
+    <value>الخدمات المفعّلة</value>
   </data>
   <data name="EnabledServicesDescription" xml:space="preserve">
-    <value>Wählen Sie aus, welche Übersetzungsdienste in jedem Fenster angezeigt werden. Mehrere Dienste werden parallel ausgeführt.</value>
+    <value>اختر خدمات الترجمة التي تريد عرضها في كل نافذة. ستعمل الخدمات المتعددة بشكل متوازٍ.</value>
   </data>
   <data name="MainWindow" xml:space="preserve">
-    <value>Hauptfenster</value>
+    <value>النافذة الرئيسية</value>
   </data>
   <data name="MiniWindow" xml:space="preserve">
-    <value>Mini-Fenster</value>
+    <value>النافذة المصغّرة</value>
   </data>
   <data name="FixedWindow" xml:space="preserve">
-    <value>Fixiertes Fenster</value>
+    <value>النافذة الثابتة</value>
   </data>
   <data name="Auto" xml:space="preserve">
-    <value>Automatisch</value>
+    <value>تلقائي</value>
   </data>
   <data name="Manual" xml:space="preserve">
-    <value>Manuell</value>
+    <value>يدوي</value>
   </data>
 
   <!-- Language Preferences -->
   <data name="LanguagePreferences" xml:space="preserve">
-    <value>Spracheinstellungen</value>
+    <value>تفضيلات اللغة</value>
   </data>
   <data name="FirstLanguage" xml:space="preserve">
-    <value>Erste Sprache</value>
+    <value>اللغة الأولى</value>
   </data>
   <data name="SecondLanguage" xml:space="preserve">
-    <value>Zweite Sprache</value>
+    <value>اللغة الثانية</value>
   </data>
   <data name="LanguagePreferencesDescription" xml:space="preserve">
-    <value>Wenn die erkannte Sprache Ihrer Ersten Sprache entspricht, wird die Übersetzung in Ihre Zweite Sprache erfolgen und umgekehrt.</value>
+    <value>عندما تتطابق اللغة المكتشفة مع لغتك الأولى، سيكون هدف الترجمة هو لغتك الثانية، والعكس صحيح.</value>
   </data>
   <data name="AutoSelectTargetLanguage" xml:space="preserve">
-    <value>Zielsprache automatisch basierend auf erkannter Quelle auswählen</value>
+    <value>تحديد لغة الهدف تلقائياً بناءً على لغة المصدر المكتشفة</value>
   </data>
 
   <!-- Service Configuration -->
   <data name="ServiceConfiguration" xml:space="preserve">
-    <value>Dienstkonfiguration</value>
+    <value>تكوين الخدمة</value>
   </data>
   <data name="ServiceConfigurationDescription" xml:space="preserve">
-    <value>Konfigurieren Sie API-Schlüssel, Endpunkte und Modelle für jeden Übersetzungsdienst.</value>
+    <value>تكوين مفاتيح API والنقاط الطرفية والنماذج لكل خدمة ترجمة.</value>
   </data>
   <data name="ApiKey" xml:space="preserve">
-    <value>API-Schlüssel</value>
+    <value>مفتاح API</value>
   </data>
   <data name="ApiKeyOptional" xml:space="preserve">
-    <value>API-Schlüssel (Optional)</value>
+    <value>مفتاح API (اختياري)</value>
   </data>
   <data name="Endpoint" xml:space="preserve">
-    <value>Endpunkt</value>
+    <value>نقطة الاتصال</value>
   </data>
   <data name="EndpointOptional" xml:space="preserve">
-    <value>Endpunkt (Optional)</value>
+    <value>نقطة الاتصال (اختياري)</value>
   </data>
   <data name="EndpointRequired" xml:space="preserve">
-    <value>Endpunkt (Erforderlich)</value>
+    <value>نقطة الاتصال (مطلوب)</value>
   </data>
   <data name="Model" xml:space="preserve">
-    <value>Modell</value>
+    <value>النموذج</value>
   </data>
   <data name="Refresh" xml:space="preserve">
-    <value>Aktualisieren</value>
+    <value>تحديث</value>
   </data>
 
   <!-- Service Descriptions -->
   <data name="DeepLDescription" xml:space="preserve">
-    <value>Lassen Sie den API-Schlüssel leer, um die kostenlose Web-Übersetzung zu nutzen. Pro-API-Schlüssel bieten höhere Limits.</value>
+    <value>اترك مفتاح API فارغاً لاستخدام ترجمة الويب المجانية. مفتاح Pro API يوفر حدوداً أعلى.</value>
   </data>
   <data name="DeepLFreeOption" xml:space="preserve">
-    <value>Kostenlose API verwenden (kein API-Schlüssel für Web-Übersetzung erforderlich)</value>
+    <value>استخدام API المجاني (ترجمة الويب لا تتطلب مفتاح API)</value>
   </data>
   <data name="OpenAIDescription" xml:space="preserve">
-    <value>Sie können einen benutzerdefinierten Modellnamen direkt eingeben.</value>
+    <value>يمكنك كتابة اسم نموذج مخصص مباشرة.</value>
   </data>
   <data name="DeepSeekDescription" xml:space="preserve">
-    <value>Holen Sie sich Ihren API-Schlüssel von platform.deepseek.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>احصل على مفتاح API من platform.deepseek.com. يمكنك كتابة اسم نموذج مخصص.</value>
   </data>
   <data name="GroqDescription" xml:space="preserve">
-    <value>Groq bietet schnelle Inferenz. Holen Sie sich Ihren API-Schlüssel von console.groq.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>يوفر Groq استدلالاً سريعاً. احصل على مفتاح API من console.groq.com. يمكنك كتابة اسم نموذج مخصص.</value>
   </data>
   <data name="ZhipuDescription" xml:space="preserve">
-    <value>Holen Sie sich Ihren API-Schlüssel von open.bigmodel.cn. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>احصل على مفتاح API من open.bigmodel.cn. يمكنك كتابة اسم نموذج مخصص.</value>
   </data>
   <data name="GitHubModelsDescription" xml:space="preserve">
-    <value>Verwenden Sie Ihr GitHub-Personal-Access-Token. Erstellen Sie eines unter github.com/settings/tokens. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>استخدم رمز الوصول الشخصي لـ GitHub. احصل عليه من github.com/settings/tokens. يمكنك كتابة اسم نموذج مخصص.</value>
   </data>
   <data name="GeminiDescription" xml:space="preserve">
-    <value>Holen Sie sich Ihren API-Schlüssel von aistudio.google.com. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>احصل على مفتاح API من aistudio.google.com. يمكنك كتابة اسم نموذج مخصص.</value>
   </data>
   <data name="CustomOpenAIDescription" xml:space="preserve">
-    <value>Konfigurieren Sie jeden OpenAI-kompatiblen API-Endpunkt (z.B. lokale LLM-Server, andere KI-Anbieter).</value>
+    <value>تكوين أي نقطة اتصال API متوافقة مع OpenAI (مثل خوادم LLM المحلية، مزودي AI آخرين).</value>
   </data>
   <data name="OllamaDescription" xml:space="preserve">
-    <value>Ollama muss lokal ausgeführt werden. Klicken Sie auf Aktualisieren, um verfügbare Modelle zu laden.</value>
+    <value>يجب أن يكون Ollama قيد التشغيل محلياً. انقر على تحديث لتحميل النماذج المتاحة.</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>Integrierte KI verwendet den Groq-Cloud-Dienst. Kein API-Schlüssel erforderlich. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>يستخدم الذكاء الاصطناعي المدمج خدمة Groq السحابية. لا يتطلب مفتاح API. يمكنك كتابة اسم نموذج مخصص.</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
-    <value>ByteDances Doubao-Übersetzungsdienst. Holen Sie sich Ihren API-Schlüssel von console.volcengine.com</value>
+    <value>خدمة ترجمة Doubao من ByteDance. احصل على مفتاح API من console.volcengine.com</value>
   </data>
   <data name="CaiyunDescription" xml:space="preserve">
-    <value>Holen Sie sich Ihren API-Schlüssel von fanyi.caiyunapp.com</value>
+    <value>احصل على مفتاح API من fanyi.caiyunapp.com</value>
   </data>
   <data name="NiuTransDescription" xml:space="preserve">
-    <value>NiuTrans unterstützt über 450 Sprachpaare. Holen Sie sich Ihren API-Schlüssel von niutrans.com</value>
+    <value>يدعم NiuTrans أكثر من 450 زوج لغوي. احصل على مفتاح API من niutrans.com</value>
+  </data>
+  <data name="AppKey" xml:space="preserve">
+    <value>مفتاح التطبيق</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>سر التطبيق</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>استخدام API الرسمي</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>يوفر Youdao النطق الصوتي للكلمات الإنجليزية. بدون مفاتيح API، يستخدم قاموس الويب المجاني. مع مفاتيح API، يتيح API الرسمي لحدود أعلى. احصل على مفاتيح API من ai.youdao.com</value>
   </data>
   <data name="FreeServicesTitle" xml:space="preserve">
-    <value>Kostenlose Dienste (Keine Konfiguration erforderlich)</value>
+    <value>خدمات مجانية (لا تتطلب تكويناً)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google Translate und Linguee Dictionary funktionieren sofort ohne API-Schlüssel.</value>
+    <value>يعمل Google Translate وقاموس Linguee فوراً بدون مفاتيح API.</value>
   </data>
 
   <!-- HTTP Proxy -->
   <data name="HttpProxy" xml:space="preserve">
-    <value>HTTP-Proxy</value>
+    <value>وكيل HTTP</value>
   </data>
   <data name="UseHttpProxy" xml:space="preserve">
-    <value>HTTP-Proxy verwenden</value>
+    <value>استخدام وكيل HTTP</value>
   </data>
   <data name="ProxyUrl" xml:space="preserve">
-    <value>Proxy-URL</value>
+    <value>عنوان الوكيل</value>
   </data>
   <data name="BypassProxyForLocalhost" xml:space="preserve">
-    <value>Proxy für localhost umgehen</value>
+    <value>تجاوز الوكيل للمضيف المحلي</value>
   </data>
   <data name="ProxyDescription" xml:space="preserve">
-    <value>Proxy-Änderungen werden nach Neustart der App wirksam. Localhost-Umgehung stellt sicher, dass Ollama ohne Proxy funktioniert.</value>
+    <value>تسري تغييرات الوكيل بعد إعادة تشغيل التطبيق. تجاوز المضيف المحلي يضمن عمل Ollama بدون وكيل.</value>
   </data>
 
   <!-- Behavior -->
   <data name="Behavior" xml:space="preserve">
-    <value>Verhalten</value>
+    <value>السلوك</value>
   </data>
   <data name="MinimizeToTray" xml:space="preserve">
-    <value>In Taskleiste minimieren</value>
+    <value>تصغير إلى علبة النظام</value>
   </data>
   <data name="MonitorClipboard" xml:space="preserve">
-    <value>Zwischenablage auf Text überwachen</value>
+    <value>مراقبة الحافظة للنصوص</value>
   </data>
   <data name="AlwaysOnTop" xml:space="preserve">
-    <value>Immer im Vordergrund</value>
+    <value>دائماً في المقدمة</value>
   </data>
   <data name="LaunchAtStartup" xml:space="preserve">
-    <value>Bei Windows-Start ausführen</value>
+    <value>التشغيل عند بدء Windows</value>
   </data>
 
   <!-- Hotkeys -->
   <data name="Hotkeys" xml:space="preserve">
-    <value>Tastenkürzel</value>
+    <value>اختصارات لوحة المفاتيح</value>
   </data>
   <data name="ShowWindow" xml:space="preserve">
-    <value>Fenster anzeigen</value>
+    <value>إظهار النافذة</value>
   </data>
   <data name="TranslateSelection" xml:space="preserve">
-    <value>Auswahl übersetzen</value>
+    <value>ترجمة النص المحدد</value>
   </data>
   <data name="ShowMiniWindow" xml:space="preserve">
-    <value>Mini-Fenster anzeigen</value>
+    <value>إظهار النافذة المصغّرة</value>
   </data>
   <data name="ShowFixedWindow" xml:space="preserve">
-    <value>Fixiertes Fenster anzeigen</value>
+    <value>إظهار النافذة الثابتة</value>
   </data>
   <data name="HotkeysDescription" xml:space="preserve">
-    <value>Hinweis: Starten Sie die App neu, um Tastenkürzel-Änderungen anzuwenden. Umschalt-Tastenkürzel verwenden dieselbe Taste mit zusätzlicher Umschalttaste (z.B. Strg+Alt+Umschalt+M).</value>
+    <value>ملاحظة: أعد تشغيل التطبيق لتطبيق تغييرات الاختصارات. اختصارات التبديل تستخدم نفس المفتاح مع Shift (مثل Ctrl+Alt+Shift+M).</value>
   </data>
 
   <!-- About -->
   <data name="About" xml:space="preserve">
-    <value>Über</value>
+    <value>حول</value>
   </data>
   <data name="EasydictForWindows" xml:space="preserve">
-    <value>Easydict für Windows</value>
+    <value>Easydict لنظام Windows</value>
   </data>
   <data name="GitHubRepository" xml:space="preserve">
-    <value>GitHub-Repository</value>
+    <value>مستودع GitHub</value>
   </data>
   <data name="IssueFeedback" xml:space="preserve">
-    <value>Problem melden</value>
+    <value>الإبلاغ عن مشكلة</value>
   </data>
   <data name="InspiredBy" xml:space="preserve">
-    <value>Inspiriert von</value>
+    <value>مستوحى من</value>
   </data>
   <data name="EasydictForMacOS" xml:space="preserve">
-    <value>Easydict für macOS</value>
+    <value>Easydict لنظام macOS</value>
   </data>
   <data name="License" xml:space="preserve">
-    <value>Lizenz: GPL-3.0</value>
+    <value>الترخيص: GPL-3.0</value>
   </data>
 
   <!-- Buttons -->
   <data name="SaveSettings" xml:space="preserve">
-    <value>Einstellungen speichern</value>
+    <value>حفظ الإعدادات</value>
   </data>
   <data name="Back" xml:space="preserve">
-    <value>Zurück</value>
+    <value>رجوع</value>
   </data>
   <data name="BackToTop" xml:space="preserve">
-    <value>Nach oben</value>
+    <value>العودة للأعلى</value>
   </data>
   <data name="Copy" xml:space="preserve">
-    <value>Kopieren</value>
+    <value>نسخ</value>
   </data>
   <data name="InsertReplace" xml:space="preserve">
-    <value>Einfügen/Ersetzen</value>
+    <value>إدراج/استبدال</value>
   </data>
   <data name="CopyAll" xml:space="preserve">
-    <value>Alle kopieren</value>
+    <value>نسخ الكل</value>
   </data>
 
   <!-- Messages -->
   <data name="TranslationFailed" xml:space="preserve">
-    <value>Übersetzung fehlgeschlagen</value>
+    <value>فشلت الترجمة</value>
   </data>
   <data name="ServiceNotInitialized" xml:space="preserve">
-    <value>Dienst nicht initialisiert</value>
+    <value>الخدمة غير مهيأة</value>
+  </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>لا توجد خدمات مفعّلة. انتقل إلى الإعدادات لتفعيل الخدمات.</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>اكتملت {0} خدمة (خدمات)</value>
   </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
-    <value>Ungültige Sprachauswahl</value>
+    <value>اختيار لغة غير صالح</value>
+  </data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>لا يمكن أن تكون اللغة الأولى والثانية متطابقتين.</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
-    <value>Ungültige Proxy-URL</value>
+    <value>عنوان وكيل غير صالح</value>
+  </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>عنوان الوكيل غير صالح. الرجاء إدخال عنوان صالح (مثل http://127.0.0.1:7890).</value>
   </data>
   <data name="SettingsSaved" xml:space="preserve">
-    <value>Einstellungen gespeichert</value>
+    <value>تم حفظ الإعدادات</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>تم حفظ إعداداتك بنجاح.</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
-    <value>Neustart erforderlich</value>
+    <value>يلزم إعادة التشغيل</value>
   </data>
   <data name="CannotConnectToOllama" xml:space="preserve">
-    <value>Verbindung zu Ollama nicht möglich</value>
+    <value>لا يمكن الاتصال بـ Ollama</value>
+  </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>فشل جلب النماذج من Ollama. تأكد من أن Ollama قيد التشغيل ويمكن الوصول إليه.</value>
   </data>
   <data name="Copied" xml:space="preserve">
-    <value>Kopiert!</value>
+    <value>تم النسخ!</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
-    <value>Erkannt: {0}</value>
+    <value>المكتشفة: {0}</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>موافق</value>
   </data>
 
   <!-- Service Names -->
@@ -496,10 +421,10 @@
     <value>OpenAI</value>
   </data>
   <data name="ServiceOllama" xml:space="preserve">
-    <value>Ollama (Lokal)</value>
+    <value>Ollama (محلي)</value>
   </data>
   <data name="ServiceBuiltIn" xml:space="preserve">
-    <value>Integrierte KI</value>
+    <value>ذكاء اصطناعي مدمج</value>
   </data>
   <data name="ServiceDeepSeek" xml:space="preserve">
     <value>DeepSeek</value>
@@ -517,7 +442,7 @@
     <value>Gemini</value>
   </data>
   <data name="ServiceCustomOpenAI" xml:space="preserve">
-    <value>Benutzerdefiniertes OpenAI</value>
+    <value>OpenAI مخصص</value>
   </data>
   <data name="ServiceDoubao" xml:space="preserve">
     <value>Doubao</value>
@@ -529,46 +454,57 @@
     <value>NiuTrans</value>
   </data>
   <data name="ServiceLinguee" xml:space="preserve">
-    <value>Linguee Wörterbuch</value>
+    <value>قاموس Linguee</value>
   </data>
 
   <!-- Tray Menu -->
   <data name="TrayShow" xml:space="preserve">
-    <value>Anzeigen</value>
+    <value>إظهار</value>
   </data>
   <data name="TrayShowMini" xml:space="preserve">
-    <value>Mini-Fenster</value>
+    <value>النافذة المصغّرة</value>
   </data>
   <data name="TrayShowFixed" xml:space="preserve">
-    <value>Fixiertes Fenster</value>
+    <value>النافذة الثابتة</value>
   </data>
   <data name="TraySettings" xml:space="preserve">
-    <value>Einstellungen</value>
+    <value>الإعدادات</value>
   </data>
   <data name="TrayExit" xml:space="preserve">
-    <value>Beenden</value>
+    <value>خروج</value>
+  </data>
+
+  <!-- Window Titles -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>ترجمة سريعة</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>ترجمة ثابتة</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>تثبيت النافذة (البقاء في المقدمة)</value>
   </data>
 
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">
-    <value>Oberflächensprache</value>
+    <value>لغة الواجهة</value>
   </data>
   <data name="RestartRequiredMessage" xml:space="preserve">
-    <value>Bitte starten Sie die Anwendung neu, damit die Sprachänderung wirksam wird.</value>
+    <value>الرجاء إعادة تشغيل التطبيق لتفعيل تغيير اللغة.</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
-    <value>Englisch</value>
+    <value>الإنجليزية</value>
   </data>
   <data name="UILangChineseSimplified" xml:space="preserve">
-    <value>Chinesisch (Vereinfacht)</value>
+    <value>الصينية (المبسّطة)</value>
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
   <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>Verhalten</value>
+    <value>السلوك</value>
   </data>
   <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>Oberflächensprache</value>
+    <value>لغة الواجهة</value>
   </data>
   <data name="UILangEnglishItem.Content" xml:space="preserve">
     <value>English</value>
@@ -616,63 +552,92 @@
     <value>Dansk</value>
   </data>
   <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>Wählen Sie die Anzeigesprache für die Anwendungsoberfläche. Neustart erforderlich.</value>
+    <value>اختر لغة العرض لواجهة التطبيق. يلزم إعادة التشغيل.</value>
   </data>
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>In Taskleiste minimieren</value>
+    <value>تصغير إلى علبة النظام</value>
   </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>Zwischenablage auf Text überwachen</value>
+    <value>مراقبة الحافظة للنصوص</value>
   </data>
   <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
-    <value>Mausauswahl-Übersetzung (Text auswählen → schwebendes Symbol anklicken)</value>
+    <value>ترجمة بتحديد الماوس (حدد النص ← انقر على الأيقونة العائمة)</value>
   </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>Immer im Vordergrund</value>
+    <value>دائماً في المقدمة</value>
   </data>
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>Bei Windows-Start ausführen</value>
+    <value>التشغيل عند بدء Windows</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>إغلاق</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>إخفاء (Ctrl+Alt+F للإظهار مرة أخرى)</value>
   </data>
 
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">
-    <value>Internationale Dienste aktivieren</value>
+    <value>تفعيل الخدمات الدولية</value>
   </data>
   <data name="EnableInternationalServicesDescription" xml:space="preserve">
-    <value>Einige Dienste (Google, DeepL, OpenAI, Gemini usw.) erfordern internationalen Netzwerkzugang und sind möglicherweise nicht in allen Regionen verfügbar.</value>
+    <value>بعض الخدمات (Google وDeepL وOpenAI وGemini وغيرها) تتطلب الوصول إلى الشبكة الدولية وقد لا تكون متاحة في جميع المناطق.</value>
   </data>
   <data name="InternationalServiceUnavailableHint" xml:space="preserve">
-    <value>Dieser Dienst ist in Ihrer Region möglicherweise nicht verfügbar. Versuchen Sie stattdessen Bing Übersetzer oder andere regionskompatible Dienste. Sie können die aktivierten Dienste in den Einstellungen ändern.</value>
+    <value>قد لا تكون هذه الخدمة متاحة في منطقتك. جرب استخدام Bing Translate أو خدمات أخرى متوافقة مع المنطقة. يمكنك تغيير الخدمات المفعّلة في الإعدادات.</value>
   </data>
 
   <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
-    <value>App-Design</value>
+    <value>سمة التطبيق</value>
   </data>
   <data name="AppThemeDescription" xml:space="preserve">
-    <value>Wählen Sie das Erscheinungsbild von Easydict. Wählen Sie System, um dem Windows-Design zu folgen.</value>
+    <value>اختر مظهر Easydict. اختر النظام لمتابعة سمة Windows.</value>
   </data>
   <data name="ThemeSystem" xml:space="preserve">
-    <value>System</value>
+    <value>النظام</value>
   </data>
   <data name="ThemeLight" xml:space="preserve">
-    <value>Hell</value>
+    <value>فاتح</value>
   </data>
   <data name="ThemeDark" xml:space="preserve">
-    <value>Dunkel</value>
+    <value>داكن</value>
   </data>
 
   <!-- Unsaved Changes Dialog -->
   <data name="UnsavedChangesTitle" xml:space="preserve">
-    <value>Nicht gespeicherte Änderungen</value>
+    <value>تغييرات غير محفوظة</value>
   </data>
   <data name="UnsavedChangesMessage" xml:space="preserve">
-    <value>Sie haben nicht gespeicherte Änderungen. Möchten Sie diese vor dem Verlassen speichern?</value>
+    <value>لديك تغييرات غير محفوظة. هل تريد حفظها قبل المغادرة؟</value>
   </data>
   <data name="DontSave" xml:space="preserve">
-    <value>Nicht speichern</value>
+    <value>عدم الحفظ</value>
   </data>
   <data name="Cancel" xml:space="preserve">
-    <value>Abbrechen</value>
+    <value>إلغاء</value>
+  </data>
+
+  <!-- Service Test Button -->
+  <data name="Test" xml:space="preserve">
+    <value>اختبار</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>جارٍ الاختبار...</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>نجح الاختبار</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>التكوين صالح. اكتملت الترجمة في {0} مللي ثانية.</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>فشل الاختبار</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>فشل اختبار التكوين: {0}</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>الرجاء تكوين الخدمة أولاً (مفتاح API، نقطة الاتصال، إلخ).</value>
   </data>
 </root>

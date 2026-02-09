@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>1.3</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AppName" xml:space="preserve"><value>Easydict</value></data>
+  <data name="SourceText" xml:space="preserve"><value>मूल पाठ</value></data>
+  <data name="TranslationResults" xml:space="preserve"><value>अनुवाद परिणाम</value></data>
+  <data name="InputPlaceholder" xml:space="preserve"><value>अनुवाद के लिए पाठ दर्ज या पेस्ट करें...</value></data>
+  <data name="TranslationPlaceholder" xml:space="preserve"><value>अनुवाद यहाँ दिखाई देगा...</value></data>
+  <data name="SettingsTooltip" xml:space="preserve"><value>सेटिंग्स</value></data>
+  <data name="TranslateTooltip" xml:space="preserve"><value>अनुवाद करें</value></data>
+  <data name="SwapLanguagesTooltip" xml:space="preserve"><value>स्रोत और लक्ष्य भाषा बदलें</value></data>
+  <data name="SourceLanguageTooltip" xml:space="preserve"><value>स्रोत भाषा</value></data>
+  <data name="TargetLanguageTooltip" xml:space="preserve"><value>लक्ष्य भाषा</value></data>
+  <data name="StatusConnected" xml:space="preserve"><value>कनेक्टेड</value></data>
+  <data name="StatusDisconnected" xml:space="preserve"><value>डिस्कनेक्टेड</value></data>
+  <data name="StatusInitializing" xml:space="preserve"><value>आरंभ हो रहा है...</value></data>
+  <data name="StatusReady" xml:space="preserve"><value>तैयार</value></data>
+  <data name="StatusTranslating" xml:space="preserve"><value>अनुवाद हो रहा है...</value></data>
+  <data name="StatusError" xml:space="preserve"><value>त्रुटि</value></data>
+  <data name="LangAutoDetect" xml:space="preserve"><value>स्वतः पहचान</value></data>
+  <data name="LangEnglish" xml:space="preserve"><value>अंग्रेज़ी</value></data>
+  <data name="LangChinese" xml:space="preserve"><value>चीनी</value></data>
+  <data name="LangChineseSimplified" xml:space="preserve"><value>चीनी (सरलीकृत)</value></data>
+  <data name="LangChineseTraditional" xml:space="preserve"><value>चीनी (पारंपरिक)</value></data>
+  <data name="LangJapanese" xml:space="preserve"><value>जापानी</value></data>
+  <data name="LangKorean" xml:space="preserve"><value>कोरियाई</value></data>
+  <data name="LangFrench" xml:space="preserve"><value>फ़्रेंच</value></data>
+  <data name="LangGerman" xml:space="preserve"><value>जर्मन</value></data>
+  <data name="LangSpanish" xml:space="preserve"><value>स्पेनिश</value></data>
+  <data name="Settings" xml:space="preserve"><value>सेटिंग्स</value></data>
+  <data name="TranslationService" xml:space="preserve"><value>अनुवाद सेवा</value></data>
+  <data name="EnabledServices" xml:space="preserve"><value>सक्रिय सेवाएँ</value></data>
+  <data name="EnabledServicesDescription" xml:space="preserve"><value>प्रत्येक विंडो में दिखाने के लिए अनुवाद सेवाएँ चुनें। कई सेवाएँ समानांतर में चलेंगी।</value></data>
+  <data name="MainWindow" xml:space="preserve"><value>मुख्य विंडो</value></data>
+  <data name="MiniWindow" xml:space="preserve"><value>मिनी विंडो</value></data>
+  <data name="FixedWindow" xml:space="preserve"><value>स्थिर विंडो</value></data>
+  <data name="Auto" xml:space="preserve"><value>स्वचालित</value></data>
+  <data name="Manual" xml:space="preserve"><value>मैनुअल</value></data>
+  <data name="LanguagePreferences" xml:space="preserve"><value>भाषा प्राथमिकताएँ</value></data>
+  <data name="FirstLanguage" xml:space="preserve"><value>प्रथम भाषा</value></data>
+  <data name="SecondLanguage" xml:space="preserve"><value>द्वितीय भाषा</value></data>
+  <data name="LanguagePreferencesDescription" xml:space="preserve"><value>जब पहचानी गई भाषा आपकी प्रथम भाषा से मेल खाती है, तो अनुवाद लक्ष्य आपकी द्वितीय भाषा होगी, और इसके विपरीत।</value></data>
+  <data name="AutoSelectTargetLanguage" xml:space="preserve"><value>पहचानी गई स्रोत भाषा के आधार पर लक्ष्य भाषा स्वचालित रूप से चुनें</value></data>
+  <data name="ServiceConfiguration" xml:space="preserve"><value>सेवा कॉन्फ़िगरेशन</value></data>
+  <data name="ServiceConfigurationDescription" xml:space="preserve"><value>प्रत्येक अनुवाद सेवा के लिए API key, endpoint और model कॉन्फ़िगर करें।</value></data>
+  <data name="ApiKey" xml:space="preserve"><value>API Key</value></data>
+  <data name="ApiKeyOptional" xml:space="preserve"><value>API Key (वैकल्पिक)</value></data>
+  <data name="Endpoint" xml:space="preserve"><value>Endpoint</value></data>
+  <data name="EndpointOptional" xml:space="preserve"><value>Endpoint (वैकल्पिक)</value></data>
+  <data name="EndpointRequired" xml:space="preserve"><value>Endpoint (आवश्यक)</value></data>
+  <data name="Model" xml:space="preserve"><value>Model</value></data>
+  <data name="Refresh" xml:space="preserve"><value>रीफ़्रेश</value></data>
+  <data name="DeepLDescription" xml:space="preserve"><value>मुफ़्त वेब अनुवाद के लिए API key खाली छोड़ें। Pro API key से अधिक सीमा मिलती है।</value></data>
+  <data name="DeepLFreeOption" xml:space="preserve"><value>मुफ़्त API का उपयोग करें (वेब अनुवाद के लिए API key आवश्यक नहीं)</value></data>
+  <data name="OpenAIDescription" xml:space="preserve"><value>आप सीधे कस्टम model नाम टाइप कर सकते हैं।</value></data>
+  <data name="DeepSeekDescription" xml:space="preserve"><value>platform.deepseek.com से API key प्राप्त करें। आप कस्टम model नाम टाइप कर सकते हैं।</value></data>
+  <data name="GroqDescription" xml:space="preserve"><value>Groq तेज़ इंफ़रेंस प्रदान करता है। console.groq.com से API key प्राप्त करें। आप कस्टम model नाम टाइप कर सकते हैं।</value></data>
+  <data name="ZhipuDescription" xml:space="preserve"><value>open.bigmodel.cn से API key प्राप्त करें। आप कस्टम model नाम टाइप कर सकते हैं।</value></data>
+  <data name="GitHubModelsDescription" xml:space="preserve"><value>अपना GitHub personal access token उपयोग करें। github.com/settings/tokens से प्राप्त करें। आप कस्टम model नाम टाइप कर सकते हैं।</value></data>
+  <data name="GeminiDescription" xml:space="preserve"><value>aistudio.google.com से API key प्राप्त करें। आप कस्टम model नाम टाइप कर सकते हैं।</value></data>
+  <data name="CustomOpenAIDescription" xml:space="preserve"><value>कोई भी OpenAI-संगत API endpoint कॉन्फ़िगर करें (जैसे स्थानीय LLM सर्वर, अन्य AI प्रदाता)।</value></data>
+  <data name="OllamaDescription" xml:space="preserve"><value>Ollama स्थानीय रूप से चल रहा होना चाहिए। उपलब्ध model लोड करने के लिए रीफ़्रेश पर क्लिक करें।</value></data>
+  <data name="BuiltInAIDescription" xml:space="preserve"><value>बिल्ट-इन AI Groq क्लाउड सेवा का उपयोग करता है। API key आवश्यक नहीं। आप कस्टम model नाम टाइप कर सकते हैं।</value></data>
+  <data name="DoubaoDescription" xml:space="preserve"><value>ByteDance की Doubao अनुवाद सेवा। console.volcengine.com से API key प्राप्त करें</value></data>
+  <data name="CaiyunDescription" xml:space="preserve"><value>fanyi.caiyunapp.com से API key प्राप्त करें</value></data>
+  <data name="NiuTransDescription" xml:space="preserve"><value>NiuTrans 450+ भाषा जोड़ियों का समर्थन करता है। niutrans.com से API key प्राप्त करें</value></data>
+  <data name="AppKey" xml:space="preserve"><value>App Key</value></data>
+  <data name="AppSecret" xml:space="preserve"><value>App Secret</value></data>
+  <data name="UseOfficialApi" xml:space="preserve"><value>आधिकारिक API का उपयोग करें</value></data>
+  <data name="YoudaoDescription" xml:space="preserve"><value>Youdao अंग्रेज़ी शब्दों के लिए ध्वन्यात्मक लिप्यंतरण प्रदान करता है। API key के बिना, मुफ़्त वेब शब्दकोश का उपयोग करता है। API key के साथ, उच्च सीमा के लिए आधिकारिक API सक्षम होता है। ai.youdao.com से API key प्राप्त करें</value></data>
+  <data name="FreeServicesTitle" xml:space="preserve"><value>मुफ़्त सेवाएँ (कॉन्फ़िगरेशन आवश्यक नहीं)</value></data>
+  <data name="FreeServicesDescription" xml:space="preserve"><value>Google Translate और Linguee Dictionary बिना API key के तुरंत काम करते हैं।</value></data>
+  <data name="HttpProxy" xml:space="preserve"><value>HTTP Proxy</value></data>
+  <data name="UseHttpProxy" xml:space="preserve"><value>HTTP Proxy का उपयोग करें</value></data>
+  <data name="ProxyUrl" xml:space="preserve"><value>Proxy URL</value></data>
+  <data name="BypassProxyForLocalhost" xml:space="preserve"><value>localhost के लिए proxy बायपास करें</value></data>
+  <data name="ProxyDescription" xml:space="preserve"><value>Proxy परिवर्तन ऐप पुनः आरंभ के बाद लागू होते हैं। Localhost बायपास सुनिश्चित करता है कि Ollama बिना proxy के काम करे।</value></data>
+  <data name="Behavior" xml:space="preserve"><value>व्यवहार</value></data>
+  <data name="MinimizeToTray" xml:space="preserve"><value>सिस्टम ट्रे में छोटा करें</value></data>
+  <data name="MonitorClipboard" xml:space="preserve"><value>क्लिपबोर्ड पर नज़र रखें</value></data>
+  <data name="AlwaysOnTop" xml:space="preserve"><value>हमेशा ऊपर</value></data>
+  <data name="LaunchAtStartup" xml:space="preserve"><value>Windows शुरू होने पर लॉन्च करें</value></data>
+  <data name="Hotkeys" xml:space="preserve"><value>शॉर्टकट कुंजियाँ</value></data>
+  <data name="ShowWindow" xml:space="preserve"><value>विंडो दिखाएँ</value></data>
+  <data name="TranslateSelection" xml:space="preserve"><value>चयन का अनुवाद करें</value></data>
+  <data name="ShowMiniWindow" xml:space="preserve"><value>मिनी विंडो दिखाएँ</value></data>
+  <data name="ShowFixedWindow" xml:space="preserve"><value>स्थिर विंडो दिखाएँ</value></data>
+  <data name="HotkeysDescription" xml:space="preserve"><value>नोट: शॉर्टकट कुंजी परिवर्तन लागू करने के लिए ऐप पुनः आरंभ करें। टॉगल शॉर्टकट कुंजियाँ Shift के साथ समान कुंजी का उपयोग करती हैं (जैसे Ctrl+Alt+Shift+M)।</value></data>
+  <data name="About" xml:space="preserve"><value>के बारे में</value></data>
+  <data name="EasydictForWindows" xml:space="preserve"><value>Windows के लिए Easydict</value></data>
+  <data name="GitHubRepository" xml:space="preserve"><value>GitHub रिपॉज़िटरी</value></data>
+  <data name="IssueFeedback" xml:space="preserve"><value>समस्या प्रतिक्रिया</value></data>
+  <data name="InspiredBy" xml:space="preserve"><value>से प्रेरित</value></data>
+  <data name="EasydictForMacOS" xml:space="preserve"><value>macOS के लिए Easydict</value></data>
+  <data name="License" xml:space="preserve"><value>लाइसेंस: GPL-3.0</value></data>
+  <data name="SaveSettings" xml:space="preserve"><value>सेटिंग्स सहेजें</value></data>
+  <data name="Back" xml:space="preserve"><value>वापस</value></data>
+  <data name="BackToTop" xml:space="preserve"><value>शीर्ष पर वापस</value></data>
+  <data name="Copy" xml:space="preserve"><value>कॉपी</value></data>
+  <data name="InsertReplace" xml:space="preserve"><value>सम्मिलित/बदलें</value></data>
+  <data name="CopyAll" xml:space="preserve"><value>सब कॉपी करें</value></data>
+  <data name="TranslationFailed" xml:space="preserve"><value>अनुवाद विफल</value></data>
+  <data name="ServiceNotInitialized" xml:space="preserve"><value>सेवा आरंभ नहीं हुई</value></data>
+  <data name="NoServicesEnabled" xml:space="preserve"><value>कोई सेवा सक्रिय नहीं है। सेवाएँ सक्रिय करने के लिए सेटिंग्स में जाएँ।</value></data>
+  <data name="ServiceResultsComplete" xml:space="preserve"><value>{0} सेवा(एँ) पूर्ण</value></data>
+  <data name="InvalidLanguageSelection" xml:space="preserve"><value>अमान्य भाषा चयन</value></data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve"><value>प्रथम भाषा और द्वितीय भाषा एक समान नहीं हो सकतीं।</value></data>
+  <data name="InvalidProxyUrl" xml:space="preserve"><value>अमान्य Proxy URL</value></data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve"><value>Proxy URL अमान्य है। कृपया एक मान्य URL दर्ज करें (जैसे http://127.0.0.1:7890)।</value></data>
+  <data name="SettingsSaved" xml:space="preserve"><value>सेटिंग्स सहेजी गईं</value></data>
+  <data name="SettingsSavedMessage" xml:space="preserve"><value>आपकी सेटिंग्स सफलतापूर्वक सहेजी गई हैं।</value></data>
+  <data name="RestartRequired" xml:space="preserve"><value>पुनः आरंभ आवश्यक</value></data>
+  <data name="CannotConnectToOllama" xml:space="preserve"><value>Ollama से कनेक्ट नहीं हो सकता</value></data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve"><value>Ollama से model प्राप्त करने में विफल। सुनिश्चित करें कि Ollama चल रहा है और पहुँच योग्य है।</value></data>
+  <data name="Copied" xml:space="preserve"><value>कॉपी हो गया!</value></data>
+  <data name="DetectedLanguage" xml:space="preserve"><value>पहचाना गया: {0}</value></data>
+  <data name="OK" xml:space="preserve"><value>ठीक है</value></data>
+  <data name="ServiceGoogle" xml:space="preserve"><value>Google Translate</value></data>
+  <data name="ServiceDeepL" xml:space="preserve"><value>DeepL</value></data>
+  <data name="ServiceOpenAI" xml:space="preserve"><value>OpenAI</value></data>
+  <data name="ServiceOllama" xml:space="preserve"><value>Ollama (स्थानीय)</value></data>
+  <data name="ServiceBuiltIn" xml:space="preserve"><value>बिल्ट-इन AI</value></data>
+  <data name="ServiceDeepSeek" xml:space="preserve"><value>DeepSeek</value></data>
+  <data name="ServiceGroq" xml:space="preserve"><value>Groq</value></data>
+  <data name="ServiceZhipu" xml:space="preserve"><value>Zhipu</value></data>
+  <data name="ServiceGitHubModels" xml:space="preserve"><value>GitHub Models</value></data>
+  <data name="ServiceGemini" xml:space="preserve"><value>Gemini</value></data>
+  <data name="ServiceCustomOpenAI" xml:space="preserve"><value>कस्टम OpenAI</value></data>
+  <data name="ServiceDoubao" xml:space="preserve"><value>Doubao</value></data>
+  <data name="ServiceCaiyun" xml:space="preserve"><value>Caiyun</value></data>
+  <data name="ServiceNiuTrans" xml:space="preserve"><value>NiuTrans</value></data>
+  <data name="ServiceLinguee" xml:space="preserve"><value>Linguee शब्दकोश</value></data>
+  <data name="TrayShow" xml:space="preserve"><value>दिखाएँ</value></data>
+  <data name="TrayShowMini" xml:space="preserve"><value>मिनी विंडो</value></data>
+  <data name="TrayShowFixed" xml:space="preserve"><value>स्थिर विंडो</value></data>
+  <data name="TraySettings" xml:space="preserve"><value>सेटिंग्स</value></data>
+  <data name="TrayExit" xml:space="preserve"><value>बाहर निकलें</value></data>
+  <data name="QuickTranslate" xml:space="preserve"><value>त्वरित अनुवाद</value></data>
+  <data name="FixedTranslate" xml:space="preserve"><value>स्थिर अनुवाद</value></data>
+  <data name="PinWindowTooltip" xml:space="preserve"><value>विंडो पिन करें (ऊपर रखें)</value></data>
+  <data name="UILanguage" xml:space="preserve"><value>इंटरफ़ेस भाषा</value></data>
+  <data name="RestartRequiredMessage" xml:space="preserve"><value>भाषा परिवर्तन लागू करने के लिए कृपया एप्लिकेशन पुनः आरंभ करें।</value></data>
+  <data name="UILangEnglish" xml:space="preserve"><value>अंग्रेज़ी</value></data>
+  <data name="UILangChineseSimplified" xml:space="preserve"><value>चीनी (सरलीकृत)</value></data>
+  <data name="BehaviorHeader.Text" xml:space="preserve"><value>व्यवहार</value></data>
+  <data name="UILanguageCombo.Header" xml:space="preserve"><value>इंटरफ़ेस भाषा</value></data>
+  <data name="UILangEnglishItem.Content" xml:space="preserve"><value>English</value></data>
+  <data name="UILangChineseItem.Content" xml:space="preserve"><value>简体中文</value></data>
+  <data name="UILangJapaneseItem.Content" xml:space="preserve"><value>日本語</value></data>
+  <data name="UILangKoreanItem.Content" xml:space="preserve"><value>한국어</value></data>
+  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve"><value>繁體中文</value></data>
+  <data name="UILangFrenchItem.Content" xml:space="preserve"><value>Français</value></data>
+  <data name="UILangGermanItem.Content" xml:space="preserve"><value>Deutsch</value></data>
+  <data name="UILangVietnameseItem.Content" xml:space="preserve"><value>Tiếng Việt</value></data>
+  <data name="UILangThaiItem.Content" xml:space="preserve"><value>ไทย</value></data>
+  <data name="UILangArabicItem.Content" xml:space="preserve"><value>العربية</value></data>
+  <data name="UILangIndonesianItem.Content" xml:space="preserve"><value>Bahasa Indonesia</value></data>
+  <data name="UILangItalianItem.Content" xml:space="preserve"><value>Italiano</value></data>
+  <data name="UILangMalayItem.Content" xml:space="preserve"><value>Bahasa Melayu</value></data>
+  <data name="UILangHindiItem.Content" xml:space="preserve"><value>हिन्दी</value></data>
+  <data name="UILangDanishItem.Content" xml:space="preserve"><value>Dansk</value></data>
+  <data name="UILanguageDescription.Text" xml:space="preserve"><value>एप्लिकेशन इंटरफ़ेस के लिए प्रदर्शन भाषा चुनें। पुनः आरंभ आवश्यक।</value></data>
+  <data name="MinimizeToTrayToggle.Header" xml:space="preserve"><value>सिस्टम ट्रे में छोटा करें</value></data>
+  <data name="ClipboardMonitorToggle.Header" xml:space="preserve"><value>क्लिपबोर्ड पर नज़र रखें</value></data>
+  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve"><value>माउस चयन से अनुवाद (पाठ चुनें → फ़्लोटिंग आइकन पर क्लिक करें)</value></data>
+  <data name="AlwaysOnTopToggle.Header" xml:space="preserve"><value>हमेशा ऊपर</value></data>
+  <data name="LaunchAtStartupToggle.Header" xml:space="preserve"><value>Windows शुरू होने पर लॉन्च करें</value></data>
+  <data name="Close" xml:space="preserve"><value>बंद करें</value></data>
+  <data name="HideWindow" xml:space="preserve"><value>छुपाएँ (Ctrl+Alt+F से फिर दिखाएँ)</value></data>
+  <data name="EnableInternationalServices" xml:space="preserve"><value>अंतर्राष्ट्रीय सेवाएँ सक्रिय करें</value></data>
+  <data name="EnableInternationalServicesDescription" xml:space="preserve"><value>कुछ सेवाओं (Google, DeepL, OpenAI, Gemini आदि) के लिए अंतर्राष्ट्रीय नेटवर्क एक्सेस आवश्यक है और ये सभी क्षेत्रों में उपलब्ध नहीं हो सकतीं।</value></data>
+  <data name="InternationalServiceUnavailableHint" xml:space="preserve"><value>यह सेवा आपके क्षेत्र में उपलब्ध नहीं हो सकती। Bing Translate या अन्य क्षेत्र-संगत सेवाओं का उपयोग करें। आप सेटिंग्स में सक्रिय सेवाएँ बदल सकते हैं।</value></data>
+  <data name="AppTheme" xml:space="preserve"><value>ऐप थीम</value></data>
+  <data name="AppThemeDescription" xml:space="preserve"><value>Easydict का रूप चुनें। Windows थीम अनुसरण करने के लिए सिस्टम चुनें।</value></data>
+  <data name="ThemeSystem" xml:space="preserve"><value>सिस्टम</value></data>
+  <data name="ThemeLight" xml:space="preserve"><value>लाइट</value></data>
+  <data name="ThemeDark" xml:space="preserve"><value>डार्क</value></data>
+  <data name="UnsavedChangesTitle" xml:space="preserve"><value>सहेजे नहीं गए परिवर्तन</value></data>
+  <data name="UnsavedChangesMessage" xml:space="preserve"><value>आपके पास सहेजे नहीं गए परिवर्तन हैं। क्या आप जाने से पहले सहेजना चाहते हैं?</value></data>
+  <data name="DontSave" xml:space="preserve"><value>सहेजें नहीं</value></data>
+  <data name="Cancel" xml:space="preserve"><value>रद्द करें</value></data>
+  <data name="Test" xml:space="preserve"><value>परीक्षण</value></data>
+  <data name="Testing" xml:space="preserve"><value>परीक्षण हो रहा है...</value></data>
+  <data name="TestSuccessTitle" xml:space="preserve"><value>परीक्षण सफल</value></data>
+  <data name="TestSuccessMessage" xml:space="preserve"><value>कॉन्फ़िगरेशन मान्य है। अनुवाद {0}ms में पूर्ण हुआ।</value></data>
+  <data name="TestFailedTitle" xml:space="preserve"><value>परीक्षण विफल</value></data>
+  <data name="TestFailedMessage" xml:space="preserve"><value>कॉन्फ़िगरेशन परीक्षण विफल: {0}</value></data>
+  <data name="TestNotConfigured" xml:space="preserve"><value>कृपया पहले सेवा कॉन्फ़िगर करें (API key, endpoint, आदि)।</value></data>
+</root>

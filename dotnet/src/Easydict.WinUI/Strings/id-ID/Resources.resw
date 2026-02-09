@@ -27,467 +27,354 @@
       </xsd:complexType>
     </xsd:element>
   </xsd:schema>
-  <resheader name="resmimetype">
-    <value>text/microsoft-resx</value>
-  </resheader>
-  <resheader name="version">
-    <value>1.3</value>
-  </resheader>
-  <resheader name="reader">
-    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </resheader>
-  <resheader name="writer">
-    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </resheader>
-
-  <!-- App Name -->
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>1.3</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="AppName" xml:space="preserve">
-    <value>易詞典</value>
+    <value>Easydict</value>
   </data>
-
-  <!-- Main Page -->
   <data name="SourceText" xml:space="preserve">
-    <value>原文</value>
+    <value>Teks Sumber</value>
   </data>
   <data name="TranslationResults" xml:space="preserve">
-    <value>翻譯結果</value>
+    <value>Hasil Terjemahan</value>
   </data>
   <data name="InputPlaceholder" xml:space="preserve">
-    <value>輸入或貼上要翻譯的文字...</value>
+    <value>Masukkan atau tempel teks untuk diterjemahkan...</value>
   </data>
   <data name="TranslationPlaceholder" xml:space="preserve">
-    <value>翻譯結果將在這裡顯示...</value>
+    <value>Terjemahan akan muncul di sini...</value>
   </data>
   <data name="SettingsTooltip" xml:space="preserve">
-    <value>設定</value>
+    <value>Pengaturan</value>
   </data>
   <data name="TranslateTooltip" xml:space="preserve">
-    <value>翻譯</value>
+    <value>Terjemahkan</value>
   </data>
   <data name="SwapLanguagesTooltip" xml:space="preserve">
-    <value>交換來源語言和目標語言</value>
+    <value>Tukar bahasa sumber dan target</value>
   </data>
   <data name="SourceLanguageTooltip" xml:space="preserve">
-    <value>來源語言</value>
+    <value>Bahasa Sumber</value>
   </data>
   <data name="TargetLanguageTooltip" xml:space="preserve">
-    <value>目標語言</value>
+    <value>Bahasa Target</value>
   </data>
-
-  <!-- Status -->
   <data name="StatusConnected" xml:space="preserve">
-    <value>已連線</value>
+    <value>Terhubung</value>
   </data>
   <data name="StatusDisconnected" xml:space="preserve">
-    <value>未連線</value>
+    <value>Terputus</value>
+  </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>Menginisialisasi...</value>
   </data>
   <data name="StatusReady" xml:space="preserve">
-    <value>就緒</value>
+    <value>Siap</value>
   </data>
   <data name="StatusTranslating" xml:space="preserve">
-    <value>翻譯中...</value>
+    <value>Menerjemahkan...</value>
   </data>
   <data name="StatusError" xml:space="preserve">
-    <value>錯誤</value>
+    <value>Kesalahan</value>
   </data>
-
-  <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
-    <value>自動偵測</value>
+    <value>Deteksi Otomatis</value>
   </data>
   <data name="LangEnglish" xml:space="preserve">
-    <value>英語</value>
+    <value>Inggris</value>
   </data>
   <data name="LangChinese" xml:space="preserve">
-    <value>中文</value>
+    <value>Tionghoa</value>
   </data>
   <data name="LangChineseSimplified" xml:space="preserve">
-    <value>簡體中文</value>
+    <value>Tionghoa (Sederhana)</value>
   </data>
   <data name="LangChineseTraditional" xml:space="preserve">
-    <value>繁體中文</value>
+    <value>Tionghoa (Tradisional)</value>
   </data>
   <data name="LangJapanese" xml:space="preserve">
-    <value>日語</value>
+    <value>Jepang</value>
   </data>
   <data name="LangKorean" xml:space="preserve">
-    <value>韓語</value>
+    <value>Korea</value>
   </data>
   <data name="LangFrench" xml:space="preserve">
-    <value>法語</value>
+    <value>Prancis</value>
   </data>
   <data name="LangGerman" xml:space="preserve">
-    <value>德語</value>
+    <value>Jerman</value>
   </data>
   <data name="LangSpanish" xml:space="preserve">
-    <value>西班牙語</value>
+    <value>Spanyol</value>
   </data>
-  <data name="LangClassicalChinese" xml:space="preserve">
-    <value>文言文</value>
-  </data>
-  <data name="LangDutch" xml:space="preserve">
-    <value>荷蘭語</value>
-  </data>
-  <data name="LangSwedish" xml:space="preserve">
-    <value>瑞典語</value>
-  </data>
-  <data name="LangNorwegian" xml:space="preserve">
-    <value>挪威語</value>
-  </data>
-  <data name="LangDanish" xml:space="preserve">
-    <value>丹麥語</value>
-  </data>
-  <data name="LangPortuguese" xml:space="preserve">
-    <value>葡萄牙語</value>
-  </data>
-  <data name="LangItalian" xml:space="preserve">
-    <value>義大利語</value>
-  </data>
-  <data name="LangRomanian" xml:space="preserve">
-    <value>羅馬尼亞語</value>
-  </data>
-  <data name="LangRussian" xml:space="preserve">
-    <value>俄語</value>
-  </data>
-  <data name="LangPolish" xml:space="preserve">
-    <value>波蘭語</value>
-  </data>
-  <data name="LangCzech" xml:space="preserve">
-    <value>捷克語</value>
-  </data>
-  <data name="LangUkrainian" xml:space="preserve">
-    <value>烏克蘭語</value>
-  </data>
-  <data name="LangBulgarian" xml:space="preserve">
-    <value>保加利亞語</value>
-  </data>
-  <data name="LangSlovak" xml:space="preserve">
-    <value>斯洛伐克語</value>
-  </data>
-  <data name="LangSlovenian" xml:space="preserve">
-    <value>斯洛維尼亞語</value>
-  </data>
-  <data name="LangEstonian" xml:space="preserve">
-    <value>愛沙尼亞語</value>
-  </data>
-  <data name="LangLatvian" xml:space="preserve">
-    <value>拉脫維亞語</value>
-  </data>
-  <data name="LangLithuanian" xml:space="preserve">
-    <value>立陶宛語</value>
-  </data>
-  <data name="LangGreek" xml:space="preserve">
-    <value>希臘語</value>
-  </data>
-  <data name="LangHungarian" xml:space="preserve">
-    <value>匈牙利語</value>
-  </data>
-  <data name="LangFinnish" xml:space="preserve">
-    <value>芬蘭語</value>
-  </data>
-  <data name="LangTurkish" xml:space="preserve">
-    <value>土耳其語</value>
-  </data>
-  <data name="LangArabic" xml:space="preserve">
-    <value>阿拉伯語</value>
-  </data>
-  <data name="LangPersian" xml:space="preserve">
-    <value>波斯語</value>
-  </data>
-  <data name="LangHebrew" xml:space="preserve">
-    <value>希伯來語</value>
-  </data>
-  <data name="LangHindi" xml:space="preserve">
-    <value>印地語</value>
-  </data>
-  <data name="LangBengali" xml:space="preserve">
-    <value>孟加拉語</value>
-  </data>
-  <data name="LangTamil" xml:space="preserve">
-    <value>泰米爾語</value>
-  </data>
-  <data name="LangTelugu" xml:space="preserve">
-    <value>泰盧固語</value>
-  </data>
-  <data name="LangUrdu" xml:space="preserve">
-    <value>烏爾都語</value>
-  </data>
-  <data name="LangVietnamese" xml:space="preserve">
-    <value>越南語</value>
-  </data>
-  <data name="LangThai" xml:space="preserve">
-    <value>泰語</value>
-  </data>
-  <data name="LangIndonesian" xml:space="preserve">
-    <value>印尼語</value>
-  </data>
-  <data name="LangMalay" xml:space="preserve">
-    <value>馬來語</value>
-  </data>
-  <data name="LangFilipino" xml:space="preserve">
-    <value>菲律賓語</value>
-  </data>
-  <data name="AvailableLanguages" xml:space="preserve">
-    <value>可用語言</value>
-  </data>
-  <data name="AvailableLanguagesDesc" xml:space="preserve">
-    <value>選擇在來源語言/目標語言選擇器中可用的語言。至少需要選擇2種語言。</value>
-  </data>
-
-  <!-- Settings Page -->
   <data name="Settings" xml:space="preserve">
-    <value>設定</value>
+    <value>Pengaturan</value>
   </data>
   <data name="TranslationService" xml:space="preserve">
-    <value>翻譯服務</value>
+    <value>Layanan Terjemahan</value>
   </data>
   <data name="EnabledServices" xml:space="preserve">
-    <value>已啟用的服務</value>
+    <value>Layanan yang Diaktifkan</value>
   </data>
   <data name="EnabledServicesDescription" xml:space="preserve">
-    <value>選擇在每個視窗中顯示哪些翻譯服務。多個服務將並行運行。</value>
+    <value>Pilih layanan terjemahan yang akan ditampilkan di setiap jendela. Beberapa layanan akan berjalan secara paralel.</value>
   </data>
   <data name="MainWindow" xml:space="preserve">
-    <value>主視窗</value>
+    <value>Jendela Utama</value>
   </data>
   <data name="MiniWindow" xml:space="preserve">
-    <value>迷你視窗</value>
+    <value>Jendela Mini</value>
   </data>
   <data name="FixedWindow" xml:space="preserve">
-    <value>固定視窗</value>
+    <value>Jendela Tetap</value>
   </data>
   <data name="Auto" xml:space="preserve">
-    <value>自動</value>
+    <value>Otomatis</value>
   </data>
   <data name="Manual" xml:space="preserve">
-    <value>手動</value>
+    <value>Manual</value>
   </data>
-
-  <!-- Language Preferences -->
   <data name="LanguagePreferences" xml:space="preserve">
-    <value>語言偏好</value>
+    <value>Preferensi Bahasa</value>
   </data>
   <data name="FirstLanguage" xml:space="preserve">
-    <value>第一語言</value>
+    <value>Bahasa Pertama</value>
   </data>
   <data name="SecondLanguage" xml:space="preserve">
-    <value>第二語言</value>
+    <value>Bahasa Kedua</value>
   </data>
   <data name="LanguagePreferencesDescription" xml:space="preserve">
-    <value>當偵測到的語言與您的第一語言匹配時，翻譯目標將是您的第二語言，反之亦然。</value>
+    <value>Ketika bahasa yang terdeteksi cocok dengan Bahasa Pertama Anda, target terjemahan akan menjadi Bahasa Kedua, dan sebaliknya.</value>
   </data>
   <data name="AutoSelectTargetLanguage" xml:space="preserve">
-    <value>根據偵測到的來源語言自動選擇目標語言</value>
+    <value>Pilih bahasa target secara otomatis berdasarkan bahasa sumber yang terdeteksi</value>
   </data>
-
-  <!-- Service Configuration -->
   <data name="ServiceConfiguration" xml:space="preserve">
-    <value>服務設定</value>
+    <value>Konfigurasi Layanan</value>
   </data>
   <data name="ServiceConfigurationDescription" xml:space="preserve">
-    <value>為每個翻譯服務設定 API 金鑰、端點和模型。</value>
+    <value>Konfigurasikan API key, endpoint, dan model untuk setiap layanan terjemahan.</value>
   </data>
   <data name="ApiKey" xml:space="preserve">
-    <value>API 金鑰</value>
+    <value>API Key</value>
   </data>
   <data name="ApiKeyOptional" xml:space="preserve">
-    <value>API 金鑰（選填）</value>
+    <value>API Key (Opsional)</value>
   </data>
   <data name="Endpoint" xml:space="preserve">
-    <value>端點</value>
+    <value>Endpoint</value>
   </data>
   <data name="EndpointOptional" xml:space="preserve">
-    <value>端點（選填）</value>
+    <value>Endpoint (Opsional)</value>
   </data>
   <data name="EndpointRequired" xml:space="preserve">
-    <value>端點（必填）</value>
+    <value>Endpoint (Wajib)</value>
   </data>
   <data name="Model" xml:space="preserve">
-    <value>模型</value>
+    <value>Model</value>
   </data>
   <data name="Refresh" xml:space="preserve">
-    <value>重新整理</value>
+    <value>Segarkan</value>
   </data>
-
-  <!-- Service Descriptions -->
   <data name="DeepLDescription" xml:space="preserve">
-    <value>留空 API 金鑰可使用免費網頁翻譯。Pro API 金鑰有更高的限額。</value>
+    <value>Biarkan API key kosong untuk menggunakan terjemahan web gratis. API key Pro memberikan batas lebih tinggi.</value>
   </data>
   <data name="DeepLFreeOption" xml:space="preserve">
-    <value>使用免費 API（網頁翻譯無需 API 金鑰）</value>
+    <value>Gunakan API Gratis (terjemahan web tidak memerlukan API key)</value>
   </data>
   <data name="OpenAIDescription" xml:space="preserve">
-    <value>您可以直接輸入自訂模型名稱。</value>
+    <value>Anda dapat mengetik nama model kustom secara langsung.</value>
   </data>
   <data name="DeepSeekDescription" xml:space="preserve">
-    <value>從 platform.deepseek.com 取得您的 API 金鑰。您可以輸入自訂模型名稱。</value>
+    <value>Dapatkan API key dari platform.deepseek.com. Anda dapat mengetik nama model kustom.</value>
   </data>
   <data name="GroqDescription" xml:space="preserve">
-    <value>Groq 提供快速推論。從 console.groq.com 取得您的 API 金鑰。您可以輸入自訂模型名稱。</value>
+    <value>Groq menyediakan inferensi cepat. Dapatkan API key dari console.groq.com. Anda dapat mengetik nama model kustom.</value>
   </data>
   <data name="ZhipuDescription" xml:space="preserve">
-    <value>從 open.bigmodel.cn 取得您的 API 金鑰。您可以輸入自訂模型名稱。</value>
+    <value>Dapatkan API key dari open.bigmodel.cn. Anda dapat mengetik nama model kustom.</value>
   </data>
   <data name="GitHubModelsDescription" xml:space="preserve">
-    <value>使用您的 GitHub 個人存取權杖。從 github.com/settings/tokens 取得。您可以輸入自訂模型名稱。</value>
+    <value>Gunakan personal access token GitHub Anda. Dapatkan dari github.com/settings/tokens. Anda dapat mengetik nama model kustom.</value>
   </data>
   <data name="GeminiDescription" xml:space="preserve">
-    <value>從 aistudio.google.com 取得您的 API 金鑰。您可以輸入自訂模型名稱。</value>
+    <value>Dapatkan API key dari aistudio.google.com. Anda dapat mengetik nama model kustom.</value>
   </data>
   <data name="CustomOpenAIDescription" xml:space="preserve">
-    <value>設定任何與 OpenAI 相容的 API 端點（例如本機 LLM 伺服器、其他 AI 提供商）。</value>
+    <value>Konfigurasikan endpoint API yang kompatibel dengan OpenAI (mis. server LLM lokal, penyedia AI lainnya).</value>
   </data>
   <data name="OllamaDescription" xml:space="preserve">
-    <value>Ollama 必須在本機運行。點擊重新整理以載入可用模型。</value>
+    <value>Ollama harus berjalan secara lokal. Klik Segarkan untuk memuat model yang tersedia.</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>內建 AI 使用 Groq 雲端服務。無需 API 金鑰。您可以輸入自訂模型名稱。</value>
+    <value>AI bawaan menggunakan layanan cloud Groq. Tidak memerlukan API key. Anda dapat mengetik nama model kustom.</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
-    <value>字節跳動的豆包翻譯服務。從 console.volcengine.com 取得您的 API 金鑰</value>
+    <value>Layanan terjemahan Doubao dari ByteDance. Dapatkan API key dari console.volcengine.com</value>
   </data>
   <data name="CaiyunDescription" xml:space="preserve">
-    <value>從 fanyi.caiyunapp.com 取得您的 API 金鑰</value>
+    <value>Dapatkan API key dari fanyi.caiyunapp.com</value>
   </data>
   <data name="NiuTransDescription" xml:space="preserve">
-    <value>小牛翻譯支援 450+ 種語言對。從 niutrans.com 取得您的 API 金鑰</value>
+    <value>NiuTrans mendukung lebih dari 450 pasangan bahasa. Dapatkan API key dari niutrans.com</value>
+  </data>
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>Gunakan API Resmi</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>Youdao menyediakan transkripsi fonetik untuk kata-kata bahasa Inggris. Tanpa API key, menggunakan kamus web gratis. Dengan API key, mengaktifkan API resmi untuk batas lebih tinggi. Dapatkan API key dari ai.youdao.com</value>
   </data>
   <data name="FreeServicesTitle" xml:space="preserve">
-    <value>免費服務（無需設定）</value>
+    <value>Layanan Gratis (Tidak Perlu Konfigurasi)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google 翻譯和 Linguee 詞典無需 API 金鑰即可使用。</value>
+    <value>Google Translate dan Linguee Dictionary langsung berfungsi tanpa API key.</value>
   </data>
-
-  <!-- HTTP Proxy -->
   <data name="HttpProxy" xml:space="preserve">
-    <value>HTTP 代理</value>
+    <value>HTTP Proxy</value>
   </data>
   <data name="UseHttpProxy" xml:space="preserve">
-    <value>使用 HTTP 代理</value>
+    <value>Gunakan HTTP Proxy</value>
   </data>
   <data name="ProxyUrl" xml:space="preserve">
-    <value>代理位址</value>
+    <value>URL Proxy</value>
   </data>
   <data name="BypassProxyForLocalhost" xml:space="preserve">
-    <value>本機位址繞過代理</value>
+    <value>Lewati proxy untuk localhost</value>
   </data>
   <data name="ProxyDescription" xml:space="preserve">
-    <value>代理變更在應用程式重新啟動後生效。本機繞過確保 Ollama 無需代理即可運作。</value>
+    <value>Perubahan proxy berlaku setelah aplikasi dimulai ulang. Melewati localhost memastikan Ollama berfungsi tanpa proxy.</value>
   </data>
-
-  <!-- Behavior -->
   <data name="Behavior" xml:space="preserve">
-    <value>行為</value>
+    <value>Perilaku</value>
   </data>
   <data name="MinimizeToTray" xml:space="preserve">
-    <value>最小化到系統匣</value>
+    <value>Minimalkan ke baki sistem</value>
   </data>
   <data name="MonitorClipboard" xml:space="preserve">
-    <value>監控剪貼簿文字</value>
+    <value>Pantau papan klip untuk teks</value>
   </data>
   <data name="AlwaysOnTop" xml:space="preserve">
-    <value>始終置頂</value>
+    <value>Selalu di atas</value>
   </data>
   <data name="LaunchAtStartup" xml:space="preserve">
-    <value>開機自動啟動</value>
+    <value>Jalankan saat Windows dimulai</value>
   </data>
-
-  <!-- Hotkeys -->
   <data name="Hotkeys" xml:space="preserve">
-    <value>快速鍵</value>
+    <value>Pintasan</value>
   </data>
   <data name="ShowWindow" xml:space="preserve">
-    <value>顯示視窗</value>
+    <value>Tampilkan Jendela</value>
   </data>
   <data name="TranslateSelection" xml:space="preserve">
-    <value>翻譯選取文字</value>
+    <value>Terjemahkan Pilihan</value>
   </data>
   <data name="ShowMiniWindow" xml:space="preserve">
-    <value>顯示迷你視窗</value>
+    <value>Tampilkan Jendela Mini</value>
   </data>
   <data name="ShowFixedWindow" xml:space="preserve">
-    <value>顯示固定視窗</value>
+    <value>Tampilkan Jendela Tetap</value>
   </data>
   <data name="HotkeysDescription" xml:space="preserve">
-    <value>注意：重新啟動應用程式以套用快速鍵變更。切換快速鍵使用相同的鍵加 Shift（例如 Ctrl+Alt+Shift+M）。</value>
+    <value>Catatan: Mulai ulang aplikasi untuk menerapkan perubahan pintasan. Pintasan toggle menggunakan tombol yang sama dengan Shift (mis. Ctrl+Alt+Shift+M).</value>
   </data>
-
-  <!-- About -->
   <data name="About" xml:space="preserve">
-    <value>關於</value>
+    <value>Tentang</value>
   </data>
   <data name="EasydictForWindows" xml:space="preserve">
-    <value>Easydict Windows 版</value>
+    <value>Easydict untuk Windows</value>
   </data>
   <data name="GitHubRepository" xml:space="preserve">
-    <value>GitHub 儲存庫</value>
+    <value>Repositori GitHub</value>
   </data>
   <data name="IssueFeedback" xml:space="preserve">
-    <value>問題回饋</value>
+    <value>Laporkan Masalah</value>
   </data>
   <data name="InspiredBy" xml:space="preserve">
-    <value>靈感來自</value>
+    <value>Terinspirasi dari</value>
   </data>
   <data name="EasydictForMacOS" xml:space="preserve">
-    <value>Easydict macOS 版</value>
+    <value>Easydict untuk macOS</value>
   </data>
   <data name="License" xml:space="preserve">
-    <value>授權條款：GPL-3.0</value>
+    <value>Lisensi: GPL-3.0</value>
   </data>
-
-  <!-- Buttons -->
   <data name="SaveSettings" xml:space="preserve">
-    <value>儲存設定</value>
+    <value>Simpan Pengaturan</value>
   </data>
   <data name="Back" xml:space="preserve">
-    <value>返回</value>
+    <value>Kembali</value>
   </data>
   <data name="BackToTop" xml:space="preserve">
-    <value>返回頂部</value>
+    <value>Kembali ke atas</value>
   </data>
   <data name="Copy" xml:space="preserve">
-    <value>複製</value>
+    <value>Salin</value>
   </data>
   <data name="InsertReplace" xml:space="preserve">
-    <value>插入/替換</value>
+    <value>Sisipkan/Ganti</value>
   </data>
   <data name="CopyAll" xml:space="preserve">
-    <value>複製全部</value>
+    <value>Salin Semua</value>
   </data>
-
-  <!-- Messages -->
   <data name="TranslationFailed" xml:space="preserve">
-    <value>翻譯失敗</value>
+    <value>Terjemahan gagal</value>
   </data>
   <data name="ServiceNotInitialized" xml:space="preserve">
-    <value>服務未初始化</value>
+    <value>Layanan belum diinisialisasi</value>
+  </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>Tidak ada layanan yang diaktifkan. Buka Pengaturan untuk mengaktifkan layanan.</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} layanan selesai</value>
   </data>
   <data name="InvalidLanguageSelection" xml:space="preserve">
-    <value>無效的語言選擇</value>
+    <value>Pilihan Bahasa Tidak Valid</value>
+  </data>
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>Bahasa Pertama dan Bahasa Kedua tidak boleh sama.</value>
   </data>
   <data name="InvalidProxyUrl" xml:space="preserve">
-    <value>無效的代理位址</value>
+    <value>URL Proxy Tidak Valid</value>
+  </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>URL proxy tidak valid. Silakan masukkan URL yang valid (mis. http://127.0.0.1:7890).</value>
   </data>
   <data name="SettingsSaved" xml:space="preserve">
-    <value>設定已儲存</value>
+    <value>Pengaturan Disimpan</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>Pengaturan Anda telah berhasil disimpan.</value>
   </data>
   <data name="RestartRequired" xml:space="preserve">
-    <value>需要重新啟動</value>
+    <value>Perlu Dimulai Ulang</value>
   </data>
   <data name="CannotConnectToOllama" xml:space="preserve">
-    <value>無法連線到 Ollama</value>
+    <value>Tidak Dapat Terhubung ke Ollama</value>
+  </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>Gagal mengambil model dari Ollama. Pastikan Ollama berjalan dan dapat diakses.</value>
   </data>
   <data name="Copied" xml:space="preserve">
-    <value>已複製！</value>
+    <value>Disalin!</value>
   </data>
   <data name="DetectedLanguage" xml:space="preserve">
-    <value>偵測到：{0}</value>
+    <value>Terdeteksi: {0}</value>
   </data>
-
-  <!-- Service Names -->
+  <data name="OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
   <data name="ServiceGoogle" xml:space="preserve">
-    <value>Google 翻譯</value>
+    <value>Google Translate</value>
   </data>
   <data name="ServiceDeepL" xml:space="preserve">
     <value>DeepL</value>
@@ -496,10 +383,10 @@
     <value>OpenAI</value>
   </data>
   <data name="ServiceOllama" xml:space="preserve">
-    <value>Ollama（本機）</value>
+    <value>Ollama (Lokal)</value>
   </data>
   <data name="ServiceBuiltIn" xml:space="preserve">
-    <value>內建 AI</value>
+    <value>AI Bawaan</value>
   </data>
   <data name="ServiceDeepSeek" xml:space="preserve">
     <value>DeepSeek</value>
@@ -508,7 +395,7 @@
     <value>Groq</value>
   </data>
   <data name="ServiceZhipu" xml:space="preserve">
-    <value>智譜</value>
+    <value>Zhipu</value>
   </data>
   <data name="ServiceGitHubModels" xml:space="preserve">
     <value>GitHub Models</value>
@@ -517,88 +404,91 @@
     <value>Gemini</value>
   </data>
   <data name="ServiceCustomOpenAI" xml:space="preserve">
-    <value>自訂 OpenAI</value>
+    <value>OpenAI Kustom</value>
   </data>
   <data name="ServiceDoubao" xml:space="preserve">
-    <value>豆包</value>
+    <value>Doubao</value>
   </data>
   <data name="ServiceCaiyun" xml:space="preserve">
-    <value>彩雲小譯</value>
+    <value>Caiyun</value>
   </data>
   <data name="ServiceNiuTrans" xml:space="preserve">
-    <value>小牛翻譯</value>
+    <value>NiuTrans</value>
   </data>
   <data name="ServiceLinguee" xml:space="preserve">
-    <value>Linguee 詞典</value>
+    <value>Kamus Linguee</value>
   </data>
-
-  <!-- Tray Menu -->
   <data name="TrayShow" xml:space="preserve">
-    <value>顯示</value>
+    <value>Tampilkan</value>
   </data>
   <data name="TrayShowMini" xml:space="preserve">
-    <value>迷你視窗</value>
+    <value>Jendela Mini</value>
   </data>
   <data name="TrayShowFixed" xml:space="preserve">
-    <value>固定視窗</value>
+    <value>Jendela Tetap</value>
   </data>
   <data name="TraySettings" xml:space="preserve">
-    <value>設定</value>
+    <value>Pengaturan</value>
   </data>
   <data name="TrayExit" xml:space="preserve">
-    <value>結束</value>
+    <value>Keluar</value>
   </data>
-
-  <!-- UI Language -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>Terjemahan Cepat</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>Terjemahan Tetap</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>Sematkan jendela (tetap di atas)</value>
+  </data>
   <data name="UILanguage" xml:space="preserve">
-    <value>介面語言</value>
+    <value>Bahasa Antarmuka</value>
   </data>
   <data name="RestartRequiredMessage" xml:space="preserve">
-    <value>請重新啟動應用程式以使語言更改生效。</value>
+    <value>Silakan mulai ulang aplikasi agar perubahan bahasa berlaku.</value>
   </data>
   <data name="UILangEnglish" xml:space="preserve">
-    <value>英語</value>
+    <value>Inggris</value>
   </data>
   <data name="UILangChineseSimplified" xml:space="preserve">
-    <value>簡體中文</value>
+    <value>Tionghoa (Sederhana)</value>
   </data>
-
-  <!-- x:Uid entries for Settings Page XAML -->
   <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>行為</value>
+    <value>Perilaku</value>
   </data>
   <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>介面語言</value>
+    <value>Bahasa Antarmuka</value>
   </data>
   <data name="UILangEnglishItem.Content" xml:space="preserve">
     <value>English</value>
   </data>
   <data name="UILangChineseItem.Content" xml:space="preserve">
-    <value>简体中文</value>
-  </data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
-    <value>繁體中文</value>
+    <value>&#x7B80;&#x4F53;&#x4E2D;&#x6587;</value>
   </data>
   <data name="UILangJapaneseItem.Content" xml:space="preserve">
-    <value>日本語</value>
+    <value>&#x65E5;&#x672C;&#x8A9E;</value>
   </data>
   <data name="UILangKoreanItem.Content" xml:space="preserve">
-    <value>한국어</value>
+    <value>&#xD55C;&#xAD6D;&#xC5B4;</value>
+  </data>
+  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
+    <value>&#x7E41;&#x9AD4;&#x4E2D;&#x6587;</value>
   </data>
   <data name="UILangFrenchItem.Content" xml:space="preserve">
-    <value>Français</value>
+    <value>Fran&#xE7;ais</value>
   </data>
   <data name="UILangGermanItem.Content" xml:space="preserve">
     <value>Deutsch</value>
   </data>
   <data name="UILangVietnameseItem.Content" xml:space="preserve">
-    <value>Tiếng Việt</value>
+    <value>Ti&#x1EBF;ng Vi&#x1EC7;t</value>
   </data>
   <data name="UILangThaiItem.Content" xml:space="preserve">
-    <value>ไทย</value>
+    <value>&#xE44;&#xE17;&#xE22;</value>
   </data>
   <data name="UILangArabicItem.Content" xml:space="preserve">
-    <value>العربية</value>
+    <value>&#x627;&#x644;&#x639;&#x631;&#x628;&#x64A;&#x629;</value>
   </data>
   <data name="UILangIndonesianItem.Content" xml:space="preserve">
     <value>Bahasa Indonesia</value>
@@ -610,69 +500,90 @@
     <value>Bahasa Melayu</value>
   </data>
   <data name="UILangHindiItem.Content" xml:space="preserve">
-    <value>हिन्दी</value>
+    <value>&#x939;&#x93F;&#x928;&#x94D;&#x926;&#x940;</value>
   </data>
   <data name="UILangDanishItem.Content" xml:space="preserve">
     <value>Dansk</value>
   </data>
   <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>選擇應用程式介面的顯示語言。需要重新啟動生效。</value>
+    <value>Pilih bahasa tampilan untuk antarmuka aplikasi. Perlu dimulai ulang.</value>
   </data>
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>最小化到系統匣</value>
+    <value>Minimalkan ke baki sistem</value>
   </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>監控剪貼簿文字</value>
+    <value>Pantau papan klip untuk teks</value>
   </data>
   <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
-    <value>劃詞翻譯（選取文字 → 點擊浮動圖示）</value>
+    <value>Terjemahkan dengan seleksi mouse (pilih teks &#x2192; klik ikon mengambang)</value>
   </data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>始終置頂</value>
+    <value>Selalu di atas</value>
   </data>
   <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>開機自動啟動</value>
+    <value>Jalankan saat Windows dimulai</value>
   </data>
-
-  <!-- International Services -->
+  <data name="Close" xml:space="preserve">
+    <value>Tutup</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>Sembunyikan (Ctrl+Alt+F untuk menampilkan kembali)</value>
+  </data>
   <data name="EnableInternationalServices" xml:space="preserve">
-    <value>啟用國際服務</value>
+    <value>Aktifkan Layanan Internasional</value>
   </data>
   <data name="EnableInternationalServicesDescription" xml:space="preserve">
-    <value>部分服務（Google、DeepL、OpenAI、Gemini 等）需要國際網路存取，可能在部分地區無法使用。</value>
+    <value>Beberapa layanan (Google, DeepL, OpenAI, Gemini, dll.) memerlukan akses jaringan internasional dan mungkin tidak tersedia di semua wilayah.</value>
   </data>
   <data name="InternationalServiceUnavailableHint" xml:space="preserve">
-    <value>此服務在您所在的地區可能無法使用。請嘗試使用 Bing 翻譯或其他地區相容的翻譯服務。您可以在設定中更改啟用的服務。</value>
+    <value>Layanan ini mungkin tidak tersedia di wilayah Anda. Coba gunakan Bing Translate atau layanan lain yang kompatibel. Anda dapat mengubah layanan yang diaktifkan di Pengaturan.</value>
   </data>
-
-  <!-- App Theme -->
   <data name="AppTheme" xml:space="preserve">
-    <value>應用程式主題</value>
+    <value>Tema Aplikasi</value>
   </data>
   <data name="AppThemeDescription" xml:space="preserve">
-    <value>選擇 Easydict 的外觀。選擇「系統」將跟隨 Windows 主題。</value>
+    <value>Pilih tampilan Easydict. Pilih Sistem untuk mengikuti tema Windows.</value>
   </data>
   <data name="ThemeSystem" xml:space="preserve">
-    <value>系統</value>
+    <value>Sistem</value>
   </data>
   <data name="ThemeLight" xml:space="preserve">
-    <value>淺色</value>
+    <value>Terang</value>
   </data>
   <data name="ThemeDark" xml:space="preserve">
-    <value>深色</value>
+    <value>Gelap</value>
   </data>
-
-  <!-- Unsaved Changes Dialog -->
   <data name="UnsavedChangesTitle" xml:space="preserve">
-    <value>未儲存的變更</value>
+    <value>Perubahan Belum Disimpan</value>
   </data>
   <data name="UnsavedChangesMessage" xml:space="preserve">
-    <value>您有未儲存的變更。是否要在離開前儲存？</value>
+    <value>Anda memiliki perubahan yang belum disimpan. Apakah Anda ingin menyimpannya sebelum pergi?</value>
   </data>
   <data name="DontSave" xml:space="preserve">
-    <value>不儲存</value>
+    <value>Jangan Simpan</value>
   </data>
   <data name="Cancel" xml:space="preserve">
-    <value>取消</value>
+    <value>Batal</value>
+  </data>
+  <data name="Test" xml:space="preserve">
+    <value>Uji</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>Menguji...</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>Uji Berhasil</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>Konfigurasi valid. Terjemahan selesai dalam {0}ms.</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>Uji Gagal</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>Uji konfigurasi gagal: {0}</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>Silakan konfigurasikan layanan terlebih dahulu (API key, endpoint, dll.).</value>
   </data>
 </root>

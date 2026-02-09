@@ -480,6 +480,30 @@
   <data name="UILangGermanItem.Content" xml:space="preserve">
     <value>Deutsch</value>
   </data>
+  <data name="UILangVietnameseItem.Content" xml:space="preserve">
+    <value>Tiếng Việt</value>
+  </data>
+  <data name="UILangThaiItem.Content" xml:space="preserve">
+    <value>ไทย</value>
+  </data>
+  <data name="UILangArabicItem.Content" xml:space="preserve">
+    <value>العربية</value>
+  </data>
+  <data name="UILangIndonesianItem.Content" xml:space="preserve">
+    <value>Bahasa Indonesia</value>
+  </data>
+  <data name="UILangItalianItem.Content" xml:space="preserve">
+    <value>Italiano</value>
+  </data>
+  <data name="UILangMalayItem.Content" xml:space="preserve">
+    <value>Bahasa Melayu</value>
+  </data>
+  <data name="UILangHindiItem.Content" xml:space="preserve">
+    <value>हिन्दी</value>
+  </data>
+  <data name="UILangDanishItem.Content" xml:space="preserve">
+    <value>Dansk</value>
+  </data>
   <data name="UILanguageDescription.Text" xml:space="preserve">
     <value>選擇應用程式介面的顯示語言。需要重新啟動生效。</value>
   </data>

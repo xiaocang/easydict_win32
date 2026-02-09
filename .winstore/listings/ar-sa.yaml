@@ -1,0 +1,63 @@
+language: ar-sa
+title: Easydict لنظام Windows
+shortTitle: Easydict
+sortTitle: Easydict
+voiceTitle: Easy Dict
+shortDescription: سهولة البحث عن الكلمات أو ترجمة النصوص
+description: |-
+  Easydict لنظام Windows هو أداة ترجمة وقاموس مجانية ومفتوحة المصدر، توفر وصولاً فوريًا إلى 18 خدمة ترجمة. الشفرة المصدرية الكاملة متاحة على GitHub بموجب رخصة GPL-3.0. سواء كنت بحاجة إلى البحث السريع عن الكلمات، أو ترجمة النصوص الكاملة، أو الترجمة بالذكاء الاصطناعي مع البث المباشر، فإن Easydict يلبي جميع احتياجاتك.
+
+  نسخة Windows من تطبيق Easydict الشهير على macOS، مبنية بتقنيات .NET و WinUI 3 الحديثة لتجربة Windows أصلية.
+
+  أبرز المميزات:
+
+  - 18 خدمة ترجمة: Google Translate و Google Dict و Bing Translate و DeepL و OpenAI و Gemini و DeepSeek و Groq و Zhipu AI و GitHub Models و Doubao و Volcano Engine و Caiyun و NiuTrans و Linguee و Ollama والمزيد
+  - بث الذكاء الاصطناعي: شاهد ترجمات LLM تظهر في الوقت الفعلي أثناء إنشائها
+  - أوضاع نوافذ متعددة: نافذة رئيسية كاملة، نافذة مصغرة مدمجة، أو نافذة ثابتة
+  - ترجمة النص المحدد: حدد النص في أي مكان وانقر على الزر العائم للترجمة فورًا
+  - اختصارات لوحة المفاتيح العامة: ترجم من أي مكان باستخدام اختصارات لوحة المفاتيح القابلة للتخصيص
+  - شريط النظام: يعمل بهدوء في الخلفية، جاهز دائمًا عند الحاجة
+  - مراقبة الحافظة: ترجمة النص المنسوخ تلقائيًا
+  - السمة الداكنة/الفاتحة: يتبع سمة نظام Windows
+  - تحويل النص إلى كلام: استمع إلى النص الأصلي والنص المترجم
+  - دعم DPI العالي: عرض واضح تمامًا على أي شاشة
+
+  مثالي للطلاب والمهنيين والمترجمين وأي شخص يحتاج إلى ترجمات سريعة وموثوقة عبر لغات متعددة.
+features:
+- 18 خدمة ترجمة تشمل Google و Bing و DeepL و OpenAI و Gemini و DeepSeek و Volcano Engine
+- ترجمة بث LLM في الوقت الفعلي مع خدمات الذكاء الاصطناعي
+- 'أوضاع نوافذ متعددة: الرئيسية والمصغرة والثابتة'
+- ترجمة النص المحدد بزر عائم
+- اختصارات لوحة المفاتيح العامة للترجمة الفورية من أي تطبيق
+- تكامل شريط النظام للعمل في الخلفية
+- مراقبة الحافظة مع الترجمة التلقائية
+- دعم السمة الداكنة والفاتحة وفقًا لإعدادات النظام
+- تحويل النص إلى كلام للنص الأصلي والمترجم
+- دعم وكيل HTTP لتكوين الشبكة
+- دعم LLM المحلي عبر Ollama
+- دعم خدمة مخصصة متوافقة مع OpenAI
+- دعم DPI العالي والشاشات المتعددة
+keywords:
+- ترجمة
+- قاموس
+- مترجم
+- مفتوح المصدر
+- LLM
+- متعدد اللغات
+releaseNotes: ''
+copyrightAndTrademarkInfo: Copyright (c) xiaocang. Licensed under GPL-3.0.
+additionalLicenseTerms: ''
+developedBy: xiaocang
+images:
+  overview:
+    fileName: ../../screenshot/overview.png
+    description: النافذة الرئيسية مع النافذة المصغرة للترجمة السريعة
+  main-window:
+    fileName: ../../screenshot/main-window.png
+    description: واجهة الترجمة الكاملة مع خدمات متعددة
+  all-windows:
+    fileName: ../../screenshot/all-windows.png
+    description: 'جميع أوضاع النوافذ: الرئيسية والمصغرة والثابتة مع إعدادات الاختصارات'
+  settings:
+    fileName: ../../screenshot/settings.png
+    description: صفحة الإعدادات مع تكوين الخدمات

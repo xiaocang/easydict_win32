@@ -1,0 +1,63 @@
+language: it-it
+title: Easydict per Windows
+shortTitle: Easydict
+sortTitle: Easydict
+voiceTitle: Easy Dict
+shortDescription: Cerca parole o traduci testi facilmente
+description: |-
+  Easydict per Windows è uno strumento di traduzione e dizionario gratuito e open-source che fornisce accesso immediato a 18 servizi di traduzione. Il codice sorgente completo è disponibile su GitHub con licenza GPL-3.0. Che tu abbia bisogno di cercare velocemente parole, tradurre testi completi o traduzioni AI con streaming in tempo reale, Easydict è la soluzione.
+
+  Versione Windows della popolare app Easydict per macOS, costruita con tecnologie moderne .NET e WinUI 3 per un'esperienza Windows nativa.
+
+  Punti salienti:
+
+  - 18 Servizi di Traduzione: Google Translate, Google Dict, Bing Translate, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama e altri
+  - Streaming AI: Guarda le traduzioni LLM apparire in tempo reale
+  - Modalità Finestra Multiple: Finestra principale completa, finestra mini compatta o finestra fissa persistente
+  - Traduzione con Selezione Mouse: Seleziona testo ovunque e clicca il pulsante fluttuante per tradurre istantaneamente
+  - Tasti Rapidi Globali: Traduci da qualsiasi punto con scorciatoie da tastiera personalizzabili
+  - Barra di Sistema: Funziona silenziosamente in background, sempre pronto quando serve
+  - Monitoraggio Appunti: Traduce automaticamente il testo copiato
+  - Tema Scuro/Chiaro: Segue il tema di sistema Windows
+  - Sintesi Vocale: Ascolta il testo originale e tradotto
+  - Supporto High DPI: Nitido su qualsiasi display
+
+  Perfetto per studenti, professionisti, traduttori e chiunque abbia bisogno di traduzioni rapide e affidabili in più lingue.
+features:
+- 18 servizi di traduzione tra cui Google, Bing, DeepL, OpenAI, Gemini, DeepSeek e Volcano Engine
+- Traduzione in streaming LLM in tempo reale con servizi AI
+- 'Modalità finestra multiple: Principale, Mini e Fissa'
+- Traduzione con selezione mouse e pulsante pop fluttuante
+- Tasti rapidi globali per traduzione istantanea da qualsiasi applicazione
+- Integrazione nella barra di sistema per funzionamento in background
+- Monitoraggio appunti con traduzione automatica
+- Supporto tema scuro e chiaro seguendo le impostazioni di sistema
+- Sintesi vocale per testo originale e tradotto
+- Supporto proxy HTTP per configurazione di rete
+- Supporto per LLM locale tramite Ollama
+- Supporto servizi compatibili OpenAI personalizzati
+- Supporto High DPI e multi-monitor
+keywords:
+- traduzione
+- dizionario
+- traduttore
+- open source
+- LLM
+- multilingue
+releaseNotes: ''
+copyrightAndTrademarkInfo: Copyright (c) xiaocang. Licensed under GPL-3.0.
+additionalLicenseTerms: ''
+developedBy: xiaocang
+images:
+  overview:
+    fileName: ../../screenshot/overview.png
+    description: Finestra principale con finestra mini per traduzione rapida
+  main-window:
+    fileName: ../../screenshot/main-window.png
+    description: Interfaccia di traduzione completa con servizi multipli
+  all-windows:
+    fileName: ../../screenshot/all-windows.png
+    description: 'Tutte le modalità finestra: Principale, Mini e Fissa con impostazioni tasti rapidi'
+  settings:
+    fileName: ../../screenshot/settings.png
+    description: Pagina impostazioni con configurazione servizi

@@ -1,0 +1,63 @@
+language: ms-my
+title: Easydict untuk Windows
+shortTitle: Easydict
+sortTitle: Easydict
+voiceTitle: Easy Dict
+shortDescription: Mudah mencari perkataan atau menterjemah teks
+description: |-
+  Easydict untuk Windows ialah alat terjemahan dan kamus percuma serta sumber terbuka yang menyediakan akses segera kepada 18 perkhidmatan terjemahan. Kod sumber penuh tersedia di GitHub di bawah lesen GPL-3.0. Sama ada anda memerlukan carian perkataan pantas, terjemahan teks penuh, atau terjemahan berkuasa AI dengan penstriman masa nyata, Easydict memenuhi keperluan anda.
+
+  Versi Windows bagi aplikasi Easydict macOS yang popular, dibina dengan teknologi .NET dan WinUI 3 moden untuk pengalaman Windows asli.
+
+  Sorotan Utama:
+
+  - 18 Perkhidmatan Terjemahan: Google Translate, Google Dict, Bing Translate, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama dan lagi
+  - Penstriman AI: Lihat terjemahan LLM muncul secara masa nyata
+  - Pelbagai Mod Tetingkap: Tetingkap utama penuh, tetingkap mini padat, atau tetingkap tetap kekal
+  - Terjemahan Pilihan Tetikus: Pilih teks di mana-mana dan klik butang pop terapung untuk menterjemah serta-merta
+  - Kekunci Pintas Global: Terjemah dari mana-mana dengan pintasan papan kekunci boleh suai
+  - Dulang Sistem: Berjalan senyap di latar belakang, sentiasa sedia apabila diperlukan
+  - Pemantauan Papan Keratan: Terjemah teks yang disalin secara automatik
+  - Tema Gelap/Cerah: Mengikut tema sistem Windows anda
+  - Teks-ke-Ucapan: Dengar teks sumber dan terjemahan
+  - Sokongan DPI Tinggi: Jelas pada sebarang paparan
+
+  Sesuai untuk pelajar, profesional, penterjemah, dan sesiapa yang memerlukan terjemahan pantas dan boleh dipercayai merentasi pelbagai bahasa.
+features:
+- 18 perkhidmatan terjemahan termasuk Google, Bing, DeepL, OpenAI, Gemini, DeepSeek dan Volcano Engine
+- Terjemahan penstriman LLM masa nyata dengan perkhidmatan AI
+- 'Pelbagai mod tetingkap: Utama, Mini dan Tetap'
+- Terjemahan pilihan tetikus dengan butang pop terapung
+- Kekunci pintas global untuk terjemahan segera dari sebarang aplikasi
+- Integrasi dulang sistem untuk operasi latar belakang
+- Pemantauan papan keratan dengan terjemahan automatik
+- Sokongan tema gelap dan cerah mengikut tetapan sistem
+- Teks-ke-Ucapan untuk teks sumber dan terjemahan
+- Sokongan proksi HTTP untuk konfigurasi rangkaian
+- Sokongan untuk LLM tempatan melalui Ollama
+- Sokongan perkhidmatan serasi OpenAI tersuai
+- Sokongan DPI tinggi dan berbilang monitor
+keywords:
+- terjemahan
+- kamus
+- penterjemah
+- sumber terbuka
+- LLM
+- pelbagai bahasa
+releaseNotes: ''
+copyrightAndTrademarkInfo: Copyright (c) xiaocang. Licensed under GPL-3.0.
+additionalLicenseTerms: ''
+developedBy: xiaocang
+images:
+  overview:
+    fileName: ../../screenshot/overview.png
+    description: Tetingkap utama dengan tetingkap mini untuk terjemahan pantas
+  main-window:
+    fileName: ../../screenshot/main-window.png
+    description: Antara muka terjemahan penuh dengan pelbagai perkhidmatan
+  all-windows:
+    fileName: ../../screenshot/all-windows.png
+    description: 'Semua mod tetingkap: Utama, Mini dan Tetap dengan tetapan kekunci pintas'
+  settings:
+    fileName: ../../screenshot/settings.png
+    description: Halaman tetapan dengan konfigurasi perkhidmatan

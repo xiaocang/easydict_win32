@@ -23,6 +23,8 @@ A powerful Windows translation & dictionary app, ported from the popular macOS a
 
 - **Clipboard Monitoring** — Automatically translate copied text.
 
+- **Multilingual UI (i18n)** — Interface available in 15 languages: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German, Italian, Arabic, Danish, Hindi, Indonesian, Malay, Thai, and Vietnamese.
+
 - **Dark / Light Theme** — Follows your Windows system theme.
 
 - **Text-to-Speech** — Listen to pronunciation of source and translated text using Windows Speech Synthesis.

@@ -33,6 +33,7 @@ namespace Easydict.WinUI.Views
         private readonly TargetLanguageSelector _targetLanguageSelector;
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
         private bool _isLoaded;
+        private bool _isQuerying;
         private volatile bool _isClosing;
         private bool _suppressTargetLanguageSelectionChanged;
         private bool _suppressSourceLanguageSelectionChanged;
@@ -469,27 +470,38 @@ namespace Easydict.WinUI.Views
         {
             if (_isClosing) return;
 
-            // Update both Wide and Narrow buttons
-            TranslateButton.IsEnabled = !loading;
-            TranslateButtonNarrow.IsEnabled = !loading;
+            _isQuerying = loading;
 
-            LoadingRing.IsActive = loading;
-            LoadingRing.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
-            TranslateIcon.Visibility = loading ? Visibility.Collapsed : Visibility.Visible;
+            var loc = LocalizationService.Instance;
+            var tooltip = loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip");
+            ToolTipService.SetToolTip(TranslateButton, tooltip);
+            ToolTipService.SetToolTip(TranslateButtonNarrow, tooltip);
 
-            LoadingRingNarrow.IsActive = loading;
-            LoadingRingNarrow.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
-            TranslateIconNarrow.Visibility = loading ? Visibility.Collapsed : Visibility.Visible;
+            // Swap icon: show cancel (X) glyph during query, translate glyph otherwise
+            var glyph = loading ? "\uE711" : "\uE8C1";
+            TranslateIcon.Glyph = glyph;
+            TranslateIconNarrow.Glyph = glyph;
+
+            // Hide progress rings (cancel icon replaces them)
+            LoadingRing.IsActive = false;
+            LoadingRing.Visibility = Visibility.Collapsed;
+            LoadingRingNarrow.IsActive = false;
+            LoadingRingNarrow.Visibility = Visibility.Collapsed;
         }
 
         /// <summary>
-        /// Handle translate button click - follows macOS Easydict's pattern:
-        /// 1. Cancel any ongoing query
-        /// 2. Clear previous results
-        /// 3. Start new translation query
+        /// Handle translate button click:
+        /// - If a query is in progress, cancel it.
+        /// - Otherwise, start a new translation query.
         /// </summary>
         private async void OnTranslateClicked(object sender, RoutedEventArgs e)
         {
+            if (_isQuerying)
+            {
+                CancelCurrentQuery();
+                return;
+            }
+
             await StartQueryTrackedAsync();
         }
 

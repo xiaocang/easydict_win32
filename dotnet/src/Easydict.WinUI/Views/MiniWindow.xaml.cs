@@ -57,6 +57,7 @@ public sealed partial class MiniWindow : Window
     private bool _isPinned;
     private volatile bool _isClosing;
     private bool _isLoaded;
+    private bool _isQuerying;
     private bool _suppressTargetLanguageSelectionChanged;
     private bool _suppressSourceLanguageSelectionChanged;
     private TitleBarDragRegionHelper? _titleBarHelper;
@@ -711,10 +712,18 @@ public sealed partial class MiniWindow : Window
     {
         if (_isClosing) return;
 
-        TranslateButton.IsEnabled = !loading;
-        LoadingRing.IsActive = loading;
-        LoadingRing.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
-        TranslateIcon.Visibility = loading ? Visibility.Collapsed : Visibility.Visible;
+        _isQuerying = loading;
+
+        var loc = LocalizationService.Instance;
+        ToolTipService.SetToolTip(TranslateButton,
+            loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip"));
+
+        // Swap icon: show cancel (X) glyph during query, translate glyph otherwise
+        TranslateIcon.Glyph = loading ? "\uE711" : "\uE8C1";
+
+        // Hide progress ring (cancel icon replaces it)
+        LoadingRing.IsActive = false;
+        LoadingRing.Visibility = Visibility.Collapsed;
     }
     
     private async Task StartQueryAsync()
@@ -1098,6 +1107,12 @@ public sealed partial class MiniWindow : Window
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)
     {
+        if (_isQuerying)
+        {
+            CancelCurrentQuery();
+            return;
+        }
+
         await StartQueryTrackedAsync();
     }
 

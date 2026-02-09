@@ -675,4 +675,86 @@
   <data name="Cancel" xml:space="preserve">
     <value>キャンセル</value>
   </data>
+
+  <!-- Service Testing UI -->
+  <data name="Test" xml:space="preserve">
+    <value>テスト</value>
+  </data>
+  <data name="Testing" xml:space="preserve">
+    <value>テスト中...</value>
+  </data>
+  <data name="TestNotConfigured" xml:space="preserve">
+    <value>先にサービスを設定してください（APIキー、エンドポイントなど）。</value>
+  </data>
+  <data name="TestSuccessTitle" xml:space="preserve">
+    <value>テスト成功</value>
+  </data>
+  <data name="TestSuccessMessage" xml:space="preserve">
+    <value>設定は有効です。翻訳は {0}ms で完了しました。</value>
+  </data>
+  <data name="TestFailedTitle" xml:space="preserve">
+    <value>テスト失敗</value>
+  </data>
+  <data name="TestFailedMessage" xml:space="preserve">
+    <value>設定テストに失敗しました：{0}</value>
+  </data>
+
+  <!-- Youdao Service -->
+  <data name="AppKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="AppSecret" xml:space="preserve">
+    <value>App Secret</value>
+  </data>
+  <data name="UseOfficialApi" xml:space="preserve">
+    <value>公式APIを使用</value>
+  </data>
+  <data name="YoudaoDescription" xml:space="preserve">
+    <value>有道は英単語の発音記号を提供します。APIキー未設定時は無料のウェブ辞書を使用します。APIキーを設定すると、公式APIを使用してより高い利用制限が得られます。APIキーは ai.youdao.com から取得できます</value>
+  </data>
+
+  <!-- Window Chrome -->
+  <data name="QuickTranslate" xml:space="preserve">
+    <value>クイック翻訳</value>
+  </data>
+  <data name="FixedTranslate" xml:space="preserve">
+    <value>固定翻訳</value>
+  </data>
+  <data name="PinWindowTooltip" xml:space="preserve">
+    <value>ウィンドウを固定（最前面に表示）</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>閉じる</value>
+  </data>
+  <data name="HideWindow" xml:space="preserve">
+    <value>非表示（Ctrl+Alt+Fで再表示）</value>
+  </data>
+
+  <!-- Status & Feedback -->
+  <data name="OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="StatusInitializing" xml:space="preserve">
+    <value>初期化中...</value>
+  </data>
+  <data name="NoServicesEnabled" xml:space="preserve">
+    <value>サービスが有効になっていません。設定からサービスを有効にしてください。</value>
+  </data>
+  <data name="ServiceResultsComplete" xml:space="preserve">
+    <value>{0} 件のサービスが完了</value>
+  </data>
+  <data name="SettingsSavedMessage" xml:space="preserve">
+    <value>設定が正常に保存されました。</value>
+  </data>
+
+  <!-- Validation Messages -->
+  <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
+    <value>第一言語と第二言語を同じにすることはできません。</value>
+  </data>
+  <data name="InvalidProxyUrlMessage" xml:space="preserve">
+    <value>プロキシURLが無効です。有効なURLを入力してください（例：http://127.0.0.1:7890）。</value>
+  </data>
+  <data name="CannotConnectToOllamaMessage" xml:space="preserve">
+    <value>Ollamaからモデルを取得できませんでした。Ollamaが実行中でアクセス可能であることを確認してください。</value>
+  </data>
 </root>

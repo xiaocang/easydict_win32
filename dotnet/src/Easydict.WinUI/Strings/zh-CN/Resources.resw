@@ -729,6 +729,17 @@
     <value>取消</value>
   </data>
 
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>如需添加或移除语言，请前往 设置 &#x2192; 语言偏好 &#x2192; 可用语言</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>自动：提交输入时自动翻译。手动：点击服务名称手动开始翻译。</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>请先在上方「已启用的服务」中启用服务，再在此处配置 API 密钥。</value>
+  </data>
+
   <!-- Service Test Button -->
   <data name="Test" xml:space="preserve">
     <value>测试</value>

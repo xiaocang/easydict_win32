@@ -208,6 +208,10 @@ public sealed partial class SettingsPage : Page
         // Tooltips
         ToolTipService.SetToolTip(FloatingBackButton, loc.GetString("Back"));
         ToolTipService.SetToolTip(BackToTopButton, loc.GetString("BackToTop"));
+
+        // Help icon tooltips
+        ToolTipService.SetToolTip(EnabledServicesHelpIcon, loc.GetString("EnabledServicesHelpTip"));
+        ToolTipService.SetToolTip(ServiceConfigHelpIcon, loc.GetString("ServiceConfigHelpTip"));
     }
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)

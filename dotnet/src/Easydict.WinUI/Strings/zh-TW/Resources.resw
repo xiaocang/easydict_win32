@@ -747,6 +747,17 @@
     <value>您的設定已成功儲存。</value>
   </data>
 
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>如需新增或移除語言，請前往 設定 &#x2192; 語言偏好 &#x2192; 可用語言</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>自動：提交輸入時自動翻譯。手動：點擊服務名稱手動開始翻譯。</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>請先在上方「已啟用的服務」中啟用服務，再在此處設定 API 金鑰。</value>
+  </data>
+
   <!-- Validation Messages -->
   <data name="InvalidLanguageSelectionMessage" xml:space="preserve">
     <value>第一語言與第二語言不能相同。</value>

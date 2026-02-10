@@ -594,4 +594,15 @@
   <data name="TestNotConfigured" xml:space="preserve">
     <value>&#xE01;&#xE23;&#xE38;&#xE13;&#xE32;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32;&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE01;&#xE48;&#xE2D;&#xE19; (API key, endpoint &#xE2F;&#xE25;&#xE2F;)</value>
   </data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>To add or remove languages, go to Settings &#x2192; Language Preferences &#x2192; Available Languages</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>Auto: translates automatically when input is submitted. Manual: click the service header to start translation.</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>First enable services in the 'Enabled Services' section above, then configure their API keys here.</value>
+  </data>
 </root>

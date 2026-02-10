@@ -108,6 +108,7 @@
                 <ColumnDefinition Width="Auto" />  <!-- Source Language -->
                 <ColumnDefinition Width="Auto" />  <!-- Swap Button -->
                 <ColumnDefinition Width="Auto" />  <!-- Target Language -->
+                <ColumnDefinition Width="Auto" />  <!-- Help Icon -->
                 <ColumnDefinition Width="*" />     <!-- Translate Button (Right-aligned) -->
             </Grid.ColumnDefinitions>
 
@@ -149,10 +150,20 @@
                 <!-- Populated dynamically in code-behind -->
             </ComboBox>
 
+            <!-- Language Help Icon -->
+            <FontIcon
+                x:Name="LangHelpIcon"
+                Grid.Column="3"
+                Glyph="&#xE897;"
+                FontSize="14"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                VerticalAlignment="Center"
+                Margin="6,0,0,0" />
+
             <!-- Translate Button (Right) -->
             <Button
                 x:Name="TranslateButton"
-                Grid.Column="3"
+                Grid.Column="4"
                 Click="OnTranslateClicked"
                 Width="40"
                 Height="40"
@@ -186,6 +197,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <ComboBox
@@ -221,6 +233,16 @@
                     ToolTipService.ToolTip="Target Language">
                     <!-- Populated dynamically in code-behind -->
                 </ComboBox>
+
+                <!-- Language Help Icon (Narrow) -->
+                <FontIcon
+                    x:Name="LangHelpIconNarrow"
+                    Grid.Column="3"
+                    Glyph="&#xE897;"
+                    FontSize="14"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    VerticalAlignment="Center"
+                    Margin="4,0,0,0" />
             </Grid>
 
             <!-- Translate button row -->

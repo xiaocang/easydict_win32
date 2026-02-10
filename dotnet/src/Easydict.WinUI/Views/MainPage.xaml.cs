@@ -189,6 +189,10 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(SourceLangComboNarrow, loc.GetString("SourceLanguageTooltip"));
             ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
             ToolTipService.SetToolTip(TargetLangComboNarrow, loc.GetString("TargetLanguageTooltip"));
+
+            // Help icon tooltips
+            ToolTipService.SetToolTip(LangHelpIcon, loc.GetString("LanguagePickerHelpTip"));
+            ToolTipService.SetToolTip(LangHelpIconNarrow, loc.GetString("LanguagePickerHelpTip"));
         }
 
         private void OnClipboardTextReceived(string text)

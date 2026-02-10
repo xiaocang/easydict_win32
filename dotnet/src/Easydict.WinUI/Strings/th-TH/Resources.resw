@@ -597,12 +597,12 @@
 
   <!-- Help Tooltips -->
   <data name="LanguagePickerHelpTip" xml:space="preserve">
-    <value>To add or remove languages, go to Settings &#x2192; Language Preferences &#x2192; Available Languages</value>
+    <value>Add/remove languages: Settings &#x2192; Available Languages</value>
   </data>
   <data name="EnabledServicesHelpTip" xml:space="preserve">
-    <value>Auto: translates automatically when input is submitted. Manual: click the service header to start translation.</value>
+    <value>Auto = auto-query, Manual = click to query</value>
   </data>
   <data name="ServiceConfigHelpTip" xml:space="preserve">
-    <value>First enable services in the 'Enabled Services' section above, then configure their API keys here.</value>
+    <value>Enable services in 'Enabled Services' above first</value>
   </data>
 </root>

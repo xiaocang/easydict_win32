@@ -760,12 +760,12 @@
 
   <!-- Help Tooltips -->
   <data name="LanguagePickerHelpTip" xml:space="preserve">
-    <value>言語を追加または削除するには、設定 &#x2192; 言語設定 &#x2192; 利用可能な言語 に移動してください</value>
+    <value>言語の追加/削除：設定 &#x2192; 利用可能な言語</value>
   </data>
   <data name="EnabledServicesHelpTip" xml:space="preserve">
-    <value>自動：入力送信時に自動翻訳。手動：サービス名をクリックして翻訳を開始。</value>
+    <value>自動 = 自動クエリ、手動 = クリックでクエリ</value>
   </data>
   <data name="ServiceConfigHelpTip" xml:space="preserve">
-    <value>まず上の「有効なサービス」でサービスを有効にし、ここで API キーを設定してください。</value>
+    <value>先に上の「有効なサービス」で有効にしてください</value>
   </data>
 </root>

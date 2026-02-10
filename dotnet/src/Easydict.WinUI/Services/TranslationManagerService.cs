@@ -185,7 +185,7 @@ public sealed class TranslationManagerService : IDisposable
         {
             if (service is BuiltInAIService builtin)
             {
-                builtin.Configure(_settings.BuiltInAIModel, _settings.BuiltInAIApiKey);
+                builtin.Configure(_settings.BuiltInAIModel, _settings.BuiltInAIApiKey, _settings.DeviceId);
             }
         });
 

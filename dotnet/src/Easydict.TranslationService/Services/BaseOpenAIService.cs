@@ -139,6 +139,8 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
         }
 
+        ConfigureHttpRequest(httpRequest);
+
         HttpResponseMessage response;
         try
         {
@@ -203,6 +205,12 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             stream = true
         };
     }
+
+    /// <summary>
+    /// Hook for subclasses to add custom headers or modify the HTTP request
+    /// before it is sent. Called after Authorization header is set.
+    /// </summary>
+    protected virtual void ConfigureHttpRequest(HttpRequestMessage request) { }
 
     /// <summary>
     /// Validate service configuration before making API calls.

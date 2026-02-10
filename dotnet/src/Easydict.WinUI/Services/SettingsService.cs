@@ -61,6 +61,12 @@ public sealed class SettingsService
     public string BuiltInAIModel { get; set; } = "glm-4-flash-250414";
     public string? BuiltInAIApiKey { get; set; }
 
+    /// <summary>
+    /// Stable device fingerprint (GUID) for Cloudflare Worker rate limiting.
+    /// Auto-generated on first run, persisted across sessions.
+    /// </summary>
+    public string DeviceId { get; set; } = "";
+
     // DeepSeek settings
     public string? DeepSeekApiKey { get; set; }
     public string DeepSeekModel { get; set; } = "deepseek-chat";
@@ -360,6 +366,11 @@ public sealed class SettingsService
         // Built-in AI settings
         BuiltInAIModel = GetValue(nameof(BuiltInAIModel), "glm-4-flash-250414");
         BuiltInAIApiKey = GetValue<string?>(nameof(BuiltInAIApiKey), null);
+        DeviceId = GetValue(nameof(DeviceId), "");
+        if (string.IsNullOrEmpty(DeviceId))
+        {
+            DeviceId = Guid.NewGuid().ToString("N");
+        }
 
         // DeepSeek settings
         DeepSeekApiKey = GetValue<string?>(nameof(DeepSeekApiKey), null);
@@ -497,6 +508,7 @@ public sealed class SettingsService
         // Built-in AI settings
         _settings[nameof(BuiltInAIModel)] = BuiltInAIModel;
         _settings[nameof(BuiltInAIApiKey)] = BuiltInAIApiKey ?? string.Empty;
+        _settings[nameof(DeviceId)] = DeviceId;
 
         // DeepSeek settings
         _settings[nameof(DeepSeekApiKey)] = DeepSeekApiKey ?? string.Empty;

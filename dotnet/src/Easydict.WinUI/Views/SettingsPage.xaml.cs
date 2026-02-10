@@ -1628,7 +1628,8 @@ public sealed partial class SettingsPage : Page
             {
                 var model = GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414");
                 var apiKey = BuiltInApiKeyBox.Password;
-                builtin.Configure(model, string.IsNullOrWhiteSpace(apiKey) ? null : apiKey);
+                var deviceId = SettingsService.Instance.DeviceId;
+                builtin.Configure(model, string.IsNullOrWhiteSpace(apiKey) ? null : apiKey, deviceId);
             }
         }, TestBuiltInButton, BuiltInStatusText);
     }

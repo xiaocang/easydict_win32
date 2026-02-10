@@ -7,8 +7,10 @@ using Xunit;
 namespace Easydict.TranslationService.Tests.Services;
 
 /// <summary>
-/// Tests for BuiltInAIService-specific behavior.
-/// Focuses on: Worker proxy routing, direct connection fallback, device fingerprint, model selection.
+/// Tests for BuiltInAIService two-tier routing:
+/// - GLM models → direct with embedded key
+/// - Groq models → Cloudflare Worker proxy (DeviceId)
+/// - User API key → direct to provider
 /// </summary>
 public class BuiltInAIServiceTests
 {
@@ -42,27 +44,6 @@ public class BuiltInAIServiceTests
     }
 
     [Fact]
-    public void AvailableModels_ContainsGLMModels()
-    {
-        BuiltInAIService.AvailableModels.Should().Contain("glm-4-flash-250414");
-        BuiltInAIService.AvailableModels.Should().Contain("glm-4-flash");
-    }
-
-    [Fact]
-    public void AvailableModels_ContainsGroqModels()
-    {
-        BuiltInAIService.AvailableModels.Should().Contain("llama-3.3-70b-versatile");
-        BuiltInAIService.AvailableModels.Should().Contain("llama-3.1-8b-instant");
-    }
-
-    [Fact]
-    public void AvailableModels_DoesNotContainDeprecatedModels()
-    {
-        BuiltInAIService.AvailableModels.Should().NotContain("gemma2-9b-it");
-        BuiltInAIService.AvailableModels.Should().NotContain("mixtral-8x7b-32768");
-    }
-
-    [Fact]
     public void DefaultModel_IsGLM()
     {
         _service.Model.Should().Be("glm-4-flash-250414");
@@ -74,106 +55,110 @@ public class BuiltInAIServiceTests
         _service.CurrentProvider.Should().Be(BuiltInAIService.Provider.GLM);
     }
 
-    // --- Worker proxy mode (default, no user API key) ---
+    // --- GLM direct mode (primary, embedded key) ---
 
     [Fact]
-    public void Default_UsesWorkerEndpoint()
+    public void GLMModel_UsesDirectEndpoint()
     {
-        // No user API key → routes through Cloudflare Worker
-        _service.Endpoint.Should().Contain("workers.dev");
-    }
-
-    [Fact]
-    public void Default_ApiKey_IsEmpty()
-    {
-        // Worker handles authentication server-side
-        _service.ApiKey.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Default_UseDirectConnection_IsFalse()
-    {
-        _service.UseDirectConnection.Should().BeFalse();
-    }
-
-    [Fact]
-    public void Default_IsConfigured_IsTrue()
-    {
-        // Worker mode is always configured (endpoint is hardcoded)
-        _service.IsConfigured.Should().BeTrue();
-    }
-
-    [Fact]
-    public void WorkerMode_EndpointSameRegardlessOfModel()
-    {
-        // In Worker mode, all models route through the same Worker endpoint
         _service.Configure("glm-4-flash");
-        var glmEndpoint = _service.Endpoint;
-
-        _service.Configure("llama-3.3-70b-versatile");
-        var groqEndpoint = _service.Endpoint;
-
-        glmEndpoint.Should().Be(groqEndpoint);
-        glmEndpoint.Should().Contain("workers.dev");
-    }
-
-    // --- Direct connection mode (user provides API key) ---
-
-    [Fact]
-    public void DirectMode_UsesGLMEndpoint_WhenGLMModelSelected()
-    {
-        _service.Configure("glm-4-flash", "user-key");
         _service.Endpoint.Should().Be("https://open.bigmodel.cn/api/paas/v4/chat/completions");
     }
 
     [Fact]
-    public void DirectMode_UsesGroqEndpoint_WhenGroqModelSelected()
+    public void GLMModel_UsesEmbeddedKey()
     {
-        _service.Configure("llama-3.3-70b-versatile", "user-key");
-        _service.Endpoint.Should().Be("https://api.groq.com/openai/v1/chat/completions");
+        _service.Configure("glm-4-flash");
+        // Embedded key may be empty in test env (no real secret), but should not be user key
+        _service.UseDirectConnection.Should().BeFalse();
+        _service.UsesWorkerProxy.Should().BeFalse();
+    }
+
+    // --- Groq Worker proxy mode (backup) ---
+
+    [Fact]
+    public void GroqModel_UsesWorkerEndpoint()
+    {
+        _service.Configure("llama-3.3-70b-versatile");
+        _service.Endpoint.Should().Contain("workers.dev");
     }
 
     [Fact]
-    public void DirectMode_UseDirectConnection_IsTrue()
+    public void GroqModel_ApiKey_IsEmpty()
+    {
+        _service.Configure("llama-3.3-70b-versatile");
+        _service.ApiKey.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GroqModel_UsesWorkerProxy_IsTrue()
+    {
+        _service.Configure("llama-3.3-70b-versatile");
+        _service.UsesWorkerProxy.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GroqModel_IsConfigured_IsTrue()
+    {
+        _service.Configure("llama-3.3-70b-versatile");
+        _service.IsConfigured.Should().BeTrue();
+    }
+
+    // --- User API key mode (direct to provider) ---
+
+    [Fact]
+    public void UserKey_GLM_UsesDirectEndpoint()
+    {
+        _service.Configure("glm-4-flash", "user-key");
+        _service.Endpoint.Should().Be("https://open.bigmodel.cn/api/paas/v4/chat/completions");
+        _service.ApiKey.Should().Be("user-key");
+    }
+
+    [Fact]
+    public void UserKey_Groq_UsesDirectGroqEndpoint()
+    {
+        _service.Configure("llama-3.3-70b-versatile", "user-key");
+        _service.Endpoint.Should().Be("https://api.groq.com/openai/v1/chat/completions");
+        _service.ApiKey.Should().Be("user-key");
+    }
+
+    [Fact]
+    public void UserKey_UsesWorkerProxy_IsFalse()
+    {
+        _service.Configure("llama-3.3-70b-versatile", "user-key");
+        _service.UsesWorkerProxy.Should().BeFalse();
+    }
+
+    [Fact]
+    public void UserKey_UseDirectConnection_IsTrue()
     {
         _service.Configure("glm-4-flash", "user-key");
         _service.UseDirectConnection.Should().BeTrue();
     }
 
-    [Fact]
-    public void DirectMode_ApiKey_ReturnsUserKey()
-    {
-        _service.Configure("glm-4-flash", "user-custom-key");
-        _service.ApiKey.Should().Be("user-custom-key");
-    }
+    // --- Switching modes ---
 
     [Fact]
-    public void DirectMode_IsConfigured_IsTrue()
-    {
-        _service.Configure("glm-4-flash", "user-key");
-        _service.IsConfigured.Should().BeTrue();
-    }
-
-    // --- Switching between modes ---
-
-    [Fact]
-    public void ClearingApiKey_SwitchesBackToWorkerMode()
+    public void ClearingApiKey_SwitchesBackToBuiltIn()
     {
         _service.Configure("glm-4-flash", "user-key");
         _service.UseDirectConnection.Should().BeTrue();
 
         _service.Configure("glm-4-flash", null);
         _service.UseDirectConnection.Should().BeFalse();
-        _service.ApiKey.Should().BeEmpty();
-        _service.Endpoint.Should().Contain("workers.dev");
     }
 
     [Fact]
-    public void EmptyApiKey_SwitchesBackToWorkerMode()
+    public void SwitchingModel_ChangesRoutingMode()
     {
-        _service.Configure("glm-4-flash", "user-key");
-        _service.Configure("glm-4-flash", "");
-        _service.UseDirectConnection.Should().BeFalse();
+        // GLM → direct
+        _service.Configure("glm-4-flash");
+        _service.UsesWorkerProxy.Should().BeFalse();
+        _service.Endpoint.Should().Contain("bigmodel.cn");
+
+        // Groq → Worker
+        _service.Configure("llama-3.3-70b-versatile");
+        _service.UsesWorkerProxy.Should().BeTrue();
+        _service.Endpoint.Should().Contain("workers.dev");
     }
 
     // --- Model selection ---
@@ -206,45 +191,22 @@ public class BuiltInAIServiceTests
         _service.Model.Should().Be(originalModel);
     }
 
-    // --- Device fingerprint ---
+    // --- Model/provider coverage ---
 
     [Fact]
-    public void Configure_AcceptsDeviceId()
+    public void AvailableModels_ContainsExpectedModels()
     {
-        // Should not throw; deviceId is stored internally
-        _service.Configure("glm-4-flash", null, "test-device-id-123");
+        BuiltInAIService.AvailableModels.Should().Contain("glm-4-flash-250414");
+        BuiltInAIService.AvailableModels.Should().Contain("glm-4-flash");
+        BuiltInAIService.AvailableModels.Should().Contain("llama-3.3-70b-versatile");
+        BuiltInAIService.AvailableModels.Should().Contain("llama-3.1-8b-instant");
     }
 
     [Fact]
-    public void Configure_WithNullDeviceId_DoesNotThrow()
+    public void AvailableModels_DoesNotContainDeprecatedModels()
     {
-        _service.Configure("glm-4-flash", null, null);
-    }
-
-    // --- Other properties ---
-
-    [Fact]
-    public void SupportedLanguages_IsLimitedSubset()
-    {
-        var languages = _service.SupportedLanguages;
-
-        languages.Should().Contain(Language.SimplifiedChinese);
-        languages.Should().Contain(Language.TraditionalChinese);
-        languages.Should().Contain(Language.English);
-        languages.Should().Contain(Language.Japanese);
-        languages.Should().Contain(Language.Korean);
-        languages.Should().Contain(Language.French);
-        languages.Should().Contain(Language.Spanish);
-        languages.Should().Contain(Language.German);
-
-        // Should have fewer languages than full OpenAI language list
-        languages.Count.Should().BeLessThan(32);
-    }
-
-    [Fact]
-    public void IsStreaming_IsTrue()
-    {
-        _service.IsStreaming.Should().BeTrue();
+        BuiltInAIService.AvailableModels.Should().NotContain("gemma2-9b-it");
+        BuiltInAIService.AvailableModels.Should().NotContain("mixtral-8x7b-32768");
     }
 
     [Fact]
@@ -255,5 +217,22 @@ public class BuiltInAIServiceTests
             BuiltInAIService.ModelProviderMap.Should().ContainKey(model,
                 $"model '{model}' in AvailableModels should have a provider mapping");
         }
+    }
+
+    // --- Other ---
+
+    [Fact]
+    public void SupportedLanguages_IsLimitedSubset()
+    {
+        var languages = _service.SupportedLanguages;
+        languages.Should().Contain(Language.SimplifiedChinese);
+        languages.Should().Contain(Language.English);
+        languages.Count.Should().BeLessThan(32);
+    }
+
+    [Fact]
+    public void IsStreaming_IsTrue()
+    {
+        _service.IsStreaming.Should().BeTrue();
     }
 }

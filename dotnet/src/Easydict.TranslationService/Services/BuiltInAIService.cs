@@ -1,21 +1,20 @@
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Security;
 
 namespace Easydict.TranslationService.Services;
 
 /// <summary>
-/// Built-in AI service that routes through a Cloudflare Worker proxy.
+/// Built-in AI translation service with two-tier routing:
 ///
-/// Default flow (no user API key):
-///   Client → Cloudflare Worker (with X-Device-Id header) → GLM / Groq
-///   The Worker holds the actual API keys and routes requests by model name.
-///   Rate limiting is enforced per device fingerprint on the Worker side.
+/// 1. Primary — Zhipu GLM free API (direct, embedded key):
+///    Client → open.bigmodel.cn with built-in free API key
 ///
-/// User API key flow:
-///   Client → GLM / Groq directly (with user's own API key, bypasses Worker)
+/// 2. Backup — Cloudflare Worker proxy (DeviceId rate-limited):
+///    Client → Worker (X-Device-Id header) → GLM / Groq
+///    Used for Groq models and as GLM fallback when free quota is exhausted.
 ///
-/// Supports two provider backends:
-/// - GLM (Zhipu AI): Default, uses free flash models (glm-4-flash, glm-4-flash-250414)
-/// - Groq: Backup, uses free models (llama-3.3-70b-versatile, llama-3.1-8b-instant)
+/// 3. User API key — direct connection (bypasses both):
+///    Client → GLM / Groq with user's own key
 /// </summary>
 public sealed class BuiltInAIService : BaseOpenAIService
 {
@@ -26,29 +25,26 @@ public sealed class BuiltInAIService : BaseOpenAIService
 
     private const string DefaultModel = "glm-4-flash-250414";
 
-    /// <summary>
-    /// Cloudflare Worker proxy endpoint.
-    /// All built-in requests (without user API key) go through this proxy.
-    /// The Worker holds actual API keys and routes by model name.
-    /// TODO: Replace with actual Worker URL after deployment.
-    /// </summary>
-    private const string WorkerEndpoint = "https://easydict-ai.example.workers.dev/v1/chat/completions";
-
-    // Direct provider endpoints (used only when user provides their own API key)
+    // Primary: Zhipu GLM direct endpoint (free API key embedded)
     private const string GLMEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+
+    // Backup: Cloudflare Worker proxy (holds Groq key, also proxies GLM)
+    // TODO: Replace with actual Worker URL after deployment.
+    internal const string WorkerEndpoint = "https://easydict-ai.example.workers.dev/v1/chat/completions";
+
+    // Direct Groq endpoint (used only with user's own Groq API key)
     private const string GroqEndpoint = "https://api.groq.com/openai/v1/chat/completions";
 
     /// <summary>
     /// Maps model names to their provider backend.
-    /// Used for direct connection routing when user provides their own API key.
     /// </summary>
     internal static readonly Dictionary<string, Provider> ModelProviderMap = new()
     {
-        // GLM models (primary, free)
+        // GLM models — primary, direct with embedded free key
         ["glm-4-flash"] = Provider.GLM,
         ["glm-4-flash-250414"] = Provider.GLM,
 
-        // Groq models (backup)
+        // Groq models — via Worker proxy (no embedded Groq key)
         ["llama-3.3-70b-versatile"] = Provider.Groq,
         ["llama-3.1-8b-instant"] = Provider.Groq,
     };
@@ -59,11 +55,8 @@ public sealed class BuiltInAIService : BaseOpenAIService
     /// </summary>
     public static readonly string[] AvailableModels = new[]
     {
-        // GLM models (primary, free via Zhipu AI)
         "glm-4-flash-250414",
         "glm-4-flash",
-
-        // Groq models (backup)
         "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
     };
@@ -100,51 +93,83 @@ public sealed class BuiltInAIService : BaseOpenAIService
     public override IReadOnlyList<Language> SupportedLanguages => _builtInLanguages;
 
     /// <summary>
-    /// Whether the user has provided their own API key (bypasses Worker proxy).
+    /// Whether the user has provided their own API key (bypasses built-in routing).
     /// </summary>
     internal bool UseDirectConnection => !string.IsNullOrEmpty(_userApiKey);
 
     /// <summary>
     /// Current provider backend, determined by the selected model.
-    /// Only relevant for direct connection (user API key) routing.
     /// </summary>
     internal Provider CurrentProvider =>
         ModelProviderMap.GetValueOrDefault(_model, Provider.GLM);
 
     /// <summary>
-    /// Endpoint: Worker proxy for built-in mode, direct provider for user API key mode.
+    /// Whether this request goes through the Cloudflare Worker proxy.
+    /// True for Groq models (no embedded key) when user hasn't provided their own key.
     /// </summary>
-    public override string Endpoint => UseDirectConnection
-        ? CurrentProvider switch
-        {
-            Provider.GLM => GLMEndpoint,
-            Provider.Groq => GroqEndpoint,
-            _ => GLMEndpoint
-        }
-        : WorkerEndpoint;
+    internal bool UsesWorkerProxy => !UseDirectConnection && CurrentProvider == Provider.Groq;
 
     /// <summary>
-    /// API key: user's key for direct mode, empty for Worker proxy mode
-    /// (Worker handles authentication server-side).
+    /// Endpoint routing:
+    /// - User API key → direct to provider
+    /// - GLM model (no user key) → direct to Zhipu with embedded key
+    /// - Groq model (no user key) → Cloudflare Worker proxy
     /// </summary>
-    public override string ApiKey => UseDirectConnection ? _userApiKey : "";
+    public override string Endpoint
+    {
+        get
+        {
+            if (UseDirectConnection)
+            {
+                return CurrentProvider switch
+                {
+                    Provider.GLM => GLMEndpoint,
+                    Provider.Groq => GroqEndpoint,
+                    _ => GLMEndpoint
+                };
+            }
+
+            return CurrentProvider switch
+            {
+                Provider.GLM => GLMEndpoint,   // Direct with embedded key
+                Provider.Groq => WorkerEndpoint, // Via Worker proxy
+                _ => GLMEndpoint
+            };
+        }
+    }
+
+    /// <summary>
+    /// API key routing:
+    /// - User API key → user's key
+    /// - GLM (built-in) → embedded free key
+    /// - Groq (Worker) → empty (Worker handles auth)
+    /// </summary>
+    public override string ApiKey
+    {
+        get
+        {
+            if (UseDirectConnection) return _userApiKey;
+
+            return CurrentProvider switch
+            {
+                Provider.GLM => GetEmbeddedGLMKey(),
+                Provider.Groq => "",  // Worker handles auth server-side
+                _ => ""
+            };
+        }
+    }
 
     public override string Model => _model;
 
-    /// <summary>
-    /// Built-in mode is always configured (Worker endpoint is hardcoded).
-    /// Direct mode requires a non-empty user API key.
-    /// </summary>
     public override bool IsConfigured => UseDirectConnection
         ? !string.IsNullOrEmpty(_userApiKey)
-        : true;
+        : CurrentProvider == Provider.GLM
+            ? !string.IsNullOrEmpty(GetEmbeddedGLMKey())
+            : true;  // Worker mode always configured
 
     /// <summary>
     /// Configure the model selection, optional user API key, and device fingerprint.
     /// </summary>
-    /// <param name="model">Model to use.</param>
-    /// <param name="apiKey">Optional user-provided API key (bypasses Worker proxy).</param>
-    /// <param name="deviceId">Device fingerprint for Worker rate limiting.</param>
     public void Configure(string model, string? apiKey = null, string? deviceId = null)
     {
         if (AvailableModels.Contains(model) || ModelProviderMap.ContainsKey(model))
@@ -157,12 +182,11 @@ public sealed class BuiltInAIService : BaseOpenAIService
     }
 
     /// <summary>
-    /// Add device fingerprint header for Worker proxy requests.
-    /// The Worker uses this for per-device rate limiting.
+    /// Attach X-Device-Id header for Worker proxy requests.
     /// </summary>
     protected override void ConfigureHttpRequest(HttpRequestMessage request)
     {
-        if (!UseDirectConnection && !string.IsNullOrEmpty(_deviceId))
+        if (UsesWorkerProxy && !string.IsNullOrEmpty(_deviceId))
         {
             request.Headers.TryAddWithoutValidation("X-Device-Id", _deviceId);
         }
@@ -173,20 +197,30 @@ public sealed class BuiltInAIService : BaseOpenAIService
     /// </summary>
     protected override void ValidateConfiguration()
     {
-        if (UseDirectConnection)
+        if (UseDirectConnection && string.IsNullOrEmpty(_userApiKey))
         {
-            // Direct mode: need endpoint and API key
-            if (string.IsNullOrEmpty(ApiKey))
+            throw new TranslationException(
+                "API key is required for direct connection mode. " +
+                "Please provide your API key in Settings → Built-in AI.")
             {
-                throw new TranslationException(
-                    "API key is required for direct connection mode. " +
-                    "Please provide your API key in Settings → Built-in AI.")
-                {
-                    ErrorCode = TranslationErrorCode.InvalidApiKey,
-                    ServiceId = ServiceId
-                };
-            }
+                ErrorCode = TranslationErrorCode.InvalidApiKey,
+                ServiceId = ServiceId
+            };
         }
-        // Worker proxy mode: always available (endpoint is hardcoded)
+
+        if (!UseDirectConnection && CurrentProvider == Provider.GLM && string.IsNullOrEmpty(GetEmbeddedGLMKey()))
+        {
+            throw new TranslationException(
+                "Built-in GLM API key is not available. " +
+                "Please provide your own API key in Settings → Built-in AI, " +
+                "or select a Groq model to use the proxy.")
+            {
+                ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                ServiceId = ServiceId
+            };
+        }
     }
+
+    private static string GetEmbeddedGLMKey() =>
+        SecretKeyManager.GetSecret("builtInGLMAPIKey") ?? "";
 }

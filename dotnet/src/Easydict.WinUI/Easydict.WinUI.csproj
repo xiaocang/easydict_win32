@@ -52,6 +52,9 @@
         <!-- Localization -->
         <DefaultLanguage>en-US</DefaultLanguage>
 
+        <!-- Allow test project to access internal members -->
+        <InternalsVisibleTo>Easydict.WinUI.Tests</InternalsVisibleTo>
+
         <!--
             Ensure PRI resources are generated for BOTH packaged and unpackaged modes.
             WindowsPackageType=None normally skips PRI generation, but ResourceManager API

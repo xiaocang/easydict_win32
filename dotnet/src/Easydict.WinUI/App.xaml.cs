@@ -18,6 +18,7 @@ namespace Easydict.WinUI
         private ClipboardService? _clipboardService;
         private MouseHookService? _mouseHookService;
         private PopButtonService? _popButtonService;
+        private OcrTranslateService? _ocrTranslateService;
         private AppWindow? _appWindow;
 
         private static App Instance => (App)Current;
@@ -286,11 +287,23 @@ namespace Easydict.WinUI
                 _hotkeyService.OnShowFixedWindow += OnShowFixedWindowHotkey;
                 _hotkeyService.OnToggleMiniWindow += OnToggleMiniWindowHotkey;
                 _hotkeyService.OnToggleFixedWindow += OnToggleFixedWindowHotkey;
+                _hotkeyService.OnOcrTranslate += OnOcrTranslateHotkey;
+                _hotkeyService.OnSilentOcr += OnSilentOcrHotkey;
                 _hotkeyService.Initialize();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[App] HotkeyService initialization failed: {ex}");
+            }
+
+            // Initialize OCR translate service
+            try
+            {
+                _ocrTranslateService = new OcrTranslateService(_window.DispatcherQueue);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] OcrTranslateService initialization failed: {ex}");
             }
 
             // Initialize clipboard service
@@ -449,6 +462,30 @@ namespace Easydict.WinUI
             {
                 FixedWindowService.Instance.Toggle();
             });
+        }
+
+        private async void OnOcrTranslateHotkey()
+        {
+            try
+            {
+                await _ocrTranslateService!.OcrTranslateAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] OnOcrTranslateHotkey error: {ex.Message}");
+            }
+        }
+
+        private async void OnSilentOcrHotkey()
+        {
+            try
+            {
+                await _ocrTranslateService!.SilentOcrAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] OnSilentOcrHotkey error: {ex.Message}");
+            }
         }
 
         private async void OnTrayTranslateClipboard()

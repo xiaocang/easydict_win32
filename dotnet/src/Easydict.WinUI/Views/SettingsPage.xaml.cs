@@ -130,6 +130,7 @@ public sealed partial class SettingsPage : Page
         OllamaEndpointBox.Header = loc.GetString("EndpointOptional");
         OllamaModelCombo.Header = loc.GetString("Model");
         BuiltInModelCombo.Header = loc.GetString("Model");
+        BuiltInApiKeyBox.Header = loc.GetString("ApiKeyOptional");
         DoubaoKeyBox.Header = loc.GetString("ApiKey");
         DoubaoEndpointBox.Header = loc.GetString("EndpointOptional");
         DoubaoModelBox.Header = loc.GetString("Model");
@@ -323,6 +324,7 @@ public sealed partial class SettingsPage : Page
         CustomOpenAIEndpointBox.TextChanged += OnSettingChanged;
         CustomOpenAIKeyBox.PasswordChanged += OnSettingChanged;
         CustomOpenAIModelBox.TextChanged += OnSettingChanged;
+        BuiltInApiKeyBox.PasswordChanged += OnSettingChanged;
         DoubaoKeyBox.PasswordChanged += OnSettingChanged;
         DoubaoEndpointBox.TextChanged += OnSettingChanged;
         DoubaoModelBox.TextChanged += OnSettingChanged;
@@ -427,6 +429,7 @@ public sealed partial class SettingsPage : Page
 
         // Built-in AI settings
         SetEditableComboValue(BuiltInModelCombo, _settings.BuiltInAIModel);
+        BuiltInApiKeyBox.Password = _settings.BuiltInAIApiKey ?? string.Empty;
 
         // Doubao settings
         DoubaoKeyBox.Password = _settings.DoubaoApiKey ?? string.Empty;
@@ -807,7 +810,9 @@ public sealed partial class SettingsPage : Page
         _settings.OllamaModel = OllamaModelCombo.Text?.Trim() ?? "llama3.2";
 
         // Save Built-in AI settings
-        _settings.BuiltInAIModel = GetEditableComboValue(BuiltInModelCombo, "llama-3.3-70b-versatile");
+        _settings.BuiltInAIModel = GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414");
+        var builtInKey = BuiltInApiKeyBox.Password;
+        _settings.BuiltInAIApiKey = string.IsNullOrWhiteSpace(builtInKey) ? null : builtInKey;
 
         // Save Doubao settings
         var doubaoKey = DoubaoKeyBox.Password;
@@ -1618,8 +1623,9 @@ public sealed partial class SettingsPage : Page
         {
             if (service is BuiltInAIService builtin)
             {
-                var model = GetEditableComboValue(BuiltInModelCombo, "llama-3.3-70b-versatile");
-                builtin.Configure(model);
+                var model = GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414");
+                var apiKey = BuiltInApiKeyBox.Password;
+                builtin.Configure(model, string.IsNullOrWhiteSpace(apiKey) ? null : apiKey);
             }
         }, TestBuiltInButton, BuiltInStatusText);
     }

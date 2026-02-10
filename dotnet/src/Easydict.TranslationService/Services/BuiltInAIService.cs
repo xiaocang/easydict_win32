@@ -5,24 +5,56 @@ namespace Easydict.TranslationService.Services;
 
 /// <summary>
 /// Built-in AI service with pre-configured endpoint and API key.
-/// User only selects the model - endpoint and API key are hidden.
+/// User only selects the model - endpoint and API key are hidden (but user can override API key).
 /// This provides a free/low-cost translation option without requiring user configuration.
-/// Uses Groq cloud service with embedded API key.
+///
+/// Supports two providers:
+/// - GLM (Zhipu AI): Default provider, uses free flash models (glm-4-flash, glm-4-flash-250414)
+/// - Groq: Backup provider, uses free models (llama-3.3-70b-versatile, llama-3.1-8b-instant)
+///
+/// The provider is automatically selected based on the model chosen.
+/// Users can optionally provide their own API key in settings as a fallback
+/// when the built-in keys are exhausted.
 /// </summary>
 public sealed class BuiltInAIService : BaseOpenAIService
 {
-    private const string DefaultModel = "llama-3.3-70b-versatile";
+    /// <summary>
+    /// Provider backends for the built-in AI service.
+    /// </summary>
+    internal enum Provider { GLM, Groq }
+
+    private const string DefaultModel = "glm-4-flash-250414";
+
+    private const string GLMEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+    private const string GroqEndpoint = "https://api.groq.com/openai/v1/chat/completions";
+
+    /// <summary>
+    /// Maps model names to their provider backend.
+    /// </summary>
+    internal static readonly Dictionary<string, Provider> ModelProviderMap = new()
+    {
+        // GLM models (primary, free)
+        ["glm-4-flash"] = Provider.GLM,
+        ["glm-4-flash-250414"] = Provider.GLM,
+
+        // Groq models (backup)
+        ["llama-3.3-70b-versatile"] = Provider.Groq,
+        ["llama-3.1-8b-instant"] = Provider.Groq,
+    };
 
     /// <summary>
     /// Available models for the built-in AI service.
-    /// These are free/low-cost models that don't require user API keys.
+    /// GLM models listed first (default), Groq models as backup.
     /// </summary>
     public static readonly string[] AvailableModels = new[]
     {
+        // GLM models (primary, free via Zhipu AI)
+        "glm-4-flash-250414",
+        "glm-4-flash",
+
+        // Groq models (backup)
         "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
-        "gemma2-9b-it",
-        "mixtral-8x7b-32768"
     };
 
     private static readonly IReadOnlyList<Language> _builtInLanguages = new[]
@@ -46,6 +78,7 @@ public sealed class BuiltInAIService : BaseOpenAIService
     };
 
     private string _model = DefaultModel;
+    private string _userApiKey = "";
 
     public BuiltInAIService(HttpClient httpClient) : base(httpClient) { }
 
@@ -55,36 +88,65 @@ public sealed class BuiltInAIService : BaseOpenAIService
     public override bool IsConfigured => !string.IsNullOrEmpty(GetApiKey());
     public override IReadOnlyList<Language> SupportedLanguages => _builtInLanguages;
 
-    public override string Endpoint => SecretKeyManager.GetSecret("builtInAIEndpoint") ?? "";
+    /// <summary>
+    /// Current provider backend, determined by the selected model.
+    /// </summary>
+    internal Provider CurrentProvider =>
+        ModelProviderMap.GetValueOrDefault(_model, Provider.GLM);
+
+    public override string Endpoint => CurrentProvider switch
+    {
+        Provider.GLM => GLMEndpoint,
+        Provider.Groq => GroqEndpoint,
+        _ => GLMEndpoint
+    };
+
     public override string ApiKey => GetApiKey();
     public override string Model => _model;
 
     /// <summary>
-    /// Get API key from environment variable or fall back to encrypted embedded key.
+    /// Get API key with fallback chain:
+    /// 1. User-provided API key (from settings)
+    /// 2. Environment variable
+    /// 3. Built-in encrypted key for the current provider
     /// </summary>
-    private static string GetApiKey()
+    private string GetApiKey()
     {
-        // Allow override via environment variable for development/deployment
-        var envKey = Environment.GetEnvironmentVariable("EASYDICT_GROQ_API_KEY");
+        // 1. User-provided API key takes priority
+        if (!string.IsNullOrEmpty(_userApiKey))
+        {
+            return _userApiKey;
+        }
+
+        // 2. Allow override via environment variable
+        var envKey = Environment.GetEnvironmentVariable("EASYDICT_BUILTIN_AI_KEY");
         if (!string.IsNullOrEmpty(envKey))
         {
             return envKey;
         }
 
-        // Fall back to encrypted embedded key
-        return SecretKeyManager.GetSecret("builtInAIAPIKey") ?? "";
+        // 3. Built-in encrypted key for the current provider
+        return CurrentProvider switch
+        {
+            Provider.GLM => SecretKeyManager.GetSecret("builtInGLMAPIKey") ?? "",
+            Provider.Groq => SecretKeyManager.GetSecret("builtInGroqAPIKey") ?? "",
+            _ => ""
+        };
     }
 
     /// <summary>
-    /// Configure the model selection (only configurable option).
+    /// Configure the model selection and optional user API key.
     /// </summary>
     /// <param name="model">Model to use.</param>
-    public void Configure(string model)
+    /// <param name="apiKey">Optional user-provided API key (overrides built-in key).</param>
+    public void Configure(string model, string? apiKey = null)
     {
-        if (AvailableModels.Contains(model))
+        if (AvailableModels.Contains(model) || ModelProviderMap.ContainsKey(model))
         {
             _model = model;
         }
+
+        _userApiKey = apiKey ?? "";
     }
 
     /// <summary>
@@ -101,10 +163,11 @@ public sealed class BuiltInAIService : BaseOpenAIService
             };
         }
 
-        // Check if API key is available (embedded or from environment)
+        // Check if API key is available (user-provided, env var, or embedded)
         if (string.IsNullOrEmpty(GetApiKey()))
         {
-            throw new TranslationException("Built-in AI service is not available. Set EASYDICT_GROQ_API_KEY environment variable.")
+            throw new TranslationException(
+                "Built-in AI service is not available. Please provide your own API key in Settings → Built-in AI.")
             {
                 ErrorCode = TranslationErrorCode.ServiceUnavailable,
                 ServiceId = ServiceId

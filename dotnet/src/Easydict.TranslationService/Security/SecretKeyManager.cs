@@ -18,7 +18,7 @@ public static class SecretKeyManager
     /// <summary>
     /// Gets a decrypted secret by key name.
     /// </summary>
-    /// <param name="key">The secret key name (e.g., "builtInAIAPIKey").</param>
+    /// <param name="key">The secret key name (e.g., "builtInGLMAPIKey").</param>
     /// <returns>The decrypted secret value, or null if not found.</returns>
     public static string? GetSecret(string key)
     {

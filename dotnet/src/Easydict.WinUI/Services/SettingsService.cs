@@ -58,7 +58,8 @@ public sealed class SettingsService
     public string OllamaModel { get; set; } = "llama3.2";
 
     // Built-in AI settings
-    public string BuiltInAIModel { get; set; } = "llama-3.3-70b-versatile";
+    public string BuiltInAIModel { get; set; } = "glm-4-flash-250414";
+    public string? BuiltInAIApiKey { get; set; }
 
     // DeepSeek settings
     public string? DeepSeekApiKey { get; set; }
@@ -357,7 +358,8 @@ public sealed class SettingsService
         OllamaModel = GetValue(nameof(OllamaModel), "llama3.2");
 
         // Built-in AI settings
-        BuiltInAIModel = GetValue(nameof(BuiltInAIModel), "llama-3.3-70b-versatile");
+        BuiltInAIModel = GetValue(nameof(BuiltInAIModel), "glm-4-flash-250414");
+        BuiltInAIApiKey = GetValue<string?>(nameof(BuiltInAIApiKey), null);
 
         // DeepSeek settings
         DeepSeekApiKey = GetValue<string?>(nameof(DeepSeekApiKey), null);
@@ -494,6 +496,7 @@ public sealed class SettingsService
 
         // Built-in AI settings
         _settings[nameof(BuiltInAIModel)] = BuiltInAIModel;
+        _settings[nameof(BuiltInAIApiKey)] = BuiltInAIApiKey ?? string.Empty;
 
         // DeepSeek settings
         _settings[nameof(DeepSeekApiKey)] = DeepSeekApiKey ?? string.Empty;

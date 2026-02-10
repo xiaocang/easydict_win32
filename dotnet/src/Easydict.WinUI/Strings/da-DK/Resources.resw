@@ -221,6 +221,12 @@
   <data name="LanguagePickerHelpTip" xml:space="preserve">
     <value>Add/remove languages: Settings &#x2192; Available Languages</value>
   </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter to translate, Shift+Enter for new line</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>Restart required after changes</value>
+  </data>
   <data name="EnabledServicesHelpTip" xml:space="preserve">
     <value>Auto = auto-query, Manual = click to query</value>
   </data>

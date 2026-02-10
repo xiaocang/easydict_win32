@@ -762,6 +762,12 @@
   <data name="LanguagePickerHelpTip" xml:space="preserve">
     <value>언어 추가/제거: 설정 &#x2192; 사용 가능한 언어</value>
   </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter 번역, Shift+Enter 줄바꿈</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>변경 후 재시작 필요</value>
+  </data>
   <data name="EnabledServicesHelpTip" xml:space="preserve">
     <value>자동 = 자동 쿼리, 수동 = 클릭하여 쿼리</value>
   </data>

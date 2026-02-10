@@ -193,6 +193,7 @@ namespace Easydict.WinUI.Views
             // Help icon tooltips
             ToolTipService.SetToolTip(LangHelpIcon, loc.GetString("LanguagePickerHelpTip"));
             ToolTipService.SetToolTip(LangHelpIconNarrow, loc.GetString("LanguagePickerHelpTip"));
+            ToolTipService.SetToolTip(InputHelpIcon, loc.GetString("InputHelpTip"));
         }
 
         private void OnClipboardTextReceived(string text)

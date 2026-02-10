@@ -212,6 +212,7 @@ public sealed partial class SettingsPage : Page
         // Help icon tooltips
         ToolTipService.SetToolTip(EnabledServicesHelpIcon, loc.GetString("EnabledServicesHelpTip"));
         ToolTipService.SetToolTip(ServiceConfigHelpIcon, loc.GetString("ServiceConfigHelpTip"));
+        ToolTipService.SetToolTip(HotkeysHelpIcon, loc.GetString("HotkeysHelpTip"));
     }
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)

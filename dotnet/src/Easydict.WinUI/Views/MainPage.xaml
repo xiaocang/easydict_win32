@@ -283,8 +283,9 @@
                 <!-- Title row with consistent height -->
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
                     <TextBlock
@@ -295,10 +296,20 @@
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         VerticalAlignment="Center" />
 
+                    <!-- Input Help Icon -->
+                    <FontIcon
+                        x:Name="InputHelpIcon"
+                        Grid.Column="1"
+                        Glyph="&#xE897;"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        VerticalAlignment="Center"
+                        Margin="4,0,0,0" />
+
                     <!-- TTS Play Button for source text -->
                     <Button
                         x:Name="SourcePlayButton"
-                        Grid.Column="1"
+                        Grid.Column="2"
                         Click="OnSourcePlayClicked"
                         ToolTipService.ToolTip="Play source text"
                         Background="Transparent"
@@ -306,6 +317,7 @@
                         Width="24"
                         Height="24"
                         Padding="0"
+                        HorizontalAlignment="Right"
                         VerticalAlignment="Center">
                         <FontIcon x:Name="SourcePlayIcon" Glyph="&#xE768;" FontSize="12" />
                     </Button>

@@ -642,7 +642,11 @@
 
             <!-- Hotkeys -->
             <StackPanel x:Name="HotkeysSection" Spacing="12">
-                <TextBlock x:Name="HotkeysHeaderText" Text="Hotkeys" FontSize="18" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock x:Name="HotkeysHeaderText" Text="Hotkeys" FontSize="18" FontWeight="SemiBold" />
+                    <FontIcon x:Name="HotkeysHelpIcon" Glyph="&#xE897;" FontSize="14"
+                              Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                </StackPanel>
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="16">

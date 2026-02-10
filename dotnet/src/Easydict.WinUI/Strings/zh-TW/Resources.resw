@@ -751,6 +751,12 @@
   <data name="LanguagePickerHelpTip" xml:space="preserve">
     <value>新增/移除語言：設定 &#x2192; 可用語言</value>
   </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter 翻譯, Shift+Enter 換行</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>修改後需重啟生效</value>
+  </data>
   <data name="EnabledServicesHelpTip" xml:space="preserve">
     <value>自動 = 自動查詢，手動 = 點擊查詢</value>
   </data>

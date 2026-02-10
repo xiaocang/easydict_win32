@@ -131,6 +131,9 @@ public sealed partial class SettingsPage : Page
         OllamaModelCombo.Header = loc.GetString("Model");
         BuiltInModelCombo.Header = loc.GetString("Model");
         BuiltInApiKeyBox.Header = loc.GetString("ApiKeyOptional");
+        BuiltInAIHintBar.Title = loc.GetString("Hint");
+        BuiltInAIHintBar.Message = loc.GetString("BuiltInAIHint");
+        BuiltInDescriptionText.Text = loc.GetString("BuiltInAIDescription");
         DoubaoKeyBox.Header = loc.GetString("ApiKey");
         DoubaoEndpointBox.Header = loc.GetString("EndpointOptional");
         DoubaoModelBox.Header = loc.GetString("Model");

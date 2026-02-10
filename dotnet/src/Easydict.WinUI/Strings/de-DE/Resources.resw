@@ -341,7 +341,13 @@
     <value>Ollama muss lokal ausgeführt werden. Klicken Sie auf Aktualisieren, um verfügbare Modelle zu laden.</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>Integrierte KI verwendet den Groq-Cloud-Dienst. Kein API-Schlüssel erforderlich. Sie können einen benutzerdefinierten Modellnamen eingeben.</value>
+    <value>Verwendet kostenlose GLM (Zhipu AI) oder Groq Modelle. Sie können Ihren eigenen API-Schlüssel von open.bigmodel.cn (GLM) oder console.groq.com (Groq) bereitstellen.</value>
+  </data>
+  <data name="BuiltInAIHint" xml:space="preserve">
+    <value>Der integrierte Schlüssel hat ein begrenztes kostenloses Kontingent und ist nicht garantiert immer verfügbar. Für stabile Nutzung holen Sie sich Ihren eigenen kostenlosen API-Schlüssel.</value>
+  </data>
+  <data name="Hint" xml:space="preserve">
+    <value>Hinweis</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
     <value>ByteDances Doubao-Übersetzungsdienst. Holen Sie sich Ihren API-Schlüssel von console.volcengine.com</value>

@@ -341,7 +341,13 @@
     <value>Ollama doit être en cours d'exécution localement. Cliquez sur Actualiser pour charger les modèles disponibles.</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>L'IA intégrée utilise le service cloud Groq. Aucune clé API requise. Vous pouvez saisir un nom de modèle personnalisé.</value>
+    <value>Utilise les modèles gratuits GLM (Zhipu AI) ou Groq. Vous pouvez fournir votre propre clé API depuis open.bigmodel.cn (GLM) ou console.groq.com (Groq).</value>
+  </data>
+  <data name="BuiltInAIHint" xml:space="preserve">
+    <value>La clé intégrée a un quota gratuit limité et n'est pas garantie d'être toujours disponible. Pour une utilisation stable, obtenez votre propre clé API gratuite.</value>
+  </data>
+  <data name="Hint" xml:space="preserve">
+    <value>Conseil</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
     <value>Service de traduction Doubao de ByteDance. Obtenez votre clé API sur console.volcengine.com</value>

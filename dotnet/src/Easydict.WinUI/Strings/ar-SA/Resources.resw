@@ -233,7 +233,13 @@
     <value>يجب أن يكون Ollama قيد التشغيل محلياً. انقر على تحديث لتحميل النماذج المتاحة.</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>يستخدم الذكاء الاصطناعي المدمج خدمة Groq السحابية. لا يتطلب مفتاح API. يمكنك كتابة اسم نموذج مخصص.</value>
+    <value>يستخدم نماذج GLM (Zhipu AI) أو Groq المجانية. يمكنك تقديم مفتاح API الخاص بك من open.bigmodel.cn (GLM) أو console.groq.com (Groq).</value>
+  </data>
+  <data name="BuiltInAIHint" xml:space="preserve">
+    <value>المفتاح المدمج له حصة مجانية محدودة وليس مضمونًا أن يكون متاحًا دائمًا. للاستخدام المستقر، احصل على مفتاح API المجاني الخاص بك.</value>
+  </data>
+  <data name="Hint" xml:space="preserve">
+    <value>تلميح</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
     <value>خدمة ترجمة Doubao من ByteDance. احصل على مفتاح API من console.volcengine.com</value>

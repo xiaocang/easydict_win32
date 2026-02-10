@@ -209,7 +209,13 @@
     <value>Ollama harus berjalan secara lokal. Klik Segarkan untuk memuat model yang tersedia.</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>AI bawaan menggunakan layanan cloud Groq. Tidak memerlukan API key. Anda dapat mengetik nama model kustom.</value>
+    <value>Menggunakan model gratis GLM (Zhipu AI) atau Groq. Anda dapat menyediakan API key sendiri dari open.bigmodel.cn (GLM) atau console.groq.com (Groq).</value>
+  </data>
+  <data name="BuiltInAIHint" xml:space="preserve">
+    <value>Kunci bawaan memiliki kuota gratis terbatas dan tidak dijamin selalu tersedia. Untuk penggunaan stabil, dapatkan API key gratis Anda sendiri.</value>
+  </data>
+  <data name="Hint" xml:space="preserve">
+    <value>Petunjuk</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
     <value>Layanan terjemahan Doubao dari ByteDance. Dapatkan API key dari console.volcengine.com</value>

@@ -344,7 +344,13 @@
     <value>Ollama 必须在本地运行。点击刷新以加载可用模型。</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>内置 AI 使用 Groq 云服务。无需 API 密钥。您可以输入自定义模型名称。</value>
+    <value>使用 GLM（智谱 AI）或 Groq 免费模型。您可以从 open.bigmodel.cn（GLM）或 console.groq.com（Groq）获取自己的 API 密钥。</value>
+  </data>
+  <data name="BuiltInAIHint" xml:space="preserve">
+    <value>内置密钥有免费额度限制，不保证始终可用。为稳定使用，建议获取自己的免费 API 密钥。</value>
+  </data>
+  <data name="Hint" xml:space="preserve">
+    <value>提示</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
     <value>字节跳动的豆包翻译服务。从 console.volcengine.com 获取您的 API 密钥</value>

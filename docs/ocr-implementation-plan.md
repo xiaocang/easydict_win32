@@ -112,7 +112,9 @@ Apple Vision Framework (VNRecognizeTextRequest)   ← 离线 OCR
 
 #### 3.2.1 ScreenCaptureService — 截图服务
 
-**职责**：全屏覆盖 → 用户拖拽框选区域 → 返回选区截图
+**职责**：全屏覆盖 → Snipaste 风格交互（自动窗口检测 + 自由框选） → 返回选区截图
+
+**交互设计参考 [Snipaste](https://zh.snipaste.com/)**，实现与其一致的截图取图体验。
 
 ```csharp
 namespace Easydict.WinUI.Services;
@@ -120,7 +122,7 @@ namespace Easydict.WinUI.Services;
 public sealed class ScreenCaptureService
 {
     /// <summary>
-    /// 启动截图流程，用户框选后返回截图和区域信息。
+    /// 启动截图流程（Snipaste 风格交互），用户框选后返回截图和区域信息。
     /// 如果用户按 Esc 取消，返回 null。
     /// </summary>
     public Task<ScreenCaptureResult?> CaptureRegionAsync();
@@ -138,19 +140,22 @@ public record ScreenCaptureResult
 
 **实现方案**：
 
-1. **抓取全屏**：使用 `Windows.Graphics.Capture` API (Screen Capture API)，或 Win32 `BitBlt` 捕获所有显示器画面
-2. **覆盖窗口**：创建全屏无边框顶层窗口（`WS_EX_TOPMOST | WS_EX_TOOLWINDOW`），显示半透明遮罩
-3. **用户交互**：
-   - 鼠标拖拽绘制选区矩形
-   - 选区实时显示放大镜 + 坐标信息（可选，V2）
-   - Esc 取消，松开鼠标确认选区
-4. **裁切返回**：根据选区坐标从全屏截图中裁切出目标区域
-5. **多显示器支持**：遍历所有显示器创建对应覆盖窗口，或创建一个横跨虚拟桌面的窗口
+1. **抓取全屏**：使用 Win32 `BitBlt` + GDI 捕获整个虚拟桌面（所有显示器），冻结为静态背景图
+2. **覆盖窗口**：创建 Win32 原生全屏无边框顶层窗口（`WS_EX_TOPMOST | WS_EX_TOOLWINDOW`），显示冻结的桌面截图 + 半透明暗色遮罩
+3. **Snipaste 风格交互**（详见 3.2.3 节）：
+   - 鼠标悬浮时自动检测窗口/元素区域并高亮
+   - 单击确认自动检测的区域，或拖拽自由框选
+   - 选区确认后显示控制手柄，可拖拽调整
+   - 放大镜 + 十字线辅助精确定位
+   - 键盘方向键微调选区边界
+4. **裁切返回**：根据选区坐标从冻结的全屏截图中裁切出目标区域
+5. **多显示器支持**：创建一个横跨虚拟桌面的覆盖窗口
 6. **DPI 感知**：使用物理像素坐标，处理 Per-Monitor V2 DPI 差异
 
 **关键设计决策**：
 - 使用 Win32 原生窗口（而非 WinUI 3 窗口）作为覆盖层，避免 WinUI 3 窗口创建延迟和焦点问题
-- 参考 PowerToys Text Extractor / Text Grab 的实现模式
+- 绘制使用 GDI+ 或 Direct2D，保证高帧率流畅渲染
+- 参考 Snipaste 的交互模式，同时参考 PowerToys Text Extractor / Text Grab 的截图实现
 
 #### 3.2.2 OcrService — OCR 识别服务
 
@@ -230,32 +235,174 @@ public record OcrLanguage
    - 二值化提高对比度
    - 自动旋转校正（利用 `OcrResult.TextAngle`）
 
-#### 3.2.3 ScreenCaptureWindow — 截图覆盖窗口
+#### 3.2.3 ScreenCaptureWindow — 截图覆盖窗口（Snipaste 风格）
 
-**职责**：提供截图区域选择的 UI 交互
+**职责**：提供 Snipaste 风格的截图区域选择交互
+
+**参考**: [Snipaste](https://zh.snipaste.com/) 的截图交互是 Windows 平台上公认体验最好的截图工具之一。OCR 截图模块的交互设计完全对标 Snipaste，包括自动窗口检测、自由框选、放大镜、选区调整等核心体验。
+
+##### 视觉布局
 
 ```
-┌─────────────────────────────────────────────┐
-│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │  ← 半透明灰色遮罩
-│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  ░░░░░░░░┌─────────────────┐░░░░░░░░░░░░░░ │
-│  ░░░░░░░░│                 │░░░░░░░░░░░░░░ │  ← 选区（清晰显示原始画面）
-│  ░░░░░░░░│   选区区域       │░░░░░░░░░░░░░░ │
-│  ░░░░░░░░│                 │░░░░░░░░░░░░░░ │
-│  ░░░░░░░░└─────────────────┘░░░░░░░░░░░░░░ │
-│  ░░░░░░░░░░░░░░░░░░░░░░░░░░ 📐 640×320 ░░░ │  ← 选区尺寸提示
-│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│                                     Esc 取消 │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │  ← 半透明暗色遮罩 (冻结桌面)
+│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│  ░░░░░░░░┌━━━━━━━━━━━━━━━━━━━━━┐░░░░░░░░░░░░░░░░░░░░░ │
+│  ░░░░░░░░┃                     ┃░░░░░░░░░░░░░░░░░░░░░ │  ← 选区 (清晰原始画面，边框高亮)
+│  ░░░░░░░░┃    选区区域          ┃░░░░░░░░░░░░░░░░░░░░░ │
+│  ░░░░░░░░┃                     ┃░░░░░░░░░░░░░░░░░░░░░ │
+│  ░░░░░░░░┗━━━━━━━━━━━━━━━━━━━━━┛░░░░░░░░░░░░░░░░░░░░░ │
+│  ░░░░░░░░  640 × 320              ░░░░░░░░░░░░░░░░░░░░ │  ← 选区尺寸提示
+│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ┌──────────┐░░░ │
+│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │ 🔍 放大镜 │░░░ │  ← 放大镜 + 十字线 + 坐标/颜色
+│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │  (255,128) │░░░ │
+│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │  #FF8040   │░░░ │
+│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ └──────────┘░░░ │
+└──────────────────────────────────────────────────────────┘
 ```
 
-**交互流程**：
-1. 进入截图模式：全屏遮罩覆盖，鼠标变为十字光标
-2. 按下鼠标左键：记录起始点
-3. 拖拽：实时绘制选区矩形，选区内显示原始画面
-4. 释放鼠标：确认选区，返回截图结果
-5. 按 Esc：取消截图
-6. 右键：取消截图
+##### 完整交互流程（对标 Snipaste）
+
+**阶段一：进入截图模式**
+1. 快捷键触发 → 用 GDI `BitBlt` 冻结当前桌面为静态背景图
+2. 创建全屏覆盖窗口，显示冻结画面 + 半透明暗色遮罩（约 40% 不透明度）
+3. 鼠标变为十字光标（Crosshair）
+4. 右下角显示放大镜面板（跟随鼠标移动）
+
+**阶段二：自动窗口/元素检测（鼠标悬浮）**
+5. 鼠标移动时，自动检测鼠标下方的窗口/UI 元素区域并实时高亮
+   - 使用 `EnumWindows` 在截图开始时构建窗口层次快照（Z-Order + Rect）
+   - 使用 `ChildWindowFromPointEx` 递归查找子窗口
+   - 检测到的区域用高亮边框标识，区域内去掉遮罩显示清晰原始画面
+6. **鼠标滚轮**：在父窗口/子窗口层级间切换，精确选择不同粒度的元素
+7. **单击**：确认自动检测到的区域作为选区 → 跳到阶段四
+
+**阶段三：自由框选（鼠标拖拽）**
+8. 按住鼠标左键拖拽：从按下点开始绘制矩形选区
+   - 选区内去掉遮罩，显示清晰原始画面
+   - 选区边框用醒目颜色（如 Snipaste 的绿色/蓝色边框）
+   - 选区左上角或下方显示实时尺寸 `W × H`
+9. 释放鼠标：选区确定 → 跳到阶段四
+
+**阶段四：选区确认与调整**
+10. 选区确定后，四边和四角显示 **8 个控制手柄**（拖拽调整选区大小）
+11. 鼠标在选区内部拖拽 → 整体移动选区
+12. **键盘微调**：
+    - `↑↓←→`：移动选区（1px/次）
+    - `Ctrl + ↑↓←→`：扩大选区对应边界（1px/次）
+    - `Shift + ↑↓←→`：缩小选区对应边界（1px/次）
+13. **确认截图**：
+    - `Enter` 或 双击选区：确认选区，执行 OCR
+    - 选区下方可显示工具条（包含「确认」「取消」按钮）
+
+**取消操作**：
+- `Esc`：随时取消截图
+- 右键单击：取消截图
+- 在选区外单击（未开始拖拽时）：取消当前选区，回到检测模式
+
+##### 放大镜面板
+
+放大镜是 Snipaste 精确截图的关键交互，跟随鼠标右下角显示：
+
+```
+┌─────────────────┐
+│  ╬ ╬ ╬ ╬ ╬ ╬ ╬ │  ← 鼠标周围 ~11×11 像素区域，放大 8~10 倍
+│  ╬ ╬ ╬ ╬ ╬ ╬ ╬ │     中心十字线标记精确鼠标位置
+│  ╬ ╬ ╬ ┼ ╬ ╬ ╬ │     显示像素网格
+│  ╬ ╬ ╬ ╬ ╬ ╬ ╬ │
+│  ╬ ╬ ╬ ╬ ╬ ╬ ╬ │
+├─────────────────┤
+│  (1920, 1080)   │  ← 当前鼠标坐标（物理像素）
+│  #FF8040  ████  │  ← 鼠标所在像素的颜色值 + 色块预览
+└─────────────────┘
+```
+
+**放大镜实现要点**：
+- 从冻结的全屏截图中取鼠标周围 11×11 像素区域
+- 使用 `StretchBlt` 或手动逐像素放大至 ~90×90 显示区域
+- 在放大图上绘制像素网格线和十字准心
+- 面板跟随鼠标，当靠近屏幕边缘时自动切换到对侧显示
+
+##### 窗口自动检测实现
+
+```csharp
+/// <summary>
+/// 在截图开始时构建窗口层次快照。
+/// 参考 Snipaste / QQ 截图的窗口检测方案。
+/// </summary>
+public class WindowDetector
+{
+    private readonly List<WindowInfo> _windowSnapshots = new();
+
+    /// <summary>
+    /// 枚举所有可见窗口及其子窗口，按 Z-Order 排序，缓存 Rect 信息。
+    /// 在截图开始时调用一次，后续使用快照数据（不受下层窗口变化影响）。
+    /// </summary>
+    public void TakeSnapshot()
+    {
+        _windowSnapshots.Clear();
+        // EnumWindows 按 Z-Order 从前到后枚举
+        EnumWindows((hwnd, lParam) =>
+        {
+            if (!IsWindowVisible(hwnd)) return true;
+            if (IsOwnWindow(hwnd)) return true; // 过滤自己的覆盖窗口
+
+            GetWindowRect(hwnd, out var rect);
+            var info = new WindowInfo { Hwnd = hwnd, Rect = rect };
+
+            // 递归收集子窗口
+            EnumChildWindows(hwnd, (childHwnd, _) =>
+            {
+                if (!IsWindowVisible(childHwnd)) return true;
+                GetWindowRect(childHwnd, out var childRect);
+                info.Children.Add(new WindowInfo { Hwnd = childHwnd, Rect = childRect });
+                return true;
+            }, IntPtr.Zero);
+
+            _windowSnapshots.Add(info);
+            return true;
+        }, IntPtr.Zero);
+    }
+
+    /// <summary>
+    /// 根据鼠标位置查找最匹配的窗口/元素区域。
+    /// 支持 depth 参数控制检测粒度（滚轮切换父/子窗口层级）。
+    /// </summary>
+    public Rectangle? FindRegionAtPoint(Point screenPoint, int depth = 0);
+}
+```
+
+##### 选区调整手柄
+
+```
+     ●─────────────────●─────────────────●
+     │                                   │
+     │                                   │
+     ●             选区区域              ●    ← 8 个控制手柄
+     │                                   │        (4 角 + 4 边中点)
+     │                                   │
+     ●─────────────────●─────────────────●
+```
+
+- 角上的手柄：对角线方向缩放
+- 边上的手柄：单边方向缩放
+- 选区内拖拽：整体平移
+- 手柄大小约 8×8 像素，鼠标靠近时光标变为对应方向的缩放箭头
+
+##### 截图模式下的完整快捷键表
+
+| 快捷键 | 功能 | 对标 Snipaste |
+|--------|------|--------------|
+| `Esc` | 取消截图 | ✓ |
+| 右键 | 取消截图 | ✓ |
+| `Enter` | 确认选区，执行 OCR | ✓ (Snipaste: 复制) |
+| `↑↓←→` | 移动选区 1px | ✓ |
+| `Ctrl + ↑↓←→` | 扩大选区对应边界 1px | ✓ |
+| `Shift + ↑↓←→` | 缩小选区对应边界 1px | ✓ |
+| 鼠标滚轮 | 切换窗口检测层级（父/子） | ✓ |
+| `Ctrl + A` | 选区设为全屏 | ✓ |
+| `Tab` | 切换窗口检测/元素检测模式 | ✓ (Snipaste Pro) |
 
 #### 3.2.4 OcrTranslateService — OCR 翻译编排
 
@@ -341,9 +488,13 @@ dotnet/src/Easydict.WinUI/
 ├── Services/
 │   ├── OcrService.cs                    # OCR 识别服务 (Windows.Media.Ocr 封装)
 │   ├── ScreenCaptureService.cs          # 截图服务（编排截图流程）
-│   └── OcrTranslateService.cs           # OCR 翻译编排（截图→OCR→翻译/剪贴板）
-├── Views/
-│   └── ScreenCaptureWindow.xaml(.cs)    # 截图覆盖窗口（区域选择 UI）
+│   ├── OcrTranslateService.cs           # OCR 翻译编排（截图→OCR→翻译/剪贴板）
+│   └── ScreenCapture/                   # Snipaste 风格截图模块
+│       ├── ScreenCaptureWindow.cs       # Win32 原生覆盖窗口（非 WinUI 3 窗口）
+│       ├── WindowDetector.cs            # 窗口/元素自动检测（EnumWindows 快照）
+│       ├── SelectionRenderer.cs         # 选区绘制（遮罩、高亮、边框、手柄）
+│       ├── MagnifierRenderer.cs         # 放大镜面板绘制（放大像素 + 十字线 + 颜色）
+│       └── SelectionState.cs            # 选区状态机（检测→框选→调整→确认）
 ├── Models/
 │   ├── OcrResult.cs                     # OCR 识别结果模型
 │   └── ScreenCaptureResult.cs           # 截图结果模型
@@ -509,12 +660,20 @@ OCR 识别的文本通过 `MiniWindowService.ShowWithText(ocrText)` 送入翻译
 
 ## 五、分阶段实施计划
 
-### Phase 1：核心 OCR 功能（MVP）
+### Phase 1：核心 OCR + Snipaste 风格截图（MVP）
 
-**目标**：截图 → OCR → 翻译的完整流程跑通
+**目标**：Snipaste 风格截图 → OCR → 翻译的完整流程跑通
 
-1. **OcrService**：封装 `Windows.Media.Ocr`，支持自动语言检测
-2. **ScreenCaptureService + ScreenCaptureWindow**：全屏覆盖 + 区域框选
+1. **ScreenCaptureWindow**（Snipaste 风格核心交互）：
+   - 全屏 GDI `BitBlt` 截图 + Win32 覆盖窗口
+   - 自动窗口检测（`EnumWindows` 快照 + `ChildWindowFromPointEx`）
+   - 鼠标悬浮高亮 + 单击确认 / 拖拽自由框选
+   - 选区尺寸提示
+   - 放大镜 + 十字线 + 坐标显示
+   - 8 个控制手柄拖拽调整选区
+   - 键盘方向键微调（`↑↓←→` / `Ctrl+方向` / `Shift+方向`）
+   - `Esc` / 右键取消，`Enter` / 双击确认
+2. **OcrService**：封装 `Windows.Media.Ocr`，支持自动语言检测
 3. **OcrTranslateService**：编排截图→OCR→MiniWindow 翻译
 4. **HotkeyService 扩展**：注册 `Ctrl+Alt+S` 触发 OCR 翻译
 5. **SettingsService 扩展**：OCR 快捷键设置
@@ -524,13 +683,14 @@ OCR 识别的文本通过 `MiniWindowService.ShowWithText(ocrText)` 送入翻译
 1. **静默 OCR 模式**：`Ctrl+Alt+Shift+S` → OCR → 剪贴板
 2. **设置页面**：OCR 语言选择、快捷键配置
 3. **语言手动选择**：在 MiniWindow 中显示"检测到 XX 语言"按钮，可切换
+4. **滚轮切换窗口层级**：在自动检测模式下滚轮切换父/子窗口
 
 ### Phase 3：体验优化
 
-1. **截图窗口增强**：
-   - 放大镜辅助精确选区
-   - 选区尺寸提示
-   - 快速调整选区
+1. **截图交互增强**：
+   - `Tab` 键切换窗口检测/元素检测模式
+   - `Ctrl+A` 全屏选区
+   - 选区历史记忆（记住上次截图区域）
 2. **OCR 结果展示**：
    - 在截图上叠加识别结果框（可选）
    - 识别文本可编辑修正
@@ -539,7 +699,7 @@ OCR 识别的文本通过 `MiniWindowService.ShowWithText(ocrText)` 送入翻译
    - 引擎选择设置
 4. **性能优化**：
    - 预初始化 OcrEngine
-   - 截图窗口复用
+   - 截图覆盖窗口复用（隐藏而非销毁）
 
 ---
 
@@ -548,20 +708,27 @@ OCR 识别的文本通过 `MiniWindowService.ShowWithText(ocrText)` 送入翻译
 | 风险 | 应对 |
 |------|------|
 | `Windows.Media.Ocr` 不支持某些语言 | 检查 `OcrEngine.AvailableRecognizerLanguages`，在设置中提示安装语言包 |
-| 截图窗口在某些 DPI 配置下错位 | 使用物理像素坐标，Per-Monitor V2 DPI 感知 |
+| 截图窗口在某些 DPI 配置下错位 | 使用物理像素坐标，Per-Monitor V2 DPI 感知；多显示器独立处理 DPI |
 | 全屏截图在 DWM 合成关闭时失败 | 降级到 `PrintWindow` 方案 |
 | 截图覆盖窗口与游戏/全屏应用冲突 | 在全屏应用检测到时提示用户 |
 | OCR 对截图中的小字/低对比度文字识别差 | Phase 3 添加图像预处理（锐化、二值化） |
-| WinUI 3 窗口创建有延迟 | 截图覆盖窗口使用 Win32 原生窗口 |
+| WinUI 3 窗口创建有延迟 | 截图覆盖窗口使用 Win32 原生窗口（非 WinUI 3），GDI/GDI+ 绘制 |
+| 窗口自动检测对 UWP/WinUI 3 应用不准 | `ChildWindowFromPointEx` 对现代应用可能返回顶层窗口；可用 UI Automation 辅助获取子元素（Phase 3） |
+| 放大镜在高 DPI 下模糊 | 从物理像素级别的原始截图取数据，不经 DPI 缩放 |
+| 多显示器不同 DPI 时截图拼接错位 | 每个显示器独立 `BitBlt`，按物理像素偏移拼接到虚拟桌面坐标系 |
 
 ---
 
 ## 七、参考资料
 
+- **[Snipaste — 截图交互设计参考](https://zh.snipaste.com/)**：截图取图交互完全对标 Snipaste，包括自动窗口检测、放大镜、选区调整手柄、键盘微调等
+- [Snipaste 使用技巧大全 — 少数派](https://sspai.com/post/85542)
+- [Windows 上最好的免费截图标注工具：Snipaste — 少数派](https://sspai.com/post/34962)
 - [macOS Easydict OCR 实现](https://github.com/tisfeng/Easydict)
 - [Windows.Media.Ocr API 文档](https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr.ocrengine)
 - [Windows App SDK TextRecognizer](https://learn.microsoft.com/en-us/windows/ai/apis/text-recognition)
 - [Text Grab (开源 Windows OCR 工具)](https://github.com/TheJoeFin/Text-Grab)
 - [Pot Desktop OCR 架构](https://github.com/pot-app/pot-desktop)
 - [STranslate (Windows 翻译+OCR)](https://github.com/ZGGSONG/STranslate)
+- [QQ 截图窗口自动识别原理](https://www.cnblogs.com/findumars/p/5786055.html)
 - [V2EX 讨论: Windows 类 Bob 翻译软件](https://www.v2ex.com/t/910296)

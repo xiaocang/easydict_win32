@@ -219,18 +219,18 @@
 
   <!-- Help Tooltips -->
   <data name="LanguagePickerHelpTip" xml:space="preserve">
-    <value>Add/remove languages: Settings &#x2192; Available Languages</value>
+    <value>Tilf&#248;j/fjern sprog: Indstillinger &#x2192; Tilg&#230;ngelige sprog</value>
   </data>
   <data name="InputHelpTip" xml:space="preserve">
-    <value>Enter to translate, Shift+Enter for new line</value>
+    <value>Enter for at overs&#230;tte, Shift+Enter for ny linje</value>
   </data>
   <data name="HotkeysHelpTip" xml:space="preserve">
-    <value>Restart required after changes</value>
+    <value>Genstart p&#229;kr&#230;vet efter &#230;ndringer</value>
   </data>
   <data name="EnabledServicesHelpTip" xml:space="preserve">
-    <value>Auto = auto-query, Manual = click to query</value>
+    <value>Auto = automatisk foresp&#248;rgsel, Manuel = klik for foresp&#248;rgsel</value>
   </data>
   <data name="ServiceConfigHelpTip" xml:space="preserve">
-    <value>Enable services in 'Enabled Services' above first</value>
+    <value>Aktiver tjenester under 'Aktiverede tjenester' ovenfor f&#248;rst</value>
   </data>
 </root>

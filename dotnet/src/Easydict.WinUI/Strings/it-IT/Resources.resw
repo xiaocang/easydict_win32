@@ -635,18 +635,18 @@
 
   <!-- Help Tooltips -->
   <data name="LanguagePickerHelpTip" xml:space="preserve">
-    <value>Add/remove languages: Settings &#x2192; Available Languages</value>
+    <value>Aggiungi/rimuovi lingue: Impostazioni &#x2192; Lingue disponibili</value>
   </data>
   <data name="InputHelpTip" xml:space="preserve">
-    <value>Enter to translate, Shift+Enter for new line</value>
+    <value>Invio per tradurre, Maiusc+Invio per nuova riga</value>
   </data>
   <data name="HotkeysHelpTip" xml:space="preserve">
-    <value>Restart required after changes</value>
+    <value>Riavvio necessario dopo le modifiche</value>
   </data>
   <data name="EnabledServicesHelpTip" xml:space="preserve">
-    <value>Auto = auto-query, Manual = click to query</value>
+    <value>Auto = query automatica, Manuale = clicca per eseguire</value>
   </data>
   <data name="ServiceConfigHelpTip" xml:space="preserve">
-    <value>Enable services in 'Enabled Services' above first</value>
+    <value>Attiva prima i servizi in 'Servizi attivati' sopra</value>
   </data>
 </root>

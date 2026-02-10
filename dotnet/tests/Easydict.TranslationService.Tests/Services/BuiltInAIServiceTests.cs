@@ -7,10 +7,9 @@ using Xunit;
 namespace Easydict.TranslationService.Tests.Services;
 
 /// <summary>
-/// Tests for BuiltInAIService two-tier routing:
-/// - GLM models → direct with embedded key
-/// - Groq models → Cloudflare Worker proxy (DeviceId)
-/// - User API key → direct to provider
+/// Tests for BuiltInAIService routing:
+/// - Built-in mode → proxy endpoint with embedded key (all models)
+/// - User API key → direct to provider (GLM or Groq endpoint)
 /// </summary>
 public class BuiltInAIServiceTests
 {
@@ -55,52 +54,27 @@ public class BuiltInAIServiceTests
         _service.CurrentProvider.Should().Be(BuiltInAIService.Provider.GLM);
     }
 
-    // --- GLM direct mode (primary, embedded key) ---
+    // --- Built-in proxy mode (default, no user API key) ---
 
     [Fact]
-    public void GLMModel_UsesDirectEndpoint()
+    public void BuiltInMode_UsesProxyEndpoint()
     {
-        _service.Configure("glm-4-flash");
-        _service.Endpoint.Should().Be("https://open.bigmodel.cn/api/paas/v4/chat/completions");
-    }
-
-    [Fact]
-    public void GLMModel_UsesEmbeddedKey()
-    {
-        _service.Configure("glm-4-flash");
-        // Embedded key may be empty in test env (no real secret), but should not be user key
+        // All models route through the same proxy in built-in mode
+        // Endpoint comes from embedded config (may be empty in test env)
         _service.UseDirectConnection.Should().BeFalse();
-        _service.UsesWorkerProxy.Should().BeFalse();
-    }
-
-    // --- Groq Worker proxy mode (backup) ---
-
-    [Fact]
-    public void GroqModel_UsesWorkerEndpoint()
-    {
-        _service.Configure("llama-3.3-70b-versatile");
-        _service.Endpoint.Should().Contain("workers.dev");
     }
 
     [Fact]
-    public void GroqModel_ApiKey_IsEmpty()
+    public void BuiltInMode_SameEndpointForAllModels()
     {
-        _service.Configure("llama-3.3-70b-versatile");
-        _service.ApiKey.Should().BeEmpty();
-    }
+        _service.Configure("glm-4-flash");
+        var glmEndpoint = _service.Endpoint;
 
-    [Fact]
-    public void GroqModel_UsesWorkerProxy_IsTrue()
-    {
         _service.Configure("llama-3.3-70b-versatile");
-        _service.UsesWorkerProxy.Should().BeTrue();
-    }
+        var groqEndpoint = _service.Endpoint;
 
-    [Fact]
-    public void GroqModel_IsConfigured_IsTrue()
-    {
-        _service.Configure("llama-3.3-70b-versatile");
-        _service.IsConfigured.Should().BeTrue();
+        // Both models use the same proxy endpoint in built-in mode
+        glmEndpoint.Should().Be(groqEndpoint);
     }
 
     // --- User API key mode (direct to provider) ---
@@ -122,17 +96,17 @@ public class BuiltInAIServiceTests
     }
 
     [Fact]
-    public void UserKey_UsesWorkerProxy_IsFalse()
-    {
-        _service.Configure("llama-3.3-70b-versatile", "user-key");
-        _service.UsesWorkerProxy.Should().BeFalse();
-    }
-
-    [Fact]
     public void UserKey_UseDirectConnection_IsTrue()
     {
         _service.Configure("glm-4-flash", "user-key");
         _service.UseDirectConnection.Should().BeTrue();
+    }
+
+    [Fact]
+    public void UserKey_IsConfigured_IsTrue()
+    {
+        _service.Configure("glm-4-flash", "user-key");
+        _service.IsConfigured.Should().BeTrue();
     }
 
     // --- Switching modes ---
@@ -148,17 +122,11 @@ public class BuiltInAIServiceTests
     }
 
     [Fact]
-    public void SwitchingModel_ChangesRoutingMode()
+    public void EmptyApiKey_SwitchesBackToBuiltIn()
     {
-        // GLM → direct
-        _service.Configure("glm-4-flash");
-        _service.UsesWorkerProxy.Should().BeFalse();
-        _service.Endpoint.Should().Contain("bigmodel.cn");
-
-        // Groq → Worker
-        _service.Configure("llama-3.3-70b-versatile");
-        _service.UsesWorkerProxy.Should().BeTrue();
-        _service.Endpoint.Should().Contain("workers.dev");
+        _service.Configure("glm-4-flash", "user-key");
+        _service.Configure("glm-4-flash", "");
+        _service.UseDirectConnection.Should().BeFalse();
     }
 
     // --- Model selection ---

@@ -4,16 +4,13 @@ using Easydict.TranslationService.Security;
 namespace Easydict.TranslationService.Services;
 
 /// <summary>
-/// Built-in AI translation service with two-tier routing:
+/// Built-in AI translation service, matching the macOS Easydict approach:
 ///
-/// 1. Primary — Zhipu GLM free API (direct, embedded key):
-///    Client → open.bigmodel.cn with built-in free API key
+/// 1. Default — Proxy endpoint with embedded API key:
+///    Client → proxy (api.izual.me) → GLM / Groq
+///    All built-in models route through the same proxy.
 ///
-/// 2. Backup — Cloudflare Worker proxy (DeviceId rate-limited):
-///    Client → Worker (X-Device-Id header) → GLM / Groq
-///    Used for Groq models and as GLM fallback when free quota is exhausted.
-///
-/// 3. User API key — direct connection (bypasses both):
+/// 2. User API key — direct connection (bypasses proxy):
 ///    Client → GLM / Groq with user's own key
 /// </summary>
 public sealed class BuiltInAIService : BaseOpenAIService
@@ -25,14 +22,8 @@ public sealed class BuiltInAIService : BaseOpenAIService
 
     private const string DefaultModel = "glm-4-flash-250414";
 
-    // Primary: Zhipu GLM direct endpoint (free API key embedded)
+    // Direct provider endpoints (used only with user's own API key)
     private const string GLMEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
-
-    // Backup: Cloudflare Worker proxy (holds Groq key, also proxies GLM)
-    // TODO: Replace with actual Worker URL after deployment.
-    internal const string WorkerEndpoint = "https://easydict-ai.example.workers.dev/v1/chat/completions";
-
-    // Direct Groq endpoint (used only with user's own Groq API key)
     private const string GroqEndpoint = "https://api.groq.com/openai/v1/chat/completions";
 
     /// <summary>
@@ -40,11 +31,11 @@ public sealed class BuiltInAIService : BaseOpenAIService
     /// </summary>
     internal static readonly Dictionary<string, Provider> ModelProviderMap = new()
     {
-        // GLM models — primary, direct with embedded free key
+        // GLM models (Zhipu AI)
         ["glm-4-flash"] = Provider.GLM,
         ["glm-4-flash-250414"] = Provider.GLM,
 
-        // Groq models — via Worker proxy (no embedded Groq key)
+        // Groq models
         ["llama-3.3-70b-versatile"] = Provider.Groq,
         ["llama-3.1-8b-instant"] = Provider.Groq,
     };
@@ -93,7 +84,7 @@ public sealed class BuiltInAIService : BaseOpenAIService
     public override IReadOnlyList<Language> SupportedLanguages => _builtInLanguages;
 
     /// <summary>
-    /// Whether the user has provided their own API key (bypasses built-in routing).
+    /// Whether the user has provided their own API key (bypasses proxy).
     /// </summary>
     internal bool UseDirectConnection => !string.IsNullOrEmpty(_userApiKey);
 
@@ -104,16 +95,9 @@ public sealed class BuiltInAIService : BaseOpenAIService
         ModelProviderMap.GetValueOrDefault(_model, Provider.GLM);
 
     /// <summary>
-    /// Whether this request goes through the Cloudflare Worker proxy.
-    /// True for Groq models (no embedded key) when user hasn't provided their own key.
-    /// </summary>
-    internal bool UsesWorkerProxy => !UseDirectConnection && CurrentProvider == Provider.Groq;
-
-    /// <summary>
     /// Endpoint routing:
-    /// - User API key → direct to provider
-    /// - GLM model (no user key) → direct to Zhipu with embedded key
-    /// - Groq model (no user key) → Cloudflare Worker proxy
+    /// - User API key → direct to provider (GLM or Groq endpoint)
+    /// - Built-in mode → proxy endpoint from embedded config
     /// </summary>
     public override string Endpoint
     {
@@ -129,33 +113,21 @@ public sealed class BuiltInAIService : BaseOpenAIService
                 };
             }
 
-            return CurrentProvider switch
-            {
-                Provider.GLM => GLMEndpoint,   // Direct with embedded key
-                Provider.Groq => WorkerEndpoint, // Via Worker proxy
-                _ => GLMEndpoint
-            };
+            return GetEmbeddedEndpoint();
         }
     }
 
     /// <summary>
     /// API key routing:
     /// - User API key → user's key
-    /// - GLM (built-in) → embedded free key
-    /// - Groq (Worker) → empty (Worker handles auth)
+    /// - Built-in mode → embedded key from config
     /// </summary>
     public override string ApiKey
     {
         get
         {
             if (UseDirectConnection) return _userApiKey;
-
-            return CurrentProvider switch
-            {
-                Provider.GLM => GetEmbeddedGLMKey(),
-                Provider.Groq => "",  // Worker handles auth server-side
-                _ => ""
-            };
+            return GetEmbeddedApiKey();
         }
     }
 
@@ -163,9 +135,7 @@ public sealed class BuiltInAIService : BaseOpenAIService
 
     public override bool IsConfigured => UseDirectConnection
         ? !string.IsNullOrEmpty(_userApiKey)
-        : CurrentProvider == Provider.GLM
-            ? !string.IsNullOrEmpty(GetEmbeddedGLMKey())
-            : true;  // Worker mode always configured
+        : !string.IsNullOrEmpty(GetEmbeddedApiKey()) && !string.IsNullOrEmpty(GetEmbeddedEndpoint());
 
     /// <summary>
     /// Configure the model selection, optional user API key, and device fingerprint.
@@ -182,11 +152,11 @@ public sealed class BuiltInAIService : BaseOpenAIService
     }
 
     /// <summary>
-    /// Attach X-Device-Id header for Worker proxy requests.
+    /// Attach X-Device-Id header for proxy requests (rate limiting).
     /// </summary>
     protected override void ConfigureHttpRequest(HttpRequestMessage request)
     {
-        if (UsesWorkerProxy && !string.IsNullOrEmpty(_deviceId))
+        if (!UseDirectConnection && !string.IsNullOrEmpty(_deviceId))
         {
             request.Headers.TryAddWithoutValidation("X-Device-Id", _deviceId);
         }
@@ -208,12 +178,11 @@ public sealed class BuiltInAIService : BaseOpenAIService
             };
         }
 
-        if (!UseDirectConnection && CurrentProvider == Provider.GLM && string.IsNullOrEmpty(GetEmbeddedGLMKey()))
+        if (!UseDirectConnection && (string.IsNullOrEmpty(GetEmbeddedApiKey()) || string.IsNullOrEmpty(GetEmbeddedEndpoint())))
         {
             throw new TranslationException(
-                "Built-in GLM API key is not available. " +
-                "Please provide your own API key in Settings → Built-in AI, " +
-                "or select a Groq model to use the proxy.")
+                "Built-in AI is not available. " +
+                "Please provide your own API key in Settings → Built-in AI.")
             {
                 ErrorCode = TranslationErrorCode.ServiceUnavailable,
                 ServiceId = ServiceId
@@ -221,6 +190,9 @@ public sealed class BuiltInAIService : BaseOpenAIService
         }
     }
 
-    private static string GetEmbeddedGLMKey() =>
-        SecretKeyManager.GetSecret("builtInGLMAPIKey") ?? "";
+    private static string GetEmbeddedApiKey() =>
+        SecretKeyManager.GetSecret("builtInAIAPIKey") ?? "";
+
+    private static string GetEmbeddedEndpoint() =>
+        SecretKeyManager.GetSecret("builtInAIEndpoint") ?? "";
 }

@@ -757,4 +757,21 @@
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>Ollamaからモデルを取得できませんでした。Ollamaが実行中でアクセス可能であることを確認してください。</value>
   </data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>言語の追加/削除：設定 &#x2192; 利用可能な言語</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter で翻訳、Shift+Enter で改行</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>変更後は再起動が必要</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>自動 = 自動クエリ、手動 = クリックでクエリ</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>先に上の「有効なサービス」で有効にしてください</value>
+  </data>
 </root>

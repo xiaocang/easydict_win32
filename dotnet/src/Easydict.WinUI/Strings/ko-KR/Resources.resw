@@ -757,4 +757,21 @@
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>Ollama에서 모델을 가져올 수 없습니다. Ollama가 실행 중이고 접근 가능한지 확인하세요.</value>
   </data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>언어 추가/제거: 설정 &#x2192; 사용 가능한 언어</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter 번역, Shift+Enter 줄바꿈</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>변경 후 재시작 필요</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>자동 = 자동 쿼리, 수동 = 클릭하여 쿼리</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>먼저 위의 '활성화된 서비스'에서 활성화하세요</value>
+  </data>
 </root>

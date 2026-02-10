@@ -216,4 +216,21 @@
   <data name="TestFailedTitle" xml:space="preserve"><value>Test mislykkedes</value></data>
   <data name="TestFailedMessage" xml:space="preserve"><value>Konfigurationstest mislykkedes: {0}</value></data>
   <data name="TestNotConfigured" xml:space="preserve"><value>Konfigurer venligst tjenesten først (API-nøgle, endpoint osv.).</value></data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>Tilf&#248;j/fjern sprog: Indstillinger &#x2192; Tilg&#230;ngelige sprog</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter for at overs&#230;tte, Shift+Enter for ny linje</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>Genstart p&#229;kr&#230;vet efter &#230;ndringer</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>Auto = automatisk foresp&#248;rgsel, Manuel = klik for foresp&#248;rgsel</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>Aktiver tjenester under 'Aktiverede tjenester' ovenfor f&#248;rst</value>
+  </data>
 </root>

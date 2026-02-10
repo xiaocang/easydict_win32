@@ -216,4 +216,21 @@
   <data name="TestFailedTitle" xml:space="preserve"><value>Ujian Gagal</value></data>
   <data name="TestFailedMessage" xml:space="preserve"><value>Ujian konfigurasi gagal: {0}</value></data>
   <data name="TestNotConfigured" xml:space="preserve"><value>Sila konfigurasikan perkhidmatan terlebih dahulu (kunci API, endpoint, dll.).</value></data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>Tambah/buang bahasa: Tetapan &#x2192; Bahasa Tersedia</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter untuk menterjemah, Shift+Enter baris baharu</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>Perlu mulakan semula selepas perubahan</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>Auto = pertanyaan automatik, Manual = klik untuk pertanyaan</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>Aktifkan perkhidmatan dalam 'Perkhidmatan Aktif' di atas dahulu</value>
+  </data>
 </root>

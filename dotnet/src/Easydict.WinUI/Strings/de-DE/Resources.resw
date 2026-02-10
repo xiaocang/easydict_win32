@@ -757,4 +757,21 @@
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>Modelle konnten nicht von Ollama abgerufen werden. Stellen Sie sicher, dass Ollama ausgeführt wird und erreichbar ist.</value>
   </data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>Sprachen hinzuf&#252;gen/entfernen: Einstellungen &#x2192; Verf&#252;gbare Sprachen</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter zum &#220;bersetzen, Umschalt+Enter f&#252;r neue Zeile</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>Neustart nach &#196;nderungen erforderlich</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>Auto = automatische Abfrage, Manuell = klicken zum Abfragen</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>Zuerst Dienste unter &#8222;Aktivierte Dienste&#8220; oben aktivieren</value>
+  </data>
 </root>

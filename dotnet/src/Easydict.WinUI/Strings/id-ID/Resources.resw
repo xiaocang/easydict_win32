@@ -586,4 +586,21 @@
   <data name="TestNotConfigured" xml:space="preserve">
     <value>Silakan konfigurasikan layanan terlebih dahulu (API key, endpoint, dll.).</value>
   </data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>Tambah/hapus bahasa: Pengaturan &#x2192; Bahasa Tersedia</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter untuk menerjemahkan, Shift+Enter baris baru</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>Perlu restart setelah perubahan</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>Otomatis = kueri otomatis, Manual = klik untuk kueri</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>Aktifkan layanan di 'Layanan Aktif' di atas terlebih dahulu</value>
+  </data>
 </root>

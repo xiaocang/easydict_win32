@@ -640,4 +640,21 @@
   <data name="TestNotConfigured" xml:space="preserve">
     <value>Vui l&#xF2;ng c&#x1EA5;u h&#xEC;nh d&#x1ECB;ch v&#x1EE5; tr&#x1B0;&#x1EDB;c (API key, endpoint, v.v.).</value>
   </data>
+
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>Th&#234;m/x&#243;a ng&#244;n ng&#7919;: C&#224;i &#273;&#7863;t &#x2192; Ng&#244;n ng&#7919; kh&#7843; d&#7909;ng</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter &#273;&#7875; d&#7883;ch, Shift+Enter xu&#7889;ng d&#242;ng</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>C&#7847;n kh&#7903;i &#273;&#7897;ng l&#7841;i sau khi thay &#273;&#7893;i</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>T&#7921; &#273;&#7897;ng = truy v&#7845;n t&#7921; &#273;&#7897;ng, Th&#7911; c&#244;ng = nh&#7845;n &#273;&#7875; truy v&#7845;n</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>B&#7853;t d&#7883;ch v&#7909; trong 'D&#7883;ch v&#7909; &#273;&#227; b&#7853;t' &#7903; tr&#234;n tr&#432;&#7899;c</value>
+  </data>
 </root>

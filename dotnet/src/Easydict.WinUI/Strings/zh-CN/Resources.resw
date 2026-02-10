@@ -729,6 +729,23 @@
     <value>取消</value>
   </data>
 
+  <!-- Help Tooltips -->
+  <data name="LanguagePickerHelpTip" xml:space="preserve">
+    <value>添加/移除语言：设置 &#x2192; 可用语言</value>
+  </data>
+  <data name="InputHelpTip" xml:space="preserve">
+    <value>Enter 翻译, Shift+Enter 换行</value>
+  </data>
+  <data name="HotkeysHelpTip" xml:space="preserve">
+    <value>修改后需重启生效</value>
+  </data>
+  <data name="EnabledServicesHelpTip" xml:space="preserve">
+    <value>自动 = 自动查询，手动 = 点击查询</value>
+  </data>
+  <data name="ServiceConfigHelpTip" xml:space="preserve">
+    <value>请先在上方「已启用的服务」中启用</value>
+  </data>
+
   <!-- Service Test Button -->
   <data name="Test" xml:space="preserve">
     <value>测试</value>

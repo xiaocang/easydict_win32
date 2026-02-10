@@ -97,7 +97,11 @@
 
             <!-- Enabled Services for Each Window -->
             <StackPanel x:Name="EnabledServicesSection" Spacing="12">
-                <TextBlock x:Name="EnabledServicesHeaderText" Text="Enabled Services" FontSize="18" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock x:Name="EnabledServicesHeaderText" Text="Enabled Services" FontSize="18" FontWeight="SemiBold" />
+                    <FontIcon x:Name="EnabledServicesHelpIcon" Glyph="&#xE897;" FontSize="14"
+                              Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                </StackPanel>
                 <TextBlock x:Name="EnabledServicesDescriptionText" Text="Select which translation services to display in each window. Multiple services will run in parallel."
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
@@ -232,7 +236,11 @@
 
             <!-- Service Configuration -->
             <StackPanel x:Name="ServiceConfigurationSection" Spacing="12">
-                <TextBlock x:Name="ServiceConfigurationHeaderText" Text="Service Configuration" FontSize="18" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock x:Name="ServiceConfigurationHeaderText" Text="Service Configuration" FontSize="18" FontWeight="SemiBold" />
+                    <FontIcon x:Name="ServiceConfigHelpIcon" Glyph="&#xE897;" FontSize="14"
+                              Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                </StackPanel>
                 <TextBlock x:Name="ServiceConfigurationDescriptionText" Text="Configure API keys, endpoints, and models for each translation service."
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
@@ -634,7 +642,11 @@
 
             <!-- Hotkeys -->
             <StackPanel x:Name="HotkeysSection" Spacing="12">
-                <TextBlock x:Name="HotkeysHeaderText" Text="Hotkeys" FontSize="18" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock x:Name="HotkeysHeaderText" Text="Hotkeys" FontSize="18" FontWeight="SemiBold" />
+                    <FontIcon x:Name="HotkeysHelpIcon" Glyph="&#xE897;" FontSize="14"
+                              Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                </StackPanel>
 
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="16">

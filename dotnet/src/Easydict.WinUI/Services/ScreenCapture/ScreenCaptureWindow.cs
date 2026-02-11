@@ -72,7 +72,6 @@ public sealed class ScreenCaptureWindow : IDisposable
     private nint _hwnd;
     private nint _desktopBitmapHandle;
     private nint _desktopDcHandle;
-    private byte[]? _desktopPixels;
     private int _desktopWidth;
     private int _desktopHeight;
     private int _virtualLeft;

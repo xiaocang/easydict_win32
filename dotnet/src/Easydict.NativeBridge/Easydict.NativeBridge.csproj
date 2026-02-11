@@ -7,9 +7,5 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Easydict.NativeBridge</RootNamespace>
         <AssemblyName>easydict-native-bridge</AssemblyName>
-        <!-- Publish-time settings: pass RID via CLI (dotnet publish -r win-x64 --self-contained)
-             to avoid SelfContained + multi-RID RuntimeIdentifiers breaking solution-level restore. -->
-        <PublishTrimmed>true</PublishTrimmed>
-        <PublishSingleFile>true</PublishSingleFile>
     </PropertyGroup>
 </Project>

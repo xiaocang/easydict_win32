@@ -13,11 +13,14 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class WindowsOcrService : IOcrService
 {
+    private bool? _isAvailable;
+
     public string ServiceId => "windows_ocr";
 
     public string DisplayName => "Windows OCR";
 
-    public bool IsAvailable => WinOcr.OcrEngine.TryCreateFromUserProfileLanguages() is not null;
+    public bool IsAvailable => _isAvailable ??=
+        WinOcr.OcrEngine.TryCreateFromUserProfileLanguages() is not null;
 
     /// <inheritdoc />
     public async Task<OcrResult> RecognizeAsync(
@@ -27,7 +30,16 @@ public sealed class WindowsOcrService : IOcrService
         string? preferredLanguageTag = null,
         CancellationToken cancellationToken = default)
     {
-        // Create SoftwareBitmap on a background thread
+        ArgumentNullException.ThrowIfNull(pixelData);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
+
+        var expectedLength = pixelWidth * pixelHeight * 4; // BGRA8
+        if (pixelData.Length < expectedLength)
+            throw new ArgumentException(
+                $"pixelData length ({pixelData.Length}) is less than expected ({expectedLength}) for {pixelWidth}x{pixelHeight} BGRA8",
+                nameof(pixelData));
+
         var bitmap = CreateSoftwareBitmap(pixelData, pixelWidth, pixelHeight);
 
         try

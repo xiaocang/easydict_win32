@@ -774,8 +774,16 @@ namespace Easydict.WinUI
         private void CleanupServices()
         {
             // Dispose OCR signal event first — this unblocks the listener thread's WaitOne()
+            // which throws ObjectDisposedException, causing the thread to exit gracefully.
             _ocrSignalEvent?.Dispose();
             _ocrSignalEvent = null;
+
+            // Wait briefly for the signal thread to finish to avoid races during teardown
+            if (_ocrSignalThread?.IsAlive == true)
+            {
+                _ocrSignalThread.Join(TimeSpan.FromSeconds(2));
+            }
+            _ocrSignalThread = null;
 
             _mouseHookService?.Dispose();
             _popButtonService?.Dispose();

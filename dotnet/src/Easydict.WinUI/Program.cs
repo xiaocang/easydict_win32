@@ -80,9 +80,13 @@ public static class Program
                     StringComparison.OrdinalIgnoreCase);
             }
         }
-        catch
+        catch (InvalidOperationException)
         {
             // AppInstance API may not be available in all scenarios (e.g., unpackaged).
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // WinRT activation infrastructure not available.
         }
         return false;
     }

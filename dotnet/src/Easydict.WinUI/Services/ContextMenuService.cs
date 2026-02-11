@@ -17,7 +17,6 @@ namespace Easydict.WinUI.Services;
 public static class ContextMenuService
 {
     private const string MenuKeyName = "EasydictOCR";
-    private const string MenuText = "OCR 截图翻译";
 
     /// <summary>
     /// Registry paths under HKCU\Software\Classes where context menu entries are created.
@@ -40,7 +39,7 @@ public static class ContextMenuService
                 using var key = Registry.CurrentUser.OpenSubKey($@"{RegistryPaths[0]}\{MenuKeyName}");
                 return key is not null;
             }
-            catch
+            catch (System.Security.SecurityException)
             {
                 return false;
             }
@@ -66,8 +65,9 @@ public static class ContextMenuService
         {
             try
             {
+                var menuText = LocalizationService.Instance.GetString("TrayOcrTranslate");
                 using var shellKey = Registry.CurrentUser.CreateSubKey($@"{basePath}\{MenuKeyName}");
-                shellKey.SetValue(null, MenuText);
+                shellKey.SetValue(null, menuText);
                 shellKey.SetValue("Icon", appPath);
 
                 using var cmdKey = Registry.CurrentUser.CreateSubKey($@"{basePath}\{MenuKeyName}\command");
@@ -103,13 +103,6 @@ public static class ContextMenuService
 
     private static string? GetAppPath()
     {
-        try
-        {
-            return Environment.ProcessPath;
-        }
-        catch
-        {
-            return null;
-        }
+        return Environment.ProcessPath;
     }
 }

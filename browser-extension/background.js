@@ -56,7 +56,14 @@ function triggerViaProtocol() {
     // Close the helper tab after a short delay so the user doesn't see it linger.
     if (newTab?.id) {
       setTimeout(() => {
-        chrome.tabs.remove(newTab.id).catch(() => {});
+        // chrome.tabs.remove returns a Promise in MV3 (Chrome) but undefined in MV2 (Firefox).
+        // Guard against calling .catch() on undefined to avoid TypeError in Firefox.
+        try {
+          var result = chrome.tabs.remove(newTab.id);
+          if (result && result.catch) result.catch(() => {});
+        } catch {
+          // Ignore tab removal errors
+        }
       }, 1000);
     }
   });

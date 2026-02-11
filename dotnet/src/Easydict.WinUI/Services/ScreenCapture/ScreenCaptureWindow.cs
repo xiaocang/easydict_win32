@@ -799,7 +799,43 @@ public sealed class ScreenCaptureWindow : IDisposable
         }
 
         _selection = NormalizeRect(_selection);
+        ClampSelectionToBounds();
         InvalidateRect(_hwnd, IntPtr.Zero, false);
+    }
+
+    /// <summary>
+    /// Clamp the selection rectangle so it stays within the captured desktop area.
+    /// For move operations, shifts the entire selection. For resize, clamps individual edges.
+    /// </summary>
+    private void ClampSelectionToBounds()
+    {
+        // Clamp edges to the desktop bitmap area [0, desktopWidth) x [0, desktopHeight)
+        if (_selection.Left < 0)
+        {
+            _selection.Right -= _selection.Left; // shift right by overshoot
+            _selection.Left = 0;
+        }
+        if (_selection.Top < 0)
+        {
+            _selection.Bottom -= _selection.Top;
+            _selection.Top = 0;
+        }
+        if (_selection.Right > _desktopWidth)
+        {
+            _selection.Left -= _selection.Right - _desktopWidth;
+            _selection.Right = _desktopWidth;
+        }
+        if (_selection.Bottom > _desktopHeight)
+        {
+            _selection.Top -= _selection.Bottom - _desktopHeight;
+            _selection.Bottom = _desktopHeight;
+        }
+
+        // Final clamp in case the selection is larger than the desktop
+        _selection.Left = Math.Clamp(_selection.Left, 0, _desktopWidth);
+        _selection.Top = Math.Clamp(_selection.Top, 0, _desktopHeight);
+        _selection.Right = Math.Clamp(_selection.Right, 0, _desktopWidth);
+        _selection.Bottom = Math.Clamp(_selection.Bottom, 0, _desktopHeight);
     }
 
     private void ConfirmSelection()
@@ -968,6 +1004,8 @@ public sealed class ScreenCaptureWindow : IDisposable
             case DragMode.ResizeBottom: _selection.Bottom += dy; break;
             case DragMode.ResizeBottomRight: _selection.Right += dx; _selection.Bottom += dy; break;
         }
+
+        ClampSelectionToBounds();
     }
 
     private static DragMode HitTestHandles(RECT sel, POINT pt)

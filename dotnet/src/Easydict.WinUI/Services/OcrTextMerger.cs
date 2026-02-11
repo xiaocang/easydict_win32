@@ -109,24 +109,28 @@ public static class OcrTextMerger
                              .Average();
         var yTolerance = avgHeight * yToleranceFactor;
 
-        // Sort by Y first, then group lines with similar Y into rows
+        // Sort by Y first, then group lines with similar Y into rows.
+        // Use a running average Y for the current row so that slight drift
+        // across a wide page doesn't cause incorrect row splits.
         var sorted = lines.OrderBy(l => l.BoundingRect.Y).ToList();
         var rows = new List<List<OcrLine>>();
         var currentRow = new List<OcrLine> { sorted[0] };
-        var currentRowY = sorted[0].BoundingRect.Y;
+        var currentRowYSum = sorted[0].BoundingRect.Y;
 
         for (int i = 1; i < sorted.Count; i++)
         {
             var line = sorted[i];
-            if (Math.Abs(line.BoundingRect.Y - currentRowY) <= yTolerance)
+            var currentRowYAvg = currentRowYSum / currentRow.Count;
+            if (Math.Abs(line.BoundingRect.Y - currentRowYAvg) <= yTolerance)
             {
                 currentRow.Add(line);
+                currentRowYSum += line.BoundingRect.Y;
             }
             else
             {
                 rows.Add(currentRow);
                 currentRow = [line];
-                currentRowY = line.BoundingRect.Y;
+                currentRowYSum = line.BoundingRect.Y;
             }
         }
         rows.Add(currentRow);

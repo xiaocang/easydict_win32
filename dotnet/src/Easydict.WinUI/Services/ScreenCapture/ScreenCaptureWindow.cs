@@ -568,7 +568,7 @@ public sealed class ScreenCaptureWindow : IDisposable
         // Use DPI-aware font sizing: pointSize * dpi / 72
         var dpi = GetDpiForWindow(_hwnd);
         if (dpi == 0) dpi = 96; // fallback to 96 DPI (100% scaling)
-        var fontHeight = TipsFontPointSize * dpi / 72;
+        var fontHeight = (int)(TipsFontPointSize * dpi / 72);
 
         _tipsFont = CreateFont(
             -fontHeight, 0, 0, 0, 400, // height (negative = character height), weight = FW_NORMAL

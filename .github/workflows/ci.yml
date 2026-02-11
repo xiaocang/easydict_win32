@@ -21,7 +21,16 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore Easydict.Win32.sln -p:Platform=x64 -v diag 2>&1 | tail -200
+        shell: pwsh
+        run: |
+          $output = & dotnet restore Easydict.Win32.sln -p:Platform=x64 --verbosity detailed 2>&1
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          if ($code -ne 0) {
+            Write-Host "::error::RESTORE FAILED (exit $code). Error lines:"
+            $output | Where-Object { $_ -match '(?i)error|NETSDK|NU\d{4}|MSB\d{4}' } | ForEach-Object { Write-Host "::error::$_" }
+            exit $code
+          }
 
       - name: Build
         working-directory: dotnet

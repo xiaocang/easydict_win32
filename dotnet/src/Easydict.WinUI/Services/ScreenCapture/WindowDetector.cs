@@ -122,6 +122,11 @@ public sealed class WindowDetector
         if (hwnd == _ownWindowHandle) return true;
         if (!IsWindowVisible(hwnd)) return true;
 
+        // Skip desktop background windows (Progman = desktop, WorkerW = wallpaper worker)
+        var className = GetWindowClassName(hwnd);
+        if (className is "Progman" or "WorkerW")
+            return true;
+
         // Skip windows with zero size
         if (!GetWindowRect(hwnd, out var rect)) return true;
         if (rect.Width <= 0 || rect.Height <= 0) return true;
@@ -143,6 +148,13 @@ public sealed class WindowDetector
         return true;
     }
 
+    private static string GetWindowClassName(nint hwnd)
+    {
+        var sb = new System.Text.StringBuilder(256);
+        GetClassName(hwnd, sb, sb.Capacity);
+        return sb.ToString();
+    }
+
     // P/Invoke declarations
     private delegate bool EnumWindowsProc(nint hwnd, nint lParam);
 
@@ -157,4 +169,7 @@ public sealed class WindowDetector
 
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(nint hwnd, out RECT lpRect);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(nint hwnd, System.Text.StringBuilder lpClassName, int nMaxCount);
 }

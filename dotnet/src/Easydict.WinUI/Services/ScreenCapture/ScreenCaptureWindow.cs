@@ -8,12 +8,19 @@ namespace Easydict.WinUI.Services.ScreenCapture;
 /// Win32 native overlay window for Snipaste-style screenshot region selection.
 /// Uses GDI+ for rendering to avoid WinUI 3 window creation latency.
 ///
-/// Interaction flow:
+/// Interaction flow (Snipaste-style):
 ///   1. Freeze desktop with BitBlt → show full-screen overlay with dark mask
 ///   2. Mouse hover: auto-detect windows via WindowDetector, highlight region
-///   3. Click: confirm detected region; Drag: free-select rectangle
-///   4. After selection: 8 resize handles + arrow-key fine-tuning
-///   5. Enter/double-click: confirm → return result; Esc/right-click: cancel
+///      (desktop/wallpaper windows are excluded to avoid full-screen selection)
+///   3. Click on detected window: select it → Adjusting phase
+///      Click on blank: nothing (no accidental selection)
+///      Click+drag (anywhere): free-select rectangle (drag threshold = 5px)
+///      Double-click on blank: enter track-mouse selection mode (click to finalize)
+///   4. After selection (Adjusting): 8 resize handles, arrow-key fine-tuning,
+///      cursor changes (move/resize/crosshair) based on position
+///   5. Enter/double-click: confirm → return result
+///      Right-click/Esc in Adjusting/Selecting: go back to Detecting
+///      Right-click/Esc in Detecting: confirmation dialog → cancel
 ///
 /// All operations are non-blocking. The window runs its own message loop on
 /// the calling thread and returns when the user confirms or cancels.
@@ -88,6 +95,13 @@ public sealed class ScreenCaptureWindow : IDisposable
     private bool _isDragging;
     private DragMode _dragMode = DragMode.None;
     private int _detectionDepth;      // scroll depth for window detection
+    private bool _isMouseDown;        // mouse button held in Detecting phase
+    private POINT _mouseDownPoint;    // where mouse went down (for drag threshold)
+    private bool _ignoreNextMouseUp;  // skip mouse-up after double-click starts Selecting
+    private bool _isDragSelecting;    // true = entered Selecting via click+drag (capture held)
+
+    // Drag threshold in pixels — must move beyond this to start free-form selection
+    private const int DragThreshold = 5;
 
     // Result
     private TaskCompletionSource<ScreenCaptureResult?>? _resultTcs;
@@ -252,12 +266,52 @@ public sealed class ScreenCaptureWindow : IDisposable
                 return IntPtr.Zero;
 
             case WM_LBUTTONDBLCLK:
-                if (_phase == SelectionPhase.Adjusting)
+                if (_phase == SelectionPhase.Detecting)
+                {
+                    // Double-click on blank/detected area: start free-form selection
+                    var dblPt = GetLParamPoint(lParam);
+                    _selection = new RECT
+                    {
+                        Left = dblPt.X, Top = dblPt.Y,
+                        Right = dblPt.X, Bottom = dblPt.Y
+                    };
+                    _phase = SelectionPhase.Selecting;
+                    _isDragSelecting = false; // track-mouse mode (no capture)
+                    _isMouseDown = false;
+                    _ignoreNextMouseUp = true; // ignore the dblclk's button-up
+                    _detectedRegion = null;
+                    InvalidateRect(_hwnd, IntPtr.Zero, false);
+                }
+                else if (_phase == SelectionPhase.Adjusting)
+                {
                     ConfirmSelection();
+                }
                 return IntPtr.Zero;
 
             case WM_RBUTTONDOWN:
-                CancelCapture();
+                if (_phase == SelectionPhase.Adjusting)
+                {
+                    // Go back to Detecting (Snipaste: right-click = step back)
+                    _phase = SelectionPhase.Detecting;
+                    _detectedRegion = null;
+                    _detectionDepth = 0;
+                    InvalidateRect(_hwnd, IntPtr.Zero, false);
+                }
+                else if (_phase == SelectionPhase.Selecting)
+                {
+                    // Cancel current drag, back to Detecting
+                    ReleaseCapture();
+                    _isDragSelecting = false;
+                    _isMouseDown = false;
+                    _phase = SelectionPhase.Detecting;
+                    _detectedRegion = null;
+                    InvalidateRect(_hwnd, IntPtr.Zero, false);
+                }
+                else
+                {
+                    // Detecting phase: exit with confirmation
+                    RequestCancelWithConfirmation();
+                }
                 return IntPtr.Zero;
 
             case WM_MOUSEWHEEL:
@@ -267,6 +321,11 @@ public sealed class ScreenCaptureWindow : IDisposable
             case WM_KEYDOWN:
                 OnKeyDown((int)wParam);
                 return IntPtr.Zero;
+
+            case WM_SETCURSOR:
+                if (UpdateCursor())
+                    return (nint)1; // We handled the cursor
+                return DefWindowProc(hwnd, msg, wParam, lParam);
 
             case WM_DESTROY:
                 PostQuitMessage(0);
@@ -469,6 +528,28 @@ public sealed class ScreenCaptureWindow : IDisposable
         switch (_phase)
         {
             case SelectionPhase.Detecting:
+                // Check if mouse-down is held and dragged beyond threshold → start free-form selection
+                if (_isMouseDown)
+                {
+                    var dx = Math.Abs(pt.X - _mouseDownPoint.X);
+                    var dy = Math.Abs(pt.Y - _mouseDownPoint.Y);
+                    if (dx > DragThreshold || dy > DragThreshold)
+                    {
+                        _isMouseDown = false;
+                        _isDragSelecting = true;
+                        _selection = new RECT
+                        {
+                            Left = _mouseDownPoint.X, Top = _mouseDownPoint.Y,
+                            Right = pt.X, Bottom = pt.Y
+                        };
+                        _phase = SelectionPhase.Selecting;
+                        _detectedRegion = null;
+                        InvalidateRect(_hwnd, IntPtr.Zero, false);
+                        break;
+                    }
+                }
+
+                // Auto-detect windows under cursor
                 var region = _windowDetector.FindRegionAtPoint(
                     pt.X + _virtualLeft, pt.Y + _virtualTop, _detectionDepth);
                 if (region.HasValue)
@@ -517,18 +598,26 @@ public sealed class ScreenCaptureWindow : IDisposable
         switch (_phase)
         {
             case SelectionPhase.Detecting:
-                if (_detectedRegion.HasValue)
+                // Record mouse-down; actual action deferred until mouse-up (click)
+                // or mouse-move (drag beyond threshold)
+                _isMouseDown = true;
+                _mouseDownPoint = pt;
+                SetCapture(_hwnd);
+                break;
+
+            case SelectionPhase.Selecting when !_isDragSelecting:
+                // Double-click initiated selection: click to finalize
+                _selection.Right = pt.X;
+                _selection.Bottom = pt.Y;
+                _selection = NormalizeRect(_selection);
+                if (_selection.Width >= 3 && _selection.Height >= 3)
                 {
-                    // Confirm detected region as selection
-                    _selection = _detectedRegion.Value;
                     _phase = SelectionPhase.Adjusting;
                 }
                 else
                 {
-                    // Start free-select drag
-                    _selection = new RECT { Left = pt.X, Top = pt.Y, Right = pt.X, Bottom = pt.Y };
-                    _phase = SelectionPhase.Selecting;
-                    SetCapture(_hwnd);
+                    _phase = SelectionPhase.Detecting;
+                    _detectedRegion = null;
                 }
                 InvalidateRect(_hwnd, IntPtr.Zero, false);
                 break;
@@ -563,9 +652,33 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     private void OnLeftButtonUp(POINT pt)
     {
-        if (_phase == SelectionPhase.Selecting)
+        // Skip mouse-up that follows a double-click entering Selecting mode
+        if (_ignoreNextMouseUp)
+        {
+            _ignoreNextMouseUp = false;
+            return;
+        }
+
+        // Click-without-drag in Detecting phase
+        if (_isMouseDown && _phase == SelectionPhase.Detecting)
+        {
+            _isMouseDown = false;
+            ReleaseCapture();
+
+            // Single-click: if a window was detected, select it; otherwise do nothing
+            if (_detectedRegion.HasValue)
+            {
+                _selection = _detectedRegion.Value;
+                _phase = SelectionPhase.Adjusting;
+                InvalidateRect(_hwnd, IntPtr.Zero, false);
+            }
+            return;
+        }
+
+        if (_phase == SelectionPhase.Selecting && _isDragSelecting)
         {
             ReleaseCapture();
+            _isDragSelecting = false;
             _selection.Right = pt.X;
             _selection.Bottom = pt.Y;
             _selection = NormalizeRect(_selection);
@@ -611,7 +724,22 @@ public sealed class ScreenCaptureWindow : IDisposable
         switch (vk)
         {
             case VK_ESCAPE:
-                CancelCapture();
+                if (_phase == SelectionPhase.Adjusting || _phase == SelectionPhase.Selecting)
+                {
+                    // Step back to Detecting (Snipaste behavior)
+                    if (_isDragSelecting) ReleaseCapture();
+                    _isDragSelecting = false;
+                    _isMouseDown = false;
+                    _phase = SelectionPhase.Detecting;
+                    _detectedRegion = null;
+                    _detectionDepth = 0;
+                    InvalidateRect(_hwnd, IntPtr.Zero, false);
+                }
+                else
+                {
+                    // In Detecting phase: exit with confirmation
+                    RequestCancelWithConfirmation();
+                }
                 break;
 
             case VK_RETURN:
@@ -685,6 +813,81 @@ public sealed class ScreenCaptureWindow : IDisposable
         _resultTcs?.TrySetResult(null);
         DestroyWindow(_hwnd);
     }
+
+    /// <summary>
+    /// Show a confirmation dialog before cancelling. If user says Yes, cancel.
+    /// </summary>
+    private void RequestCancelWithConfirmation()
+    {
+        // MB_YESNO = 0x04, MB_ICONQUESTION = 0x20, MB_TOPMOST = 0x40000
+        var result = MessageBoxW(_hwnd, "确定要退出截图吗？", "Easydict",
+            0x00000004u | 0x00000020u | 0x00040000u);
+        if (result == 6) // IDYES
+        {
+            CancelCapture();
+        }
+    }
+
+    /// <summary>
+    /// Update the mouse cursor based on current phase and position.
+    /// Returns true if we handled the cursor, false to let Windows handle it.
+    /// </summary>
+    private bool UpdateCursor()
+    {
+        GetCursorPos(out var screenPt);
+        var pt = new POINT
+        {
+            X = screenPt.X - _virtualLeft,
+            Y = screenPt.Y - _virtualTop
+        };
+
+        int cursorId;
+
+        if (_phase == SelectionPhase.Adjusting)
+        {
+            var sel = NormalizeRect(_selection);
+
+            if (_isDragging)
+            {
+                // While dragging, keep the cursor matching the drag mode
+                cursorId = GetCursorIdForDragMode(_dragMode);
+            }
+            else
+            {
+                // Hit-test handles first, then interior, then outside
+                var mode = HitTestHandles(sel, pt);
+                if (mode != DragMode.None)
+                {
+                    cursorId = GetCursorIdForDragMode(mode);
+                }
+                else if (sel.Contains(pt.X, pt.Y))
+                {
+                    cursorId = 32646; // IDC_SIZEALL (move)
+                }
+                else
+                {
+                    cursorId = 32515; // IDC_CROSS
+                }
+            }
+        }
+        else
+        {
+            cursorId = 32515; // IDC_CROSS for Detecting and Selecting
+        }
+
+        SetCursor(LoadCursor(IntPtr.Zero, cursorId));
+        return true;
+    }
+
+    private static int GetCursorIdForDragMode(DragMode mode) => mode switch
+    {
+        DragMode.Move => 32646,                                             // IDC_SIZEALL
+        DragMode.ResizeTopLeft or DragMode.ResizeBottomRight => 32642,      // IDC_SIZENWSE
+        DragMode.ResizeTopRight or DragMode.ResizeBottomLeft => 32643,      // IDC_SIZENESW
+        DragMode.ResizeTop or DragMode.ResizeBottom => 32645,               // IDC_SIZENS
+        DragMode.ResizeLeft or DragMode.ResizeRight => 32644,               // IDC_SIZEWE
+        _ => 32515,                                                          // IDC_CROSS
+    };
 
     private ScreenCaptureResult ExtractRegion(RECT sel)
     {
@@ -948,5 +1151,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("user32.dll")] private static extern bool TranslateMessage(ref MSG lpMsg);
     [DllImport("user32.dll")] private static extern nint DispatchMessage(ref MSG lpMsg);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandle(string? lpModuleName);
+    [DllImport("user32.dll")] private static extern nint SetCursor(nint hCursor);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int MessageBoxW(nint hwnd, string text, string caption, uint type);
     [DllImport("msimg32.dll")] private static extern bool AlphaBlend(nint hdcDest, int xoriginDest, int yoriginDest, int wDest, int hDest, nint hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc, BLENDFUNCTION ftn);
 }

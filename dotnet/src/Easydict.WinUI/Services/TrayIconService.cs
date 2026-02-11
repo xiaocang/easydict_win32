@@ -198,33 +198,35 @@ public sealed class TrayIconService : IDisposable
         }
     }
 
+    private static string L(string key) => LocalizationService.Instance.GetString(key);
+
     private MenuFlyout CreateContextMenu()
     {
         var menu = new MenuFlyout();
 
-        // Set MinWidth to fit the longest menu item text "Fixed Window (Ctrl+Alt+F)"
+        // Set MinWidth to fit the longest menu item text
         // This ensures proper width on first open (H.NotifyIcon SecondWindow mode quirk)
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
         presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 250d));
         menu.MenuFlyoutPresenterStyle = presenterStyle;
 
-        var showItem = new MenuFlyoutItem { Text = "Show Easydict" };
+        var showItem = new MenuFlyoutItem { Text = L("TrayShow") };
         showItem.Click += (_, _) => ShowWindow();
         menu.Items.Add(showItem);
 
-        var translateItem = new MenuFlyoutItem { Text = "Translate Clipboard" };
+        var translateItem = new MenuFlyoutItem { Text = L("TrayTranslateClipboard") };
         translateItem.Click += (_, _) => OnTranslateClipboard?.Invoke();
         menu.Items.Add(translateItem);
 
-        var ocrItem = new MenuFlyoutItem { Text = "OCR Translate (Ctrl+Alt+S)" };
+        var ocrItem = new MenuFlyoutItem { Text = $"{L("TrayOcrTranslate")} (Ctrl+Alt+S)" };
         ocrItem.Click += (_, _) => OnOcrTranslate?.Invoke();
         menu.Items.Add(ocrItem);
 
-        var miniWindowItem = new MenuFlyoutItem { Text = "Mini Window (Ctrl+Alt+M)" };
+        var miniWindowItem = new MenuFlyoutItem { Text = $"{L("TrayShowMini")} (Ctrl+Alt+M)" };
         miniWindowItem.Click += (_, _) => MiniWindowService.Instance.Toggle();
         menu.Items.Add(miniWindowItem);
 
-        var fixedWindowItem = new MenuFlyoutItem { Text = "Fixed Window (Ctrl+Alt+F)" };
+        var fixedWindowItem = new MenuFlyoutItem { Text = $"{L("TrayShowFixed")} (Ctrl+Alt+F)" };
         fixedWindowItem.Click += (_, _) => FixedWindowService.Instance.Toggle();
         menu.Items.Add(fixedWindowItem);
 
@@ -233,13 +235,13 @@ public sealed class TrayIconService : IDisposable
         // Browser support submenu
         menu.Items.Add(CreateBrowserSupportSubmenu());
 
-        var settingsItem = new MenuFlyoutItem { Text = "Settings" };
+        var settingsItem = new MenuFlyoutItem { Text = L("TraySettings") };
         settingsItem.Click += (_, _) => OnOpenSettings?.Invoke();
         menu.Items.Add(settingsItem);
 
         menu.Items.Add(new MenuFlyoutSeparator());
 
-        var exitItem = new MenuFlyoutItem { Text = "Exit" };
+        var exitItem = new MenuFlyoutItem { Text = L("TrayExit") };
         exitItem.Click += (_, _) => ExitApplication();
         menu.Items.Add(exitItem);
 
@@ -248,42 +250,41 @@ public sealed class TrayIconService : IDisposable
 
     private MenuFlyoutSubItem CreateBrowserSupportSubmenu()
     {
-        var browserMenu = new MenuFlyoutSubItem { Text = "浏览器支持" };
+        var browserMenu = new MenuFlyoutSubItem { Text = L("TrayBrowserSupport") };
 
-        // Chrome 系
-        var chromeGroup = new MenuFlyoutSubItem { Text = "Chrome 系" };
+        // Chrome
+        var chromeGroup = new MenuFlyoutSubItem { Text = L("TrayBrowserChrome") };
 
-        _installChromeItem = new MenuFlyoutItem { Text = "安装 Chrome 支持" };
+        _installChromeItem = new MenuFlyoutItem { Text = L("TrayBrowserInstallChrome") };
         _installChromeItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("chrome", true);
         chromeGroup.Items.Add(_installChromeItem);
 
-        _uninstallChromeItem = new MenuFlyoutItem { Text = "卸载 Chrome 支持" };
+        _uninstallChromeItem = new MenuFlyoutItem { Text = L("TrayBrowserUninstallChrome") };
         _uninstallChromeItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("chrome", false);
         chromeGroup.Items.Add(_uninstallChromeItem);
 
         browserMenu.Items.Add(chromeGroup);
 
-        // Firefox 系
-        var firefoxGroup = new MenuFlyoutSubItem { Text = "Firefox 系" };
+        // Firefox
+        var firefoxGroup = new MenuFlyoutSubItem { Text = L("TrayBrowserFirefox") };
 
-        _installFirefoxItem = new MenuFlyoutItem { Text = "安装 Firefox 支持" };
+        _installFirefoxItem = new MenuFlyoutItem { Text = L("TrayBrowserInstallFirefox") };
         _installFirefoxItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("firefox", true);
         firefoxGroup.Items.Add(_installFirefoxItem);
 
-        _uninstallFirefoxItem = new MenuFlyoutItem { Text = "卸载 Firefox 支持" };
+        _uninstallFirefoxItem = new MenuFlyoutItem { Text = L("TrayBrowserUninstallFirefox") };
         _uninstallFirefoxItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("firefox", false);
         firefoxGroup.Items.Add(_uninstallFirefoxItem);
 
         browserMenu.Items.Add(firefoxGroup);
 
-        // Separator before "全部"
         browserMenu.Items.Add(new MenuFlyoutSeparator());
 
-        _installAllItem = new MenuFlyoutItem { Text = "安装全部" };
+        _installAllItem = new MenuFlyoutItem { Text = L("TrayBrowserInstallAll") };
         _installAllItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("all", true);
         browserMenu.Items.Add(_installAllItem);
 
-        _uninstallAllItem = new MenuFlyoutItem { Text = "卸载全部" };
+        _uninstallAllItem = new MenuFlyoutItem { Text = L("TrayBrowserUninstallAll") };
         _uninstallAllItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("all", false);
         browserMenu.Items.Add(_uninstallAllItem);
 

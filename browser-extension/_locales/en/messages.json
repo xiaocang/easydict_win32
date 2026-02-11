@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "Easydict OCR Translate",
+    "description": "Extension display name"
+  },
+  "extDescription": {
+    "message": "Right-click to capture screen and translate with Easydict OCR",
+    "description": "Extension description"
+  },
+  "contextMenuTitle": {
+    "message": "Easydict OCR Translate",
+    "description": "Right-click context menu item title"
+  }
+}

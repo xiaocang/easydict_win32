@@ -1,7 +1,7 @@
 // Easydict OCR Translate — Browser Extension Background Script
 // Works with both Manifest V3 (Chrome) and V2 (Firefox).
 //
-// Adds a single right-click context menu item "Easydict OCR 截图翻译".
+// Adds a single right-click context menu item (localized via _locales).
 // On click, triggers OCR screen capture in the Easydict desktop app.
 //
 // Two communication channels (tried in order):
@@ -16,7 +16,7 @@ const PROTOCOL_URL = "easydict://ocr-translate";
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "easydict-ocr-translate",
-    title: "Easydict OCR 截图翻译",
+    title: chrome.i18n.getMessage("contextMenuTitle"),
     contexts: ["all"],
   });
 });

@@ -819,8 +819,10 @@ public sealed class ScreenCaptureWindow : IDisposable
     /// </summary>
     private void RequestCancelWithConfirmation()
     {
+        var message = LocalizationService.Instance.GetString("ScreenCaptureExitConfirm");
+
         // MB_YESNO = 0x04, MB_ICONQUESTION = 0x20, MB_TOPMOST = 0x40000
-        var result = MessageBoxW(_hwnd, "确定要退出截图吗？", "Easydict",
+        var result = MessageBoxW(_hwnd, message, "Easydict",
             0x00000004u | 0x00000020u | 0x00040000u);
         if (result == 6) // IDYES
         {

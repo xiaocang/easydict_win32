@@ -570,7 +570,13 @@
 
   <!-- Tray Menu -->
   <data name="TrayShow" xml:space="preserve">
-    <value>Show</value>
+    <value>Show Easydict</value>
+  </data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
   </data>
   <data name="TrayShowMini" xml:space="preserve">
     <value>Mini Window</value>
@@ -578,11 +584,43 @@
   <data name="TrayShowFixed" xml:space="preserve">
     <value>Fixed Window</value>
   </data>
+  <data name="TrayBrowserSupport" xml:space="preserve">
+    <value>Browser Support</value>
+  </data>
+  <data name="TrayBrowserChrome" xml:space="preserve">
+    <value>Chrome</value>
+  </data>
+  <data name="TrayBrowserFirefox" xml:space="preserve">
+    <value>Firefox</value>
+  </data>
+  <data name="TrayBrowserInstallChrome" xml:space="preserve">
+    <value>Install Chrome Support</value>
+  </data>
+  <data name="TrayBrowserUninstallChrome" xml:space="preserve">
+    <value>Uninstall Chrome Support</value>
+  </data>
+  <data name="TrayBrowserInstallFirefox" xml:space="preserve">
+    <value>Install Firefox Support</value>
+  </data>
+  <data name="TrayBrowserUninstallFirefox" xml:space="preserve">
+    <value>Uninstall Firefox Support</value>
+  </data>
+  <data name="TrayBrowserInstallAll" xml:space="preserve">
+    <value>Install All</value>
+  </data>
+  <data name="TrayBrowserUninstallAll" xml:space="preserve">
+    <value>Uninstall All</value>
+  </data>
   <data name="TraySettings" xml:space="preserve">
     <value>Settings</value>
   </data>
   <data name="TrayExit" xml:space="preserve">
     <value>Exit</value>
+  </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
   </data>
 
   <!-- Window Titles -->

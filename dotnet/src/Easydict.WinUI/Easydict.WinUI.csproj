@@ -22,7 +22,7 @@
         <RootNamespace>Easydict.WinUI</RootNamespace>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <!-- Use custom Program.cs entry point (handles --ocr-translate from Shell context menu) -->
-        <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+        <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
 
         <!-- App Options -->
         <UseRidGraph>true</UseRidGraph>

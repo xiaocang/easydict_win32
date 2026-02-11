@@ -796,7 +796,7 @@
 
   <!-- Screen Capture -->
   <data name="ScreenCaptureTipDetecting" xml:space="preserve">
-    <value>Glisser pour s&#233;lectionner  |  Double-clic pour la fen&#234;tre  |  Molette pour changer  |  Esc pour quitter</value>
+    <value>Glisser pour s&#233;lectionner  |  Double-clic pour s&#233;lectionner la fen&#234;tre  |  Molette pour changer  |  Esc pour quitter</value>
   </data>
   <data name="ScreenCaptureTipSelecting" xml:space="preserve">
     <value>Clic droit ou Esc pour annuler</value>

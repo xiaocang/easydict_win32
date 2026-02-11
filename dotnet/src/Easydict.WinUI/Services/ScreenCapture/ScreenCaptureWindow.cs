@@ -111,6 +111,9 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     // Tips rendering
     private nint _tipsFont;
+    private nint _tipsDc;
+    private nint _tipsBitmap;
+    private nint _tipsOldBitmap;
     private string _tipDetecting = string.Empty;
     private string _tipSelecting = string.Empty;
     private string _tipAdjusting = string.Empty;
@@ -555,16 +558,38 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     // --- Tips initialization and rendering ---
 
+    /// <summary>
+    /// Base point size for tips font. Scaled by the window's DPI at runtime.
+    /// </summary>
+    private const int TipsFontPointSize = 14;
+
     private void InitializeTips()
     {
-        // Create a font scaled to display size for readability across DPI settings
-        var fontHeight = Math.Max(16, _desktopHeight / 72);
+        // Use DPI-aware font sizing: pointSize * dpi / 72
+        var dpi = GetDpiForWindow(_hwnd);
+        if (dpi == 0) dpi = 96; // fallback to 96 DPI (100% scaling)
+        var fontHeight = TipsFontPointSize * dpi / 72;
+
         _tipsFont = CreateFont(
             -fontHeight, 0, 0, 0, 400, // height (negative = character height), weight = FW_NORMAL
             0, 0, 0,                     // italic, underline, strikeout
             1,                           // DEFAULT_CHARSET
             0, 0, 4, 0,                 // out precision, clip precision, ANTIALIASED_QUALITY, pitch
             "Segoe UI");
+
+        // Cache a 1×1 compatible DC + bitmap for DrawTips alpha blending
+        // so we don't allocate/destroy GDI objects on every paint cycle.
+        var screenDc = GetDC(IntPtr.Zero);
+        _tipsDc = CreateCompatibleDC(screenDc);
+        _tipsBitmap = CreateCompatibleBitmap(screenDc, 1, 1);
+        _tipsOldBitmap = SelectObject(_tipsDc, _tipsBitmap);
+        ReleaseDC(IntPtr.Zero, screenDc);
+
+        // Fill the 1×1 pixel with dark gray once
+        var brush = CreateSolidBrush(0x00303030);
+        var rc = new RECT { Left = 0, Top = 0, Right = 1, Bottom = 1 };
+        FillRect(_tipsDc, ref rc, brush);
+        DeleteObject(brush);
 
         // Cache localized tip strings
         var loc = LocalizationService.Instance;
@@ -597,16 +622,7 @@ public sealed class ScreenCaptureWindow : IDisposable
         var panelX = (_desktopWidth - panelWidth) / 2;
         var panelY = 20; // 20px from top of screen
 
-        // Draw semi-transparent dark background panel
-        var memDc = CreateCompatibleDC(hdc);
-        var bmp = CreateCompatibleBitmap(hdc, 1, 1);
-        var oldBmp = SelectObject(memDc, bmp);
-
-        var brush = CreateSolidBrush(0x00303030); // Dark gray
-        var rc = new RECT { Left = 0, Top = 0, Right = 1, Bottom = 1 };
-        FillRect(memDc, ref rc, brush);
-        DeleteObject(brush);
-
+        // Draw semi-transparent dark background panel using cached DC/bitmap
         var blend = new BLENDFUNCTION
         {
             BlendOp = 0,              // AC_SRC_OVER
@@ -614,11 +630,7 @@ public sealed class ScreenCaptureWindow : IDisposable
             SourceConstantAlpha = 200, // ~78% opacity
             AlphaFormat = 0
         };
-        AlphaBlend(hdc, panelX, panelY, panelWidth, panelHeight, memDc, 0, 0, 1, 1, blend);
-
-        SelectObject(memDc, oldBmp);
-        DeleteObject(bmp);
-        DeleteDC(memDc);
+        AlphaBlend(hdc, panelX, panelY, panelWidth, panelHeight, _tipsDc, 0, 0, 1, 1, blend);
 
         // Draw white text centered in the panel
         SetBkMode(hdc, 1); // TRANSPARENT
@@ -1168,6 +1180,23 @@ public sealed class ScreenCaptureWindow : IDisposable
             _tipsFont = IntPtr.Zero;
         }
 
+        // Release cached tips DC/bitmap
+        if (_tipsDc != IntPtr.Zero && _tipsOldBitmap != IntPtr.Zero)
+        {
+            SelectObject(_tipsDc, _tipsOldBitmap);
+            _tipsOldBitmap = IntPtr.Zero;
+        }
+        if (_tipsDc != IntPtr.Zero)
+        {
+            DeleteDC(_tipsDc);
+            _tipsDc = IntPtr.Zero;
+        }
+        if (_tipsBitmap != IntPtr.Zero)
+        {
+            DeleteObject(_tipsBitmap);
+            _tipsBitmap = IntPtr.Zero;
+        }
+
         // Restore the original bitmap before deleting the DC and our bitmap.
         // GDI requires that objects are deselected from a DC before deletion.
         if (_desktopDcHandle != IntPtr.Zero && _oldDesktopBitmapHandle != IntPtr.Zero)
@@ -1312,4 +1341,5 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("user32.dll")] private static extern nint SetCursor(nint hCursor);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int MessageBoxW(nint hwnd, string text, string caption, uint type);
     [DllImport("msimg32.dll")] private static extern bool AlphaBlend(nint hdcDest, int xoriginDest, int yoriginDest, int wDest, int hDest, nint hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc, BLENDFUNCTION ftn);
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint hwnd);
 }

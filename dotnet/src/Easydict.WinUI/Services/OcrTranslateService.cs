@@ -10,11 +10,17 @@ namespace Easydict.WinUI.Services;
 public sealed class OcrTranslateService
 {
     private readonly ScreenCaptureService _captureService = new();
-    private readonly OcrService _ocrService = new();
+    private readonly IOcrService _ocrService;
     private readonly DispatcherQueue _dispatcherQueue;
 
     public OcrTranslateService(DispatcherQueue dispatcherQueue)
+        : this(new WindowsOcrService(), dispatcherQueue)
     {
+    }
+
+    public OcrTranslateService(IOcrService ocrService, DispatcherQueue dispatcherQueue)
+    {
+        _ocrService = ocrService;
         _dispatcherQueue = dispatcherQueue;
     }
 

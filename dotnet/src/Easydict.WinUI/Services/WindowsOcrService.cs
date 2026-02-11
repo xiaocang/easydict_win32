@@ -6,24 +6,19 @@ using Windows.Media.Ocr;
 namespace Easydict.WinUI.Services;
 
 /// <summary>
-/// OCR recognition service wrapping Windows.Media.Ocr (WinRT).
+/// OCR service using the built-in Windows.Media.Ocr (WinRT) engine.
+/// Supports 26+ languages via installed Windows language packs.
 /// All recognition runs on a background thread to avoid blocking the UI.
 /// </summary>
-public sealed class OcrService
+public sealed class WindowsOcrService : IOcrService
 {
-    /// <summary>
-    /// Recognizes text in an image.
-    /// This method is safe to call from any thread — recognition runs asynchronously.
-    /// </summary>
-    /// <param name="pixelData">Raw BGRA8 pixel data.</param>
-    /// <param name="pixelWidth">Image width in pixels.</param>
-    /// <param name="pixelHeight">Image height in pixels.</param>
-    /// <param name="preferredLanguageTag">
-    /// BCP-47 language tag to use for recognition (e.g. "zh-Hans-CN").
-    /// Pass null or empty to auto-detect from user profile languages.
-    /// </param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>OCR result with recognized text and line information.</returns>
+    public string ServiceId => "windows_ocr";
+
+    public string DisplayName => "Windows OCR";
+
+    public bool IsAvailable => OcrEngine.TryCreateFromUserProfileLanguages() is not null;
+
+    /// <inheritdoc />
     public async Task<OcrResult> RecognizeAsync(
         byte[] pixelData,
         int pixelWidth,
@@ -44,25 +39,7 @@ public sealed class OcrService
         }
     }
 
-    /// <summary>
-    /// Recognizes text from a <see cref="ScreenCaptureResult"/>.
-    /// </summary>
-    public async Task<OcrResult> RecognizeAsync(
-        ScreenCaptureResult capture,
-        string? preferredLanguageTag = null,
-        CancellationToken cancellationToken = default)
-    {
-        return await RecognizeAsync(
-            capture.PixelData,
-            capture.PixelWidth,
-            capture.PixelHeight,
-            preferredLanguageTag,
-            cancellationToken);
-    }
-
-    /// <summary>
-    /// Gets the list of OCR languages currently available on the system.
-    /// </summary>
+    /// <inheritdoc />
     public IReadOnlyList<OcrLanguage> GetAvailableLanguages()
     {
         return OcrEngine.AvailableRecognizerLanguages
@@ -89,7 +66,7 @@ public sealed class OcrService
         var engine = CreateEngine(preferredLanguageTag);
         if (engine is null)
         {
-            Debug.WriteLine("[OcrService] No OCR engine available");
+            Debug.WriteLine("[WindowsOcrService] No OCR engine available");
             return new OcrResult();
         }
 
@@ -119,11 +96,11 @@ public sealed class OcrService
                 var lang = new Windows.Globalization.Language(preferredLanguageTag);
                 var engine = OcrEngine.TryCreateFromLanguage(lang);
                 if (engine is not null) return engine;
-                Debug.WriteLine($"[OcrService] Language '{preferredLanguageTag}' not available, falling back to profile");
+                Debug.WriteLine($"[WindowsOcrService] Language '{preferredLanguageTag}' not available, falling back to profile");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[OcrService] Failed to create engine for '{preferredLanguageTag}': {ex.Message}");
+                Debug.WriteLine($"[WindowsOcrService] Failed to create engine for '{preferredLanguageTag}': {ex.Message}");
             }
         }
 

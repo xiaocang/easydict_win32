@@ -21,6 +21,10 @@ namespace Easydict.WinUI
         private OcrTranslateService? _ocrTranslateService;
         private AppWindow? _appWindow;
 
+        // IPC: named event for context menu --ocr-translate signaling
+        private EventWaitHandle? _ocrSignalEvent;
+        private Thread? _ocrSignalThread;
+
         private static App Instance => (App)Current;
 
         /// <summary>
@@ -305,6 +309,65 @@ namespace Easydict.WinUI
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[App] OcrTranslateService initialization failed: {ex}");
+            }
+
+            // Start named-event listener for Shell context menu --ocr-translate IPC.
+            // A second process launched from File Explorer signals this event and exits;
+            // the background thread wakes up and triggers OCR on the UI thread.
+            try
+            {
+                _ocrSignalEvent = new EventWaitHandle(false, EventResetMode.AutoReset,
+                    Program.OcrTranslateEventName);
+
+                _ocrSignalThread = new Thread(() =>
+                {
+                    try
+                    {
+                        while (_ocrSignalEvent.WaitOne())
+                        {
+                            System.Diagnostics.Debug.WriteLine("[App] OCR signal received from context menu");
+                            _window.DispatcherQueue.TryEnqueue(async () =>
+                            {
+                                try
+                                {
+                                    await _ocrTranslateService!.OcrTranslateAsync();
+                                }
+                                catch (Exception ex)
+                                {
+                                    System.Diagnostics.Debug.WriteLine(
+                                        $"[App] Context menu OCR error: {ex.Message}");
+                                }
+                            });
+                        }
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Event disposed during shutdown — exit gracefully
+                    }
+                })
+                {
+                    IsBackground = true,
+                    Name = "OcrSignalListener"
+                };
+                _ocrSignalThread.Start();
+                System.Diagnostics.Debug.WriteLine("[App] OCR signal listener started");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] OCR signal listener failed: {ex.Message}");
+            }
+
+            // Register Shell context menu if enabled
+            try
+            {
+                if (settings.ShellContextMenu)
+                {
+                    ContextMenuService.Register();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] Shell context menu registration failed: {ex.Message}");
             }
 
             // Initialize clipboard service
@@ -615,6 +678,10 @@ namespace Easydict.WinUI
 
         private void CleanupServices()
         {
+            // Dispose OCR signal event first — this unblocks the listener thread's WaitOne()
+            _ocrSignalEvent?.Dispose();
+            _ocrSignalEvent = null;
+
             _mouseHookService?.Dispose();
             _popButtonService?.Dispose();
             _clipboardService?.Dispose();
@@ -666,6 +733,18 @@ namespace Easydict.WinUI
                     app._mouseHookService.Uninstall();
                 }
             }
+        }
+
+        /// <summary>
+        /// Apply Shell context menu registration setting.
+        /// Registers or unregisters the "OCR Translate" entry in Windows File Explorer.
+        /// </summary>
+        public static void ApplyShellContextMenu(bool enabled)
+        {
+            if (enabled)
+                ContextMenuService.Register();
+            else
+                ContextMenuService.Unregister();
         }
 
         /// <summary>

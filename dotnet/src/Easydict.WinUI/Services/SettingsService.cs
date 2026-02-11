@@ -118,6 +118,12 @@ public sealed class SettingsService
     /// </summary>
     public bool MouseSelectionTranslate { get; set; } = true;
 
+    /// <summary>
+    /// Register "OCR 截图翻译" in the Windows Shell context menu (File Explorer / Desktop).
+    /// The entry launches --ocr-translate which signals the running app via a named event.
+    /// </summary>
+    public bool ShellContextMenu { get; set; } = false;
+
     // Hotkey settings (stored as string like "Ctrl+Alt+T")
     public string ShowWindowHotkey { get; set; } = "Ctrl+Alt+T";
     public string TranslateSelectionHotkey { get; set; } = "Ctrl+Alt+D";
@@ -397,6 +403,7 @@ public sealed class SettingsService
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
+        ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
         ShowWindowHotkey = GetValue(nameof(ShowWindowHotkey), "Ctrl+Alt+T");
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");
         OcrTranslateHotkey = GetValue(nameof(OcrTranslateHotkey), "Ctrl+Alt+S");
@@ -532,6 +539,7 @@ public sealed class SettingsService
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
+        _settings[nameof(ShellContextMenu)] = ShellContextMenu;
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;
         _settings[nameof(OcrTranslateHotkey)] = OcrTranslateHotkey;

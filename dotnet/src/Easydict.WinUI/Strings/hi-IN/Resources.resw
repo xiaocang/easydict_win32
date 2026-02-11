@@ -191,6 +191,7 @@
   <data name="UILangDanishItem.Content" xml:space="preserve"><value>Dansk</value></data>
   <data name="UILanguageDescription.Text" xml:space="preserve"><value>एप्लिकेशन इंटरफ़ेस के लिए प्रदर्शन भाषा चुनें। पुनः आरंभ आवश्यक।</value></data>
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve"><value>सिस्टम ट्रे में छोटा करें</value></data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve"><value>सिस्टम ट्रे में छोटा करके शुरू करें</value></data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve"><value>क्लिपबोर्ड पर नज़र रखें</value></data>
   <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve"><value>माउस चयन से अनुवाद (पाठ चुनें → फ़्लोटिंग आइकन पर क्लिक करें)</value></data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve"><value>हमेशा ऊपर</value></data>

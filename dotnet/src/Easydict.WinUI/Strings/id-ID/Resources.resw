@@ -511,6 +511,9 @@
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
     <value>Minimalkan ke baki sistem</value>
   </data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
+    <value>Mulai diminimalkan ke baki sistem</value>
+  </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>Pantau papan klip untuk teks</value>
   </data>

@@ -668,6 +668,9 @@
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
     <value>Minimize to system tray</value>
   </data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
+    <value>Start minimized to tray</value>
+  </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>Monitor clipboard for text</value>
   </data>

@@ -632,6 +632,7 @@
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
                         <ToggleSwitch x:Name="MinimizeToTrayToggle" x:Uid="MinimizeToTrayToggle" Header="Minimize to system tray" />
+                        <ToggleSwitch x:Name="MinimizeToTrayOnStartupToggle" x:Uid="MinimizeToTrayOnStartupToggle" Header="Start minimized to tray" />
                         <ToggleSwitch x:Name="ClipboardMonitorToggle" x:Uid="ClipboardMonitorToggle" Header="Monitor clipboard for text" />
                         <ToggleSwitch x:Name="MouseSelectionTranslateToggle" x:Uid="MouseSelectionTranslateToggle" Header="Mouse selection translate" />
                         <ToggleSwitch x:Name="AlwaysOnTopToggle" x:Uid="AlwaysOnTopToggle" Header="Always on top" />

@@ -668,6 +668,9 @@
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
     <value>最小化到系统托盘</value>
   </data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
+    <value>启动后最小化到系统托盘</value>
+  </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>监控剪贴板文本</value>
   </data>

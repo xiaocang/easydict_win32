@@ -242,6 +242,15 @@ namespace Easydict.WinUI
             InitializeServices();
             LogToFile("[OnLaunched] Launch complete!");
 
+            // If "minimize to tray on startup" is enabled, hide the window immediately
+            // after activation (window must be activated first for services to initialize properly)
+            var startupSettings = SettingsService.Instance;
+            if (startupSettings.MinimizeToTrayOnStartup && startupSettings.MinimizeToTray)
+            {
+                LogToFile("[OnLaunched] MinimizeToTrayOnStartup enabled, hiding window");
+                HideWindow();
+            }
+
             // Run region detection asynchronously after startup completes.
             // On first launch this detects China region and switches defaults (Google → Bing).
             // For returning users with saved settings this is a no-op.

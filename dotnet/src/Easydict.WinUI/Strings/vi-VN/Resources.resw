@@ -557,6 +557,9 @@
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
     <value>Thu nh&#x1ECF; v&#xE0;o khay h&#x1EC7; th&#x1ED1;ng</value>
   </data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
+    <value>Kh&#x1EDF;i &#x111;&#x1ED9;ng thu nh&#x1ECF; v&#xE0;o khay h&#x1EC7; th&#x1ED1;ng</value>
+  </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>Theo d&#xF5;i clipboard</value>
   </data>

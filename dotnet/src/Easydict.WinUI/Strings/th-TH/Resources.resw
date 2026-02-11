@@ -519,6 +519,9 @@
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
     <value>&#xE22;&#xE48;&#xE2D;&#xE25;&#xE07;&#xE43;&#xE19;&#xE16;&#xE32;&#xE14;&#xE23;&#xE30;&#xE1A;&#xE1A;</value>
   </data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
+    <value>&#xE40;&#xE23;&#xE34;&#xE48;&#xE21;&#xE15;&#xE49;&#xE19;&#xE22;&#xE48;&#xE2D;&#xE25;&#xE07;&#xE43;&#xE19;&#xE16;&#xE32;&#xE14;&#xE23;&#xE30;&#xE1A;&#xE1A;</value>
+  </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>&#xE15;&#xE23;&#xE27;&#xE08;&#xE2A;&#xE2D;&#xE1A;&#xE04;&#xE25;&#xE34;&#xE1B;&#xE1A;&#xE2D;&#xE23;&#xE4C;&#xE14;</value>
   </data>

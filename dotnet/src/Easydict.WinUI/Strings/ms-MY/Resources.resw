@@ -191,6 +191,7 @@
   <data name="UILangDanishItem.Content" xml:space="preserve"><value>Dansk</value></data>
   <data name="UILanguageDescription.Text" xml:space="preserve"><value>Pilih bahasa paparan untuk antara muka aplikasi. Perlu dimulakan semula.</value></data>
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve"><value>Kecilkan ke dulang sistem</value></data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve"><value>Mulakan dikecilkan ke dulang sistem</value></data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve"><value>Pantau papan keratan untuk teks</value></data>
   <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve"><value>Terjemah dengan pilihan tetikus (pilih teks → klik ikon terapung)</value></data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve"><value>Sentiasa di atas</value></data>

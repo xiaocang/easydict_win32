@@ -621,6 +621,9 @@
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
     <value>Réduire dans la barre des tâches</value>
   </data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
+    <value>Démarrer réduit dans la barre des tâches</value>
+  </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>Surveiller le presse-papiers</value>
   </data>

@@ -269,6 +269,7 @@ public sealed partial class SettingsPage : Page
         // ToggleSwitch changes
         AutoSelectTargetToggle.Toggled += OnSettingChanged;
         MinimizeToTrayToggle.Toggled += OnSettingChanged;
+        MinimizeToTrayOnStartupToggle.Toggled += OnSettingChanged;
         ClipboardMonitorToggle.Toggled += OnSettingChanged;
         MouseSelectionTranslateToggle.Toggled += OnSettingChanged;
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
@@ -417,6 +418,7 @@ public sealed partial class SettingsPage : Page
         SelectComboByTag(UILanguageCombo, currentLanguage);
 
         MinimizeToTrayToggle.IsOn = _settings.MinimizeToTray;
+        MinimizeToTrayOnStartupToggle.IsOn = _settings.MinimizeToTrayOnStartup;
         ClipboardMonitorToggle.IsOn = _settings.ClipboardMonitoring;
         MouseSelectionTranslateToggle.IsOn = _settings.MouseSelectionTranslate;
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
@@ -801,6 +803,7 @@ public sealed partial class SettingsPage : Page
 
         // Save behavior settings
         _settings.MinimizeToTray = MinimizeToTrayToggle.IsOn;
+        _settings.MinimizeToTrayOnStartup = MinimizeToTrayOnStartupToggle.IsOn;
         _settings.ClipboardMonitoring = ClipboardMonitorToggle.IsOn;
         _settings.MouseSelectionTranslate = MouseSelectionTranslateToggle.IsOn;
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;

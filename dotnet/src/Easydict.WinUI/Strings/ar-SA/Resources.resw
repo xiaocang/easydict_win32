@@ -557,6 +557,9 @@
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
     <value>تصغير إلى علبة النظام</value>
   </data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
+    <value>بدء التشغيل مصغراً في علبة النظام</value>
+  </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>مراقبة الحافظة للنصوص</value>
   </data>

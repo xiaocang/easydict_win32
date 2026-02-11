@@ -621,6 +621,9 @@
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
     <value>システムトレイに最小化</value>
   </data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
+    <value>起動時にトレイに最小化</value>
+  </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>クリップボードのテキストを監視</value>
   </data>

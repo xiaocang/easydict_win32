@@ -134,6 +134,12 @@ public sealed class SettingsService
     // Startup settings
     public bool LaunchAtStartup { get; set; } = false;
 
+    /// <summary>
+    /// When enabled, the app starts minimized to the system tray without showing the main window.
+    /// Requires MinimizeToTray to be enabled.
+    /// </summary>
+    public bool MinimizeToTrayOnStartup { get; set; } = false;
+
     // Mini window settings
     public string ShowMiniWindowHotkey { get; set; } = "Ctrl+Alt+M";
     public bool MiniWindowAutoClose { get; set; } = true;
@@ -387,6 +393,7 @@ public sealed class SettingsService
         UILanguage = GetValue(nameof(UILanguage), "");
         AppTheme = GetValue(nameof(AppTheme), "System");
         LaunchAtStartup = GetValue(nameof(LaunchAtStartup), false);
+        MinimizeToTrayOnStartup = GetValue(nameof(MinimizeToTrayOnStartup), false);
         EnableDpiAwareness = GetValue(nameof(EnableDpiAwareness), true);
 
         // Try to load WindowWidthDips first (new format), fallback to WindowWidth (legacy)
@@ -518,6 +525,7 @@ public sealed class SettingsService
         _settings[nameof(UILanguage)] = UILanguage;
         _settings[nameof(AppTheme)] = AppTheme;
         _settings[nameof(LaunchAtStartup)] = LaunchAtStartup;
+        _settings[nameof(MinimizeToTrayOnStartup)] = MinimizeToTrayOnStartup;
         _settings[nameof(EnableDpiAwareness)] = EnableDpiAwareness;
         _settings[nameof(WindowWidthDips)] = WindowWidthDips;
         _settings[nameof(WindowHeightDips)] = WindowHeightDips;

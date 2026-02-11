@@ -191,6 +191,7 @@
   <data name="UILangDanishItem.Content" xml:space="preserve"><value>Dansk</value></data>
   <data name="UILanguageDescription.Text" xml:space="preserve"><value>Vælg visningssprog for applikationens grænseflade. Genstart påkrævet.</value></data>
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve"><value>Minimer til systembakke</value></data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve"><value>Start minimeret i systembakke</value></data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve"><value>Overvåg udklipsholder for tekst</value></data>
   <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve"><value>Oversæt med musemarkering (vælg tekst → klik svæveikon)</value></data>
   <data name="AlwaysOnTopToggle.Header" xml:space="preserve"><value>Altid øverst</value></data>

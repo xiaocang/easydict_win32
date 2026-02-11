@@ -549,6 +549,9 @@
   <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
     <value>Minimizza nella barra di sistema</value>
   </data>
+  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
+    <value>Avvia minimizzato nella barra di sistema</value>
+  </data>
   <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
     <value>Monitora gli appunti per il testo</value>
   </data>

@@ -71,6 +71,8 @@ While the feature set is not yet complete compared to the macOS version, this po
   - `Ctrl+Alt+D` - Translate clipboard content
   - `Ctrl+Alt+M` - Show mini window (copies selection and translates when available)
   - `Ctrl+Alt+F` - Show fixed window
+  - `Ctrl+Alt+S` - OCR screenshot translate
+  - `Ctrl+Alt+Shift+S` - Silent OCR (copy recognized text to clipboard)
   - `Ctrl+Alt+Shift+M` - Toggle mini window visibility
   - `Ctrl+Alt+Shift+F` - Toggle fixed window visibility
 
@@ -83,6 +85,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 - **High DPI Support** - Per-Monitor V2 DPI awareness
 
 - **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window
+
+- **OCR Screenshot Translate** - Snipaste-style screen capture: press `Ctrl+Alt+S` to capture a screen region, auto-detect windows or drag to select, then OCR the text and translate. Uses Windows OCR API with configurable recognition language. Also supports silent OCR (`Ctrl+Alt+Shift+S`) that copies recognized text to clipboard without translating.
 
 - **Dark/Light Theme** - Follows system theme
 
@@ -209,6 +213,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - [x] ~~**NiuTrans**~~ - 小牛翻译 (450+ languages) ✅ **Implemented**
 - [x] ~~**Linguee Dictionary**~~ - Dictionary with context examples ✅ **Implemented**
 - [x] ~~**TTS (Text-to-Speech)**~~ - Windows Speech Synthesis API ✅ **Implemented**
+- [x] ~~**OCR Screenshot Translation**~~ - Snipaste-style screen capture with Windows OCR API ✅ **Implemented**
 
 ### Medium Priority
 
@@ -242,11 +247,11 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Feature | macOS | Windows |
 |---------|-------|---------|
 | Translation Services | 25+ | 18 |
-| OCR Screenshot Translation | Yes | No |
+| OCR Screenshot Translation | Yes | Yes |
 | TTS | Yes | Yes |
 | Selection Translation | Yes | Yes |
 | Window Types | 3 | 3 |
-| Global Hotkeys | 10+ | 6 |
+| Global Hotkeys | 10+ | 8 |
 | LLM Streaming | Yes | Yes |
 | Traditional Chinese | Yes | Yes |
 

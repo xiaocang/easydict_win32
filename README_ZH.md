@@ -71,6 +71,8 @@
   - `Ctrl+Alt+D` - 翻译剪贴板内容
   - `Ctrl+Alt+M` - 显示迷你窗口（自动复制选中文本并翻译）
   - `Ctrl+Alt+F` - 显示固定窗口
+  - `Ctrl+Alt+S` - OCR 截图翻译
+  - `Ctrl+Alt+Shift+S` - 静默 OCR（复制识别文字到剪贴板）
   - `Ctrl+Alt+Shift+M` - 切换迷你窗口可见性
   - `Ctrl+Alt+Shift+F` - 切换固定窗口可见性
 
@@ -83,6 +85,8 @@
 - **高 DPI 支持** - Per-Monitor V2 DPI 感知
 
 - **划词翻译** - 在任意应用中选中文本（拖拽、双击或三击），点击浮动翻译按钮即可在迷你窗口中翻译
+
+- **OCR 截图翻译** - 类似 Snipaste 的截图体验：按 `Ctrl+Alt+S` 截取屏幕区域，自动检测窗口或拖拽选择区域，然后 OCR 识别文字并翻译。使用 Windows OCR API，支持配置识别语言。还支持静默 OCR（`Ctrl+Alt+Shift+S`），将识别文字复制到剪贴板而不翻译。
 
 - **深色/浅色主题** - 跟随系统主题
 
@@ -209,6 +213,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - [x] ~~**小牛翻译**~~ - 450+ 语种 ✅ **已实现**
 - [x] ~~**Linguee 词典**~~ - 带上下文例句的词典 ✅ **已实现**
 - [x] ~~**TTS（文字转语音）**~~ - Windows Speech Synthesis API ✅ **已实现**
+- [x] ~~**OCR 截图翻译**~~ - 类似 Snipaste 的截图体验，使用 Windows OCR API ✅ **已实现**
 
 ### 中优先级
 
@@ -242,11 +247,11 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | 功能 | macOS | Windows |
 |------|-------|---------|
 | 翻译服务 | 25+ | 18 |
-| OCR 截图翻译 | 支持 | 不支持 |
+| OCR 截图翻译 | 支持 | 支持 |
 | TTS | 支持 | 支持 |
 | 划词翻译 | 支持 | 支持 |
 | 窗口类型 | 3 | 3 |
-| 全局快捷键 | 10+ | 6 |
+| 全局快捷键 | 10+ | 8 |
 | LLM 流式翻译 | 支持 | 支持 |
 | 繁体中文 | 支持 | 支持 |
 

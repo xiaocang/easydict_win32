@@ -347,11 +347,18 @@ namespace Easydict.WinUI
                         while (_ocrSignalEvent.WaitOne())
                         {
                             System.Diagnostics.Debug.WriteLine("[App] OCR signal received from context menu");
+                            var ocrService = _ocrTranslateService;
+                            if (ocrService is null)
+                            {
+                                System.Diagnostics.Debug.WriteLine("[App] OCR service not available, ignoring signal");
+                                continue;
+                            }
+
                             _window.DispatcherQueue.TryEnqueue(async () =>
                             {
                                 try
                                 {
-                                    await _ocrTranslateService!.OcrTranslateAsync();
+                                    await ocrService.OcrTranslateAsync();
                                 }
                                 catch (Exception ex)
                                 {
@@ -551,9 +558,15 @@ namespace Easydict.WinUI
 
         private async void OnOcrTranslateHotkey()
         {
+            if (_ocrTranslateService is null)
+            {
+                System.Diagnostics.Debug.WriteLine("[Hotkey] OCR service not available");
+                return;
+            }
+
             try
             {
-                await _ocrTranslateService!.OcrTranslateAsync();
+                await _ocrTranslateService.OcrTranslateAsync();
             }
             catch (Exception ex)
             {
@@ -563,9 +576,15 @@ namespace Easydict.WinUI
 
         private async void OnSilentOcrHotkey()
         {
+            if (_ocrTranslateService is null)
+            {
+                System.Diagnostics.Debug.WriteLine("[Hotkey] OCR service not available");
+                return;
+            }
+
             try
             {
-                await _ocrTranslateService!.SilentOcrAsync();
+                await _ocrTranslateService.SilentOcrAsync();
             }
             catch (Exception ex)
             {
@@ -592,9 +611,15 @@ namespace Easydict.WinUI
 
         private async void OnTrayOcrTranslate()
         {
+            if (_ocrTranslateService is null)
+            {
+                System.Diagnostics.Debug.WriteLine("[Tray] OCR service not available");
+                return;
+            }
+
             try
             {
-                await _ocrTranslateService!.OcrTranslateAsync();
+                await _ocrTranslateService.OcrTranslateAsync();
             }
             catch (Exception ex)
             {

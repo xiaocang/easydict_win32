@@ -13,6 +13,11 @@ public sealed class OcrTranslateService
     private readonly IOcrService _ocrService;
     private readonly DispatcherQueue _dispatcherQueue;
 
+    // Concurrency guard: only one OCR operation can run at a time.
+    // Owned by OcrTranslateAsync/SilentOcrAsync — only those methods create and dispose.
+    // Other code may Cancel() but must NOT Dispose().
+    private CancellationTokenSource? _currentCts;
+
     public OcrTranslateService(DispatcherQueue dispatcherQueue)
         : this(new WindowsOcrService(), dispatcherQueue)
     {
@@ -26,21 +31,28 @@ public sealed class OcrTranslateService
 
     /// <summary>
     /// Capture screenshot → OCR → show result in MiniWindow for translation.
-    /// Safe to call from any thread.
+    /// Safe to call from any thread. Cancels any in-flight OCR operation.
     /// </summary>
     public async Task OcrTranslateAsync()
     {
         Debug.WriteLine("[OcrTranslate] Starting OCR translate flow...");
+
+        using var cts = new CancellationTokenSource();
+        var previousCts = Interlocked.Exchange(ref _currentCts, cts);
+        try { previousCts?.Cancel(); } catch (ObjectDisposedException) { }
 
         try
         {
             var capture = await _captureService.CaptureRegionAsync();
             if (capture is null) return;
 
+            cts.Token.ThrowIfCancellationRequested();
+
             using (capture)
             {
                 var preferredLanguage = GetPreferredOcrLanguage();
-                var ocrResult = await _ocrService.RecognizeAsync(capture, preferredLanguage);
+                var ocrResult = await _ocrService.RecognizeAsync(
+                    capture, preferredLanguage, cts.Token);
 
                 if (string.IsNullOrWhiteSpace(ocrResult.Text))
                 {
@@ -51,10 +63,13 @@ public sealed class OcrTranslateService
                 Debug.WriteLine($"[OcrTranslate] Recognized {ocrResult.Text.Length} chars, showing in MiniWindow");
 
                 // Marshal to UI thread to show the MiniWindow
-                _dispatcherQueue.TryEnqueue(() =>
+                if (!_dispatcherQueue.TryEnqueue(() =>
                 {
                     MiniWindowService.Instance.ShowWithText(ocrResult.Text);
-                });
+                }))
+                {
+                    Debug.WriteLine("[OcrTranslate] Failed to enqueue UI update — dispatcher shut down?");
+                }
             }
         }
         catch (OperationCanceledException)
@@ -65,25 +80,36 @@ public sealed class OcrTranslateService
         {
             Debug.WriteLine($"[OcrTranslate] Error: {ex.Message}");
         }
+        finally
+        {
+            Interlocked.CompareExchange(ref _currentCts, null, cts);
+        }
     }
 
     /// <summary>
     /// Capture screenshot → OCR → copy result to clipboard (silent mode).
-    /// Safe to call from any thread.
+    /// Safe to call from any thread. Cancels any in-flight OCR operation.
     /// </summary>
     public async Task SilentOcrAsync()
     {
         Debug.WriteLine("[OcrTranslate] Starting silent OCR flow...");
+
+        using var cts = new CancellationTokenSource();
+        var previousCts = Interlocked.Exchange(ref _currentCts, cts);
+        try { previousCts?.Cancel(); } catch (ObjectDisposedException) { }
 
         try
         {
             var capture = await _captureService.CaptureRegionAsync();
             if (capture is null) return;
 
+            cts.Token.ThrowIfCancellationRequested();
+
             using (capture)
             {
                 var preferredLanguage = GetPreferredOcrLanguage();
-                var ocrResult = await _ocrService.RecognizeAsync(capture, preferredLanguage);
+                var ocrResult = await _ocrService.RecognizeAsync(
+                    capture, preferredLanguage, cts.Token);
 
                 if (string.IsNullOrWhiteSpace(ocrResult.Text))
                 {
@@ -94,7 +120,7 @@ public sealed class OcrTranslateService
                 Debug.WriteLine($"[OcrTranslate] Silent OCR: {ocrResult.Text.Length} chars → clipboard");
 
                 // Copy to clipboard on UI thread
-                _dispatcherQueue.TryEnqueue(() =>
+                if (!_dispatcherQueue.TryEnqueue(() =>
                 {
                     try
                     {
@@ -106,7 +132,10 @@ public sealed class OcrTranslateService
                     {
                         Debug.WriteLine($"[OcrTranslate] Clipboard error: {ex.Message}");
                     }
-                });
+                }))
+                {
+                    Debug.WriteLine("[OcrTranslate] Failed to enqueue clipboard write — dispatcher shut down?");
+                }
             }
         }
         catch (OperationCanceledException)
@@ -116,6 +145,10 @@ public sealed class OcrTranslateService
         catch (Exception ex)
         {
             Debug.WriteLine($"[OcrTranslate] Silent OCR error: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.CompareExchange(ref _currentCts, null, cts);
         }
     }
 

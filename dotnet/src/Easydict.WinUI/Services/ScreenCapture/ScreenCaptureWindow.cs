@@ -79,6 +79,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     private nint _hwnd;
     private nint _desktopBitmapHandle;
     private nint _desktopDcHandle;
+    private nint _oldDesktopBitmapHandle; // saved from SelectObject to restore before cleanup
     private int _desktopWidth;
     private int _desktopHeight;
     private int _virtualLeft;
@@ -205,7 +206,7 @@ public sealed class ScreenCaptureWindow : IDisposable
         var screenDc = GetDC(IntPtr.Zero);
         _desktopDcHandle = CreateCompatibleDC(screenDc);
         _desktopBitmapHandle = CreateCompatibleBitmap(screenDc, _desktopWidth, _desktopHeight);
-        SelectObject(_desktopDcHandle, _desktopBitmapHandle);
+        _oldDesktopBitmapHandle = SelectObject(_desktopDcHandle, _desktopBitmapHandle);
 
         BitBlt(_desktopDcHandle, 0, 0, _desktopWidth, _desktopHeight,
                screenDc, _virtualLeft, _virtualTop, SRCCOPY);
@@ -315,7 +316,15 @@ public sealed class ScreenCaptureWindow : IDisposable
                 return IntPtr.Zero;
 
             case WM_MOUSEWHEEL:
-                OnMouseWheel(GetWheelDelta(wParam), GetLParamPoint(lParam));
+                // WM_MOUSEWHEEL lParam contains screen coordinates, not client coordinates.
+                // Convert to client-relative (overlay-relative) by subtracting virtual desktop origin.
+                var wheelScreenPt = GetLParamPoint(lParam);
+                var wheelClientPt = new POINT
+                {
+                    X = wheelScreenPt.X - _virtualLeft,
+                    Y = wheelScreenPt.Y - _virtualTop
+                };
+                OnMouseWheel(GetWheelDelta(wParam), wheelClientPt);
                 return IntPtr.Zero;
 
             case WM_KEYDOWN:
@@ -1025,6 +1034,13 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     private void Cleanup()
     {
+        // Restore the original bitmap before deleting the DC and our bitmap.
+        // GDI requires that objects are deselected from a DC before deletion.
+        if (_desktopDcHandle != IntPtr.Zero && _oldDesktopBitmapHandle != IntPtr.Zero)
+        {
+            SelectObject(_desktopDcHandle, _oldDesktopBitmapHandle);
+            _oldDesktopBitmapHandle = IntPtr.Zero;
+        }
         if (_desktopDcHandle != IntPtr.Zero)
         {
             DeleteDC(_desktopDcHandle);
@@ -1036,7 +1052,8 @@ public sealed class ScreenCaptureWindow : IDisposable
             _desktopBitmapHandle = IntPtr.Zero;
         }
 
-        try { UnregisterClass(WindowClassName, GetModuleHandle(null)); } catch { }
+        try { UnregisterClass(WindowClassName, GetModuleHandle(null)); }
+        catch (ExternalException) { }
     }
 
     public void Dispose()
@@ -1132,7 +1149,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("gdi32.dll")] private static extern int SetStretchBltMode(nint hdc, int mode);
     [DllImport("gdi32.dll")] private static extern int GetDIBits(nint hdc, nint hbmp, uint start, uint cLines, byte[] lpvBits, ref BITMAPINFO lpbmi, uint usage);
     [DllImport("user32.dll")] private static extern bool FillRect(nint hdc, ref RECT lprc, nint hbr);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool TextOut(nint hdc, int x, int y, string lpString, int c);
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool TextOut(nint hdc, int x, int y, string lpString, int c);
     [DllImport("user32.dll")] private static extern bool InvalidateRect(nint hwnd, nint lpRect, bool bErase);
     [DllImport("user32.dll")] private static extern nint BeginPaint(nint hwnd, ref PAINTSTRUCT lpPaint);
     [DllImport("user32.dll")] private static extern bool EndPaint(nint hwnd, ref PAINTSTRUCT lpPaint);

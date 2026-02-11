@@ -55,8 +55,16 @@ public sealed class WindowsOcrService : IOcrService
     private static SoftwareBitmap CreateSoftwareBitmap(byte[] pixelData, int width, int height)
     {
         var bitmap = new SoftwareBitmap(BitmapPixelFormat.Bgra8, width, height, BitmapAlphaMode.Premultiplied);
-        bitmap.CopyFromBuffer(pixelData.AsBuffer());
-        return bitmap;
+        try
+        {
+            bitmap.CopyFromBuffer(pixelData.AsBuffer());
+            return bitmap;
+        }
+        catch
+        {
+            bitmap.Dispose();
+            throw;
+        }
     }
 
     private static async Task<OcrResult> RecognizeBitmapAsync(

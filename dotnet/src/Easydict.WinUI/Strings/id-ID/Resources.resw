@@ -606,4 +606,20 @@
   <data name="ServiceConfigHelpTip" xml:space="preserve">
     <value>Aktifkan layanan di 'Layanan Aktif' di atas terlebih dahulu</value>
   </data>
+
+  <!-- Toggle Switch On/Off -->
+  <data name="ToggleOn" xml:space="preserve">
+    <value>Aktif</value>
+  </data>
+  <data name="ToggleOff" xml:space="preserve">
+    <value>Nonaktif</value>
+  </data>
+
+  <!-- Youdao Toggle Content -->
+  <data name="OfficialApi" xml:space="preserve">
+    <value>API Resmi</value>
+  </data>
+  <data name="WebFree" xml:space="preserve">
+    <value>Web (gratis)</value>
+  </data>
 </root>

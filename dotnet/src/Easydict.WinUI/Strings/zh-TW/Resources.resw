@@ -777,4 +777,20 @@
   <data name="CannotConnectToOllamaMessage" xml:space="preserve">
     <value>無法從 Ollama 取得模型。請確認 Ollama 正在執行且可以存取。</value>
   </data>
+
+  <!-- Toggle Switch On/Off -->
+  <data name="ToggleOn" xml:space="preserve">
+    <value>開</value>
+  </data>
+  <data name="ToggleOff" xml:space="preserve">
+    <value>關</value>
+  </data>
+
+  <!-- Youdao Toggle Content -->
+  <data name="OfficialApi" xml:space="preserve">
+    <value>官方 API</value>
+  </data>
+  <data name="WebFree" xml:space="preserve">
+    <value>網頁版（免費）</value>
+  </data>
 </root>

@@ -152,8 +152,7 @@
                                         <ToggleSwitch
                                             Grid.Column="1"
                                             IsOn="{Binding EnabledQuery, Mode=TwoWay}"
-                                            OnContent="Auto"
-                                            OffContent="Manual"
+                                            Loaded="OnServiceToggleSwitchLoaded"
                                             Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
                                             IsEnabled="{Binding IsAvailable}"
                                             MinWidth="0"
@@ -186,8 +185,7 @@
                                         <ToggleSwitch
                                             Grid.Column="1"
                                             IsOn="{Binding EnabledQuery, Mode=TwoWay}"
-                                            OnContent="Auto"
-                                            OffContent="Manual"
+                                            Loaded="OnServiceToggleSwitchLoaded"
                                             Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
                                             IsEnabled="{Binding IsAvailable}"
                                             MinWidth="0"
@@ -220,8 +218,7 @@
                                         <ToggleSwitch
                                             Grid.Column="1"
                                             IsOn="{Binding EnabledQuery, Mode=TwoWay}"
-                                            OnContent="Auto"
-                                            OffContent="Manual"
+                                            Loaded="OnServiceToggleSwitchLoaded"
                                             Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
                                             IsEnabled="{Binding IsAvailable}"
                                             MinWidth="0"
@@ -549,7 +546,7 @@
                     <StackPanel Spacing="12" Padding="0,8">
                         <PasswordBox x:Name="YoudaoAppKeyBox" Header="App Key" Width="350" PlaceholderText="Enter your Youdao App Key" HorizontalAlignment="Left" />
                         <PasswordBox x:Name="YoudaoAppSecretBox" Header="App Secret" Width="350" PlaceholderText="Enter your Youdao App Secret" HorizontalAlignment="Left" />
-                        <ToggleSwitch x:Name="YoudaoUseOfficialApiToggle" Header="Use Official API" OffContent="Web (free)" OnContent="Official API" />
+                        <ToggleSwitch x:Name="YoudaoUseOfficialApiToggle" Header="Use Official API" />
                         <TextBlock Text="Youdao provides phonetic transcriptions for English words. Without API keys, uses free web dictionary. With API keys, enables official API for higher limits. Get API keys from ai.youdao.com"
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>

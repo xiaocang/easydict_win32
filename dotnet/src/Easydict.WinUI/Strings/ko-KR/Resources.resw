@@ -777,4 +777,20 @@
   <data name="ServiceConfigHelpTip" xml:space="preserve">
     <value>먼저 위의 '활성화된 서비스'에서 활성화하세요</value>
   </data>
+
+  <!-- Toggle Switch On/Off -->
+  <data name="ToggleOn" xml:space="preserve">
+    <value>켜짐</value>
+  </data>
+  <data name="ToggleOff" xml:space="preserve">
+    <value>꺼짐</value>
+  </data>
+
+  <!-- Youdao Toggle Content -->
+  <data name="OfficialApi" xml:space="preserve">
+    <value>공식 API</value>
+  </data>
+  <data name="WebFree" xml:space="preserve">
+    <value>웹 (무료)</value>
+  </data>
 </root>

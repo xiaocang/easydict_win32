@@ -614,4 +614,20 @@
   <data name="ServiceConfigHelpTip" xml:space="preserve">
     <value>&#3648;&#3611;&#3636;&#3604;&#3651;&#3594;&#3657;&#3610;&#3619;&#3636;&#3585;&#3634;&#3619;&#3651;&#3609; '&#3610;&#3619;&#3636;&#3585;&#3634;&#3619;&#3607;&#3637;&#3656;&#3648;&#3611;&#3636;&#3604;&#3651;&#3594;&#3657;' &#3604;&#3657;&#3634;&#3609;&#3610;&#3609;&#3585;&#3656;&#3629;&#3609;</value>
   </data>
+
+  <!-- Toggle Switch On/Off -->
+  <data name="ToggleOn" xml:space="preserve">
+    <value>&#3648;&#3611;&#3636;&#3604;</value>
+  </data>
+  <data name="ToggleOff" xml:space="preserve">
+    <value>&#3611;&#3636;&#3604;</value>
+  </data>
+
+  <!-- Youdao Toggle Content -->
+  <data name="OfficialApi" xml:space="preserve">
+    <value>API &#3607;&#3634;&#3591;&#3585;&#3634;&#3619;</value>
+  </data>
+  <data name="WebFree" xml:space="preserve">
+    <value>&#3648;&#3623;&#3655;&#3610; (&#3615;&#3619;&#3637;)</value>
+  </data>
 </root>

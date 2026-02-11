@@ -660,4 +660,20 @@
   <data name="ServiceConfigHelpTip" xml:space="preserve">
     <value>B&#7853;t d&#7883;ch v&#7909; trong 'D&#7883;ch v&#7909; &#273;&#227; b&#7853;t' &#7903; tr&#234;n tr&#432;&#7899;c</value>
   </data>
+
+  <!-- Toggle Switch On/Off -->
+  <data name="ToggleOn" xml:space="preserve">
+    <value>B&#7853;t</value>
+  </data>
+  <data name="ToggleOff" xml:space="preserve">
+    <value>T&#7855;t</value>
+  </data>
+
+  <!-- Youdao Toggle Content -->
+  <data name="OfficialApi" xml:space="preserve">
+    <value>API ch&#237;nh th&#7913;c</value>
+  </data>
+  <data name="WebFree" xml:space="preserve">
+    <value>Web (mi&#7877;n ph&#237;)</value>
+  </data>
 </root>

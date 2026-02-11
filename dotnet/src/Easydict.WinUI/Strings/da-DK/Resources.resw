@@ -234,4 +234,20 @@
   <data name="ServiceConfigHelpTip" xml:space="preserve">
     <value>Aktiver tjenester under 'Aktiverede tjenester' ovenfor f&#248;rst</value>
   </data>
+
+  <!-- Toggle Switch On/Off -->
+  <data name="ToggleOn" xml:space="preserve">
+    <value>Til</value>
+  </data>
+  <data name="ToggleOff" xml:space="preserve">
+    <value>Fra</value>
+  </data>
+
+  <!-- Youdao Toggle Content -->
+  <data name="OfficialApi" xml:space="preserve">
+    <value>Officiel API</value>
+  </data>
+  <data name="WebFree" xml:space="preserve">
+    <value>Web (gratis)</value>
+  </data>
 </root>

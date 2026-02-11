@@ -2,7 +2,7 @@
  * Easydict AI Proxy Worker
  *
  * Routes OpenAI-compatible chat completion requests to GLM (Zhipu) or Groq
- * based on the model name. Applies per-device rate limiting via X-Device-Id.
+ * based on the model name. Dual rate limiting: per-device (X-Device-Id) + per-IP.
  *
  * Client sends:
  *   POST /v1/chat/completions
@@ -16,7 +16,7 @@
  *   4. Streams SSE response back to client
  */
 
-import { handleRateLimit, RateLimitResult } from "./rate-limit";
+import { handleRateLimit } from "./rate-limit";
 import { resolveUpstream, UpstreamConfig } from "./routing";
 
 export interface Env {
@@ -74,9 +74,10 @@ export default {
       return jsonError(400, `Unsupported model: ${model}`);
     }
 
-    // Rate limiting (per device)
+    // Dual rate limiting: per-device + per-IP
     const deviceId = request.headers.get("X-Device-Id") ?? "anonymous";
-    const rateResult = await handleRateLimit(env.RATE_LIMIT, deviceId);
+    const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+    const rateResult = await handleRateLimit(env.RATE_LIMIT, deviceId, ip);
     if (!rateResult.allowed) {
       return jsonError(429, "Rate limit exceeded. Please try again later.", {
         "Retry-After": String(rateResult.retryAfterSeconds),

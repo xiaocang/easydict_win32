@@ -8,12 +8,12 @@ Cloudflare Worker that proxies OpenAI-compatible chat completion requests to ups
 Client (Easydict Win32)
   ├── POST /v1/chat/completions
   ├── Authorization: Bearer <embedded-key>
-  └── X-Device-Id: <device-guid>
+  └── X-Device-Id: <hardware-id>
         │
         ▼
   Cloudflare Worker
   ├── Auth check (optional)
-  ├── Rate limit (30 req/min per device, KV-backed)
+  ├── Rate limit (per-device + per-IP, KV-backed)
   └── Route by model name
         │
         ├── glm-4-flash* ──────► Zhipu GLM API
@@ -54,7 +54,14 @@ npm run deploy
 
 ## Rate Limiting
 
-- **30 requests per minute** per `X-Device-Id`
-- Sliding window counter stored in Cloudflare KV
+Dual rate limiting — both must pass:
+
+| Dimension | Limit | Key |
+|-----------|-------|-----|
+| Per device | 30 req/min | `X-Device-Id` header (hardware-bound) |
+| Per IP | 60 req/min | `CF-Connecting-IP` (unforgeable) |
+
+- Sliding window counters stored in Cloudflare KV
 - Fails open (allows request) if KV is unavailable
-- Anonymous requests (no Device-Id) share a single counter
+- Anonymous requests (no Device-Id) share a single device counter
+- IP limit is higher to accommodate shared networks (NAT, VPN)

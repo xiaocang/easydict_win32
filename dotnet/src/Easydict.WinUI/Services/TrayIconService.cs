@@ -316,8 +316,9 @@ public sealed class TrayIconService : IDisposable
         SetTip(_uninstallAllItem);
         browserMenu.Items.Add(_uninstallAllItem);
 
-        // Set initial enabled states
-        UpdateBrowserSupportMenuStates();
+        // TODO: Browser extension not yet published to Chrome Web Store.
+        // Disable the entire submenu until a Store ID is available.
+        browserMenu.IsEnabled = false;
 
         return browserMenu;
     }

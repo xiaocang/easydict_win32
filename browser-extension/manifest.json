@@ -3,7 +3,7 @@
   "name": "Easydict OCR Translate",
   "version": "1.0.0",
   "description": "Right-click to capture screen and translate with Easydict OCR",
-  "permissions": ["contextMenus"],
+  "permissions": ["contextMenus", "nativeMessaging"],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

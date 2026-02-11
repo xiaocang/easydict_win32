@@ -1,38 +1,63 @@
 // Easydict OCR Translate — Browser Extension Background Script
 // Works with both Manifest V3 (Chrome) and V2 (Firefox).
 //
-// Adds a single right-click context menu item "OCR 截图翻译".
-// On click, opens the easydict://ocr-translate protocol URL.
-// The OS routes it to the Easydict MSIX app, which triggers screen capture + OCR.
+// Adds a single right-click context menu item "Easydict OCR 截图翻译".
+// On click, triggers OCR screen capture in the Easydict desktop app.
 //
-// First-time behavior: the browser will show a confirmation dialog
-// ("Allow this site to open the easydict app?"). After the user clicks Allow,
-// subsequent clicks work silently.
+// Two communication channels (tried in order):
+//   1. Native Messaging — if the user installed native host via tray menu,
+//      sends a message directly to the bridge exe (instant, no UI flash).
+//   2. Protocol fallback — opens easydict://ocr-translate in a temp tab.
+//      First time: browser shows a confirmation dialog. Subsequent: silent.
 
+const NATIVE_HOST_NAME = "com.easydict.bridge";
 const PROTOCOL_URL = "easydict://ocr-translate";
 
-// Manifest V3 uses chrome.runtime.onInstalled; V2 fires it too.
-// Both APIs share the same chrome.contextMenus namespace.
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "easydict-ocr-translate",
-    title: "OCR 截图翻译",
+    title: "Easydict OCR 截图翻译",
     contexts: ["all"],
   });
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener((info, _tab) => {
   if (info.menuItemId !== "easydict-ocr-translate") return;
+  triggerOcrTranslate();
+});
 
-  // Open the protocol URL in a new tab. The browser intercepts the custom
-  // protocol and hands it to the OS, which activates the MSIX app.
-  // The tab auto-navigates to about:blank or shows a brief prompt.
+function triggerOcrTranslate() {
+  // Try Native Messaging first (preferred — no UI flash, no permission dialog)
+  try {
+    chrome.runtime.sendNativeMessage(
+      NATIVE_HOST_NAME,
+      { action: "ocr-translate" },
+      (response) => {
+        if (chrome.runtime.lastError || !response?.success) {
+          // Native host not installed or Easydict not running — fall back to protocol
+          console.log(
+            "[Easydict] Native messaging unavailable, falling back to protocol:",
+            chrome.runtime.lastError?.message
+          );
+          triggerViaProtocol();
+        }
+      }
+    );
+  } catch {
+    // sendNativeMessage not available (e.g., no nativeMessaging permission) — use protocol
+    triggerViaProtocol();
+  }
+}
+
+function triggerViaProtocol() {
+  // Open the protocol URL in a new background tab.
+  // The browser hands the easydict:// URL to the OS, which activates the MSIX app.
   chrome.tabs.create({ url: PROTOCOL_URL, active: false }, (newTab) => {
-    // Close the helper tab after a short delay so the user doesn't see it.
+    // Close the helper tab after a short delay so the user doesn't see it linger.
     if (newTab?.id) {
       setTimeout(() => {
         chrome.tabs.remove(newTab.id).catch(() => {});
       }, 1000);
     }
   });
-});
+}

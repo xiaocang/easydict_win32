@@ -34,6 +34,20 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public event Action? OnOcrTranslate;
 
+    /// <summary>
+    /// Event fired when a browser support install/uninstall action is triggered.
+    /// Parameter: ("chrome"|"firefox"|"all", isInstall)
+    /// </summary>
+    public event Action<string, bool>? OnBrowserSupportAction;
+
+    // Browser support menu items — stored for dynamic enable/disable updates
+    private MenuFlyoutItem? _installChromeItem;
+    private MenuFlyoutItem? _uninstallChromeItem;
+    private MenuFlyoutItem? _installFirefoxItem;
+    private MenuFlyoutItem? _uninstallFirefoxItem;
+    private MenuFlyoutItem? _installAllItem;
+    private MenuFlyoutItem? _uninstallAllItem;
+
     public TrayIconService(Window window, AppWindow? appWindow)
     {
         _window = window;
@@ -216,6 +230,9 @@ public sealed class TrayIconService : IDisposable
 
         menu.Items.Add(new MenuFlyoutSeparator());
 
+        // Browser support submenu
+        menu.Items.Add(CreateBrowserSupportSubmenu());
+
         var settingsItem = new MenuFlyoutItem { Text = "Settings" };
         settingsItem.Click += (_, _) => OnOpenSettings?.Invoke();
         menu.Items.Add(settingsItem);
@@ -227,6 +244,81 @@ public sealed class TrayIconService : IDisposable
         menu.Items.Add(exitItem);
 
         return menu;
+    }
+
+    private MenuFlyoutSubItem CreateBrowserSupportSubmenu()
+    {
+        var browserMenu = new MenuFlyoutSubItem { Text = "浏览器支持" };
+
+        // Chrome 系
+        var chromeGroup = new MenuFlyoutSubItem { Text = "Chrome 系" };
+
+        _installChromeItem = new MenuFlyoutItem { Text = "安装 Chrome 支持" };
+        _installChromeItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("chrome", true);
+        chromeGroup.Items.Add(_installChromeItem);
+
+        _uninstallChromeItem = new MenuFlyoutItem { Text = "卸载 Chrome 支持" };
+        _uninstallChromeItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("chrome", false);
+        chromeGroup.Items.Add(_uninstallChromeItem);
+
+        browserMenu.Items.Add(chromeGroup);
+
+        // Firefox 系
+        var firefoxGroup = new MenuFlyoutSubItem { Text = "Firefox 系" };
+
+        _installFirefoxItem = new MenuFlyoutItem { Text = "安装 Firefox 支持" };
+        _installFirefoxItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("firefox", true);
+        firefoxGroup.Items.Add(_installFirefoxItem);
+
+        _uninstallFirefoxItem = new MenuFlyoutItem { Text = "卸载 Firefox 支持" };
+        _uninstallFirefoxItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("firefox", false);
+        firefoxGroup.Items.Add(_uninstallFirefoxItem);
+
+        browserMenu.Items.Add(firefoxGroup);
+
+        // Separator before "全部"
+        browserMenu.Items.Add(new MenuFlyoutSeparator());
+
+        _installAllItem = new MenuFlyoutItem { Text = "安装全部" };
+        _installAllItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("all", true);
+        browserMenu.Items.Add(_installAllItem);
+
+        _uninstallAllItem = new MenuFlyoutItem { Text = "卸载全部" };
+        _uninstallAllItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("all", false);
+        browserMenu.Items.Add(_uninstallAllItem);
+
+        // Set initial enabled states
+        UpdateBrowserSupportMenuStates();
+
+        return browserMenu;
+    }
+
+    /// <summary>
+    /// Refresh the enabled/disabled state of browser support menu items
+    /// based on current installation status. Call after install/uninstall actions.
+    /// </summary>
+    public void UpdateBrowserSupportMenuStates()
+    {
+        var chromeInstalled = BrowserSupportService.IsChromeSupportInstalled;
+        var firefoxInstalled = BrowserSupportService.IsFirefoxSupportInstalled;
+
+        if (_installChromeItem != null)
+            _installChromeItem.IsEnabled = !chromeInstalled;
+        if (_uninstallChromeItem != null)
+            _uninstallChromeItem.IsEnabled = chromeInstalled;
+
+        if (_installFirefoxItem != null)
+            _installFirefoxItem.IsEnabled = !firefoxInstalled;
+        if (_uninstallFirefoxItem != null)
+            _uninstallFirefoxItem.IsEnabled = firefoxInstalled;
+
+        var anyNotInstalled = !chromeInstalled || !firefoxInstalled;
+        var anyInstalled = chromeInstalled || firefoxInstalled;
+
+        if (_installAllItem != null)
+            _installAllItem.IsEnabled = anyNotInstalled;
+        if (_uninstallAllItem != null)
+            _uninstallAllItem.IsEnabled = anyInstalled;
     }
 
     /// <summary>

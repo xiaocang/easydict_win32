@@ -295,6 +295,7 @@ namespace Easydict.WinUI
                 _trayIconService.OnTranslateClipboard += OnTrayTranslateClipboard;
                 _trayIconService.OnOcrTranslate += OnTrayOcrTranslate;
                 _trayIconService.OnOpenSettings += OnTrayOpenSettings;
+                _trayIconService.OnBrowserSupportAction += OnBrowserSupportAction;
                 _trayIconService.Initialize();
             }
             catch (Exception ex)
@@ -598,6 +599,55 @@ namespace Easydict.WinUI
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[Tray] OnTrayOcrTranslate error: {ex.Message}");
+            }
+        }
+
+        private void OnBrowserSupportAction(string browser, bool isInstall)
+        {
+            try
+            {
+                if (isInstall)
+                {
+                    switch (browser)
+                    {
+                        case "chrome":
+                            BrowserSupportService.InstallChrome();
+                            BrowserSupportService.OpenChromeStorePage();
+                            break;
+                        case "firefox":
+                            BrowserSupportService.InstallFirefox();
+                            BrowserSupportService.OpenFirefoxStorePage();
+                            break;
+                        case "all":
+                            BrowserSupportService.InstallAll();
+                            BrowserSupportService.OpenChromeStorePage();
+                            BrowserSupportService.OpenFirefoxStorePage();
+                            break;
+                    }
+                }
+                else
+                {
+                    switch (browser)
+                    {
+                        case "chrome":
+                            BrowserSupportService.UninstallChrome();
+                            break;
+                        case "firefox":
+                            BrowserSupportService.UninstallFirefox();
+                            break;
+                        case "all":
+                            BrowserSupportService.UninstallAll();
+                            break;
+                    }
+                }
+
+                // Refresh menu states after action
+                _trayIconService?.UpdateBrowserSupportMenuStates();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Tray] BrowserSupportAction({browser}, install={isInstall}) error: {ex.Message}");
             }
         }
 

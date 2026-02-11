@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using Easydict.WinUI.Models;
 using Windows.Graphics.Imaging;
-using Windows.Media.Ocr;
+using WinOcr = Windows.Media.Ocr;
 
 namespace Easydict.WinUI.Services;
 
@@ -16,7 +16,7 @@ public sealed class WindowsOcrService : IOcrService
 
     public string DisplayName => "Windows OCR";
 
-    public bool IsAvailable => OcrEngine.TryCreateFromUserProfileLanguages() is not null;
+    public bool IsAvailable => WinOcr.OcrEngine.TryCreateFromUserProfileLanguages() is not null;
 
     /// <inheritdoc />
     public async Task<OcrResult> RecognizeAsync(
@@ -42,7 +42,7 @@ public sealed class WindowsOcrService : IOcrService
     /// <inheritdoc />
     public IReadOnlyList<OcrLanguage> GetAvailableLanguages()
     {
-        return OcrEngine.AvailableRecognizerLanguages
+        return WinOcr.OcrEngine.AvailableRecognizerLanguages
             .Select(lang => new OcrLanguage
             {
                 Tag = lang.LanguageTag,
@@ -87,14 +87,14 @@ public sealed class WindowsOcrService : IOcrService
         };
     }
 
-    private static OcrEngine? CreateEngine(string? preferredLanguageTag)
+    private static WinOcr.OcrEngine? CreateEngine(string? preferredLanguageTag)
     {
         if (!string.IsNullOrEmpty(preferredLanguageTag))
         {
             try
             {
                 var lang = new Windows.Globalization.Language(preferredLanguageTag);
-                var engine = OcrEngine.TryCreateFromLanguage(lang);
+                var engine = WinOcr.OcrEngine.TryCreateFromLanguage(lang);
                 if (engine is not null) return engine;
                 Debug.WriteLine($"[WindowsOcrService] Language '{preferredLanguageTag}' not available, falling back to profile");
             }
@@ -104,10 +104,10 @@ public sealed class WindowsOcrService : IOcrService
             }
         }
 
-        return OcrEngine.TryCreateFromUserProfileLanguages();
+        return WinOcr.OcrEngine.TryCreateFromUserProfileLanguages();
     }
 
-    private static OcrLine ConvertLine(Windows.Media.Ocr.OcrLine winLine)
+    private static OcrLine ConvertLine(WinOcr.OcrLine winLine)
     {
         var words = winLine.Words.Select(w => w.Text).ToList();
         var text = OcrTextMerger.MergeWords(words);
@@ -132,7 +132,7 @@ public sealed class WindowsOcrService : IOcrService
         };
     }
 
-    private static OcrLanguage? DetectLanguage(OcrEngine engine)
+    private static OcrLanguage? DetectLanguage(WinOcr.OcrEngine engine)
     {
         var lang = engine.RecognizerLanguage;
         return lang is null ? null : new OcrLanguage

@@ -200,6 +200,18 @@ public sealed class TrayIconService : IDisposable
 
     private static string L(string key) => LocalizationService.Instance.GetString(key);
 
+    /// <summary>
+    /// Set a tooltip on a MenuFlyoutItem so the full text is visible on hover.
+    /// </summary>
+    private static void SetTip(MenuFlyoutItem item) =>
+        ToolTipService.SetToolTip(item, item.Text);
+
+    /// <summary>
+    /// Set a tooltip on a MenuFlyoutSubItem so the full text is visible on hover.
+    /// </summary>
+    private static void SetTip(MenuFlyoutSubItem item) =>
+        ToolTipService.SetToolTip(item, item.Text);
+
     private MenuFlyout CreateContextMenu()
     {
         var menu = new MenuFlyout();
@@ -207,27 +219,32 @@ public sealed class TrayIconService : IDisposable
         // Set MinWidth to fit the longest menu item text
         // This ensures proper width on first open (H.NotifyIcon SecondWindow mode quirk)
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
-        presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 250d));
+        presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 300d));
         menu.MenuFlyoutPresenterStyle = presenterStyle;
 
         var showItem = new MenuFlyoutItem { Text = L("TrayShow") };
         showItem.Click += (_, _) => ShowWindow();
+        SetTip(showItem);
         menu.Items.Add(showItem);
 
         var translateItem = new MenuFlyoutItem { Text = L("TrayTranslateClipboard") };
         translateItem.Click += (_, _) => OnTranslateClipboard?.Invoke();
+        SetTip(translateItem);
         menu.Items.Add(translateItem);
 
         var ocrItem = new MenuFlyoutItem { Text = $"{L("TrayOcrTranslate")} (Ctrl+Alt+S)" };
         ocrItem.Click += (_, _) => OnOcrTranslate?.Invoke();
+        SetTip(ocrItem);
         menu.Items.Add(ocrItem);
 
         var miniWindowItem = new MenuFlyoutItem { Text = $"{L("TrayShowMini")} (Ctrl+Alt+M)" };
         miniWindowItem.Click += (_, _) => MiniWindowService.Instance.Toggle();
+        SetTip(miniWindowItem);
         menu.Items.Add(miniWindowItem);
 
         var fixedWindowItem = new MenuFlyoutItem { Text = $"{L("TrayShowFixed")} (Ctrl+Alt+F)" };
         fixedWindowItem.Click += (_, _) => FixedWindowService.Instance.Toggle();
+        SetTip(fixedWindowItem);
         menu.Items.Add(fixedWindowItem);
 
         menu.Items.Add(new MenuFlyoutSeparator());
@@ -237,12 +254,14 @@ public sealed class TrayIconService : IDisposable
 
         var settingsItem = new MenuFlyoutItem { Text = L("TraySettings") };
         settingsItem.Click += (_, _) => OnOpenSettings?.Invoke();
+        SetTip(settingsItem);
         menu.Items.Add(settingsItem);
 
         menu.Items.Add(new MenuFlyoutSeparator());
 
         var exitItem = new MenuFlyoutItem { Text = L("TrayExit") };
         exitItem.Click += (_, _) => ExitApplication();
+        SetTip(exitItem);
         menu.Items.Add(exitItem);
 
         return menu;
@@ -251,29 +270,36 @@ public sealed class TrayIconService : IDisposable
     private MenuFlyoutSubItem CreateBrowserSupportSubmenu()
     {
         var browserMenu = new MenuFlyoutSubItem { Text = L("TrayBrowserSupport") };
+        SetTip(browserMenu);
 
         // Chrome
         var chromeGroup = new MenuFlyoutSubItem { Text = L("TrayBrowserChrome") };
+        SetTip(chromeGroup);
 
         _installChromeItem = new MenuFlyoutItem { Text = L("TrayBrowserInstallChrome") };
         _installChromeItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("chrome", true);
+        SetTip(_installChromeItem);
         chromeGroup.Items.Add(_installChromeItem);
 
         _uninstallChromeItem = new MenuFlyoutItem { Text = L("TrayBrowserUninstallChrome") };
         _uninstallChromeItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("chrome", false);
+        SetTip(_uninstallChromeItem);
         chromeGroup.Items.Add(_uninstallChromeItem);
 
         browserMenu.Items.Add(chromeGroup);
 
         // Firefox
         var firefoxGroup = new MenuFlyoutSubItem { Text = L("TrayBrowserFirefox") };
+        SetTip(firefoxGroup);
 
         _installFirefoxItem = new MenuFlyoutItem { Text = L("TrayBrowserInstallFirefox") };
         _installFirefoxItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("firefox", true);
+        SetTip(_installFirefoxItem);
         firefoxGroup.Items.Add(_installFirefoxItem);
 
         _uninstallFirefoxItem = new MenuFlyoutItem { Text = L("TrayBrowserUninstallFirefox") };
         _uninstallFirefoxItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("firefox", false);
+        SetTip(_uninstallFirefoxItem);
         firefoxGroup.Items.Add(_uninstallFirefoxItem);
 
         browserMenu.Items.Add(firefoxGroup);
@@ -282,10 +308,12 @@ public sealed class TrayIconService : IDisposable
 
         _installAllItem = new MenuFlyoutItem { Text = L("TrayBrowserInstallAll") };
         _installAllItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("all", true);
+        SetTip(_installAllItem);
         browserMenu.Items.Add(_installAllItem);
 
         _uninstallAllItem = new MenuFlyoutItem { Text = L("TrayBrowserUninstallAll") };
         _uninstallAllItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("all", false);
+        SetTip(_uninstallAllItem);
         browserMenu.Items.Add(_uninstallAllItem);
 
         // Set initial enabled states

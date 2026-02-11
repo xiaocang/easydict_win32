@@ -793,4 +793,15 @@
   <data name="WebFree" xml:space="preserve">
     <value>Web（無料）</value>
   </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>ドラッグで範囲選択  |  ダブルクリックでウィンドウ選択  |  スクロールで切替  |  Esc で終了</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>右クリックまたは Esc でキャンセル</value>
+  </data>
+  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
+    <value>Enter/ダブルクリックで確定  |  矢印キーで微調整  |  右クリック/Esc でやり直し</value>
+  </data>
 </root>

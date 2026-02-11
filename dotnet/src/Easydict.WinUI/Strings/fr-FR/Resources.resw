@@ -793,4 +793,15 @@
   <data name="WebFree" xml:space="preserve">
     <value>Web (gratuit)</value>
   </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>Glisser pour s&#233;lectionner  |  Double-clic pour la fen&#234;tre  |  Molette pour changer  |  Esc pour quitter</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>Clic droit ou Esc pour annuler</value>
+  </data>
+  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
+    <value>Entr&#233;e ou double-clic pour confirmer  |  Fl&#232;ches pour ajuster  |  Clic droit ou Esc pour refaire</value>
+  </data>
 </root>

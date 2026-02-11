@@ -793,4 +793,15 @@
   <data name="WebFree" xml:space="preserve">
     <value>Web (kostenlos)</value>
   </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>Ziehen zum Ausw&#228;hlen  |  Doppelklick f&#252;r Fensterauswahl  |  Scrollen zum Wechseln  |  Esc zum Beenden</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>Rechtsklick oder Esc zum Abbrechen</value>
+  </data>
+  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
+    <value>Enter oder Doppelklick best&#228;tigen  |  Pfeiltasten anpassen  |  Rechtsklick oder Esc wiederholen</value>
+  </data>
 </root>

@@ -622,4 +622,15 @@
   <data name="WebFree" xml:space="preserve">
     <value>Web (gratis)</value>
   </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>Seret untuk memilih area  |  Klik ganda untuk memilih jendela  |  Gulir untuk beralih  |  Esc untuk keluar</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>Klik kanan atau Esc untuk membatalkan</value>
+  </data>
+  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
+    <value>Enter atau klik ganda untuk konfirmasi  |  Tombol panah untuk penyesuaian  |  Klik kanan atau Esc untuk memilih ulang</value>
+  </data>
 </root>

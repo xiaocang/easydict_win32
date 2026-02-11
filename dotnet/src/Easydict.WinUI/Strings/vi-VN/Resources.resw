@@ -676,4 +676,15 @@
   <data name="WebFree" xml:space="preserve">
     <value>Web (mi&#7877;n ph&#237;)</value>
   </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>K&#233;o &#273;&#7875; ch&#7885;n v&#249;ng  |  Nh&#7845;p &#273;&#250;p &#273;&#7875; ch&#7885;n c&#7917;a s&#7893;  |  Cu&#7897;n &#273;&#7875; chuy&#7875;n  |  Esc &#273;&#7875; tho&#225;t</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>Nh&#7845;p ph&#7843;i ho&#7863;c Esc &#273;&#7875; h&#7911;y</value>
+  </data>
+  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
+    <value>Enter ho&#7863;c nh&#7845;p &#273;&#250;p &#273;&#7875; x&#225;c nh&#7853;n  |  Ph&#237;m m&#361;i t&#234;n &#273;&#7875; tinh ch&#7881;nh  |  Nh&#7845;p ph&#7843;i ho&#7863;c Esc &#273;&#7875; ch&#7885;n l&#7841;i</value>
+  </data>
 </root>

@@ -250,4 +250,15 @@
   <data name="WebFree" xml:space="preserve">
     <value>Web (gratis)</value>
   </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>Tr&#230;k for at v&#230;lge omr&#229;de  |  Dobbeltklik for at v&#230;lge vindue  |  Rul for at skifte  |  Esc for at afslutte</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>H&#248;jreklik eller Esc for at annullere</value>
+  </data>
+  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
+    <value>Enter eller dobbeltklik for at bekr&#230;fte  |  Piletaster for at finjustere  |  H&#248;jreklik eller Esc for at lave om</value>
+  </data>
 </root>

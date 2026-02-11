@@ -256,6 +256,26 @@ namespace Easydict.WinUI
                 HideWindow();
             }
 
+            // If cold-launched via protocol activation (easydict://ocr-translate) or
+            // --ocr-translate when app wasn't running, trigger OCR after initialization.
+            if (Program.PendingOcrTranslate && _ocrTranslateService != null)
+            {
+                _window.DispatcherQueue.TryEnqueue(async () =>
+                {
+                    // Small delay to let the window fully render before capturing the screen
+                    await Task.Delay(500);
+                    try
+                    {
+                        await _ocrTranslateService.OcrTranslateAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[App] PendingOcrTranslate error: {ex.Message}");
+                    }
+                });
+            }
+
             // Run region detection asynchronously after startup completes.
             // On first launch this detects China region and switches defaults (Google → Bing).
             // For returning users with saved settings this is a no-op.

@@ -21,6 +21,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Easydict.WinUI</RootNamespace>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <!-- Use custom Program.cs entry point (handles OCR translate from Shell context menu) -->
+        <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
 
         <!-- App Options -->
         <UseRidGraph>true</UseRidGraph>
@@ -88,6 +90,11 @@
         <Content Include="Assets\ServiceIcons\*.png">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+    </ItemGroup>
+
+    <!-- Allow test project to access internal members (must be ItemGroup, not PropertyGroup) -->
+    <ItemGroup>
+        <InternalsVisibleTo Include="Easydict.WinUI.Tests" />
     </ItemGroup>
 
     <ItemGroup>

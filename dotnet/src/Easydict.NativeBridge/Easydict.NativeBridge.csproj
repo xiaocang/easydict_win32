@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Easydict.NativeBridge</RootNamespace>
+        <AssemblyName>easydict-native-bridge</AssemblyName>
+        <!-- Publish settings: pass RID via CLI (dotnet publish -r win-x64 -self-contained) -->
+        <PublishTrimmed>true</PublishTrimmed>
+        <PublishSingleFile>true</PublishSingleFile>
+    </PropertyGroup>
+</Project>

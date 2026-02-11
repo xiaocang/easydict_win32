@@ -15,6 +15,7 @@ description: |-
   - AI-Powered Streaming: Watch LLM translations appear in real-time as they're generated
   - Multiple Window Modes: Full main window, compact mini window, or persistent fixed window
   - Mouse Selection Translation: Select text anywhere and click the floating pop button to translate instantly
+  - OCR Screenshot Translation: Snipaste-style screen capture — select a region, OCR the text, and translate instantly using Windows OCR API
   - Global Hotkeys: Translate from anywhere with customizable keyboard shortcuts
   - System Tray: Runs quietly in the background, always ready when you need it
   - Clipboard Monitoring: Automatically translate copied text
@@ -29,6 +30,7 @@ features:
 - Real-time LLM streaming translation with AI services
 - 'Multiple window modes: Main, Mini, and Fixed windows'
 - Mouse selection translation with floating pop button
+- OCR screenshot translation with Snipaste-style screen capture
 - Global hotkeys for instant translation from any application
 - System tray integration for background operation
 - Clipboard monitoring with auto-translate
@@ -46,7 +48,7 @@ keywords:
 - translator
 - open source
 - LLM
-- multilingual
+- OCR
 releaseNotes: ''
 copyrightAndTrademarkInfo: Copyright (c) xiaocang. Licensed under GPL-3.0.
 additionalLicenseTerms: ''

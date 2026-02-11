@@ -17,6 +17,8 @@ public sealed class HotkeyService : IDisposable
     private const int HOTKEY_ID_SHOW_FIXED = 4;
     private const int HOTKEY_ID_TOGGLE_MINI = 5;
     private const int HOTKEY_ID_TOGGLE_FIXED = 6;
+    private const int HOTKEY_ID_OCR_TRANSLATE = 7;
+    private const int HOTKEY_ID_SILENT_OCR = 8;
 
     // Modifier keys
     private const uint MOD_ALT = 0x0001;
@@ -39,6 +41,8 @@ public sealed class HotkeyService : IDisposable
     public event Action? OnShowFixedWindow;
     public event Action? OnToggleMiniWindow;
     public event Action? OnToggleFixedWindow;
+    public event Action? OnOcrTranslate;
+    public event Action? OnSilentOcr;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool RegisterHotKey(nint hWnd, int id, uint fsModifiers, uint vk);
@@ -119,6 +123,12 @@ public sealed class HotkeyService : IDisposable
             System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse ShowFixedWindowHotkey '{settings.ShowFixedWindowHotkey}': {fixedResult.ErrorMessage}");
         }
 
+        // Register OCR Translate hotkey (default: Ctrl+Alt+S)
+        RegisterHotkeyFromSetting(HOTKEY_ID_OCR_TRANSLATE, settings.OcrTranslateHotkey, "OCR_TRANSLATE");
+
+        // Register Silent OCR hotkey (default: Ctrl+Alt+Shift+S)
+        RegisterHotkeyFromSetting(HOTKEY_ID_SILENT_OCR, settings.SilentOcrHotkey, "SILENT_OCR");
+
         _isInitialized = true;
         System.Diagnostics.Debug.WriteLine("[Hotkey] Hotkey service initialized.");
     }
@@ -181,6 +191,12 @@ public sealed class HotkeyService : IDisposable
             case HOTKEY_ID_TOGGLE_FIXED:
                 OnToggleFixedWindow?.Invoke();
                 break;
+            case HOTKEY_ID_OCR_TRANSLATE:
+                OnOcrTranslate?.Invoke();
+                break;
+            case HOTKEY_ID_SILENT_OCR:
+                OnSilentOcr?.Invoke();
+                break;
         }
     }
 
@@ -198,6 +214,8 @@ public sealed class HotkeyService : IDisposable
         UnregisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED);
         UnregisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_MINI);
         UnregisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_FIXED);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_OCR_TRANSLATE);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_SILENT_OCR);
 
         // Remove window subclass
         if (_subclassProc != null)

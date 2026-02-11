@@ -29,6 +29,25 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public event Action? OnOpenSettings;
 
+    /// <summary>
+    /// Event fired when "OCR Translate" is clicked.
+    /// </summary>
+    public event Action? OnOcrTranslate;
+
+    /// <summary>
+    /// Event fired when a browser support install/uninstall action is triggered.
+    /// Parameter: ("chrome"|"firefox"|"all", isInstall)
+    /// </summary>
+    public event Action<string, bool>? OnBrowserSupportAction;
+
+    // Browser support menu items — stored for dynamic enable/disable updates
+    private MenuFlyoutItem? _installChromeItem;
+    private MenuFlyoutItem? _uninstallChromeItem;
+    private MenuFlyoutItem? _installFirefoxItem;
+    private MenuFlyoutItem? _uninstallFirefoxItem;
+    private MenuFlyoutItem? _installAllItem;
+    private MenuFlyoutItem? _uninstallAllItem;
+
     public TrayIconService(Window window, AppWindow? appWindow)
     {
         _window = window;
@@ -179,45 +198,157 @@ public sealed class TrayIconService : IDisposable
         }
     }
 
+    private static string L(string key) => LocalizationService.Instance.GetString(key);
+
+    /// <summary>
+    /// Set a tooltip on a MenuFlyoutItem so the full text is visible on hover.
+    /// </summary>
+    private static void SetTip(MenuFlyoutItem item) =>
+        ToolTipService.SetToolTip(item, item.Text);
+
+    /// <summary>
+    /// Set a tooltip on a MenuFlyoutSubItem so the full text is visible on hover.
+    /// </summary>
+    private static void SetTip(MenuFlyoutSubItem item) =>
+        ToolTipService.SetToolTip(item, item.Text);
+
     private MenuFlyout CreateContextMenu()
     {
         var menu = new MenuFlyout();
 
-        // Set MinWidth to fit the longest menu item text "Fixed Window (Ctrl+Alt+F)"
+        // Set MinWidth to fit the longest menu item text
         // This ensures proper width on first open (H.NotifyIcon SecondWindow mode quirk)
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
-        presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 250d));
+        presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 300d));
         menu.MenuFlyoutPresenterStyle = presenterStyle;
 
-        var showItem = new MenuFlyoutItem { Text = "Show Easydict" };
+        var showItem = new MenuFlyoutItem { Text = L("TrayShow") };
         showItem.Click += (_, _) => ShowWindow();
+        SetTip(showItem);
         menu.Items.Add(showItem);
 
-        var translateItem = new MenuFlyoutItem { Text = "Translate Clipboard" };
+        var translateItem = new MenuFlyoutItem { Text = L("TrayTranslateClipboard") };
         translateItem.Click += (_, _) => OnTranslateClipboard?.Invoke();
+        SetTip(translateItem);
         menu.Items.Add(translateItem);
 
-        var miniWindowItem = new MenuFlyoutItem { Text = "Mini Window (Ctrl+Alt+M)" };
+        var ocrItem = new MenuFlyoutItem { Text = $"{L("TrayOcrTranslate")} (Ctrl+Alt+S)" };
+        ocrItem.Click += (_, _) => OnOcrTranslate?.Invoke();
+        SetTip(ocrItem);
+        menu.Items.Add(ocrItem);
+
+        var miniWindowItem = new MenuFlyoutItem { Text = $"{L("TrayShowMini")} (Ctrl+Alt+M)" };
         miniWindowItem.Click += (_, _) => MiniWindowService.Instance.Toggle();
+        SetTip(miniWindowItem);
         menu.Items.Add(miniWindowItem);
 
-        var fixedWindowItem = new MenuFlyoutItem { Text = "Fixed Window (Ctrl+Alt+F)" };
+        var fixedWindowItem = new MenuFlyoutItem { Text = $"{L("TrayShowFixed")} (Ctrl+Alt+F)" };
         fixedWindowItem.Click += (_, _) => FixedWindowService.Instance.Toggle();
+        SetTip(fixedWindowItem);
         menu.Items.Add(fixedWindowItem);
 
         menu.Items.Add(new MenuFlyoutSeparator());
 
-        var settingsItem = new MenuFlyoutItem { Text = "Settings" };
+        // Browser support submenu
+        menu.Items.Add(CreateBrowserSupportSubmenu());
+
+        var settingsItem = new MenuFlyoutItem { Text = L("TraySettings") };
         settingsItem.Click += (_, _) => OnOpenSettings?.Invoke();
+        SetTip(settingsItem);
         menu.Items.Add(settingsItem);
 
         menu.Items.Add(new MenuFlyoutSeparator());
 
-        var exitItem = new MenuFlyoutItem { Text = "Exit" };
+        var exitItem = new MenuFlyoutItem { Text = L("TrayExit") };
         exitItem.Click += (_, _) => ExitApplication();
+        SetTip(exitItem);
         menu.Items.Add(exitItem);
 
         return menu;
+    }
+
+    private MenuFlyoutSubItem CreateBrowserSupportSubmenu()
+    {
+        var browserMenu = new MenuFlyoutSubItem { Text = L("TrayBrowserSupport") };
+        SetTip(browserMenu);
+
+        // Chrome
+        var chromeGroup = new MenuFlyoutSubItem { Text = L("TrayBrowserChrome") };
+        SetTip(chromeGroup);
+
+        _installChromeItem = new MenuFlyoutItem { Text = L("TrayBrowserInstallChrome") };
+        _installChromeItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("chrome", true);
+        SetTip(_installChromeItem);
+        chromeGroup.Items.Add(_installChromeItem);
+
+        _uninstallChromeItem = new MenuFlyoutItem { Text = L("TrayBrowserUninstallChrome") };
+        _uninstallChromeItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("chrome", false);
+        SetTip(_uninstallChromeItem);
+        chromeGroup.Items.Add(_uninstallChromeItem);
+
+        browserMenu.Items.Add(chromeGroup);
+
+        // Firefox
+        var firefoxGroup = new MenuFlyoutSubItem { Text = L("TrayBrowserFirefox") };
+        SetTip(firefoxGroup);
+
+        _installFirefoxItem = new MenuFlyoutItem { Text = L("TrayBrowserInstallFirefox") };
+        _installFirefoxItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("firefox", true);
+        SetTip(_installFirefoxItem);
+        firefoxGroup.Items.Add(_installFirefoxItem);
+
+        _uninstallFirefoxItem = new MenuFlyoutItem { Text = L("TrayBrowserUninstallFirefox") };
+        _uninstallFirefoxItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("firefox", false);
+        SetTip(_uninstallFirefoxItem);
+        firefoxGroup.Items.Add(_uninstallFirefoxItem);
+
+        browserMenu.Items.Add(firefoxGroup);
+
+        browserMenu.Items.Add(new MenuFlyoutSeparator());
+
+        _installAllItem = new MenuFlyoutItem { Text = L("TrayBrowserInstallAll") };
+        _installAllItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("all", true);
+        SetTip(_installAllItem);
+        browserMenu.Items.Add(_installAllItem);
+
+        _uninstallAllItem = new MenuFlyoutItem { Text = L("TrayBrowserUninstallAll") };
+        _uninstallAllItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("all", false);
+        SetTip(_uninstallAllItem);
+        browserMenu.Items.Add(_uninstallAllItem);
+
+        // TODO: Browser extension not yet published to Chrome Web Store.
+        // Disable the entire submenu until a Store ID is available.
+        browserMenu.IsEnabled = false;
+
+        return browserMenu;
+    }
+
+    /// <summary>
+    /// Refresh the enabled/disabled state of browser support menu items
+    /// based on current installation status. Call after install/uninstall actions.
+    /// </summary>
+    public void UpdateBrowserSupportMenuStates()
+    {
+        var chromeInstalled = BrowserSupportService.IsChromeSupportInstalled;
+        var firefoxInstalled = BrowserSupportService.IsFirefoxSupportInstalled;
+
+        if (_installChromeItem != null)
+            _installChromeItem.IsEnabled = !chromeInstalled;
+        if (_uninstallChromeItem != null)
+            _uninstallChromeItem.IsEnabled = chromeInstalled;
+
+        if (_installFirefoxItem != null)
+            _installFirefoxItem.IsEnabled = !firefoxInstalled;
+        if (_uninstallFirefoxItem != null)
+            _uninstallFirefoxItem.IsEnabled = firefoxInstalled;
+
+        var anyNotInstalled = !chromeInstalled || !firefoxInstalled;
+        var anyInstalled = chromeInstalled || firefoxInstalled;
+
+        if (_installAllItem != null)
+            _installAllItem.IsEnabled = anyNotInstalled;
+        if (_uninstallAllItem != null)
+            _uninstallAllItem.IsEnabled = anyInstalled;
     }
 
     /// <summary>

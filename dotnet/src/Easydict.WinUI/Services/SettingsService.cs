@@ -118,9 +118,25 @@ public sealed class SettingsService
     /// </summary>
     public bool MouseSelectionTranslate { get; set; } = true;
 
+    /// <summary>
+    /// Register "OCR 截图翻译" in the Windows Shell context menu (File Explorer / Desktop).
+    /// The entry launches --ocr-translate which signals the running app via a named event.
+    /// </summary>
+    public bool ShellContextMenu { get; set; } = false;
+
     // Hotkey settings (stored as string like "Ctrl+Alt+T")
     public string ShowWindowHotkey { get; set; } = "Ctrl+Alt+T";
     public string TranslateSelectionHotkey { get; set; } = "Ctrl+Alt+D";
+
+    // OCR settings
+    public string OcrTranslateHotkey { get; set; } = "Ctrl+Alt+S";
+    public string SilentOcrHotkey { get; set; } = "Ctrl+Alt+Shift+S";
+
+    /// <summary>
+    /// Preferred OCR recognition language. "auto" uses the system profile languages.
+    /// Otherwise a BCP-47 tag like "zh-Hans-CN", "en-US", "ja".
+    /// </summary>
+    public string OcrLanguage { get; set; } = "auto";
 
     // UI settings
     public bool AlwaysOnTop { get; set; } = false;
@@ -387,8 +403,12 @@ public sealed class SettingsService
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
+        ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
         ShowWindowHotkey = GetValue(nameof(ShowWindowHotkey), "Ctrl+Alt+T");
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");
+        OcrTranslateHotkey = GetValue(nameof(OcrTranslateHotkey), "Ctrl+Alt+S");
+        SilentOcrHotkey = GetValue(nameof(SilentOcrHotkey), "Ctrl+Alt+Shift+S");
+        OcrLanguage = GetValue(nameof(OcrLanguage), "auto");
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
         UILanguage = GetValue(nameof(UILanguage), "");
         AppTheme = GetValue(nameof(AppTheme), "System");
@@ -519,8 +539,12 @@ public sealed class SettingsService
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
+        _settings[nameof(ShellContextMenu)] = ShellContextMenu;
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;
+        _settings[nameof(OcrTranslateHotkey)] = OcrTranslateHotkey;
+        _settings[nameof(SilentOcrHotkey)] = SilentOcrHotkey;
+        _settings[nameof(OcrLanguage)] = OcrLanguage;
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;
         _settings[nameof(UILanguage)] = UILanguage;
         _settings[nameof(AppTheme)] = AppTheme;

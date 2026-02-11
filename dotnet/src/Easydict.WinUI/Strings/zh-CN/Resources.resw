@@ -570,7 +570,13 @@
 
   <!-- Tray Menu -->
   <data name="TrayShow" xml:space="preserve">
-    <value>显示</value>
+    <value>显示 Easydict</value>
+  </data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>翻译剪贴板</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR 截图翻译</value>
   </data>
   <data name="TrayShowMini" xml:space="preserve">
     <value>迷你窗口</value>
@@ -578,11 +584,43 @@
   <data name="TrayShowFixed" xml:space="preserve">
     <value>固定窗口</value>
   </data>
+  <data name="TrayBrowserSupport" xml:space="preserve">
+    <value>浏览器支持</value>
+  </data>
+  <data name="TrayBrowserChrome" xml:space="preserve">
+    <value>Chrome 系</value>
+  </data>
+  <data name="TrayBrowserFirefox" xml:space="preserve">
+    <value>Firefox 系</value>
+  </data>
+  <data name="TrayBrowserInstallChrome" xml:space="preserve">
+    <value>安装 Chrome 支持</value>
+  </data>
+  <data name="TrayBrowserUninstallChrome" xml:space="preserve">
+    <value>卸载 Chrome 支持</value>
+  </data>
+  <data name="TrayBrowserInstallFirefox" xml:space="preserve">
+    <value>安装 Firefox 支持</value>
+  </data>
+  <data name="TrayBrowserUninstallFirefox" xml:space="preserve">
+    <value>卸载 Firefox 支持</value>
+  </data>
+  <data name="TrayBrowserInstallAll" xml:space="preserve">
+    <value>安装全部</value>
+  </data>
+  <data name="TrayBrowserUninstallAll" xml:space="preserve">
+    <value>卸载全部</value>
+  </data>
   <data name="TraySettings" xml:space="preserve">
     <value>设置</value>
   </data>
   <data name="TrayExit" xml:space="preserve">
     <value>退出</value>
+  </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>确定要退出截图吗？</value>
   </data>
 
   <!-- Window Titles -->

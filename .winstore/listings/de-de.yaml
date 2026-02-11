@@ -15,6 +15,7 @@ description: |-
   - KI-Streaming-Übersetzung: LLM-Übersetzungen erscheinen in Echtzeit
   - Mehrere Fenstermodi: Vollständiges Hauptfenster, kompaktes Minifenster oder dauerhaftes festes Fenster
   - Mausauswahl-Übersetzung: Text markieren und auf die schwebende Schaltfläche klicken, um sofort zu übersetzen
+  - OCR-Screenshot-Übersetzung: Snipaste-ähnliche Bildschirmaufnahme — Bildschirmbereich auswählen, Text per OCR erkennen und sofort übersetzen mit der Windows OCR API
   - Globale Tastenkombinationen: Übersetzen Sie von überall mit anpassbaren Tastenkombinationen
   - Infobereich: Läuft leise im Hintergrund, immer einsatzbereit
   - Zwischenablage-Überwachung: Automatische Übersetzung kopierter Texte
@@ -29,6 +30,7 @@ features:
 - Echtzeit-Streaming-Übersetzung mit KI-Diensten
 - 'Mehrere Fenstermodi: Haupt-, Mini- und festes Fenster'
 - Mausauswahl-Übersetzung mit schwebendem Übersetzungsbutton
+- OCR-Screenshot-Übersetzung mit Snipaste-ähnlicher Bildschirmaufnahme
 - Globale Tastenkombinationen für sofortige Übersetzung aus jeder Anwendung
 - Infobereich-Integration für den Hintergrundbetrieb
 - Zwischenablage-Überwachung mit automatischer Übersetzung
@@ -45,7 +47,7 @@ keywords:
 - Wörterbuch
 - Open Source
 - LLM
-- mehrsprachig
+- OCR
 - übersetzen
 releaseNotes: ''
 copyrightAndTrademarkInfo: Copyright (c) xiaocang. GPL-3.0-Lizenz.

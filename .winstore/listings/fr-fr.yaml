@@ -15,6 +15,7 @@ description: |-
   - Traduction IA en streaming : regardez les traductions LLM apparaître en temps réel
   - Modes de fenêtre multiples : fenêtre principale complète, mini-fenêtre compacte ou fenêtre fixe persistante
   - Traduction par sélection : sélectionnez du texte n'importe où et cliquez sur le bouton flottant pour traduire instantanément
+  - Traduction OCR par capture d'écran : capture d'écran style Snipaste — sélectionnez une zone de l'écran, reconnaissez le texte par OCR et traduisez instantanément avec l'API Windows OCR
   - Raccourcis clavier globaux : traduisez de n'importe où avec des raccourcis personnalisables
   - Zone de notification : fonctionne discrètement en arrière-plan, toujours prêt
   - Surveillance du presse-papiers : traduction automatique du texte copié
@@ -29,6 +30,7 @@ features:
 - Traduction en streaming en temps réel avec les services IA
 - 'Modes de fenêtre multiples : principale, mini et fixe'
 - Traduction par sélection avec bouton flottant
+- Traduction OCR par capture d'écran style Snipaste
 - Raccourcis clavier globaux pour une traduction instantanée depuis toute application
 - Intégration à la zone de notification pour fonctionner en arrière-plan
 - Surveillance du presse-papiers avec traduction automatique
@@ -45,7 +47,7 @@ keywords:
 - traducteur
 - open source
 - LLM
-- multilingue
+- OCR
 - traduire
 releaseNotes: ''
 copyrightAndTrademarkInfo: Copyright (c) xiaocang. Licence GPL-3.0.

@@ -46,6 +46,10 @@ project.lock.json
 # JetBrains IDEs
 .idea/*
 
+# Cloudflare Worker
+worker/node_modules/
+worker/.wrangler/
+
 # macOS
 .DS_Store
 

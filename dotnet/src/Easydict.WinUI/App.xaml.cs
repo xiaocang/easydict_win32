@@ -269,6 +269,7 @@ namespace Easydict.WinUI
             {
                 _trayIconService = new TrayIconService(_window, _appWindow);
                 _trayIconService.OnTranslateClipboard += OnTrayTranslateClipboard;
+                _trayIconService.OnOcrTranslate += OnTrayOcrTranslate;
                 _trayIconService.OnOpenSettings += OnTrayOpenSettings;
                 _trayIconService.Initialize();
             }
@@ -502,6 +503,18 @@ namespace Easydict.WinUI
                         mainPage.SetTextAndTranslate(text);
                     }
                 });
+            }
+        }
+
+        private async void OnTrayOcrTranslate()
+        {
+            try
+            {
+                await _ocrTranslateService!.OcrTranslateAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Tray] OnTrayOcrTranslate error: {ex.Message}");
             }
         }
 

@@ -29,6 +29,11 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public event Action? OnOpenSettings;
 
+    /// <summary>
+    /// Event fired when "OCR Translate" is clicked.
+    /// </summary>
+    public event Action? OnOcrTranslate;
+
     public TrayIconService(Window window, AppWindow? appWindow)
     {
         _window = window;
@@ -196,6 +201,10 @@ public sealed class TrayIconService : IDisposable
         var translateItem = new MenuFlyoutItem { Text = "Translate Clipboard" };
         translateItem.Click += (_, _) => OnTranslateClipboard?.Invoke();
         menu.Items.Add(translateItem);
+
+        var ocrItem = new MenuFlyoutItem { Text = "OCR Translate (Ctrl+Alt+S)" };
+        ocrItem.Click += (_, _) => OnOcrTranslate?.Invoke();
+        menu.Items.Add(ocrItem);
 
         var miniWindowItem = new MenuFlyoutItem { Text = "Mini Window (Ctrl+Alt+M)" };
         miniWindowItem.Click += (_, _) => MiniWindowService.Instance.Toggle();

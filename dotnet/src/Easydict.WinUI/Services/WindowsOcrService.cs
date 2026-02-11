@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices.WindowsRuntime;
 using Easydict.WinUI.Models;
 using Windows.Graphics.Imaging;
 using WinOcr = Windows.Media.Ocr;

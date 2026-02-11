@@ -777,4 +777,20 @@
   <data name="ServiceConfigHelpTip" xml:space="preserve">
     <value>先に上の「有効なサービス」で有効にしてください</value>
   </data>
+
+  <!-- Toggle Switch On/Off -->
+  <data name="ToggleOn" xml:space="preserve">
+    <value>オン</value>
+  </data>
+  <data name="ToggleOff" xml:space="preserve">
+    <value>オフ</value>
+  </data>
+
+  <!-- Youdao Toggle Content -->
+  <data name="OfficialApi" xml:space="preserve">
+    <value>公式 API</value>
+  </data>
+  <data name="WebFree" xml:space="preserve">
+    <value>Web（無料）</value>
+  </data>
 </root>

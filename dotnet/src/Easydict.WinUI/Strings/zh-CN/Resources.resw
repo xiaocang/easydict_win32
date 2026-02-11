@@ -809,4 +809,20 @@
   <data name="TestNotConfigured" xml:space="preserve">
     <value>请先配置服务（API 密钥、端点等）。</value>
   </data>
+
+  <!-- Toggle Switch On/Off -->
+  <data name="ToggleOn" xml:space="preserve">
+    <value>开</value>
+  </data>
+  <data name="ToggleOff" xml:space="preserve">
+    <value>关</value>
+  </data>
+
+  <!-- Youdao Toggle Content -->
+  <data name="OfficialApi" xml:space="preserve">
+    <value>官方 API</value>
+  </data>
+  <data name="WebFree" xml:space="preserve">
+    <value>网页版（免费）</value>
+  </data>
 </root>

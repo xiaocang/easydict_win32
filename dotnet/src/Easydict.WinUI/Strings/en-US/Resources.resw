@@ -809,4 +809,20 @@
   <data name="TestNotConfigured" xml:space="preserve">
     <value>Please configure the service first (API key, endpoint, etc.).</value>
   </data>
+
+  <!-- Toggle Switch On/Off -->
+  <data name="ToggleOn" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="ToggleOff" xml:space="preserve">
+    <value>Off</value>
+  </data>
+
+  <!-- Youdao Toggle Content -->
+  <data name="OfficialApi" xml:space="preserve">
+    <value>Official API</value>
+  </data>
+  <data name="WebFree" xml:space="preserve">
+    <value>Web (free)</value>
+  </data>
 </root>

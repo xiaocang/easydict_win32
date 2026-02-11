@@ -138,6 +138,8 @@ public sealed partial class SettingsPage : Page
         YoudaoAppKeyBox.Header = loc.GetString("AppKey");
         YoudaoAppSecretBox.Header = loc.GetString("AppSecret");
         YoudaoUseOfficialApiToggle.Header = loc.GetString("UseOfficialApi");
+        YoudaoUseOfficialApiToggle.OnContent = loc.GetString("OfficialApi");
+        YoudaoUseOfficialApiToggle.OffContent = loc.GetString("WebFree");
 
         // Refresh button for Ollama
         RefreshOllamaButton.Content = loc.GetString("Refresh");
@@ -171,6 +173,30 @@ public sealed partial class SettingsPage : Page
         ProxyEnabledToggle.Header = loc.GetString("UseHttpProxy");
         ProxyUriBox.Header = loc.GetString("ProxyUrl");
         ProxyBypassLocalToggle.Header = loc.GetString("BypassProxyForLocalhost");
+
+        // Toggle switch On/Off content (override system locale defaults)
+        var toggleOn = loc.GetString("ToggleOn");
+        var toggleOff = loc.GetString("ToggleOff");
+        AutoSelectTargetToggle.OnContent = toggleOn;
+        AutoSelectTargetToggle.OffContent = toggleOff;
+        EnableInternationalServicesToggle.OnContent = toggleOn;
+        EnableInternationalServicesToggle.OffContent = toggleOff;
+        ProxyEnabledToggle.OnContent = toggleOn;
+        ProxyEnabledToggle.OffContent = toggleOff;
+        ProxyBypassLocalToggle.OnContent = toggleOn;
+        ProxyBypassLocalToggle.OffContent = toggleOff;
+        MinimizeToTrayToggle.OnContent = toggleOn;
+        MinimizeToTrayToggle.OffContent = toggleOff;
+        MinimizeToTrayOnStartupToggle.OnContent = toggleOn;
+        MinimizeToTrayOnStartupToggle.OffContent = toggleOff;
+        ClipboardMonitorToggle.OnContent = toggleOn;
+        ClipboardMonitorToggle.OffContent = toggleOff;
+        MouseSelectionTranslateToggle.OnContent = toggleOn;
+        MouseSelectionTranslateToggle.OffContent = toggleOff;
+        AlwaysOnTopToggle.OnContent = toggleOn;
+        AlwaysOnTopToggle.OffContent = toggleOff;
+        LaunchAtStartupToggle.OnContent = toggleOn;
+        LaunchAtStartupToggle.OffContent = toggleOff;
 
         // Hotkeys section
         if (HotkeysHeaderText != null)
@@ -324,6 +350,20 @@ public sealed partial class SettingsPage : Page
         foreach (var item in collection)
         {
             item.PropertyChanged += (_, _) => OnSettingChanged(null!, null!);
+        }
+    }
+
+    /// <summary>
+    /// Apply localized On/Off content to service ToggleSwitches in DataTemplates.
+    /// Called when each ToggleSwitch is loaded.
+    /// </summary>
+    private void OnServiceToggleSwitchLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleSwitch toggle)
+        {
+            var loc = LocalizationService.Instance;
+            toggle.OnContent = loc.GetString("Auto");
+            toggle.OffContent = loc.GetString("Manual");
         }
     }
 

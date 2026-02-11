@@ -777,4 +777,20 @@
   <data name="ServiceConfigHelpTip" xml:space="preserve">
     <value>Zuerst Dienste unter &#8222;Aktivierte Dienste&#8220; oben aktivieren</value>
   </data>
+
+  <!-- Toggle Switch On/Off -->
+  <data name="ToggleOn" xml:space="preserve">
+    <value>Ein</value>
+  </data>
+  <data name="ToggleOff" xml:space="preserve">
+    <value>Aus</value>
+  </data>
+
+  <!-- Youdao Toggle Content -->
+  <data name="OfficialApi" xml:space="preserve">
+    <value>Offizielle API</value>
+  </data>
+  <data name="WebFree" xml:space="preserve">
+    <value>Web (kostenlos)</value>
+  </data>
 </root>

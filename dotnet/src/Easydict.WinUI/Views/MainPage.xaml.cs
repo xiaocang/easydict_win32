@@ -544,41 +544,19 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            try
+            // Check if Shift or Ctrl is held — allow newline insertion
+            var shiftState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift);
+            var ctrlState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
+
+            if (shiftState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down) ||
+                ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
             {
-                // Check if XamlRoot and ContentIsland are available
-                if (this.XamlRoot?.ContentIsland == null)
-                {
-                    // Fallback: trigger translation if we can't check modifiers
-                    e.Handled = true;
-                    await StartQueryTrackedAsync();
-                    return;
-                }
-
-                // Check if Shift or Ctrl is held down using InputKeyboardSource
-                var keyboardSource = InputKeyboardSource.GetForIsland(this.XamlRoot.ContentIsland);
-                var shiftState = keyboardSource.GetKeyState(VirtualKey.Shift);
-                var ctrlState = keyboardSource.GetKeyState(VirtualKey.Control);
-
-                bool isShiftPressed = shiftState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-                bool isCtrlPressed = ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-
-                // If Shift or Ctrl is held, allow newline (don't handle the event)
-                if (isShiftPressed || isCtrlPressed)
-                {
-                    return; // Let the TextBox handle it normally (insert newline)
-                }
-
-                // Plain Enter: trigger translation
-                e.Handled = true; // Prevent default behavior (inserting newline)
-                await StartQueryTrackedAsync();
+                return; // Let the TextBox handle it normally (insert newline)
             }
-            catch
-            {
-                // Fallback: trigger translation on plain Enter if modifier detection fails
-                e.Handled = true;
-                await StartQueryTrackedAsync();
-            }
+
+            // Plain Enter: trigger translation
+            e.Handled = true;
+            await StartQueryTrackedAsync();
         }
 
         /// <summary>

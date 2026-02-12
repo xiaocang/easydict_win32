@@ -987,24 +987,14 @@ public sealed partial class FixedWindow : Window
             return;
         }
 
-        try
-        {
-            if (this.Content is FrameworkElement fe && fe.XamlRoot?.ContentIsland != null)
-            {
-                var keyboardSource = InputKeyboardSource.GetForIsland(fe.XamlRoot.ContentIsland);
-                var shiftState = keyboardSource.GetKeyState(VirtualKey.Shift);
-                var ctrlState = keyboardSource.GetKeyState(VirtualKey.Control);
+        // Check if Shift or Ctrl is held — allow newline insertion
+        var shiftState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift);
+        var ctrlState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
 
-                if (shiftState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down) ||
-                    ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
-                {
-                    return; // Allow newline
-                }
-            }
-        }
-        catch
+        if (shiftState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down) ||
+            ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
         {
-            // Fallback: trigger translation
+            return; // Allow newline
         }
 
         e.Handled = true;

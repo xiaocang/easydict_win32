@@ -306,11 +306,15 @@ public class BuiltInAIServiceTests
             ToLanguage = Language.English
         };
 
-        Func<Task> act = () => _service.TranslateAsync(request);
-        // May throw ServiceUnavailable (missing embedded config in test env),
-        // but must NOT throw InvalidModel
-        var ex = await act.Should().ThrowAsync<TranslationException>();
-        ex.Which.ErrorCode.Should().NotBe(TranslationErrorCode.InvalidModel);
+        try
+        {
+            await _service.TranslateAsync(request);
+            // If no exception, the model is allowed — pass
+        }
+        catch (TranslationException ex)
+        {
+            ex.ErrorCode.Should().NotBe(TranslationErrorCode.InvalidModel);
+        }
     }
 
     [Theory]

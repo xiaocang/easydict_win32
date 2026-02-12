@@ -12,3 +12,9 @@ id = "dd89001ceb9445fab0d40088a3f26eb8"
 # GROQ_API_KEY         - Groq API key
 # PROXY_API_KEY        - Bearer token for client auth
 # DEVICE_SIGNING_KEY   - HMAC-SHA256 secret for device token signing (hex, 32+ bytes)
+
+[observability]
+
+[observability.logs]
+enabled = false
+invocation_logs = true

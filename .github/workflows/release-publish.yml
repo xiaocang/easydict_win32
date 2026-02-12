@@ -102,7 +102,7 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
-      # Publish NativeBridge (for portable/Inno installer only, not MSIX)
+      # Publish NativeBridge (for portable/Inno installer)
       - name: Publish NativeBridge
         working-directory: dotnet
         run: |
@@ -129,6 +129,17 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
+
+      # Publish NativeBridge into MSIX output (for browser extension support)
+      - name: Publish NativeBridge (MSIX)
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --output ./publish-msix/${{ matrix.platform }} `
+            -p:PublishTrimmed=true
 
       # Verify MSIX assets are present in publish output
       - name: Verify MSIX assets

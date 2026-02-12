@@ -92,6 +92,8 @@
 
 - **OCR 截图翻译** - 类似 Snipaste 的截图体验：按 `Ctrl+Alt+S` 截取屏幕区域，自动检测窗口或拖拽选择区域，然后 OCR 识别文字并翻译。使用 Windows OCR API，支持配置识别语言。还支持静默 OCR（`Ctrl+Alt+Shift+S`），将识别文字复制到剪贴板而不翻译。
 
+- **右键菜单 OCR** - 右键点击任意文件或桌面空白处 → 选择"OCR Translate"即可截图识别翻译
+
 - **深色/浅色主题** - 跟随系统主题
 
 - **TTS（文字转语音）** - 使用 Windows Speech Synthesis 朗读原文和译文

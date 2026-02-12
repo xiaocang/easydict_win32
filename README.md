@@ -92,6 +92,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **OCR Screenshot Translate** - Snipaste-style screen capture: press `Ctrl+Alt+S` to capture a screen region, auto-detect windows or drag to select, then OCR the text and translate. Uses Windows OCR API with configurable recognition language. Also supports silent OCR (`Ctrl+Alt+Shift+S`) that copies recognized text to clipboard without translating.
 
+- **Shell Context Menu** - Right-click any file or desktop background → "OCR Translate" to instantly capture and translate text on screen
+
 - **Dark/Light Theme** - Follows system theme
 
 - **TTS (Text-to-Speech)** - Play source and translated text using Windows Speech Synthesis

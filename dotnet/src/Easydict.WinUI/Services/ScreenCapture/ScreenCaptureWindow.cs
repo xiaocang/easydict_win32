@@ -12,8 +12,8 @@ namespace Easydict.WinUI.Services.ScreenCapture;
 ///   1. Freeze desktop with BitBlt → show full-screen overlay with dark mask
 ///   2. Mouse hover: auto-detect windows via WindowDetector, highlight region
 ///      (desktop/wallpaper windows are excluded to avoid full-screen selection)
-///   3. Click on detected window: select it → Adjusting phase
-///      Click on blank: nothing (no accidental selection)
+///   3. Double-click on detected window: select it → Adjusting phase
+///      Single-click on detected window: no action (double-click required)
 ///      Click+drag (anywhere): free-select rectangle (drag threshold = 5px)
 ///      Double-click on blank: enter track-mouse selection mode (click to finalize)
 ///   4. After selection (Adjusting): 8 resize handles, arrow-key fine-tuning,
@@ -21,6 +21,7 @@ namespace Easydict.WinUI.Services.ScreenCapture;
 ///   5. Enter/double-click: confirm → return result
 ///      Right-click/Esc in Adjusting/Selecting: go back to Detecting
 ///      Right-click/Esc in Detecting: confirmation dialog → cancel
+///   Tips overlay: each phase shows context-sensitive operation hints (localized)
 ///
 /// All operations are non-blocking. The window runs its own message loop on
 /// the calling thread and returns when the user confirms or cancels.
@@ -108,6 +109,15 @@ public sealed class ScreenCaptureWindow : IDisposable
     private TaskCompletionSource<ScreenCaptureResult?>? _resultTcs;
     private bool _disposed;
 
+    // Tips rendering
+    private nint _tipsFont;
+    private nint _tipsDc;
+    private nint _tipsBitmap;
+    private nint _tipsOldBitmap;
+    private string _tipDetecting = string.Empty;
+    private string _tipSelecting = string.Empty;
+    private string _tipAdjusting = string.Empty;
+
     private enum SelectionPhase
     {
         Detecting,   // Mouse hovering, auto-detecting windows
@@ -177,6 +187,7 @@ public sealed class ScreenCaptureWindow : IDisposable
             CaptureDesktop();
             CreateOverlayWindow();
             _windowDetector.TakeSnapshot(_hwnd);
+            InitializeTips();
 
             // Win32 message loop
             while (GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
@@ -269,19 +280,31 @@ public sealed class ScreenCaptureWindow : IDisposable
             case WM_LBUTTONDBLCLK:
                 if (_phase == SelectionPhase.Detecting)
                 {
-                    // Double-click on blank/detected area: start free-form selection
-                    var dblPt = GetLParamPoint(lParam);
-                    _selection = new RECT
+                    if (_detectedRegion.HasValue)
                     {
-                        Left = dblPt.X, Top = dblPt.Y,
-                        Right = dblPt.X, Bottom = dblPt.Y
-                    };
-                    _phase = SelectionPhase.Selecting;
-                    _isDragSelecting = false; // track-mouse mode (no capture)
-                    _isMouseDown = false;
-                    _ignoreNextMouseUp = true; // ignore the dblclk's button-up
-                    _detectedRegion = null;
-                    InvalidateRect(_hwnd, IntPtr.Zero, false);
+                        // Double-click on detected window: select it → Adjusting phase
+                        _selection = _detectedRegion.Value;
+                        _phase = SelectionPhase.Adjusting;
+                        _isMouseDown = false;
+                        _ignoreNextMouseUp = true;
+                        InvalidateRect(_hwnd, IntPtr.Zero, false);
+                    }
+                    else
+                    {
+                        // Double-click on blank: enter track-mouse selection mode
+                        var dblPt = GetLParamPoint(lParam);
+                        _selection = new RECT
+                        {
+                            Left = dblPt.X, Top = dblPt.Y,
+                            Right = dblPt.X, Bottom = dblPt.Y
+                        };
+                        _phase = SelectionPhase.Selecting;
+                        _isDragSelecting = false; // track-mouse mode (no capture)
+                        _isMouseDown = false;
+                        _ignoreNextMouseUp = true;
+                        _detectedRegion = null;
+                        InvalidateRect(_hwnd, IntPtr.Zero, false);
+                    }
                 }
                 else if (_phase == SelectionPhase.Adjusting)
                 {
@@ -382,6 +405,9 @@ public sealed class ScreenCaptureWindow : IDisposable
             var localY = cursorPos.Y - _virtualTop;
             DrawMagnifier(hdc, localX, localY);
         }
+
+        // 5. Draw operation tips overlay (always on top of everything)
+        DrawTips(hdc);
 
         EndPaint(hwnd, ref ps);
     }
@@ -530,6 +556,90 @@ public sealed class ScreenCaptureWindow : IDisposable
         }
     }
 
+    // --- Tips initialization and rendering ---
+
+    /// <summary>
+    /// Base point size for tips font. Scaled by the window's DPI at runtime.
+    /// </summary>
+    private const int TipsFontPointSize = 14;
+
+    private void InitializeTips()
+    {
+        // Use DPI-aware font sizing: pointSize * dpi / 72
+        var dpi = GetDpiForWindow(_hwnd);
+        if (dpi == 0) dpi = 96; // fallback to 96 DPI (100% scaling)
+        var fontHeight = (int)(TipsFontPointSize * dpi / 72);
+
+        _tipsFont = CreateFont(
+            -fontHeight, 0, 0, 0, 400, // height (negative = character height), weight = FW_NORMAL
+            0, 0, 0,                     // italic, underline, strikeout
+            1,                           // DEFAULT_CHARSET
+            0, 0, 4, 0,                 // out precision, clip precision, ANTIALIASED_QUALITY, pitch
+            "Segoe UI");
+
+        // Cache a 1×1 compatible DC + bitmap for DrawTips alpha blending
+        // so we don't allocate/destroy GDI objects on every paint cycle.
+        var screenDc = GetDC(IntPtr.Zero);
+        _tipsDc = CreateCompatibleDC(screenDc);
+        _tipsBitmap = CreateCompatibleBitmap(screenDc, 1, 1);
+        _tipsOldBitmap = SelectObject(_tipsDc, _tipsBitmap);
+        ReleaseDC(IntPtr.Zero, screenDc);
+
+        // Fill the 1×1 pixel with dark gray once
+        var brush = CreateSolidBrush(0x00303030);
+        var rc = new RECT { Left = 0, Top = 0, Right = 1, Bottom = 1 };
+        FillRect(_tipsDc, ref rc, brush);
+        DeleteObject(brush);
+
+        // Cache localized tip strings
+        var loc = LocalizationService.Instance;
+        _tipDetecting = loc.GetString("ScreenCaptureTipDetecting");
+        _tipSelecting = loc.GetString("ScreenCaptureTipSelecting");
+        _tipAdjusting = loc.GetString("ScreenCaptureTipAdjusting");
+    }
+
+    private void DrawTips(nint hdc)
+    {
+        var text = _phase switch
+        {
+            SelectionPhase.Detecting => _tipDetecting,
+            SelectionPhase.Selecting => _tipSelecting,
+            SelectionPhase.Adjusting => _tipAdjusting,
+            _ => string.Empty
+        };
+
+        if (string.IsNullOrEmpty(text)) return;
+
+        var oldFont = SelectObject(hdc, _tipsFont);
+
+        // Measure text dimensions
+        GetTextExtentPoint32(hdc, text, text.Length, out var textSize);
+
+        var padH = 16;
+        var padV = 8;
+        var panelWidth = textSize.cx + padH * 2;
+        var panelHeight = textSize.cy + padV * 2;
+        var panelX = (_desktopWidth - panelWidth) / 2;
+        var panelY = 20; // 20px from top of screen
+
+        // Draw semi-transparent dark background panel using cached DC/bitmap
+        var blend = new BLENDFUNCTION
+        {
+            BlendOp = 0,              // AC_SRC_OVER
+            BlendFlags = 0,
+            SourceConstantAlpha = 200, // ~78% opacity
+            AlphaFormat = 0
+        };
+        AlphaBlend(hdc, panelX, panelY, panelWidth, panelHeight, _tipsDc, 0, 0, 1, 1, blend);
+
+        // Draw white text centered in the panel
+        SetBkMode(hdc, 1); // TRANSPARENT
+        SetTextColor(hdc, 0x00FFFFFF);
+        TextOut(hdc, panelX + padH, panelY + padV, text, text.Length);
+
+        SelectObject(hdc, oldFont);
+    }
+
     // --- Mouse event handlers ---
 
     private void OnMouseMove(POINT pt)
@@ -668,19 +778,11 @@ public sealed class ScreenCaptureWindow : IDisposable
             return;
         }
 
-        // Click-without-drag in Detecting phase
+        // Click-without-drag in Detecting phase — no action (double-click required to select)
         if (_isMouseDown && _phase == SelectionPhase.Detecting)
         {
             _isMouseDown = false;
             ReleaseCapture();
-
-            // Single-click: if a window was detected, select it; otherwise do nothing
-            if (_detectedRegion.HasValue)
-            {
-                _selection = _detectedRegion.Value;
-                _phase = SelectionPhase.Adjusting;
-                InvalidateRect(_hwnd, IntPtr.Zero, false);
-            }
             return;
         }
 
@@ -1072,6 +1174,29 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     private void Cleanup()
     {
+        if (_tipsFont != IntPtr.Zero)
+        {
+            DeleteObject(_tipsFont);
+            _tipsFont = IntPtr.Zero;
+        }
+
+        // Release cached tips DC/bitmap
+        if (_tipsDc != IntPtr.Zero && _tipsOldBitmap != IntPtr.Zero)
+        {
+            SelectObject(_tipsDc, _tipsOldBitmap);
+            _tipsOldBitmap = IntPtr.Zero;
+        }
+        if (_tipsDc != IntPtr.Zero)
+        {
+            DeleteDC(_tipsDc);
+            _tipsDc = IntPtr.Zero;
+        }
+        if (_tipsBitmap != IntPtr.Zero)
+        {
+            DeleteObject(_tipsBitmap);
+            _tipsBitmap = IntPtr.Zero;
+        }
+
         // Restore the original bitmap before deleting the DC and our bitmap.
         // GDI requires that objects are deselected from a DC before deletion.
         if (_desktopDcHandle != IntPtr.Zero && _oldDesktopBitmapHandle != IntPtr.Zero)
@@ -1188,6 +1313,11 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("gdi32.dll")] private static extern int GetDIBits(nint hdc, nint hbmp, uint start, uint cLines, byte[] lpvBits, ref BITMAPINFO lpbmi, uint usage);
     [DllImport("user32.dll")] private static extern bool FillRect(nint hdc, ref RECT lprc, nint hbr);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool TextOut(nint hdc, int x, int y, string lpString, int c);
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern nint CreateFont(int cHeight, int cWidth, int cEscapement, int cOrientation, int cWeight, uint bItalic, uint bUnderline, uint bStrikeOut, uint iCharSet, uint iOutPrecision, uint iClipPrecision, uint iQuality, uint iPitchAndFamily, string pszFaceName);
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool GetTextExtentPoint32(nint hdc, string lpString, int c, out SIZE lpSize);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SIZE { public int cx, cy; }
     [DllImport("user32.dll")] private static extern bool InvalidateRect(nint hwnd, nint lpRect, bool bErase);
     [DllImport("user32.dll")] private static extern nint BeginPaint(nint hwnd, ref PAINTSTRUCT lpPaint);
     [DllImport("user32.dll")] private static extern bool EndPaint(nint hwnd, ref PAINTSTRUCT lpPaint);
@@ -1211,4 +1341,5 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("user32.dll")] private static extern nint SetCursor(nint hCursor);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int MessageBoxW(nint hwnd, string text, string caption, uint type);
     [DllImport("msimg32.dll")] private static extern bool AlphaBlend(nint hdcDest, int xoriginDest, int yoriginDest, int wDest, int hDest, nint hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc, BLENDFUNCTION ftn);
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint hwnd);
 }

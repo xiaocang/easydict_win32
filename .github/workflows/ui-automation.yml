@@ -204,6 +204,9 @@ jobs:
           - name: "Core & Settings"
             filter: "Category=UIAutomation & (FullyQualifiedName~MainWindowTests. | FullyQualifiedName~TranslationTests. | FullyQualifiedName~WindowLifecycle | FullyQualifiedName~SettingsPage | FullyQualifiedName~DarkMode)"
             suffix: "shard-2"
+          - name: "OCR"
+            filter: "Category=UIAutomation & FullyQualifiedName~OcrTests"
+            suffix: "shard-3"
 
     steps:
       - name: Checkout code

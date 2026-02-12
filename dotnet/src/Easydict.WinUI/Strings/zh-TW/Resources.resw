@@ -793,4 +793,15 @@
   <data name="WebFree" xml:space="preserve">
     <value>網頁版（免費）</value>
   </data>
+
+  <!-- Screen Capture -->
+  <data name="ScreenCaptureTipDetecting" xml:space="preserve">
+    <value>拖曳選擇區域  |  雙擊選擇視窗  |  滾輪切換視窗  |  Esc 退出</value>
+  </data>
+  <data name="ScreenCaptureTipSelecting" xml:space="preserve">
+    <value>右鍵或 Esc 取消</value>
+  </data>
+  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
+    <value>Enter 或雙擊確認  |  方向鍵微調  |  右鍵或 Esc 重選</value>
+  </data>
 </root>

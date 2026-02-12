@@ -103,6 +103,10 @@ Name: "{autodesktop}\{#AppFullName}"; Filename: "{app}\{#AppExeName}"; Tasks: de
 [Registry]
 ; Startup entry (optional)
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Easydict"; ValueData: """{app}\{#AppExeName}"""; Flags: uninsdeletevalue; Tasks: startupentry
+; easydict:// protocol handler (for browser extension fallback)
+Root: HKCU; Subkey: "Software\Classes\easydict"; ValueType: string; ValueName: ""; ValueData: "URL:Easydict Protocol"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\easydict"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\easydict\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""
 
 [Run]
 ; Launch after install

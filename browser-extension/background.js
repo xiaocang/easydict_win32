@@ -51,7 +51,7 @@ function triggerOcrTranslate() {
 
 function triggerViaProtocol() {
   // Open the protocol URL in a new background tab.
-  // The browser hands the easydict:// URL to the OS, which activates the MSIX app.
+  // The browser hands the easydict:// URL to the OS, which activates Easydict.
   chrome.tabs.create({ url: PROTOCOL_URL, active: false }, (newTab) => {
     // Close the helper tab after a short delay so the user doesn't see it linger.
     if (newTab?.id) {

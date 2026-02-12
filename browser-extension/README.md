@@ -8,14 +8,17 @@ Clicking it triggers screen capture + OCR translation in the Easydict desktop ap
 1. User right-clicks anywhere in the browser → selects "Easydict OCR 截图翻译"
 2. Extension triggers Easydict via one of two channels:
    - **Native Messaging** (preferred): sends message directly to bridge exe → instant, no UI flash
-   - **Protocol fallback**: opens `easydict://ocr-translate` → OS routes to MSIX app
+   - **Protocol fallback**: opens `easydict://ocr-translate` → OS routes to Easydict desktop app
 3. Easydict enters screen capture mode → user selects region → OCR + translate
 
 ## Two integration modes
 
 ### Protocol mode (zero setup)
 
-Works immediately after installing the extension + Easydict MSIX app.
+Works after installing the extension + Easydict desktop app.
+Protocol registration is available in both modes:
+- MSIX: registered by package manifest
+- Inno/unpackaged: registered by installer and self-repaired at app startup
 First-time: browser shows a confirmation dialog ("Allow this site to open the easydict app?").
 After clicking Allow, subsequent clicks work silently.
 
@@ -51,8 +54,8 @@ zip -r easydict-ocr.xpi manifest.json background.js icons/
 
 ## Prerequisites
 
-- **Easydict for Windows** must be installed (MSIX from Microsoft Store or sideload)
-- The `easydict://` protocol is registered automatically by the MSIX package
+- **Easydict for Windows** must be installed (MSIX or Inno installer)
+- The `easydict://` protocol must be registered (MSIX auto-registers; Inno registers and app startup self-repairs if needed)
 - For Native Messaging: install browser support via tray menu (optional but recommended)
 
 ## Files

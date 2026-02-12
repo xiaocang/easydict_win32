@@ -1,6 +1,7 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using Easydict.WinUI.Services;
 
 namespace Easydict.WinUI;
 
@@ -30,8 +31,17 @@ public static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        // Unpackaged (Inno/portable) installs rely on HKCU protocol registration.
+        // Repair registration early so future easydict:// launches are reliable.
+        if (!IsPackaged())
+        {
+            ProtocolRegistrationService.EnsureRegistered();
+        }
+
         // Determine if this launch should trigger OCR
-        var shouldTriggerOcr = args.Contains("--ocr-translate") || IsOcrProtocolActivation();
+        var shouldTriggerOcr = args.Contains("--ocr-translate")
+            || IsOcrProtocolActivation()
+            || args.Any(a => a.StartsWith("easydict://ocr-translate", StringComparison.OrdinalIgnoreCase));
 
         if (shouldTriggerOcr)
         {
@@ -89,5 +99,22 @@ public static class Program
             // WinRT activation infrastructure not available.
         }
         return false;
+    }
+
+    private static bool IsPackaged()
+    {
+        try
+        {
+            _ = Windows.ApplicationModel.Package.Current;
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            return false;
+        }
     }
 }

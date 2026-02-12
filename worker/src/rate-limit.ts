@@ -47,6 +47,17 @@ export async function handleRateLimit(
   return { allowed: true, retryAfterSeconds: 0 };
 }
 
+/**
+ * Check IP-only rate limit (no device ID).
+ * Used by registration endpoint where device ID is not yet trusted.
+ */
+export async function checkIpRateLimit(
+  kv: KVNamespace,
+  ip: string
+): Promise<RateLimitResult> {
+  return checkLimit(kv, `rl:ip:${ip}`, IP_RATE_LIMIT);
+}
+
 async function checkLimit(
   kv: KVNamespace,
   key: string,

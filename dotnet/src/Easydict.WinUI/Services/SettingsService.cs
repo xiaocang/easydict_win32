@@ -68,6 +68,12 @@ public sealed class SettingsService
     /// </summary>
     public string DeviceId { get; set; } = "";
 
+    /// <summary>
+    /// HMAC-SHA256 token proving the device ID was registered with the proxy server.
+    /// Obtained via POST /v1/device/register on first launch, persisted thereafter.
+    /// </summary>
+    public string DeviceToken { get; set; } = "";
+
     // DeepSeek settings
     public string? DeepSeekApiKey { get; set; }
     public string DeepSeekModel { get; set; } = "deepseek-chat";
@@ -381,6 +387,7 @@ public sealed class SettingsService
                 DeviceId = Guid.NewGuid().ToString("N");
             }
         }
+        DeviceToken = GetValue(nameof(DeviceToken), "");
 
         // DeepSeek settings
         DeepSeekApiKey = GetValue<string?>(nameof(DeepSeekApiKey), null);
@@ -519,6 +526,7 @@ public sealed class SettingsService
         _settings[nameof(BuiltInAIModel)] = BuiltInAIModel;
         _settings[nameof(BuiltInAIApiKey)] = BuiltInAIApiKey ?? string.Empty;
         _settings[nameof(DeviceId)] = DeviceId;
+        _settings[nameof(DeviceToken)] = DeviceToken;
 
         // DeepSeek settings
         _settings[nameof(DeepSeekApiKey)] = DeepSeekApiKey ?? string.Empty;

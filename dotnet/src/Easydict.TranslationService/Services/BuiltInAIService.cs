@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.Json;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Security;
 
@@ -75,6 +77,7 @@ public sealed class BuiltInAIService : BaseOpenAIService
     private string _model = DefaultModel;
     private string _userApiKey = "";
     private string _deviceId = "";
+    private string _deviceToken = "";
 
     public BuiltInAIService(HttpClient httpClient) : base(httpClient) { }
 
@@ -138,9 +141,9 @@ public sealed class BuiltInAIService : BaseOpenAIService
         : !string.IsNullOrEmpty(GetEmbeddedApiKey()) && !string.IsNullOrEmpty(GetEmbeddedEndpoint());
 
     /// <summary>
-    /// Configure the model selection, optional user API key, and device fingerprint.
+    /// Configure the model selection, optional user API key, device fingerprint, and device token.
     /// </summary>
-    public void Configure(string model, string? apiKey = null, string? deviceId = null)
+    public void Configure(string model, string? apiKey = null, string? deviceId = null, string? deviceToken = null)
     {
         if (AvailableModels.Contains(model) || ModelProviderMap.ContainsKey(model))
         {
@@ -149,16 +152,22 @@ public sealed class BuiltInAIService : BaseOpenAIService
 
         _userApiKey = apiKey ?? "";
         _deviceId = deviceId ?? "";
+        _deviceToken = deviceToken ?? "";
     }
 
     /// <summary>
-    /// Attach X-Device-Id header for proxy requests (rate limiting).
+    /// Attach X-Device-Id and X-Device-Token headers for proxy requests.
     /// </summary>
     protected override void ConfigureHttpRequest(HttpRequestMessage request)
     {
         if (!UseDirectConnection && !string.IsNullOrEmpty(_deviceId))
         {
             request.Headers.TryAddWithoutValidation("X-Device-Id", _deviceId);
+
+            if (!string.IsNullOrEmpty(_deviceToken))
+            {
+                request.Headers.TryAddWithoutValidation("X-Device-Token", _deviceToken);
+            }
         }
     }
 
@@ -187,6 +196,78 @@ public sealed class BuiltInAIService : BaseOpenAIService
                 ErrorCode = TranslationErrorCode.ServiceUnavailable,
                 ServiceId = ServiceId
             };
+        }
+    }
+
+    /// <summary>
+    /// Register the device with the proxy server to obtain an HMAC device token.
+    /// Derives the registration URL from the embedded proxy endpoint.
+    /// Returns the device token on success, or null on failure.
+    /// </summary>
+    public async Task<string?> RegisterDeviceAsync(CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(_deviceId))
+        {
+            Debug.WriteLine("[BuiltInAI] RegisterDeviceAsync: no device ID configured");
+            return null;
+        }
+
+        var proxyEndpoint = GetEmbeddedEndpoint();
+        if (string.IsNullOrEmpty(proxyEndpoint))
+        {
+            Debug.WriteLine("[BuiltInAI] RegisterDeviceAsync: no proxy endpoint configured");
+            return null;
+        }
+
+        // Derive registration URL: replace path with /v1/device/register
+        string registerUrl;
+        try
+        {
+            var uri = new Uri(proxyEndpoint);
+            registerUrl = $"{uri.Scheme}://{uri.Authority}/v1/device/register";
+        }
+        catch (UriFormatException ex)
+        {
+            Debug.WriteLine($"[BuiltInAI] RegisterDeviceAsync: invalid proxy endpoint: {ex.Message}");
+            return null;
+        }
+
+        var apiKey = GetEmbeddedApiKey();
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, registerUrl);
+            request.Headers.TryAddWithoutValidation("X-Device-Id", _deviceId);
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {apiKey}");
+            }
+
+            var response = await HttpClient.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Debug.WriteLine($"[BuiltInAI] RegisterDeviceAsync: HTTP {(int)response.StatusCode}");
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(json);
+
+            if (doc.RootElement.TryGetProperty("device_token", out var tokenElement))
+            {
+                var token = tokenElement.GetString();
+                Debug.WriteLine($"[BuiltInAI] RegisterDeviceAsync: success, token length={token?.Length ?? 0}");
+                return token;
+            }
+
+            Debug.WriteLine("[BuiltInAI] RegisterDeviceAsync: response missing device_token field");
+            return null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            Debug.WriteLine($"[BuiltInAI] RegisterDeviceAsync: {ex.GetType().Name}: {ex.Message}");
+            return null;
         }
     }
 

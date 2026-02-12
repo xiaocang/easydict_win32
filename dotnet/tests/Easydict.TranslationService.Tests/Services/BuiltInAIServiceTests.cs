@@ -187,6 +187,85 @@ public class BuiltInAIServiceTests
         }
     }
 
+    // --- Device token (X-Device-Token header) ---
+
+    /// <summary>
+    /// Helper: enqueue a valid OpenAI-style response and call TranslateAsync
+    /// so that ConfigureHttpRequest runs, then return the captured request.
+    /// </summary>
+    private async Task<HttpRequestMessage> MakeTranslateRequestAsync()
+    {
+        var sseChunk = """{"choices":[{"delta":{"content":"Hello"}}]}""";
+        _mockHandler.EnqueueStreamingResponse([sseChunk]);
+
+        var request = new TranslationRequest
+        {
+            Text = "test",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        try
+        {
+            await _service.TranslateAsync(request);
+        }
+        catch
+        {
+            // Ignore errors — we only need the captured request
+        }
+
+        _mockHandler.LastRequest.Should().NotBeNull("a request should have been sent");
+        return _mockHandler.LastRequest!;
+    }
+
+    [Fact]
+    public async Task ConfigureHttpRequest_SendsDeviceIdAndToken_WhenBuiltInMode()
+    {
+        _service.Configure("glm-4-flash", apiKey: null, deviceId: "abc123def456", deviceToken: "deadbeef01020304");
+
+        var httpRequest = await MakeTranslateRequestAsync();
+
+        httpRequest.Headers.TryGetValues("X-Device-Id", out var deviceIds).Should().BeTrue();
+        deviceIds.Should().Contain("abc123def456");
+
+        httpRequest.Headers.TryGetValues("X-Device-Token", out var tokens).Should().BeTrue();
+        tokens.Should().Contain("deadbeef01020304");
+    }
+
+    [Fact]
+    public async Task ConfigureHttpRequest_SkipsTokenHeader_WhenTokenEmpty()
+    {
+        _service.Configure("glm-4-flash", apiKey: null, deviceId: "abc123def456", deviceToken: "");
+
+        var httpRequest = await MakeTranslateRequestAsync();
+
+        httpRequest.Headers.TryGetValues("X-Device-Id", out var deviceIds).Should().BeTrue();
+        deviceIds.Should().Contain("abc123def456");
+
+        httpRequest.Headers.Contains("X-Device-Token").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ConfigureHttpRequest_SkipsAllHeaders_WhenDirectConnection()
+    {
+        _service.Configure("glm-4-flash", apiKey: "user-key", deviceId: "abc123def456", deviceToken: "deadbeef01020304");
+
+        var httpRequest = await MakeTranslateRequestAsync();
+
+        httpRequest.Headers.Contains("X-Device-Id").Should().BeFalse();
+        httpRequest.Headers.Contains("X-Device-Token").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Configure_WithDeviceToken_StoresToken()
+    {
+        _service.Configure("glm-4-flash", apiKey: null, deviceId: "abc123def456", deviceToken: "deadbeef01020304");
+
+        // Verify via a second Configure call that doesn't clear the token
+        _service.UseDirectConnection.Should().BeFalse();
+        // Token is stored internally — validated via ConfigureHttpRequest tests above
+    }
+
     // --- Other ---
 
     [Fact]

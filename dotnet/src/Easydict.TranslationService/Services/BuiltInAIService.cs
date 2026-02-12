@@ -6,11 +6,10 @@ using Easydict.TranslationService.Security;
 namespace Easydict.TranslationService.Services;
 
 /// <summary>
-/// Built-in AI translation service, matching the macOS Easydict approach:
+/// Built-in AI translation service — all requests route through the proxy:
 ///
 /// 1. Default — Proxy endpoint with embedded API key:
-///    Client → proxy (api.izual.me) → GLM / Groq
-///    All built-in models route through the same proxy.
+///    Client → proxy → GLM / Groq
 ///
 /// 2. User API key — direct connection (bypasses proxy):
 ///    Client → GLM / Groq with user's own key

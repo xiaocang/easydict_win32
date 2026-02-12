@@ -59,7 +59,7 @@ public class BuiltInAIServiceTests
     [Fact]
     public void BuiltInMode_UsesProxyEndpoint()
     {
-        // All models route through the same proxy in built-in mode
+        // Primary routing goes through the proxy in built-in mode
         // Endpoint comes from embedded config (may be empty in test env)
         _service.UseDirectConnection.Should().BeFalse();
     }
@@ -73,7 +73,7 @@ public class BuiltInAIServiceTests
         _service.Configure("llama-3.3-70b-versatile");
         var groqEndpoint = _service.Endpoint;
 
-        // Both models use the same proxy endpoint in built-in mode
+        // Both models use the same proxy endpoint as primary in built-in mode
         glmEndpoint.Should().Be(groqEndpoint);
     }
 

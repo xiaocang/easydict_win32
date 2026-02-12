@@ -118,6 +118,12 @@
 - Windows 10 版本 2004（内部版本 19041）或更高版本
 - x64 或 ARM64 处理器
 
+### 通过 winget 安装
+
+```powershell
+winget install xiaocang.EasydictforWindows
+```
+
 ### 下载
 
 从 [Releases](https://github.com/xiaocang/easydict_win32/releases) 页面下载。
@@ -238,7 +244,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ### 分发
 
 - [x] **Windows 商店** - 已上架 Microsoft Store
-- [ ] **winget** - 发布到 Windows 包管理器
+- [x] ~~**winget**~~ - 已发布到 Windows 包管理器 ✅
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 

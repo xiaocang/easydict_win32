@@ -981,6 +981,28 @@ When processing PR comments:
 3. Skip comments from earlier revisions that have already been addressed (check if the referenced code still exists)
 4. Address remaining comments, commit, and push
 
+## Running PowerShell Scripts from Bash Tool
+
+The Bash tool on Windows runs under `/usr/bin/bash` (Git Bash / MSYS2). Windows-style paths with backslashes are interpreted as escape sequences and break. Always use `powershell.exe` or `pwsh.exe` directly with **quoted** absolute paths:
+
+```bash
+# Correct - use powershell.exe with quoted paths
+powershell.exe -ExecutionPolicy Bypass -File "C:\Users\johnn\Documents\work\easydict_win32\dotnet\scripts\release.ps1" -Tag v0.5.0
+
+# Wrong - cd with Windows paths fails in bash
+cd C:\Users\johnn\Documents\work\easydict_win32\dotnet && powershell -ExecutionPolicy Bypass -File scripts/release.ps1
+```
+
+Similarly for `dotnet` CLI commands, always pass full quoted paths rather than using `cd`:
+
+```bash
+# Correct
+dotnet build "C:\Users\johnn\Documents\work\easydict_win32\dotnet\src\Easydict.WinUI\Easydict.WinUI.csproj"
+
+# Wrong
+cd C:\Users\johnn\Documents\work\easydict_win32\dotnet && dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj
+```
+
 ## Claude Code Cloud Environment: Git Push
 
 In the Claude Code cloud (sandbox) environment, `git push` commands may be blocked by the tool permission system on the first few attempts. The workaround:

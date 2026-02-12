@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="setupTitle">Easydict Setup Required</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #1a1a1a;
+      --text-secondary: #555;
+      --card-bg: #f7f7f8;
+      --border: #e0e0e0;
+      --accent: #0067c0;
+      --accent-hover: #005499;
+      --accent-text: #fff;
+      --success-bg: #dff6dd;
+      --success-text: #1a7a1a;
+      --error-bg: #fde7e9;
+      --error-text: #c42b1c;
+      --step-bg: #e8f0fe;
+      --step-num: #0067c0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1e1e1e;
+        --text: #e0e0e0;
+        --text-secondary: #aaa;
+        --card-bg: #2d2d2d;
+        --border: #404040;
+        --accent: #4cc2ff;
+        --accent-hover: #7ad4ff;
+        --accent-text: #000;
+        --success-bg: #1a3a1a;
+        --success-text: #6ccf6c;
+        --error-bg: #3a1a1a;
+        --error-text: #ff8080;
+        --step-bg: #1a2a3a;
+        --step-num: #4cc2ff;
+      }
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .header img {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+    }
+    .header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .header p {
+      color: var(--text-secondary);
+      font-size: 15px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .steps {
+      list-style: none;
+      counter-reset: step;
+    }
+    .steps li {
+      counter-increment: step;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .steps li:last-child { margin-bottom: 0; }
+    .steps li::before {
+      content: counter(step);
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      background: var(--step-bg);
+      color: var(--step-num);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 1px;
+    }
+    .steps li span {
+      font-size: 14px;
+      padding-top: 2px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-text);
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-outline {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+    .btn-outline:hover { background: var(--step-bg); }
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .status {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      display: none;
+    }
+    .status.success {
+      display: block;
+      background: var(--success-bg);
+      color: var(--success-text);
+    }
+    .status.error {
+      display: block;
+      background: var(--error-bg);
+      color: var(--error-text);
+    }
+    .section { display: none; }
+    .section.active { display: block; }
+    a { color: var(--accent); }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="icons/icon128.png" alt="Easydict">
+      <h1 data-i18n="setupTitle">Easydict Setup Required</h1>
+      <p data-i18n="setupDescription">This extension requires the Easydict for Windows desktop app.</p>
+    </div>
+
+    <div id="section-not-installed" class="section">
+      <div class="card">
+        <h2 data-i18n="setupInstallHeading">Get Started</h2>
+        <ol class="steps">
+          <li><span data-i18n="setupInstallStep1">Install Easydict from the Microsoft Store</span></li>
+          <li><span data-i18n="setupInstallStep2">Launch the app, right-click the system tray icon, and enable Browser Support</span></li>
+          <li><span data-i18n="setupInstallStep3">Click Retry below</span></li>
+        </ol>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://apps.microsoft.com/detail/9p7nqvxf9dzj" target="_blank" rel="noopener" data-i18n="setupInstallButton">
+            Get Easydict from Microsoft Store
+          </a>
+          <button id="retry-btn-install" class="btn btn-outline" data-i18n="setupRetry">Retry</button>
+        </div>
+        <div id="status-install" class="status"></div>
+      </div>
+    </div>
+
+    <div id="section-not-running" class="section">
+      <div class="card">
+        <h2 data-i18n="setupNotRunningHeading">App Not Running</h2>
+        <p data-i18n="setupNotRunning">The Easydict app is not running. Please start it and try again.</p>
+        <div class="actions">
+          <button id="retry-btn-running" class="btn btn-primary" data-i18n="setupRetry">Retry</button>
+          <a class="btn btn-outline" href="https://apps.microsoft.com/detail/9p7nqvxf9dzj" target="_blank" rel="noopener" data-i18n="setupInstallButton">
+            Get Easydict from Microsoft Store
+          </a>
+        </div>
+        <div id="status-running" class="status"></div>
+      </div>
+    </div>
+  </div>
+  <script src="setup.js"></script>
+</body>
+</html>

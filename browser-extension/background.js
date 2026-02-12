@@ -7,6 +7,9 @@
 
 const NATIVE_HOST_NAME = "com.easydict.bridge";
 const MENU_OCR = "easydict-ocr-translate";
+const SETUP_RATE_LIMIT_MS = 10_000;
+
+let lastSetupOpenedAt = 0;
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -22,21 +25,33 @@ chrome.contextMenus.onClicked.addListener((info, _tab) => {
   }
 });
 
+function openSetupPage(hash) {
+  const now = Date.now();
+  if (now - lastSetupOpenedAt < SETUP_RATE_LIMIT_MS) return;
+  lastSetupOpenedAt = now;
+  chrome.tabs.create({ url: chrome.runtime.getURL(`setup.html#${hash}`) });
+}
+
 function triggerOcrTranslate() {
   try {
     chrome.runtime.sendNativeMessage(
       NATIVE_HOST_NAME,
       { action: "ocr-translate" },
       (response) => {
-        if (chrome.runtime.lastError || !response?.success) {
+        if (chrome.runtime.lastError) {
           console.error(
             "[Easydict] Native messaging unavailable:",
             chrome.runtime.lastError?.message
           );
+          openSetupPage("not-installed");
+        } else if (!response?.success) {
+          console.error("[Easydict] App not running or bridge error");
+          openSetupPage("not-running");
         }
       }
     );
   } catch {
     console.error("[Easydict] sendNativeMessage not available");
+    openSetupPage("not-installed");
   }
 }

@@ -10,5 +10,57 @@
   "contextMenuTitle": {
     "message": "Easydict OCR 截图翻译",
     "description": "Right-click context menu item title"
+  },
+  "setupTitle": {
+    "message": "Easydict 需要完成设置",
+    "description": "Setup page title"
+  },
+  "setupDescription": {
+    "message": "此扩展需要配合 Easydict Windows 桌面应用使用。",
+    "description": "Setup page subtitle"
+  },
+  "setupInstallHeading": {
+    "message": "开始使用",
+    "description": "Heading for install instructions section"
+  },
+  "setupInstallStep1": {
+    "message": "从 Microsoft Store 安装 Easydict",
+    "description": "Install step 1"
+  },
+  "setupInstallStep2": {
+    "message": "启动应用，右键点击系统托盘图标，启用「浏览器支持」",
+    "description": "Install step 2"
+  },
+  "setupInstallStep3": {
+    "message": "点击下方「重试」按钮",
+    "description": "Install step 3"
+  },
+  "setupNotRunningHeading": {
+    "message": "应用未运行",
+    "description": "Heading for app-not-running section"
+  },
+  "setupNotRunning": {
+    "message": "Easydict 应用未在运行，请先启动应用后重试。",
+    "description": "Message when native host exists but app is not running"
+  },
+  "setupRetry": {
+    "message": "重试",
+    "description": "Retry button label"
+  },
+  "setupInstallButton": {
+    "message": "从 Microsoft Store 获取 Easydict",
+    "description": "Microsoft Store install link text"
+  },
+  "setupRetrySuccess": {
+    "message": "连接成功！此标签页即将关闭。",
+    "description": "Status message on successful retry"
+  },
+  "setupRetryFailed": {
+    "message": "仍然无法连接。请确认应用已安装并已启用「浏览器支持」。",
+    "description": "Status message when retry fails (native host not found)"
+  },
+  "setupRetryAppNotRunning": {
+    "message": "已找到应用但无响应，请确保 Easydict 正在运行。",
+    "description": "Status message when retry finds host but app not running"
   }
 }

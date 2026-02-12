@@ -51,6 +51,8 @@ if (-not (Test-Path $OutputDir)) {
 # Common files included in both packages
 $commonFiles = @(
     "background.js"
+    "setup.html"
+    "setup.js"
     "icons\icon16.png"
     "icons\icon48.png"
     "icons\icon128.png"
@@ -90,8 +92,14 @@ function New-ExtensionPackage {
     New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
 
     try {
-        # Copy manifest as manifest.json
-        Copy-Item $manifestPath (Join-Path $stagingDir "manifest.json")
+        # Copy manifest as manifest.json, stripping the "key" field
+        # (Chrome Web Store manages the key; keeping it causes submission errors)
+        $manifestJson = Get-Content $manifestPath -Raw | ConvertFrom-Json
+        if ($manifestJson.PSObject.Properties['key']) {
+            $manifestJson.PSObject.Properties.Remove('key')
+            Write-Host "       Stripped 'key' field from $ManifestFile" -ForegroundColor DarkGray
+        }
+        $manifestJson | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $stagingDir "manifest.json") -Encoding UTF8
 
         # Copy common files preserving directory structure
         foreach ($file in $commonFiles) {

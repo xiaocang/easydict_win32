@@ -10,5 +10,57 @@
   "contextMenuTitle": {
     "message": "Easydict OCR Translate",
     "description": "Right-click context menu item title"
+  },
+  "setupTitle": {
+    "message": "Easydict Setup Required",
+    "description": "Setup page title"
+  },
+  "setupDescription": {
+    "message": "This extension requires the Easydict for Windows desktop app.",
+    "description": "Setup page subtitle"
+  },
+  "setupInstallHeading": {
+    "message": "Get Started",
+    "description": "Heading for install instructions section"
+  },
+  "setupInstallStep1": {
+    "message": "Install Easydict from the Microsoft Store",
+    "description": "Install step 1"
+  },
+  "setupInstallStep2": {
+    "message": "Launch the app, right-click the system tray icon, and enable Browser Support",
+    "description": "Install step 2"
+  },
+  "setupInstallStep3": {
+    "message": "Click Retry below",
+    "description": "Install step 3"
+  },
+  "setupNotRunningHeading": {
+    "message": "App Not Running",
+    "description": "Heading for app-not-running section"
+  },
+  "setupNotRunning": {
+    "message": "The Easydict app is not running. Please start it and try again.",
+    "description": "Message when native host exists but app is not running"
+  },
+  "setupRetry": {
+    "message": "Retry",
+    "description": "Retry button label"
+  },
+  "setupInstallButton": {
+    "message": "Get Easydict from Microsoft Store",
+    "description": "Microsoft Store install link text"
+  },
+  "setupRetrySuccess": {
+    "message": "Connected successfully! This tab will close shortly.",
+    "description": "Status message on successful retry"
+  },
+  "setupRetryFailed": {
+    "message": "Still unable to connect. Please check that the app is installed and Browser Support is enabled.",
+    "description": "Status message when retry fails (native host not found)"
+  },
+  "setupRetryAppNotRunning": {
+    "message": "The app was found but is not responding. Please make sure Easydict is running.",
+    "description": "Status message when retry finds host but app not running"
   }
 }

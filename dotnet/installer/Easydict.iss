@@ -118,7 +118,7 @@ Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(
 
 [Code]
 const
-  ChromeExtensionId = 'cbhpnmadpnoedfgonddpmlhaclbicllg';
+  ChromeExtensionId = 'dmokdfinnomehfpmhoeekomncpobgagf';
   FirefoxExtensionId = 'easydict-ocr@easydict.app';
 
 // Deploy Native Messaging bridge exe and manifest files

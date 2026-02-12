@@ -23,9 +23,8 @@ public static class BrowserSupportService
     private const string BridgeExeName = "easydict-native-bridge.exe";
     private const string BridgeDirName = "browser-bridge";
 
-    // Chrome extension ID — derived from the fixed public key in browser-extension/manifest.json
-    // Will need updating if published to Chrome Web Store (Store assigns its own ID)
-    private const string ChromeExtensionId = "cbhpnmadpnoedfgonddpmlhaclbicllg";
+    // Chrome extension ID — assigned by Chrome Web Store
+    private const string ChromeExtensionId = "dmokdfinnomehfpmhoeekomncpobgagf";
 
     // Firefox extension ID — must match gecko.id in manifest.v2.json
     private const string FirefoxExtensionId = "easydict-ocr@easydict.app";
@@ -333,13 +332,10 @@ public static class BrowserSupportService
 
     /// <summary>
     /// Open Chrome Web Store extension page in default browser.
-    /// TODO: Replace with actual Chrome Web Store URL after publishing.
     /// </summary>
     public static void OpenChromeStorePage()
     {
-        // Placeholder — update after publishing to Chrome Web Store
-        // Process.Start(new ProcessStartInfo("https://chromewebstore.google.com/detail/EXTENSION_ID") { UseShellExecute = true });
-        Debug.WriteLine("[BrowserSupport] Chrome Web Store page not yet available (extension not published)");
+        Process.Start(new ProcessStartInfo($"https://chromewebstore.google.com/detail/{ChromeExtensionId}") { UseShellExecute = true });
     }
 
     /// <summary>

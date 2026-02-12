@@ -251,6 +251,7 @@ public sealed class TrayIconService : IDisposable
 
         // Browser support submenu
         menu.Items.Add(CreateBrowserSupportSubmenu());
+        UpdateBrowserSupportMenuStates();
 
         var settingsItem = new MenuFlyoutItem { Text = L("TraySettings") };
         settingsItem.Click += (_, _) => OnOpenSettings?.Invoke();
@@ -315,10 +316,6 @@ public sealed class TrayIconService : IDisposable
         _uninstallAllItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("all", false);
         SetTip(_uninstallAllItem);
         browserMenu.Items.Add(_uninstallAllItem);
-
-        // TODO: Browser extension not yet published to Chrome Web Store.
-        // Disable the entire submenu until a Store ID is available.
-        browserMenu.IsEnabled = false;
 
         return browserMenu;
     }

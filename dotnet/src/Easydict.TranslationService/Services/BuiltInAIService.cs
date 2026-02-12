@@ -42,6 +42,16 @@ public sealed class BuiltInAIService : BaseOpenAIService
     };
 
     /// <summary>
+    /// Models allowed through the free proxy (Cloudflare worker).
+    /// Groq is not available in proxy mode. Direct connection (user API key) has no restriction.
+    /// </summary>
+    internal static readonly HashSet<string> AllowedProxyModels = new(StringComparer.Ordinal)
+    {
+        "glm-4-flash",
+        "glm-4-flash-250414",
+    };
+
+    /// <summary>
     /// Available models for the built-in AI service.
     /// GLM models listed first (default), Groq models as backup.
     /// </summary>
@@ -182,6 +192,20 @@ public sealed class BuiltInAIService : BaseOpenAIService
                 "Please provide your API key in Settings → Built-in AI.")
             {
                 ErrorCode = TranslationErrorCode.InvalidApiKey,
+                ServiceId = ServiceId
+            };
+        }
+
+        // Validate model is in the proxy allowlist (Cloudflare worker restriction).
+        // Direct connection (user API key) has no model restriction.
+        if (!UseDirectConnection && !AllowedProxyModels.Contains(_model))
+        {
+            throw new TranslationException(
+                $"Model '{_model}' is not available through the free proxy. " +
+                $"Allowed models: {string.Join(", ", AllowedProxyModels)}. " +
+                "To use other models, provide your own API key in Settings → Built-in AI.")
+            {
+                ErrorCode = TranslationErrorCode.InvalidModel,
                 ServiceId = ServiceId
             };
         }

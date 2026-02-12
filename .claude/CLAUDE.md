@@ -17,6 +17,7 @@ easydict_win32/
 │   │   ├── Easydict.WinUI/              # Main WinUI 3 application
 │   │   │   ├── Views/                   # UI views and pages
 │   │   │   ├── Services/                # Application services
+│   │   │   │   └── ScreenCapture/       # Screen capture UI (GDI+ Win32)
 │   │   │   ├── Models/                  # View models and data models
 │   │   │   ├── Strings/                 # Localization resources
 │   │   │   └── Themes/                  # Theme resources
@@ -26,6 +27,7 @@ easydict_win32/
 │   │   │   ├── Streaming/               # LLM streaming support
 │   │   │   ├── Security/                # Encryption/security utilities
 │   │   │   └── Resources/               # Service resources
+│   │   ├── Easydict.NativeBridge/       # Browser extension native messaging host
 │   │   └── Easydict.SidecarClient/      # IPC client library
 │   │       └── Protocol/                # IPC protocol definitions
 │   ├── tests/
@@ -54,6 +56,7 @@ easydict_win32/
 │   ├── listings/                        # Per-language store listings (en-us, zh-cn, etc.)
 │   ├── scripts/                         # Store sync scripts (Sync-StoreListings.ps1)
 │   └── store-config.json               # Store app ID, languages, submission settings
+├── browser-extension/                   # Browser extension for OCR trigger
 ├── .github/                             # GitHub workflows
 └── README.md
 ```
@@ -119,16 +122,21 @@ make run
 - **Translation Services**: 15+ services including Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama, and custom OpenAI-compatible services
 - **LLM Streaming Translation**: Real-time display of translation results
 - **Multiple Window Modes**: Main, Mini, Fixed windows
+- **OCR Screenshot Translate**: Snipaste-style screen capture with Windows OCR API, supports 26+ languages, configurable recognition language
 - **Global Hotkeys**:
   - `Ctrl+Alt+T` - Show/hide main window
   - `Ctrl+Alt+D` - Translate clipboard content
+  - `Ctrl+Alt+S` - OCR screenshot translate (capture → recognize → translate)
+  - `Ctrl+Alt+Shift+S` - Silent OCR (capture → recognize → copy to clipboard)
   - `Ctrl+Alt+M` - Show mini window with selection
   - `Ctrl+Alt+F` - Show fixed window
   - `Ctrl+Alt+Shift+M` - Toggle mini window
   - `Ctrl+Alt+Shift+F` - Toggle fixed window
 - **Mouse Selection Translate**: Select text in any app (drag, double-click, triple-click) → floating icon appears → click to translate in Mini Window (uses `WH_MOUSE_LL` + `WH_KEYBOARD_LL` global hooks)
-- **System Tray**: Minimize to tray, background operation
+- **System Tray**: Minimize to tray, background operation, OCR translate in context menu
 - **Clipboard Monitoring**: Auto-translate copied text
+- **Shell Context Menu**: Right-click any file or desktop background → "OCR Translate"
+- **Browser Extension**: Chrome/Firefox extension to trigger OCR translate via native messaging
 - **HTTP Proxy Support**: Configure proxy server
 - **High DPI Support**: Per-Monitor V2 DPI awareness
 - **Dark/Light Theme**: System theme integration
@@ -208,9 +216,60 @@ protected override Task<TranslationResult> TranslateInternalAsync(
 - **Setting**: `MouseSelectionTranslate` in SettingsService (default: off), toggle in Settings → Behavior
 - **Flow**: `MouseHookService.OnDragSelectionEnd` → `PopButtonService.OnDragSelectionEnd` → `TextSelectionService.GetSelectedTextAsync` → `PopButtonWindow.ShowAt` → user clicks → `MiniWindowService.ShowWithText`
 
+### OCR Screenshot Translate
+
+#### Service Architecture
+```
+IOcrService                              # Pluggable OCR interface
+└── WindowsOcrService                    # Windows.Media.Ocr (WinRT) implementation
+
+ScreenCaptureService                     # Orchestrates capture UI flow
+└── ScreenCaptureWindow                  # GDI+ Win32 capture window (not WinUI 3)
+    └── WindowDetector                   # Z-order window snapshot for auto-detect
+
+OcrTranslateService                      # Orchestrates: capture → OCR → translate/clipboard
+OcrTextMerger                            # CJK-aware text line merging (pure logic)
+```
+
+#### Key Components
+- **IOcrService** (`Services/IOcrService.cs`): Pluggable interface with `RecognizeAsync()`, `GetAvailableLanguages()`, `IsAvailable`
+- **WindowsOcrService** (`Services/WindowsOcrService.cs`): Uses `Windows.Media.Ocr` WinRT API, supports 26+ languages via Windows language packs, includes text angle detection
+- **ScreenCaptureWindow** (`Services/ScreenCapture/ScreenCaptureWindow.cs`): ~1200 lines of GDI+ rendering + Win32 message handling. Three phases: Detecting (auto-detect window under cursor) → Selecting (click+drag or double-click) → Adjusting (resize handles, arrow keys). Features magnifier, size label, multi-monitor support
+- **WindowDetector** (`Services/ScreenCapture/WindowDetector.cs`): Snapshots visible windows on startup, builds hierarchy, hit-tests cursor position, supports scroll-to-change-depth (Snipaste-style)
+- **OcrTranslateService** (`Services/OcrTranslateService.cs`): Two modes — `OcrTranslateAsync()` (capture → OCR → MiniWindow translation) and `SilentOcrAsync()` (capture → OCR → clipboard). Concurrency guard: one OCR operation at a time
+- **OcrTextMerger** (`Services/OcrTextMerger.cs`): Merges OCR words/lines intelligently — spaces between Latin words, no spaces between CJK characters. Groups and sorts lines by visual layout
+
+#### OCR Data Models
+- **OcrResult** (`Models/OcrResult.cs`): `Text`, `Lines: IReadOnlyList<OcrLine>`, `DetectedLanguage`, `TextAngle`
+- **OcrLine**: `Text`, `BoundingRect: OcrRect`
+- **OcrRect** (record struct): `X, Y, Width, Height` — platform-independent rectangle
+- **OcrLanguage**: `Tag` (BCP-47), `DisplayName`
+- **ScreenCaptureResult** (`Models/ScreenCaptureResult.cs`): `PixelData: byte[]` (BGRA8), `PixelWidth`, `PixelHeight`, `ScreenRect`
+
+#### OCR Settings
+- `OcrTranslateHotkey` (default: `Ctrl+Alt+S`)
+- `SilentOcrHotkey` (default: `Ctrl+Alt+Shift+S`)
+- `OcrLanguage` (default: `auto` — uses system profile languages)
+
+#### Integration Points
+- **Global Hotkeys**: `HOTKEY_ID_OCR_TRANSLATE` and `HOTKEY_ID_SILENT_OCR` in HotkeyService
+- **System Tray**: "OCR Translate" menu item in TrayIconService
+- **Shell Context Menu**: `ContextMenuService` registers `HKCU\Software\Classes\*\shell\EasydictOCR` for right-click OCR
+- **Browser Extension**: `Easydict.NativeBridge` native messaging host + `browser-extension/` (Chrome/Firefox)
+- **Protocol Activation**: `easydict://ocr-translate` URI scheme
+- **IPC**: Named event `Local\Easydict-OcrTranslate` for shell context menu and browser extension signaling
+
+#### Flow
+1. Trigger: hotkey / tray menu / shell context menu / browser extension / protocol activation
+2. `OcrTranslateService.OcrTranslateAsync()` → `ScreenCaptureService.CaptureRegionAsync()` (dedicated STA thread)
+3. `ScreenCaptureWindow` shows fullscreen overlay → user selects region → returns `ScreenCaptureResult`
+4. `WindowsOcrService.RecognizeAsync()` → `OcrTextMerger` post-processes → `OcrResult`
+5. Result sent to `MiniWindowService.ShowWithText()` for translation (or copied to clipboard for silent mode)
+
 ### IPC Architecture
 - `Easydict.SidecarClient` provides communication with external sidecar processes
-- Used for OCR and other native features (future)
+- `Easydict.NativeBridge` provides native messaging host for browser extension communication (stdin/stdout JSON + 4-byte length prefix)
+- Named events (`Local\Easydict-OcrTranslate`) for cross-process OCR signaling from shell context menu and browser extension
 - E2E tests in `e2e/` directory
 
 ### Testing

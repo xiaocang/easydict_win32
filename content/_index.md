@@ -17,6 +17,8 @@ A powerful Windows translation & dictionary app, ported from the popular macOS a
 
 - **Mouse Selection Translate** — Select text in any app (drag, double-click, or triple-click) and click the floating button to translate instantly in Mini Window.
 
+- **OCR Screenshot Translate** — Snipaste-style screen capture (`Ctrl+Alt+S`): auto-detect windows or drag to select a region, then OCR the text and translate. Supports 26+ languages via Windows OCR API. Silent mode (`Ctrl+Alt+Shift+S`) copies recognized text to clipboard without translating.
+
 - **Multiple Window Modes** — Main window, compact mini window, and persistent fixed window to suit your workflow.
 
 - **Global Hotkeys** — Quick access with customizable shortcuts like `Ctrl+Alt+T`, `Ctrl+Alt+D`, `Ctrl+Alt+M`, and more.

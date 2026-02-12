@@ -323,8 +323,7 @@
                         <ComboBox x:Name="GroqModelCombo" Header="Model" Width="280" IsEditable="True">
                             <ComboBoxItem Content="llama-3.3-70b-versatile" Tag="llama-3.3-70b-versatile" />
                             <ComboBoxItem Content="llama-3.1-8b-instant" Tag="llama-3.1-8b-instant" />
-                            <ComboBoxItem Content="gemma2-9b-it" Tag="gemma2-9b-it" />
-                            <ComboBoxItem Content="mixtral-8x7b-32768" Tag="mixtral-8x7b-32768" />
+                            <ComboBoxItem Content="qwen/qwen-3-32b" Tag="qwen/qwen-3-32b" />
                         </ComboBox>
                         <TextBlock Text="Groq provides fast inference. Get your API key from console.groq.com. You can type a custom model name."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
@@ -468,13 +467,20 @@
                         </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="12" Padding="0,8">
+                        <InfoBar x:Name="BuiltInAIHintBar"
+                                 IsOpen="True" IsClosable="False" Severity="Informational"
+                                 Title="Hint"
+                                 Message="The built-in key has limited free quota and is not guaranteed to always be available. For stable use, get your own free API key." />
                         <ComboBox x:Name="BuiltInModelCombo" Header="Model" Width="280" IsEditable="True">
-                            <ComboBoxItem Content="llama-3.3-70b-versatile" Tag="llama-3.3-70b-versatile" />
-                            <ComboBoxItem Content="llama-3.1-8b-instant" Tag="llama-3.1-8b-instant" />
-                            <ComboBoxItem Content="gemma2-9b-it" Tag="gemma2-9b-it" />
-                            <ComboBoxItem Content="mixtral-8x7b-32768" Tag="mixtral-8x7b-32768" />
+                            <ComboBoxItem Content="glm-4-flash-250414 (GLM)" Tag="glm-4-flash-250414" />
+                            <ComboBoxItem Content="glm-4-flash (GLM)" Tag="glm-4-flash" />
+                            <ComboBoxItem Content="llama-3.3-70b-versatile (Groq)" Tag="llama-3.3-70b-versatile" />
+                            <ComboBoxItem Content="llama-3.1-8b-instant (Groq)" Tag="llama-3.1-8b-instant" />
                         </ComboBox>
-                        <TextBlock Text="Built-in AI uses Groq cloud service. No API key required. You can type a custom model name."
+                        <PasswordBox x:Name="BuiltInApiKeyBox" Header="API Key (Optional)" Width="350"
+                                     PlaceholderText="Leave empty to use built-in key" HorizontalAlignment="Left" />
+                        <TextBlock x:Name="BuiltInDescriptionText"
+                                   Text="Uses GLM (Zhipu AI) or Groq free models. You can provide your own API key from open.bigmodel.cn (GLM) or console.groq.com (Groq)."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                         <Button x:Name="TestBuiltInButton" Content="Test" Click="OnTestBuiltIn" Padding="8,4" />
                     </StackPanel>

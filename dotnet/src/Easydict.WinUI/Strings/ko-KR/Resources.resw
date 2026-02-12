@@ -341,7 +341,13 @@
     <value>Ollama가 로컬에서 실행 중이어야 합니다. 새로고침을 클릭하여 사용 가능한 모델을 로드하세요.</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>내장 AI는 Groq 클라우드 서비스를 사용합니다. API 키 불필요. 사용자 정의 모델 이름을 입력할 수 있습니다.</value>
+    <value>GLM(Zhipu AI) 또는 Groq 무료 모델을 사용합니다. open.bigmodel.cn(GLM) 또는 console.groq.com(Groq)에서 자신의 API 키를 받을 수 있습니다.</value>
+  </data>
+  <data name="BuiltInAIHint" xml:space="preserve">
+    <value>내장 키는 무료 할당량이 제한되어 있으며 항상 사용 가능하다고 보장되지 않습니다. 안정적인 사용을 위해 자신의 무료 API 키를 받으세요.</value>
+  </data>
+  <data name="Hint" xml:space="preserve">
+    <value>힌트</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
     <value>ByteDance의 豆包 번역 서비스. console.volcengine.com에서 API 키를 받으세요</value>

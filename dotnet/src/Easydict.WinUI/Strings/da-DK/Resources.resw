@@ -90,7 +90,9 @@
   <data name="GeminiDescription" xml:space="preserve"><value>Hent din API-nøgle fra aistudio.google.com. Du kan skrive et brugerdefineret modelnavn.</value></data>
   <data name="CustomOpenAIDescription" xml:space="preserve"><value>Konfigurer ethvert OpenAI-kompatibelt API-endpoint (f.eks. lokale LLM-servere, andre AI-udbydere).</value></data>
   <data name="OllamaDescription" xml:space="preserve"><value>Ollama skal køre lokalt. Klik Opdater for at indlæse tilgængelige modeller.</value></data>
-  <data name="BuiltInAIDescription" xml:space="preserve"><value>Indbygget AI bruger Groq-cloudtjenesten. Ingen API-nøgle påkrævet. Du kan skrive et brugerdefineret modelnavn.</value></data>
+  <data name="BuiltInAIDescription" xml:space="preserve"><value>Bruger gratis GLM (Zhipu AI) eller Groq modeller. Du kan angive din egen API-nøgle fra open.bigmodel.cn (GLM) eller console.groq.com (Groq).</value></data>
+  <data name="BuiltInAIHint" xml:space="preserve"><value>Den indbyggede nøgle har en begrænset gratis kvote og er ikke garanteret altid at være tilgængelig. For stabil brug, hent din egen gratis API-nøgle.</value></data>
+  <data name="Hint" xml:space="preserve"><value>Tip</value></data>
   <data name="DoubaoDescription" xml:space="preserve"><value>ByteDances Doubao-oversættelsestjeneste. Hent din API-nøgle fra console.volcengine.com</value></data>
   <data name="CaiyunDescription" xml:space="preserve"><value>Hent din API-nøgle fra fanyi.caiyunapp.com</value></data>
   <data name="NiuTransDescription" xml:space="preserve"><value>NiuTrans understøtter over 450 sprogpar. Hent din API-nøgle fra niutrans.com</value></data>

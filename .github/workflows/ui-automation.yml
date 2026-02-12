@@ -188,7 +188,7 @@ jobs:
           path: dotnet/**/TestResults/*.trx
           retention-days: 30
 
-  # ── Job 3: UI Automation Tests (parallel, 2 shards) ──
+  # ── Job 3: UI Automation Tests (parallel, 4 shards) ──
   ui-automation:
     name: UI Automation (${{ matrix.shard.name }})
     runs-on: windows-latest
@@ -198,15 +198,18 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - name: "PopButton & Advanced"
-            filter: "Category=UIAutomation & (FullyQualifiedName~PopButton | FullyQualifiedName~MiniWindowLongText | FullyQualifiedName~PhoneticTranscription)"
+          - name: "PopButton"
+            filter: "Category=UIAutomation & FullyQualifiedName~PopButton"
             suffix: "shard-1"
+          - name: "Advanced"
+            filter: "Category=UIAutomation & (FullyQualifiedName~MiniWindowLongText | FullyQualifiedName~PhoneticTranscription)"
+            suffix: "shard-2"
           - name: "Core & Settings"
             filter: "Category=UIAutomation & (FullyQualifiedName~MainWindowTests. | FullyQualifiedName~TranslationTests. | FullyQualifiedName~WindowLifecycle | FullyQualifiedName~SettingsPage | FullyQualifiedName~DarkMode)"
-            suffix: "shard-2"
+            suffix: "shard-3"
           - name: "OCR"
             filter: "Category=UIAutomation & FullyQualifiedName~OcrTests"
-            suffix: "shard-3"
+            suffix: "shard-4"
 
     steps:
       - name: Checkout code

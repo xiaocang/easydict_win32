@@ -158,6 +158,8 @@ public sealed partial class ServiceResultItem : UserControl
         // Error state
         var hasError = _serviceResult.HasError && !_serviceResult.IsLoading;
         ErrorIcon.Visibility = hasError ? Visibility.Visible : Visibility.Collapsed;
+        RetryButton.Visibility = hasError && !_serviceResult.IsStreaming
+            ? Visibility.Visible : Visibility.Collapsed;
 
         // Status text - show "Click to query" hint for pending manual-query services
         if (_serviceResult.ShowPendingQueryHint)
@@ -450,6 +452,16 @@ public sealed partial class ServiceResultItem : UserControl
 
             e.Handled = true;
         }
+    }
+
+    private void OnRetryClicked(object sender, RoutedEventArgs e)
+    {
+        if (_serviceResult == null || _serviceResult.IsLoading)
+            return;
+
+        _serviceResult.Error = null;
+        _serviceResult.ClearQueried();
+        QueryRequested?.Invoke(this, _serviceResult);
     }
 
     private void OnControlPointerEntered(object sender, PointerRoutedEventArgs e)

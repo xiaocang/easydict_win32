@@ -90,7 +90,9 @@
   <data name="GeminiDescription" xml:space="preserve"><value>Dapatkan kunci API dari aistudio.google.com. Anda boleh menaip nama model tersuai.</value></data>
   <data name="CustomOpenAIDescription" xml:space="preserve"><value>Konfigurasikan sebarang endpoint API yang serasi dengan OpenAI (cth. pelayan LLM tempatan, pembekal AI lain).</value></data>
   <data name="OllamaDescription" xml:space="preserve"><value>Ollama mesti berjalan secara tempatan. Klik Muat Semula untuk memuatkan model yang tersedia.</value></data>
-  <data name="BuiltInAIDescription" xml:space="preserve"><value>AI terbina dalam menggunakan perkhidmatan awan Groq. Tidak memerlukan kunci API. Anda boleh menaip nama model tersuai.</value></data>
+  <data name="BuiltInAIDescription" xml:space="preserve"><value>Menggunakan model percuma GLM (Zhipu AI) atau Groq. Anda boleh menyediakan kunci API sendiri dari open.bigmodel.cn (GLM) atau console.groq.com (Groq).</value></data>
+  <data name="BuiltInAIHint" xml:space="preserve"><value>Kunci terbina dalam mempunyai kuota percuma terhad dan tidak dijamin sentiasa tersedia. Untuk penggunaan stabil, dapatkan kunci API percuma anda sendiri.</value></data>
+  <data name="Hint" xml:space="preserve"><value>Petunjuk</value></data>
   <data name="DoubaoDescription" xml:space="preserve"><value>Perkhidmatan terjemahan Doubao dari ByteDance. Dapatkan kunci API dari console.volcengine.com</value></data>
   <data name="CaiyunDescription" xml:space="preserve"><value>Dapatkan kunci API dari fanyi.caiyunapp.com</value></data>
   <data name="NiuTransDescription" xml:space="preserve"><value>NiuTrans menyokong lebih 450 pasangan bahasa. Dapatkan kunci API dari niutrans.com</value></data>

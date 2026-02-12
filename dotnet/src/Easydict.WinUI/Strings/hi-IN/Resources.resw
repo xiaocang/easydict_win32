@@ -90,7 +90,9 @@
   <data name="GeminiDescription" xml:space="preserve"><value>aistudio.google.com से API key प्राप्त करें। आप कस्टम model नाम टाइप कर सकते हैं।</value></data>
   <data name="CustomOpenAIDescription" xml:space="preserve"><value>कोई भी OpenAI-संगत API endpoint कॉन्फ़िगर करें (जैसे स्थानीय LLM सर्वर, अन्य AI प्रदाता)।</value></data>
   <data name="OllamaDescription" xml:space="preserve"><value>Ollama स्थानीय रूप से चल रहा होना चाहिए। उपलब्ध model लोड करने के लिए रीफ़्रेश पर क्लिक करें।</value></data>
-  <data name="BuiltInAIDescription" xml:space="preserve"><value>बिल्ट-इन AI Groq क्लाउड सेवा का उपयोग करता है। API key आवश्यक नहीं। आप कस्टम model नाम टाइप कर सकते हैं।</value></data>
+  <data name="BuiltInAIDescription" xml:space="preserve"><value>GLM (Zhipu AI) या Groq मुफ़्त model का उपयोग करता है। आप open.bigmodel.cn (GLM) या console.groq.com (Groq) से अपनी API key प्रदान कर सकते हैं।</value></data>
+  <data name="BuiltInAIHint" xml:space="preserve"><value>बिल्ट-इन key की मुफ़्त सीमा सीमित है और हमेशा उपलब्ध होने की गारंटी नहीं है। स्थिर उपयोग के लिए, अपनी मुफ़्त API key प्राप्त करें।</value></data>
+  <data name="Hint" xml:space="preserve"><value>संकेत</value></data>
   <data name="DoubaoDescription" xml:space="preserve"><value>ByteDance की Doubao अनुवाद सेवा। console.volcengine.com से API key प्राप्त करें</value></data>
   <data name="CaiyunDescription" xml:space="preserve"><value>fanyi.caiyunapp.com से API key प्राप्त करें</value></data>
   <data name="NiuTransDescription" xml:space="preserve"><value>NiuTrans 450+ भाषा जोड़ियों का समर्थन करता है। niutrans.com से API key प्राप्त करें</value></data>

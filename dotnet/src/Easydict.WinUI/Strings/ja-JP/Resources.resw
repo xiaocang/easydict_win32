@@ -341,7 +341,13 @@
     <value>Ollamaはローカルで実行している必要があります。更新をクリックして利用可能なモデルを読み込みます。</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>内蔵AIはGroqクラウドサービスを使用します。APIキー不要。カスタムモデル名を入力できます。</value>
+    <value>GLM（Zhipu AI）またはGroqの無料モデルを使用します。open.bigmodel.cn（GLM）またはconsole.groq.com（Groq）から独自のAPIキーを取得できます。</value>
+  </data>
+  <data name="BuiltInAIHint" xml:space="preserve">
+    <value>内蔵キーには無料枠の制限があり、常に利用可能とは限りません。安定した利用のために、独自の無料APIキーを取得することをお勧めします。</value>
+  </data>
+  <data name="Hint" xml:space="preserve">
+    <value>ヒント</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
     <value>ByteDanceの豆包翻訳サービス。console.volcengine.comからAPIキーを取得してください</value>

@@ -58,7 +58,21 @@ public sealed class SettingsService
     public string OllamaModel { get; set; } = "llama3.2";
 
     // Built-in AI settings
-    public string BuiltInAIModel { get; set; } = "llama-3.3-70b-versatile";
+    public string BuiltInAIModel { get; set; } = "glm-4-flash-250414";
+    public string? BuiltInAIApiKey { get; set; }
+
+    /// <summary>
+    /// Hardware-bound device identifier for proxy rate limiting.
+    /// Derived from SystemIdentification (packaged) or MachineGuid (unpackaged).
+    /// Falls back to a persisted random GUID if both fail.
+    /// </summary>
+    public string DeviceId { get; set; } = "";
+
+    /// <summary>
+    /// HMAC-SHA256 token proving the device ID was registered with the proxy server.
+    /// Obtained via POST /v1/device/register on first launch, persisted thereafter.
+    /// </summary>
+    public string DeviceToken { get; set; } = "";
 
     // DeepSeek settings
     public string? DeepSeekApiKey { get; set; }
@@ -357,7 +371,23 @@ public sealed class SettingsService
         OllamaModel = GetValue(nameof(OllamaModel), "llama3.2");
 
         // Built-in AI settings
-        BuiltInAIModel = GetValue(nameof(BuiltInAIModel), "llama-3.3-70b-versatile");
+        BuiltInAIModel = GetValue(nameof(BuiltInAIModel), "glm-4-flash-250414");
+        BuiltInAIApiKey = GetValue<string?>(nameof(BuiltInAIApiKey), null);
+        // Try hardware-bound ID; fall back to persisted random UUID
+        var hardwareId = GetHardwareDeviceId();
+        if (!string.IsNullOrEmpty(hardwareId))
+        {
+            DeviceId = hardwareId;
+        }
+        else
+        {
+            DeviceId = GetValue(nameof(DeviceId), "");
+            if (string.IsNullOrEmpty(DeviceId))
+            {
+                DeviceId = Guid.NewGuid().ToString("N");
+            }
+        }
+        DeviceToken = GetValue(nameof(DeviceToken), "");
 
         // DeepSeek settings
         DeepSeekApiKey = GetValue<string?>(nameof(DeepSeekApiKey), null);
@@ -494,6 +524,9 @@ public sealed class SettingsService
 
         // Built-in AI settings
         _settings[nameof(BuiltInAIModel)] = BuiltInAIModel;
+        _settings[nameof(BuiltInAIApiKey)] = BuiltInAIApiKey ?? string.Empty;
+        _settings[nameof(DeviceId)] = DeviceId;
+        _settings[nameof(DeviceToken)] = DeviceToken;
 
         // DeepSeek settings
         _settings[nameof(DeepSeekApiKey)] = DeepSeekApiKey ?? string.Empty;
@@ -779,6 +812,56 @@ public sealed class SettingsService
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Derives a stable device identifier from hardware.
+    /// 1. SystemIdentification (SMBIOS-based, requires package identity)
+    /// 2. Registry MachineGuid (unique per Windows installation)
+    /// Returns null if both fail (caller falls back to random GUID).
+    /// </summary>
+    private static string? GetHardwareDeviceId()
+    {
+        // Attempt 1: WinRT SystemIdentification (packaged/MSIX app)
+        try
+        {
+            var systemId = Windows.System.Profile.SystemIdentification.GetSystemIdForPublisher();
+            if (systemId?.Id != null && systemId.Id.Length > 0)
+            {
+                var reader = Windows.Storage.Streams.DataReader.FromBuffer(systemId.Id);
+                var bytes = new byte[systemId.Id.Length];
+                reader.ReadBytes(bytes);
+                // Hash to fixed-length hex string
+                var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+                return Convert.ToHexString(hash).ToLowerInvariant();
+            }
+        }
+        catch
+        {
+            // Not available: unpackaged app, old Windows, or missing capability
+        }
+
+        // Attempt 2: Windows registry MachineGuid (works for unpackaged apps)
+        try
+        {
+            var machineGuid = Microsoft.Win32.Registry.GetValue(
+                @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography",
+                "MachineGuid",
+                null) as string;
+            if (!string.IsNullOrEmpty(machineGuid))
+            {
+                // Hash to avoid leaking raw MachineGuid
+                var hash = System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(machineGuid));
+                return Convert.ToHexString(hash).ToLowerInvariant();
+            }
+        }
+        catch
+        {
+            // Registry access denied or unavailable
+        }
+
+        return null;
     }
 
     private T GetValue<T>(string key, T defaultValue)

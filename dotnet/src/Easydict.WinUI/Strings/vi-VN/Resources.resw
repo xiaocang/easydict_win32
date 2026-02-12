@@ -233,7 +233,13 @@
     <value>Ollama ph&#x1EA3;i &#x111;ang ch&#x1EA1;y tr&#xEA;n m&#xE1;y. Nh&#x1EA5;n L&#xE0;m m&#x1EDB;i &#x111;&#x1EC3; t&#x1EA3;i c&#xE1;c model c&#xF3; s&#x1EB5;n.</value>
   </data>
   <data name="BuiltInAIDescription" xml:space="preserve">
-    <value>AI t&#xED;ch h&#x1EE3;p s&#x1EED; d&#x1EE5;ng d&#x1ECB;ch v&#x1EE5; &#x111;&#xE1;m m&#xE2;y Groq. Kh&#xF4;ng c&#x1EA7;n API key. B&#x1EA1;n c&#xF3; th&#x1EC3; nh&#x1EAD;p t&#xEA;n model t&#xF9;y ch&#x1EC9;nh.</value>
+    <value>Sử dụng các model miễn phí GLM (Zhipu AI) hoặc Groq. Bạn có thể cung cấp API key của riêng từ open.bigmodel.cn (GLM) hoặc console.groq.com (Groq).</value>
+  </data>
+  <data name="BuiltInAIHint" xml:space="preserve">
+    <value>Khóa tích hợp có hạn mức miễn phí và không được đảm bảo luôn sẵn sàng. Để sử dụng ổn định, hãy lấy API key miễn phí của riêng bạn.</value>
+  </data>
+  <data name="Hint" xml:space="preserve">
+    <value>Gợi ý</value>
   </data>
   <data name="DoubaoDescription" xml:space="preserve">
     <value>D&#x1ECB;ch v&#x1EE5; d&#x1ECB;ch Doubao c&#x1EE7;a ByteDance. L&#x1EA5;y API key t&#x1EA1;i console.volcengine.com</value>

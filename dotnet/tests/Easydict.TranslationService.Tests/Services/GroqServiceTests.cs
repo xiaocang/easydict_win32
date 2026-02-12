@@ -59,8 +59,7 @@ public class GroqServiceTests
     {
         GroqService.AvailableModels.Should().Contain("llama-3.3-70b-versatile");
         GroqService.AvailableModels.Should().Contain("llama-3.1-8b-instant");
-        GroqService.AvailableModels.Should().Contain("gemma2-9b-it");
-        GroqService.AvailableModels.Should().Contain("mixtral-8x7b-32768");
+        GroqService.AvailableModels.Should().Contain("qwen/qwen-3-32b");
     }
 
     [Fact]

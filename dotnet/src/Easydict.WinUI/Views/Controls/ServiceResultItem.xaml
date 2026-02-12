@@ -35,6 +35,7 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <!-- Service Icon -->
@@ -86,10 +87,26 @@
                         Margin="0,0,4,0"
                         ToolTipService.ToolTip="Translation error" />
 
+                    <!-- Retry Button (visible on error) -->
+                    <Button
+                        x:Name="RetryButton"
+                        Grid.Column="4"
+                        Click="OnRetryClicked"
+                        ToolTipService.ToolTip="Retry"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Width="24"
+                        Height="24"
+                        Padding="0"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed">
+                        <FontIcon Glyph="&#xE72C;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
+                    </Button>
+
                     <!-- Expand/Collapse Arrow -->
                     <FontIcon
                         x:Name="ArrowIcon"
-                        Grid.Column="4"
+                        Grid.Column="5"
                         Glyph="&#xE70D;"
                         FontSize="10"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"

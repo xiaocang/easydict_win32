@@ -92,15 +92,18 @@ clean:
 publish: restore
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --output ./publish --self-contained true
 
-# Publish for specific platform
+# Publish for specific platform (includes NativeBridge)
 publish-x64: restore
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64
+	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64 -p:PublishTrimmed=true
 
 publish-x86: restore
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86
+	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86 -p:PublishTrimmed=true
 
 publish-arm64: restore
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64
+	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64 -p:PublishTrimmed=true
 
 # Publish for MSIX (without bundled Windows App SDK DLLs)
 # MSIX declares a framework package dependency so bundled DLLs are redundant and cause launch failures.

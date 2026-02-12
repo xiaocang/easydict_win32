@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6g1K3ysr/D4i5Kk+ojcpk3SGmdB2AFXIWXtMqtnUuqg0eu1ejKhQsk5ypXe0Gn5M2wS+grY5ms4birIkrRa2C2yDDD58n8ND0F5HlkF9fJKaHhuTVBQvBIcu+exxm0zhDJFp+F9fTWfnBRvhfA+93kbHgSkuy4zfL5WXfwBMPh/Jb8RQ+6l4jnaqvCBVWmkKi+UIrsvEMjD6X2nty6WD/U+Ic6Z6uLRfkFByQBQcPbd9es4r6qpsjiWZBvIJhByswpnro5FVngv+YOZsFMOOR7PwtGovo2qyLjn3r5B6SDzA/vZ0/0C6QNarvD1hr8Y4bIQu68QsCBmGqMCX1dmWJwIDAQAB",
   "permissions": ["contextMenus", "nativeMessaging"],
   "icons": {
     "16": "icons/icon16.png",

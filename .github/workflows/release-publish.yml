@@ -102,6 +102,17 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
+      # Publish NativeBridge (for portable/Inno installer only, not MSIX)
+      - name: Publish NativeBridge
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --output ./publish/${{ matrix.platform }} `
+            -p:PublishTrimmed=true
+
       # Publish again for MSIX without bundled Windows App SDK DLLs.
       # MSIX declares a framework package dependency (Microsoft.WindowsAppRuntime)
       # so bundled DLLs are redundant and cause launch failures.

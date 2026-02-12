@@ -90,3 +90,6 @@ test-release-bin.ps1
 CLAUDE.md
 
 .fake
+
+# Browser extension private key (public key is in manifest.json)
+browser-extension/key.pem

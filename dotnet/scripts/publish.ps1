@@ -45,6 +45,30 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# Publish NativeBridge and copy to WinUI publish output
+$BridgeProject = Join-Path $SolutionDir "src\Easydict.NativeBridge\Easydict.NativeBridge.csproj"
+$BridgePublishDir = Join-Path $SolutionDir "src\Easydict.NativeBridge\bin\publish\win-$Platform"
+
+Write-Host "Publishing NativeBridge..." -ForegroundColor Green
+dotnet publish $BridgeProject `
+    -c $Configuration `
+    -r "win-$Platform" `
+    --self-contained true `
+    -o $BridgePublishDir
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "NativeBridge publish failed!" -ForegroundColor Red
+    exit 1
+}
+
+$BridgeExe = Join-Path $BridgePublishDir "easydict-native-bridge.exe"
+if (Test-Path $BridgeExe) {
+    Copy-Item $BridgeExe -Destination $PublishDir
+    Write-Host "Copied easydict-native-bridge.exe to publish output" -ForegroundColor Green
+} else {
+    Write-Host "WARNING: easydict-native-bridge.exe not found at $BridgeExe" -ForegroundColor Yellow
+}
+
 # Calculate size
 $files = Get-ChildItem -Path $PublishDir -Recurse -File
 $totalSize = ($files | Measure-Object -Property Length -Sum).Sum

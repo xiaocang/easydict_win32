@@ -103,16 +103,66 @@ Name: "{autodesktop}\{#AppFullName}"; Filename: "{app}\{#AppExeName}"; Tasks: de
 [Registry]
 ; Startup entry (optional)
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Easydict"; ValueData: """{app}\{#AppExeName}"""; Flags: uninsdeletevalue; Tasks: startupentry
-; easydict:// protocol handler (for browser extension fallback)
+; easydict:// protocol handler
 Root: HKCU; Subkey: "Software\Classes\easydict"; ValueType: string; ValueName: ""; ValueData: "URL:Easydict Protocol"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\easydict"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKCU; Subkey: "Software\Classes\easydict\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""
+; Native Messaging for Chrome
+Root: HKCU; Subkey: "Software\Google\Chrome\NativeMessagingHosts\com.easydict.bridge"; ValueType: string; ValueName: ""; ValueData: "{localappdata}\Easydict\browser-bridge\chrome-manifest.json"; Flags: uninsdeletekey
+; Native Messaging for Firefox
+Root: HKCU; Subkey: "Software\Mozilla\NativeMessagingHosts\com.easydict.bridge"; ValueType: string; ValueName: ""; ValueData: "{localappdata}\Easydict\browser-bridge\firefox-manifest.json"; Flags: uninsdeletekey
 
 [Run]
 ; Launch after install
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppFullName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+const
+  ChromeExtensionId = 'cbhpnmadpnoedfgonddpmlhaclbicllg';
+  FirefoxExtensionId = 'easydict-ocr@easydict.app';
+
+// Deploy Native Messaging bridge exe and manifest files
+procedure DeployNativeMessaging;
+var
+  BridgeDir, BridgeSrc, BridgeDest, EscapedPath: String;
+  ChromeManifest, FirefoxManifest: String;
+begin
+  BridgeDir := ExpandConstant('{localappdata}\Easydict\browser-bridge');
+  ForceDirectories(BridgeDir);
+
+  // Copy bridge exe from install dir to browser-bridge dir
+  BridgeSrc := ExpandConstant('{app}\easydict-native-bridge.exe');
+  BridgeDest := BridgeDir + '\easydict-native-bridge.exe';
+  if FileExists(BridgeSrc) then
+    CopyFile(BridgeSrc, BridgeDest, False);
+
+  // Escape backslashes for JSON path value
+  EscapedPath := BridgeDest;
+  StringChange(EscapedPath, '\', '\\');
+
+  // Chrome manifest
+  ChromeManifest :=
+    '{' + #13#10 +
+    '  "name": "com.easydict.bridge",' + #13#10 +
+    '  "description": "Easydict native messaging bridge",' + #13#10 +
+    '  "path": "' + EscapedPath + '",' + #13#10 +
+    '  "type": "stdio",' + #13#10 +
+    '  "allowed_origins": ["chrome-extension://' + ChromeExtensionId + '/"]' + #13#10 +
+    '}';
+  SaveStringToFile(BridgeDir + '\chrome-manifest.json', ChromeManifest, False);
+
+  // Firefox manifest
+  FirefoxManifest :=
+    '{' + #13#10 +
+    '  "name": "com.easydict.bridge",' + #13#10 +
+    '  "description": "Easydict native messaging bridge",' + #13#10 +
+    '  "path": "' + EscapedPath + '",' + #13#10 +
+    '  "type": "stdio",' + #13#10 +
+    '  "allowed_extensions": ["' + FirefoxExtensionId + '"]' + #13#10 +
+    '}';
+  SaveStringToFile(BridgeDir + '\firefox-manifest.json', FirefoxManifest, False);
+end;
+
 // Kill running instances before install to avoid locked files
 procedure CurStepChanged(CurStep: TSetupStep);
 var
@@ -121,6 +171,10 @@ begin
   if CurStep = ssInstall then
   begin
     Exec('taskkill', '/F /IM Easydict.WinUI.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+  if CurStep = ssPostInstall then
+  begin
+    DeployNativeMessaging;
   end;
 end;
 

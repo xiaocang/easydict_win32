@@ -1,14 +1,14 @@
 {
   "extName": {
-    "message": "Easydict OCR \u622a\u56fe\u7ffb\u8bd1",
+    "message": "Easydict OCR 截图翻译",
     "description": "Extension display name"
   },
   "extDescription": {
-    "message": "\u53f3\u952e\u622a\u56fe\u5e76\u4f7f\u7528 Easydict OCR \u7ffb\u8bd1",
+    "message": "右键截图并使用 Easydict OCR 翻译",
     "description": "Extension description"
   },
   "contextMenuTitle": {
-    "message": "Easydict OCR \u622a\u56fe\u7ffb\u8bd1",
+    "message": "Easydict OCR 截图翻译",
     "description": "Right-click context menu item title"
   }
 }

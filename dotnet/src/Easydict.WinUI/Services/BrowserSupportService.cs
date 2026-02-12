@@ -23,8 +23,9 @@ public static class BrowserSupportService
     private const string BridgeExeName = "easydict-native-bridge.exe";
     private const string BridgeDirName = "browser-bridge";
 
-    // Chrome extension ID — update after publishing to Chrome Web Store
-    private const string ChromeExtensionId = "PLACEHOLDER_CHROME_EXTENSION_ID";
+    // Chrome extension ID — derived from the fixed public key in browser-extension/manifest.json
+    // Will need updating if published to Chrome Web Store (Store assigns its own ID)
+    private const string ChromeExtensionId = "cbhpnmadpnoedfgonddpmlhaclbicllg";
 
     // Firefox extension ID — must match gecko.id in manifest.v2.json
     private const string FirefoxExtensionId = "easydict-ocr@easydict.app";

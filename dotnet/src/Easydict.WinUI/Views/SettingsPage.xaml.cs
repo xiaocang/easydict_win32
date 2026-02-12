@@ -597,12 +597,22 @@ public sealed partial class SettingsPage : Page
         var text = combo.Text?.Trim();
         if (!string.IsNullOrEmpty(text))
         {
+            // If text matches a dropdown item's Content, return its Tag (programmatic value).
+            // This handles cases where Content differs from Tag (e.g., "glm-4-flash-250414 (GLM)" → "glm-4-flash-250414").
+            for (int i = 0; i < combo.Items.Count; i++)
+            {
+                if (combo.Items[i] is ComboBoxItem item && item.Content?.ToString() == text && item.Tag != null)
+                {
+                    return item.Tag.ToString() ?? defaultValue;
+                }
+            }
+            // Custom user-typed value
             return text;
         }
         // Fall back to selected item's tag
-        if (combo.SelectedItem is ComboBoxItem item && item.Tag != null)
+        if (combo.SelectedItem is ComboBoxItem selectedItem && selectedItem.Tag != null)
         {
-            return item.Tag.ToString() ?? defaultValue;
+            return selectedItem.Tag.ToString() ?? defaultValue;
         }
         return defaultValue;
     }

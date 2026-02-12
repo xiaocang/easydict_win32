@@ -311,6 +311,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>Mostra finestra fissa</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>Traduzione screenshot OCR</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>OCR silenzioso</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>Nota: Riavvia l'app per applicare le modifiche ai tasti rapidi. I tasti di commutazione usano lo stesso tasto con Shift (ad es. Ctrl+Alt+Shift+M).</value>
   </data>

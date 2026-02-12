@@ -212,6 +212,8 @@ public sealed partial class SettingsPage : Page
         TranslateHotkeyBox.Header = loc.GetString("TranslateSelection");
         ShowMiniHotkeyBox.Header = loc.GetString("ShowMiniWindow");
         ShowFixedHotkeyBox.Header = loc.GetString("ShowFixedWindow");
+        OcrTranslateHotkeyBox.Header = loc.GetString("OcrScreenshotTranslate");
+        SilentOcrHotkeyBox.Header = loc.GetString("SilentOcr");
 
         // About section
         if (AboutHeaderText != null)
@@ -317,6 +319,8 @@ public sealed partial class SettingsPage : Page
         TranslateHotkeyBox.TextChanged += OnSettingChanged;
         ShowMiniHotkeyBox.TextChanged += OnSettingChanged;
         ShowFixedHotkeyBox.TextChanged += OnSettingChanged;
+        OcrTranslateHotkeyBox.TextChanged += OnSettingChanged;
+        SilentOcrHotkeyBox.TextChanged += OnSettingChanged;
 
         // TextBox/PasswordBox changes - new services
         DeepSeekKeyBox.PasswordChanged += OnSettingChanged;
@@ -475,6 +479,8 @@ public sealed partial class SettingsPage : Page
         TranslateHotkeyBox.Text = _settings.TranslateSelectionHotkey;
         ShowMiniHotkeyBox.Text = _settings.ShowMiniWindowHotkey;
         ShowFixedHotkeyBox.Text = _settings.ShowFixedWindowHotkey;
+        OcrTranslateHotkeyBox.Text = _settings.OcrTranslateHotkey;
+        SilentOcrHotkeyBox.Text = _settings.SilentOcrHotkey;
 
         // Enabled services for each window (populate from TranslationManager.Services)
         PopulateServiceCollection(_mainWindowServices, _settings.MainWindowEnabledServices, _settings.MainWindowServiceEnabledQuery);
@@ -865,6 +871,8 @@ public sealed partial class SettingsPage : Page
         _settings.TranslateSelectionHotkey = TranslateHotkeyBox.Text;
         _settings.ShowMiniWindowHotkey = ShowMiniHotkeyBox.Text;
         _settings.ShowFixedWindowHotkey = ShowFixedHotkeyBox.Text;
+        _settings.OcrTranslateHotkey = OcrTranslateHotkeyBox.Text;
+        _settings.SilentOcrHotkey = SilentOcrHotkeyBox.Text;
 
         // Save enabled services for each window (from collections)
         _settings.MainWindowEnabledServices = GetEnabledServicesFromCollection(_mainWindowServices);

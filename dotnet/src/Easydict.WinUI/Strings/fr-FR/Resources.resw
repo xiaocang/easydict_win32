@@ -415,6 +415,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>Afficher la fenêtre fixe</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>Traduction OCR par capture d'écran</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>OCR silencieux</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>Note : Redémarrez l'application pour appliquer les changements de raccourcis. Les raccourcis de bascule utilisent la même touche avec Shift ajouté (ex : Ctrl+Alt+Shift+M).</value>
   </data>

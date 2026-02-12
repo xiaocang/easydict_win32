@@ -319,6 +319,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>إظهار النافذة الثابتة</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>ترجمة لقطة شاشة OCR</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>OCR صامت</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>ملاحظة: أعد تشغيل التطبيق لتطبيق تغييرات الاختصارات. اختصارات التبديل تستخدم نفس المفتاح مع Shift (مثل Ctrl+Alt+Shift+M).</value>
   </data>

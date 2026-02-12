@@ -430,6 +430,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>显示固定窗口</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>OCR 截图翻译</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>静默 OCR</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>注意：重启应用以应用快捷键更改。切换快捷键使用相同的键加 Shift（例如 Ctrl+Alt+Shift+M）。</value>
   </data>

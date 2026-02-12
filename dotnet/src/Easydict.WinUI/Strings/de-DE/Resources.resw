@@ -415,6 +415,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>Fixiertes Fenster anzeigen</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>OCR-Screenshot-Übersetzung</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>Stille OCR</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>Hinweis: Starten Sie die App neu, um Tastenkürzel-Änderungen anzuwenden. Umschalt-Tastenkürzel verwenden dieselbe Taste mit zusätzlicher Umschalttaste (z.B. Strg+Alt+Umschalt+M).</value>
   </data>

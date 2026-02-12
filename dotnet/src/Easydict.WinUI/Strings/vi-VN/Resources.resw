@@ -319,6 +319,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>Hi&#x1EC3;n th&#x1ECB; c&#x1EED;a s&#x1ED5; c&#x1ED1; &#x111;&#x1ECB;nh</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>D&#x1ECB;ch &#x1EA3;nh ch&#x1EE5;p m&#xE0;n h&#xEC;nh OCR</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>OCR im l&#x1EB7;ng</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>L&#x1B0;u &#xFD;: Kh&#x1EDF;i &#x111;&#x1ED9;ng l&#x1EA1;i &#x1EE9;ng d&#x1EE5;ng &#x111;&#x1EC3; &#xE1;p d&#x1EE5;ng thay &#x111;&#x1ED5;i ph&#xED;m t&#x1EAF;t. Ph&#xED;m t&#x1EAF;t chuy&#x1EC3;n &#x111;&#x1ED5;i s&#x1EED; d&#x1EE5;ng c&#xF9;ng ph&#xED;m v&#x1EDB;i Shift (v&#xED; d&#x1EE5;: Ctrl+Alt+Shift+M).</value>
   </data>

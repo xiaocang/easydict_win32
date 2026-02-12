@@ -117,6 +117,8 @@
   <data name="TranslateSelection" xml:space="preserve"><value>Oversæt markering</value></data>
   <data name="ShowMiniWindow" xml:space="preserve"><value>Vis minivindue</value></data>
   <data name="ShowFixedWindow" xml:space="preserve"><value>Vis fast vindue</value></data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve"><value>OCR-skærmbilledeoversættelse</value></data>
+  <data name="SilentOcr" xml:space="preserve"><value>Lydløs OCR</value></data>
   <data name="HotkeysDescription" xml:space="preserve"><value>Bemærk: Genstart appen for at anvende genvejstastændringer. Skiftetaster bruger samme tast med Shift (f.eks. Ctrl+Alt+Shift+M).</value></data>
   <data name="About" xml:space="preserve"><value>Om</value></data>
   <data name="EasydictForWindows" xml:space="preserve"><value>Easydict til Windows</value></data>

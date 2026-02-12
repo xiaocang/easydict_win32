@@ -117,6 +117,8 @@
   <data name="TranslateSelection" xml:space="preserve"><value>Terjemah Pilihan</value></data>
   <data name="ShowMiniWindow" xml:space="preserve"><value>Papar Tetingkap Mini</value></data>
   <data name="ShowFixedWindow" xml:space="preserve"><value>Papar Tetingkap Tetap</value></data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve"><value>Terjemahan Tangkapan Skrin OCR</value></data>
+  <data name="SilentOcr" xml:space="preserve"><value>OCR Senyap</value></data>
   <data name="HotkeysDescription" xml:space="preserve"><value>Nota: Mulakan semula aplikasi untuk menerapkan perubahan kekunci pintas. Kekunci pintas togol menggunakan kekunci yang sama dengan Shift (cth. Ctrl+Alt+Shift+M).</value></data>
   <data name="About" xml:space="preserve"><value>Perihal</value></data>
   <data name="EasydictForWindows" xml:space="preserve"><value>Easydict untuk Windows</value></data>

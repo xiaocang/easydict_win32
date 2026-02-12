@@ -415,6 +415,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>고정 창 표시</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>OCR 스크린샷 번역</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>무음 OCR</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>참고: 단축키 변경을 적용하려면 앱을 다시 시작하세요. 토글 단축키는 같은 키에 Shift를 추가합니다 (예: Ctrl+Alt+Shift+M).</value>
   </data>

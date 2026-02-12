@@ -117,6 +117,8 @@
   <data name="TranslateSelection" xml:space="preserve"><value>चयन का अनुवाद करें</value></data>
   <data name="ShowMiniWindow" xml:space="preserve"><value>मिनी विंडो दिखाएँ</value></data>
   <data name="ShowFixedWindow" xml:space="preserve"><value>स्थिर विंडो दिखाएँ</value></data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve"><value>OCR स्क्रीनशॉट अनुवाद</value></data>
+  <data name="SilentOcr" xml:space="preserve"><value>मूक OCR</value></data>
   <data name="HotkeysDescription" xml:space="preserve"><value>नोट: शॉर्टकट कुंजी परिवर्तन लागू करने के लिए ऐप पुनः आरंभ करें। टॉगल शॉर्टकट कुंजियाँ Shift के साथ समान कुंजी का उपयोग करती हैं (जैसे Ctrl+Alt+Shift+M)।</value></data>
   <data name="About" xml:space="preserve"><value>के बारे में</value></data>
   <data name="EasydictForWindows" xml:space="preserve"><value>Windows के लिए Easydict</value></data>

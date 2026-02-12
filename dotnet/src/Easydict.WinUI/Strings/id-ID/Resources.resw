@@ -289,6 +289,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>Tampilkan Jendela Tetap</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>Terjemahan Tangkapan Layar OCR</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>OCR Diam</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>Catatan: Mulai ulang aplikasi untuk menerapkan perubahan pintasan. Pintasan toggle menggunakan tombol yang sama dengan Shift (mis. Ctrl+Alt+Shift+M).</value>
   </data>

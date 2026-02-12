@@ -297,6 +297,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>&#xE41;&#xE2A;&#xE14;&#xE07;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;&#xE04;&#xE07;&#xE17;&#xE35;&#xE48;</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>&#xE41;&#xE1B;&#xE25;&#xE20;&#xE32;&#xE1E;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE08;&#xE2D; OCR</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>OCR &#xE40;&#xE07;&#xE35;&#xE22;&#xE1A;</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>&#xE2B;&#xE21;&#xE32;&#xE22;&#xE40;&#xE2B;&#xE15;&#xE38;: &#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;&#xE41;&#xE2D;&#xE1B;&#xE40;&#xE1E;&#xE37;&#xE48;&#xE2D;&#xE43;&#xE0A;&#xE49;&#xE01;&#xE32;&#xE23;&#xE40;&#xE1B;&#xE25;&#xE35;&#xE48;&#xE22;&#xE19;&#xE41;&#xE1B;&#xE25;&#xE07;&#xE04;&#xE35;&#xE22;&#xE4C;&#xE25;&#xE31;&#xE14; &#xE04;&#xE35;&#xE22;&#xE4C;&#xE25;&#xE31;&#xE14;&#xE2A;&#xE25;&#xE31;&#xE1A;&#xE43;&#xE0A;&#xE49;&#xE1B;&#xE38;&#xE48;&#xE21;&#xE40;&#xE14;&#xE35;&#xE22;&#xE27;&#xE01;&#xE31;&#xE19;&#xE1E;&#xE23;&#xE49;&#xE2D;&#xE21; Shift (&#xE40;&#xE0A;&#xE48;&#xE19; Ctrl+Alt+Shift+M)</value>
   </data>

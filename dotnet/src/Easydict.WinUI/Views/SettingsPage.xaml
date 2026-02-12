@@ -658,6 +658,8 @@
                         <TextBox x:Name="TranslateHotkeyBox" Header="Translate Selection" Width="200" PlaceholderText="Ctrl+Alt+D" />
                         <TextBox x:Name="ShowMiniHotkeyBox" Header="Show Mini Window" Width="200" PlaceholderText="Ctrl+Alt+M" />
                         <TextBox x:Name="ShowFixedHotkeyBox" Header="Show Fixed Window" Width="200" PlaceholderText="Ctrl+Alt+F" />
+                        <TextBox x:Name="OcrTranslateHotkeyBox" Header="OCR Screenshot Translate" Width="200" PlaceholderText="Ctrl+Alt+S" />
+                        <TextBox x:Name="SilentOcrHotkeyBox" Header="Silent OCR" Width="200" PlaceholderText="Ctrl+Alt+Shift+S" />
                         <TextBlock x:Name="HotkeysDescriptionText" Text="Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M)."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>

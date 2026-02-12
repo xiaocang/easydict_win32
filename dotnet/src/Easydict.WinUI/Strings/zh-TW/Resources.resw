@@ -415,6 +415,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>顯示固定視窗</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>OCR 截圖翻譯</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>靜默 OCR</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>注意：重新啟動應用程式以套用快速鍵變更。切換快速鍵使用相同的鍵加 Shift（例如 Ctrl+Alt+Shift+M）。</value>
   </data>

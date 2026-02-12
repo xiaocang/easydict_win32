@@ -430,6 +430,12 @@
   <data name="ShowFixedWindow" xml:space="preserve">
     <value>Show Fixed Window</value>
   </data>
+  <data name="OcrScreenshotTranslate" xml:space="preserve">
+    <value>OCR Screenshot Translate</value>
+  </data>
+  <data name="SilentOcr" xml:space="preserve">
+    <value>Silent OCR</value>
+  </data>
   <data name="HotkeysDescription" xml:space="preserve">
     <value>Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M).</value>
   </data>

@@ -10,7 +10,7 @@
   <Identity
     Name="xiaocang.EasydictforWindows"
     Publisher="CN=33FC47D7-8283-45FC-BB5D-297D1476BB29"
-    Version="0.4.0.0"
+    Version="0.5.0.0"
     ProcessorArchitecture="neutral" />
 
   <Properties>

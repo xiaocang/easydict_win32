@@ -266,6 +266,102 @@ public class BuiltInAIServiceTests
         // Token is stored internally — validated via ConfigureHttpRequest tests above
     }
 
+    // --- Proxy model validation ---
+
+    [Fact]
+    public void AllowedProxyModels_ContainsExactExpectedModels()
+    {
+        BuiltInAIService.AllowedProxyModels.Should().BeEquivalentTo(
+            new[] { "glm-4-flash", "glm-4-flash-250414" });
+    }
+
+    [Fact]
+    public void AllowedProxyModels_CoversAllGlmModelsInProviderMap()
+    {
+        var glmModels = BuiltInAIService.ModelProviderMap
+            .Where(kvp => kvp.Value == BuiltInAIService.Provider.GLM)
+            .Select(kvp => kvp.Key);
+
+        foreach (var model in glmModels)
+        {
+            BuiltInAIService.AllowedProxyModels.Should().Contain(model,
+                $"GLM model '{model}' in ModelProviderMap should also be in AllowedProxyModels");
+        }
+    }
+
+    [Theory]
+    [InlineData("glm-4-flash")]
+    [InlineData("glm-4-flash-250414")]
+    public async Task ProxyMode_AllowedGlmModel_DoesNotThrowInvalidModel(string model)
+    {
+        _service.Configure(model); // No API key = proxy mode
+
+        var sseChunk = """{"choices":[{"delta":{"content":"Hello"}}]}""";
+        _mockHandler.EnqueueStreamingResponse([sseChunk]);
+
+        var request = new TranslationRequest
+        {
+            Text = "test",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        try
+        {
+            await _service.TranslateAsync(request);
+            // If no exception, the model is allowed — pass
+        }
+        catch (TranslationException ex)
+        {
+            ex.ErrorCode.Should().NotBe(TranslationErrorCode.InvalidModel);
+        }
+    }
+
+    [Theory]
+    [InlineData("llama-3.3-70b-versatile")]
+    [InlineData("llama-3.1-8b-instant")]
+    public async Task ProxyMode_GroqModel_ThrowsInvalidModel(string model)
+    {
+        _service.Configure(model); // No API key = proxy mode
+
+        var request = new TranslationRequest
+        {
+            Text = "test",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        Func<Task> act = () => _service.TranslateAsync(request);
+        var ex = await act.Should().ThrowAsync<TranslationException>();
+        ex.Which.ErrorCode.Should().Be(TranslationErrorCode.InvalidModel);
+    }
+
+    [Fact]
+    public async Task DirectConnection_AnyModel_DoesNotThrowInvalidModel()
+    {
+        // With user API key, Groq model should not trigger proxy allowlist check
+        _service.Configure("llama-3.3-70b-versatile", "user-api-key");
+
+        var sseChunk = """{"choices":[{"delta":{"content":"Hello"}}]}""";
+        _mockHandler.EnqueueStreamingResponse([sseChunk]);
+
+        var request = new TranslationRequest
+        {
+            Text = "test",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        try
+        {
+            await _service.TranslateAsync(request);
+        }
+        catch (TranslationException ex)
+        {
+            ex.ErrorCode.Should().NotBe(TranslationErrorCode.InvalidModel);
+        }
+    }
+
     // --- Other ---
 
     [Fact]

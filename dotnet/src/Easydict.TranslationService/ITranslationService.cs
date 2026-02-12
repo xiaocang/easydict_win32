@@ -90,6 +90,7 @@ public enum TranslationErrorCode
     UnsupportedLanguage,
     TextTooLong,
     ServiceUnavailable,
-    InvalidResponse
+    InvalidResponse,
+    InvalidModel
 }
 

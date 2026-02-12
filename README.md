@@ -118,6 +118,12 @@ While the feature set is not yet complete compared to the macOS version, this po
 - Windows 10 version 2004 (build 19041) or later
 - x64 or ARM64 processor
 
+### Install via winget
+
+```powershell
+winget install xiaocang.EasydictforWindows
+```
+
 ### Download
 
 Download from the [Releases](https://github.com/xiaocang/easydict_win32/releases) page.
@@ -238,7 +244,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ### Distribution
 
 - [x] **Windows Store** - Published to Microsoft Store
-- [ ] **winget** - Publish to Windows Package Manager
+- [x] ~~**winget**~~ - Published to Windows Package Manager ✅
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 

@@ -20,16 +20,38 @@ try {
     Write-Host "=== Easydict MSIX Package and Install Script ===" -ForegroundColor Cyan
     Write-Host ""
 
-    # Step 1: Publish (self-contained)
+    # Step 1: Publish (self-contained, MSIX mode — without bundled Windows App SDK)
     Write-Host "[1/5] Publishing project..." -ForegroundColor Yellow
-    $publishDir = "./publish/$Platform"
+    $publishDir = "./publish-msix/$Platform"
     dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
         -c $Configuration `
         --runtime "win-$Platform" `
         --self-contained true `
         --output $publishDir `
-        -p:Platform=$Platform
-    if ($LASTEXITCODE -ne 0) { throw "Publish failed" }
+        -p:Platform=$Platform `
+        -p:WindowsAppSDKSelfContained=false
+    if ($LASTEXITCODE -ne 0) { throw "WinUI publish failed" }
+
+    # Publish NativeBridge into same output (for browser extension support)
+    Write-Host "  Publishing NativeBridge..." -ForegroundColor Gray
+    dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj `
+        -c $Configuration `
+        --runtime "win-$Platform" `
+        --self-contained true `
+        --output $publishDir `
+        -p:PublishTrimmed=true
+    if ($LASTEXITCODE -ne 0) { throw "NativeBridge publish failed" }
+
+    # Publish BrowserRegistrar into same output (for browser extension support)
+    Write-Host "  Publishing BrowserRegistrar..." -ForegroundColor Gray
+    dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj `
+        -c $Configuration `
+        --runtime "win-$Platform" `
+        --self-contained true `
+        --output $publishDir `
+        -p:PublishTrimmed=true
+    if ($LASTEXITCODE -ne 0) { throw "BrowserRegistrar publish failed" }
+
     Write-Host "Publish completed successfully" -ForegroundColor Green
 
     # dotnet publish names the PRI file after the assembly (Easydict.WinUI.pri),

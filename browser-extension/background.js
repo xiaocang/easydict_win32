@@ -45,7 +45,7 @@ function triggerOcrTranslate() {
           );
           openSetupPage("not-installed");
         } else if (!response?.success) {
-          console.error("[Easydict] App not running or bridge error");
+          console.error("[Easydict] App not running or bridge error, response:", response);
           openSetupPage("not-running");
         }
       }

@@ -49,6 +49,7 @@ function retry(sectionId) {
       { action: "ocr-translate" },
       (response) => {
         if (chrome.runtime.lastError) {
+          console.error("[Easydict] Retry: native host not found:", chrome.runtime.lastError?.message);
           showStatus(sectionId, "error", "setupRetryFailed");
           return;
         }
@@ -56,11 +57,13 @@ function retry(sectionId) {
           showStatus(sectionId, "success", "setupRetrySuccess");
           setTimeout(() => window.close(), 1500);
         } else {
+          console.error("[Easydict] Retry: app not running or bridge error, response:", response);
           showStatus(sectionId, "error", "setupRetryAppNotRunning");
         }
       }
     );
-  } catch {
+  } catch (e) {
+    console.error("[Easydict] Retry: sendNativeMessage not available:", e);
     showStatus(sectionId, "error", "setupRetryFailed");
   }
 }

@@ -1,3 +1,4 @@
+using Easydict.WinUI.Services;
 using FluentAssertions;
 using Xunit;
 

@@ -627,43 +627,52 @@ namespace Easydict.WinUI
             }
         }
 
-        private void OnBrowserSupportAction(string browser, bool isInstall)
+        private async void OnBrowserSupportAction(string browser, bool isInstall)
         {
             try
             {
                 if (isInstall)
                 {
-                    switch (browser)
+                    // Download registrar + bridge from GitHub releases, then run registrar.
+                    // This works for both MSIX and non-MSIX installs.
+                    var success = await BrowserSupportService.DownloadAndInstallAsync(browser);
+                    if (success)
                     {
-                        case "chrome":
-                            BrowserSupportService.InstallChrome();
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[Tray] Browser support installed via registrar for {browser}");
+
+                        if (browser is "chrome" or "all")
                             BrowserSupportService.OpenChromeStorePage();
-                            break;
-                        case "firefox":
-                            BrowserSupportService.InstallFirefox();
+                        if (browser is "firefox" or "all")
                             BrowserSupportService.OpenFirefoxStorePage();
-                            break;
-                        case "all":
-                            BrowserSupportService.InstallAll();
-                            BrowserSupportService.OpenChromeStorePage();
-                            BrowserSupportService.OpenFirefoxStorePage();
-                            break;
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[Tray] Registrar install failed for {browser}, falling back to local install");
+
+                        // Fallback to local install (works for non-MSIX)
+                        switch (browser)
+                        {
+                            case "chrome":
+                                BrowserSupportService.InstallChrome();
+                                BrowserSupportService.OpenChromeStorePage();
+                                break;
+                            case "firefox":
+                                BrowserSupportService.InstallFirefox();
+                                BrowserSupportService.OpenFirefoxStorePage();
+                                break;
+                            case "all":
+                                BrowserSupportService.InstallAll();
+                                BrowserSupportService.OpenChromeStorePage();
+                                BrowserSupportService.OpenFirefoxStorePage();
+                                break;
+                        }
                     }
                 }
                 else
                 {
-                    switch (browser)
-                    {
-                        case "chrome":
-                            BrowserSupportService.UninstallChrome();
-                            break;
-                        case "firefox":
-                            BrowserSupportService.UninstallFirefox();
-                            break;
-                        case "all":
-                            BrowserSupportService.UninstallAll();
-                            break;
-                    }
+                    await BrowserSupportService.DownloadAndUninstallAsync(browser);
                 }
 
                 // Refresh menu states after action
@@ -673,6 +682,52 @@ namespace Easydict.WinUI
             {
                 System.Diagnostics.Debug.WriteLine(
                     $"[Tray] BrowserSupportAction({browser}, install={isInstall}) error: {ex.Message}");
+
+                // Last resort fallback for install failures
+                try
+                {
+                    if (isInstall)
+                    {
+                        switch (browser)
+                        {
+                            case "chrome":
+                                BrowserSupportService.InstallChrome();
+                                BrowserSupportService.OpenChromeStorePage();
+                                break;
+                            case "firefox":
+                                BrowserSupportService.InstallFirefox();
+                                BrowserSupportService.OpenFirefoxStorePage();
+                                break;
+                            case "all":
+                                BrowserSupportService.InstallAll();
+                                BrowserSupportService.OpenChromeStorePage();
+                                BrowserSupportService.OpenFirefoxStorePage();
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        switch (browser)
+                        {
+                            case "chrome":
+                                BrowserSupportService.UninstallChrome();
+                                break;
+                            case "firefox":
+                                BrowserSupportService.UninstallFirefox();
+                                break;
+                            case "all":
+                                BrowserSupportService.UninstallAll();
+                                break;
+                        }
+                    }
+
+                    _trayIconService?.UpdateBrowserSupportMenuStates();
+                }
+                catch (Exception fallbackEx)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[Tray] Fallback BrowserSupportAction also failed: {fallbackEx.Message}");
+                }
             }
         }
 

@@ -113,6 +113,64 @@ jobs:
             --output ./publish/${{ matrix.platform }} `
             -p:PublishTrimmed=true
 
+      # Publish BrowserHostRegistrar (standalone exe for MSIX browser support install)
+      - name: Publish BrowserHostRegistrar
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --output ./publish-registrar/${{ matrix.platform }} `
+            -p:PublishTrimmed=true
+
+      # Copy registrar and bridge as standalone release assets with platform suffix
+      - name: Prepare browser support assets
+        shell: pwsh
+        run: |
+          $platform = "${{ matrix.platform }}"
+          $outDir = "browser-support-assets"
+          New-Item -ItemType Directory -Force -Path $outDir
+
+          # Copy registrar with platform suffix
+          $registrar = "dotnet/publish-registrar/$platform/BrowserHostRegistrar.exe"
+          if (Test-Path $registrar) {
+            Copy-Item $registrar "$outDir/BrowserHostRegistrar-$platform.exe"
+            Write-Host "Registrar: $((Get-Item $registrar).Length / 1MB) MB"
+          } else {
+            Write-Error "BrowserHostRegistrar.exe not found at $registrar"
+            exit 1
+          }
+
+          # Copy bridge with platform suffix
+          $bridge = "dotnet/publish/$platform/easydict-native-bridge.exe"
+          if (Test-Path $bridge) {
+            Copy-Item $bridge "$outDir/easydict-native-bridge-$platform.exe"
+            Write-Host "Bridge: $((Get-Item $bridge).Length / 1MB) MB"
+          } else {
+            Write-Error "easydict-native-bridge.exe not found at $bridge"
+            exit 1
+          }
+
+          # Generate SHA256 checksums
+          $checksumFile = "$outDir/browser-support-$platform.sha256"
+          $files = Get-ChildItem "$outDir/*.exe"
+          $lines = @()
+          foreach ($f in $files) {
+            $hash = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
+            $lines += "$hash *$($f.Name)"
+            Write-Host "$hash  $($f.Name)"
+          }
+          $lines | Out-File -FilePath $checksumFile -Encoding utf8
+          Write-Host "Checksums written to $checksumFile"
+
+      - name: Upload browser support assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-support-${{ matrix.platform }}
+          path: browser-support-assets/*
+          retention-days: 7
+
       # Publish again for MSIX without bundled Windows App SDK DLLs.
       # MSIX declares a framework package dependency (Microsoft.WindowsAppRuntime)
       # so bundled DLLs are redundant and cause launch failures.
@@ -353,6 +411,13 @@ jobs:
           path: installer-packages
           merge-multiple: true
 
+      - name: Download all browser support assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: browser-support-*
+          path: browser-support-packages
+          merge-multiple: true
+
       - name: Create MSIX Bundle
         shell: pwsh
         run: |
@@ -444,6 +509,8 @@ jobs:
             Easydict-${{ github.ref_name }}.unsigned.msixbundle
             zip-packages/*.zip
             installer-packages/*.exe
+            browser-support-packages/*.exe
+            browser-support-packages/*.sha256
           generate_release_notes: true
 
   publish-winget:

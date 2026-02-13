@@ -7,7 +7,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Easydict.BrowserRegistrar</RootNamespace>
         <AssemblyName>BrowserHostRegistrar</AssemblyName>
-        <!-- Publish settings: pass RID via CLI (dotnet publish -r win-x64 --self-contained) -->
+        <!-- Publish settings: pass RID via CLI (dotnet publish -r win-x64 /p:SelfContained=true) -->
         <PublishTrimmed>true</PublishTrimmed>
         <PublishSingleFile>true</PublishSingleFile>
     </PropertyGroup>

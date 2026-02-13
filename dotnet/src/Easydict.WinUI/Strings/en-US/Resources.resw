@@ -617,6 +617,12 @@
   <data name="TrayBrowserUninstallFirefox" xml:space="preserve">
     <value>Uninstall Firefox Support</value>
   </data>
+  <data name="TrayBrowserGetChromeExtension" xml:space="preserve">
+    <value>Get Extension</value>
+  </data>
+  <data name="TrayBrowserGetFirefoxExtension" xml:space="preserve">
+    <value>Get Extension</value>
+  </data>
   <data name="TrayBrowserInstallAll" xml:space="preserve">
     <value>Install All</value>
   </data>

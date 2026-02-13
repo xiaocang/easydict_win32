@@ -554,6 +554,39 @@
   <data name="TrayShowFixed" xml:space="preserve">
     <value>고정 창</value>
   </data>
+  <data name="TrayBrowserSupport" xml:space="preserve">
+    <value>Browser Support</value>
+  </data>
+  <data name="TrayBrowserChrome" xml:space="preserve">
+    <value>Chrome</value>
+  </data>
+  <data name="TrayBrowserFirefox" xml:space="preserve">
+    <value>Firefox</value>
+  </data>
+  <data name="TrayBrowserInstallChrome" xml:space="preserve">
+    <value>Install Chrome Support</value>
+  </data>
+  <data name="TrayBrowserUninstallChrome" xml:space="preserve">
+    <value>Uninstall Chrome Support</value>
+  </data>
+  <data name="TrayBrowserInstallFirefox" xml:space="preserve">
+    <value>Install Firefox Support</value>
+  </data>
+  <data name="TrayBrowserUninstallFirefox" xml:space="preserve">
+    <value>Uninstall Firefox Support</value>
+  </data>
+  <data name="TrayBrowserGetChromeExtension" xml:space="preserve">
+    <value>확장 프로그램 받기</value>
+  </data>
+  <data name="TrayBrowserGetFirefoxExtension" xml:space="preserve">
+    <value>확장 프로그램 받기</value>
+  </data>
+  <data name="TrayBrowserInstallAll" xml:space="preserve">
+    <value>Install All</value>
+  </data>
+  <data name="TrayBrowserUninstallAll" xml:space="preserve">
+    <value>Uninstall All</value>
+  </data>
   <data name="TraySettings" xml:space="preserve">
     <value>설정</value>
   </data>

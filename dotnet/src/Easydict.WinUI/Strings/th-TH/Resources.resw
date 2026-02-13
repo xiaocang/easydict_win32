@@ -447,6 +447,39 @@
   <data name="TrayShowFixed" xml:space="preserve">
     <value>&#xE2B;&#xE19;&#xE49;&#xE32;&#xE15;&#xE48;&#xE32;&#xE07;&#xE04;&#xE07;&#xE17;&#xE35;&#xE48;</value>
   </data>
+  <data name="TrayBrowserSupport" xml:space="preserve">
+    <value>Browser Support</value>
+  </data>
+  <data name="TrayBrowserChrome" xml:space="preserve">
+    <value>Chrome</value>
+  </data>
+  <data name="TrayBrowserFirefox" xml:space="preserve">
+    <value>Firefox</value>
+  </data>
+  <data name="TrayBrowserInstallChrome" xml:space="preserve">
+    <value>Install Chrome Support</value>
+  </data>
+  <data name="TrayBrowserUninstallChrome" xml:space="preserve">
+    <value>Uninstall Chrome Support</value>
+  </data>
+  <data name="TrayBrowserInstallFirefox" xml:space="preserve">
+    <value>Install Firefox Support</value>
+  </data>
+  <data name="TrayBrowserUninstallFirefox" xml:space="preserve">
+    <value>Uninstall Firefox Support</value>
+  </data>
+  <data name="TrayBrowserGetChromeExtension" xml:space="preserve">
+    <value>Get Extension</value>
+  </data>
+  <data name="TrayBrowserGetFirefoxExtension" xml:space="preserve">
+    <value>Get Extension</value>
+  </data>
+  <data name="TrayBrowserInstallAll" xml:space="preserve">
+    <value>Install All</value>
+  </data>
+  <data name="TrayBrowserUninstallAll" xml:space="preserve">
+    <value>Uninstall All</value>
+  </data>
   <data name="TraySettings" xml:space="preserve">
     <value>&#xE01;&#xE32;&#xE23;&#xE15;&#xE31;&#xE49;&#xE07;&#xE04;&#xE48;&#xE32;</value>
   </data>

@@ -617,6 +617,12 @@
   <data name="TrayBrowserUninstallFirefox" xml:space="preserve">
     <value>卸载 Firefox 支持</value>
   </data>
+  <data name="TrayBrowserGetChromeExtension" xml:space="preserve">
+    <value>获取扩展</value>
+  </data>
+  <data name="TrayBrowserGetFirefoxExtension" xml:space="preserve">
+    <value>获取扩展</value>
+  </data>
   <data name="TrayBrowserInstallAll" xml:space="preserve">
     <value>安装全部</value>
   </data>

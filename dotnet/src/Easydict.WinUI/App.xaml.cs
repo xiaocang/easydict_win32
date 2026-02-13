@@ -633,18 +633,13 @@ namespace Easydict.WinUI
             {
                 if (isInstall)
                 {
-                    // Run bundled registrar to install browser support.
+                    // Run bundled registrar to register native messaging host.
                     // This works for both MSIX and non-MSIX installs.
                     var success = await BrowserSupportService.InstallWithRegistrarAsync(browser);
                     if (success)
                     {
                         System.Diagnostics.Debug.WriteLine(
                             $"[Tray] Browser support installed via registrar for {browser}");
-
-                        if (browser is "chrome" or "all")
-                            BrowserSupportService.OpenChromeStorePage();
-                        if (browser is "firefox" or "all")
-                            BrowserSupportService.OpenFirefoxStorePage();
                     }
                     else
                     {
@@ -656,16 +651,12 @@ namespace Easydict.WinUI
                         {
                             case "chrome":
                                 BrowserSupportService.InstallChrome();
-                                BrowserSupportService.OpenChromeStorePage();
                                 break;
                             case "firefox":
                                 BrowserSupportService.InstallFirefox();
-                                BrowserSupportService.OpenFirefoxStorePage();
                                 break;
                             case "all":
                                 BrowserSupportService.InstallAll();
-                                BrowserSupportService.OpenChromeStorePage();
-                                BrowserSupportService.OpenFirefoxStorePage();
                                 break;
                         }
                     }
@@ -683,7 +674,7 @@ namespace Easydict.WinUI
                 System.Diagnostics.Debug.WriteLine(
                     $"[Tray] BrowserSupportAction({browser}, install={isInstall}) error: {ex.Message}");
 
-                // Last resort fallback for install failures
+                // Last resort fallback
                 try
                 {
                     if (isInstall)
@@ -692,16 +683,12 @@ namespace Easydict.WinUI
                         {
                             case "chrome":
                                 BrowserSupportService.InstallChrome();
-                                BrowserSupportService.OpenChromeStorePage();
                                 break;
                             case "firefox":
                                 BrowserSupportService.InstallFirefox();
-                                BrowserSupportService.OpenFirefoxStorePage();
                                 break;
                             case "all":
                                 BrowserSupportService.InstallAll();
-                                BrowserSupportService.OpenChromeStorePage();
-                                BrowserSupportService.OpenFirefoxStorePage();
                                 break;
                         }
                     }

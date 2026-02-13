@@ -164,7 +164,9 @@ public static class BrowserSupportService
     }
 
     /// <summary>
-    /// Download the registrar exe from the latest vr-* release on GitHub.
+    /// Download the registrar exe from the "vr-latest" GitHub release.
+    /// The workflow always updates this release on every vr-* tag push,
+    /// so we can use a fixed download URL without querying the API.
     /// </summary>
     private static async Task<string> DownloadRegistrarAsync(CancellationToken ct)
     {
@@ -173,22 +175,19 @@ public static class BrowserSupportService
 
         using var httpClient = CreateHttpClient();
 
-        // Find latest registrar release via GitHub API
-        var (registrarUrl, checksumUrl) = await FindLatestRegistrarReleaseAsync(httpClient, ct);
+        var registrarUrl = GetRegistrarDownloadUrl();
+        var checksumUrl = GetChecksumDownloadUrl();
 
-        // Download checksum file (optional)
+        // Download checksum file (optional — may not exist for first release)
         string? checksumContent = null;
-        if (checksumUrl != null)
+        try
         {
-            try
-            {
-                checksumContent = await httpClient.GetStringAsync(checksumUrl, ct);
-                Debug.WriteLine("[BrowserSupport] Downloaded checksum file");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[BrowserSupport] Checksum file not available: {ex.Message}");
-            }
+            checksumContent = await httpClient.GetStringAsync(checksumUrl, ct);
+            Debug.WriteLine("[BrowserSupport] Downloaded checksum file");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[BrowserSupport] Checksum file not available: {ex.Message}");
         }
 
         // Download registrar
@@ -197,7 +196,7 @@ public static class BrowserSupportService
         // Verify SHA256 checksum
         if (checksumContent != null)
         {
-            var assetName = registrarUrl.Split('/').Last();
+            var assetName = $"BrowserHostRegistrar-{GetPlatform()}.exe";
             VerifyChecksum(checksumContent, assetName, registrarPath);
         }
 
@@ -205,52 +204,22 @@ public static class BrowserSupportService
     }
 
     /// <summary>
-    /// Query GitHub releases API to find the latest vr-* tagged release
-    /// and return the download URL for the registrar asset matching the current platform.
+    /// Fixed download URL for the registrar exe from the "vr-latest" release.
+    /// The browser-registrar-release.yml workflow updates this release on every vr-* tag push.
     /// </summary>
-    internal static async Task<(string registrarUrl, string? checksumUrl)> FindLatestRegistrarReleaseAsync(
-        HttpClient httpClient, CancellationToken ct)
+    internal static string GetRegistrarDownloadUrl()
     {
         var platform = GetPlatform();
-        var registrarAssetName = $"BrowserHostRegistrar-{platform}.exe";
-        var checksumAssetName = $"browser-support-{platform}.sha256";
+        return $"https://github.com/{GitHubRepo}/releases/download/vr-latest/BrowserHostRegistrar-{platform}.exe";
+    }
 
-        var releasesUrl = $"https://api.github.com/repos/{GitHubRepo}/releases?per_page=30";
-        Debug.WriteLine($"[BrowserSupport] Fetching releases: {releasesUrl}");
-
-        var json = await httpClient.GetStringAsync(releasesUrl, ct);
-        using var doc = JsonDocument.Parse(json);
-
-        foreach (var release in doc.RootElement.EnumerateArray())
-        {
-            var tagName = release.GetProperty("tag_name").GetString();
-            if (tagName == null || !tagName.StartsWith("vr-", StringComparison.Ordinal))
-                continue;
-
-            string? registrarUrl = null;
-            string? checksumUrl = null;
-
-            foreach (var asset in release.GetProperty("assets").EnumerateArray())
-            {
-                var name = asset.GetProperty("name").GetString();
-                var url = asset.GetProperty("browser_download_url").GetString();
-
-                if (name == registrarAssetName)
-                    registrarUrl = url;
-                else if (name == checksumAssetName)
-                    checksumUrl = url;
-            }
-
-            if (registrarUrl != null)
-            {
-                Debug.WriteLine($"[BrowserSupport] Found registrar release: {tagName}");
-                return (registrarUrl, checksumUrl);
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"No registrar release (vr-* tag) found with asset '{registrarAssetName}' " +
-            $"at https://github.com/{GitHubRepo}/releases");
+    /// <summary>
+    /// Fixed download URL for the SHA256 checksum file from the "vr-latest" release.
+    /// </summary>
+    internal static string GetChecksumDownloadUrl()
+    {
+        var platform = GetPlatform();
+        return $"https://github.com/{GitHubRepo}/releases/download/vr-latest/browser-support-{platform}.sha256";
     }
 
     // ───────────────────── Local Install (non-MSIX fallback) ─────────────────────

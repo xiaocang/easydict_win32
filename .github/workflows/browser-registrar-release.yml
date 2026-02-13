@@ -1,11 +1,16 @@
 name: Browser Registrar Release
 
 # Separate release workflow for BrowserHostRegistrar.
-# Triggered by vr-* tags (e.g. vr-1.0.0-1, vr-1.0.0-2).
-# Creates a GitHub release with only the registrar exe per platform.
+# Triggered by vr-* tags with the same format as the main app's v-* tags:
+#   - vr-X.Y.Z         (stable, e.g. vr-1.0.0)
+#   - vr-X.Y.Z-suffix  (pre-release, e.g. vr-1.0.0-rc.1, vr-1.0.0-beta.1)
+#
+# Each run also updates the "vr-latest" release so the app can always
+# download the newest registrar via a fixed URL:
+#   https://github.com/<owner>/<repo>/releases/download/vr-latest/BrowserHostRegistrar-<platform>.exe
 #
 # Usage:
-#   git tag vr-1.0.0-1 && git push origin vr-1.0.0-1
+#   git tag vr-1.0.0 && git push origin vr-1.0.0
 
 on:
   push:
@@ -32,6 +37,20 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Validate tag format
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # Must be vr- followed by semver, optionally with pre-release suffix
+          if [[ ! "$TAG" =~ ^vr-[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Tag '$TAG' does not match expected format (vr-X.Y.Z or vr-X.Y.Z-suffix)"
+            echo "Examples: vr-1.0.0, vr-1.0.0-rc.1, vr-1.0.0-beta.2"
+            exit 1
+          fi
+
+          echo "Tag validated: $TAG"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -96,6 +115,9 @@ jobs:
     needs: build-registrar
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download all registrar artifacts
         uses: actions/download-artifact@v4
         with:
@@ -106,7 +128,8 @@ jobs:
       - name: List release assets
         run: ls -la release-assets/
 
-      - name: Create GitHub Release
+      # Create the versioned release (e.g. vr-1.0.0)
+      - name: Create versioned release
         uses: softprops/action-gh-release@v1
         with:
           name: "Browser Registrar ${{ github.ref_name }}"
@@ -132,3 +155,21 @@ jobs:
           files: |
             release-assets/*
           generate_release_notes: false
+
+      # Update the "vr-latest" release so the app can always download
+      # from a fixed URL regardless of the versioned tag.
+      - name: Update vr-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Delete existing vr-latest release and tag (ignore errors if not found)
+          gh release delete vr-latest --yes --cleanup-tag 2>/dev/null || true
+
+          # Create new vr-latest release with the same assets
+          gh release create vr-latest release-assets/* \
+            --title "Browser Registrar (latest)" \
+            --notes "Latest Browser Host Registrar build (from ${{ github.ref_name }}).
+
+          The Easydict app downloads from this release automatically.
+          This release is updated on every \`vr-*\` tag push." \
+            --latest=false

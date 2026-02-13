@@ -3,7 +3,8 @@ using FluentAssertions;
 namespace Easydict.WinUI.Tests.Services;
 
 /// <summary>
-/// Tests for BrowserSupportService — checksum verification, SHA256 computation, platform detection.
+/// Tests for BrowserSupportService — checksum verification, SHA256 computation,
+/// platform detection, and download URL generation.
 /// </summary>
 public class BrowserSupportServiceTests : IDisposable
 {
@@ -168,135 +169,70 @@ public class BrowserSupportServiceTests : IDisposable
         platform.Should().BeOneOf("x64", "x86", "arm64");
     }
 
-    // ───────────────────── FindLatestRegistrarReleaseAsync ─────────────────────
+    // ───────────────────── Download URLs (vr-latest) ─────────────────────
 
     [Fact]
-    public async Task FindLatestRegistrarRelease_NoVrRelease_Throws()
+    public void GetRegistrarDownloadUrl_ContainsVrLatestTag()
     {
-        // Mock HTTP response with no vr-* tags
-        var handler = new MockHttpMessageHandler("""
-            [
-                {
-                    "tag_name": "v1.0.0",
-                    "assets": [
-                        { "name": "Easydict-v1.0.0.msix", "browser_download_url": "https://example.com/easydict.msix" }
-                    ]
-                }
-            ]
-            """);
-        using var client = new HttpClient(handler);
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("test");
+        var url = BrowserSupportService.GetRegistrarDownloadUrl();
 
-        var act = () => BrowserSupportService.FindLatestRegistrarReleaseAsync(client, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*No registrar release*vr-*");
+        url.Should().Contain("/releases/download/vr-latest/");
     }
 
     [Fact]
-    public async Task FindLatestRegistrarRelease_WithVrRelease_ReturnsUrls()
+    public void GetRegistrarDownloadUrl_ContainsPlatform()
     {
         var platform = BrowserSupportService.GetPlatform();
-        var handler = new MockHttpMessageHandler($$"""
-            [
-                {
-                    "tag_name": "v1.0.0",
-                    "assets": [
-                        { "name": "Easydict-v1.0.0.msix", "browser_download_url": "https://example.com/easydict.msix" }
-                    ]
-                },
-                {
-                    "tag_name": "vr-1.0.0-1",
-                    "assets": [
-                        { "name": "BrowserHostRegistrar-{{platform}}.exe", "browser_download_url": "https://example.com/registrar.exe" },
-                        { "name": "browser-support-{{platform}}.sha256", "browser_download_url": "https://example.com/checksums.sha256" }
-                    ]
-                }
-            ]
-            """);
-        using var client = new HttpClient(handler);
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("test");
+        var url = BrowserSupportService.GetRegistrarDownloadUrl();
 
-        var (registrarUrl, checksumUrl) = await BrowserSupportService.FindLatestRegistrarReleaseAsync(
-            client, CancellationToken.None);
-
-        registrarUrl.Should().Be("https://example.com/registrar.exe");
-        checksumUrl.Should().Be("https://example.com/checksums.sha256");
+        url.Should().Contain($"BrowserHostRegistrar-{platform}.exe");
     }
 
     [Fact]
-    public async Task FindLatestRegistrarRelease_NoChecksumAsset_ReturnsNullChecksum()
+    public void GetRegistrarDownloadUrl_IsFullGitHubUrl()
     {
-        var platform = BrowserSupportService.GetPlatform();
-        var handler = new MockHttpMessageHandler($$"""
-            [
-                {
-                    "tag_name": "vr-1.0.0-1",
-                    "assets": [
-                        { "name": "BrowserHostRegistrar-{{platform}}.exe", "browser_download_url": "https://example.com/registrar.exe" }
-                    ]
-                }
-            ]
-            """);
-        using var client = new HttpClient(handler);
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("test");
+        var url = BrowserSupportService.GetRegistrarDownloadUrl();
 
-        var (registrarUrl, checksumUrl) = await BrowserSupportService.FindLatestRegistrarReleaseAsync(
-            client, CancellationToken.None);
-
-        registrarUrl.Should().Be("https://example.com/registrar.exe");
-        checksumUrl.Should().BeNull();
+        url.Should().StartWith("https://github.com/");
+        url.Should().EndWith(".exe");
     }
 
     [Fact]
-    public async Task FindLatestRegistrarRelease_PicksFirstVrRelease()
+    public void GetChecksumDownloadUrl_ContainsVrLatestTag()
     {
-        var platform = BrowserSupportService.GetPlatform();
-        var handler = new MockHttpMessageHandler($$"""
-            [
-                {
-                    "tag_name": "vr-2.0.0-1",
-                    "assets": [
-                        { "name": "BrowserHostRegistrar-{{platform}}.exe", "browser_download_url": "https://example.com/registrar-v2.exe" }
-                    ]
-                },
-                {
-                    "tag_name": "vr-1.0.0-1",
-                    "assets": [
-                        { "name": "BrowserHostRegistrar-{{platform}}.exe", "browser_download_url": "https://example.com/registrar-v1.exe" }
-                    ]
-                }
-            ]
-            """);
-        using var client = new HttpClient(handler);
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("test");
+        var url = BrowserSupportService.GetChecksumDownloadUrl();
 
-        var (registrarUrl, _) = await BrowserSupportService.FindLatestRegistrarReleaseAsync(
-            client, CancellationToken.None);
-
-        registrarUrl.Should().Be("https://example.com/registrar-v2.exe");
+        url.Should().Contain("/releases/download/vr-latest/");
     }
 
-    /// <summary>
-    /// Minimal mock HTTP handler that returns a fixed JSON response for any request.
-    /// </summary>
-    private sealed class MockHttpMessageHandler : HttpMessageHandler
+    [Fact]
+    public void GetChecksumDownloadUrl_ContainsPlatform()
     {
-        private readonly string _responseJson;
+        var platform = BrowserSupportService.GetPlatform();
+        var url = BrowserSupportService.GetChecksumDownloadUrl();
 
-        public MockHttpMessageHandler(string responseJson)
-        {
-            _responseJson = responseJson;
-        }
+        url.Should().Contain($"browser-support-{platform}.sha256");
+    }
 
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
-            {
-                Content = new StringContent(_responseJson, System.Text.Encoding.UTF8, "application/json")
-            };
-            return Task.FromResult(response);
-        }
+    [Fact]
+    public void GetChecksumDownloadUrl_IsFullGitHubUrl()
+    {
+        var url = BrowserSupportService.GetChecksumDownloadUrl();
+
+        url.Should().StartWith("https://github.com/");
+        url.Should().EndWith(".sha256");
+    }
+
+    [Fact]
+    public void DownloadUrls_ShareSameRepoAndTag()
+    {
+        var registrarUrl = BrowserSupportService.GetRegistrarDownloadUrl();
+        var checksumUrl = BrowserSupportService.GetChecksumDownloadUrl();
+
+        // Both URLs should share the same base (repo + vr-latest tag)
+        var registrarBase = registrarUrl[..registrarUrl.LastIndexOf('/')];
+        var checksumBase = checksumUrl[..checksumUrl.LastIndexOf('/')];
+
+        registrarBase.Should().Be(checksumBase);
     }
 }

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
 

@@ -25,7 +25,7 @@ namespace Easydict.WinUI.Services;
 /// The bridge exe receives messages from the browser extension via Native Messaging (stdio)
 /// and signals the running Easydict app via a named EventWaitHandle.
 /// </summary>
-public static class BrowserSupportService
+public static partial class BrowserSupportService
 {
     private const string NativeHostName = "com.easydict.bridge";
     private const string BridgeExeName = "easydict-native-bridge.exe";

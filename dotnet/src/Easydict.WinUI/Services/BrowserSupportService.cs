@@ -503,7 +503,38 @@ public static class BrowserSupportService
         await using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
         await stream.CopyToAsync(fileStream, ct);
 
+        // Remove NTFS Zone.Identifier ADS to prevent SmartScreen blocking.
+        // Downloaded files are marked as "from the internet" which can cause
+        // Process.Start to fail or show a security warning.
+        RemoveZoneIdentifier(destPath);
+
         Debug.WriteLine($"[BrowserSupport] Downloaded: {destPath} ({new FileInfo(destPath).Length} bytes)");
+    }
+
+    /// <summary>
+    /// Remove the NTFS Zone.Identifier alternate data stream from a downloaded file.
+    /// This prevents Windows SmartScreen from blocking Process.Start on the file.
+    /// Equivalent to PowerShell's Unblock-File cmdlet.
+    /// </summary>
+    private static void RemoveZoneIdentifier(string filePath)
+    {
+        try
+        {
+            var adsPath = filePath + ":Zone.Identifier";
+            if (NativeMethods.DeleteFile(adsPath))
+                Debug.WriteLine($"[BrowserSupport] Removed Zone.Identifier from {Path.GetFileName(filePath)}");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[BrowserSupport] Zone.Identifier removal failed (non-critical): {ex.Message}");
+        }
+    }
+
+    private static partial class NativeMethods
+    {
+        [System.Runtime.InteropServices.LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf16)]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        public static partial bool DeleteFile(string lpFileName);
     }
 
     /// <summary>

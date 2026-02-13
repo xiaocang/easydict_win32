@@ -633,9 +633,9 @@ namespace Easydict.WinUI
             {
                 if (isInstall)
                 {
-                    // Download registrar + bridge from GitHub releases, then run registrar.
+                    // Run bundled registrar to install browser support.
                     // This works for both MSIX and non-MSIX installs.
-                    var success = await BrowserSupportService.DownloadAndInstallAsync(browser);
+                    var success = await BrowserSupportService.InstallWithRegistrarAsync(browser);
                     if (success)
                     {
                         System.Diagnostics.Debug.WriteLine(
@@ -672,7 +672,7 @@ namespace Easydict.WinUI
                 }
                 else
                 {
-                    await BrowserSupportService.DownloadAndUninstallAsync(browser);
+                    await BrowserSupportService.UninstallWithRegistrarAsync(browser);
                 }
 
                 // Refresh menu states after action

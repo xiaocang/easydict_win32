@@ -1,7 +1,4 @@
 using System.Diagnostics;
-using System.Net.Http;
-using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Win32;
 
@@ -12,8 +9,8 @@ namespace Easydict.WinUI.Services;
 ///
 /// Two installation approaches:
 ///   1. Local install (non-MSIX): copy bridge exe from app directory + write registry directly.
-///   2. Download install (MSIX / universal): download BrowserHostRegistrar + bridge from GitHub
-///      releases, run the registrar outside the MSIX sandbox to write real HKCU registry keys.
+///   2. Registrar install (MSIX / universal): copy bundled BrowserHostRegistrar to
+///      %LocalAppData% and run it outside the MSIX sandbox to write real HKCU registry keys.
 ///
 /// "Install" does two things:
 ///   1. Deploy bridge: copy easydict-native-bridge.exe + host manifest JSON to
@@ -25,7 +22,7 @@ namespace Easydict.WinUI.Services;
 /// The bridge exe receives messages from the browser extension via Native Messaging (stdio)
 /// and signals the running Easydict app via a named EventWaitHandle.
 /// </summary>
-public static partial class BrowserSupportService
+public static class BrowserSupportService
 {
     private const string NativeHostName = "com.easydict.bridge";
     private const string BridgeExeName = "easydict-native-bridge.exe";
@@ -37,9 +34,6 @@ public static partial class BrowserSupportService
 
     // Firefox extension ID — must match gecko.id in manifest.v2.json
     private const string FirefoxExtensionId = "easydict-ocr@easydict.app";
-
-    // GitHub release download
-    private const string GitHubRepo = "xiaocang/easydict_win32";
 
     private static readonly string ChromeRegistryPath =
         $@"Software\Google\Chrome\NativeMessagingHosts\{NativeHostName}";
@@ -57,19 +51,6 @@ public static partial class BrowserSupportService
         {
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             return Path.Combine(localAppData, "Easydict", BridgeDirName);
-        }
-    }
-
-    /// <summary>
-    /// Directory where the registrar and bridge are downloaded before running.
-    /// %LocalAppData%\Easydict\downloads\
-    /// </summary>
-    private static string DownloadDirectory
-    {
-        get
-        {
-            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            return Path.Combine(localAppData, "Easydict", "downloads");
         }
     }
 
@@ -117,19 +98,21 @@ public static partial class BrowserSupportService
         return false;
     }
 
-    // ───────────────────── Download + Registrar Install ─────────────────────
+    // ───────────────────── Registrar Install (MSIX-safe) ─────────────────────
 
     /// <summary>
-    /// Download BrowserHostRegistrar from its dedicated GitHub release (vr-* tag),
-    /// then run it to install browser support outside the MSIX sandbox.
-    /// The bridge exe comes from the local app directory (bundled in MSIX / installer).
+    /// Run the bundled BrowserHostRegistrar to install browser support outside the MSIX sandbox.
+    /// The registrar exe is bundled in the app directory alongside the bridge exe.
+    /// It is copied to %LocalAppData% before running so it operates outside the MSIX container.
     /// </summary>
     /// <param name="browser">"chrome", "firefox", or "all"</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>True if registration succeeded.</returns>
-    public static async Task<bool> DownloadAndInstallAsync(string browser, CancellationToken ct = default)
+    public static async Task<bool> InstallWithRegistrarAsync(string browser, CancellationToken ct = default)
     {
-        var registrarPath = await DownloadRegistrarAsync(ct);
+        var registrarPath = DeployRegistrar();
+        if (registrarPath == null)
+            return false;
 
         // Use bridge from app's own install directory (works for both MSIX and non-MSIX)
         var localBridgePath = Path.Combine(AppContext.BaseDirectory, BridgeExeName);
@@ -138,88 +121,42 @@ public static partial class BrowserSupportService
     }
 
     /// <summary>
-    /// Download registrar from GitHub releases and run it to uninstall browser support.
-    /// Falls back to local uninstall if download fails.
+    /// Run the bundled BrowserHostRegistrar to uninstall browser support.
+    /// Falls back to local uninstall if registrar is not available.
     /// </summary>
-    public static async Task<bool> DownloadAndUninstallAsync(string browser, CancellationToken ct = default)
+    public static async Task<bool> UninstallWithRegistrarAsync(string browser, CancellationToken ct = default)
     {
-        var registrarPath = Path.Combine(DownloadDirectory, RegistrarExeName);
-
-        // If registrar was previously downloaded, reuse it
-        if (!File.Exists(registrarPath))
+        var registrarPath = DeployRegistrar();
+        if (registrarPath == null)
         {
-            try
-            {
-                registrarPath = await DownloadRegistrarAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[BrowserSupport] Registrar download failed, using local uninstall: {ex.Message}");
-                LocalUninstall(browser);
-                return true;
-            }
+            Debug.WriteLine("[BrowserSupport] Registrar not available, using local uninstall");
+            LocalUninstall(browser);
+            return true;
         }
 
         return await RunRegistrarAsync(registrarPath, "uninstall", browser, bridgePath: null, ct);
     }
 
     /// <summary>
-    /// Download the registrar exe from the "vr-latest" GitHub release.
-    /// The workflow always updates this release on every vr-* tag push,
-    /// so we can use a fixed download URL without querying the API.
+    /// Copy the bundled BrowserHostRegistrar exe from the app directory to
+    /// %LocalAppData%\Easydict\browser-bridge\ so it runs outside the MSIX sandbox.
+    /// Returns the deployed path, or null if the registrar is not bundled.
     /// </summary>
-    private static async Task<string> DownloadRegistrarAsync(CancellationToken ct)
+    private static string? DeployRegistrar()
     {
-        Directory.CreateDirectory(DownloadDirectory);
-        var registrarPath = Path.Combine(DownloadDirectory, RegistrarExeName);
-
-        using var httpClient = CreateHttpClient();
-
-        var registrarUrl = GetRegistrarDownloadUrl();
-        var checksumUrl = GetChecksumDownloadUrl();
-
-        // Download checksum file (optional — may not exist for first release)
-        string? checksumContent = null;
-        try
+        var sourcePath = Path.Combine(AppContext.BaseDirectory, RegistrarExeName);
+        if (!File.Exists(sourcePath))
         {
-            checksumContent = await httpClient.GetStringAsync(checksumUrl, ct);
-            Debug.WriteLine("[BrowserSupport] Downloaded checksum file");
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[BrowserSupport] Checksum file not available: {ex.Message}");
+            Debug.WriteLine($"[BrowserSupport] WARNING: Registrar exe not found at {sourcePath}");
+            return null;
         }
 
-        // Download registrar
-        await DownloadFileAsync(httpClient, registrarUrl, registrarPath, ct);
+        Directory.CreateDirectory(BridgeDirectory);
+        var destPath = Path.Combine(BridgeDirectory, RegistrarExeName);
 
-        // Verify SHA256 checksum
-        if (checksumContent != null)
-        {
-            var assetName = $"BrowserHostRegistrar-{GetPlatform()}.exe";
-            VerifyChecksum(checksumContent, assetName, registrarPath);
-        }
-
-        return registrarPath;
-    }
-
-    /// <summary>
-    /// Fixed download URL for the registrar exe from the "vr-latest" release.
-    /// The browser-registrar-release.yml workflow updates this release on every vr-* tag push.
-    /// </summary>
-    internal static string GetRegistrarDownloadUrl()
-    {
-        var platform = GetPlatform();
-        return $"https://github.com/{GitHubRepo}/releases/download/vr-latest/BrowserHostRegistrar-{platform}.exe";
-    }
-
-    /// <summary>
-    /// Fixed download URL for the SHA256 checksum file from the "vr-latest" release.
-    /// </summary>
-    internal static string GetChecksumDownloadUrl()
-    {
-        var platform = GetPlatform();
-        return $"https://github.com/{GitHubRepo}/releases/download/vr-latest/browser-support-{platform}.sha256";
+        File.Copy(sourcePath, destPath, overwrite: true);
+        Debug.WriteLine($"[BrowserSupport] Registrar deployed: {sourcePath} → {destPath}");
+        return destPath;
     }
 
     // ───────────────────── Local Install (non-MSIX fallback) ─────────────────────
@@ -477,106 +414,7 @@ public static partial class BrowserSupportService
         Debug.WriteLine("[BrowserSupport] Firefox Add-ons page not yet available (extension not published)");
     }
 
-    // ───────────────────── GitHub Download Helpers ─────────────────────
-
-    internal static string GetPlatform()
-    {
-        return RuntimeInformation.ProcessArchitecture switch
-        {
-            Architecture.X64 => "x64",
-            Architecture.X86 => "x86",
-            Architecture.Arm64 => "arm64",
-            _ => "x64"
-        };
-    }
-
-    private static HttpClient CreateHttpClient()
-    {
-        var client = new HttpClient();
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Easydict-WinUI");
-        client.Timeout = TimeSpan.FromMinutes(5);
-        return client;
-    }
-
-    private static async Task DownloadFileAsync(HttpClient client, string url, string destPath, CancellationToken ct)
-    {
-        Debug.WriteLine($"[BrowserSupport] Downloading: {url}");
-        using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        await using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        await stream.CopyToAsync(fileStream, ct);
-
-        // Remove NTFS Zone.Identifier ADS to prevent SmartScreen blocking.
-        // Downloaded files are marked as "from the internet" which can cause
-        // Process.Start to fail or show a security warning.
-        RemoveZoneIdentifier(destPath);
-
-        Debug.WriteLine($"[BrowserSupport] Downloaded: {destPath} ({new FileInfo(destPath).Length} bytes)");
-    }
-
-    /// <summary>
-    /// Remove the NTFS Zone.Identifier alternate data stream from a downloaded file.
-    /// This prevents Windows SmartScreen from blocking Process.Start on the file.
-    /// Equivalent to PowerShell's Unblock-File cmdlet.
-    /// </summary>
-    private static void RemoveZoneIdentifier(string filePath)
-    {
-        try
-        {
-            var adsPath = filePath + ":Zone.Identifier";
-            if (NativeMethods.DeleteFile(adsPath))
-                Debug.WriteLine($"[BrowserSupport] Removed Zone.Identifier from {Path.GetFileName(filePath)}");
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[BrowserSupport] Zone.Identifier removal failed (non-critical): {ex.Message}");
-        }
-    }
-
-    private static partial class NativeMethods
-    {
-        [System.Runtime.InteropServices.LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf16)]
-        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
-        public static partial bool DeleteFile(string lpFileName);
-    }
-
-    /// <summary>
-    /// Verify SHA256 hash of a downloaded file against a checksum file.
-    /// Checksum file format: "hash *filename" or "hash  filename" per line.
-    /// </summary>
-    internal static void VerifyChecksum(string checksumContent, string expectedFileName, string filePath)
-    {
-        foreach (var line in checksumContent.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var parts = line.Trim().Split(new[] { ' ', '*' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2 && parts[1].Equals(expectedFileName, StringComparison.OrdinalIgnoreCase))
-            {
-                var expectedHash = parts[0];
-                var actualHash = ComputeSha256(filePath);
-
-                if (!expectedHash.Equals(actualHash, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        $"SHA256 checksum mismatch for {expectedFileName}: expected {expectedHash}, got {actualHash}. " +
-                        "The downloaded file may be corrupted or tampered with.");
-                }
-
-                Debug.WriteLine($"[BrowserSupport] Checksum verified: {expectedFileName}");
-                return;
-            }
-        }
-
-        Debug.WriteLine($"[BrowserSupport] No checksum entry found for {expectedFileName}, skipping verification");
-    }
-
-    internal static string ComputeSha256(string filePath)
-    {
-        using var stream = File.OpenRead(filePath);
-        var hash = SHA256.HashData(stream);
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
+    // ───────────────────── Registrar Process ─────────────────────
 
     /// <summary>
     /// Run the BrowserHostRegistrar process with the given command and arguments.

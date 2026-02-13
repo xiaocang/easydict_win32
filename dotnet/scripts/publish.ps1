@@ -69,6 +69,31 @@ if (Test-Path $BridgeExe) {
     Write-Host "WARNING: easydict-native-bridge.exe not found at $BridgeExe" -ForegroundColor Yellow
 }
 
+# Publish BrowserRegistrar and copy to WinUI publish output
+$RegistrarProject = Join-Path $SolutionDir "src\Easydict.BrowserRegistrar\Easydict.BrowserRegistrar.csproj"
+$RegistrarPublishDir = Join-Path $SolutionDir "src\Easydict.BrowserRegistrar\bin\publish\win-$Platform"
+
+Write-Host "Publishing BrowserRegistrar..." -ForegroundColor Green
+dotnet publish $RegistrarProject `
+    -c $Configuration `
+    -r "win-$Platform" `
+    --self-contained true `
+    -o $RegistrarPublishDir `
+    -p:PublishTrimmed=true
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "BrowserRegistrar publish failed!" -ForegroundColor Red
+    exit 1
+}
+
+$RegistrarExe = Join-Path $RegistrarPublishDir "BrowserHostRegistrar.exe"
+if (Test-Path $RegistrarExe) {
+    Copy-Item $RegistrarExe -Destination $PublishDir
+    Write-Host "Copied BrowserHostRegistrar.exe to publish output" -ForegroundColor Green
+} else {
+    Write-Host "WARNING: BrowserHostRegistrar.exe not found at $RegistrarExe" -ForegroundColor Yellow
+}
+
 # Calculate size
 $files = Get-ChildItem -Path $PublishDir -Recurse -File
 $totalSize = ($files | Measure-Object -Property Length -Sum).Sum

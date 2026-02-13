@@ -11,4 +11,8 @@
         <PublishTrimmed>true</PublishTrimmed>
         <PublishSingleFile>true</PublishSingleFile>
     </PropertyGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Easydict.BrowserRegistrar.Tests" />
+    </ItemGroup>
 </Project>

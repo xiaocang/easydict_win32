@@ -120,54 +120,21 @@ public static class BrowserSupportService
     // ───────────────────── Download + Registrar Install ─────────────────────
 
     /// <summary>
-    /// Download BrowserHostRegistrar + easydict-native-bridge from GitHub releases,
-    /// then run the registrar to install browser support outside the MSIX sandbox.
+    /// Download BrowserHostRegistrar from its dedicated GitHub release (vr-* tag),
+    /// then run it to install browser support outside the MSIX sandbox.
+    /// The bridge exe comes from the local app directory (bundled in MSIX / installer).
     /// </summary>
     /// <param name="browser">"chrome", "firefox", or "all"</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>True if registration succeeded.</returns>
     public static async Task<bool> DownloadAndInstallAsync(string browser, CancellationToken ct = default)
     {
-        var platform = GetPlatform();
-        var registrarAsset = $"BrowserHostRegistrar-{platform}.exe";
-        var bridgeAsset = $"easydict-native-bridge-{platform}.exe";
-        var checksumAsset = $"browser-support-{platform}.sha256";
+        var registrarPath = await DownloadRegistrarAsync(ct);
 
-        Directory.CreateDirectory(DownloadDirectory);
+        // Use bridge from app's own install directory (works for both MSIX and non-MSIX)
+        var localBridgePath = Path.Combine(AppContext.BaseDirectory, BridgeExeName);
 
-        var registrarPath = Path.Combine(DownloadDirectory, RegistrarExeName);
-        var bridgePath = Path.Combine(DownloadDirectory, BridgeExeName);
-
-        using var httpClient = CreateHttpClient();
-
-        // Download checksum file (optional — skip verification if not available)
-        string? checksumContent = null;
-        try
-        {
-            var checksumUrl = GetReleaseDownloadUrl(checksumAsset);
-            checksumContent = await httpClient.GetStringAsync(checksumUrl, ct);
-            Debug.WriteLine("[BrowserSupport] Downloaded checksum file");
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[BrowserSupport] Checksum file not available, skipping verification: {ex.Message}");
-        }
-
-        // Download registrar
-        await DownloadFileAsync(httpClient, GetReleaseDownloadUrl(registrarAsset), registrarPath, ct);
-
-        // Download bridge
-        await DownloadFileAsync(httpClient, GetReleaseDownloadUrl(bridgeAsset), bridgePath, ct);
-
-        // Verify SHA256 checksums
-        if (checksumContent != null)
-        {
-            VerifyChecksum(checksumContent, registrarAsset, registrarPath);
-            VerifyChecksum(checksumContent, bridgeAsset, bridgePath);
-        }
-
-        // Run the registrar
-        return await RunRegistrarAsync(registrarPath, "install", browser, bridgePath, ct);
+        return await RunRegistrarAsync(registrarPath, "install", browser, localBridgePath, ct);
     }
 
     /// <summary>
@@ -183,12 +150,7 @@ public static class BrowserSupportService
         {
             try
             {
-                var platform = GetPlatform();
-                var registrarAsset = $"BrowserHostRegistrar-{platform}.exe";
-
-                Directory.CreateDirectory(DownloadDirectory);
-                using var httpClient = CreateHttpClient();
-                await DownloadFileAsync(httpClient, GetReleaseDownloadUrl(registrarAsset), registrarPath, ct);
+                registrarPath = await DownloadRegistrarAsync(ct);
             }
             catch (Exception ex)
             {
@@ -199,6 +161,96 @@ public static class BrowserSupportService
         }
 
         return await RunRegistrarAsync(registrarPath, "uninstall", browser, bridgePath: null, ct);
+    }
+
+    /// <summary>
+    /// Download the registrar exe from the latest vr-* release on GitHub.
+    /// </summary>
+    private static async Task<string> DownloadRegistrarAsync(CancellationToken ct)
+    {
+        Directory.CreateDirectory(DownloadDirectory);
+        var registrarPath = Path.Combine(DownloadDirectory, RegistrarExeName);
+
+        using var httpClient = CreateHttpClient();
+
+        // Find latest registrar release via GitHub API
+        var (registrarUrl, checksumUrl) = await FindLatestRegistrarReleaseAsync(httpClient, ct);
+
+        // Download checksum file (optional)
+        string? checksumContent = null;
+        if (checksumUrl != null)
+        {
+            try
+            {
+                checksumContent = await httpClient.GetStringAsync(checksumUrl, ct);
+                Debug.WriteLine("[BrowserSupport] Downloaded checksum file");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[BrowserSupport] Checksum file not available: {ex.Message}");
+            }
+        }
+
+        // Download registrar
+        await DownloadFileAsync(httpClient, registrarUrl, registrarPath, ct);
+
+        // Verify SHA256 checksum
+        if (checksumContent != null)
+        {
+            var assetName = registrarUrl.Split('/').Last();
+            VerifyChecksum(checksumContent, assetName, registrarPath);
+        }
+
+        return registrarPath;
+    }
+
+    /// <summary>
+    /// Query GitHub releases API to find the latest vr-* tagged release
+    /// and return the download URL for the registrar asset matching the current platform.
+    /// </summary>
+    internal static async Task<(string registrarUrl, string? checksumUrl)> FindLatestRegistrarReleaseAsync(
+        HttpClient httpClient, CancellationToken ct)
+    {
+        var platform = GetPlatform();
+        var registrarAssetName = $"BrowserHostRegistrar-{platform}.exe";
+        var checksumAssetName = $"browser-support-{platform}.sha256";
+
+        var releasesUrl = $"https://api.github.com/repos/{GitHubRepo}/releases?per_page=30";
+        Debug.WriteLine($"[BrowserSupport] Fetching releases: {releasesUrl}");
+
+        var json = await httpClient.GetStringAsync(releasesUrl, ct);
+        using var doc = JsonDocument.Parse(json);
+
+        foreach (var release in doc.RootElement.EnumerateArray())
+        {
+            var tagName = release.GetProperty("tag_name").GetString();
+            if (tagName == null || !tagName.StartsWith("vr-", StringComparison.Ordinal))
+                continue;
+
+            string? registrarUrl = null;
+            string? checksumUrl = null;
+
+            foreach (var asset in release.GetProperty("assets").EnumerateArray())
+            {
+                var name = asset.GetProperty("name").GetString();
+                var url = asset.GetProperty("browser_download_url").GetString();
+
+                if (name == registrarAssetName)
+                    registrarUrl = url;
+                else if (name == checksumAssetName)
+                    checksumUrl = url;
+            }
+
+            if (registrarUrl != null)
+            {
+                Debug.WriteLine($"[BrowserSupport] Found registrar release: {tagName}");
+                return (registrarUrl, checksumUrl);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"No registrar release (vr-* tag) found with asset '{registrarAssetName}' " +
+            $"at https://github.com/{GitHubRepo}/releases");
     }
 
     // ───────────────────── Local Install (non-MSIX fallback) ─────────────────────
@@ -458,13 +510,7 @@ public static class BrowserSupportService
 
     // ───────────────────── GitHub Download Helpers ─────────────────────
 
-    private static string GetAppVersion()
-    {
-        var version = typeof(BrowserSupportService).Assembly.GetName().Version;
-        return version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "0.0.0";
-    }
-
-    private static string GetPlatform()
+    internal static string GetPlatform()
     {
         return RuntimeInformation.ProcessArchitecture switch
         {
@@ -473,16 +519,6 @@ public static class BrowserSupportService
             Architecture.Arm64 => "arm64",
             _ => "x64"
         };
-    }
-
-    /// <summary>
-    /// Construct GitHub release asset download URL for the current app version.
-    /// Pattern: https://github.com/{repo}/releases/download/v{version}/{fileName}
-    /// </summary>
-    private static string GetReleaseDownloadUrl(string fileName)
-    {
-        var version = GetAppVersion();
-        return $"https://github.com/{GitHubRepo}/releases/download/v{version}/{fileName}";
     }
 
     private static HttpClient CreateHttpClient()
@@ -541,7 +577,7 @@ public static class BrowserSupportService
     /// Verify SHA256 hash of a downloaded file against a checksum file.
     /// Checksum file format: "hash *filename" or "hash  filename" per line.
     /// </summary>
-    private static void VerifyChecksum(string checksumContent, string expectedFileName, string filePath)
+    internal static void VerifyChecksum(string checksumContent, string expectedFileName, string filePath)
     {
         foreach (var line in checksumContent.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -566,7 +602,7 @@ public static class BrowserSupportService
         Debug.WriteLine($"[BrowserSupport] No checksum entry found for {expectedFileName}, skipping verification");
     }
 
-    private static string ComputeSha256(string filePath)
+    internal static string ComputeSha256(string filePath)
     {
         using var stream = File.OpenRead(filePath);
         var hash = SHA256.HashData(stream);

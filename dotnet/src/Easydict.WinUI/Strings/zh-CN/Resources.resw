@@ -606,22 +606,22 @@
     <value>Firefox 系</value>
   </data>
   <data name="TrayBrowserInstallChrome" xml:space="preserve">
-    <value>安装 Chrome 支持</value>
+    <value>① 安装 Chrome 支持</value>
   </data>
   <data name="TrayBrowserUninstallChrome" xml:space="preserve">
     <value>卸载 Chrome 支持</value>
   </data>
   <data name="TrayBrowserInstallFirefox" xml:space="preserve">
-    <value>安装 Firefox 支持</value>
+    <value>① 安装 Firefox 支持</value>
   </data>
   <data name="TrayBrowserUninstallFirefox" xml:space="preserve">
     <value>卸载 Firefox 支持</value>
   </data>
   <data name="TrayBrowserGetChromeExtension" xml:space="preserve">
-    <value>获取扩展</value>
+    <value>② 获取扩展</value>
   </data>
   <data name="TrayBrowserGetFirefoxExtension" xml:space="preserve">
-    <value>获取扩展</value>
+    <value>② 获取扩展</value>
   </data>
   <data name="TrayBrowserInstallAll" xml:space="preserve">
     <value>安装全部</value>

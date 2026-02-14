@@ -1,5 +1,5 @@
-using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Easydict.NativeBridge;
 
@@ -62,11 +62,9 @@ public static class Program
             }
 
             // Send response
-            var response = JsonSerializer.SerializeToUtf8Bytes(new
-            {
-                success,
-                action
-            });
+            var response = JsonSerializer.SerializeToUtf8Bytes(
+                new BridgeResponse(success, action),
+                BridgeJsonContext.Default.BridgeResponse);
             WriteMessage(stdout, response);
         }
     }
@@ -107,3 +105,16 @@ public static class Program
         stream.Flush();
     }
 }
+
+/// <summary>
+/// Response sent back to the browser extension via native messaging.
+/// </summary>
+internal sealed record BridgeResponse(
+    [property: JsonPropertyName("success")] bool Success,
+    [property: JsonPropertyName("action")] string Action);
+
+/// <summary>
+/// Source-generated JSON context for trimming-safe serialization.
+/// </summary>
+[JsonSerializable(typeof(BridgeResponse))]
+internal sealed partial class BridgeJsonContext : JsonSerializerContext;

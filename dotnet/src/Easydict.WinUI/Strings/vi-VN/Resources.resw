@@ -489,22 +489,22 @@
     <value>Firefox</value>
   </data>
   <data name="TrayBrowserInstallChrome" xml:space="preserve">
-    <value>Install Chrome Support</value>
+    <value>① Install Chrome Support</value>
   </data>
   <data name="TrayBrowserUninstallChrome" xml:space="preserve">
     <value>Uninstall Chrome Support</value>
   </data>
   <data name="TrayBrowserInstallFirefox" xml:space="preserve">
-    <value>Install Firefox Support</value>
+    <value>① Install Firefox Support</value>
   </data>
   <data name="TrayBrowserUninstallFirefox" xml:space="preserve">
     <value>Uninstall Firefox Support</value>
   </data>
   <data name="TrayBrowserGetChromeExtension" xml:space="preserve">
-    <value>Get Extension</value>
+    <value>② Get Extension</value>
   </data>
   <data name="TrayBrowserGetFirefoxExtension" xml:space="preserve">
-    <value>Get Extension</value>
+    <value>② Get Extension</value>
   </data>
   <data name="TrayBrowserInstallAll" xml:space="preserve">
     <value>Install All</value>

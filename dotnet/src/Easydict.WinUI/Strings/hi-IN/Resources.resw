@@ -167,6 +167,17 @@
   <data name="TrayShow" xml:space="preserve"><value>दिखाएँ</value></data>
   <data name="TrayShowMini" xml:space="preserve"><value>मिनी विंडो</value></data>
   <data name="TrayShowFixed" xml:space="preserve"><value>स्थिर विंडो</value></data>
+  <data name="TrayBrowserSupport" xml:space="preserve"><value>Browser Support</value></data>
+  <data name="TrayBrowserChrome" xml:space="preserve"><value>Chrome</value></data>
+  <data name="TrayBrowserFirefox" xml:space="preserve"><value>Firefox</value></data>
+  <data name="TrayBrowserInstallChrome" xml:space="preserve"><value>① Install Chrome Support</value></data>
+  <data name="TrayBrowserUninstallChrome" xml:space="preserve"><value>Uninstall Chrome Support</value></data>
+  <data name="TrayBrowserInstallFirefox" xml:space="preserve"><value>① Install Firefox Support</value></data>
+  <data name="TrayBrowserUninstallFirefox" xml:space="preserve"><value>Uninstall Firefox Support</value></data>
+  <data name="TrayBrowserGetChromeExtension" xml:space="preserve"><value>② Get Extension</value></data>
+  <data name="TrayBrowserGetFirefoxExtension" xml:space="preserve"><value>② Get Extension</value></data>
+  <data name="TrayBrowserInstallAll" xml:space="preserve"><value>Install All</value></data>
+  <data name="TrayBrowserUninstallAll" xml:space="preserve"><value>Uninstall All</value></data>
   <data name="TraySettings" xml:space="preserve"><value>सेटिंग्स</value></data>
   <data name="TrayExit" xml:space="preserve"><value>बाहर निकलें</value></data>
   <data name="QuickTranslate" xml:space="preserve"><value>त्वरित अनुवाद</value></data>

@@ -287,6 +287,11 @@ public sealed class TrayIconService : IDisposable
         SetTip(_uninstallChromeItem);
         chromeGroup.Items.Add(_uninstallChromeItem);
 
+        var getChromeExtItem = new MenuFlyoutItem { Text = L("TrayBrowserGetChromeExtension") };
+        getChromeExtItem.Click += (_, _) => BrowserSupportService.OpenChromeStorePage();
+        SetTip(getChromeExtItem);
+        chromeGroup.Items.Add(getChromeExtItem);
+
         browserMenu.Items.Add(chromeGroup);
 
         // Firefox
@@ -302,6 +307,11 @@ public sealed class TrayIconService : IDisposable
         _uninstallFirefoxItem.Click += (_, _) => OnBrowserSupportAction?.Invoke("firefox", false);
         SetTip(_uninstallFirefoxItem);
         firefoxGroup.Items.Add(_uninstallFirefoxItem);
+
+        var getFirefoxExtItem = new MenuFlyoutItem { Text = L("TrayBrowserGetFirefoxExtension") };
+        getFirefoxExtItem.Click += (_, _) => BrowserSupportService.OpenFirefoxStorePage();
+        SetTip(getFirefoxExtItem);
+        firefoxGroup.Items.Add(getFirefoxExtItem);
 
         browserMenu.Items.Add(firefoxGroup);
 

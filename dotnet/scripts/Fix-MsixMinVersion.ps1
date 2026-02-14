@@ -39,9 +39,15 @@ if (-not (Test-Path $MsixPath)) {
 $extractDir = Join-Path ([System.IO.Path]::GetTempPath()) "msix-minversion-fix-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
 
 try {
-    # Extract MSIX (ZIP format)
+    # Extract MSIX (ZIP format — rename to .zip because Expand-Archive rejects non-.zip extensions)
     New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
-    Expand-Archive -Path $MsixPath -DestinationPath $extractDir -Force
+    $tempZip = "$MsixPath.zip"
+    Copy-Item $MsixPath $tempZip -Force
+    try {
+        Expand-Archive -Path $tempZip -DestinationPath $extractDir -Force
+    } finally {
+        Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+    }
 
     $manifestPath = Join-Path $extractDir "AppxManifest.xml"
     if (-not (Test-Path $manifestPath)) {
@@ -72,13 +78,20 @@ try {
     $tdf.SetAttribute("MinVersion", $MinVersion)
     $manifest.Save($manifestPath)
 
-    # Find MakeAppx.exe from Windows SDK
+    # Find MakeAppx.exe — try Windows SDK first, then NuGet package cache
     $makeAppx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.*\x64\MakeAppx.exe" -ErrorAction SilentlyContinue |
                 Sort-Object { [version]($_.Directory.Parent.Name) } -Descending |
                 Select-Object -First 1
 
     if (-not $makeAppx) {
-        Write-Error "MakeAppx.exe not found - cannot re-pack MSIX"
+        $nugetPkgs = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windows.sdk.buildtools"
+        $makeAppx = Get-ChildItem "$nugetPkgs\*\bin\*\x64\MakeAppx.exe" -ErrorAction SilentlyContinue |
+                    Sort-Object { ($_.FullName -match '\\(\d+\.\d+\.\d+\.\d+)\\') | Out-Null; [version]$Matches[1] } -Descending |
+                    Select-Object -First 1
+    }
+
+    if (-not $makeAppx) {
+        Write-Error "MakeAppx.exe not found in Windows SDK or NuGet cache — cannot re-pack MSIX"
         exit 1
     }
 

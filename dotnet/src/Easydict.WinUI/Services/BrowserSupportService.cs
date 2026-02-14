@@ -7,6 +7,11 @@ namespace Easydict.WinUI.Services;
 /// <summary>
 /// Manages Native Messaging host installation for Chrome and Firefox browser extensions.
 ///
+/// Two installation approaches:
+///   1. Local install (non-MSIX): copy bridge exe from app directory + write registry directly.
+///   2. Registrar install (MSIX / universal): copy bundled BrowserHostRegistrar to
+///      %LocalAppData% and run it outside the MSIX sandbox to write real HKCU registry keys.
+///
 /// "Install" does two things:
 ///   1. Deploy bridge: copy easydict-native-bridge.exe + host manifest JSON to
 ///      %LocalAppData%\Easydict\browser-bridge\
@@ -22,9 +27,16 @@ public static class BrowserSupportService
     private const string NativeHostName = "com.easydict.bridge";
     private const string BridgeExeName = "easydict-native-bridge.exe";
     private const string BridgeDirName = "browser-bridge";
+    private const string RegistrarExeName = "BrowserHostRegistrar.exe";
 
     // Chrome extension ID — assigned by Chrome Web Store
     private const string ChromeExtensionId = "dmokdfinnomehfpmhoeekomncpobgagf";
+
+    // Chrome extension ID — computed from the key field in manifest.json when sideloaded
+    private const string ChromeSideloadedExtensionId = "cbhpnmadpnoedfgonddpmlhaclbicllg";
+
+    // Both Chrome extension IDs: Web Store + sideloaded (developer mode)
+    private static readonly string[] ChromeExtensionIds = new[] { ChromeExtensionId, ChromeSideloadedExtensionId };
 
     // Firefox extension ID — must match gecko.id in manifest.v2.json
     private const string FirefoxExtensionId = "easydict-ocr@easydict.app";
@@ -92,13 +104,81 @@ public static class BrowserSupportService
         return false;
     }
 
-    // ───────────────────── Install ─────────────────────
+    // ───────────────────── Registrar Install (MSIX-safe) ─────────────────────
 
     /// <summary>
-    /// Install Chrome Native Messaging support:
+    /// Run the bundled BrowserHostRegistrar to install browser support outside the MSIX sandbox.
+    /// The registrar exe is bundled in the app directory alongside the bridge exe.
+    /// It is copied to %LocalAppData% before running so it operates outside the MSIX container.
+    /// </summary>
+    /// <param name="browser">"chrome", "firefox", or "all"</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>True if registration succeeded.</returns>
+    public static async Task<bool> InstallWithRegistrarAsync(string browser, CancellationToken ct = default)
+    {
+        var registrarPath = DeployRegistrar();
+        if (registrarPath == null)
+            return false;
+
+        // Use bridge from app's own install directory (works for both MSIX and non-MSIX)
+        var localBridgePath = Path.Combine(AppContext.BaseDirectory, BridgeExeName);
+
+        return await RunRegistrarAsync(registrarPath, "install", browser, localBridgePath, ct);
+    }
+
+    /// <summary>
+    /// Run the bundled BrowserHostRegistrar to uninstall browser support.
+    /// Falls back to local uninstall if registrar is not available.
+    /// </summary>
+    public static async Task<bool> UninstallWithRegistrarAsync(string browser, CancellationToken ct = default)
+    {
+        var registrarPath = DeployRegistrar();
+        if (registrarPath == null)
+        {
+            Debug.WriteLine("[BrowserSupport] Registrar not available, using local uninstall");
+            LocalUninstall(browser);
+            return true;
+        }
+
+        return await RunRegistrarAsync(registrarPath, "uninstall", browser, bridgePath: null, ct);
+    }
+
+    /// <summary>
+    /// Copy the bundled BrowserHostRegistrar exe from the app directory to
+    /// %LocalAppData%\Easydict\browser-bridge\ so it runs outside the MSIX sandbox.
+    /// Returns the deployed path, or null if the registrar is not bundled.
+    /// </summary>
+    private static string? DeployRegistrar()
+    {
+        var sourcePath = Path.Combine(AppContext.BaseDirectory, RegistrarExeName);
+        if (!File.Exists(sourcePath))
+        {
+            Debug.WriteLine($"[BrowserSupport] WARNING: Registrar exe not found at {sourcePath}");
+            return null;
+        }
+
+        Directory.CreateDirectory(BridgeDirectory);
+        var destPath = Path.Combine(BridgeDirectory, RegistrarExeName);
+
+        try
+        {
+            File.Copy(sourcePath, destPath, overwrite: true);
+            Debug.WriteLine($"[BrowserSupport] Registrar deployed: {sourcePath} → {destPath}");
+        }
+        catch (IOException) when (File.Exists(destPath))
+        {
+            // Target is locked by a running process — skip since it already exists
+            Debug.WriteLine($"[BrowserSupport] Registrar already exists and is locked, skipping copy");
+        }
+        return destPath;
+    }
+
+    // ───────────────────── Local Install (non-MSIX fallback) ─────────────────────
+
+    /// <summary>
+    /// Install Chrome Native Messaging support using local copy:
     ///   1. Deploy bridge exe and Chrome host manifest
     ///   2. Write Chrome registry key
-    ///   3. Open Chrome Web Store page for the extension
     /// </summary>
     public static void InstallChrome()
     {
@@ -109,10 +189,9 @@ public static class BrowserSupportService
     }
 
     /// <summary>
-    /// Install Firefox Native Messaging support:
+    /// Install Firefox Native Messaging support using local copy:
     ///   1. Deploy bridge exe and Firefox host manifest
     ///   2. Write Firefox registry key
-    ///   3. Open Firefox Add-ons page for the extension
     /// </summary>
     public static void InstallFirefox()
     {
@@ -123,7 +202,7 @@ public static class BrowserSupportService
     }
 
     /// <summary>
-    /// Install both Chrome and Firefox support.
+    /// Install both Chrome and Firefox support using local copy.
     /// </summary>
     public static void InstallAll()
     {
@@ -185,7 +264,7 @@ public static class BrowserSupportService
         }
     }
 
-    // ───────────────────── Bridge Deployment ─────────────────────
+    // ───────────────────── Bridge Deployment (local) ─────────────────────
 
     /// <summary>
     /// Copy bridge exe from app directory to %LocalAppData%\Easydict\browser-bridge\.
@@ -201,8 +280,16 @@ public static class BrowserSupportService
 
         if (File.Exists(sourcePath))
         {
-            File.Copy(sourcePath, destPath, overwrite: true);
-            Debug.WriteLine($"[BrowserSupport] Bridge deployed: {sourcePath} → {destPath}");
+            try
+            {
+                File.Copy(sourcePath, destPath, overwrite: true);
+                Debug.WriteLine($"[BrowserSupport] Bridge deployed: {sourcePath} → {destPath}");
+            }
+            catch (IOException) when (File.Exists(destPath))
+            {
+                // Target is locked by a running process — skip since it already exists
+                Debug.WriteLine($"[BrowserSupport] Bridge already exists and is locked, skipping copy");
+            }
         }
         else
         {
@@ -222,7 +309,7 @@ public static class BrowserSupportService
             description = "Easydict native messaging bridge",
             path = BridgeExePath,
             type = "stdio",
-            allowed_origins = new[] { $"chrome-extension://{ChromeExtensionId}/" }
+            allowed_origins = ChromeExtensionIds.Select(id => $"chrome-extension://{id}/").ToArray()
         };
 
         var path = Path.Combine(BridgeDirectory, "chrome-manifest.json");
@@ -347,5 +434,107 @@ public static class BrowserSupportService
         // Placeholder — update after publishing to Firefox Add-ons
         // Process.Start(new ProcessStartInfo("https://addons.mozilla.org/en-US/firefox/addon/ADDON_SLUG/") { UseShellExecute = true });
         Debug.WriteLine("[BrowserSupport] Firefox Add-ons page not yet available (extension not published)");
+    }
+
+    // ───────────────────── Registrar Process ─────────────────────
+
+    /// <summary>
+    /// Run the BrowserHostRegistrar process with the given command and arguments.
+    /// Uses UseShellExecute = true so the process runs outside the MSIX sandbox,
+    /// ensuring registry writes are visible to Chrome/Firefox (not virtualized).
+    /// </summary>
+    private static async Task<bool> RunRegistrarAsync(
+        string registrarPath, string command, string browser, string? bridgePath, CancellationToken ct)
+    {
+        var args = new List<string> { command };
+
+        switch (browser)
+        {
+            case "chrome":
+                args.Add("--chrome");
+                break;
+            case "firefox":
+                args.Add("--firefox");
+                break;
+            // "all": omit browser flags → registrar defaults to both
+        }
+
+        if (bridgePath != null)
+        {
+            args.Add("--bridge-path");
+            args.Add(bridgePath);
+        }
+
+        args.AddRange(new[] { "--chrome-ext-id", string.Join(",", ChromeExtensionIds) });
+        args.AddRange(new[] { "--firefox-ext-id", FirefoxExtensionId });
+
+        var argsString = string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a));
+
+        Debug.WriteLine($"[BrowserSupport] Running registrar: {registrarPath} {argsString}");
+
+        // UseShellExecute = true ensures the registrar runs outside the MSIX container,
+        // so registry writes go to the real HKCU hive (visible to Chrome/Firefox).
+        var psi = new ProcessStartInfo
+        {
+            FileName = registrarPath,
+            Arguments = argsString,
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        };
+
+        using var process = Process.Start(psi);
+        if (process == null)
+        {
+            Debug.WriteLine("[BrowserSupport] Failed to start registrar process");
+            return false;
+        }
+
+        await process.WaitForExitAsync(ct);
+
+        Debug.WriteLine($"[BrowserSupport] Registrar exit code: {process.ExitCode}");
+
+        if (process.ExitCode != 0)
+        {
+            Debug.WriteLine("[BrowserSupport] Registrar reported failure");
+            return false;
+        }
+
+        // Verify installation by checking registry + manifest + bridge (not stdout parsing)
+        return command == "install" ? VerifyInstallation(browser) : true;
+    }
+
+    /// <summary>
+    /// Verify that browser support was installed correctly by checking the real registry.
+    /// </summary>
+    private static bool VerifyInstallation(string browser)
+    {
+        var success = browser switch
+        {
+            "chrome" => IsInstalled(ChromeRegistryPath),
+            "firefox" => IsInstalled(FirefoxRegistryPath),
+            _ => IsInstalled(ChromeRegistryPath) || IsInstalled(FirefoxRegistryPath) // "all"
+        };
+
+        Debug.WriteLine($"[BrowserSupport] VerifyInstallation({browser}): {success}");
+        return success;
+    }
+
+    /// <summary>
+    /// Local uninstall helper — used as fallback when registrar is not available.
+    /// </summary>
+    private static void LocalUninstall(string browser)
+    {
+        switch (browser)
+        {
+            case "chrome":
+                UninstallChrome();
+                break;
+            case "firefox":
+                UninstallFirefox();
+                break;
+            case "all":
+                UninstallAll();
+                break;
+        }
     }
 }

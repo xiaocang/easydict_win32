@@ -2,7 +2,7 @@
 # Package, sign, reinstall, and run Easydict MSIX
 
 param(
-    [string]$Version = "0.3.2",
+    [string]$Version = "",
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
     [string]$CertPath = ".\certs\dev-signing.pfx",
@@ -20,16 +20,54 @@ try {
     Write-Host "=== Easydict MSIX Package and Install Script ===" -ForegroundColor Cyan
     Write-Host ""
 
-    # Step 1: Publish (self-contained)
-    Write-Host "[1/5] Publishing project..." -ForegroundColor Yellow
-    $publishDir = "./publish/$Platform"
+    # Auto-detect version from csproj if not provided
+    if (-not $Version) {
+        $csprojPath = "src/Easydict.WinUI/Easydict.WinUI.csproj"
+        [xml]$csproj = Get-Content $csprojPath -Raw
+        $Version = $csproj.Project.PropertyGroup[0].Version
+        if (-not $Version) {
+            throw "Could not extract version from csproj. Please specify -Version."
+        }
+        Write-Host "Auto-detected version: $Version" -ForegroundColor Gray
+    }
+
+    # MSIX requires 4-part version (X.Y.Z.0)
+    $msixVersion = "$Version.0"
+
+    # Step 1: Publish (self-contained, MSIX mode — without bundled Windows App SDK)
+    Write-Host "[1/6] Publishing project..." -ForegroundColor Yellow
+    $publishDir = "./publish-msix/$Platform"
     dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
         -c $Configuration `
         --runtime "win-$Platform" `
         --self-contained true `
         --output $publishDir `
-        -p:Platform=$Platform
-    if ($LASTEXITCODE -ne 0) { throw "Publish failed" }
+        -p:Version=$Version `
+        -p:Platform=$Platform `
+        -p:PublishTrimmed=false `
+        -p:WindowsAppSDKSelfContained=false
+    if ($LASTEXITCODE -ne 0) { throw "WinUI publish failed" }
+
+    # Publish NativeBridge into same output (for browser extension support)
+    Write-Host "  Publishing NativeBridge..." -ForegroundColor Gray
+    dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj `
+        -c $Configuration `
+        --runtime "win-$Platform" `
+        --self-contained true `
+        --output $publishDir `
+        -p:PublishTrimmed=true
+    if ($LASTEXITCODE -ne 0) { throw "NativeBridge publish failed" }
+
+    # Publish BrowserRegistrar into same output (for browser extension support)
+    Write-Host "  Publishing BrowserRegistrar..." -ForegroundColor Gray
+    dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj `
+        -c $Configuration `
+        --runtime "win-$Platform" `
+        --self-contained true `
+        --output $publishDir `
+        -p:PublishTrimmed=true
+    if ($LASTEXITCODE -ne 0) { throw "BrowserRegistrar publish failed" }
+
     Write-Host "Publish completed successfully" -ForegroundColor Green
 
     # dotnet publish names the PRI file after the assembly (Easydict.WinUI.pri),
@@ -47,13 +85,13 @@ try {
     Write-Host ""
 
     # Step 2: Create output directory
-    Write-Host "[2/5] Creating MSIX output directory..." -ForegroundColor Yellow
+    Write-Host "[2/6] Creating MSIX output directory..." -ForegroundColor Yellow
     New-Item -ItemType Directory -Force -Path "msix" | Out-Null
     Write-Host "Directory ready" -ForegroundColor Green
     Write-Host ""
 
     # Step 3: Package
-    Write-Host "[3/5] Packaging MSIX..." -ForegroundColor Yellow
+    Write-Host "[3/6] Packaging MSIX..." -ForegroundColor Yellow
     $msixPath = ".\msix\Easydict-v$Version-$Platform.msix"
     $manifestPath = "src/Easydict.WinUI/Package.appxmanifest"
 
@@ -62,7 +100,6 @@ try {
     try {
         $manifestContent = Get-Content $manifestPath -Raw
         $manifestContent = $manifestContent -replace 'ProcessorArchitecture="[^"]*"', "ProcessorArchitecture=`"$Platform`""
-        $msixVersion = "$Version.0"
         $manifestContent = $manifestContent -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"$msixVersion`""
         Set-Content $tempManifest $manifestContent
 
@@ -74,15 +111,20 @@ try {
     Write-Host "Package created: $msixPath" -ForegroundColor Green
     Write-Host ""
 
-    # Step 4: Sign
-    Write-Host "[4/5] Signing MSIX..." -ForegroundColor Yellow
+    # Step 4: Fix MinVersion inside MSIX (WindowsAppSDK #5598 workaround)
+    Write-Host "[4/6] Verifying MSIX manifest MinVersion..." -ForegroundColor Yellow
+    & "$scriptDir/Fix-MsixMinVersion.ps1" -MsixPath $msixPath
+    Write-Host ""
+
+    # Step 5: Sign
+    Write-Host "[5/6] Signing MSIX..." -ForegroundColor Yellow
     winapp sign $msixPath $CertPath --password $CertPassword --verbose
     if ($LASTEXITCODE -ne 0) { throw "Signing failed" }
     Write-Host "Package signed successfully" -ForegroundColor Green
     Write-Host ""
 
-    # Step 5: Reinstall
-    Write-Host "[5/5] Reinstalling app..." -ForegroundColor Yellow
+    # Step 6: Reinstall
+    Write-Host "[6/6] Reinstalling app..." -ForegroundColor Yellow
 
     # Remove existing installation
     Write-Host "  - Removing existing installation..." -ForegroundColor Gray
@@ -101,7 +143,7 @@ try {
     Write-Host "App installed successfully" -ForegroundColor Green
     Write-Host ""
 
-    # Step 6: Show completion info
+    # Show completion info
     Write-Host "=== Installation Complete ===" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Package location: $msixPath" -ForegroundColor White

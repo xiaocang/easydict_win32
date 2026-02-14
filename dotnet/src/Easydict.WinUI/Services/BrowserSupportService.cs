@@ -160,8 +160,16 @@ public static class BrowserSupportService
         Directory.CreateDirectory(BridgeDirectory);
         var destPath = Path.Combine(BridgeDirectory, RegistrarExeName);
 
-        File.Copy(sourcePath, destPath, overwrite: true);
-        Debug.WriteLine($"[BrowserSupport] Registrar deployed: {sourcePath} → {destPath}");
+        try
+        {
+            File.Copy(sourcePath, destPath, overwrite: true);
+            Debug.WriteLine($"[BrowserSupport] Registrar deployed: {sourcePath} → {destPath}");
+        }
+        catch (IOException) when (File.Exists(destPath))
+        {
+            // Target is locked by a running process — skip since it already exists
+            Debug.WriteLine($"[BrowserSupport] Registrar already exists and is locked, skipping copy");
+        }
         return destPath;
     }
 
@@ -272,8 +280,16 @@ public static class BrowserSupportService
 
         if (File.Exists(sourcePath))
         {
-            File.Copy(sourcePath, destPath, overwrite: true);
-            Debug.WriteLine($"[BrowserSupport] Bridge deployed: {sourcePath} → {destPath}");
+            try
+            {
+                File.Copy(sourcePath, destPath, overwrite: true);
+                Debug.WriteLine($"[BrowserSupport] Bridge deployed: {sourcePath} → {destPath}");
+            }
+            catch (IOException) when (File.Exists(destPath))
+            {
+                // Target is locked by a running process — skip since it already exists
+                Debug.WriteLine($"[BrowserSupport] Bridge already exists and is locked, skipping copy");
+            }
         }
         else
         {

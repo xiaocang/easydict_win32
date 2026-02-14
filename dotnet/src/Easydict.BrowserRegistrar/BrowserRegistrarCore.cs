@@ -41,7 +41,14 @@ internal sealed class BrowserRegistrarCore
 
         // Deploy bridge to stable location
         Directory.CreateDirectory(_bridgeDirectory);
-        File.Copy(sourceBridgePath, BridgeExePath, overwrite: true);
+        try
+        {
+            File.Copy(sourceBridgePath, BridgeExePath, overwrite: true);
+        }
+        catch (IOException) when (File.Exists(BridgeExePath))
+        {
+            // Bridge exe is locked by a running process — skip copy since it already exists
+        }
 
         var installed = new List<string>();
 

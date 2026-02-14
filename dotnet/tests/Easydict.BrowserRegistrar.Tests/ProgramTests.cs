@@ -59,6 +59,16 @@ public class ProgramTests
     }
 
     [Fact]
+    public void DefaultChromeExtIds_ContainsBothStoreAndSideloadedIds()
+    {
+        var ids = Program.DefaultChromeExtIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        ids.Should().HaveCount(2);
+        ids.Should().Contain("dmokdfinnomehfpmhoeekomncpobgagf"); // Chrome Web Store ID
+        ids.Should().Contain("cbhpnmadpnoedfgonddpmlhaclbicllg"); // Sideloaded extension ID
+    }
+
+    [Fact]
     public void WriteJson_ProducesValidSnakeCaseJson()
     {
         var writer = new StringWriter();
@@ -66,7 +76,7 @@ public class ProgramTests
 
         try
         {
-            Program.WriteJson(new { success = true, bridge_path = "C:\\test" });
+            Program.WriteJson(new InstallOutput(true, new List<string> { "chrome" }, "C:\\test"));
             var output = writer.ToString().Trim();
 
             output.Should().Contain("\"success\":true");

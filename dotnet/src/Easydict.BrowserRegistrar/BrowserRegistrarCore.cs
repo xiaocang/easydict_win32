@@ -30,7 +30,7 @@ internal sealed class BrowserRegistrarCore
     // ───────────────────── Install ─────────────────────
 
     internal InstallResult Install(bool chrome, bool firefox, string? sourceBridgePath,
-        string chromeExtId, string firefoxExtId)
+        string[] chromeExtIds, string firefoxExtId)
     {
         // Resolve bridge source
         if (string.IsNullOrEmpty(sourceBridgePath))
@@ -47,7 +47,7 @@ internal sealed class BrowserRegistrarCore
 
         if (chrome)
         {
-            var manifestPath = WriteChromeManifest(chromeExtId);
+            var manifestPath = WriteChromeManifest(chromeExtIds);
             WriteRegistryKey(ChromeRegistryPath, manifestPath);
             installed.Add("chrome");
         }
@@ -109,16 +109,14 @@ internal sealed class BrowserRegistrarCore
 
     // ───────────────────── Manifest Generation ─────────────────────
 
-    internal string WriteChromeManifest(string chromeExtId)
+    internal string WriteChromeManifest(string[] chromeExtIds)
     {
-        var manifest = new
-        {
-            name = NativeHostName,
-            description = "Easydict native messaging bridge",
-            path = BridgeExePath,
-            type = "stdio",
-            allowed_origins = new[] { $"chrome-extension://{chromeExtId}/" }
-        };
+        var manifest = new ChromeManifest(
+            NativeHostName,
+            "Easydict native messaging bridge",
+            BridgeExePath,
+            "stdio",
+            chromeExtIds.Select(id => $"chrome-extension://{id}/").ToArray());
 
         var path = Path.Combine(_bridgeDirectory, "chrome-manifest.json");
         WriteManifestFile(path, manifest);
@@ -127,27 +125,27 @@ internal sealed class BrowserRegistrarCore
 
     internal string WriteFirefoxManifest(string firefoxExtId)
     {
-        var manifest = new
-        {
-            name = NativeHostName,
-            description = "Easydict native messaging bridge",
-            path = BridgeExePath,
-            type = "stdio",
-            allowed_extensions = new[] { firefoxExtId }
-        };
+        var manifest = new FirefoxManifest(
+            NativeHostName,
+            "Easydict native messaging bridge",
+            BridgeExePath,
+            "stdio",
+            [firefoxExtId]);
 
         var path = Path.Combine(_bridgeDirectory, "firefox-manifest.json");
         WriteManifestFile(path, manifest);
         return path;
     }
 
-    internal static void WriteManifestFile(string path, object data)
+    private static void WriteManifestFile(string path, ChromeManifest data)
     {
-        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-        });
+        var json = JsonSerializer.Serialize(data, AppJsonContext.IndentedDefault.ChromeManifest);
+        File.WriteAllText(path, json);
+    }
+
+    private static void WriteManifestFile(string path, FirefoxManifest data)
+    {
+        var json = JsonSerializer.Serialize(data, AppJsonContext.IndentedDefault.FirefoxManifest);
         File.WriteAllText(path, json);
     }
 

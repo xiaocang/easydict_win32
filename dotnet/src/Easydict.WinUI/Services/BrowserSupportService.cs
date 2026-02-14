@@ -32,6 +32,12 @@ public static class BrowserSupportService
     // Chrome extension ID — assigned by Chrome Web Store
     private const string ChromeExtensionId = "dmokdfinnomehfpmhoeekomncpobgagf";
 
+    // Chrome extension ID — computed from the key field in manifest.json when sideloaded
+    private const string ChromeSideloadedExtensionId = "cbhpnmadpnoedfgonddpmlhaclbicllg";
+
+    // Both Chrome extension IDs: Web Store + sideloaded (developer mode)
+    private static readonly string[] ChromeExtensionIds = new[] { ChromeExtensionId, ChromeSideloadedExtensionId };
+
     // Firefox extension ID — must match gecko.id in manifest.v2.json
     private const string FirefoxExtensionId = "easydict-ocr@easydict.app";
 
@@ -287,7 +293,7 @@ public static class BrowserSupportService
             description = "Easydict native messaging bridge",
             path = BridgeExePath,
             type = "stdio",
-            allowed_origins = new[] { $"chrome-extension://{ChromeExtensionId}/" }
+            allowed_origins = ChromeExtensionIds.Select(id => $"chrome-extension://{id}/").ToArray()
         };
 
         var path = Path.Combine(BridgeDirectory, "chrome-manifest.json");
@@ -418,6 +424,8 @@ public static class BrowserSupportService
 
     /// <summary>
     /// Run the BrowserHostRegistrar process with the given command and arguments.
+    /// Uses UseShellExecute = true so the process runs outside the MSIX sandbox,
+    /// ensuring registry writes are visible to Chrome/Firefox (not virtualized).
     /// </summary>
     private static async Task<bool> RunRegistrarAsync(
         string registrarPath, string command, string browser, string? bridgePath, CancellationToken ct)
@@ -441,21 +449,21 @@ public static class BrowserSupportService
             args.Add(bridgePath);
         }
 
-        args.AddRange(new[] { "--chrome-ext-id", ChromeExtensionId });
+        args.AddRange(new[] { "--chrome-ext-id", string.Join(",", ChromeExtensionIds) });
         args.AddRange(new[] { "--firefox-ext-id", FirefoxExtensionId });
 
         var argsString = string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a));
 
         Debug.WriteLine($"[BrowserSupport] Running registrar: {registrarPath} {argsString}");
 
+        // UseShellExecute = true ensures the registrar runs outside the MSIX container,
+        // so registry writes go to the real HKCU hive (visible to Chrome/Firefox).
         var psi = new ProcessStartInfo
         {
             FileName = registrarPath,
             Arguments = argsString,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Hidden
         };
 
         using var process = Process.Start(psi);
@@ -465,16 +473,34 @@ public static class BrowserSupportService
             return false;
         }
 
-        var stdout = await process.StandardOutput.ReadToEndAsync(ct);
-        var stderr = await process.StandardError.ReadToEndAsync(ct);
         await process.WaitForExitAsync(ct);
 
         Debug.WriteLine($"[BrowserSupport] Registrar exit code: {process.ExitCode}");
-        Debug.WriteLine($"[BrowserSupport] Registrar stdout: {stdout}");
-        if (!string.IsNullOrEmpty(stderr))
-            Debug.WriteLine($"[BrowserSupport] Registrar stderr: {stderr}");
 
-        return process.ExitCode == 0;
+        if (process.ExitCode != 0)
+        {
+            Debug.WriteLine("[BrowserSupport] Registrar reported failure");
+            return false;
+        }
+
+        // Verify installation by checking registry + manifest + bridge (not stdout parsing)
+        return command == "install" ? VerifyInstallation(browser) : true;
+    }
+
+    /// <summary>
+    /// Verify that browser support was installed correctly by checking the real registry.
+    /// </summary>
+    private static bool VerifyInstallation(string browser)
+    {
+        var success = browser switch
+        {
+            "chrome" => IsInstalled(ChromeRegistryPath),
+            "firefox" => IsInstalled(FirefoxRegistryPath),
+            _ => IsInstalled(ChromeRegistryPath) || IsInstalled(FirefoxRegistryPath) // "all"
+        };
+
+        Debug.WriteLine($"[BrowserSupport] VerifyInstallation({browser}): {success}");
+        return success;
     }
 
     /// <summary>

@@ -16,7 +16,7 @@ namespace Easydict.BrowserRegistrar;
 /// </summary>
 public static class Program
 {
-    private const string DefaultChromeExtId = "dmokdfinnomehfpmhoeekomncpobgagf";
+    internal const string DefaultChromeExtIds = "dmokdfinnomehfpmhoeekomncpobgagf,cbhpnmadpnoedfgonddpmlhaclbicllg";
     private const string DefaultFirefoxExtId = "easydict-ocr@easydict.app";
 
     static int Main(string[] args)
@@ -28,7 +28,8 @@ public static class Program
         var chrome = HasFlag(args, "--chrome");
         var firefox = HasFlag(args, "--firefox");
         var bridgePath = GetArgValue(args, "--bridge-path");
-        var chromeExtId = GetArgValue(args, "--chrome-ext-id") ?? DefaultChromeExtId;
+        var chromeExtIdsRaw = GetArgValue(args, "--chrome-ext-id") ?? DefaultChromeExtIds;
+        var chromeExtIds = chromeExtIdsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var firefoxExtId = GetArgValue(args, "--firefox-ext-id") ?? DefaultFirefoxExtId;
 
         // Default to both browsers if neither specified
@@ -44,7 +45,7 @@ public static class Program
         {
             return command switch
             {
-                "install" => DoInstall(core, chrome, firefox, bridgePath, chromeExtId, firefoxExtId),
+                "install" => DoInstall(core, chrome, firefox, bridgePath, chromeExtIds, firefoxExtId),
                 "uninstall" => DoUninstall(core, chrome, firefox),
                 "status" => DoStatus(core),
                 _ => PrintUsage()
@@ -52,48 +53,41 @@ public static class Program
         }
         catch (Exception ex)
         {
-            WriteJson(new { success = false, error = ex.Message });
+            WriteJson(new ErrorOutput(false, ex.Message));
             return 1;
         }
     }
 
     private static int DoInstall(BrowserRegistrarCore core, bool chrome, bool firefox,
-        string? bridgePath, string chromeExtId, string firefoxExtId)
+        string? bridgePath, string[] chromeExtIds, string firefoxExtId)
     {
-        var result = core.Install(chrome, firefox, bridgePath, chromeExtId, firefoxExtId);
+        var result = core.Install(chrome, firefox, bridgePath, chromeExtIds, firefoxExtId);
 
         if (!result.Success)
         {
-            WriteJson(new { success = false, error = result.Error });
+            WriteJson(new ErrorOutput(false, result.Error));
             return 1;
         }
 
-        WriteJson(new
-        {
-            success = true,
-            installed = result.Installed,
-            bridge_path = result.BridgePath
-        });
+        WriteJson(new InstallOutput(true, result.Installed, result.BridgePath));
         return 0;
     }
 
     private static int DoUninstall(BrowserRegistrarCore core, bool chrome, bool firefox)
     {
         var result = core.Uninstall(chrome, firefox);
-        WriteJson(new { success = true, uninstalled = result.Uninstalled });
+        WriteJson(new UninstallOutput(true, result.Uninstalled));
         return 0;
     }
 
     private static int DoStatus(BrowserRegistrarCore core)
     {
         var status = core.GetStatus();
-        WriteJson(new
-        {
-            chrome = new { installed = status.ChromeInstalled },
-            firefox = new { installed = status.FirefoxInstalled },
-            bridge_exists = status.BridgeExists,
-            bridge_directory = status.BridgeDirectory
-        });
+        WriteJson(new StatusOutput(
+            new BrowserStatusEntry(status.ChromeInstalled),
+            new BrowserStatusEntry(status.FirefoxInstalled),
+            status.BridgeExists,
+            status.BridgeDirectory));
         return 0;
     }
 
@@ -118,15 +112,17 @@ public static class Program
         return Path.Combine(localAppData, "Easydict", "browser-bridge");
     }
 
-    internal static void WriteJson(object data)
-    {
-        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
-        {
-            WriteIndented = false,
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-        });
-        Console.WriteLine(json);
-    }
+    internal static void WriteJson(ErrorOutput data) =>
+        Console.WriteLine(JsonSerializer.Serialize(data, AppJsonContext.Default.ErrorOutput));
+
+    internal static void WriteJson(InstallOutput data) =>
+        Console.WriteLine(JsonSerializer.Serialize(data, AppJsonContext.Default.InstallOutput));
+
+    internal static void WriteJson(UninstallOutput data) =>
+        Console.WriteLine(JsonSerializer.Serialize(data, AppJsonContext.Default.UninstallOutput));
+
+    internal static void WriteJson(StatusOutput data) =>
+        Console.WriteLine(JsonSerializer.Serialize(data, AppJsonContext.Default.StatusOutput));
 
     private static int PrintUsage()
     {
@@ -142,7 +138,7 @@ public static class Program
               --chrome              Target Chrome/Edge (default: both)
               --firefox             Target Firefox (default: both)
               --bridge-path PATH    Path to easydict-native-bridge.exe
-              --chrome-ext-id ID    Chrome extension ID (default: built-in)
+              --chrome-ext-id IDS   Chrome extension ID(s), comma-separated (default: built-in)
               --firefox-ext-id ID   Firefox extension ID (default: built-in)
             """);
         return 1;

@@ -50,7 +50,7 @@ public class BrowserRegistrarCoreTests : IDisposable
         var sourceBridge = CreateFakeBridge();
 
         var result = _core.Install(chrome: true, firefox: false, sourceBridge,
-            "test-chrome-ext-id", "test-firefox-ext-id");
+            new[] { "test-chrome-ext-id" }, "test-firefox-ext-id");
 
         result.Success.Should().BeTrue();
         File.Exists(_core.BridgeExePath).Should().BeTrue();
@@ -61,7 +61,7 @@ public class BrowserRegistrarCoreTests : IDisposable
     public void Install_ReturnsError_WhenBridgeNotFound()
     {
         var result = _core.Install(chrome: true, firefox: false,
-            "/nonexistent/bridge.exe", "ext-id", "ext-id");
+            "/nonexistent/bridge.exe", new[] { "ext-id" }, "ext-id");
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("Bridge exe not found");
@@ -73,7 +73,7 @@ public class BrowserRegistrarCoreTests : IDisposable
         var sourceBridge = CreateFakeBridge();
 
         var result = _core.Install(chrome: true, firefox: false, sourceBridge,
-            "test-chrome-ext-id", "test-firefox-ext-id");
+            new[] { "test-chrome-ext-id" }, "test-firefox-ext-id");
 
         result.Success.Should().BeTrue();
         result.Installed.Should().Contain("chrome");
@@ -100,7 +100,7 @@ public class BrowserRegistrarCoreTests : IDisposable
         var sourceBridge = CreateFakeBridge();
 
         var result = _core.Install(chrome: false, firefox: true, sourceBridge,
-            "test-chrome-ext-id", "test-firefox-ext-id");
+            new[] { "test-chrome-ext-id" }, "test-firefox-ext-id");
 
         result.Success.Should().BeTrue();
         result.Installed.Should().Contain("firefox");
@@ -127,7 +127,7 @@ public class BrowserRegistrarCoreTests : IDisposable
         var sourceBridge = CreateFakeBridge();
 
         var result = _core.Install(chrome: true, firefox: true, sourceBridge,
-            "chrome-id", "firefox-id");
+            new[] { "chrome-id" }, "firefox-id");
 
         result.Success.Should().BeTrue();
         result.Installed.Should().HaveCount(2);
@@ -144,11 +144,11 @@ public class BrowserRegistrarCoreTests : IDisposable
         var sourceBridge = CreateFakeBridge();
 
         // First install
-        _core.Install(chrome: true, firefox: false, sourceBridge, "id", "id");
+        _core.Install(chrome: true, firefox: false, sourceBridge, new[] { "id" }, "id");
 
         // Update source and reinstall
         File.WriteAllText(sourceBridge, "updated-bridge-exe");
-        _core.Install(chrome: true, firefox: false, sourceBridge, "id", "id");
+        _core.Install(chrome: true, firefox: false, sourceBridge, new[] { "id" }, "id");
 
         File.ReadAllText(_core.BridgeExePath).Should().Be("updated-bridge-exe");
     }
@@ -159,7 +159,7 @@ public class BrowserRegistrarCoreTests : IDisposable
     public void Uninstall_Chrome_DeletesChromeManifest()
     {
         var sourceBridge = CreateFakeBridge();
-        _core.Install(chrome: true, firefox: false, sourceBridge, "id", "id");
+        _core.Install(chrome: true, firefox: false, sourceBridge, new[] { "id" }, "id");
 
         File.Exists(Path.Combine(_bridgeDir, "chrome-manifest.json")).Should().BeTrue();
 
@@ -172,7 +172,7 @@ public class BrowserRegistrarCoreTests : IDisposable
     public void Uninstall_Firefox_DeletesFirefoxManifest()
     {
         var sourceBridge = CreateFakeBridge();
-        _core.Install(chrome: false, firefox: true, sourceBridge, "id", "id");
+        _core.Install(chrome: false, firefox: true, sourceBridge, new[] { "id" }, "id");
 
         File.Exists(Path.Combine(_bridgeDir, "firefox-manifest.json")).Should().BeTrue();
 
@@ -208,7 +208,7 @@ public class BrowserRegistrarCoreTests : IDisposable
     public void GetStatus_BridgeExists_AfterInstall()
     {
         var sourceBridge = CreateFakeBridge();
-        _core.Install(chrome: true, firefox: false, sourceBridge, "id", "id");
+        _core.Install(chrome: true, firefox: false, sourceBridge, new[] { "id" }, "id");
 
         var status = _core.GetStatus();
 
@@ -222,7 +222,7 @@ public class BrowserRegistrarCoreTests : IDisposable
     {
         Directory.CreateDirectory(_bridgeDir);
 
-        var manifestPath = _core.WriteChromeManifest("test-ext-id");
+        var manifestPath = _core.WriteChromeManifest(new[] { "test-ext-id" });
 
         File.Exists(manifestPath).Should().BeTrue();
         manifestPath.Should().EndWith("chrome-manifest.json");
@@ -254,7 +254,7 @@ public class BrowserRegistrarCoreTests : IDisposable
     {
         Directory.CreateDirectory(_bridgeDir);
 
-        _core.WriteChromeManifest("abc123");
+        _core.WriteChromeManifest(new[] { "abc123" });
 
         var json = File.ReadAllText(Path.Combine(_bridgeDir, "chrome-manifest.json"));
         using var doc = JsonDocument.Parse(json);
@@ -291,6 +291,47 @@ public class BrowserRegistrarCoreTests : IDisposable
 
         // Chrome-only field should NOT be present
         root.TryGetProperty("allowed_origins", out _).Should().BeFalse();
+    }
+
+    // ───────────────────── Multiple Chrome Extension IDs ─────────────────────
+
+    [Fact]
+    public void Install_Chrome_MultipleExtIds_WritesAllAllowedOrigins()
+    {
+        var sourceBridge = CreateFakeBridge();
+        var extIds = new[] { "store-id-abc", "sideloaded-id-xyz" };
+
+        var result = _core.Install(chrome: true, firefox: false, sourceBridge,
+            extIds, "test-firefox-ext-id");
+
+        result.Success.Should().BeTrue();
+
+        var manifestPath = Path.Combine(_bridgeDir, "chrome-manifest.json");
+        var json = File.ReadAllText(manifestPath);
+        using var doc = JsonDocument.Parse(json);
+        var origins = doc.RootElement.GetProperty("allowed_origins");
+
+        origins.GetArrayLength().Should().Be(2);
+        origins[0].GetString().Should().Be("chrome-extension://store-id-abc/");
+        origins[1].GetString().Should().Be("chrome-extension://sideloaded-id-xyz/");
+    }
+
+    [Fact]
+    public void WriteChromeManifest_MultipleIds_ProducesCorrectAllowedOrigins()
+    {
+        Directory.CreateDirectory(_bridgeDir);
+        var extIds = new[] { "id-one", "id-two", "id-three" };
+
+        _core.WriteChromeManifest(extIds);
+
+        var json = File.ReadAllText(Path.Combine(_bridgeDir, "chrome-manifest.json"));
+        using var doc = JsonDocument.Parse(json);
+        var origins = doc.RootElement.GetProperty("allowed_origins");
+
+        origins.GetArrayLength().Should().Be(3);
+        origins[0].GetString().Should().Be("chrome-extension://id-one/");
+        origins[1].GetString().Should().Be("chrome-extension://id-two/");
+        origins[2].GetString().Should().Be("chrome-extension://id-three/");
     }
 
     // ───────────────────── BridgeExePath ─────────────────────

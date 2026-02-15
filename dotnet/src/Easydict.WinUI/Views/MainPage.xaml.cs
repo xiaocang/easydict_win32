@@ -37,6 +37,15 @@ namespace Easydict.WinUI.Views
         private volatile bool _isClosing;
         private bool _suppressTargetLanguageSelectionChanged;
         private bool _suppressSourceLanguageSelectionChanged;
+        private readonly LongDocumentTranslationService _longDocumentService = new();
+        private readonly LongDocumentDeduplicationService _longDocDedupService = new();
+        private LongDocumentTranslationCheckpoint? _longDocCheckpoint;
+        private Language _longDocLastFrom = Language.Auto;
+        private Language _longDocLastTo = Language.English;
+        private string _longDocLastServiceId = string.Empty;
+        private string _longDocLastDedupKey = string.Empty;
+        private CancellationTokenSource? _longDocQueueCts;
+        private Task? _longDocQueueTask;
 
         /// <summary>
         /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -106,6 +115,9 @@ namespace Easydict.WinUI.Views
 
             // Initialize service result controls based on enabled services
             InitializeServiceResults();
+            InitializeLongDocServices();
+            InitializeLongDocOutputDefaults();
+            OnLongDocInputModeChanged(LongDocInputModeCombo, null!);
         }
 
         private async void OnPageUnloaded(object sender, RoutedEventArgs e)
@@ -401,6 +413,8 @@ namespace Easydict.WinUI.Views
         private async Task CleanupResourcesAsync()
         {
             CancelCurrentQuery();
+
+            _longDocQueueCts?.Cancel();
 
             // Cancel any in-flight manual queries
             // Don't dispose - let the owning OnServiceQueryRequested's finally block dispose it
@@ -1136,6 +1150,446 @@ namespace Easydict.WinUI.Views
             finally
             {
                 _suppressTargetLanguageSelectionChanged = false;
+            }
+        }
+
+
+        private void InitializeLongDocServices()
+        {
+            LongDocServiceCombo.Items.Clear();
+
+            var manager = TranslationManagerService.Instance.Manager;
+            foreach (var service in manager.Services.Values.Where(IsLongDocSupportedService).OrderBy(s => s.DisplayName))
+            {
+                var item = new ComboBoxItem
+                {
+                    Content = service.DisplayName,
+                    Tag = service.ServiceId
+                };
+                LongDocServiceCombo.Items.Add(item);
+            }
+
+            if (LongDocServiceCombo.Items.Count > 0)
+            {
+                LongDocServiceCombo.SelectedIndex = 0;
+            }
+        }
+
+        private static bool IsLongDocSupportedService(ITranslationService service)
+        {
+            // Long-document mode focuses on AI/LLM services similar to PDFMathTranslate style pipelines.
+            return service is IStreamTranslationService || string.Equals(service.ServiceId, "builtin", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool TryGetSelectedLongDocServiceId(out string serviceId)
+        {
+            serviceId = (LongDocServiceCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(serviceId);
+        }
+
+
+        private void InitializeLongDocOutputDefaults()
+        {
+            var defaultDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "Easydict",
+                "LongDocOutputs");
+
+            if (string.IsNullOrWhiteSpace(LongDocOutputFolderTextBox.Text))
+            {
+                LongDocOutputFolderTextBox.Text = defaultDir;
+            }
+
+            if (string.IsNullOrWhiteSpace(LongDocOutputFileNameTextBox.Text))
+            {
+                LongDocOutputFileNameTextBox.Text = $"translated-{DateTime.Now:yyyyMMdd-HHmmss}.pdf";
+            }
+        }
+
+        private bool TryBuildLongDocOutputPath(out string outputPath, out string errorMessage)
+        {
+            outputPath = string.Empty;
+            errorMessage = string.Empty;
+
+            var folder = LongDocOutputFolderTextBox.Text?.Trim() ?? string.Empty;
+            var fileName = LongDocOutputFileNameTextBox.Text?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(folder))
+            {
+                errorMessage = "Output folder is required.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                errorMessage = "Output file name is required.";
+                return false;
+            }
+
+            foreach (var c in Path.GetInvalidFileNameChars())
+            {
+                if (fileName.Contains(c))
+                {
+                    errorMessage = "Output file name contains invalid characters.";
+                    return false;
+                }
+            }
+
+            if (!fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                fileName += ".pdf";
+            }
+
+            try
+            {
+                Directory.CreateDirectory(folder);
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Cannot create output folder: {ex.Message}";
+                return false;
+            }
+
+            outputPath = Path.Combine(folder, fileName);
+            return true;
+        }
+
+        private void RefreshLongDocSuggestedOutputFileName(string prefix = "translated")
+        {
+            LongDocOutputFileNameTextBox.Text = $"{prefix}-{DateTime.Now:yyyyMMdd-HHmmss}.pdf";
+        }
+
+
+        private List<string> ParseBatchPdfQueueInputs()
+        {
+            var raw = LongDocBatchPdfPathsTextBox.Text ?? string.Empty;
+            return raw
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private void SetLongDocQueueUiState(bool running)
+        {
+            LongDocStartQueueButton.IsEnabled = !running;
+            LongDocCancelQueueButton.IsEnabled = running;
+            LongDocTranslateButton.IsEnabled = !running;
+            if (running)
+            {
+                LongDocRetryButton.IsEnabled = false;
+            }
+        }
+
+        private string BuildQueueOutputPath(string outputFolder, string sourcePdfPath, int queueIndex)
+        {
+            var safeName = Path.GetFileNameWithoutExtension(sourcePdfPath);
+            if (string.IsNullOrWhiteSpace(safeName))
+            {
+                safeName = $"file-{queueIndex:000}";
+            }
+
+            var outputName = $"{safeName}-translated-{DateTime.Now:yyyyMMdd-HHmmss}.pdf";
+            return Path.Combine(outputFolder, outputName);
+        }
+
+        private async Task ProcessLongDocQueueAsync(List<string> pdfPaths, string serviceId, string outputFolder, CancellationToken cancellationToken)
+        {
+            var from = GetSourceLanguage();
+            var to = GetTargetLanguage();
+
+            var completed = 0;
+            var skipped = 0;
+            var failed = 0;
+
+            for (var i = 0; i < pdfPaths.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var pdfPath = pdfPaths[i];
+                if (!File.Exists(pdfPath))
+                {
+                    failed++;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        LongDocStatusText.Text = $"Queue {i + 1}/{pdfPaths.Count} failed (file not found): {pdfPath}";
+                    });
+                    continue;
+                }
+
+                var dedupKey = await _longDocDedupService.CreateDedupKeyAsync(
+                    LongDocumentInputMode.Pdf,
+                    pdfPath,
+                    serviceId,
+                    from,
+                    to,
+                    cancellationToken);
+
+                var existingPath = await _longDocDedupService.TryGetExistingOutputPathAsync(dedupKey, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(existingPath))
+                {
+                    skipped++;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        LongDocStatusText.Text = $"Queue {i + 1}/{pdfPaths.Count} skipped duplicate: {existingPath}";
+                    });
+                    continue;
+                }
+
+                var outputPath = BuildQueueOutputPath(outputFolder, pdfPath, i + 1);
+
+                var result = await _longDocumentService.TranslateToPdfAsync(
+                    LongDocumentInputMode.Pdf,
+                    pdfPath,
+                    from,
+                    to,
+                    outputPath,
+                    serviceId,
+                    progress => DispatcherQueue.TryEnqueue(() =>
+                    {
+                        LongDocStatusText.Text = $"Queue {i + 1}/{pdfPaths.Count}: {progress}";
+                    }),
+                    cancellationToken);
+
+                if (result.State == LongDocumentJobState.Completed)
+                {
+                    await _longDocDedupService.RegisterOutputAsync(dedupKey, result.OutputPath, cancellationToken);
+                    completed++;
+                }
+                else
+                {
+                    failed++;
+                }
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                LongDocStatusText.Text = $"Queue finished. Completed: {completed}, Skipped: {skipped}, Failed/Partial: {failed}.";
+            });
+        }
+
+        private async void OnLongDocStartQueueClicked(object sender, RoutedEventArgs e)
+        {
+            if (!TryGetSelectedLongDocServiceId(out var serviceId))
+            {
+                LongDocStatusText.Text = "Please select one translation service.";
+                return;
+            }
+
+            if (!TryBuildLongDocOutputPath(out var sampleOutputPath, out var outputError))
+            {
+                LongDocStatusText.Text = outputError;
+                return;
+            }
+
+            var outputFolder = Path.GetDirectoryName(sampleOutputPath) ?? string.Empty;
+            var queueItems = ParseBatchPdfQueueInputs();
+            if (queueItems.Count == 0)
+            {
+                LongDocStatusText.Text = "Queue is empty. Add one PDF path per line.";
+                return;
+            }
+
+            _longDocQueueCts?.Cancel();
+            _longDocQueueCts?.Dispose();
+            _longDocQueueCts = new CancellationTokenSource();
+
+            SetLongDocQueueUiState(true);
+            LongDocStatusText.Text = $"Queue started: {queueItems.Count} file(s).";
+
+            _longDocQueueTask = ProcessLongDocQueueAsync(queueItems, serviceId, outputFolder, _longDocQueueCts.Token);
+
+            var runInBackground = LongDocRunInBackgroundCheckBox.IsChecked == true;
+            if (runInBackground)
+            {
+                _ = _longDocQueueTask.ContinueWith(task =>
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (task.IsCanceled)
+                        {
+                            LongDocStatusText.Text = "Queue canceled.";
+                        }
+                        else if (task.IsFaulted)
+                        {
+                            LongDocStatusText.Text = $"Queue failed: {task.Exception?.GetBaseException().Message}";
+                        }
+
+                        SetLongDocQueueUiState(false);
+                    });
+                }, TaskScheduler.Default);
+                return;
+            }
+
+            try
+            {
+                await _longDocQueueTask;
+            }
+            catch (OperationCanceledException)
+            {
+                LongDocStatusText.Text = "Queue canceled.";
+            }
+            catch (Exception ex)
+            {
+                LongDocStatusText.Text = $"Queue failed: {ex.Message}";
+            }
+            finally
+            {
+                SetLongDocQueueUiState(false);
+            }
+        }
+
+        private void OnLongDocCancelQueueClicked(object sender, RoutedEventArgs e)
+        {
+            LongDocCancelQueueButton.IsEnabled = false;
+            _longDocQueueCts?.Cancel();
+            LongDocStatusText.Text = "Canceling queue...";
+        }
+
+
+        private void OnLongDocInputModeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var selected = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+            LongDocManualTextBox.Visibility = selected == "manual" ? Visibility.Visible : Visibility.Collapsed;
+            LongDocManualLabel.Visibility = selected == "manual" ? Visibility.Visible : Visibility.Collapsed;
+            LongDocPdfPanel.Visibility = selected == "pdf" ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private async void OnLongDocTranslateClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                LongDocTranslateButton.IsEnabled = false;
+                LongDocRetryButton.IsEnabled = false;
+                LongDocStatusText.Text = "Preparing...";
+
+                if (!TryGetSelectedLongDocServiceId(out var serviceId))
+                {
+                    LongDocStatusText.Text = "Please select one translation service.";
+                    return;
+                }
+
+                var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "manual";
+                var mode = modeTag switch
+                {
+                    "pdf" => LongDocumentInputMode.Pdf,
+                    _ => LongDocumentInputMode.Manual
+                };
+
+                var input = mode switch
+                {
+                    LongDocumentInputMode.Pdf => LongDocPdfPathTextBox.Text?.Trim() ?? string.Empty,
+                    _ => LongDocManualTextBox.Text?.Trim() ?? string.Empty
+                };
+
+                if (string.IsNullOrWhiteSpace(input))
+                {
+                    LongDocStatusText.Text = "Input cannot be empty.";
+                    return;
+                }
+
+                if (!TryBuildLongDocOutputPath(out var outputPath, out var outputError))
+                {
+                    LongDocStatusText.Text = outputError;
+                    return;
+                }
+
+                _longDocLastFrom = GetSourceLanguage();
+                _longDocLastTo = GetTargetLanguage();
+                _longDocLastServiceId = serviceId;
+                _longDocLastDedupKey = await _longDocDedupService.CreateDedupKeyAsync(
+                    mode,
+                    input,
+                    serviceId,
+                    _longDocLastFrom,
+                    _longDocLastTo);
+
+                var existingOutputPath = await _longDocDedupService.TryGetExistingOutputPathAsync(_longDocLastDedupKey);
+                if (!string.IsNullOrWhiteSpace(existingOutputPath))
+                {
+                    LongDocStatusText.Text = $"Skipped duplicate file. Existing translation: {existingOutputPath}";
+                    return;
+                }
+
+                var result = await _longDocumentService.TranslateToPdfAsync(
+                    mode,
+                    input,
+                    _longDocLastFrom,
+                    _longDocLastTo,
+                    outputPath,
+                    serviceId,
+                    progress => DispatcherQueue.TryEnqueue(() => LongDocStatusText.Text = progress));
+
+                _longDocCheckpoint = result.Checkpoint;
+                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
+                LongDocStatusText.Text = result.State == LongDocumentJobState.Completed
+                    ? $"Completed: {result.OutputPath}"
+                    : $"Partial success: {result.SucceededChunks}/{result.TotalChunks} chunks succeeded, failed chunks: {string.Join(",", result.FailedChunkIndexes.Select(i => i + 1))}.";
+
+                if (result.State == LongDocumentJobState.Completed)
+                {
+                    await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath);
+                }
+
+                RefreshLongDocSuggestedOutputFileName();
+            }
+            catch (Exception ex)
+            {
+                LongDocStatusText.Text = $"Failed: {ex.Message}";
+            }
+            finally
+            {
+                LongDocTranslateButton.IsEnabled = LongDocCancelQueueButton.IsEnabled ? false : true;
+            }
+        }
+
+        private async void OnLongDocRetryClicked(object sender, RoutedEventArgs e)
+        {
+            if (_longDocCheckpoint is null)
+            {
+                LongDocStatusText.Text = "No partial task to retry.";
+                return;
+            }
+
+            try
+            {
+                LongDocTranslateButton.IsEnabled = false;
+                LongDocRetryButton.IsEnabled = false;
+
+                if (!TryBuildLongDocOutputPath(out var outputPath, out var outputError))
+                {
+                    LongDocStatusText.Text = outputError;
+                    return;
+                }
+
+                var result = await _longDocumentService.RetryFailedChunksAsync(
+                    _longDocCheckpoint,
+                    _longDocLastFrom,
+                    _longDocLastTo,
+                    outputPath,
+                    _longDocLastServiceId,
+                    progress => DispatcherQueue.TryEnqueue(() => LongDocStatusText.Text = progress));
+
+                _longDocCheckpoint = result.Checkpoint;
+                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
+                LongDocStatusText.Text = result.State == LongDocumentJobState.Completed
+                    ? $"Retry completed: {result.OutputPath}"
+                    : $"Still partial: {result.SucceededChunks}/{result.TotalChunks} chunks succeeded, remaining failed chunks: {string.Join(",", result.FailedChunkIndexes.Select(i => i + 1))}.";
+
+                if (result.State == LongDocumentJobState.Completed && !string.IsNullOrWhiteSpace(_longDocLastDedupKey))
+                {
+                    await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath);
+                }
+
+                RefreshLongDocSuggestedOutputFileName("translated-retry");
+            }
+            catch (Exception ex)
+            {
+                LongDocStatusText.Text = $"Retry failed: {ex.Message}";
+            }
+            finally
+            {
+                LongDocTranslateButton.IsEnabled = LongDocCancelQueueButton.IsEnabled ? false : true;
             }
         }
 

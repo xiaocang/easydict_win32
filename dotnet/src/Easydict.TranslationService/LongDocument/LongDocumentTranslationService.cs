@@ -36,6 +36,11 @@ public sealed class LongDocumentTranslationService
         LongDocumentTranslationOptions options,
         CancellationToken cancellationToken = default)
     {
+        if (options.MaxRetriesPerBlock < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options.MaxRetriesPerBlock), options.MaxRetriesPerBlock, "MaxRetriesPerBlock must be greater than or equal to 0.");
+        }
+
         var timings = new Dictionary<string, long>();
 
         var ingestSw = Stopwatch.StartNew();
@@ -230,6 +235,7 @@ public sealed class LongDocumentTranslationService
             var retryCount = 0;
             string? lastError = null;
             string translatedText = block.ProtectedText;
+            var translationSucceeded = false;
 
             for (; retryCount <= options.MaxRetriesPerBlock; retryCount++)
             {
@@ -245,7 +251,12 @@ public sealed class LongDocumentTranslationService
                     var translated = await _translateWithService(request, options.ServiceId, cancellationToken);
                     translatedText = ApplyGlossary(translated.TranslatedText, options.Glossary);
                     lastError = null;
+                    translationSucceeded = true;
                     break;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -256,6 +267,10 @@ public sealed class LongDocumentTranslationService
                     }
                 }
             }
+
+            var effectiveRetryCount = translationSucceeded
+                ? retryCount
+                : Math.Min(retryCount, options.MaxRetriesPerBlock);
 
             result[block.IrBlockId] = new TranslatedDocumentBlock
             {
@@ -268,7 +283,7 @@ public sealed class LongDocumentTranslationService
                 SourceHash = block.SourceHash,
                 BoundingBox = block.BoundingBox,
                 TranslationSkipped = false,
-                RetryCount = retryCount,
+                RetryCount = effectiveRetryCount,
                 LastError = lastError
             };
         }
@@ -287,7 +302,6 @@ public sealed class LongDocumentTranslationService
             {
                 PageNumber = group.Key,
                 Blocks = group
-                    .OrderBy(b => b.IrBlockId, StringComparer.Ordinal)
                     .Select(b => translatedBlocks[b.IrBlockId])
                     .ToList()
             })

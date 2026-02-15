@@ -35,6 +35,14 @@ public enum LayoutRegionType
     TableLike
 }
 
+
+public enum LayoutRegionSource
+{
+    Unknown,
+    Heuristic,
+    BlockIdFallback
+}
+
 public sealed class LongDocumentTranslationCheckpoint
 {
     public required LongDocumentInputMode InputMode { get; init; }
@@ -54,6 +62,8 @@ public sealed class LongDocumentChunkMetadata
     public bool IsFormulaLike { get; init; }
     public required int OrderInPage { get; init; }
     public required LayoutRegionType RegionType { get; init; }
+    public double RegionConfidence { get; init; }
+    public LayoutRegionSource RegionSource { get; init; }
     public double ReadingOrderScore { get; init; }
     public BlockRect? BoundingBox { get; init; }
 }
@@ -155,33 +165,39 @@ public sealed class LongDocumentTranslationService
             SourcePdfPath = sourcePdfPath,
             SourceChunks = allBlocks.Select(item => item.Block.OriginalText).ToList(),
             ChunkMetadata = allBlocks
-                .Select((item, index) => new LongDocumentChunkMetadata
+                .Select((item, index) =>
                 {
-                    ChunkIndex = index,
-                    PageNumber = item.PageNumber,
-                    SourceBlockId = item.Block.SourceBlockId,
-                    SourceBlockType = item.Block.BlockType switch
+                    var regionInfo = InferRegionInfoFromBlockId(item.Block.SourceBlockId);
+                    return new LongDocumentChunkMetadata
                     {
-                        BlockType.Heading => SourceBlockType.Heading,
-                        BlockType.Caption => SourceBlockType.Caption,
-                        BlockType.Table => SourceBlockType.TableCell,
-                        BlockType.Formula => SourceBlockType.Formula,
-                        BlockType.Unknown => SourceBlockType.Unknown,
-                        _ => SourceBlockType.Paragraph
-                    },
-                    IsFormulaLike = item.Block.TranslationSkipped,
-                    OrderInPage = orderBySourceBlockId.TryGetValue(item.PageNumber, out var orders) &&
-                                  orders.TryGetValue(item.Block.SourceBlockId, out var order)
-                        ? order
-                        : 0,
-                    RegionType = InferRegionTypeFromBlockId(item.Block.SourceBlockId),
-                    ReadingOrderScore = CalculateReadingOrderScore(
+                        ChunkIndex = index,
+                        PageNumber = item.PageNumber,
+                        SourceBlockId = item.Block.SourceBlockId,
+                        SourceBlockType = item.Block.BlockType switch
+                        {
+                            BlockType.Heading => SourceBlockType.Heading,
+                            BlockType.Caption => SourceBlockType.Caption,
+                            BlockType.Table => SourceBlockType.TableCell,
+                            BlockType.Formula => SourceBlockType.Formula,
+                            BlockType.Unknown => SourceBlockType.Unknown,
+                            _ => SourceBlockType.Paragraph
+                        },
+                        IsFormulaLike = item.Block.TranslationSkipped,
+                        OrderInPage = orderBySourceBlockId.TryGetValue(item.PageNumber, out var orders) &&
+                                      orders.TryGetValue(item.Block.SourceBlockId, out var order)
+                            ? order
+                            : 0,
+                        RegionType = regionInfo.Type,
+                        RegionConfidence = regionInfo.Confidence,
+                        RegionSource = regionInfo.Source,
+                        ReadingOrderScore = CalculateReadingOrderScore(
                         orderBySourceBlockId.TryGetValue(item.PageNumber, out var scoreOrders) &&
                         scoreOrders.TryGetValue(item.Block.SourceBlockId, out var scoreOrder)
                             ? scoreOrder
                             : 0,
                         pageBlockCounts.TryGetValue(item.PageNumber, out var pageCount) ? pageCount : 1),
-                    BoundingBox = item.Block.BoundingBox
+                        BoundingBox = item.Block.BoundingBox
+                    };
                 })
                 .ToList(),
             TranslatedChunks = allBlocks
@@ -1238,39 +1254,39 @@ public sealed class LongDocumentTranslationService
         return Math.Round(normalized, 4, MidpointRounding.AwayFromZero);
     }
 
-    private static LayoutRegionType InferRegionTypeFromBlockId(string sourceBlockId)
+    private static (LayoutRegionType Type, double Confidence, LayoutRegionSource Source) InferRegionInfoFromBlockId(string sourceBlockId)
     {
         if (sourceBlockId.Contains("-header-", StringComparison.OrdinalIgnoreCase))
         {
-            return LayoutRegionType.Header;
+            return (LayoutRegionType.Header, 0.92d, LayoutRegionSource.Heuristic);
         }
 
         if (sourceBlockId.Contains("-footer-", StringComparison.OrdinalIgnoreCase))
         {
-            return LayoutRegionType.Footer;
+            return (LayoutRegionType.Footer, 0.92d, LayoutRegionSource.Heuristic);
         }
 
         if (sourceBlockId.Contains("-left-", StringComparison.OrdinalIgnoreCase))
         {
-            return LayoutRegionType.LeftColumn;
+            return (LayoutRegionType.LeftColumn, 0.80d, LayoutRegionSource.Heuristic);
         }
 
         if (sourceBlockId.Contains("-right-", StringComparison.OrdinalIgnoreCase))
         {
-            return LayoutRegionType.RightColumn;
+            return (LayoutRegionType.RightColumn, 0.80d, LayoutRegionSource.Heuristic);
         }
 
         if (sourceBlockId.Contains("-table-", StringComparison.OrdinalIgnoreCase))
         {
-            return LayoutRegionType.TableLike;
+            return (LayoutRegionType.TableLike, 0.88d, LayoutRegionSource.Heuristic);
         }
 
         if (sourceBlockId.Contains("-body-", StringComparison.OrdinalIgnoreCase))
         {
-            return LayoutRegionType.Body;
+            return (LayoutRegionType.Body, 0.72d, LayoutRegionSource.BlockIdFallback);
         }
 
-        return LayoutRegionType.Unknown;
+        return (LayoutRegionType.Unknown, 0.35d, LayoutRegionSource.Unknown);
     }
 
     private static SourceBlockType GuessBlockType(string text)

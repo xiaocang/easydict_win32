@@ -78,7 +78,7 @@
   - 已在 `BackfillQualityMetrics` 增加 `PageMetrics`，并在 PDF 回填阶段产出 page-level object/overlay/fallback 分布。
   - 重试路径指标合并已支持 page-level metrics 累加。
 
-### M2（优先级 P0）：结构化布局能力
+### M2（优先级 P0）：结构化布局能力 ✅（本轮已落地）
 - **改动目标**：为 `RegionType` 增加置信度与来源标签（heuristic / parser / fallback）。
 - **建议实现**：
   - 扩展 chunk metadata：`RegionConfidence`（0~1）+ `RegionSource`。
@@ -86,6 +86,9 @@
 - **验收标准**：
   - longdoc checkpoint 中可观察 region 判定来源。
   - 误判样例可通过阈值或来源快速定位。
+- **当前实现状态**：
+  - `LongDocumentChunkMetadata` 新增 `RegionConfidence` 与 `RegionSource`。
+  - 已实现 `InferRegionInfoFromBlockId`，统一输出 `(Type, Confidence, Source)` 并接入 checkpoint 构建。
 
 ### M3（优先级 P1）：术语一致性与上下文增强
 - **改动目标**：在重试翻译中引入按页/章节的术语记忆窗口。
@@ -141,3 +144,4 @@
 - 已细化“中期改进列表”为 M1~M6 执行计划（含优先级、建议实现与验收标准）。
 
 - 本轮按 roadmap 落地 M1：新增 page-level 回填指标（含 object replace / overlay / structured fallback），并覆盖重试合并逻辑测试。
+- 本轮按 roadmap 落地 M2：为 RegionType 增加置信度与来源标签，并补充对应反射测试。

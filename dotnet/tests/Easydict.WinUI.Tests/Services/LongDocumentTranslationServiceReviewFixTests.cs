@@ -82,6 +82,8 @@ public class LongDocumentTranslationServiceReviewFixTests
                     SourceBlockType = SourceBlockType.Paragraph,
                     OrderInPage = 0,
                     RegionType = LayoutRegionType.Body,
+                    RegionConfidence = 0.72,
+                    RegionSource = LayoutRegionSource.BlockIdFallback,
                     ReadingOrderScore = 1
                 }
             ],
@@ -255,6 +257,31 @@ public class LongDocumentTranslationServiceReviewFixTests
         patchedContent.Should().Contain(" Tj");
         patchedContent.Should().Contain("(Bonjour World)");
         patchedContent.Should().NotContain("[(Hello)");
+    }
+
+
+    [Fact]
+    public void InferRegionInfoFromBlockId_ShouldReturnConfidenceAndSource()
+    {
+        var serviceType = typeof(LongDocumentTranslationService);
+        var method = serviceType.GetMethod("InferRegionInfoFromBlockId", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var tableInfo = method!.Invoke(null, ["p2-table-b3"]);
+        tableInfo.Should().NotBeNull();
+        var tableType = (LayoutRegionType)tableInfo!.GetType().GetField("Item1")!.GetValue(tableInfo)!;
+        var tableConfidence = (double)tableInfo.GetType().GetField("Item2")!.GetValue(tableInfo)!;
+        var tableSource = (LayoutRegionSource)tableInfo.GetType().GetField("Item3")!.GetValue(tableInfo)!;
+        tableType.Should().Be(LayoutRegionType.TableLike);
+        tableConfidence.Should().BeGreaterThan(0.8);
+        tableSource.Should().Be(LayoutRegionSource.Heuristic);
+
+        var unknownInfo = method.Invoke(null, ["p9-raw-b1"]);
+        unknownInfo.Should().NotBeNull();
+        var unknownType = (LayoutRegionType)unknownInfo!.GetType().GetField("Item1")!.GetValue(unknownInfo)!;
+        var unknownSource = (LayoutRegionSource)unknownInfo.GetType().GetField("Item3")!.GetValue(unknownInfo)!;
+        unknownType.Should().Be(LayoutRegionType.Unknown);
+        unknownSource.Should().Be(LayoutRegionSource.Unknown);
     }
 
     [Fact]

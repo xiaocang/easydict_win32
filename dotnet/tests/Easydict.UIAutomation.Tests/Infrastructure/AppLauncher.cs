@@ -22,10 +22,9 @@ public sealed class AppLauncher : IDisposable
     /// </summary>
     public void LaunchFromMsix(string packageFamilyName, TimeSpan? timeout = null)
     {
-        _automation = new UIA3Automation();
+        var resolvedTimeout = ResolveLaunchTimeout(timeout ?? TimeSpan.FromSeconds(30));
         var appUserModelId = $"{packageFamilyName}!App";
-        _application = Application.LaunchStoreApp(appUserModelId);
-        WaitForMainWindow(timeout ?? TimeSpan.FromSeconds(30));
+        LaunchWithRetry(() => Application.LaunchStoreApp(appUserModelId), resolvedTimeout);
     }
 
     /// <summary>
@@ -36,9 +35,8 @@ public sealed class AppLauncher : IDisposable
         if (!File.Exists(exePath))
             throw new FileNotFoundException($"App executable not found: {exePath}");
 
-        _automation = new UIA3Automation();
-        _application = Application.Launch(exePath);
-        WaitForMainWindow(timeout ?? TimeSpan.FromSeconds(30));
+        var resolvedTimeout = ResolveLaunchTimeout(timeout ?? TimeSpan.FromSeconds(30));
+        LaunchWithRetry(() => Application.Launch(exePath), resolvedTimeout);
     }
 
     /// <summary>
@@ -72,6 +70,63 @@ public sealed class AppLauncher : IDisposable
 
         throw new InvalidOperationException(
             "Cannot find Easydict app. Set EASYDICT_EXE_PATH or EASYDICT_PACKAGE_FAMILY_NAME environment variable.");
+    }
+
+
+    private void LaunchWithRetry(Func<Application> launch, TimeSpan timeout)
+    {
+        var attempts = ResolveLaunchAttempts();
+        Exception? lastException = null;
+
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            TryCloseApplication();
+            _automation?.Dispose();
+            _automation = new UIA3Automation();
+
+            try
+            {
+                _application = launch();
+                WaitForMainWindow(timeout);
+                return;
+            }
+            catch (TimeoutException ex)
+            {
+                lastException = ex;
+                if (attempt == attempts)
+                {
+                    throw;
+                }
+
+                TryCloseApplication();
+                Thread.Sleep(1000);
+            }
+        }
+
+        throw lastException ?? new TimeoutException($"Main window did not appear within {timeout.TotalSeconds}s");
+    }
+
+    private static int ResolveLaunchAttempts()
+    {
+        const int defaultAttempts = 2;
+        var value = Environment.GetEnvironmentVariable("EASYDICT_UIA_LAUNCH_ATTEMPTS");
+        if (!int.TryParse(value, out var attempts))
+        {
+            return defaultAttempts;
+        }
+
+        return Math.Clamp(attempts, 1, 5);
+    }
+
+    private static TimeSpan ResolveLaunchTimeout(TimeSpan defaultTimeout)
+    {
+        var value = Environment.GetEnvironmentVariable("EASYDICT_UIA_MAINWINDOW_TIMEOUT_SECONDS");
+        if (!double.TryParse(value, out var seconds) || seconds <= 0)
+        {
+            return defaultTimeout;
+        }
+
+        return TimeSpan.FromSeconds(Math.Clamp(seconds, 5, 300));
     }
 
     public FlaUI.Core.AutomationElements.Window GetMainWindow(TimeSpan? timeout = null)
@@ -128,27 +183,37 @@ public sealed class AppLauncher : IDisposable
         }
     }
 
-    public void Dispose()
-    {
-        if (_isDisposed) return;
-        _isDisposed = true;
 
+    private void TryCloseApplication()
+    {
         try
         {
             _application?.Close();
-            // Give the app time to close gracefully
             if (_application != null && !_application.HasExited)
             {
                 Thread.Sleep(2000);
                 if (!_application.HasExited)
+                {
                     _application.Kill();
+                }
             }
         }
         catch
         {
             // Ignore close errors
         }
+        finally
+        {
+            _application = null;
+        }
+    }
 
+    public void Dispose()
+    {
+        if (_isDisposed) return;
+        _isDisposed = true;
+
+        TryCloseApplication();
         _automation?.Dispose();
     }
 }

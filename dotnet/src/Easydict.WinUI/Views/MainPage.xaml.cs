@@ -40,8 +40,8 @@ namespace Easydict.WinUI.Views
         private readonly LongDocumentTranslationService _longDocumentService = new();
         private readonly LongDocumentDeduplicationService _longDocDedupService = new();
         private LongDocumentTranslationCheckpoint? _longDocCheckpoint;
-        private Language _longDocLastFrom = Language.Auto;
-        private Language _longDocLastTo = Language.English;
+        private TranslationLanguage _longDocLastFrom = TranslationLanguage.Auto;
+        private TranslationLanguage _longDocLastTo = TranslationLanguage.English;
         private string _longDocLastServiceId = string.Empty;
         private string _longDocLastDedupKey = string.Empty;
         private CancellationTokenSource? _longDocSingleTaskCts;

@@ -1,6 +1,5 @@
 using System.Text;
 using Easydict.TranslationService.LongDocument;
-using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
@@ -25,8 +24,18 @@ public enum LongDocumentJobState
 public sealed class LongDocumentTranslationCheckpoint
 {
     public required List<string> SourceChunks { get; init; }
+    public required List<LongDocumentChunkMetadata> ChunkMetadata { get; init; }
     public required Dictionary<int, string> TranslatedChunks { get; init; }
     public required HashSet<int> FailedChunkIndexes { get; init; }
+}
+
+public sealed class LongDocumentChunkMetadata
+{
+    public required int ChunkIndex { get; init; }
+    public required int PageNumber { get; init; }
+    public required string SourceBlockId { get; init; }
+    public required SourceBlockType SourceBlockType { get; init; }
+    public bool IsFormulaLike { get; init; }
 }
 
 public sealed class LongDocumentTranslationResult
@@ -57,8 +66,9 @@ public sealed class LongDocumentTranslationService
         var hasAnySourceText = sourceDocument.Pages
             .SelectMany(page => page.Blocks)
             .Any(block => !string.IsNullOrWhiteSpace(block.Text));
+        var hasScannedPages = sourceDocument.Pages.Any(page => page.IsScanned);
 
-        if (!hasAnySourceText)
+        if (!hasAnySourceText && !hasScannedPages)
         {
             throw new InvalidOperationException("No source text found for translation.");
         }
@@ -76,22 +86,46 @@ public sealed class LongDocumentTranslationService
         }, cancellationToken);
 
         var allBlocks = coreResult.Pages
-            .SelectMany(page => page.Blocks)
+            .SelectMany(page => page.Blocks.Select(block => new
+            {
+                page.PageNumber,
+                Block = block
+            }))
             .ToList();
 
         var checkpoint = new LongDocumentTranslationCheckpoint
         {
-            SourceChunks = allBlocks.Select(block => block.OriginalText).ToList(),
+            SourceChunks = allBlocks.Select(item => item.Block.OriginalText).ToList(),
+            ChunkMetadata = allBlocks
+                .Select((item, index) => new LongDocumentChunkMetadata
+                {
+                    ChunkIndex = index,
+                    PageNumber = item.PageNumber,
+                    SourceBlockId = item.Block.SourceBlockId,
+                    SourceBlockType = item.Block.BlockType switch
+                    {
+                        BlockType.Heading => SourceBlockType.Heading,
+                        BlockType.Caption => SourceBlockType.Caption,
+                        BlockType.Table => SourceBlockType.TableCell,
+                        BlockType.Formula => SourceBlockType.Formula,
+                        BlockType.Unknown => SourceBlockType.Unknown,
+                        _ => SourceBlockType.Paragraph
+                    },
+                    IsFormulaLike = item.Block.TranslationSkipped
+                })
+                .ToList(),
             TranslatedChunks = allBlocks
-                .Select((block, index) => new { block, index })
-                .Where(x => string.IsNullOrWhiteSpace(x.block.LastError))
-                .ToDictionary(x => x.index, x => x.block.TranslatedText),
+                .Select((item, index) => new { item.Block, index })
+                .Where(x => string.IsNullOrWhiteSpace(x.Block.LastError))
+                .ToDictionary(x => x.index, x => x.Block.TranslatedText),
             FailedChunkIndexes = allBlocks
-                .Select((block, index) => new { block, index })
-                .Where(x => !string.IsNullOrWhiteSpace(x.block.LastError))
+                .Select((item, index) => new { item.Block, index })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Block.LastError))
                 .Select(x => x.index)
                 .ToHashSet()
         };
+
+        EnforceTerminologyConsistency(checkpoint);
 
         onProgress?.Invoke("Rendering translated output...");
         return FinalizeResult(checkpoint, outputPath, onProgress);
@@ -106,17 +140,21 @@ public sealed class LongDocumentTranslationService
         Action<string>? onProgress = null,
         CancellationToken cancellationToken = default)
     {
+        ValidateCheckpointOrThrow(checkpoint);
+
         if (checkpoint.FailedChunkIndexes.Count == 0)
         {
             return FinalizeResult(checkpoint, outputPath, onProgress);
         }
 
         onProgress?.Invoke($"Retrying {checkpoint.FailedChunkIndexes.Count} failed chunks...");
-        await TranslatePendingChunksAsync(checkpoint, from, to, serviceId, onProgress, cancellationToken);
+        await TranslatePendingChunksAsync(_coreLongDocumentService, checkpoint, from, to, serviceId, onProgress, cancellationToken);
+        EnforceTerminologyConsistency(checkpoint);
         return FinalizeResult(checkpoint, outputPath, onProgress);
     }
 
     private static async Task TranslatePendingChunksAsync(
+        CoreLongDocumentTranslationService coreLongDocumentService,
         LongDocumentTranslationCheckpoint checkpoint,
         Language from,
         Language to,
@@ -124,42 +162,105 @@ public sealed class LongDocumentTranslationService
         Action<string>? onProgress,
         CancellationToken cancellationToken)
     {
-        var manager = TranslationManagerService.Instance.Manager;
         var pendingIndexes = checkpoint.FailedChunkIndexes.Count > 0
             ? checkpoint.FailedChunkIndexes.OrderBy(i => i).ToList()
             : Enumerable.Range(0, checkpoint.SourceChunks.Count).ToList();
+        var metadataByChunkIndex = checkpoint.ChunkMetadata
+            .ToDictionary(m => m.ChunkIndex);
 
         checkpoint.FailedChunkIndexes.Clear();
+
+        if (pendingIndexes.Count == 0)
+        {
+            return;
+        }
+
+        var indexByRetryBlockId = new Dictionary<string, int>(StringComparer.Ordinal);
+        var retryPages = new List<SourceDocumentPage>(pendingIndexes.Count);
+        var canonicalBySource = BuildCanonicalTranslations(checkpoint);
 
         for (var i = 0; i < pendingIndexes.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var chunkIndex = pendingIndexes[i];
-            onProgress?.Invoke($"Translating chunk {chunkIndex + 1}/{checkpoint.SourceChunks.Count} (pending {i + 1}/{pendingIndexes.Count})...");
+            var sourceText = checkpoint.SourceChunks[chunkIndex];
 
-            try
+            if (canonicalBySource.TryGetValue(sourceText, out var canonicalTranslation) &&
+                !string.IsNullOrWhiteSpace(canonicalTranslation))
             {
-                var request = new TranslationRequest
-                {
-                    Text = checkpoint.SourceChunks[chunkIndex],
-                    FromLanguage = from,
-                    ToLanguage = to
-                };
-
-                var result = await manager.TranslateAsync(request, cancellationToken, serviceId);
-                if (string.IsNullOrWhiteSpace(result.TranslatedText))
-                {
-                    checkpoint.FailedChunkIndexes.Add(chunkIndex);
-                    continue;
-                }
-
-                checkpoint.TranslatedChunks[chunkIndex] = result.TranslatedText.Trim();
+                checkpoint.TranslatedChunks[chunkIndex] = canonicalTranslation;
+                continue;
             }
-            catch (OperationCanceledException)
+
+            if (!metadataByChunkIndex.TryGetValue(chunkIndex, out var metadata))
             {
-                throw;
+                throw new InvalidOperationException($"Missing chunk metadata for chunk index {chunkIndex}.");
             }
-            catch
+
+            var pageNumber = metadata.PageNumber;
+            var blockId = $"retry-{chunkIndex}-{metadata.SourceBlockId}";
+            indexByRetryBlockId[blockId] = chunkIndex;
+
+            retryPages.Add(new SourceDocumentPage
+            {
+                PageNumber = pageNumber,
+                Blocks =
+                [
+                    new SourceDocumentBlock
+                    {
+                        BlockId = blockId,
+                        BlockType = metadata.SourceBlockType,
+                        Text = checkpoint.SourceChunks[chunkIndex],
+                        IsFormulaLike = metadata.IsFormulaLike
+                    }
+                ]
+            });
+        }
+
+        if (retryPages.Count == 0)
+        {
+            return;
+        }
+
+        var retrySource = new SourceDocument
+        {
+            DocumentId = "retry-failed-chunks",
+            Pages = retryPages
+        };
+
+        var retryResult = await coreLongDocumentService.TranslateAsync(retrySource, new LongDocumentTranslationOptions
+        {
+            ServiceId = serviceId,
+            FromLanguage = from,
+            ToLanguage = to,
+            EnableFormulaProtection = true,
+            EnableOcrFallback = true,
+            MaxRetriesPerBlock = 1
+        }, cancellationToken);
+
+        foreach (var translatedBlock in retryResult.Pages.SelectMany(page => page.Blocks))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!indexByRetryBlockId.TryGetValue(translatedBlock.SourceBlockId, out var chunkIndex))
+            {
+                continue;
+            }
+
+            onProgress?.Invoke($"Translating chunk {chunkIndex + 1}/{checkpoint.SourceChunks.Count}...");
+
+            if (!string.IsNullOrWhiteSpace(translatedBlock.LastError) || string.IsNullOrWhiteSpace(translatedBlock.TranslatedText))
+            {
+                checkpoint.FailedChunkIndexes.Add(chunkIndex);
+                continue;
+            }
+
+            checkpoint.TranslatedChunks[chunkIndex] = translatedBlock.TranslatedText.Trim();
+        }
+
+        foreach (var chunkIndex in pendingIndexes)
+        {
+            if (!checkpoint.TranslatedChunks.ContainsKey(chunkIndex) && !checkpoint.FailedChunkIndexes.Contains(chunkIndex))
             {
                 checkpoint.FailedChunkIndexes.Add(chunkIndex);
             }
@@ -171,6 +272,8 @@ public sealed class LongDocumentTranslationService
         string outputPath,
         Action<string>? onProgress)
     {
+        ValidateCheckpointOrThrow(checkpoint);
+
         var succeededCount = checkpoint.TranslatedChunks.Count;
         if (succeededCount == 0)
         {
@@ -205,16 +308,41 @@ public sealed class LongDocumentTranslationService
     {
         var sb = new StringBuilder();
 
-        for (var i = 0; i < checkpoint.SourceChunks.Count; i++)
+        var metadataByChunkIndex = checkpoint.ChunkMetadata
+            .ToDictionary(m => m.ChunkIndex);
+
+        var orderedChunkIndexes = Enumerable.Range(0, checkpoint.SourceChunks.Count)
+            .OrderBy(index => metadataByChunkIndex[index].PageNumber)
+            .ThenBy(index => index)
+            .ToList();
+
+        int? currentPage = null;
+
+        foreach (var chunkIndex in orderedChunkIndexes)
         {
-            if (checkpoint.TranslatedChunks.TryGetValue(i, out var translated))
+            var metadata = metadataByChunkIndex[chunkIndex];
+            if (currentPage != metadata.PageNumber)
             {
-                sb.AppendLine(translated);
+                currentPage = metadata.PageNumber;
+                sb.AppendLine($"=== Page {currentPage} ===");
+                sb.AppendLine();
+            }
+
+            if (checkpoint.TranslatedChunks.TryGetValue(chunkIndex, out var translated))
+            {
+                if (metadata?.SourceBlockType == SourceBlockType.Formula || metadata?.IsFormulaLike == true)
+                {
+                    sb.AppendLine($"[Formula] {translated}");
+                }
+                else
+                {
+                    sb.AppendLine(translated);
+                }
                 sb.AppendLine();
             }
             else
             {
-                sb.AppendLine($"[Chunk {i + 1} translation failed. Retry required.]");
+                sb.AppendLine($"[Chunk {chunkIndex + 1} translation failed. Retry required.]");
                 sb.AppendLine();
             }
         }
@@ -276,6 +404,7 @@ public sealed class LongDocumentTranslationService
             .Select(page => new SourceDocumentPage
             {
                 PageNumber = page.Number,
+                IsScanned = string.IsNullOrWhiteSpace(page.Text),
                 Blocks =
                 [
                     new SourceDocumentBlock
@@ -314,7 +443,11 @@ public sealed class LongDocumentTranslationService
 
     private static void ExportTextPdf(string text, string outputPath)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        var outputDirectory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            Directory.CreateDirectory(outputDirectory);
+        }
 
         var doc = new PdfSharpCore.Pdf.PdfDocument();
         var page = doc.AddPage();
@@ -358,6 +491,64 @@ public sealed class LongDocumentTranslationService
                 var len = Math.Min(maxChars, p.Length - start);
                 yield return p.Substring(start, len);
                 start += len;
+            }
+        }
+    }
+
+
+    private static void ValidateCheckpointOrThrow(LongDocumentTranslationCheckpoint checkpoint)
+    {
+        if (checkpoint.ChunkMetadata.Count != checkpoint.SourceChunks.Count)
+        {
+            throw new InvalidOperationException("Checkpoint metadata count does not match source chunk count.");
+        }
+
+        var expectedIndexes = Enumerable.Range(0, checkpoint.SourceChunks.Count).ToHashSet();
+        var actualIndexes = checkpoint.ChunkMetadata.Select(m => m.ChunkIndex).ToHashSet();
+        if (!expectedIndexes.SetEquals(actualIndexes))
+        {
+            throw new InvalidOperationException("Checkpoint metadata indexes are incomplete or duplicated.");
+        }
+    }
+
+    private static Dictionary<string, string> BuildCanonicalTranslations(LongDocumentTranslationCheckpoint checkpoint)
+    {
+        var canonical = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var entry in checkpoint.TranslatedChunks.OrderBy(item => item.Key))
+        {
+            if (entry.Key < 0 || entry.Key >= checkpoint.SourceChunks.Count)
+            {
+                continue;
+            }
+
+            var source = checkpoint.SourceChunks[entry.Key];
+            if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(entry.Value))
+            {
+                continue;
+            }
+
+            canonical.TryAdd(source, entry.Value.Trim());
+        }
+
+        return canonical;
+    }
+
+    private static void EnforceTerminologyConsistency(LongDocumentTranslationCheckpoint checkpoint)
+    {
+        var canonicalBySource = BuildCanonicalTranslations(checkpoint);
+
+        for (var i = 0; i < checkpoint.SourceChunks.Count; i++)
+        {
+            if (!checkpoint.TranslatedChunks.ContainsKey(i))
+            {
+                continue;
+            }
+
+            var source = checkpoint.SourceChunks[i];
+            if (canonicalBySource.TryGetValue(source, out var canonical) && !string.IsNullOrWhiteSpace(canonical))
+            {
+                checkpoint.TranslatedChunks[i] = canonical;
             }
         }
     }

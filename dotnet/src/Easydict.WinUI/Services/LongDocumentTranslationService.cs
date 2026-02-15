@@ -108,6 +108,8 @@ public sealed class LongDocumentTranslationService
         public int StructuredFallbackBlocks { get; set; }
     }
 
+    private sealed record CanonicalTranslationEntry(int ChunkIndex, int PageNumber, string Translation);
+
     private readonly CoreLongDocumentTranslationService _coreLongDocumentService = new();
 
     public async Task<LongDocumentTranslationResult> TranslateToPdfAsync(
@@ -264,7 +266,7 @@ public sealed class LongDocumentTranslationService
 
         var indexByRetryBlockId = new Dictionary<string, int>(StringComparer.Ordinal);
         var retryPages = new List<SourceDocumentPage>(pendingIndexes.Count);
-        var canonicalBySource = BuildCanonicalTranslations(checkpoint);
+        var canonicalBySource = BuildCanonicalTranslationsBySource(checkpoint);
         var reusedByCanonical = 0;
 
         for (var i = 0; i < pendingIndexes.Count; i++)
@@ -273,8 +275,7 @@ public sealed class LongDocumentTranslationService
             var chunkIndex = pendingIndexes[i];
             var sourceText = checkpoint.SourceChunks[chunkIndex];
 
-            if (canonicalBySource.TryGetValue(sourceText, out var canonicalTranslation) &&
-                !string.IsNullOrWhiteSpace(canonicalTranslation))
+            if (TryGetCanonicalTranslationForChunk(checkpoint, canonicalBySource, chunkIndex, sourceText, out var canonicalTranslation))
             {
                 checkpoint.TranslatedChunks[chunkIndex] = canonicalTranslation;
                 reusedByCanonical++;
@@ -1595,13 +1596,15 @@ public sealed class LongDocumentTranslationService
         }
     }
 
-    private static Dictionary<string, string> BuildCanonicalTranslations(LongDocumentTranslationCheckpoint checkpoint)
+    private static Dictionary<string, List<CanonicalTranslationEntry>> BuildCanonicalTranslationsBySource(LongDocumentTranslationCheckpoint checkpoint)
     {
-        var canonical = new Dictionary<string, string>(StringComparer.Ordinal);
+        var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
+        var canonical = new Dictionary<string, List<CanonicalTranslationEntry>>(StringComparer.Ordinal);
 
         foreach (var entry in checkpoint.TranslatedChunks.OrderBy(item => item.Key))
         {
-            if (entry.Key < 0 || entry.Key >= checkpoint.SourceChunks.Count)
+            if (entry.Key < 0 || entry.Key >= checkpoint.SourceChunks.Count ||
+                !metadataByChunkIndex.TryGetValue(entry.Key, out var metadata))
             {
                 continue;
             }
@@ -1612,15 +1615,73 @@ public sealed class LongDocumentTranslationService
                 continue;
             }
 
-            canonical.TryAdd(source, entry.Value.Trim());
+            if (!canonical.TryGetValue(source, out var values))
+            {
+                values = [];
+                canonical[source] = values;
+            }
+
+            values.Add(new CanonicalTranslationEntry(entry.Key, metadata.PageNumber, entry.Value.Trim()));
         }
 
         return canonical;
     }
 
+    private static bool TryGetCanonicalTranslationForChunk(
+        LongDocumentTranslationCheckpoint checkpoint,
+        IReadOnlyDictionary<string, List<CanonicalTranslationEntry>> canonicalBySource,
+        int chunkIndex,
+        string sourceText,
+        out string canonicalTranslation)
+    {
+        canonicalTranslation = string.Empty;
+        if (string.IsNullOrWhiteSpace(sourceText) ||
+            !canonicalBySource.TryGetValue(sourceText, out var candidates) ||
+            candidates.Count == 0)
+        {
+            return false;
+        }
+
+        var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
+        if (!metadataByChunkIndex.TryGetValue(chunkIndex, out var targetMetadata))
+        {
+            return false;
+        }
+
+        const int pageWindow = 2;
+
+        var best = candidates
+            .Where(c => c.ChunkIndex != chunkIndex)
+            .Select(c => new
+            {
+                Entry = c,
+                Distance = Math.Abs(c.PageNumber - targetMetadata.PageNumber)
+            })
+            .OrderBy(x => x.Distance)
+            .ThenByDescending(x => x.Entry.ChunkIndex)
+            .FirstOrDefault(x => x.Distance <= pageWindow)
+            ?.Entry;
+
+        if (best is null)
+        {
+            best = candidates
+                .Where(c => c.ChunkIndex != chunkIndex)
+                .OrderByDescending(c => c.ChunkIndex)
+                .FirstOrDefault();
+        }
+
+        if (best is null || string.IsNullOrWhiteSpace(best.Translation))
+        {
+            return false;
+        }
+
+        canonicalTranslation = best.Translation;
+        return true;
+    }
+
     private static void EnforceTerminologyConsistency(LongDocumentTranslationCheckpoint checkpoint)
     {
-        var canonicalBySource = BuildCanonicalTranslations(checkpoint);
+        var canonicalBySource = BuildCanonicalTranslationsBySource(checkpoint);
 
         for (var i = 0; i < checkpoint.SourceChunks.Count; i++)
         {
@@ -1630,7 +1691,7 @@ public sealed class LongDocumentTranslationService
             }
 
             var source = checkpoint.SourceChunks[i];
-            if (canonicalBySource.TryGetValue(source, out var canonical) && !string.IsNullOrWhiteSpace(canonical))
+            if (TryGetCanonicalTranslationForChunk(checkpoint, canonicalBySource, i, source, out var canonical))
             {
                 checkpoint.TranslatedChunks[i] = canonical;
             }

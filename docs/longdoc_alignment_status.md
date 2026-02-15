@@ -90,13 +90,16 @@
   - `LongDocumentChunkMetadata` 新增 `RegionConfidence` 与 `RegionSource`。
   - 已实现 `InferRegionInfoFromBlockId`，统一输出 `(Type, Confidence, Source)` 并接入 checkpoint 构建。
 
-### M3（优先级 P1）：术语一致性与上下文增强
+### M3（优先级 P1）：术语一致性与上下文增强 ✅（本轮已落地）
 - **改动目标**：在重试翻译中引入按页/章节的术语记忆窗口。
 - **建议实现**：
   - 维护最近 N 页术语表（source->canonical translation）。
   - 重试 prompt 注入局部术语集并设置冲突优先级（当前页 > 章节 > 全局）。
 - **验收标准**：
   - 同术语跨页翻译一致性提升（可通过 E2E 基线统计）。
+- **当前实现状态**：
+  - 术语复用从“全局首个命中”升级为“按页窗口优先”（默认 ±2 页），并保留全局回退。
+  - `EnforceTerminologyConsistency` 与重试路径复用逻辑已共享该策略。
 
 ### M4（优先级 P1）：公式恢复精度提升
 - **改动目标**：细化公式 token 类型并增加恢复校验。
@@ -145,3 +148,4 @@
 
 - 本轮按 roadmap 落地 M1：新增 page-level 回填指标（含 object replace / overlay / structured fallback），并覆盖重试合并逻辑测试。
 - 本轮按 roadmap 落地 M2：为 RegionType 增加置信度与来源标签，并补充对应反射测试。
+- 本轮按 roadmap 落地 M3：术语复用增加按页窗口优先策略（当前页邻近优先，超窗回退全局）。

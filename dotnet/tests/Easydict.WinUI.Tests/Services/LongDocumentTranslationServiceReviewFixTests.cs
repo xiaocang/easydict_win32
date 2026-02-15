@@ -276,6 +276,70 @@ public class LongDocumentTranslationServiceReviewFixTests
         args[3].Should().Be(content);
     }
 
+
+    [Fact]
+    public void EnforceTerminologyConsistency_ShouldPreferNearbyPageCanonicalTranslation()
+    {
+        var serviceType = typeof(LongDocumentTranslationService);
+        var method = serviceType.GetMethod("EnforceTerminologyConsistency", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var checkpoint = new LongDocumentTranslationCheckpoint
+        {
+            InputMode = LongDocumentInputMode.Manual,
+            SourceChunks = ["Term A", "Term A", "Term A"],
+            ChunkMetadata =
+            [
+                new LongDocumentChunkMetadata
+                {
+                    ChunkIndex = 0,
+                    PageNumber = 1,
+                    SourceBlockId = "p1-body-b1",
+                    SourceBlockType = SourceBlockType.Paragraph,
+                    OrderInPage = 0,
+                    RegionType = LayoutRegionType.Body,
+                    RegionConfidence = 0.72,
+                    RegionSource = LayoutRegionSource.BlockIdFallback,
+                    ReadingOrderScore = 1
+                },
+                new LongDocumentChunkMetadata
+                {
+                    ChunkIndex = 1,
+                    PageNumber = 2,
+                    SourceBlockId = "p2-body-b1",
+                    SourceBlockType = SourceBlockType.Paragraph,
+                    OrderInPage = 0,
+                    RegionType = LayoutRegionType.Body,
+                    RegionConfidence = 0.72,
+                    RegionSource = LayoutRegionSource.BlockIdFallback,
+                    ReadingOrderScore = 1
+                },
+                new LongDocumentChunkMetadata
+                {
+                    ChunkIndex = 2,
+                    PageNumber = 10,
+                    SourceBlockId = "p10-body-b1",
+                    SourceBlockType = SourceBlockType.Paragraph,
+                    OrderInPage = 0,
+                    RegionType = LayoutRegionType.Body,
+                    RegionConfidence = 0.72,
+                    RegionSource = LayoutRegionSource.BlockIdFallback,
+                    ReadingOrderScore = 1
+                }
+            ],
+            TranslatedChunks = new Dictionary<int, string>
+            {
+                [0] = "近页术语",
+                [2] = "远页术语"
+            },
+            FailedChunkIndexes = []
+        };
+
+        method!.Invoke(null, [checkpoint]);
+
+        checkpoint.TranslatedChunks[1].Should().Be("近页术语");
+    }
+
     [Fact]
     public void InferRegionInfoFromBlockId_ShouldReturnConfidenceAndSource()
     {

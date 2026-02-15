@@ -6,6 +6,7 @@ using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;
 using UglyToad.PdfPig;
+using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using UglyToad.PdfPig.Content;
 using PdfPigPage = UglyToad.PdfPig.Content.Page;
 using CoreLongDocumentTranslationService = Easydict.TranslationService.LongDocument.LongDocumentTranslationService;
@@ -485,7 +486,7 @@ public sealed class LongDocumentTranslationService
             throw new FileNotFoundException("PDF file not found.", input);
         }
 
-        using var document = PdfDocument.Open(input);
+        using var document = PdfPigDocument.Open(input);
         var pages = document.GetPages()
             .Select(page =>
             {
@@ -1057,7 +1058,7 @@ public sealed class LongDocumentTranslationService
             .OrderByDescending(l => l.Top)
             .ToList();
 
-        var orderedLines = OrderLinesByLayout(lines, page.Width);
+        var orderedLines = OrderLinesByLayout(lines, Convert.ToDecimal(page.Width));
         var paragraphs = BuildParagraphs(orderedLines, paragraphGapThreshold);
         var layoutProfile = BuildLayoutProfile(orderedLines, (double)page.Width, (double)page.Height);
 
@@ -1531,7 +1532,12 @@ public sealed class LongDocumentTranslationService
 
         if (previous is null)
         {
-            return current with { RetryMergeStrategy = "core-only", PageMetrics = MergePageBackfillMetrics(null, current.PageMetrics) };
+            var coreMetrics = current!;
+            return coreMetrics with
+            {
+                RetryMergeStrategy = "core-only",
+                PageMetrics = MergePageBackfillMetrics(null, coreMetrics.PageMetrics)
+            };
         }
 
         if (current is null)

@@ -831,14 +831,7 @@ public sealed class LongDocumentTranslationService
                 continue;
             }
 
-            var targetLength = Math.Max(sourceText.Length, combined.Length);
-            if (translatedText.Length > targetLength)
-            {
-                return false;
-            }
-
-            var padded = translatedText.PadRight(targetLength);
-            var escapedTranslated = EscapePdfLiteralString(padded);
+            var escapedTranslated = EscapePdfLiteralString(translatedText);
             var replacement = $"({escapedTranslated}) Tj";
             patched = content.Remove(match.Index, match.Length).Insert(match.Index, replacement);
             return true;

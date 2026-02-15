@@ -395,15 +395,15 @@ public sealed class LongDocumentTranslationService
 
     private static FormulaTokenKind ClassifyFormulaToken(string rawFormula)
     {
-        if (rawFormula.StartsWith("\[", StringComparison.Ordinal) || rawFormula.EndsWith("\]", StringComparison.Ordinal))
+        if (rawFormula.StartsWith("\\[", StringComparison.Ordinal) || rawFormula.EndsWith("\\]", StringComparison.Ordinal))
         {
             return FormulaTokenKind.DisplayMath;
         }
 
         if (rawFormula.StartsWith("$", StringComparison.Ordinal) ||
-            rawFormula.StartsWith("\(", StringComparison.Ordinal) ||
+            rawFormula.StartsWith("\\(", StringComparison.Ordinal) ||
             rawFormula.EndsWith("$", StringComparison.Ordinal) ||
-            rawFormula.EndsWith("\)", StringComparison.Ordinal))
+            rawFormula.EndsWith("\\)", StringComparison.Ordinal))
         {
             return FormulaTokenKind.InlineMath;
         }

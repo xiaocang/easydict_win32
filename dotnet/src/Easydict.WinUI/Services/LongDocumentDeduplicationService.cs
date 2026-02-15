@@ -51,7 +51,6 @@ public sealed class LongDocumentDeduplicationService
             }
 
             entry.LastUsedUtc = DateTime.UtcNow;
-            index[dedupKey] = entry;
             await WriteIndexCoreAsync(index, cancellationToken);
             return entry.OutputPath;
         }

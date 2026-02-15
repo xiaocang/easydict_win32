@@ -415,8 +415,13 @@ namespace Easydict.WinUI.Views
         {
             CancelCurrentQuery();
 
-            _longDocSingleTaskCts?.Cancel();
-            _longDocQueueCts?.Cancel();
+            var singleTaskCts = Interlocked.Exchange(ref _longDocSingleTaskCts, null);
+            try { singleTaskCts?.Cancel(); } catch (ObjectDisposedException) { }
+            singleTaskCts?.Dispose();
+
+            var queueCts = Interlocked.Exchange(ref _longDocQueueCts, null);
+            try { queueCts?.Cancel(); } catch (ObjectDisposedException) { }
+            queueCts?.Dispose();
 
             // Cancel any in-flight manual queries
             // Don't dispose - let the owning OnServiceQueryRequested's finally block dispose it

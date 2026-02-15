@@ -153,8 +153,9 @@ public sealed class LongDocumentTranslationService
         {
             foreach (var block in page.Blocks)
             {
+                var blockText = block.Text ?? string.Empty;
                 var irBlockId = $"ir-{page.PageNumber}-{block.BlockId}";
-                var sourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(block.Text ?? string.Empty)));
+                var sourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(blockText)));
 
                 irBlocks.Add(new DocumentBlockIr
                 {
@@ -162,8 +163,8 @@ public sealed class LongDocumentTranslationService
                     PageNumber = page.PageNumber,
                     SourceBlockId = block.BlockId,
                     BlockType = MapBlockType(block.BlockType),
-                    OriginalText = block.Text,
-                    ProtectedText = block.Text,
+                    OriginalText = blockText,
+                    ProtectedText = blockText,
                     SourceHash = sourceHash,
                     BoundingBox = block.BoundingBox,
                     ParentIrBlockId = block.ParentBlockId is null ? null : $"ir-{page.PageNumber}-{block.ParentBlockId}",

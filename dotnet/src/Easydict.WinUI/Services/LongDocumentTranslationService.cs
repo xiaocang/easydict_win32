@@ -7,6 +7,7 @@ using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
+using PdfPigPage = UglyToad.PdfPig.Content.Page;
 using CoreLongDocumentTranslationService = Easydict.TranslationService.LongDocument.LongDocumentTranslationService;
 
 namespace Easydict.WinUI.Services;
@@ -1015,7 +1016,7 @@ public sealed class LongDocumentTranslationService
         }
     }
 
-    private static IEnumerable<SourceDocumentBlock> ExtractLayoutBlocksFromPage(Page page)
+    private static IEnumerable<SourceDocumentBlock> ExtractLayoutBlocksFromPage(PdfPigPage page)
     {
         var words = page.GetWords()
             .Where(word => !string.IsNullOrWhiteSpace(word.Text))

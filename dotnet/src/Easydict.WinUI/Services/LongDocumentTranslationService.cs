@@ -1,9 +1,11 @@
 using System.Text;
+using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using UglyToad.PdfPig;
+using CoreLongDocumentTranslationService = Easydict.TranslationService.LongDocument.LongDocumentTranslationService;
 
 namespace Easydict.WinUI.Services;
 
@@ -39,7 +41,7 @@ public sealed class LongDocumentTranslationResult
 
 public sealed class LongDocumentTranslationService
 {
-    private const int ChunkSize = 1200;
+    private readonly CoreLongDocumentTranslationService _coreLongDocumentService = new();
 
     public async Task<LongDocumentTranslationResult> TranslateToPdfAsync(
         LongDocumentInputMode mode,
@@ -51,28 +53,47 @@ public sealed class LongDocumentTranslationService
         Action<string>? onProgress = null,
         CancellationToken cancellationToken = default)
     {
-        var sourceText = mode switch
-        {
-            LongDocumentInputMode.Manual => input,
-            LongDocumentInputMode.Pdf => ExtractPdfText(input),
-            _ => input
-        };
+        var sourceDocument = BuildSourceDocument(mode, input);
+        var hasAnySourceText = sourceDocument.Pages
+            .SelectMany(page => page.Blocks)
+            .Any(block => !string.IsNullOrWhiteSpace(block.Text));
 
-        if (string.IsNullOrWhiteSpace(sourceText))
+        if (!hasAnySourceText)
         {
             throw new InvalidOperationException("No source text found for translation.");
         }
 
-        onProgress?.Invoke("Preparing chunks...");
-        var chunks = SplitChunks(sourceText, ChunkSize);
+        onProgress?.Invoke("Building long-document IR...");
+
+        var coreResult = await _coreLongDocumentService.TranslateAsync(sourceDocument, new LongDocumentTranslationOptions
+        {
+            ServiceId = serviceId,
+            FromLanguage = from,
+            ToLanguage = to,
+            EnableFormulaProtection = true,
+            EnableOcrFallback = true,
+            MaxRetriesPerBlock = 1
+        }, cancellationToken);
+
+        var allBlocks = coreResult.Pages
+            .SelectMany(page => page.Blocks)
+            .ToList();
+
         var checkpoint = new LongDocumentTranslationCheckpoint
         {
-            SourceChunks = chunks,
-            TranslatedChunks = new Dictionary<int, string>(),
-            FailedChunkIndexes = new HashSet<int>()
+            SourceChunks = allBlocks.Select(block => block.OriginalText).ToList(),
+            TranslatedChunks = allBlocks
+                .Select((block, index) => new { block, index })
+                .Where(x => string.IsNullOrWhiteSpace(x.block.LastError))
+                .ToDictionary(x => x.index, x => x.block.TranslatedText),
+            FailedChunkIndexes = allBlocks
+                .Select((block, index) => new { block, index })
+                .Where(x => !string.IsNullOrWhiteSpace(x.block.LastError))
+                .Select(x => x.index)
+                .ToHashSet()
         };
 
-        await TranslatePendingChunksAsync(checkpoint, from, to, serviceId, onProgress, cancellationToken);
+        onProgress?.Invoke("Rendering translated output...");
         return FinalizeResult(checkpoint, outputPath, onProgress);
     }
 
@@ -133,6 +154,10 @@ public sealed class LongDocumentTranslationService
                 }
 
                 checkpoint.TranslatedChunks[chunkIndex] = result.TranslatedText.Trim();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch
             {
@@ -215,18 +240,76 @@ public sealed class LongDocumentTranslationService
         return sb.ToString();
     }
 
-    private static List<string> SplitChunks(string text, int chunkSize)
+    private static SourceDocument BuildSourceDocument(LongDocumentInputMode mode, string input)
     {
-        var chunks = new List<string>();
-        var start = 0;
-        while (start < text.Length)
+        if (mode == LongDocumentInputMode.Manual)
         {
-            var len = Math.Min(chunkSize, text.Length - start);
-            chunks.Add(text.Substring(start, len));
-            start += len;
+            return new SourceDocument
+            {
+                DocumentId = "manual-input",
+                Pages =
+                [
+                    new SourceDocumentPage
+                    {
+                        PageNumber = 1,
+                        Blocks =
+                        [
+                            new SourceDocumentBlock
+                            {
+                                BlockId = "p1-b1",
+                                BlockType = SourceBlockType.Paragraph,
+                                Text = input
+                            }
+                        ]
+                    }
+                ]
+            };
         }
 
-        return chunks;
+        if (!File.Exists(input))
+        {
+            throw new FileNotFoundException("PDF file not found.", input);
+        }
+
+        using var document = PdfDocument.Open(input);
+        var pages = document.GetPages()
+            .Select(page => new SourceDocumentPage
+            {
+                PageNumber = page.Number,
+                Blocks =
+                [
+                    new SourceDocumentBlock
+                    {
+                        BlockId = $"p{page.Number}-b1",
+                        BlockType = SourceBlockType.Paragraph,
+                        Text = page.Text
+                    }
+                ]
+            })
+            .ToList();
+
+        if (pages.Count == 0)
+        {
+            pages.Add(new SourceDocumentPage
+            {
+                PageNumber = 1,
+                Blocks =
+                [
+                    new SourceDocumentBlock
+                    {
+                        BlockId = "p1-b1",
+                        BlockType = SourceBlockType.Paragraph,
+                        Text = string.Empty
+                    }
+                ]
+            });
+        }
+
+        return new SourceDocument
+        {
+            DocumentId = Path.GetFileNameWithoutExtension(input),
+            Pages = pages
+        };
     }
 
     private static void ExportTextPdf(string text, string outputPath)

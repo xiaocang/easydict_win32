@@ -46,6 +46,7 @@ namespace Easydict.WinUI.Views
         private Language _longDocLastTo = Language.English;
         private string _longDocLastServiceId = string.Empty;
         private string _longDocLastDedupKey = string.Empty;
+        private CancellationTokenSource? _longDocSingleTaskCts;
         private CancellationTokenSource? _longDocQueueCts;
         private Task? _longDocQueueTask;
 
@@ -510,6 +511,7 @@ namespace Easydict.WinUI.Views
         {
             CancelCurrentQuery();
 
+            _longDocSingleTaskCts?.Cancel();
             _longDocQueueCts?.Cancel();
 
             // Cancel any in-flight manual queries
@@ -1547,14 +1549,49 @@ namespace Easydict.WinUI.Views
                 .ToList();
         }
 
-        private void SetLongDocQueueUiState(bool running)
+        private bool IsLongDocTaskRunning()
         {
-            LongDocStartQueueButton.IsEnabled = !running;
+            return _longDocSingleTaskCts is not null
+                   || _longDocQueueCts is not null
+                   || _longDocQueueTask is { IsCompleted: false };
+        }
+
+        private CancellationToken PrepareLongDocSingleTaskCancellationToken()
+        {
+            _longDocSingleTaskCts?.Cancel();
+            _longDocSingleTaskCts?.Dispose();
+            _longDocSingleTaskCts = new CancellationTokenSource();
+            return _longDocSingleTaskCts.Token;
+        }
+
+        private void CompleteLongDocSingleTask()
+        {
+            _longDocSingleTaskCts?.Dispose();
+            _longDocSingleTaskCts = null;
+        }
+
+        private void SetLongDocTaskUiState(bool running)
+        {
+            var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+            var isPdfMode = string.Equals(modeTag, "pdf", StringComparison.Ordinal);
+
+            LongDocStartQueueButton.IsEnabled = !running && isPdfMode;
+            LongDocStartQueueButton.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
             LongDocCancelQueueButton.IsEnabled = running;
             LongDocTranslateButton.IsEnabled = !running;
+            LongDocServiceCombo.IsEnabled = !running;
+            LongDocInputModeCombo.IsEnabled = !running;
+            LongDocManualTextBox.IsEnabled = !running;
+            LongDocPdfPathTextBox.IsEnabled = !running;
+            LongDocBatchPdfPathsTextBox.IsEnabled = !running;
+            LongDocRunInBackgroundCheckBox.IsEnabled = !running;
+            LongDocOutputFolderTextBox.IsEnabled = !running;
+            LongDocOutputFileNameTextBox.IsEnabled = !running;
+
             if (running)
             {
                 LongDocRetryButton.IsEnabled = false;
+                LongDocStatusText.Text = "Task running, settings are locked. Changes will apply to the next task.";
             }
         }
 
@@ -1647,6 +1684,12 @@ namespace Easydict.WinUI.Views
 
         private async void OnLongDocStartQueueClicked(object sender, RoutedEventArgs e)
         {
+            if (IsLongDocTaskRunning())
+            {
+                LongDocStatusText.Text = "A task is already running. Please wait or cancel current task.";
+                return;
+            }
+
             if (!TryGetSelectedLongDocServiceId(out var serviceId))
             {
                 LongDocStatusText.Text = "Please select one translation service.";
@@ -1671,7 +1714,7 @@ namespace Easydict.WinUI.Views
             _longDocQueueCts?.Dispose();
             _longDocQueueCts = new CancellationTokenSource();
 
-            SetLongDocQueueUiState(true);
+            SetLongDocTaskUiState(true);
             LongDocStatusText.Text = $"Queue started: {queueItems.Count} file(s).";
 
             _longDocQueueTask = ProcessLongDocQueueAsync(queueItems, serviceId, outputFolder, _longDocQueueCts.Token);
@@ -1692,7 +1735,10 @@ namespace Easydict.WinUI.Views
                             LongDocStatusText.Text = $"Queue failed: {task.Exception?.GetBaseException().Message}";
                         }
 
-                        SetLongDocQueueUiState(false);
+                        SetLongDocTaskUiState(false);
+                        _longDocQueueTask = null;
+                        _longDocQueueCts?.Dispose();
+                        _longDocQueueCts = null;
                     });
                 }, TaskScheduler.Default);
                 return;
@@ -1712,32 +1758,53 @@ namespace Easydict.WinUI.Views
             }
             finally
             {
-                SetLongDocQueueUiState(false);
+                SetLongDocTaskUiState(false);
+                _longDocQueueTask = null;
+                _longDocQueueCts?.Dispose();
+                _longDocQueueCts = null;
             }
         }
 
         private void OnLongDocCancelQueueClicked(object sender, RoutedEventArgs e)
         {
             LongDocCancelQueueButton.IsEnabled = false;
+            _longDocSingleTaskCts?.Cancel();
             _longDocQueueCts?.Cancel();
-            LongDocStatusText.Text = "Canceling queue...";
+            LongDocStatusText.Text = "Canceling current task...";
         }
 
 
         private void OnLongDocInputModeChanged(object sender, SelectionChangedEventArgs e)
         {
             var selected = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+            var isPdfMode = string.Equals(selected, "pdf", StringComparison.Ordinal);
+
             LongDocManualTextBox.Visibility = selected == "manual" ? Visibility.Visible : Visibility.Collapsed;
             LongDocManualLabel.Visibility = selected == "manual" ? Visibility.Visible : Visibility.Collapsed;
-            LongDocPdfPanel.Visibility = selected == "pdf" ? Visibility.Visible : Visibility.Collapsed;
+            LongDocPdfPanel.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
+            LongDocQueuePanel.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
+
+            if (!IsLongDocTaskRunning())
+            {
+                LongDocStartQueueButton.IsEnabled = isPdfMode;
+            }
+
+            LongDocStartQueueButton.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private async void OnLongDocTranslateClicked(object sender, RoutedEventArgs e)
         {
+            if (IsLongDocTaskRunning())
+            {
+                LongDocStatusText.Text = "A task is already running. Please wait or cancel current task.";
+                return;
+            }
+
+            var cancellationToken = PrepareLongDocSingleTaskCancellationToken();
+
             try
             {
-                LongDocTranslateButton.IsEnabled = false;
-                LongDocRetryButton.IsEnabled = false;
+                SetLongDocTaskUiState(true);
                 LongDocStatusText.Text = "Preparing...";
 
                 if (!TryGetSelectedLongDocServiceId(out var serviceId))
@@ -1779,9 +1846,10 @@ namespace Easydict.WinUI.Views
                     input,
                     serviceId,
                     _longDocLastFrom,
-                    _longDocLastTo);
+                    _longDocLastTo,
+                    cancellationToken);
 
-                var existingOutputPath = await _longDocDedupService.TryGetExistingOutputPathAsync(_longDocLastDedupKey);
+                var existingOutputPath = await _longDocDedupService.TryGetExistingOutputPathAsync(_longDocLastDedupKey, cancellationToken);
                 if (!string.IsNullOrWhiteSpace(existingOutputPath))
                 {
                     LongDocStatusText.Text = $"Skipped duplicate file. Existing translation: {existingOutputPath}";
@@ -1795,7 +1863,8 @@ namespace Easydict.WinUI.Views
                     _longDocLastTo,
                     outputPath,
                     serviceId,
-                    progress => DispatcherQueue.TryEnqueue(() => LongDocStatusText.Text = progress));
+                    progress => DispatcherQueue.TryEnqueue(() => LongDocStatusText.Text = progress),
+                    cancellationToken);
 
                 _longDocCheckpoint = result.Checkpoint;
                 LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
@@ -1805,10 +1874,14 @@ namespace Easydict.WinUI.Views
 
                 if (result.State == LongDocumentJobState.Completed)
                 {
-                    await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath);
+                    await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
                 }
 
                 RefreshLongDocSuggestedOutputFileName();
+            }
+            catch (OperationCanceledException)
+            {
+                LongDocStatusText.Text = "Task canceled.";
             }
             catch (Exception ex)
             {
@@ -1816,7 +1889,8 @@ namespace Easydict.WinUI.Views
             }
             finally
             {
-                LongDocTranslateButton.IsEnabled = LongDocCancelQueueButton.IsEnabled ? false : true;
+                CompleteLongDocSingleTask();
+                SetLongDocTaskUiState(false);
             }
         }
 
@@ -1828,9 +1902,17 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
+            if (IsLongDocTaskRunning())
+            {
+                LongDocStatusText.Text = "A task is already running. Please wait or cancel current task.";
+                return;
+            }
+
+            var cancellationToken = PrepareLongDocSingleTaskCancellationToken();
+
             try
             {
-                LongDocTranslateButton.IsEnabled = false;
+                SetLongDocTaskUiState(true);
                 LongDocRetryButton.IsEnabled = false;
 
                 if (!TryBuildLongDocOutputPath(out var outputPath, out var outputError))
@@ -1845,7 +1927,8 @@ namespace Easydict.WinUI.Views
                     _longDocLastTo,
                     outputPath,
                     _longDocLastServiceId,
-                    progress => DispatcherQueue.TryEnqueue(() => LongDocStatusText.Text = progress));
+                    progress => DispatcherQueue.TryEnqueue(() => LongDocStatusText.Text = progress),
+                    cancellationToken);
 
                 _longDocCheckpoint = result.Checkpoint;
                 LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
@@ -1855,10 +1938,14 @@ namespace Easydict.WinUI.Views
 
                 if (result.State == LongDocumentJobState.Completed && !string.IsNullOrWhiteSpace(_longDocLastDedupKey))
                 {
-                    await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath);
+                    await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
                 }
 
                 RefreshLongDocSuggestedOutputFileName("translated-retry");
+            }
+            catch (OperationCanceledException)
+            {
+                LongDocStatusText.Text = "Task canceled.";
             }
             catch (Exception ex)
             {
@@ -1866,7 +1953,8 @@ namespace Easydict.WinUI.Views
             }
             finally
             {
-                LongDocTranslateButton.IsEnabled = LongDocCancelQueueButton.IsEnabled ? false : true;
+                CompleteLongDocSingleTask();
+                SetLongDocTaskUiState(false);
             }
         }
 

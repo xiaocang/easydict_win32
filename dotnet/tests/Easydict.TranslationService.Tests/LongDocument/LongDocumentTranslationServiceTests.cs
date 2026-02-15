@@ -177,6 +177,51 @@ public class LongDocumentTranslationServiceTests
         result.Pages[0].Blocks[0].TranslatedText.Should().Be("$x+y=z$");
     }
 
+
+    [Fact]
+    public async Task TranslateAsync_ShouldFallbackToOriginalWhenFormulaDelimitersBecomeUnbalanced()
+    {
+        var sut = new LongDocumentTranslationService(translateWithService: (_, _, _) =>
+            Task.FromResult(new TranslationResult
+            {
+                OriginalText = "x",
+                TranslatedText = "ZH:[[FORMULA_0_ABCDEF12]](",
+                ServiceName = "fake",
+                TargetLanguage = Language.SimplifiedChinese
+            }));
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-formula-restore-validation",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "text-inline-restore",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "The equation $a^2+b^2=c^2$ is important."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        var translated = result.Pages.SelectMany(p => p.Blocks).Single().TranslatedText;
+        translated.Should().Be("The equation $a^2+b^2=c^2$ is important.");
+    }
+
     [Fact]
     public async Task TranslateAsync_ShouldUseOcrFallbackForScannedPage()
     {

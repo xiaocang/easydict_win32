@@ -419,6 +419,7 @@
                 <StackPanel Padding="12" Spacing="10">
                     <TextBlock Text="Long document translation (C# native pipeline)" FontSize="16" FontWeight="SemiBold" />
                     <TextBlock Text="Web pages should be sent by browser extension as rendered PDF. Main window supports only manual text and local PDF." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Execution model: serial only (one task at a time)." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
                     <TextBlock Text="Translation Service (single select)" />
                     <ComboBox x:Name="LongDocServiceCombo" />
@@ -440,14 +441,16 @@
                         <TextBox x:Name="LongDocPdfPathTextBox" Width="480" PlaceholderText="PDF file path..." />
                     </StackPanel>
 
-                    <TextBlock Text="Batch PDF Queue (one path per line, optional)" />
-                    <TextBox x:Name="LongDocBatchPdfPathsTextBox"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             Height="120"
-                             PlaceholderText="D:\docs\a.pdf&#10;D:\docs\b.pdf" />
+                    <StackPanel x:Name="LongDocQueuePanel" Spacing="8" Visibility="Collapsed">
+                        <TextBlock x:Name="LongDocBatchPdfQueueLabel" Text="Batch PDF Queue (one path per line, optional)" />
+                        <TextBox x:Name="LongDocBatchPdfPathsTextBox"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 Height="120"
+                                 PlaceholderText="D:\docs\a.pdf&#10;D:\docs\b.pdf" />
 
-                    <CheckBox x:Name="LongDocRunInBackgroundCheckBox" Content="Run queue in background" IsChecked="True" />
+                        <CheckBox x:Name="LongDocRunInBackgroundCheckBox" Content="Run queue in background" IsChecked="True" />
+                    </StackPanel>
 
                     <TextBlock Text="Output Folder" />
                     <TextBox x:Name="LongDocOutputFolderTextBox" PlaceholderText="e.g. C:\Users\&lt;you&gt;\Documents\Easydict\LongDocOutputs" />
@@ -459,7 +462,7 @@
                         <Button x:Name="LongDocTranslateButton" Content="Translate and Export PDF" Click="OnLongDocTranslateClicked" />
                         <Button x:Name="LongDocRetryButton" Content="Retry Failed Chunks" Click="OnLongDocRetryClicked" IsEnabled="False" />
                         <Button x:Name="LongDocStartQueueButton" Content="Start PDF Queue" Click="OnLongDocStartQueueClicked" />
-                        <Button x:Name="LongDocCancelQueueButton" Content="Cancel Queue" Click="OnLongDocCancelQueueClicked" IsEnabled="False" />
+                        <Button x:Name="LongDocCancelQueueButton" Content="Cancel Current Task" Click="OnLongDocCancelQueueClicked" IsEnabled="False" />
                     </StackPanel>
 
                     <TextBlock x:Name="LongDocStatusText" Text="Idle" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />

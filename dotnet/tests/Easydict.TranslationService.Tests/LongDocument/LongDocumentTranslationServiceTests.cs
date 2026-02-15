@@ -197,6 +197,129 @@ public class LongDocumentTranslationServiceTests
         result.Pages[0].Blocks[0].RetryCount.Should().Be(2);
     }
 
+    [Fact]
+    public async Task TranslateAsync_ShouldPropagateCancellation()
+    {
+        var sut = new LongDocumentTranslationService(translateWithService: (_, _, cancellationToken) =>
+            Task.FromCanceled<TranslationResult>(cancellationToken));
+
+        var source = BuildSourceDocument();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = () => sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            MaxRetriesPerBlock = 3
+        }, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ShouldCapRetryCountWhenAllAttemptsFail()
+    {
+        var sut = new LongDocumentTranslationService(translateWithService: (_, _, _) =>
+            throw new InvalidOperationException("always fail"));
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-fail-retry",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "failing text"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        const int maxRetries = 2;
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            MaxRetriesPerBlock = maxRetries
+        });
+
+        result.Pages[0].Blocks[0].RetryCount.Should().Be(maxRetries);
+        result.Pages[0].Blocks[0].LastError.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ShouldPreserveInputBlockOrderInOutput()
+    {
+        var sut = new LongDocumentTranslationService(translateWithService: FakeTranslate);
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-order",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "one"
+                        },
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b10",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "ten"
+                        },
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b2",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "two"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google"
+        });
+
+        result.Pages[0].Blocks.Select(b => b.SourceBlockId)
+            .Should().ContainInOrder("b1", "b10", "b2");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ShouldThrowForNegativeMaxRetries()
+    {
+        var sut = new LongDocumentTranslationService(translateWithService: FakeTranslate);
+
+        var act = () => sut.TranslateAsync(BuildSourceDocument(), new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            MaxRetriesPerBlock = -1
+        });
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>()
+            .WithParameterName("MaxRetriesPerBlock");
+    }
+
     private static Task<TranslationResult> FakeTranslate(TranslationRequest request, string _, CancellationToken __)
     {
         return Task.FromResult(new TranslationResult

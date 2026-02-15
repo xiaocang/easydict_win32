@@ -1,6 +1,7 @@
 using System.Reflection;
 using Easydict.TranslationService.LongDocument;
 using Easydict.WinUI.Services;
+using WinUiLongDocumentTranslationService = Easydict.WinUI.Services.LongDocumentTranslationService;
 using FluentAssertions;
 using Xunit;
 
@@ -12,7 +13,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void CalculateReadingOrderScore_ShouldBePageLocalAndStableForLargeCounts()
     {
-        var method = typeof(LongDocumentTranslationService)
+        var method = typeof(WinUiLongDocumentTranslationService)
             .GetMethod("CalculateReadingOrderScore", BindingFlags.NonPublic | BindingFlags.Static);
 
         method.Should().NotBeNull();
@@ -29,7 +30,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void MergeBackfillMetrics_ShouldNotPolluteStageTimingKeys()
     {
-        var serviceType = typeof(LongDocumentTranslationService);
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
         var metricsType = serviceType.GetNestedType("BackfillRenderingMetrics", BindingFlags.NonPublic);
         var mergeMethod = serviceType.GetMethod("MergeBackfillMetrics", BindingFlags.NonPublic | BindingFlags.Static);
 
@@ -61,7 +62,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void BuildQualityReportFromRetry_ShouldKeepCoreBackfillMetrics()
     {
-        var serviceType = typeof(LongDocumentTranslationService);
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
         var summaryType = serviceType.GetNestedType("RetryExecutionSummary", BindingFlags.NonPublic);
         var method = serviceType.GetMethod("BuildQualityReportFromRetry", BindingFlags.NonPublic | BindingFlags.Static);
 
@@ -122,7 +123,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void MergeRetryBackfillMetrics_ShouldAccumulateWhenBothExist()
     {
-        var serviceType = typeof(LongDocumentTranslationService);
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
         var method = serviceType.GetMethod("MergeRetryBackfillMetrics", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
@@ -163,7 +164,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void MergeRetryBackfillMetrics_ShouldMergePageMetrics()
     {
-        var serviceType = typeof(LongDocumentTranslationService);
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
         var method = serviceType.GetMethod("MergeRetryBackfillMetrics", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
@@ -243,7 +244,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void TryPatchPdfLiteralToken_ShouldPatchMultiSegmentTjArray()
     {
-        var serviceType = typeof(LongDocumentTranslationService);
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
         var method = serviceType.GetMethod("TryPatchPdfLiteralToken", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
@@ -264,7 +265,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void TryPatchPdfLiteralToken_ShouldReturnFalseWhenTranslationWouldBeTruncated()
     {
-        var serviceType = typeof(LongDocumentTranslationService);
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
         var method = serviceType.GetMethod("TryPatchPdfLiteralToken", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
@@ -280,7 +281,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void EnforceTerminologyConsistency_ShouldPreferNearbyPageCanonicalTranslation()
     {
-        var serviceType = typeof(LongDocumentTranslationService);
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
         var method = serviceType.GetMethod("EnforceTerminologyConsistency", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
@@ -343,7 +344,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void InferRegionInfoFromBlockId_ShouldReturnConfidenceAndSource()
     {
-        var serviceType = typeof(LongDocumentTranslationService);
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
         var method = serviceType.GetMethod("InferRegionInfoFromBlockId", BindingFlags.NonPublic | BindingFlags.Static);
         method.Should().NotBeNull();
 
@@ -367,7 +368,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void InferRegionType_ShouldUseAdaptiveHeaderFooterAndTableHints()
     {
-        var serviceType = typeof(LongDocumentTranslationService);
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
         var profileType = serviceType.GetNestedType("LayoutProfile", BindingFlags.NonPublic);
         var inferMethod = serviceType.GetMethod("InferRegionType", BindingFlags.NonPublic | BindingFlags.Static);
 
@@ -396,7 +397,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void InferRegionType_ShouldRespectTwoColumnBoundariesWhenEnabled()
     {
-        var serviceType = typeof(LongDocumentTranslationService);
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
         var profileType = serviceType.GetNestedType("LayoutProfile", BindingFlags.NonPublic);
         var inferMethod = serviceType.GetMethod("InferRegionType", BindingFlags.NonPublic | BindingFlags.Static);
 

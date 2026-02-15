@@ -1685,7 +1685,7 @@ public sealed class LongDocumentTranslationService
 
         for (var i = 0; i < checkpoint.SourceChunks.Count; i++)
         {
-            if (!checkpoint.TranslatedChunks.ContainsKey(i))
+            if (checkpoint.FailedChunkIndexes.Contains(i))
             {
                 continue;
             }

@@ -252,7 +252,7 @@ public sealed class LongDocumentTranslationService
                     var formulaProtection = options.EnableFormulaProtection
                         ? ProtectFormulaSpans(block.OriginalText)
                         : FormulaProtectionResult.Empty;
-                    translatedText = RestoreFormulaSpans(translatedText, formulaProtection.TokenToFormula);
+                    translatedText = RestoreFormulaSpans(translatedText, formulaProtection, block.OriginalText);
                     lastError = null;
                     translationSucceeded = true;
                     break;
@@ -322,24 +322,33 @@ public sealed class LongDocumentTranslationService
     };
 
 
-    private sealed record FormulaProtectionResult(string ProtectedText, IReadOnlyDictionary<string, string> TokenToFormula)
+    private enum FormulaTokenKind
     {
-        public static FormulaProtectionResult Empty { get; } = new(string.Empty, new Dictionary<string, string>(StringComparer.Ordinal));
+        InlineMath,
+        DisplayMath,
+        UnitFragment
+    }
+
+    private sealed record FormulaToken(string RawText, FormulaTokenKind Kind);
+
+    private sealed record FormulaProtectionResult(string ProtectedText, IReadOnlyDictionary<string, FormulaToken> TokenMap)
+    {
+        public static FormulaProtectionResult Empty { get; } = new(string.Empty, new Dictionary<string, FormulaToken>(StringComparer.Ordinal));
     }
 
     private static FormulaProtectionResult ProtectFormulaSpans(string text)
     {
         if (string.IsNullOrEmpty(text))
         {
-            return new FormulaProtectionResult(text, new Dictionary<string, string>(StringComparer.Ordinal));
+            return new FormulaProtectionResult(text, new Dictionary<string, FormulaToken>(StringComparer.Ordinal));
         }
 
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        var map = new Dictionary<string, FormulaToken>(StringComparer.Ordinal);
         var counter = 0;
         var protectedText = FormulaRegex.Replace(text, match =>
         {
             var token = $"[[FORMULA_{counter}_{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(match.Value)))[..8]}]]";
-            map[token] = match.Value;
+            map[token] = new FormulaToken(match.Value, ClassifyFormulaToken(match.Value));
             counter++;
             return token;
         });
@@ -354,24 +363,98 @@ public sealed class LongDocumentTranslationService
             return false;
         }
 
-        var cleaned = Regex.Replace(protectedText, @"\[\[FORMULA_\d+_[A-F0-9]{8}\]\]", string.Empty).Trim();
+        var cleaned = Regex.Replace(protectedText, @"\[\[FORMULA_[^\]]+\]\]", string.Empty).Trim();
         return cleaned.Length == 0;
     }
 
-    private static string RestoreFormulaSpans(string text, IReadOnlyDictionary<string, string> tokenToFormula)
+    private static string RestoreFormulaSpans(string text, FormulaProtectionResult protection, string originalText)
     {
-        if (string.IsNullOrWhiteSpace(text) || tokenToFormula.Count == 0)
+        if (string.IsNullOrWhiteSpace(text) || protection.TokenMap.Count == 0)
         {
             return text;
         }
 
         var restored = text;
-        foreach (var pair in tokenToFormula)
+        foreach (var pair in protection.TokenMap)
         {
-            restored = restored.Replace(pair.Key, pair.Value, StringComparison.Ordinal);
+            restored = restored.Replace(pair.Key, pair.Value.RawText, StringComparison.Ordinal);
+        }
+
+        if (Regex.IsMatch(restored, @"\[\[FORMULA_[^\]]+\]\]"))
+        {
+            return originalText;
+        }
+
+        if (!AreFormulaDelimitersBalanced(restored))
+        {
+            return originalText;
         }
 
         return restored;
+    }
+
+    private static FormulaTokenKind ClassifyFormulaToken(string rawFormula)
+    {
+        if (rawFormula.StartsWith("\[", StringComparison.Ordinal) || rawFormula.EndsWith("\]", StringComparison.Ordinal))
+        {
+            return FormulaTokenKind.DisplayMath;
+        }
+
+        if (rawFormula.StartsWith("$", StringComparison.Ordinal) ||
+            rawFormula.StartsWith("\(", StringComparison.Ordinal) ||
+            rawFormula.EndsWith("$", StringComparison.Ordinal) ||
+            rawFormula.EndsWith("\)", StringComparison.Ordinal))
+        {
+            return FormulaTokenKind.InlineMath;
+        }
+
+        return FormulaTokenKind.UnitFragment;
+    }
+
+    private static bool AreFormulaDelimitersBalanced(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return true;
+        }
+
+        var stack = new Stack<char>();
+        var dollarCount = 0;
+
+        foreach (var c in text)
+        {
+            switch (c)
+            {
+                case '$':
+                    dollarCount++;
+                    break;
+                case '(':
+                case '[':
+                case '{':
+                    stack.Push(c);
+                    break;
+                case ')':
+                    if (stack.Count == 0 || stack.Pop() != '(')
+                    {
+                        return false;
+                    }
+                    break;
+                case ']':
+                    if (stack.Count == 0 || stack.Pop() != '[')
+                    {
+                        return false;
+                    }
+                    break;
+                case '}':
+                    if (stack.Count == 0 || stack.Pop() != '{')
+                    {
+                        return false;
+                    }
+                    break;
+            }
+        }
+
+        return stack.Count == 0 && dollarCount % 2 == 0;
     }
 
     private static string ApplyGlossary(string text, IReadOnlyDictionary<string, string>? glossary)

@@ -1242,6 +1242,15 @@ namespace Easydict.WinUI.Views
                 }
             }
 
+            foreach (var c in Path.GetInvalidPathChars())
+            {
+                if (folder.Contains(c))
+                {
+                    errorMessage = "Output folder contains invalid path characters.";
+                    return false;
+                }
+            }
+
             if (!fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
             {
                 fileName += ".pdf";

@@ -31,6 +31,10 @@ jobs:
         working-directory: dotnet
         run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 --filter "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance"
 
+      - name: Run long-document regression gate
+        working-directory: dotnet
+        run: dotnet test tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" -p:Platform=x64 --filter "FullyQualifiedName~LongDocument"
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()

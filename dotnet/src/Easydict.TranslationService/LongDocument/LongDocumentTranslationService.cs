@@ -188,10 +188,9 @@ public sealed class LongDocumentTranslationService
                 return block;
             }
 
-            var protectedText = FormulaRegex.Replace(block.ProtectedText, m => $"[[FORMULA:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(m.Value))).Substring(0, 8)}]]");
-            var shouldSkip = protectedText.StartsWith("[[FORMULA:", StringComparison.Ordinal) &&
-                             protectedText.EndsWith("]]", StringComparison.Ordinal) &&
-                             !protectedText.Contains(' ');
+            var protection = ProtectFormulaSpans(block.ProtectedText);
+            var protectedText = protection.ProtectedText;
+            var shouldSkip = IsFormulaOnlyText(protectedText);
 
             return block with
             {
@@ -250,6 +249,10 @@ public sealed class LongDocumentTranslationService
 
                     var translated = await _translateWithService(request, options.ServiceId, cancellationToken);
                     translatedText = ApplyGlossary(translated.TranslatedText, options.Glossary);
+                    var formulaProtection = options.EnableFormulaProtection
+                        ? ProtectFormulaSpans(block.OriginalText)
+                        : FormulaProtectionResult.Empty;
+                    translatedText = RestoreFormulaSpans(translatedText, formulaProtection.TokenToFormula);
                     lastError = null;
                     translationSucceeded = true;
                     break;
@@ -317,6 +320,59 @@ public sealed class LongDocumentTranslationService
         SourceBlockType.Formula => BlockType.Formula,
         _ => BlockType.Unknown
     };
+
+
+    private sealed record FormulaProtectionResult(string ProtectedText, IReadOnlyDictionary<string, string> TokenToFormula)
+    {
+        public static FormulaProtectionResult Empty { get; } = new(string.Empty, new Dictionary<string, string>(StringComparer.Ordinal));
+    }
+
+    private static FormulaProtectionResult ProtectFormulaSpans(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return new FormulaProtectionResult(text, new Dictionary<string, string>(StringComparer.Ordinal));
+        }
+
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        var counter = 0;
+        var protectedText = FormulaRegex.Replace(text, match =>
+        {
+            var token = $"[[FORMULA_{counter}_{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(match.Value))).Substring(0, 8)}]]";
+            map[token] = match.Value;
+            counter++;
+            return token;
+        });
+
+        return new FormulaProtectionResult(protectedText, map);
+    }
+
+    private static bool IsFormulaOnlyText(string protectedText)
+    {
+        if (string.IsNullOrWhiteSpace(protectedText))
+        {
+            return false;
+        }
+
+        var cleaned = Regex.Replace(protectedText, @"\[\[FORMULA_\d+_[A-F0-9]{8}\]\]", string.Empty).Trim();
+        return cleaned.Length == 0;
+    }
+
+    private static string RestoreFormulaSpans(string text, IReadOnlyDictionary<string, string> tokenToFormula)
+    {
+        if (string.IsNullOrWhiteSpace(text) || tokenToFormula.Count == 0)
+        {
+            return text;
+        }
+
+        var restored = text;
+        foreach (var pair in tokenToFormula)
+        {
+            restored = restored.Replace(pair.Key, pair.Value, StringComparison.Ordinal);
+        }
+
+        return restored;
+    }
 
     private static string ApplyGlossary(string text, IReadOnlyDictionary<string, string>? glossary)
     {

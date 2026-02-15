@@ -108,6 +108,18 @@ public sealed record FailedBlockInfo
     public required string Error { get; init; }
 }
 
+public sealed record BackfillPageMetrics
+{
+    public required long CandidateBlocks { get; init; }
+    public required long RenderedBlocks { get; init; }
+    public required long MissingBoundingBoxBlocks { get; init; }
+    public required long ShrinkFontBlocks { get; init; }
+    public required long TruncatedBlocks { get; init; }
+    public required long ObjectReplaceBlocks { get; init; }
+    public required long OverlayModeBlocks { get; init; }
+    public required long StructuredFallbackBlocks { get; init; }
+}
+
 public sealed record BackfillQualityMetrics
 {
     public required long CandidateBlocks { get; init; }
@@ -118,6 +130,7 @@ public sealed record BackfillQualityMetrics
     public required long ObjectReplaceBlocks { get; init; }
     public required long OverlayModeBlocks { get; init; }
     public required long StructuredFallbackBlocks { get; init; }
+    public IReadOnlyDictionary<int, BackfillPageMetrics>? PageMetrics { get; init; }
     public string? RetryMergeStrategy { get; init; }
 }
 

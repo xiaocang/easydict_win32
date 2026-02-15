@@ -72,9 +72,30 @@ public sealed class LongDocumentTranslationResult
 public sealed class LongDocumentTranslationService
 {
     private sealed record RetryExecutionSummary(LongDocumentQualityReport? CoreQualityReport, int ReusedByCanonicalCount);
-    private sealed record BackfillRenderingMetrics(int CandidateBlocks, int RenderedBlocks, int MissingBoundingBoxBlocks, int ShrinkFontBlocks, int TruncatedBlocks, int ObjectReplaceBlocks, int OverlayModeBlocks, int StructuredFallbackBlocks)
+    private sealed record BackfillRenderingMetrics(
+        int CandidateBlocks,
+        int RenderedBlocks,
+        int MissingBoundingBoxBlocks,
+        int ShrinkFontBlocks,
+        int TruncatedBlocks,
+        int ObjectReplaceBlocks,
+        int OverlayModeBlocks,
+        int StructuredFallbackBlocks,
+        IReadOnlyDictionary<int, BackfillPageMetrics>? PageMetrics)
     {
-        public static BackfillRenderingMetrics Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0);
+        public static BackfillRenderingMetrics Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, null);
+    }
+
+    private sealed class PageBackfillAccumulator
+    {
+        public int CandidateBlocks { get; set; }
+        public int RenderedBlocks { get; set; }
+        public int MissingBoundingBoxBlocks { get; set; }
+        public int ShrinkFontBlocks { get; set; }
+        public int TruncatedBlocks { get; set; }
+        public int ObjectReplaceBlocks { get; set; }
+        public int OverlayModeBlocks { get; set; }
+        public int StructuredFallbackBlocks { get; set; }
     }
 
     private readonly CoreLongDocumentTranslationService _coreLongDocumentService = new();
@@ -496,6 +517,7 @@ public sealed class LongDocumentTranslationService
         var truncatedBlocks = 0;
         var objectReplaceBlocks = 0;
         var overlayModeBlocks = 0;
+        var pageMetrics = new Dictionary<int, PageBackfillAccumulator>();
 
         foreach (var chunkIndex in Enumerable.Range(0, checkpoint.SourceChunks.Count))
         {
@@ -511,10 +533,13 @@ public sealed class LongDocumentTranslationService
             }
 
             candidateBlocks++;
+            var perPage = GetOrCreatePageBackfill(pageMetrics, metadata.PageNumber);
+            perPage.CandidateBlocks++;
 
             if (metadata.BoundingBox is null)
             {
                 missingBoundingBoxBlocks++;
+                perPage.MissingBoundingBoxBlocks++;
                 continue;
             }
 
@@ -522,6 +547,7 @@ public sealed class LongDocumentTranslationService
             if (pageIndex < 0 || pageIndex >= doc.Pages.Count)
             {
                 missingBoundingBoxBlocks++;
+                perPage.MissingBoundingBoxBlocks++;
                 continue;
             }
 
@@ -531,6 +557,8 @@ public sealed class LongDocumentTranslationService
             {
                 renderedBlocks++;
                 objectReplaceBlocks++;
+                perPage.RenderedBlocks++;
+                perPage.ObjectReplaceBlocks++;
                 continue;
             }
 
@@ -548,6 +576,7 @@ public sealed class LongDocumentTranslationService
             if (font.Size < baseFont.Size)
             {
                 shrinkFontBlocks++;
+                perPage.ShrinkFontBlocks++;
             }
 
             var wrappedLines = WrapTextByWidth(gfx, translated, font, rect.Width).ToList();
@@ -558,6 +587,7 @@ public sealed class LongDocumentTranslationService
                 var last = wrappedLines[^1];
                 wrappedLines[^1] = last.Length > 1 ? $"{last.TrimEnd('.', ' ')}…" : "…";
                 truncatedBlocks++;
+                perPage.TruncatedBlocks++;
             }
 
             var lineY = rect.Y;
@@ -569,11 +599,22 @@ public sealed class LongDocumentTranslationService
 
             renderedBlocks++;
             overlayModeBlocks++;
+            perPage.RenderedBlocks++;
+            perPage.OverlayModeBlocks++;
         }
 
         doc.Save(outputPath);
 
-        return new BackfillRenderingMetrics(candidateBlocks, renderedBlocks, missingBoundingBoxBlocks, shrinkFontBlocks, truncatedBlocks, objectReplaceBlocks, overlayModeBlocks, 0);
+        return new BackfillRenderingMetrics(
+            candidateBlocks,
+            renderedBlocks,
+            missingBoundingBoxBlocks,
+            shrinkFontBlocks,
+            truncatedBlocks,
+            objectReplaceBlocks,
+            overlayModeBlocks,
+            0,
+            BuildPageBackfillMetrics(pageMetrics));
     }
 
     private static BackfillRenderingMetrics ExportStructuredPdf(LongDocumentTranslationCheckpoint checkpoint, string outputPath)
@@ -632,7 +673,21 @@ public sealed class LongDocumentTranslationService
 
         doc.Save(outputPath);
 
-        return new BackfillRenderingMetrics(0, 0, 0, 0, 0, 0, 0, checkpoint.SourceChunks.Count);
+        var structuredPageMetrics = groupedChunks.ToDictionary(
+            group => group.Key,
+            group => new BackfillPageMetrics
+            {
+                CandidateBlocks = 0,
+                RenderedBlocks = 0,
+                MissingBoundingBoxBlocks = 0,
+                ShrinkFontBlocks = 0,
+                TruncatedBlocks = 0,
+                ObjectReplaceBlocks = 0,
+                OverlayModeBlocks = 0,
+                StructuredFallbackBlocks = group.Count()
+            });
+
+        return new BackfillRenderingMetrics(0, 0, 0, 0, 0, 0, 0, checkpoint.SourceChunks.Count, structuredPageMetrics);
     }
 
     private static bool TryReplacePdfTextObject(PdfPage page, string sourceText, string translatedText)
@@ -1295,6 +1350,86 @@ public sealed class LongDocumentTranslationService
         }
     }
 
+    private static PageBackfillAccumulator GetOrCreatePageBackfill(
+        IDictionary<int, PageBackfillAccumulator> pageMetrics,
+        int pageNumber)
+    {
+        if (!pageMetrics.TryGetValue(pageNumber, out var metrics))
+        {
+            metrics = new PageBackfillAccumulator();
+            pageMetrics[pageNumber] = metrics;
+        }
+
+        return metrics;
+    }
+
+    private static IReadOnlyDictionary<int, BackfillPageMetrics>? BuildPageBackfillMetrics(
+        IReadOnlyDictionary<int, PageBackfillAccumulator> pageMetrics)
+    {
+        if (pageMetrics.Count == 0)
+        {
+            return null;
+        }
+
+        return pageMetrics.ToDictionary(
+            entry => entry.Key,
+            entry => new BackfillPageMetrics
+            {
+                CandidateBlocks = entry.Value.CandidateBlocks,
+                RenderedBlocks = entry.Value.RenderedBlocks,
+                MissingBoundingBoxBlocks = entry.Value.MissingBoundingBoxBlocks,
+                ShrinkFontBlocks = entry.Value.ShrinkFontBlocks,
+                TruncatedBlocks = entry.Value.TruncatedBlocks,
+                ObjectReplaceBlocks = entry.Value.ObjectReplaceBlocks,
+                OverlayModeBlocks = entry.Value.OverlayModeBlocks,
+                StructuredFallbackBlocks = entry.Value.StructuredFallbackBlocks
+            });
+    }
+
+    private static IReadOnlyDictionary<int, BackfillPageMetrics>? MergePageBackfillMetrics(
+        IReadOnlyDictionary<int, BackfillPageMetrics>? previous,
+        IReadOnlyDictionary<int, BackfillPageMetrics>? current)
+    {
+        if (previous is null && current is null)
+        {
+            return null;
+        }
+
+        if (previous is null)
+        {
+            return current!.ToDictionary(entry => entry.Key, entry => entry.Value);
+        }
+
+        if (current is null)
+        {
+            return previous.ToDictionary(entry => entry.Key, entry => entry.Value);
+        }
+
+        var merged = previous.ToDictionary(entry => entry.Key, entry => entry.Value);
+        foreach (var (pageNumber, currentPage) in current)
+        {
+            if (!merged.TryGetValue(pageNumber, out var previousPage))
+            {
+                merged[pageNumber] = currentPage;
+                continue;
+            }
+
+            merged[pageNumber] = new BackfillPageMetrics
+            {
+                CandidateBlocks = previousPage.CandidateBlocks + currentPage.CandidateBlocks,
+                RenderedBlocks = previousPage.RenderedBlocks + currentPage.RenderedBlocks,
+                MissingBoundingBoxBlocks = previousPage.MissingBoundingBoxBlocks + currentPage.MissingBoundingBoxBlocks,
+                ShrinkFontBlocks = previousPage.ShrinkFontBlocks + currentPage.ShrinkFontBlocks,
+                TruncatedBlocks = previousPage.TruncatedBlocks + currentPage.TruncatedBlocks,
+                ObjectReplaceBlocks = previousPage.ObjectReplaceBlocks + currentPage.ObjectReplaceBlocks,
+                OverlayModeBlocks = previousPage.OverlayModeBlocks + currentPage.OverlayModeBlocks,
+                StructuredFallbackBlocks = previousPage.StructuredFallbackBlocks + currentPage.StructuredFallbackBlocks
+            };
+        }
+
+        return merged;
+    }
+
     private static LongDocumentQualityReport MergeBackfillMetrics(LongDocumentQualityReport baseReport, BackfillRenderingMetrics metrics)
     {
         var backfill = new BackfillQualityMetrics
@@ -1307,6 +1442,7 @@ public sealed class LongDocumentTranslationService
             ObjectReplaceBlocks = metrics.ObjectReplaceBlocks,
             OverlayModeBlocks = metrics.OverlayModeBlocks,
             StructuredFallbackBlocks = metrics.StructuredFallbackBlocks,
+            PageMetrics = metrics.PageMetrics,
             RetryMergeStrategy = baseReport.BackfillMetrics?.RetryMergeStrategy
         };
 
@@ -1358,12 +1494,12 @@ public sealed class LongDocumentTranslationService
 
         if (previous is null)
         {
-            return current with { RetryMergeStrategy = "core-only" };
+            return current with { RetryMergeStrategy = "core-only", PageMetrics = MergePageBackfillMetrics(null, current.PageMetrics) };
         }
 
         if (current is null)
         {
-            return previous with { RetryMergeStrategy = "checkpoint-only" };
+            return previous with { RetryMergeStrategy = "checkpoint-only", PageMetrics = MergePageBackfillMetrics(previous.PageMetrics, null) };
         }
 
         return new BackfillQualityMetrics
@@ -1376,6 +1512,7 @@ public sealed class LongDocumentTranslationService
             ObjectReplaceBlocks = previous.ObjectReplaceBlocks + current.ObjectReplaceBlocks,
             OverlayModeBlocks = previous.OverlayModeBlocks + current.OverlayModeBlocks,
             StructuredFallbackBlocks = previous.StructuredFallbackBlocks + current.StructuredFallbackBlocks,
+            PageMetrics = MergePageBackfillMetrics(previous.PageMetrics, current.PageMetrics),
             RetryMergeStrategy = "accumulate"
         };
     }

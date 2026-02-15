@@ -66,7 +66,7 @@
 
 > 目标：将“可回填、可解释、可回归”的能力从当前实现提升到稳定工程化阶段。
 
-### M1（优先级 P0）：对象级回填可观测性
+### M1（优先级 P0）：对象级回填可观测性 ✅（本轮已落地）
 - **改动目标**：输出页面级回填模式分布（object replace / overlay / structured fallback）。
 - **建议实现**：
   - 在 `BackfillQualityMetrics` 基础上补充 page-level 明细结构（如 `Dictionary<int, PageBackfillMetrics>`）。
@@ -74,6 +74,9 @@
 - **验收标准**：
   - 质量报告可追溯到“哪一页为何降级”。
   - UI/日志可直接展示“高风险页 TopN”。
+- **当前实现状态**：
+  - 已在 `BackfillQualityMetrics` 增加 `PageMetrics`，并在 PDF 回填阶段产出 page-level object/overlay/fallback 分布。
+  - 重试路径指标合并已支持 page-level metrics 累加。
 
 ### M2（优先级 P0）：结构化布局能力
 - **改动目标**：为 `RegionType` 增加置信度与来源标签（heuristic / parser / fallback）。
@@ -136,3 +139,5 @@
   - 双栏边界判定（left/right/body）
 - CI 新增长文档测试门禁，确保 longdoc 相关回归在主流程中可见。
 - 已细化“中期改进列表”为 M1~M6 执行计划（含优先级、建议实现与验收标准）。
+
+- 本轮按 roadmap 落地 M1：新增 page-level 回填指标（含 object replace / overlay / structured fallback），并覆盖重试合并逻辑测试。

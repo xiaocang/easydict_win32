@@ -36,7 +36,7 @@ public class LongDocumentTranslationServiceReviewFixTests
         metricsType.Should().NotBeNull();
         mergeMethod.Should().NotBeNull();
 
-        var metrics = Activator.CreateInstance(metricsType!, [10, 8, 1, 2, 1, 3, 5, 0]);
+        var metrics = Activator.CreateInstance(metricsType!, [10, 8, 1, 2, 1, 3, 5, 0, null]);
         var baseReport = new LongDocumentQualityReport
         {
             StageTimingsMs = new Dictionary<string, long>
@@ -156,6 +156,87 @@ public class LongDocumentTranslationServiceReviewFixTests
         merged.RetryMergeStrategy.Should().Be("accumulate");
     }
 
+
+
+    [Fact]
+    public void MergeRetryBackfillMetrics_ShouldMergePageMetrics()
+    {
+        var serviceType = typeof(LongDocumentTranslationService);
+        var method = serviceType.GetMethod("MergeRetryBackfillMetrics", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var previous = new BackfillQualityMetrics
+        {
+            CandidateBlocks = 1,
+            RenderedBlocks = 1,
+            MissingBoundingBoxBlocks = 0,
+            ShrinkFontBlocks = 0,
+            TruncatedBlocks = 0,
+            ObjectReplaceBlocks = 1,
+            OverlayModeBlocks = 0,
+            StructuredFallbackBlocks = 0,
+            PageMetrics = new Dictionary<int, BackfillPageMetrics>
+            {
+                [1] = new BackfillPageMetrics
+                {
+                    CandidateBlocks = 1,
+                    RenderedBlocks = 1,
+                    MissingBoundingBoxBlocks = 0,
+                    ShrinkFontBlocks = 0,
+                    TruncatedBlocks = 0,
+                    ObjectReplaceBlocks = 1,
+                    OverlayModeBlocks = 0,
+                    StructuredFallbackBlocks = 0
+                }
+            }
+        };
+
+        var current = new BackfillQualityMetrics
+        {
+            CandidateBlocks = 2,
+            RenderedBlocks = 1,
+            MissingBoundingBoxBlocks = 1,
+            ShrinkFontBlocks = 0,
+            TruncatedBlocks = 0,
+            ObjectReplaceBlocks = 0,
+            OverlayModeBlocks = 1,
+            StructuredFallbackBlocks = 0,
+            PageMetrics = new Dictionary<int, BackfillPageMetrics>
+            {
+                [1] = new BackfillPageMetrics
+                {
+                    CandidateBlocks = 2,
+                    RenderedBlocks = 1,
+                    MissingBoundingBoxBlocks = 1,
+                    ShrinkFontBlocks = 0,
+                    TruncatedBlocks = 0,
+                    ObjectReplaceBlocks = 0,
+                    OverlayModeBlocks = 1,
+                    StructuredFallbackBlocks = 0
+                },
+                [2] = new BackfillPageMetrics
+                {
+                    CandidateBlocks = 1,
+                    RenderedBlocks = 0,
+                    MissingBoundingBoxBlocks = 1,
+                    ShrinkFontBlocks = 0,
+                    TruncatedBlocks = 0,
+                    ObjectReplaceBlocks = 0,
+                    OverlayModeBlocks = 0,
+                    StructuredFallbackBlocks = 0
+                }
+            }
+        };
+
+        var merged = (BackfillQualityMetrics?)method!.Invoke(null, [previous, current]);
+        merged.Should().NotBeNull();
+        merged!.PageMetrics.Should().NotBeNull();
+        merged.PageMetrics!.Should().ContainKey(1);
+        merged.PageMetrics.Should().ContainKey(2);
+        merged.PageMetrics[1].CandidateBlocks.Should().Be(3);
+        merged.PageMetrics[1].OverlayModeBlocks.Should().Be(1);
+        merged.PageMetrics[2].MissingBoundingBoxBlocks.Should().Be(1);
+    }
 
     [Fact]
     public void TryPatchPdfLiteralToken_ShouldPatchMultiSegmentTjArray()

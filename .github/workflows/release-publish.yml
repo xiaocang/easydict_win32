@@ -163,106 +163,16 @@ jobs:
             --output ./publish-msix/${{ matrix.platform }} `
             -p:PublishTrimmed=true
 
-      # Verify MSIX assets are present in publish output
-      - name: Verify MSIX assets
+      - name: Package MSIX (shared script)
         shell: pwsh
         run: |
-          $publishDir = "dotnet/publish-msix/${{ matrix.platform }}"
-          $requiredAssets = @(
-            "Assets/SplashScreen.scale-100.png",
-            "Assets/LockScreenLogo.scale-100.png",
-            "Assets/Square150x150Logo.scale-100.png",
-            "Assets/Square44x44Logo.scale-100.png",
-            "Assets/Wide310x150Logo.scale-100.png",
-            "Assets/StoreLogo.png"
-          )
-
-          $missing = @()
-          foreach ($asset in $requiredAssets) {
-            $path = Join-Path $publishDir $asset
-            if (-not (Test-Path $path)) {
-              $missing += $asset
-            }
-          }
-
-          if ($missing.Count -gt 0) {
-            Write-Error "Missing required MSIX assets:"
-            $missing | ForEach-Object { Write-Error "  - $_" }
-            exit 1
-          }
-
-          Write-Host "All required MSIX assets verified:"
-          $requiredAssets | ForEach-Object { Write-Host "  - $_" }
-
-      # Verify targetsize icons are present (required for high-quality icons in Start Menu)
-      - name: Verify targetsize icons
-        shell: pwsh
-        run: |
-          $publishDir = "dotnet/publish-msix/${{ matrix.platform }}"
-          $targetsize = Get-ChildItem "$publishDir\Assets" -Filter "*targetsize*.png"
-          Write-Host "Found $($targetsize.Count) targetsize icons"
-          if ($targetsize.Count -lt 10) {
-            Write-Error "Expected 10 targetsize icons, found $($targetsize.Count). Start Menu icon may appear low-resolution!"
-            exit 1
-          }
-          Write-Host "All targetsize icons verified (high-quality icons ensured)"
-
-      # Fix PRI: dotnet publish outputs localization PRI as Easydict.WinUI.pri,
-      # but MSIX packaging expects resources.pri. Copy it before packaging.
-      - name: Fix resources.pri for MSIX
-        shell: pwsh
-        run: |
-          $publishDir = "dotnet/publish-msix/${{ matrix.platform }}"
-          $sourcePri = Join-Path $publishDir "Easydict.WinUI.pri"
-          $targetPri = Join-Path $publishDir "resources.pri"
-
-          if (Test-Path $sourcePri) {
-            $sourceSize = (Get-Item $sourcePri).Length
-            Write-Host "Found Easydict.WinUI.pri ($sourceSize bytes), copying to resources.pri"
-            Copy-Item -Path $sourcePri -Destination $targetPri -Force
-            Write-Host "resources.pri updated ($((Get-Item $targetPri).Length) bytes)"
-          } else {
-            Write-Warning "Easydict.WinUI.pri not found in $publishDir - resources.pri may lack localizations"
-          }
-
-      # Update manifest version
-      - name: Update manifest version
-        shell: pwsh
-        run: |
-          $manifestPath = "dotnet/src/Easydict.WinUI/Package.appxmanifest"
-          $content = Get-Content $manifestPath -Raw
-          $content = $content -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"${{ steps.version.outputs.MSIX_VERSION }}`""
-          $content = $content -replace 'ProcessorArchitecture="neutral"', "ProcessorArchitecture=`"${{ matrix.platform }}`""
-          Set-Content $manifestPath $content
-
-      # Create MSIX package using winapp CLI (unsigned for Windows Store submission)
-      - name: Create MSIX package
-        working-directory: dotnet
-        shell: pwsh
-        run: |
-          # Create MSIX output directory
-          New-Item -ItemType Directory -Force -Path ./msix
-
-          # Package the application (unsigned - Microsoft signs during Store submission)
-          # Note: --self-contained is NOT used here because dotnet publish already
-          # bundles all runtime files. Using --self-contained would cause winapp to
-          # try building its own runtime deployment, which fails in CI.
-          winapp package `
-            ./publish-msix/${{ matrix.platform }} `
-            --output ./msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix `
-            --manifest src/Easydict.WinUI/Package.appxmanifest `
-            --skip-pri `
-            --verbose
-
-      # Verify and fix MinVersion inside the MSIX package
-      # winapp package may override TargetDeviceFamily MinVersion with a lower default.
-      # Windows Store requires MinVersion > 10.0.17134.0.
-      # See: https://github.com/microsoft/WindowsAppSDK/issues/5598
-      - name: Verify MSIX manifest MinVersion
-        shell: pwsh
-        run: |
-          dotnet/scripts/Fix-MsixMinVersion.ps1 `
-            -MsixPath "dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix"
+          dotnet/scripts/Package-Msix.ps1 `
+            -Platform "${{ matrix.platform }}" `
+            -PublishDir "dotnet/publish-msix/${{ matrix.platform }}" `
+            -ManifestPath "dotnet/src/Easydict.WinUI/Package.appxmanifest" `
+            -OutputMsixPath "dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix" `
+            -MsixVersion "${{ steps.version.outputs.MSIX_VERSION }}" `
+            -VerifyTargetsizeIcons
 
       # Also create ZIP archive for portable distribution
       - name: Create ZIP archive

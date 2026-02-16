@@ -1,0 +1,178 @@
+name: ARM64 MSIX Smoke Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  arm64-msix-smoke:
+    name: Build + Launch MSIX (ARM64)
+    runs-on: [self-hosted, Windows, ARM64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: dotnet/global.json
+
+      - name: Setup WinApp CLI
+        shell: pwsh
+        run: |
+          # Workaround: install winapp CLI directly via winget instead of
+          # microsoft/setup-WinAppCli action, which fails to extract on
+          # runners < 2.311.0 (Expand-Archive rejects extensionless temp files).
+          $installed = winget list --id Microsoft.WinAppCli --source winget --accept-source-agreements 2>$null
+          if ($LASTEXITCODE -eq 0 -and $installed -match 'Microsoft.WinAppCli') {
+            Write-Host "Microsoft.WinAppCli is already installed, skipping."
+          } else {
+            winget install Microsoft.WinAppCli --source winget --accept-package-agreements --accept-source-agreements --silent
+          }
+
+      - name: Restore WinUI project (arm64)
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-arm64
+
+      - name: Publish WinUI App for MSIX (arm64)
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
+            --configuration Release `
+            --runtime win-arm64 `
+            --self-contained true `
+            --no-restore `
+            --output ./publish-msix/arm64 `
+            -p:Platform=arm64 `
+            -p:PublishTrimmed=false `
+            -p:WindowsAppSDKSelfContained=false
+
+      - name: Publish NativeBridge (arm64)
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj `
+            --configuration Release `
+            --runtime win-arm64 `
+            --self-contained true `
+            --output ./publish-msix/arm64 `
+            -p:PublishTrimmed=true
+
+      - name: Publish BrowserRegistrar (arm64)
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj `
+            --configuration Release `
+            --runtime win-arm64 `
+            --self-contained true `
+            --output ./publish-msix/arm64 `
+            -p:PublishTrimmed=true
+
+      - name: Package MSIX (shared script)
+        shell: pwsh
+        run: |
+          dotnet/scripts/Package-Msix.ps1 `
+            -Platform "arm64" `
+            -PublishDir "dotnet/publish-msix/arm64" `
+            -ManifestPath "dotnet/src/Easydict.WinUI/Package.appxmanifest" `
+            -OutputMsixPath "dotnet/msix/Easydict-arm64-smoke.msix" `
+            -VerifyTargetsizeIcons
+
+      - name: Trust signing certificate
+        shell: pwsh
+        run: |
+          $pfxPath = Join-Path $HOME "Downloads/dev-signing.pfx"
+          $password = ConvertTo-SecureString -String "password" -Force -AsPlainText
+          Import-PfxCertificate -FilePath $pfxPath -Password $password `
+            -CertStoreLocation "Cert:\LocalMachine\TrustedPeople"
+          Write-Host "Signing certificate trusted"
+
+      - name: Sign MSIX package
+        shell: pwsh
+        run: |
+          $pfxPath = Join-Path $HOME "Downloads/dev-signing.pfx"
+          winapp sign "dotnet/msix/Easydict-arm64-smoke.msix" $pfxPath --password "password" --verbose
+
+      - name: Enable Developer Mode (sideloading)
+        shell: pwsh
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" `
+            /t REG_DWORD /v AllowDevelopmentWithoutDevLicense /d 1 /f
+
+      - name: Install Windows App Runtime (arm64)
+        shell: pwsh
+        run: |
+          $url = "https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-arm64.exe"
+          $installer = Join-Path $env:TEMP "windowsappruntimeinstall-arm64.exe"
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow
+          Write-Host "Windows App Runtime arm64 installed"
+
+      - name: Install MSIX package
+        shell: pwsh
+        run: |
+          $existing = Get-AppxPackage -Name "xiaocang.EasydictforWindows" -ErrorAction SilentlyContinue
+          if ($existing) {
+            Write-Host "Removing existing package: $($existing.PackageFullName)"
+            Remove-AppxPackage -Package $existing.PackageFullName
+            Write-Host "Old package removed"
+          }
+          $msixPath = Resolve-Path "dotnet/msix/Easydict-arm64-smoke.msix"
+          Add-AppxPackage -Path $msixPath
+
+      - name: Launch app and verify main window appears
+        shell: pwsh
+        run: |
+          $package = Get-AppxPackage -Name "xiaocang.EasydictforWindows" -ErrorAction SilentlyContinue
+          if (-not $package) {
+            Write-Error "Package not installed"
+            exit 1
+          }
+
+          $appId = "shell:AppsFolder\$($package.PackageFamilyName)!App"
+          Start-Process "explorer.exe" $appId
+          Write-Host "Launched: $appId"
+
+          $deadline = (Get-Date).AddSeconds(60)
+          $windowFound = $false
+
+          while ((Get-Date) -lt $deadline) {
+            $uiProcs = Get-Process -Name "Easydict.WinUI" -ErrorAction SilentlyContinue
+            if ($uiProcs) {
+              foreach ($proc in $uiProcs) {
+                if ($proc.MainWindowHandle -ne 0) {
+                  Write-Host "Main window detected. PID=$($proc.Id), Title=$($proc.MainWindowTitle)"
+                  $windowFound = $true
+                  break
+                }
+              }
+            }
+
+            if ($windowFound) { break }
+            Start-Sleep -Seconds 2
+          }
+
+          if (-not $windowFound) {
+            Write-Error "App did not show a main window within timeout"
+            Get-Process -Name "Easydict.WinUI" -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, MainWindowTitle
+            exit 1
+          }
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: easydict-arm64-smoke-msix
+          path: dotnet/msix/Easydict-arm64-smoke.msix

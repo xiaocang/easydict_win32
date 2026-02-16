@@ -424,10 +424,14 @@
                     <TextBlock Text="Translation Service (single select)" />
                     <ComboBox x:Name="LongDocServiceCombo" />
 
+                    <TextBlock Text="Input Mode" />
                     <ComboBox x:Name="LongDocInputModeCombo" SelectedIndex="0" SelectionChanged="OnLongDocInputModeChanged">
                         <ComboBoxItem Content="Manual Input" Tag="manual" />
                         <ComboBoxItem Content="PDF File" Tag="pdf" />
                     </ComboBox>
+                    <TextBlock Text="Manual mode is best for pasted text. PDF mode supports single-file export and optional queue processing."
+                               TextWrapping="Wrap"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
                     <TextBlock x:Name="LongDocManualLabel" Text="Manual text" />
                     <TextBox x:Name="LongDocManualTextBox"
@@ -458,11 +462,16 @@
                     <TextBlock Text="Output File Name" />
                     <TextBox x:Name="LongDocOutputFileNameTextBox" PlaceholderText="translated.pdf" />
 
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="LongDocTranslateButton" Content="Translate and Export PDF" Click="OnLongDocTranslateClicked" />
-                        <Button x:Name="LongDocRetryButton" Content="Retry Failed Chunks" Click="OnLongDocRetryClicked" IsEnabled="False" />
-                        <Button x:Name="LongDocStartQueueButton" Content="Start PDF Queue" Click="OnLongDocStartQueueClicked" />
-                        <Button x:Name="LongDocCancelQueueButton" Content="Cancel Current Task" Click="OnLongDocCancelQueueClicked" IsEnabled="False" />
+                    <TextBlock Text="Actions" />
+                    <StackPanel Orientation="Vertical" Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="LongDocTranslateButton" Content="Translate & Export" Click="OnLongDocTranslateClicked" Style="{StaticResource AccentButtonStyle}" />
+                            <Button x:Name="LongDocRetryButton" Content="Retry Failed Chunks" Click="OnLongDocRetryClicked" IsEnabled="False" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="LongDocStartQueueButton" Content="Start PDF Queue" Click="OnLongDocStartQueueClicked" />
+                            <Button x:Name="LongDocCancelQueueButton" Content="Cancel Queue Task" Click="OnLongDocCancelQueueClicked" IsEnabled="False" />
+                        </StackPanel>
                     </StackPanel>
 
                     <TextBlock x:Name="LongDocStatusText" Text="Idle" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />

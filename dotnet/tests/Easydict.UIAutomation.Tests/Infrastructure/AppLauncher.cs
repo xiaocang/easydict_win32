@@ -40,7 +40,7 @@ public sealed class AppLauncher : IDisposable
     }
 
     /// <summary>
-    /// Try to find and launch the app. Checks MSIX first, then falls back to exe path.
+    /// Try to find and launch the app. Checks explicit exe first, then package activation with fallbacks.
     /// </summary>
     public void LaunchAuto(TimeSpan? timeout = null)
     {
@@ -56,15 +56,28 @@ public sealed class AppLauncher : IDisposable
         var packageFamilyName = Environment.GetEnvironmentVariable("EASYDICT_PACKAGE_FAMILY_NAME");
         if (!string.IsNullOrEmpty(packageFamilyName))
         {
-            LaunchFromMsix(packageFamilyName, timeout);
+            try
+            {
+                LaunchFromMsix(packageFamilyName, timeout);
+                return;
+            }
+            catch (TimeoutException)
+            {
+                // Fall back to executable discovery when AUMID activation is flaky.
+            }
+        }
+
+        // Try to find installed package info via PowerShell
+        var packageInfo = FindInstalledPackageInfo();
+        if (packageInfo.ExePath != null)
+        {
+            LaunchFromExe(packageInfo.ExePath, timeout);
             return;
         }
 
-        // Try to find installed MSIX package via PowerShell
-        var familyName = FindInstalledPackageFamilyName();
-        if (familyName != null)
+        if (packageInfo.FamilyName != null)
         {
-            LaunchFromMsix(familyName, timeout);
+            LaunchFromMsix(packageInfo.FamilyName, timeout);
             return;
         }
 
@@ -157,32 +170,42 @@ public sealed class AppLauncher : IDisposable
         throw new TimeoutException($"Main window did not appear within {timeout.TotalSeconds}s");
     }
 
-    private static string? FindInstalledPackageFamilyName()
+    private static (string? FamilyName, string? ExePath) FindInstalledPackageInfo()
     {
         try
         {
+            const string command = "& { $p = Get-AppxPackage -Name 'xiaocang.EasydictforWindows' | Select-Object -First 1; if (-not $p) { return }; $family = $p.PackageFamilyName; $exe = Join-Path $p.InstallLocation 'Easydict.exe'; if (Test-Path $exe) { Write-Output ($family + '|' + $exe) } else { Write-Output ($family + '|') } }";
             var psi = new ProcessStartInfo
             {
                 FileName = "powershell",
-                Arguments = "-NoProfile -Command \"(Get-AppxPackage -Name 'xiaocang.EasydictforWindows' | Select-Object -First 1).PackageFamilyName\"",
+                Arguments = $"-NoProfile -Command \"{command}\"",
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
             var process = Process.Start(psi);
-            if (process == null) return null;
+            if (process == null)
+            {
+                return (null, null);
+            }
 
             var output = process.StandardOutput.ReadToEnd().Trim();
             process.WaitForExit(10_000);
+            if (string.IsNullOrEmpty(output))
+            {
+                return (null, null);
+            }
 
-            return string.IsNullOrEmpty(output) ? null : output;
+            var parts = output.Split('|', 2, StringSplitOptions.TrimEntries);
+            var family = parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]) ? parts[0] : null;
+            var exe = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]) ? parts[1] : null;
+            return (family, exe);
         }
         catch
         {
-            return null;
+            return (null, null);
         }
     }
-
 
     private void TryCloseApplication()
     {

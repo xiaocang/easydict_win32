@@ -156,14 +156,6 @@ public sealed class AppLauncher : IDisposable
     private static bool ResolveAllowExeFallback()
     {
         var value = Environment.GetEnvironmentVariable("EASYDICT_UIA_ALLOW_EXE_FALLBACK");
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Equals(
-                Environment.GetEnvironmentVariable("GITHUB_ACTIONS"),
-                "true",
-                StringComparison.OrdinalIgnoreCase);
-        }
-
         return string.Equals(value, "1", StringComparison.Ordinal) ||
                string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }

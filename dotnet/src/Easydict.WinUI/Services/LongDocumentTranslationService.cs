@@ -679,9 +679,10 @@ public sealed class LongDocumentTranslationService
                     {
                         if (y > page.Height - margin)
                         {
-                            gfx.Dispose();
                             page = doc.AddPage();
-                            gfx = XGraphics.FromPdfPage(page);
+                            var nextGraphics = XGraphics.FromPdfPage(page);
+                            gfx.Dispose();
+                            gfx = nextGraphics;
                             y = margin;
                         }
 

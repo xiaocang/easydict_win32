@@ -40,7 +40,7 @@ public sealed class AppLauncher : IDisposable
     }
 
     /// <summary>
-    /// Try to find and launch the app. Checks explicit exe first, then package activation with fallbacks.
+    /// Try to find and launch the app. Prefer package activation for MSIX; EXE fallback is opt-in.
     /// </summary>
     public void LaunchAuto(TimeSpan? timeout = null)
     {
@@ -69,20 +69,20 @@ public sealed class AppLauncher : IDisposable
 
         // Try to find installed package info via PowerShell
         var packageInfo = FindInstalledPackageInfo();
-        if (packageInfo.ExePath != null)
-        {
-            LaunchFromExe(packageInfo.ExePath, timeout);
-            return;
-        }
-
         if (packageInfo.FamilyName != null)
         {
             LaunchFromMsix(packageInfo.FamilyName, timeout);
             return;
         }
 
+        if (ResolveAllowExeFallback() && packageInfo.ExePath != null)
+        {
+            LaunchFromExe(packageInfo.ExePath, timeout);
+            return;
+        }
+
         throw new InvalidOperationException(
-            "Cannot find Easydict app. Set EASYDICT_EXE_PATH or EASYDICT_PACKAGE_FAMILY_NAME environment variable.");
+            "Cannot find Easydict app. Set EASYDICT_PACKAGE_FAMILY_NAME (preferred) or EASYDICT_EXE_PATH. EXE fallback from installed package can be enabled with EASYDICT_UIA_ALLOW_EXE_FALLBACK=1.");
     }
 
 
@@ -141,6 +141,14 @@ public sealed class AppLauncher : IDisposable
 
         return TimeSpan.FromSeconds(Math.Clamp(seconds, 5, 300));
     }
+
+    private static bool ResolveAllowExeFallback()
+    {
+        var value = Environment.GetEnvironmentVariable("EASYDICT_UIA_ALLOW_EXE_FALLBACK");
+        return string.Equals(value, "1", StringComparison.Ordinal) ||
+               string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
 
     public FlaUI.Core.AutomationElements.Window GetMainWindow(TimeSpan? timeout = null)
     {

@@ -69,13 +69,24 @@ public sealed class AppLauncher : IDisposable
 
         // Try to find installed package info via PowerShell
         var packageInfo = FindInstalledPackageInfo();
+        var allowExeFallback = ResolveAllowExeFallback();
         if (packageInfo.FamilyName != null)
         {
-            LaunchFromMsix(packageInfo.FamilyName, timeout);
-            return;
+            try
+            {
+                LaunchFromMsix(packageInfo.FamilyName, timeout);
+                return;
+            }
+            catch (TimeoutException)
+            {
+                if (!allowExeFallback || packageInfo.ExePath == null)
+                {
+                    throw;
+                }
+            }
         }
 
-        if (ResolveAllowExeFallback() && packageInfo.ExePath != null)
+        if (allowExeFallback && packageInfo.ExePath != null)
         {
             LaunchFromExe(packageInfo.ExePath, timeout);
             return;
@@ -145,6 +156,14 @@ public sealed class AppLauncher : IDisposable
     private static bool ResolveAllowExeFallback()
     {
         var value = Environment.GetEnvironmentVariable("EASYDICT_UIA_ALLOW_EXE_FALLBACK");
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Equals(
+                Environment.GetEnvironmentVariable("GITHUB_ACTIONS"),
+                "true",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
         return string.Equals(value, "1", StringComparison.Ordinal) ||
                string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }

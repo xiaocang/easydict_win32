@@ -1295,8 +1295,10 @@ namespace Easydict.WinUI.Views
 
         private CancellationToken PrepareLongDocSingleTaskCancellationToken()
         {
-            _longDocSingleTaskCts?.Cancel();
-            _longDocSingleTaskCts?.Dispose();
+            var previous = Interlocked.Exchange(ref _longDocSingleTaskCts, null);
+            try { previous?.Cancel(); } catch (ObjectDisposedException) { }
+            previous?.Dispose();
+
             _longDocSingleTaskCts = new CancellationTokenSource();
             return _longDocSingleTaskCts.Token;
         }

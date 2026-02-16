@@ -33,7 +33,7 @@ jobs:
 
       - name: Run long-document regression gate
         working-directory: dotnet
-        run: dotnet test Easydict.Win32.sln --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" -p:Platform=x64 --filter "FullyQualifiedName~LongDocument"
+        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" -p:Platform=x64 --filter "FullyQualifiedName~LongDocument"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

@@ -5,10 +5,11 @@ using Easydict.TranslationService.Models;
 
 namespace Easydict.WinUI.Services;
 
-public sealed class LongDocumentDeduplicationService
+public sealed class LongDocumentDeduplicationService : IDisposable
 {
     private readonly string _indexFilePath;
     private readonly SemaphoreSlim _lock = new(1, 1);
+    private bool _disposed;
 
     public LongDocumentDeduplicationService()
     {
@@ -27,6 +28,8 @@ public sealed class LongDocumentDeduplicationService
         Language to,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
+
         var inputHash = await ComputeInputHashAsync(mode, input, cancellationToken);
         var canonical = $"v1|{mode}|{serviceId}|{from.ToCode()}|{to.ToCode()}|{inputHash}";
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
@@ -34,6 +37,8 @@ public sealed class LongDocumentDeduplicationService
 
     public async Task<string?> TryGetExistingOutputPathAsync(string dedupKey, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
+
         await _lock.WaitAsync(cancellationToken);
         try
         {
@@ -62,6 +67,8 @@ public sealed class LongDocumentDeduplicationService
 
     public async Task RegisterOutputAsync(string dedupKey, string outputPath, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
+
         await _lock.WaitAsync(cancellationToken);
         try
         {
@@ -120,6 +127,22 @@ public sealed class LongDocumentDeduplicationService
         await JsonSerializer.SerializeAsync(fs, index, cancellationToken: cancellationToken);
     }
 
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _lock.Dispose();
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+    }
     private sealed class DedupEntry
     {
         public string OutputPath { get; set; } = string.Empty;

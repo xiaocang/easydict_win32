@@ -174,7 +174,7 @@ public sealed class AppLauncher : IDisposable
     {
         try
         {
-            const string command = "& { $p = Get-AppxPackage -Name 'xiaocang.EasydictforWindows' | Select-Object -First 1; if (-not $p) { return }; $family = $p.PackageFamilyName; $exe = Join-Path $p.InstallLocation 'Easydict.exe'; if (Test-Path $exe) { Write-Output ($family + '|' + $exe) } else { Write-Output ($family + '|') } }";
+            const string command = "& { $p = Get-AppxPackage -Name 'xiaocang.EasydictforWindows' | Select-Object -First 1; if (-not $p) { return }; $family = $p.PackageFamilyName; $exe = Join-Path $p.InstallLocation 'Easydict.WinUI.exe'; if (Test-Path $exe) { Write-Output ($family + '|' + $exe) } else { Write-Output ($family + '|') } }";
             var psi = new ProcessStartInfo
             {
                 FileName = "powershell",

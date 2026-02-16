@@ -152,6 +152,9 @@
     <!-- FlaUI for proper UI Automation text selection -->
     <ItemGroup>
       <PackageReference Include="FlaUI.UIA3" Version="4.0.0" />
+      <PackageReference Include="PdfSharpCore" Version="1.3.67" />
+      <!-- Custom PdfPig build from configured feed; required by current long-document pipeline. -->
+      <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
     </ItemGroup>
 
     <!-- 

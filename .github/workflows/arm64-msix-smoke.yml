@@ -70,46 +70,15 @@ jobs:
             --output ./publish-msix/arm64 `
             -p:PublishTrimmed=true
 
-      - name: Fix resources.pri for MSIX
+      - name: Package MSIX (shared script)
         shell: pwsh
         run: |
-          $publishDir = "dotnet/publish-msix/arm64"
-          $sourcePri = Join-Path $publishDir "Easydict.WinUI.pri"
-          $targetPri = Join-Path $publishDir "resources.pri"
-
-          if (Test-Path $sourcePri) {
-            Copy-Item -Path $sourcePri -Destination $targetPri -Force
-            Write-Host "Copied Easydict.WinUI.pri -> resources.pri"
-          } elseif (Test-Path $targetPri) {
-            Write-Host "resources.pri already exists"
-          } else {
-            Write-Error "No PRI file found in publish output"
-            exit 1
-          }
-
-      - name: Create ARM64 MSIX package
-        working-directory: dotnet
-        shell: pwsh
-        run: |
-          $manifestPath = "src/Easydict.WinUI/Package.appxmanifest"
-          $tempManifest = Join-Path $env:RUNNER_TEMP "Package.arm64.appxmanifest"
-
-          $content = Get-Content $manifestPath -Raw
-          $content = $content -replace 'ProcessorArchitecture="[^"]*"', 'ProcessorArchitecture="arm64"'
-          Set-Content $tempManifest $content -Encoding utf8
-
-          New-Item -ItemType Directory -Force -Path ./msix | Out-Null
-          winapp package `
-            ./publish-msix/arm64 `
-            --output ./msix/Easydict-arm64-smoke.msix `
-            --manifest $tempManifest `
-            --skip-pri `
-            --verbose
-
-      - name: Fix MSIX MinVersion
-        shell: pwsh
-        run: |
-          dotnet/scripts/Fix-MsixMinVersion.ps1 -MsixPath "dotnet/msix/Easydict-arm64-smoke.msix"
+          dotnet/scripts/Package-Msix.ps1 `
+            -Platform "arm64" `
+            -PublishDir "dotnet/publish-msix/arm64" `
+            -ManifestPath "dotnet/src/Easydict.WinUI/Package.appxmanifest" `
+            -OutputMsixPath "dotnet/msix/Easydict-arm64-smoke.msix" `
+            -VerifyTargetsizeIcons
 
       - name: Enable Developer Mode (sideloading)
         shell: pwsh

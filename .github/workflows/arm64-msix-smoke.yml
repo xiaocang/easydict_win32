@@ -15,7 +15,7 @@ env:
 jobs:
   arm64-msix-smoke:
     name: Build + Launch MSIX (ARM64)
-    runs-on: [self-hosted, Windows, ARM64, win11-arm64]
+    runs-on: [self-hosted, Windows, ARM64]
 
     steps:
       - name: Checkout code

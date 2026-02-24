@@ -1796,11 +1796,20 @@ namespace Easydict.WinUI.Views
 
             var selected = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
             var isPdfMode = string.Equals(selected, "pdf", StringComparison.Ordinal);
+            var isManual = string.Equals(selected, "manual", StringComparison.Ordinal);
 
-            LongDocManualTextBox.Visibility = selected == "manual" ? Visibility.Visible : Visibility.Collapsed;
-            LongDocManualLabel.Visibility = selected == "manual" ? Visibility.Visible : Visibility.Collapsed;
+            // Input card: manual text vs PDF path
+            LongDocManualTextBox.Visibility = isManual ? Visibility.Visible : Visibility.Collapsed;
             LongDocPdfPanel.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
             LongDocQueuePanel.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
+
+            // Output card: result text vs PDF output fields
+            LongDocResultTextBox.Visibility = isManual ? Visibility.Visible : Visibility.Collapsed;
+            LongDocOutputFieldsPanel.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
+
+            // Title updates
+            LongDocInputTitle.Text = isPdfMode ? "PDF Input" : "Source Text";
+            LongDocOutputTitle.Text = isPdfMode ? "PDF Output" : "Translation Result";
 
             if (!IsLongDocTaskRunning())
             {
@@ -1808,6 +1817,19 @@ namespace Easydict.WinUI.Views
             }
 
             LongDocStartQueueButton.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void OnLongDocPdfPathChanged(object sender, TextChangedEventArgs e)
+        {
+            var pdfPath = LongDocPdfPathTextBox.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(pdfPath)) return;
+            var dir = Path.GetDirectoryName(pdfPath) ?? "";
+            var name = Path.GetFileNameWithoutExtension(pdfPath);
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                LongDocOutputFolderTextBox.Text = dir;
+                LongDocOutputFileNameTextBox.Text = $"{name}_translated.pdf";
+            }
         }
 
         private async void OnLongDocTranslateClicked(object sender, RoutedEventArgs e)
@@ -1895,6 +1917,15 @@ namespace Easydict.WinUI.Views
                     await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
                 }
 
+                // Show translated text in-UI for manual mode
+                if (mode == LongDocumentInputMode.Manual && result.Checkpoint is not null)
+                {
+                    var translatedText = string.Join("\n\n", result.Checkpoint.TranslatedChunks
+                        .OrderBy(kvp => kvp.Key)
+                        .Select(kvp => kvp.Value));
+                    LongDocResultTextBox.Text = translatedText;
+                }
+
                 RefreshLongDocSuggestedOutputFileName();
             }
             catch (OperationCanceledException)
@@ -1959,6 +1990,15 @@ namespace Easydict.WinUI.Views
                     await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
                 }
 
+                // Show translated text in-UI for manual mode retries
+                if (_longDocCheckpoint?.InputMode == LongDocumentInputMode.Manual && result.Checkpoint is not null)
+                {
+                    var translatedText = string.Join("\n\n", result.Checkpoint.TranslatedChunks
+                        .OrderBy(kvp => kvp.Key)
+                        .Select(kvp => kvp.Value));
+                    LongDocResultTextBox.Text = translatedText;
+                }
+
                 RefreshLongDocSuggestedOutputFileName("translated-retry");
             }
             catch (OperationCanceledException)
@@ -1974,6 +2014,15 @@ namespace Easydict.WinUI.Views
                 CompleteLongDocSingleTask();
                 SetLongDocTaskUiState(false);
             }
+        }
+
+        private void OnNavSegmentChanged(object sender, RoutedEventArgs e)
+        {
+            if (QuickTranslateContent is null) return;
+            QuickTranslateContent.Visibility = QuickTranslateTab.IsChecked == true
+                ? Visibility.Visible : Visibility.Collapsed;
+            LongDocContent.Visibility = LongDocTab.IsChecked == true
+                ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void OnSettingsClicked(object sender, RoutedEventArgs e)

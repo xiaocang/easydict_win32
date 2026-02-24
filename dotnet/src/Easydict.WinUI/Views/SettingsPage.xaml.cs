@@ -182,6 +182,45 @@ public sealed partial class SettingsPage : Page
         if (DocumentOutputModeNoteText != null)
             DocumentOutputModeNoteText.Text = loc.GetString("DocumentOutputMode_Note");
 
+        // Translation Concurrency section
+        if (TranslationConcurrencyHeaderText != null)
+            TranslationConcurrencyHeaderText.Text = loc.GetString("TranslationConcurrency_Title");
+        if (TranslationConcurrencyDescriptionText != null)
+            TranslationConcurrencyDescriptionText.Text = loc.GetString("TranslationConcurrency_Description");
+        ConcurrencyNumberBox.Header = loc.GetString("TranslationConcurrency_Title");
+        if (TranslationConcurrencyNoteText != null)
+            TranslationConcurrencyNoteText.Text = loc.GetString("TranslationConcurrency_Note");
+
+        // CJK Font section
+        if (CjkFontHeaderText != null)
+            CjkFontHeaderText.Text = loc.GetString("CjkFont_Title");
+        if (CjkFontDescriptionText != null)
+            CjkFontDescriptionText.Text = loc.GetString("CjkFont_Description");
+        CjkFontDownloadButton.Content = loc.GetString("CjkFont_Download");
+        CjkFontDeleteButton.Content = loc.GetString("CjkFont_Delete");
+        if (CjkFontNoteText != null)
+            CjkFontNoteText.Text = loc.GetString("CjkFont_Note");
+
+        // Formula Detection section
+        if (FormulaDetectionHeaderText != null)
+            FormulaDetectionHeaderText.Text = loc.GetString("FormulaDetection_Title");
+        if (FormulaDetectionDescriptionText != null)
+            FormulaDetectionDescriptionText.Text = loc.GetString("FormulaDetection_Description");
+        FormulaFontPatternBox.Header = loc.GetString("FormulaDetection_FontPattern");
+        FormulaCharPatternBox.Header = loc.GetString("FormulaDetection_CharPattern");
+        if (FormulaDetectionNoteText != null)
+            FormulaDetectionNoteText.Text = loc.GetString("FormulaDetection_Note");
+
+        // Translation Cache section
+        if (TranslationCacheHeaderText != null)
+            TranslationCacheHeaderText.Text = loc.GetString("TranslationCache_Title");
+        if (TranslationCacheDescriptionText != null)
+            TranslationCacheDescriptionText.Text = loc.GetString("TranslationCache_Description");
+        TranslationCacheToggle.Header = loc.GetString("TranslationCache_Title");
+        ClearCacheButton.Content = loc.GetString("TranslationCache_Clear");
+        if (TranslationCacheNoteText != null)
+            TranslationCacheNoteText.Text = loc.GetString("TranslationCache_Note");
+
         // HTTP Proxy section
         if (HttpProxyHeaderText != null)
             HttpProxyHeaderText.Text = loc.GetString("HttpProxy");
@@ -201,6 +240,8 @@ public sealed partial class SettingsPage : Page
         ProxyEnabledToggle.OffContent = toggleOff;
         ProxyBypassLocalToggle.OnContent = toggleOn;
         ProxyBypassLocalToggle.OffContent = toggleOff;
+        TranslationCacheToggle.OnContent = toggleOn;
+        TranslationCacheToggle.OffContent = toggleOff;
         MinimizeToTrayToggle.OnContent = toggleOn;
         MinimizeToTrayToggle.OffContent = toggleOff;
         MinimizeToTrayOnStartupToggle.OnContent = toggleOn;
@@ -358,6 +399,7 @@ public sealed partial class SettingsPage : Page
 
         // Document output mode
         DocumentOutputModeCombo.SelectionChanged += OnDocumentOutputModeChanged;
+        ConcurrencyNumberBox.ValueChanged += OnConcurrencyValueChanged;
         VisionLayoutServiceCombo.SelectionChanged += OnSettingChanged;
 
         // CheckBox changes
@@ -485,6 +527,17 @@ public sealed partial class SettingsPage : Page
 
         // Document Output Mode
         SelectComboByTag(DocumentOutputModeCombo, _settings.DocumentOutputMode);
+
+        // Translation Concurrency
+        ConcurrencyNumberBox.Value = Math.Clamp(_settings.LongDocMaxConcurrency, 1, 16);
+
+        // Formula Detection
+        FormulaFontPatternBox.Text = _settings.FormulaFontPattern;
+        FormulaCharPatternBox.Text = _settings.FormulaCharPattern;
+
+        // Translation Cache
+        TranslationCacheToggle.IsOn = _settings.EnableTranslationCache;
+        _ = UpdateCacheStatusAsync();
 
         // Behavior
         // App Theme - select based on current setting
@@ -923,6 +976,16 @@ public sealed partial class SettingsPage : Page
         // Document Output Mode
         _settings.DocumentOutputMode = GetSelectedTag(DocumentOutputModeCombo) ?? "Monolingual";
 
+        // Translation Concurrency
+        _settings.LongDocMaxConcurrency = (int)Math.Clamp(ConcurrencyNumberBox.Value, 1, 16);
+
+        // Formula Detection
+        _settings.FormulaFontPattern = FormulaFontPatternBox.Text?.Trim() ?? "";
+        _settings.FormulaCharPattern = FormulaCharPatternBox.Text?.Trim() ?? "";
+
+        // Translation Cache
+        _settings.EnableTranslationCache = TranslationCacheToggle.IsOn;
+
         // Save EnabledQuery settings for each window
         _settings.MainWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_mainWindowServices);
         _settings.MiniWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_miniWindowServices);
@@ -1090,6 +1153,10 @@ public sealed partial class SettingsPage : Page
             new NavSection("ServiceConfigurationSection", "Service Configuration", "\uE90F", ServiceConfigurationSection), // Key
             new NavSection("LayoutDetectionSection", "Layout Detection", "\uE8A1", LayoutDetectionSection),  // Page
             new NavSection("DocumentOutputModeSection", "Document Output", "\uE8C8", DocumentOutputModeSection),  // Document
+            new NavSection("TranslationConcurrencySection", "Concurrency", "\uE916", TranslationConcurrencySection),  // Speed
+            new NavSection("CjkFontSection", "CJK Font", "\uE8D2", CjkFontSection),  // Font
+            new NavSection("FormulaDetectionSection", "Formula Detection", "\uE8EF", FormulaDetectionSection),  // Calculator
+            new NavSection("TranslationCacheSection", "Translation Cache", "\uE74E", TranslationCacheSection),  // Save
             new NavSection("HttpProxySection", "HTTP Proxy", "\uE968", HttpProxySection),      // Network
             new NavSection("BehaviorSection", "Behavior", "\uE771", BehaviorSection),          // Touch
             new NavSection("HotkeysSection", "Hotkeys", "\uE765", HotkeysSection),             // Keyboard
@@ -1860,6 +1927,133 @@ public sealed partial class SettingsPage : Page
     {
         if (_isLoading) return;
         OnSettingChanged(sender, e);
+    }
+
+    #endregion
+
+    #region Translation Concurrency
+
+    private void OnConcurrencyValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (_isLoading) return;
+        if (double.IsNaN(args.NewValue))
+        {
+            sender.Value = 4; // Reset to default if cleared
+        }
+        OnSettingChanged(sender, new RoutedEventArgs());
+    }
+
+    #endregion
+
+    #region Formula Detection
+
+    private void OnFormulaPatternChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        OnSettingChanged(sender, new RoutedEventArgs());
+    }
+
+    #endregion
+
+    #region Translation Cache
+
+    private void OnTranslationCacheToggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading) return;
+        OnSettingChanged(sender, new RoutedEventArgs());
+    }
+
+    private async void OnClearCacheClick(object sender, RoutedEventArgs e)
+    {
+        ClearCacheButton.IsEnabled = false;
+        try
+        {
+            using var cacheService = new TranslationCacheService();
+            await cacheService.ClearAsync();
+            CacheStatusText.Text = "Cache cleared.";
+        }
+        catch (Exception ex)
+        {
+            CacheStatusText.Text = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            ClearCacheButton.IsEnabled = true;
+        }
+    }
+
+    private async Task UpdateCacheStatusAsync()
+    {
+        try
+        {
+            using var cacheService = new TranslationCacheService();
+            var count = await cacheService.GetEntryCountAsync();
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                CacheStatusText.Text = $"{count} cached entries";
+            });
+        }
+        catch
+        {
+            // Ignore if cache DB doesn't exist yet
+        }
+    }
+
+    #endregion
+
+    #region CJK Font
+
+    private async void OnCjkFontDownloadClick(object sender, RoutedEventArgs e)
+    {
+        CjkFontDownloadButton.IsEnabled = false;
+        CjkFontProgressBar.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+        CjkFontProgressBar.Value = 0;
+        CjkFontStatusText.Text = "Downloading...";
+
+        try
+        {
+            using var fontService = new FontDownloadService();
+            var progress = new Progress<ModelDownloadProgress>(p =>
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    CjkFontProgressBar.Value = p.Percentage;
+                    CjkFontStatusText.Text = $"Downloading {p.Stage}... {p.Percentage:F0}%";
+                });
+            });
+
+            // Download fonts for all CJK languages
+            var languages = new[]
+            {
+                Easydict.TranslationService.Models.Language.SimplifiedChinese,
+                Easydict.TranslationService.Models.Language.TraditionalChinese,
+                Easydict.TranslationService.Models.Language.Japanese,
+                Easydict.TranslationService.Models.Language.Korean,
+            };
+
+            foreach (var lang in languages)
+            {
+                await fontService.EnsureFontAsync(lang, progress);
+            }
+
+            CjkFontStatusText.Text = $"CJK fonts downloaded ({fontService.GetTotalFontSizeBytes() / 1024 / 1024}MB).";
+        }
+        catch (Exception ex)
+        {
+            CjkFontStatusText.Text = $"Download failed: {ex.Message}";
+        }
+        finally
+        {
+            CjkFontDownloadButton.IsEnabled = true;
+            CjkFontProgressBar.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+        }
+    }
+
+    private void OnCjkFontDeleteClick(object sender, RoutedEventArgs e)
+    {
+        using var fontService = new FontDownloadService();
+        fontService.DeleteAllFonts();
+        CjkFontStatusText.Text = "CJK fonts deleted.";
     }
 
     #endregion

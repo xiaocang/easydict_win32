@@ -899,4 +899,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>Zweisprachiges PDF: abwechselnde Seiten. Markdown/Text: Original+Übersetzungsblöcke.</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Übersetzungsparallelität</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Maximale Anzahl paralleler Übersetzungsanfragen für lange Dokumente. Höhere Werte beschleunigen die Übersetzung, können aber API-Ratenlimits erreichen.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Empfohlen: 4 für LLM-Dienste, 1-2 für kostenlose APIs mit strengen Ratenlimits.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK-Schriftart</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Laden Sie CJK-Schriftarten herunter, um chinesischen, japanischen und koreanischen Text in der PDF-Ausgabe korrekt darzustellen.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>CJK-Schriftart herunterladen</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Löschen</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Lädt Noto Sans CJK herunter (~16 MB pro Sprache). Erforderlich für CJK-Text im PDF-Overlay-Rendering.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Formelerkennung</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Erweiterte Formelerkennung verwendet Schriftnamen und Unicode-Mathematikzeichen zum Schutz von Formeln vor Übersetzung.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Schriftmuster (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Zeichenmuster (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Leer lassen für integrierte Muster. Schriftmuster prüft PDF-Schriftnamen (Stufe 2). Zeichenmuster prüft Unicode-Bereiche (Stufe 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Übersetzungscache</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Übersetzte Segmente lokal zwischenspeichern, um wiederholte Übersetzungen zu beschleunigen und API-Kosten zu sparen.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Cache leeren</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Zwischengespeicherte Übersetzungen werden lokal in SQLite gespeichert. Leeren Sie den Cache bei veralteten Übersetzungen.</value>
+  </data>
 </root>

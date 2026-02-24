@@ -326,4 +326,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>Tosproget PDF: alternerende sider. Markdown/Tekst: original+oversættelsesblokke.</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Oversættelsessamtidighed</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Maksimalt antal parallelle oversættelsesanmodninger for lange dokumenter. Højere værdier fremskynder oversættelsen, men kan ramme API-hastighedsgrænser.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Anbefalet: 4 for LLM-tjenester, 1-2 for gratis API-niveauer med strenge hastighedsgrænser.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK-skrifttype</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Download CJK-skrifttyper for korrekt gengivelse af kinesisk, japansk og koreansk tekst i PDF-output.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Download CJK-skrifttype</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Slet</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Downloader Noto Sans CJK (~16 MB pr. sprog). Kræves til CJK-tekst i PDF-overlay-gengivelse.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Formelgenkendelse</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Avanceret formelgenkendelse bruger skriftnavne og Unicode-matematiktegn til at beskytte formler mod oversættelse.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Skriftmønster (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Tegnmønster (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Lad stå tomt for at bruge indbyggede mønstre. Skriftmønster matcher PDF-skriftnavne (Niveau 2). Tegnmønster matcher Unicode-intervaller (Niveau 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Oversættelsescache</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Cache oversatte segmenter lokalt for at fremskynde gentagne oversættelser og spare API-omkostninger.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Ryd cache</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Cachede oversættelser gemmes lokalt i SQLite. Ryd cachen, hvis oversættelser bliver forældede.</value>
+  </data>
 </root>

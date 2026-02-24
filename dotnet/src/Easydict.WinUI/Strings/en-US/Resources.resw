@@ -940,4 +940,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>Bilingual PDF: interleaved pages. Markdown/Text: original + translation blocks.</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Translation Concurrency</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Maximum number of parallel translation requests for long document translation. Higher values speed up translation but may hit API rate limits.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Recommended: 4 for LLM services, 1-2 for free API tiers with strict rate limits.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK Font</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Download CJK fonts for proper Chinese, Japanese, and Korean text rendering in PDF output.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Download CJK Font</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Downloads Noto Sans CJK (~16MB per language). Required for CJK text in PDF overlay rendering.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Formula Detection</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Advanced formula detection uses font names and Unicode math characters to protect formulas from translation.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Font Pattern (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Character Pattern (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Leave empty to use built-in patterns. Font pattern matches PDF font names (Level 2). Character pattern matches Unicode ranges (Level 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Translation Cache</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Cache translated segments locally to speed up repeated translations and save API costs.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Clear Cache</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Cached translations are stored locally in SQLite. Clear cache if translations become stale.</value>
+  </data>
 </root>

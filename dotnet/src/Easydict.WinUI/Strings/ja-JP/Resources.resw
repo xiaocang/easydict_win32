@@ -899,4 +899,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>バイリンガルPDF：交互ページ。Markdown/テキスト：原文+翻訳ブロック。</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>翻訳同時実行数</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>長文ドキュメント翻訳の最大並列リクエスト数。値を大きくすると翻訳速度が向上しますが、APIレート制限に達する可能性があります。</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>推奨：LLMサービスは4、厳格なレート制限のある無料APIは1-2。</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK フォント</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>PDF出力で中国語・日本語・韓国語のテキストを正しくレンダリングするためにCJKフォントをダウンロードします。</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>CJKフォントをダウンロード</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>削除</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Noto Sans CJKをダウンロード（言語あたり約16MB）。PDFオーバーレイレンダリングに必要です。</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>数式検出</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>高度な数式検出はフォント名とUnicode数学文字を使用して数式を翻訳から保護します。</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>フォントパターン（正規表現）</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>文字パターン（正規表現）</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>空欄にすると組み込みパターンを使用します。フォントパターンはPDFフォント名に一致（Level 2）。文字パターンはUnicode範囲に一致（Level 3）。</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>翻訳キャッシュ</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>翻訳済みセグメントをローカルにキャッシュして、繰り返しの翻訳を高速化しAPI費用を節約します。</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>キャッシュをクリア</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>キャッシュされた翻訳はローカルのSQLiteに保存されます。翻訳が古くなった場合はクリアしてください。</value>
+  </data>
 </root>

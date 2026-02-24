@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
@@ -41,6 +42,11 @@ public sealed class LongDocumentTranslationService
             throw new ArgumentOutOfRangeException(nameof(options.MaxRetriesPerBlock), options.MaxRetriesPerBlock, "MaxRetriesPerBlock must be greater than or equal to 0.");
         }
 
+        if (options.MaxConcurrency < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options.MaxConcurrency), options.MaxConcurrency, "MaxConcurrency must be greater than or equal to 1.");
+        }
+
         var timings = new Dictionary<string, long>();
 
         var ingestSw = Stopwatch.StartNew();
@@ -49,7 +55,7 @@ public sealed class LongDocumentTranslationService
         timings["ingest"] = ingestSw.ElapsedMilliseconds;
 
         var buildIrSw = Stopwatch.StartNew();
-        var ir = BuildIr(ingested);
+        var ir = BuildIr(ingested, options);
         buildIrSw.Stop();
         timings["build-ir"] = buildIrSw.ElapsedMilliseconds;
 
@@ -145,7 +151,7 @@ public sealed class LongDocumentTranslationService
         return source with { Pages = pages };
     }
 
-    private static DocumentIr BuildIr(SourceDocument source)
+    private static DocumentIr BuildIr(SourceDocument source, LongDocumentTranslationOptions? options = null)
     {
         var irBlocks = new List<DocumentBlockIr>();
 
@@ -156,6 +162,10 @@ public sealed class LongDocumentTranslationService
                 var blockText = block.Text ?? string.Empty;
                 var irBlockId = $"ir-{page.PageNumber}-{block.BlockId}";
                 var sourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(blockText)));
+
+                var translationSkipped = block.BlockType == SourceBlockType.Formula || block.IsFormulaLike
+                    || IsFontBasedFormula(block.DetectedFontNames, options?.FormulaFontPattern)
+                    || IsCharacterBasedFormula(blockText, options?.FormulaCharPattern);
 
                 irBlocks.Add(new DocumentBlockIr
                 {
@@ -168,7 +178,7 @@ public sealed class LongDocumentTranslationService
                     SourceHash = sourceHash,
                     BoundingBox = block.BoundingBox,
                     ParentIrBlockId = block.ParentBlockId is null ? null : $"ir-{page.PageNumber}-{block.ParentBlockId}",
-                    TranslationSkipped = block.BlockType == SourceBlockType.Formula || block.IsFormulaLike
+                    TranslationSkipped = translationSkipped
                 });
             }
         }
@@ -208,12 +218,12 @@ public sealed class LongDocumentTranslationService
         LongDocumentTranslationOptions options,
         CancellationToken cancellationToken)
     {
-        var result = new Dictionary<string, TranslatedDocumentBlock>(StringComparer.Ordinal);
+        var result = new ConcurrentDictionary<string, TranslatedDocumentBlock>(StringComparer.Ordinal);
 
+        // Separate skipped blocks (no translation needed) from blocks to translate
+        var blocksToTranslate = new List<DocumentBlockIr>();
         foreach (var block in ir.Blocks)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
             if (block.TranslationSkipped)
             {
                 result[block.IrBlockId] = new TranslatedDocumentBlock
@@ -229,70 +239,111 @@ public sealed class LongDocumentTranslationService
                     TranslationSkipped = true,
                     RetryCount = 0
                 };
-                continue;
             }
-
-            var retryCount = 0;
-            string? lastError = null;
-            string translatedText = block.ProtectedText;
-            var translationSucceeded = false;
-
-            for (; retryCount <= options.MaxRetriesPerBlock; retryCount++)
+            else
             {
-                try
-                {
-                    var request = new TranslationRequest
-                    {
-                        Text = block.ProtectedText,
-                        FromLanguage = options.FromLanguage,
-                        ToLanguage = options.ToLanguage
-                    };
-
-                    var translated = await _translateWithService(request, options.ServiceId, cancellationToken);
-                    translatedText = ApplyGlossary(translated.TranslatedText, options.Glossary);
-                    var formulaProtection = options.EnableFormulaProtection
-                        ? ProtectFormulaSpans(block.OriginalText)
-                        : FormulaProtectionResult.Empty;
-                    translatedText = RestoreFormulaSpans(translatedText, formulaProtection, block.OriginalText);
-                    lastError = null;
-                    translationSucceeded = true;
-                    break;
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    lastError = ex.Message;
-                    if (retryCount >= options.MaxRetriesPerBlock)
-                    {
-                        translatedText = block.OriginalText;
-                    }
-                }
+                blocksToTranslate.Add(block);
             }
-
-            var effectiveRetryCount = translationSucceeded
-                ? retryCount
-                : Math.Min(retryCount, options.MaxRetriesPerBlock);
-
-            result[block.IrBlockId] = new TranslatedDocumentBlock
-            {
-                IrBlockId = block.IrBlockId,
-                SourceBlockId = block.SourceBlockId,
-                BlockType = block.BlockType,
-                OriginalText = block.OriginalText,
-                ProtectedText = block.ProtectedText,
-                TranslatedText = translatedText,
-                SourceHash = block.SourceHash,
-                BoundingBox = block.BoundingBox,
-                TranslationSkipped = false,
-                RetryCount = effectiveRetryCount,
-                LastError = lastError
-            };
         }
 
-        return result;
+        var concurrency = Math.Max(1, options.MaxConcurrency);
+        if (concurrency == 1)
+        {
+            // Sequential path (default, backward-compatible)
+            foreach (var block in blocksToTranslate)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var translated = await TranslateSingleBlockAsync(block, options, cancellationToken);
+                result[block.IrBlockId] = translated;
+            }
+        }
+        else
+        {
+            // Parallel path with semaphore-controlled concurrency
+            using var semaphore = new SemaphoreSlim(concurrency, concurrency);
+            var tasks = blocksToTranslate.Select(async block =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    var translated = await TranslateSingleBlockAsync(block, options, cancellationToken);
+                    result[block.IrBlockId] = translated;
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+        }
+
+        return new Dictionary<string, TranslatedDocumentBlock>(result, StringComparer.Ordinal);
+    }
+
+    private async Task<TranslatedDocumentBlock> TranslateSingleBlockAsync(
+        DocumentBlockIr block,
+        LongDocumentTranslationOptions options,
+        CancellationToken cancellationToken)
+    {
+        var retryCount = 0;
+        string? lastError = null;
+        string translatedText = block.ProtectedText;
+        var translationSucceeded = false;
+
+        for (; retryCount <= options.MaxRetriesPerBlock; retryCount++)
+        {
+            try
+            {
+                var request = new TranslationRequest
+                {
+                    Text = block.ProtectedText,
+                    FromLanguage = options.FromLanguage,
+                    ToLanguage = options.ToLanguage
+                };
+
+                var translated = await _translateWithService(request, options.ServiceId, cancellationToken);
+                translatedText = ApplyGlossary(translated.TranslatedText, options.Glossary);
+                var formulaProtection = options.EnableFormulaProtection
+                    ? ProtectFormulaSpans(block.OriginalText)
+                    : FormulaProtectionResult.Empty;
+                translatedText = RestoreFormulaSpans(translatedText, formulaProtection, block.OriginalText);
+                lastError = null;
+                translationSucceeded = true;
+                break;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex.Message;
+                if (retryCount >= options.MaxRetriesPerBlock)
+                {
+                    translatedText = block.OriginalText;
+                }
+            }
+        }
+
+        var effectiveRetryCount = translationSucceeded
+            ? retryCount
+            : Math.Min(retryCount, options.MaxRetriesPerBlock);
+
+        return new TranslatedDocumentBlock
+        {
+            IrBlockId = block.IrBlockId,
+            SourceBlockId = block.SourceBlockId,
+            BlockType = block.BlockType,
+            OriginalText = block.OriginalText,
+            ProtectedText = block.ProtectedText,
+            TranslatedText = translatedText,
+            SourceHash = block.SourceHash,
+            BoundingBox = block.BoundingBox,
+            TranslationSkipped = false,
+            RetryCount = effectiveRetryCount,
+            LastError = lastError
+        };
     }
 
     private static IReadOnlyList<TranslatedDocumentPage> BuildStructuredOutput(
@@ -322,6 +373,36 @@ public sealed class LongDocumentTranslationService
         _ => BlockType.Unknown
     };
 
+
+    // Level 2: Font-based formula detection
+    private static readonly Regex MathFontRegex = new(
+        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    internal static bool IsFontBasedFormula(IReadOnlyList<string>? fontNames, string? customPattern)
+    {
+        if (fontNames is null || fontNames.Count == 0) return false;
+        var pattern = !string.IsNullOrWhiteSpace(customPattern)
+            ? new Regex(customPattern, RegexOptions.IgnoreCase)
+            : MathFontRegex;
+        var mathFontCount = fontNames.Count(f => pattern.IsMatch(f));
+        return mathFontCount > fontNames.Count * 0.5;
+    }
+
+    // Level 3: Character-based formula detection
+    private static readonly Regex MathUnicodeRegex = new(
+        @"[\u2200-\u22FF\u2100-\u214F\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9\u2150-\u218F\u27C0-\u27EF\u2980-\u29FF]",
+        RegexOptions.Compiled);
+
+    internal static bool IsCharacterBasedFormula(string text, string? customPattern)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var pattern = !string.IsNullOrWhiteSpace(customPattern)
+            ? new Regex(customPattern)
+            : MathUnicodeRegex;
+        var mathCharCount = pattern.Matches(text).Count;
+        return text.Length > 0 && (double)mathCharCount / text.Length > 0.3;
+    }
 
     private enum FormulaTokenKind
     {

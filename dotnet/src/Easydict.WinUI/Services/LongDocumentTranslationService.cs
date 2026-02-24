@@ -57,6 +57,7 @@ public sealed class LongDocumentTranslationCheckpoint
 {
     public required LongDocumentInputMode InputMode { get; init; }
     public string? SourceFilePath { get; init; }
+    public Language? TargetLanguage { get; init; }
     public required List<string> SourceChunks { get; init; }
     public required List<LongDocumentChunkMetadata> ChunkMetadata { get; init; }
     public required Dictionary<int, string> TranslatedChunks { get; init; }
@@ -97,6 +98,7 @@ public sealed class LongDocumentTranslationService
     private sealed record CanonicalTranslationEntry(int ChunkIndex, int PageNumber, string Translation);
 
     private readonly CoreLongDocumentTranslationService _coreLongDocumentService = new();
+    private readonly TranslationCacheService _cacheService = new();
 
     // Layout detection services (lazy-initialized)
     private LayoutModelDownloadService? _layoutModelDownloadService;
@@ -161,6 +163,9 @@ public sealed class LongDocumentTranslationService
 
         onProgress?.Invoke("Building long-document IR...");
 
+        var maxConcurrency = Math.Clamp(SettingsService.Instance.LongDocMaxConcurrency, 1, 16);
+        var formulaFontPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaFontPattern) ? null : SettingsService.Instance.FormulaFontPattern;
+        var formulaCharPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaCharPattern) ? null : SettingsService.Instance.FormulaCharPattern;
         var coreResult = await _coreLongDocumentService.TranslateAsync(sourceDocument, new LongDocumentTranslationOptions
         {
             ServiceId = serviceId,
@@ -168,7 +173,10 @@ public sealed class LongDocumentTranslationService
             ToLanguage = to,
             EnableFormulaProtection = true,
             EnableOcrFallback = true,
-            MaxRetriesPerBlock = 1
+            MaxRetriesPerBlock = 1,
+            MaxConcurrency = maxConcurrency,
+            FormulaFontPattern = formulaFontPattern,
+            FormulaCharPattern = formulaCharPattern
         }, cancellationToken);
 
         var allBlocks = coreResult.Pages
@@ -190,6 +198,7 @@ public sealed class LongDocumentTranslationService
         {
             InputMode = mode,
             SourceFilePath = sourceFilePath,
+            TargetLanguage = to,
             SourceChunks = allBlocks.Select(item => item.Block.OriginalText).ToList(),
             ChunkMetadata = allBlocks
                 .Select((item, index) =>
@@ -239,6 +248,12 @@ public sealed class LongDocumentTranslationService
         };
 
         EnforceTerminologyConsistency(checkpoint);
+
+        // Write successful translations to persistent cache
+        if (SettingsService.Instance.EnableTranslationCache)
+        {
+            await WriteCacheEntriesAsync(checkpoint, serviceId, from, to, cancellationToken);
+        }
 
         onProgress?.Invoke("Rendering translated output...");
         return FinalizeResult(checkpoint, outputPath, onProgress, coreResult.QualityReport, outputMode);
@@ -345,6 +360,9 @@ public sealed class LongDocumentTranslationService
             Pages = retryPages
         };
 
+        var retryConcurrency = Math.Clamp(SettingsService.Instance.LongDocMaxConcurrency, 1, 16);
+        var retryFormulaFontPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaFontPattern) ? null : SettingsService.Instance.FormulaFontPattern;
+        var retryFormulaCharPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaCharPattern) ? null : SettingsService.Instance.FormulaCharPattern;
         var retryResult = await coreLongDocumentService.TranslateAsync(retrySource, new LongDocumentTranslationOptions
         {
             ServiceId = serviceId,
@@ -352,7 +370,10 @@ public sealed class LongDocumentTranslationService
             ToLanguage = to,
             EnableFormulaProtection = true,
             EnableOcrFallback = true,
-            MaxRetriesPerBlock = 1
+            MaxRetriesPerBlock = 1,
+            MaxConcurrency = retryConcurrency,
+            FormulaFontPattern = retryFormulaFontPattern,
+            FormulaCharPattern = retryFormulaCharPattern
         }, cancellationToken);
 
         foreach (var translatedBlock in retryResult.Pages.SelectMany(page => page.Blocks))
@@ -384,6 +405,32 @@ public sealed class LongDocumentTranslationService
         }
 
         return new RetryExecutionSummary(retryResult.QualityReport, reusedByCanonical);
+    }
+
+    private async Task WriteCacheEntriesAsync(
+        LongDocumentTranslationCheckpoint checkpoint,
+        string serviceId, Language from, Language to,
+        CancellationToken ct)
+    {
+        try
+        {
+            foreach (var (chunkIndex, translated) in checkpoint.TranslatedChunks)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (chunkIndex < 0 || chunkIndex >= checkpoint.SourceChunks.Count)
+                    continue;
+                var source = checkpoint.SourceChunks[chunkIndex];
+                if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(translated))
+                    continue;
+                var hash = TranslationCacheService.ComputeHash(source);
+                await _cacheService.SetAsync(serviceId, from, to, hash, source, translated, ct);
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LongDoc] Cache write failed: {ex.Message}");
+        }
     }
 
     private static IDocumentExportService ResolveExportService(string? sourceFilePath)
@@ -817,15 +864,44 @@ public sealed class LongDocumentTranslationService
                 _ => "body"
             };
 
+            // Collect font names from letters within this block's bounding region
+            var blockFontNames = CollectFontNamesForBlock(page, left, right, top, bottom);
+
             yield return new SourceDocumentBlock
             {
                 BlockId = $"p{page.Number}-{regionTag}-b{i + 1}",
                 BlockType = type,
                 Text = blockText,
                 IsFormulaLike = type == SourceBlockType.Formula,
-                BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom))
+                BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
+                DetectedFontNames = blockFontNames.Count > 0 ? blockFontNames : null
             };
         }
+    }
+
+    private static List<string> CollectFontNamesForBlock(PdfPigPage page, double left, double right, double top, double bottom)
+    {
+        var fontNames = new List<string>();
+        try
+        {
+            foreach (var letter in page.Letters)
+            {
+                var lbox = letter.GlyphRectangle;
+                if (lbox.Left >= left - 1 && lbox.Right <= right + 1 &&
+                    lbox.Bottom >= bottom - 1 && lbox.Top <= top + 1)
+                {
+                    if (!string.IsNullOrWhiteSpace(letter.FontName))
+                    {
+                        fontNames.Add(letter.FontName);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // PdfPig may throw on some PDFs; ignore and return what we have
+        }
+        return fontNames;
     }
 
     private static LayoutRegionType InferRegionType(LayoutProfile profile, double left, double right, double top, double bottom, string blockText)

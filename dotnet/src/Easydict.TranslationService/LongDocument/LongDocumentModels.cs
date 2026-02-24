@@ -32,6 +32,7 @@ public sealed record SourceDocumentBlock
     public BlockRect? BoundingBox { get; init; }
     public string? ParentBlockId { get; init; }
     public bool IsFormulaLike { get; init; }
+    public IReadOnlyList<string>? DetectedFontNames { get; init; }
 }
 
 public sealed record SourceDocumentPage
@@ -98,6 +99,9 @@ public sealed record LongDocumentTranslationOptions
     public int MaxRetriesPerBlock { get; init; } = 1;
     public IReadOnlyDictionary<string, string>? Glossary { get; init; }
     public LayoutDetectionMode LayoutDetection { get; init; } = LayoutDetectionMode.Auto;
+    public int MaxConcurrency { get; init; } = 1;
+    public string? FormulaFontPattern { get; init; }
+    public string? FormulaCharPattern { get; init; }
 }
 
 public sealed record FailedBlockInfo

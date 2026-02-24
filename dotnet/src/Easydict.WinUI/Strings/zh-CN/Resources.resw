@@ -940,4 +940,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>PDF 双语：交替页面。Markdown/文本：原文+译文段落。</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>翻译并发数</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>长文档翻译的最大并行请求数。数值越高翻译速度越快，但可能触发 API 速率限制。</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>建议：LLM 服务设为 4，有严格速率限制的免费 API 设为 1-2。</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK 字体</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>下载 CJK 字体以在 PDF 输出中正确渲染中日韩文字。</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>下载 CJK 字体</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>下载 Noto Sans CJK（每种语言约 16MB）。PDF 叠层渲染中日韩文字时必需。</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>公式检测</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>高级公式检测使用字体名称和 Unicode 数学字符来保护公式不被翻译。</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>字体模式（正则）</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>字符模式（正则）</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>留空使用内置模式。字体模式匹配 PDF 字体名（Level 2）。字符模式匹配 Unicode 范围（Level 3）。</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>翻译缓存</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>将已翻译的段落缓存到本地，加速重复翻译并节省 API 费用。</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>清除缓存</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>缓存的翻译存储在本地 SQLite 数据库中。如果翻译过时，请清除缓存。</value>
+  </data>
 </root>

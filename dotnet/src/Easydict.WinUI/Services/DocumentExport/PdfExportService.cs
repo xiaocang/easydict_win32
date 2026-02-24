@@ -1,6 +1,9 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService.LongDocument;
+using Easydict.TranslationService.Models;
+using Easydict.WinUI.Services;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;
@@ -41,12 +44,27 @@ public sealed class PdfExportService : IDocumentExportService
 
     public IReadOnlyList<string> SupportedExtensions => [".pdf"];
 
+    /// <summary>
+    /// Language-specific line height multipliers for overlay rendering.
+    /// CJK characters need more vertical space than Latin text.
+    /// </summary>
+    private static readonly Dictionary<Language, double> LineHeightMultipliers = new()
+    {
+        [Language.SimplifiedChinese] = 1.4,
+        [Language.TraditionalChinese] = 1.4,
+        [Language.Japanese] = 1.4,
+        [Language.Korean] = 1.3,
+    };
+
     public DocumentExportResult Export(
         LongDocumentTranslationCheckpoint checkpoint,
         string sourceFilePath,
         string outputPath,
         DocumentOutputMode outputMode = DocumentOutputMode.Monolingual)
     {
+        // Set up CJK font resolver if target language requires it
+        EnsureCjkFontSetup(checkpoint.TargetLanguage);
+
         // 1. Always generate monolingual PDF first (existing backfill logic)
         ExportPdfWithCoordinateBackfill(checkpoint, sourceFilePath, outputPath);
 
@@ -139,6 +157,8 @@ public sealed class PdfExportService : IDocumentExportService
             Directory.CreateDirectory(outputDirectory);
         }
 
+        var targetLanguage = checkpoint.TargetLanguage;
+        var lineHeight = GetLineHeight(targetLanguage);
         using var doc = PdfReader.Open(sourcePdfPath, PdfDocumentOpenMode.Modify);
         var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
 
@@ -203,8 +223,8 @@ public sealed class PdfExportService : IDocumentExportService
             var drawHeight = Math.Max(14, box.Height);
 
             var rect = new XRect(drawX, drawY, drawWidth, drawHeight);
-            var baseFont = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike);
-            var font = FitFontToRect(gfx, translated, baseFont, rect.Width, rect.Height);
+            var baseFont = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike, targetLanguage);
+            var font = FitFontToRect(gfx, translated, baseFont, rect.Width, rect.Height, lineHeight);
             if (font.Size < baseFont.Size)
             {
                 shrinkFontBlocks++;
@@ -212,7 +232,7 @@ public sealed class PdfExportService : IDocumentExportService
             }
 
             var wrappedLines = WrapTextByWidth(gfx, translated, font, rect.Width).ToList();
-            var maxVisibleLines = Math.Max(1, (int)Math.Floor(rect.Height / 14d));
+            var maxVisibleLines = Math.Max(1, (int)Math.Floor(rect.Height / lineHeight));
             if (wrappedLines.Count > maxVisibleLines)
             {
                 wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
@@ -226,7 +246,7 @@ public sealed class PdfExportService : IDocumentExportService
             foreach (var line in wrappedLines)
             {
                 gfx.DrawString(line, font, XBrushes.Black, new XRect(rect.X, lineY, rect.Width, 20), XStringFormats.TopLeft);
-                lineY += 14;
+                lineY += lineHeight;
             }
 
             renderedBlocks++;
@@ -261,6 +281,8 @@ public sealed class PdfExportService : IDocumentExportService
             Directory.CreateDirectory(outputDirectory);
         }
 
+        var targetLanguage = checkpoint.TargetLanguage;
+        var lineHeight = GetLineHeight(targetLanguage, 16d);
         var doc = new PdfDocument();
         var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
         var groupedChunks = Enumerable.Range(0, checkpoint.SourceChunks.Count)
@@ -277,10 +299,10 @@ public sealed class PdfExportService : IDocumentExportService
             try
             {
                 const int margin = 40;
-                var y = margin;
+                var y = (double)margin;
                 var width = page.Width - margin * 2;
 
-                var headingFont = new XFont("Arial", 14, XFontStyle.Bold);
+                var headingFont = PickFont(SourceBlockType.Heading, false, targetLanguage);
                 gfx.DrawString($"Page {pageGroup.Key}", headingFont, XBrushes.Black, new XRect(margin, y, width, 24), XStringFormats.TopLeft);
                 y += 24;
 
@@ -291,7 +313,7 @@ public sealed class PdfExportService : IDocumentExportService
                         ? translated
                         : $"[Chunk {chunkIndex + 1} translation failed. Retry required.]";
 
-                    var font = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike);
+                    var font = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike, targetLanguage);
                     foreach (var line in WrapText(content, 95))
                     {
                         if (y > page.Height - margin)
@@ -304,7 +326,7 @@ public sealed class PdfExportService : IDocumentExportService
                         }
 
                         gfx.DrawString(line, font, XBrushes.Black, new XRect(margin, y, width, 20), XStringFormats.TopLeft);
-                        y += 16;
+                        y += lineHeight;
                     }
 
                     y += 8;
@@ -562,29 +584,109 @@ public sealed class PdfExportService : IDocumentExportService
     // Font and text rendering helpers (migrated)
     // --------------------------------------------------
 
-    internal static XFont PickFont(SourceBlockType sourceBlockType, bool isFormulaLike)
+    internal static XFont PickFont(SourceBlockType sourceBlockType, bool isFormulaLike, Language? targetLanguage = null)
     {
-        if (sourceBlockType == SourceBlockType.Heading)
-        {
-            return new XFont("Arial", 14, XFontStyle.Bold);
-        }
-
         if (sourceBlockType == SourceBlockType.Formula || isFormulaLike)
         {
             return new XFont("Consolas", 11, XFontStyle.Italic);
         }
 
-        return new XFont("Arial", 11);
+        var fontFamily = ResolveFontFamily(targetLanguage);
+
+        if (sourceBlockType == SourceBlockType.Heading)
+        {
+            return new XFont(fontFamily, 14, XFontStyle.Bold);
+        }
+
+        return new XFont(fontFamily, 11);
     }
 
-    internal static XFont FitFontToRect(XGraphics gfx, string text, XFont baseFont, double width, double height)
+    /// <summary>
+    /// Resolves the best font family name for the given target language.
+    /// Uses CJK-specific Noto Sans fonts when available, falls back to Arial.
+    /// </summary>
+    internal static string ResolveFontFamily(Language? targetLanguage)
+    {
+        if (targetLanguage == null)
+        {
+            return "Arial";
+        }
+
+        var cjkFamily = targetLanguage switch
+        {
+            Language.SimplifiedChinese => CjkFontResolver.NotoSansSC,
+            Language.TraditionalChinese => CjkFontResolver.NotoSansTC,
+            Language.Japanese => CjkFontResolver.NotoSansJP,
+            Language.Korean => CjkFontResolver.NotoSansKR,
+            _ => null
+        };
+
+        if (cjkFamily != null && CjkFontResolver.IsFontRegistered(cjkFamily))
+        {
+            return cjkFamily;
+        }
+
+        return "Arial";
+    }
+
+    /// <summary>
+    /// Returns the line height for overlay rendering, accounting for CJK languages.
+    /// </summary>
+    internal static double GetLineHeight(Language? targetLanguage, double baseLineHeight = 14d)
+    {
+        if (targetLanguage != null && LineHeightMultipliers.TryGetValue(targetLanguage.Value, out var multiplier))
+        {
+            return baseLineHeight * multiplier;
+        }
+        return baseLineHeight;
+    }
+
+    /// <summary>
+    /// Ensures CJK font resolver is set up and fonts are registered if available.
+    /// </summary>
+    private static void EnsureCjkFontSetup(Language? targetLanguage)
+    {
+        if (targetLanguage == null || !FontDownloadService.RequiresCjkFont(targetLanguage.Value))
+        {
+            return;
+        }
+
+        CjkFontResolver.EnsureInitialized();
+
+        // Try to register font from the download cache
+        var fontService = new FontDownloadService();
+        var fontPath = fontService.GetCachedFontPath(targetLanguage.Value);
+        if (fontPath != null)
+        {
+            var familyName = targetLanguage switch
+            {
+                Language.SimplifiedChinese => CjkFontResolver.NotoSansSC,
+                Language.TraditionalChinese => CjkFontResolver.NotoSansTC,
+                Language.Japanese => CjkFontResolver.NotoSansJP,
+                Language.Korean => CjkFontResolver.NotoSansKR,
+                _ => null
+            };
+
+            if (familyName != null)
+            {
+                CjkFontResolver.RegisterFont(familyName, fontPath);
+            }
+        }
+        else
+        {
+            Debug.WriteLine($"[PdfExportService] CJK font not downloaded for {targetLanguage}. Using Arial fallback.");
+        }
+        fontService.Dispose();
+    }
+
+    internal static XFont FitFontToRect(XGraphics gfx, string text, XFont baseFont, double width, double height, double lineHeight = 14d)
     {
         var size = baseFont.Size;
         while (size >= 8)
         {
             var candidate = new XFont(baseFont.Name, size, baseFont.Style);
             var lines = WrapTextByWidth(gfx, text, candidate, width).ToList();
-            var maxLines = Math.Max(1, (int)Math.Floor(height / 14d));
+            var maxLines = Math.Max(1, (int)Math.Floor(height / lineHeight));
             if (lines.Count <= maxLines)
             {
                 return candidate;

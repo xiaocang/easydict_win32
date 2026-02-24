@@ -326,4 +326,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>PDF dwibahasa: halaman berselang-seli. Markdown/Teks: blok asal+terjemahan.</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Keserentakan Terjemahan</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Bilangan maksimum permintaan terjemahan selari untuk dokumen panjang. Nilai lebih tinggi mempercepatkan terjemahan tetapi mungkin mencapai had kadar API.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Disyorkan: 4 untuk perkhidmatan LLM, 1-2 untuk API percuma dengan had kadar ketat.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>Fon CJK</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Muat turun fon CJK untuk pemaparan teks Cina, Jepun dan Korea yang betul dalam output PDF.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Muat Turun Fon CJK</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Padam</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Memuat turun Noto Sans CJK (~16MB setiap bahasa). Diperlukan untuk teks CJK dalam pemaparan tindanan PDF.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Pengesanan Formula</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Pengesanan formula lanjutan menggunakan nama fon dan aksara matematik Unicode untuk melindungi formula daripada terjemahan.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Corak Fon (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Corak Aksara (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Biarkan kosong untuk menggunakan corak terbina dalam. Corak fon memadankan nama fon PDF (Tahap 2). Corak aksara memadankan julat Unicode (Tahap 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Cache Terjemahan</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Cache segmen yang diterjemahkan secara tempatan untuk mempercepatkan terjemahan berulang dan menjimatkan kos API.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Kosongkan Cache</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Terjemahan yang dicache disimpan secara tempatan dalam SQLite. Kosongkan cache jika terjemahan sudah lapuk.</value>
+  </data>
 </root>

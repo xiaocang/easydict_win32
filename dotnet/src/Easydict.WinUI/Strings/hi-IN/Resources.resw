@@ -326,4 +326,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>द्विभाषी PDF: बारी-बारी पृष्ठ। Markdown/टेक्स्ट: मूल+अनुवाद ब्लॉक।</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>अनुवाद समवर्तिता</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>लंबे दस्तावेज़ अनुवाद के लिए अधिकतम समानांतर अनुवाद अनुरोध। उच्च मान अनुवाद को तेज करते हैं लेकिन API दर सीमा तक पहुंच सकते हैं।</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>अनुशंसित: LLM सेवाओं के लिए 4, सख्त दर सीमाओं वाले मुफ्त API के लिए 1-2।</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK फ़ॉन्ट</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>PDF आउटपुट में चीनी, जापानी और कोरियाई पाठ को सही ढंग से प्रस्तुत करने के लिए CJK फ़ॉन्ट डाउनलोड करें।</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>CJK फ़ॉन्ट डाउनलोड करें</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>हटाएं</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Noto Sans CJK डाउनलोड करता है (~16MB प्रति भाषा)। PDF ओवरले रेंडरिंग के लिए आवश्यक।</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>सूत्र पहचान</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>उन्नत सूत्र पहचान फ़ॉन्ट नामों और यूनिकोड गणित वर्णों का उपयोग करके सूत्रों को अनुवाद से सुरक्षित करती है।</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>फ़ॉन्ट पैटर्न (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>वर्ण पैटर्न (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>अंतर्निहित पैटर्न उपयोग करने के लिए खाली छोड़ें। फ़ॉन्ट पैटर्न PDF फ़ॉन्ट नामों से मिलाता है (स्तर 2)। वर्ण पैटर्न यूनिकोड श्रेणियों से मिलाता है (स्तर 3)।</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>अनुवाद कैश</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>अनुवादित खंडों को स्थानीय रूप से कैश करें ताकि दोहराए गए अनुवाद तेज हों और API लागत बचे।</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>कैश साफ़ करें</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>कैश किए गए अनुवाद स्थानीय SQLite में संग्रहीत हैं। अगर अनुवाद पुराने हो जाएं तो कैश साफ़ करें।</value>
+  </data>
 </root>

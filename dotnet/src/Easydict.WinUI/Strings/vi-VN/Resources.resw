@@ -782,4 +782,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>PDF song ngữ: các trang xen kẽ. Markdown/Văn bản: khối gốc+bản dịch.</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Đồng thời dịch</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Số lượng yêu cầu dịch song song tối đa cho tài liệu dài. Giá trị cao hơn tăng tốc dịch nhưng có thể đạt giới hạn tốc độ API.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Khuyến nghị: 4 cho dịch vụ LLM, 1-2 cho API miễn phí có giới hạn tốc độ nghiêm ngặt.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>Phông CJK</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Tải phông CJK để hiển thị chính xác văn bản tiếng Trung, Nhật và Hàn trong đầu ra PDF.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Tải Phông CJK</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Xóa</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Tải Noto Sans CJK (~16MB mỗi ngôn ngữ). Cần thiết cho văn bản CJK trong kết xuất phủ PDF.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Phát hiện công thức</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Phát hiện công thức nâng cao sử dụng tên phông chữ và ký tự toán học Unicode để bảo vệ công thức khỏi bị dịch.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Mẫu phông chữ (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Mẫu ký tự (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Để trống để sử dụng mẫu tích hợp. Mẫu phông chữ khớp tên phông PDF (Level 2). Mẫu ký tự khớp phạm vi Unicode (Level 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Bộ nhớ đệm dịch thuật</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Lưu trữ các phân đoạn đã dịch cục bộ để tăng tốc dịch lặp lại và tiết kiệm chi phí API.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Xóa bộ nhớ đệm</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Bản dịch được lưu trong SQLite cục bộ. Xóa bộ nhớ đệm nếu bản dịch đã lỗi thời.</value>
+  </data>
 </root>

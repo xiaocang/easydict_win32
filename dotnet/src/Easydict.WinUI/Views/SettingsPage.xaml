@@ -636,6 +636,94 @@
                 </Border>
             </StackPanel>
 
+            <!-- Translation Concurrency -->
+            <StackPanel x:Name="TranslationConcurrencySection" Spacing="12">
+                <TextBlock x:Name="TranslationConcurrencyHeaderText" Text="Translation Concurrency" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="TranslationConcurrencyDescriptionText"
+                           Text="Maximum number of parallel translation requests for long document translation. Higher values speed up translation but may hit API rate limits."
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <NumberBox x:Name="ConcurrencyNumberBox" Header="Max Concurrent Requests"
+                                   Minimum="1" Maximum="16" SpinButtonPlacementMode="Inline"
+                                   SmallChange="1" LargeChange="4" Value="4"
+                                   ValueChanged="OnConcurrencyValueChanged" />
+                        <TextBlock x:Name="TranslationConcurrencyNoteText"
+                                   Text="Recommended: 4 for LLM services, 1-2 for free API tiers with strict rate limits."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- CJK Font -->
+            <StackPanel x:Name="CjkFontSection" Spacing="12">
+                <TextBlock x:Name="CjkFontHeaderText" Text="CJK Font" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="CjkFontDescriptionText"
+                           Text="Download CJK fonts for proper Chinese, Japanese, and Korean text rendering in PDF output."
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button x:Name="CjkFontDownloadButton" Content="Download CJK Font" Click="OnCjkFontDownloadClick" />
+                            <Button x:Name="CjkFontDeleteButton" Content="Delete" Click="OnCjkFontDeleteClick" />
+                        </StackPanel>
+                        <ProgressBar x:Name="CjkFontProgressBar" Visibility="Collapsed" Minimum="0" Maximum="100" />
+                        <TextBlock x:Name="CjkFontStatusText" Text="" FontSize="12"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="CjkFontNoteText"
+                                   Text="Downloads Noto Sans CJK (~16MB per language). Required for CJK text in PDF overlay rendering."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Formula Detection -->
+            <StackPanel x:Name="FormulaDetectionSection" Spacing="12">
+                <TextBlock x:Name="FormulaDetectionHeaderText" Text="Formula Detection" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="FormulaDetectionDescriptionText"
+                           Text="Advanced formula detection uses font names and Unicode math characters to protect formulas from translation."
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <TextBox x:Name="FormulaFontPatternBox" Header="Font Pattern (Regex)"
+                                 Width="450" PlaceholderText="e.g. CMSY|CMMI|Symbol|Mathematica"
+                                 HorizontalAlignment="Left" TextChanged="OnFormulaPatternChanged" />
+                        <TextBox x:Name="FormulaCharPatternBox" Header="Character Pattern (Regex)"
+                                 Width="450" PlaceholderText="e.g. [\u2200-\u22FF\u0370-\u03FF]"
+                                 HorizontalAlignment="Left" TextChanged="OnFormulaPatternChanged" />
+                        <TextBlock x:Name="FormulaDetectionNoteText"
+                                   Text="Leave empty to use built-in patterns. Font pattern matches PDF font names (Level 2). Character pattern matches Unicode ranges (Level 3)."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Translation Cache -->
+            <StackPanel x:Name="TranslationCacheSection" Spacing="12">
+                <TextBlock x:Name="TranslationCacheHeaderText" Text="Translation Cache" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="TranslationCacheDescriptionText"
+                           Text="Cache translated segments locally to speed up repeated translations and save API costs."
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <ToggleSwitch x:Name="TranslationCacheToggle" Header="Enable Translation Cache"
+                                      Toggled="OnTranslationCacheToggled" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button x:Name="ClearCacheButton" Content="Clear Cache" Click="OnClearCacheClick" />
+                            <TextBlock x:Name="CacheStatusText" Text="" VerticalAlignment="Center"
+                                       FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <TextBlock x:Name="TranslationCacheNoteText"
+                                   Text="Cached translations are stored locally in SQLite. Clear cache if translations become stale."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
             <!-- HTTP Proxy -->
             <StackPanel x:Name="HttpProxySection" Spacing="12">
                 <TextBlock x:Name="HttpProxyHeaderText" Text="HTTP Proxy" FontSize="18" FontWeight="SemiBold" />

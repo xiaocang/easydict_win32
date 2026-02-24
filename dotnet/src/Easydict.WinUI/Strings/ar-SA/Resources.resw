@@ -782,4 +782,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>PDF ثنائي اللغة: صفحات متناوبة. Markdown/نص: كتل أصلية+ترجمة.</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>التزامن في الترجمة</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>الحد الأقصى لطلبات الترجمة المتوازية للمستندات الطويلة. القيم الأعلى تسرع الترجمة ولكن قد تصل إلى حدود معدل API.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>موصى به: 4 لخدمات LLM، 1-2 لواجهات API المجانية ذات حدود المعدل الصارمة.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>خط CJK</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>قم بتنزيل خطوط CJK لعرض النصوص الصينية واليابانية والكورية بشكل صحيح في مخرجات PDF.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>تنزيل خط CJK</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>حذف</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>يقوم بتنزيل Noto Sans CJK (~16 ميجابايت لكل لغة). مطلوب لعرض نص CJK في PDF.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>كشف المعادلات</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>يستخدم الكشف المتقدم أسماء الخطوط وأحرف الرياضيات Unicode لحماية المعادلات من الترجمة.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>نمط الخط (تعبير منتظم)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>نمط الأحرف (تعبير منتظم)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>اتركه فارغًا لاستخدام الأنماط المدمجة. نمط الخط يطابق أسماء خطوط PDF (المستوى 2). نمط الأحرف يطابق نطاقات Unicode (المستوى 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>ذاكرة التخزين المؤقت للترجمة</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>تخزين الأجزاء المترجمة محليًا لتسريع الترجمات المتكررة وتوفير تكاليف API.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>مسح ذاكرة التخزين المؤقت</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>يتم تخزين الترجمات المخزنة مؤقتًا في SQLite محليًا. امسح ذاكرة التخزين المؤقت إذا أصبحت الترجمات قديمة.</value>
+  </data>
 </root>

@@ -736,4 +736,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>PDF สองภาษา: หน้าสลับกัน Markdown/ข้อความ: บล็อกต้นฉบับ+แปล</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>การแปลพร้อมกัน</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>จำนวนคำขอแปลพร้อมกันสูงสุดสำหรับเอกสารยาว ค่าที่สูงขึ้นจะเร่งการแปลแต่อาจถึงขีดจำกัดอัตรา API</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>แนะนำ: 4 สำหรับบริการ LLM, 1-2 สำหรับ API ฟรีที่มีขีดจำกัดอัตราเข้มงวด</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>ฟอนต์ CJK</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>ดาวน์โหลดฟอนต์ CJK เพื่อแสดงผลข้อความจีน ญี่ปุ่น และเกาหลีอย่างถูกต้องในเอาต์พุต PDF</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>ดาวน์โหลดฟอนต์ CJK</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>ลบ</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>ดาวน์โหลด Noto Sans CJK (~16MB ต่อภาษา) จำเป็นสำหรับข้อความ CJK ในการแสดงผลซ้อนทับ PDF</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>การตรวจจับสูตร</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>การตรวจจับสูตรขั้นสูงใช้ชื่อฟอนต์และอักขระคณิตศาสตร์ Unicode เพื่อป้องกันสูตรจากการแปล</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>รูปแบบฟอนต์ (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>รูปแบบอักขระ (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>เว้นว่างเพื่อใช้รูปแบบในตัว รูปแบบฟอนต์ตรงกับชื่อฟอนต์ PDF (Level 2) รูปแบบอักขระตรงกับช่วง Unicode (Level 3)</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>แคชการแปล</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>แคชส่วนที่แปลแล้วในเครื่องเพื่อเพิ่มความเร็วการแปลซ้ำและประหยัดค่า API</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>ล้างแคช</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>การแปลที่แคชจะถูกเก็บไว้ใน SQLite ในเครื่อง ล้างแคชหากการแปลล้าสมัย</value>
+  </data>
 </root>

@@ -774,4 +774,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>PDF bilingue: pagine alternate. Markdown/Testo: blocchi originale+traduzione.</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Concorrenza traduzione</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Numero massimo di richieste di traduzione parallele per documenti lunghi. Valori più alti velocizzano la traduzione ma possono raggiungere i limiti di velocità API.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Consigliato: 4 per servizi LLM, 1-2 per API gratuite con limiti di velocità rigorosi.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>Font CJK</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Scarica i font CJK per il rendering corretto del testo cinese, giapponese e coreano nell'output PDF.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Scarica font CJK</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Elimina</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Scarica Noto Sans CJK (~16 MB per lingua). Necessario per il testo CJK nel rendering overlay PDF.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Rilevamento formule</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Il rilevamento avanzato utilizza nomi di font e caratteri matematici Unicode per proteggere le formule dalla traduzione.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Pattern font (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Pattern caratteri (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Lasciare vuoto per utilizzare i pattern integrati. Il pattern font corrisponde ai nomi dei font PDF (Livello 2). Il pattern caratteri corrisponde agli intervalli Unicode (Livello 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Cache traduzione</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Memorizzare localmente i segmenti tradotti per velocizzare le traduzioni ripetute e risparmiare sui costi API.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Svuota cache</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Le traduzioni memorizzate sono archiviate localmente in SQLite. Svuotare la cache se le traduzioni diventano obsolete.</value>
+  </data>
 </root>

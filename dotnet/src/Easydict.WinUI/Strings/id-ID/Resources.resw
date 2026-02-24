@@ -728,4 +728,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>PDF bilingual: halaman bergantian. Markdown/Teks: blok asli+terjemahan.</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Konkurensi Terjemahan</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Jumlah maksimum permintaan terjemahan paralel untuk dokumen panjang. Nilai lebih tinggi mempercepat terjemahan tetapi mungkin mencapai batas tingkat API.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Disarankan: 4 untuk layanan LLM, 1-2 untuk API gratis dengan batas tingkat ketat.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>Font CJK</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Unduh font CJK untuk rendering teks Cina, Jepang, dan Korea yang benar dalam output PDF.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Unduh Font CJK</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Mengunduh Noto Sans CJK (~16MB per bahasa). Diperlukan untuk teks CJK dalam rendering overlay PDF.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Deteksi Rumus</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Deteksi rumus tingkat lanjut menggunakan nama font dan karakter matematika Unicode untuk melindungi rumus dari terjemahan.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Pola Font (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Pola Karakter (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Biarkan kosong untuk menggunakan pola bawaan. Pola font mencocokkan nama font PDF (Level 2). Pola karakter mencocokkan rentang Unicode (Level 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Cache Terjemahan</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Cache segmen yang diterjemahkan secara lokal untuk mempercepat terjemahan berulang dan menghemat biaya API.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Hapus Cache</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Terjemahan yang di-cache disimpan secara lokal di SQLite. Hapus cache jika terjemahan sudah usang.</value>
+  </data>
 </root>

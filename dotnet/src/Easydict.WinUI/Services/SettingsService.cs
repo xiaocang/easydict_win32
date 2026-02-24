@@ -180,6 +180,30 @@ public sealed class SettingsService
     /// </summary>
     public string DocumentOutputMode { get; set; } = "Monolingual";
 
+    /// <summary>
+    /// Maximum concurrent translation requests for long document translation.
+    /// Range: 1-16. Default: 4.
+    /// </summary>
+    public int LongDocMaxConcurrency { get; set; } = 4;
+
+    /// <summary>
+    /// Custom regex pattern for font-based formula detection (Level 2).
+    /// Empty uses the built-in math font regex.
+    /// </summary>
+    public string FormulaFontPattern { get; set; } = "";
+
+    /// <summary>
+    /// Custom regex pattern for character-based formula detection (Level 3).
+    /// Empty uses the built-in Unicode math character regex.
+    /// </summary>
+    public string FormulaCharPattern { get; set; } = "";
+
+    /// <summary>
+    /// Enable persistent translation cache for long document translation.
+    /// Caches translated segments in a local SQLite database for reuse.
+    /// </summary>
+    public bool EnableTranslationCache { get; set; } = true;
+
     // UI settings
     public bool AlwaysOnTop { get; set; } = false;
 
@@ -531,6 +555,13 @@ public sealed class SettingsService
         ProxyUri = GetValue(nameof(ProxyUri), "");
         ProxyBypassLocal = GetValue(nameof(ProxyBypassLocal), true);
         GrammarIncludeExplanations = GetValue(nameof(GrammarIncludeExplanations), true);
+
+        // Formula detection patterns
+        FormulaFontPattern = GetValue(nameof(FormulaFontPattern), "");
+        FormulaCharPattern = GetValue(nameof(FormulaCharPattern), "");
+
+        // Translation cache
+        EnableTranslationCache = GetValue(nameof(EnableTranslationCache), true);
     }
 
     public void Save()
@@ -657,6 +688,13 @@ public sealed class SettingsService
         _settings[nameof(ProxyUri)] = ProxyUri;
         _settings[nameof(ProxyBypassLocal)] = ProxyBypassLocal;
         _settings[nameof(GrammarIncludeExplanations)] = GrammarIncludeExplanations;
+
+        // Formula detection patterns
+        _settings[nameof(FormulaFontPattern)] = FormulaFontPattern;
+        _settings[nameof(FormulaCharPattern)] = FormulaCharPattern;
+
+        // Translation cache
+        _settings[nameof(EnableTranslationCache)] = EnableTranslationCache;
 
         try
         {

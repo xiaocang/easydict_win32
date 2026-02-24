@@ -899,4 +899,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>이중 언어 PDF: 교대 페이지. Markdown/텍스트: 원문+번역 블록.</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>번역 동시 실행 수</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>긴 문서 번역의 최대 병렬 요청 수입니다. 값이 높을수록 번역 속도가 빨라지지만 API 속도 제한에 도달할 수 있습니다.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>권장: LLM 서비스는 4, 엄격한 속도 제한이 있는 무료 API는 1-2.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK 글꼴</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>PDF 출력에서 중국어, 일본어, 한국어 텍스트를 올바르게 렌더링하기 위해 CJK 글꼴을 다운로드합니다.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>CJK 글꼴 다운로드</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>삭제</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Noto Sans CJK 다운로드 (언어당 약 16MB). PDF 오버레이 렌더링에 필요합니다.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>수식 감지</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>고급 수식 감지는 글꼴 이름과 유니코드 수학 문자를 사용하여 수식을 번역에서 보호합니다.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>글꼴 패턴 (정규식)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>문자 패턴 (정규식)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>비워두면 기본 패턴을 사용합니다. 글꼴 패턴은 PDF 글꼴 이름과 매칭 (Level 2). 문자 패턴은 유니코드 범위와 매칭 (Level 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>번역 캐시</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>번역된 세그먼트를 로컬에 캐시하여 반복 번역 속도를 높이고 API 비용을 절약합니다.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>캐시 지우기</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>캐시된 번역은 로컬 SQLite에 저장됩니다. 번역이 오래되면 캐시를 지우세요.</value>
+  </data>
 </root>

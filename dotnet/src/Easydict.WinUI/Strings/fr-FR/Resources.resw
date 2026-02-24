@@ -899,4 +899,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>PDF bilingue : pages alternées. Markdown/Texte : blocs original+traduction.</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Traduction simultanée</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Nombre maximum de requêtes de traduction parallèles pour les longs documents. Des valeurs plus élevées accélèrent la traduction mais peuvent atteindre les limites de l'API.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Recommandé : 4 pour les services LLM, 1-2 pour les API gratuites avec des limites strictes.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>Police CJK</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Téléchargez les polices CJK pour un rendu correct du chinois, japonais et coréen dans les PDF.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Télécharger la police CJK</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Supprimer</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Télécharge Noto Sans CJK (~16 Mo par langue). Nécessaire pour le rendu CJK dans les PDF.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Détection de formules</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>La détection avancée utilise les noms de polices et les caractères mathématiques Unicode pour protéger les formules de la traduction.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Modèle de police (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Modèle de caractères (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Laisser vide pour utiliser les modèles intégrés. Le modèle de police correspond aux noms de polices PDF (Niveau 2). Le modèle de caractères correspond aux plages Unicode (Niveau 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Cache de traduction</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Mettre en cache les segments traduits localement pour accélérer les traductions répétées et économiser les coûts API.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Vider le cache</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Les traductions en cache sont stockées localement dans SQLite. Videz le cache si les traductions deviennent obsolètes.</value>
+  </data>
 </root>

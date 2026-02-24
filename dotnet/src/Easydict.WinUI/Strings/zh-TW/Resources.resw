@@ -899,4 +899,55 @@
   <data name="DocumentOutputMode_Note" xml:space="preserve">
     <value>PDF 雙語：交替頁面。Markdown/文字：原文+譯文段落。</value>
   </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>翻譯並行數</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>長文件翻譯的最大並行請求數。數值越高翻譯速度越快，但可能觸發 API 速率限制。</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>建議：LLM 服務設為 4，有嚴格速率限制的免費 API 設為 1-2。</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK 字型</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>下載 CJK 字型以在 PDF 輸出中正確呈現中日韓文字。</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>下載 CJK 字型</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>刪除</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>下載 Noto Sans CJK（每種語言約 16MB）。PDF 疊層呈現中日韓文字時必需。</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>公式偵測</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>進階公式偵測使用字型名稱和 Unicode 數學字元來保護公式不被翻譯。</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>字型模式（正規表示式）</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>字元模式（正規表示式）</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>留空使用內建模式。字型模式比對 PDF 字型名稱（Level 2）。字元模式比對 Unicode 範圍（Level 3）。</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>翻譯快取</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>將已翻譯的段落快取到本地，加速重複翻譯並節省 API 費用。</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>清除快取</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>快取的翻譯儲存在本地 SQLite 資料庫中。如果翻譯過時，請清除快取。</value>
+  </data>
 </root>

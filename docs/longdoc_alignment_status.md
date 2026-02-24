@@ -140,17 +140,20 @@
 
 ---
 
-### G1（P0）：双语/对照 PDF 输出
+### G1（P0）：双语/对照 PDF 输出 ✅
 
 | 维度 | PDFMathTranslate | Easydict Win32 |
 |------|-----------------|----------------|
-| 输出模式 | 每次翻译产出 **两份** PDF：单语 (`*-mono.pdf`) + 双语对照 (`*-dual.pdf`) | 仅输出**单语** PDF（翻译后文本替换/覆盖） |
-| 双语实现 | `doc_en.move_page()` 交错插入原文页与译文页 | 无 |
+| 输出模式 | 每次翻译产出 **两份** PDF：单语 (`*-mono.pdf`) + 双语对照 (`*-dual.pdf`) | `DocumentOutputMode`：Monolingual / Bilingual / Both |
+| 双语实现 | `doc_en.move_page()` 交错插入原文页与译文页 | `ExportBilingualPdf` 交错插入原文页与译文覆盖页 |
+| 导出格式 | PDF | PDF / Markdown / Plain Text 三种导出器 |
 
-**差距说明**：
-- 学术论文翻译场景中，用户常需原文/译文对照阅读。
-- 建议增加 `OutputMode` 选项：`Monolingual` / `Bilingual` / `Both`。
-- 双语模式可采用交错页或左右分栏两种策略。
+**已实现**：
+- `IDocumentExportService` 接口 + 三种导出器（`PdfExportService` / `MarkdownExportService` / `PlainTextExportService`）
+- `DocumentOutputMode` 枚举：Monolingual / Bilingual / Both
+- 双语 PDF：原文页与译文页交错排列，直接复制原始页面保持完整布局
+- 设置页面：输出模式选择 ComboBox
+- 本地化：15 语言 × 6 条
 
 ---
 
@@ -180,73 +183,84 @@
 
 ---
 
-### G3（P1）：三级公式检测
+### G3（P1）：三级公式检测 ✅
 
 | 维度 | PDFMathTranslate | Easydict Win32 |
 |------|-----------------|----------------|
-| 第 1 级：布局级 | DocLayout-YOLO 检测整块公式区域 → 整块跳过 | 无（依赖 `SourceBlockType` 标记） |
-| 第 2 级：字体级 | 正则匹配数学字体名：`CM[^R]|MS.M|XY|MT` 等 | 无 |
-| 第 3 级：字符级 | Unicode 分类分析（数学符号、希腊字母、修饰符）+ 上下标检测（`child.size < parent.size * 0.79`） | 正则匹配 LaTeX 分隔符：`$...$`、`\(...\)`、`\[...\]` |
-| 占位符机制 | `{vN}` 占位，翻译后恢复原始 glyph 数据（`var`/`varl`/`varf` 列表） | `[[FORMULA_N_HASH]]` 占位 + 类型分类（InlineMath/DisplayMath/UnitFragment） |
-| 用户可配 | `--vfont`（字体正则）、`--vchar`（字符正则）CLI 参数 | 无用户可配选项 |
+| 第 1 级：布局级 | DocLayout-YOLO 检测整块公式区域 → 整块跳过 | DocLayout-YOLO + `SourceBlockType.Formula` + `IsFormulaLike` |
+| 第 2 级：字体级 | 正则匹配数学字体名：`CM[^R]|MS.M|XY|MT` 等 | `IsFontBasedFormula` — PdfPig `Letter.FontName` + 正则（CMSY/CMMI/CMEX/Symbol/Mathematica/STIX 等） |
+| 第 3 级：字符级 | Unicode 分类分析（数学符号、希腊字母、修饰符） | `IsCharacterBasedFormula` — Unicode 数学符号/希腊字母/上下标范围，>30% 阈值 |
+| 占位符机制 | `{vN}` 占位 | `[[FORMULA_N_HASH]]` 占位 + 类型分类（InlineMath/DisplayMath/UnitFragment） |
+| 用户可配 | `--vfont`（字体正则）、`--vchar`（字符正则） | `FormulaFontPattern` / `FormulaCharPattern` 设置页自定义正则 |
 
-**差距说明**：
-- 当前仅有正则级检测，对 PDF 内嵌公式（非 LaTeX 源码）的识别能力不足。
-- 字体级检测在 PDF 原生文本场景中效果显著（PDF 内含字体元信息）。
-- 建议：在 `ExtractLayoutBlocksFromPage` 中增加字体名匹配逻辑（PdfPig 提供 `Letter.FontName`）。
-- 用户可配正则可在设置页面公式保护分组下暴露。
+**已实现**：
+- `SourceDocumentBlock.DetectedFontNames`：PdfPig 提取每个块内字母的字体名列表
+- `IsFontBasedFormula`：数学字体占比 >50% 标记为公式（Level 2）
+- `IsCharacterBasedFormula`：数学 Unicode 字符占比 >30% 标记为公式（Level 3）
+- `BuildIr` 合并三级检测结果：Layout + Font + Character
+- 设置页面：Formula Detection section（字体正则 + 字符正则 TextBox）
+- 本地化：15 语言 × 5 条
+- 测试：`FormulaDetectionTests`（字体检测、字符检测、自定义模式覆盖）
 
 ---
 
-### G4（P1）：并行翻译
+### G4（P1）：并行翻译 ✅
 
 | 维度 | PDFMathTranslate | Easydict Win32 |
 |------|-----------------|----------------|
-| 并发模型 | 默认 **4 线程**（`--thread` 可配） | **顺序逐块**（`await` 逐个调用） |
-| 粒度 | 页内文本段并行翻译 | 无并行 |
+| 并发模型 | 默认 **4 线程**（`--thread` 可配） | `SemaphoreSlim` + `Task.WhenAll`，默认 **4 并发**（`LongDocMaxConcurrency` 可配 1-16） |
+| 粒度 | 页内文本段并行翻译 | 块级并行翻译 |
+| 向后兼容 | — | `MaxConcurrency = 1` 时走顺序路径 |
 
-**差距说明**：
-- 对于 50+ 页文档，顺序翻译耗时显著（每块 1~3 秒，数百块累计数分钟）。
-- 建议：引入 `SemaphoreSlim` 控制并发度，使用 `Task.WhenAll` 批量提交翻译请求。
-- 需考虑各翻译 API 的限频策略（Google 免费版较严格，LLM 服务通常更宽松）。
-- 并发度可在 `LongDocumentTranslationOptions` 中配置（默认 1 保持向后兼容）。
+**已实现**：
+- `LongDocumentTranslationOptions.MaxConcurrency`：并发度配置（默认 1，WinUI 默认 4）
+- `ConcurrentDictionary` + `SemaphoreSlim` + `Task.WhenAll` 并行翻译
+- 顺序路径保持为 `MaxConcurrency = 1` 的向后兼容
+- 设置页面：NumberBox（1-16）
+- 本地化：15 语言 × 3 条
+- 测试：`ParallelTranslationTests`（7 个测试）
 
 ---
 
-### G5（P1）：CJK/多语言字体嵌入
+### G5（P1）：CJK/多语言字体嵌入 ✅
 
 | 维度 | PDFMathTranslate | Easydict Win32 |
 |------|-----------------|----------------|
-| CJK 字体 | 按目标语言下载 SourceHanSerif 区域变体（CN/JP/KR/TW） | 使用系统 Arial（不支持 CJK 字符渲染） |
-| 非拉丁文 | 19 种 Noto 字体系列（Arabic、Thai、Hindi、Bengali 等） | 无 |
-| 回退字体 | GoNotoKurrent（通用回退） | 无 |
-| 字体子集化 | 默认启用，减小输出文件体积（`--skip-subset-fonts` 可关闭） | 无 |
-| 行高适配 | `LANG_LINEHEIGHT_MAP` 按目标语言调整（中文 1.4、俄文 0.8 等） | 固定字号（Arial 11pt / Heading 14pt） |
+| CJK 字体 | 按目标语言下载 SourceHanSerif 区域变体（CN/JP/KR/TW） | 按目标语言下载 Noto Sans CJK 变体（SC/TC/JP/KR） |
+| 字体加载 | PyMuPDF `page.insert_font()` | PdfSharpCore `IFontResolver` 自定义实现（`CjkFontResolver`） |
+| 行高适配 | `LANG_LINEHEIGHT_MAP` 按目标语言调整（中文 1.4、俄文 0.8 等） | `LineHeightMultipliers`：zh 1.4、ja 1.4、ko 1.3 |
+| 字体子集化 | 默认启用 | 暂无（全量字体嵌入） |
+| 回退字体 | GoNotoKurrent | Arial（CJK 字体不可用时回退） |
 
-**差距说明**：
-- 当前 overlay 模式使用 Arial 字体，**CJK 译文实际输出为空白或方块**。
-- 这是影响输出质量的**最关键差距**之一。
-- 建议：
-  1. 按目标语言嵌入合适字体（SourceHanSans/SourceHanSerif 开源免费）。
-  2. 增加字体子集化（仅嵌入使用到的字符，控制文件大小）。
-  3. 引入 `LANG_LINEHEIGHT_MAP` 按语言适配行高。
+**已实现**：
+- `FontDownloadService`：4 种 CJK 字体按需下载（NotoSansSC/TC/JP/KR），GitHub 源
+- `CjkFontResolver`：PdfSharpCore `IFontResolver` 实现，全局注册，动态加载字体文件
+- `PdfExportService` 扩展：`ResolveFontFamily` / `GetLineHeight` / `EnsureCjkFontSetup`
+- `LongDocumentTranslationCheckpoint.TargetLanguage`：传递目标语言至导出管线
+- 设置页面：CJK Font section（下载/删除按钮 + 进度条）
+- 本地化：15 语言 × 5 条
+- 测试：`FontDownloadServiceTests` + `PdfExportServiceFontTests`
 
 ---
 
-### G6（P1）：持久化翻译缓存
+### G6（P1）：持久化翻译缓存 ✅
 
 | 维度 | PDFMathTranslate | Easydict Win32 |
 |------|-----------------|----------------|
-| 缓存粒度 | **段落级**（每段翻译结果独立缓存） | **文档级**去重（SHA256 哈希 → 输出路径映射） |
-| 存储 | SQLite（Peewee ORM）+ WAL 模式 | JSON 文件（`longdoc_dedup_index.json`） |
-| 缓存键 | `(translate_engine, engine_params, original_text)` 复合唯一键 | `(InputMode, ServiceId, From, To, InputHash)` |
-| 断点续传 | 隐式：中断后重跑，已翻译段落自动从缓存命中 | 内存 checkpoint + 手动重试失败块 |
-| 绕过缓存 | `--ignore-cache` CLI 参数 | 无 |
+| 缓存粒度 | **段落级**（每段翻译结果独立缓存） | **段落级**（SHA256 哈希 → 翻译结果，`TranslationCacheService`） |
+| 存储 | SQLite（Peewee ORM）+ WAL 模式 | SQLite（`Microsoft.Data.Sqlite`）|
+| 缓存键 | `(translate_engine, engine_params, original_text)` 复合唯一键 | `(service_id, from_lang, to_lang, source_hash)` UNIQUE 约束 |
+| 命中统计 | 无 | `hit_count` + `last_used_utc` 追踪 |
+| 绕过缓存 | `--ignore-cache` CLI 参数 | `EnableTranslationCache` 设置开关 |
 
-**差距说明**：
-- 当前 checkpoint 仅在内存中，应用重启后丢失。
-- 段落级持久缓存可显著减少重复翻译的 API 调用（尤其跨文档共享术语段落）。
-- 建议：引入 SQLite 本地缓存（.NET 有 `Microsoft.Data.Sqlite` + Dapper 或 EF Core Sqlite）。
+**已实现**：
+- `TranslationCacheService`：SQLite 持久化缓存，UPSERT 语义，SHA256 源文本哈希
+- `WriteCacheEntriesAsync`：翻译完成后自动写入缓存
+- `EnableTranslationCache` 设置：开/关切换
+- 设置页面：Translation Cache section（开关 + 清除缓存按钮 + 缓存条目计数）
+- NuGet：`Microsoft.Data.Sqlite 9.0.0`
+- 本地化：15 语言 × 4 条
+- 测试：`TranslationCacheServiceTests`（8 个测试）
 
 ---
 
@@ -333,12 +347,12 @@
 
 | 编号 | 差距项 | 优先级 | 难度 | 影响范围 |
 |------|--------|--------|------|----------|
-| G1 | 双语/对照 PDF 输出 | P0 | 中 | 输出质量 |
+| G1 | 双语/对照 PDF 输出 ✅ | P0 | 中 | 输出质量 |
 | G2 | ML 布局检测（DocLayout-YOLO） ✅ | P0 | 高 | 布局准确度 |
-| G3 | 三级公式检测 | P1 | 中 | 公式保护 |
-| G4 | 并行翻译 | P1 | 低 | 性能 |
-| G5 | CJK/多语言字体嵌入 | P1 | 中 | 输出可读性（关键） |
-| G6 | 持久化翻译缓存 | P1 | 中 | 断点续传/API 节省 |
+| G3 | 三级公式检测 ✅ | P1 | 中 | 公式保护 |
+| G4 | 并行翻译 ✅ | P1 | 低 | 性能 |
+| G5 | CJK/多语言字体嵌入 ✅ | P1 | 中 | 输出可读性（关键） |
+| G6 | 持久化翻译缓存 ✅ | P1 | 中 | 断点续传/API 节省 |
 | G7 | 页范围选择 | P2 | 低 | 用户体验 |
 | G8 | URL 输入支持 | P2 | 低 | 用户体验 |
 | G9 | 源字体保留与匹配 | P2 | 中 | 输出质量 |
@@ -360,7 +374,11 @@
 | 术语一致性 | 按页窗口优先 + 全局回退 | 已对齐（M3 完成） |
 | 质量报告 | `BackfillQualityMetrics` + page-level 明细 | 已对齐（M1 完成） |
 | OCR 回退 | `WindowsOcrService` 集成 | 已支持 |
-| Checkpoint/重试 | 内存 checkpoint + 失败块重试 | 核心机制已有（持久化为差距） |
+| Checkpoint/重试 | 内存 checkpoint + 失败块重试 + SQLite 段落缓存 | 核心机制已有 + SQLite 持久缓存（G6 完成） |
+| 双语输出 | Monolingual + Bilingual 交错页 + Both | Monolingual / Bilingual / Both 三种模式（G1 完成） |
+| 三级公式检测 | Layout + Font + Character | Layout + Font (PdfPig) + Character (Unicode)，用户可配正则（G3 完成） |
+| 并行翻译 | 默认 4 线程 | SemaphoreSlim + Task.WhenAll，默认 4 并发（G4 完成） |
+| CJK 字体嵌入 | SourceHanSerif + 行高适配 | Noto Sans CJK + IFontResolver + 行高适配（G5 完成） |
 | 文件去重 | SHA256 哈希 + dedup index | 已支持 |
 | 取消操作 | `CancellationTokenSource` + 任务级取消 | 已支持 |
 
@@ -372,7 +390,7 @@
 - 对于非 ASCII / 复杂编码内容，仍会走 overlay 降级路径。
 - 建议在 CI 中引入样本 PDF 回归，以防布局/回填逻辑回退。
 - 当前 `RetryMergeStrategy` 采用累计策略（accumulate），后续可按产品需求调整为 latest-only。
-- G5（CJK 字体嵌入）虽列为 P1，但实际是**阻塞非拉丁语系输出可用性**的关键项，建议优先处理。
+- ~~G5（CJK 字体嵌入）虽列为 P1，但实际是**阻塞非拉丁语系输出可用性**的关键项，建议优先处理。~~ ✅ 已完成
 - ~~G2（ML 布局检测）技术难度最高，需评估 ONNX Runtime .NET 包大小对分发包的影响。~~ ✅ 已解决：NuGet 仅引入托管 API（~1-2MB），原生 DLL（~15MB）+ 模型（~25MB）按需下载至 `%LocalAppData%`。
 
 
@@ -392,6 +410,16 @@
 - 本轮按 roadmap 落地 M3：术语复用增加按页窗口优先策略（当前页邻近优先，超窗回退全局）。
 - 本轮按 roadmap 落地 M4：细化公式 token 类型并加入恢复校验（未恢复 token / 分隔符失衡回退原文）。
 
+### P1 实现（G4 并行翻译 + G5 CJK 字体 + G3 公式检测 + G6 缓存 + G1 双语输出）
+
+- **G1 双语输出**：`IDocumentExportService` 接口 + 3 种导出器（PDF/Markdown/Text），`DocumentOutputMode` 枚举（Monolingual/Bilingual/Both），双语 PDF 交错页实现
+- **G4 并行翻译**：`SemaphoreSlim` + `Task.WhenAll` + `ConcurrentDictionary`，设置页 NumberBox（1-16），顺序路径向后兼容
+- **G5 CJK 字体**：`FontDownloadService` 按需下载 Noto Sans CJK，`CjkFontResolver` 实现 PdfSharpCore `IFontResolver`，语言级行高适配
+- **G3 三级公式检测**：`DetectedFontNames` 从 PdfPig `Letter.FontName` 提取，`IsFontBasedFormula`（>50% 数学字体）+ `IsCharacterBasedFormula`（>30% Unicode 数学字符），用户可配正则
+- **G6 持久化缓存**：`TranslationCacheService` 基于 `Microsoft.Data.Sqlite`，段落级 SHA256 缓存键，UPSERT + 命中统计，设置页开关 + 清除按钮
+- **本地化**：15 语言 × 17 条（G4: 3 + G5: 5 + G3: 5 + G6: 4）
+- **测试**：`ParallelTranslationTests`（7）+ `FontDownloadServiceTests`（7）+ `FormulaDetectionTests`（11）+ `TranslationCacheServiceTests`（8）
+
 ### G2 实现（ONNX 本地下载优先 + 视觉大模型布局检测）
 
 - **核心架构**：四模式策略（Auto / OnnxLocal / VisionLLM / Heuristic），Auto 模式优先使用 ONNX 本地模型，不可用时自动回退启发式。
@@ -407,7 +435,7 @@
 
 ---
 
-## 下一 P0 任务：G1 — 双语/对照 PDF 输出
+## ~~下一 P0 任务：G1 — 双语/对照 PDF 输出~~ ✅ 已完成
 
 > 优先级：P0 | 难度：中 | 影响：输出质量（学术论文核心需求）
 

@@ -157,6 +157,8 @@
       <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
       <!-- ONNX Runtime managed wrapper only (native binary downloaded on first use) -->
       <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0" />
+      <!-- SQLite for persistent translation cache -->
+      <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     </ItemGroup>
 
     <!-- 

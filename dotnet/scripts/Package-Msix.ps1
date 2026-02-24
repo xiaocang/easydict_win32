@@ -93,9 +93,9 @@ if (Test-Path $sourcePri) {
 # Generate temporary manifest with arch/version overrides
 $tempManifest = Join-Path $env:RUNNER_TEMP "Package.$Platform.appxmanifest"
 $content = Get-Content $ManifestPath -Raw
-$content = $content -replace 'ProcessorArchitecture="[^"]*"', "ProcessorArchitecture=\"$Platform\""
+$content = $content -replace 'ProcessorArchitecture="[^"]*"', ('ProcessorArchitecture="' + $Platform + '"')
 if ($MsixVersion) {
-    $content = $content -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=\"$MsixVersion\""
+    $content = $content -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', ('Version="' + $MsixVersion + '"')
 }
 Set-Content $tempManifest $content -Encoding utf8
 

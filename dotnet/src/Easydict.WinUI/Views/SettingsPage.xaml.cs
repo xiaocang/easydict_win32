@@ -170,6 +170,18 @@ public sealed partial class SettingsPage : Page
         if (FreeServicesDescriptionText != null)
             FreeServicesDescriptionText.Text = loc.GetString("FreeServicesDescription");
 
+        // Document Output Mode section
+        if (DocumentOutputModeHeaderText != null)
+            DocumentOutputModeHeaderText.Text = loc.GetString("DocumentOutputMode_Title");
+        if (DocumentOutputModeDescriptionText != null)
+            DocumentOutputModeDescriptionText.Text = loc.GetString("DocumentOutputMode_Description");
+        DocumentOutputModeCombo.Header = loc.GetString("DocumentOutputMode_Title");
+        DocumentOutputMonolingualItem.Content = loc.GetString("DocumentOutputMode_Monolingual");
+        DocumentOutputBilingualItem.Content = loc.GetString("DocumentOutputMode_Bilingual");
+        DocumentOutputBothItem.Content = loc.GetString("DocumentOutputMode_Both");
+        if (DocumentOutputModeNoteText != null)
+            DocumentOutputModeNoteText.Text = loc.GetString("DocumentOutputMode_Note");
+
         // HTTP Proxy section
         if (HttpProxyHeaderText != null)
             HttpProxyHeaderText.Text = loc.GetString("HttpProxy");
@@ -343,6 +355,9 @@ public sealed partial class SettingsPage : Page
 
         // Layout detection changes
         LayoutDetectionModeCombo.SelectionChanged += OnLayoutDetectionModeChanged;
+
+        // Document output mode
+        DocumentOutputModeCombo.SelectionChanged += OnDocumentOutputModeChanged;
         VisionLayoutServiceCombo.SelectionChanged += OnSettingChanged;
 
         // CheckBox changes
@@ -467,6 +482,9 @@ public sealed partial class SettingsPage : Page
         SelectComboByTag(LayoutDetectionModeCombo, _settings.LayoutDetectionMode);
         SelectComboByTag(VisionLayoutServiceCombo, _settings.VisionLayoutServiceId);
         UpdateLayoutDetectionUI();
+
+        // Document Output Mode
+        SelectComboByTag(DocumentOutputModeCombo, _settings.DocumentOutputMode);
 
         // Behavior
         // App Theme - select based on current setting
@@ -902,6 +920,9 @@ public sealed partial class SettingsPage : Page
         _settings.LayoutDetectionMode = GetSelectedTag(LayoutDetectionModeCombo) ?? "Auto";
         _settings.VisionLayoutServiceId = GetSelectedTag(VisionLayoutServiceCombo) ?? "gemini";
 
+        // Document Output Mode
+        _settings.DocumentOutputMode = GetSelectedTag(DocumentOutputModeCombo) ?? "Monolingual";
+
         // Save EnabledQuery settings for each window
         _settings.MainWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_mainWindowServices);
         _settings.MiniWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_miniWindowServices);
@@ -1068,6 +1089,7 @@ public sealed partial class SettingsPage : Page
             new NavSection("EnabledServicesSection", "Enabled Services", "\uE73E", EnabledServicesSection),           // Checkmark
             new NavSection("ServiceConfigurationSection", "Service Configuration", "\uE90F", ServiceConfigurationSection), // Key
             new NavSection("LayoutDetectionSection", "Layout Detection", "\uE8A1", LayoutDetectionSection),  // Page
+            new NavSection("DocumentOutputModeSection", "Document Output", "\uE8C8", DocumentOutputModeSection),  // Document
             new NavSection("HttpProxySection", "HTTP Proxy", "\uE968", HttpProxySection),      // Network
             new NavSection("BehaviorSection", "Behavior", "\uE771", BehaviorSection),          // Touch
             new NavSection("HotkeysSection", "Hotkeys", "\uE765", HotkeysSection),             // Keyboard
@@ -1828,6 +1850,16 @@ public sealed partial class SettingsPage : Page
         _settings.OnnxModelDownloaded = false;
         _settings.Save();
         UpdateOnnxModelStatus();
+    }
+
+    #endregion
+
+    #region Document Output Mode
+
+    private void OnDocumentOutputModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        OnSettingChanged(sender, e);
     }
 
     #endregion

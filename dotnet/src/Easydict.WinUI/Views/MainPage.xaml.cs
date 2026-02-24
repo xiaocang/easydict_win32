@@ -4,6 +4,7 @@ using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.DocumentExport;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Input;
@@ -1552,6 +1553,16 @@ namespace Easydict.WinUI.Views
             LongDocOutputFileNameTextBox.Text = $"{prefix}-{DateTime.Now:yyyyMMdd-HHmmss}.pdf";
         }
 
+        private static DocumentOutputMode GetDocumentOutputModeFromSettings()
+        {
+            var setting = SettingsService.Instance.DocumentOutputMode;
+            return setting switch
+            {
+                "Bilingual" => DocumentOutputMode.Bilingual,
+                "Both" => DocumentOutputMode.Both,
+                _ => DocumentOutputMode.Monolingual
+            };
+        }
 
         private List<string> ParseBatchPdfQueueInputs()
         {
@@ -1588,16 +1599,11 @@ namespace Easydict.WinUI.Views
 
         private void SetLongDocTaskUiState(bool running)
         {
-            var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
-            var isPdfMode = string.Equals(modeTag, "pdf", StringComparison.Ordinal);
-
-            LongDocStartQueueButton.IsEnabled = !running && isPdfMode;
-            LongDocStartQueueButton.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
+            LongDocStartQueueButton.IsEnabled = !running;
             LongDocCancelQueueButton.IsEnabled = running;
             LongDocTranslateButton.IsEnabled = !running;
             LongDocServiceCombo.IsEnabled = !running;
             LongDocInputModeCombo.IsEnabled = !running;
-            LongDocManualTextBox.IsEnabled = !running;
             LongDocPdfPathTextBox.IsEnabled = !running;
             LongDocBatchPdfPathsTextBox.IsEnabled = !running;
             LongDocRunInBackgroundCheckBox.IsEnabled = !running;
@@ -1668,6 +1674,7 @@ namespace Easydict.WinUI.Views
 
                 var outputPath = BuildQueueOutputPath(outputFolder, pdfPath, i + 1);
 
+                var queueOutputMode = GetDocumentOutputModeFromSettings();
                 var result = await _longDocumentService.TranslateToPdfAsync(
                     LongDocumentInputMode.Pdf,
                     pdfPath,
@@ -1679,7 +1686,8 @@ namespace Easydict.WinUI.Views
                     {
                         LongDocStatusText.Text = $"Queue {i + 1}/{pdfPaths.Count}: {progress}";
                     }),
-                    cancellationToken);
+                    cancellationToken,
+                    outputMode: queueOutputMode);
 
                 if (result.State == LongDocumentJobState.Completed)
                 {
@@ -1792,31 +1800,27 @@ namespace Easydict.WinUI.Views
 
         private void OnLongDocInputModeChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (LongDocManualTextBox is null) return; // Fired during InitializeComponent before controls exist
+            if (LongDocFilePanel is null) return; // Fired during InitializeComponent before controls exist
 
             var selected = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
-            var isPdfMode = string.Equals(selected, "pdf", StringComparison.Ordinal);
-            var isManual = string.Equals(selected, "manual", StringComparison.Ordinal);
 
-            // Input card: manual text vs PDF path
-            LongDocManualTextBox.Visibility = isManual ? Visibility.Visible : Visibility.Collapsed;
-            LongDocPdfPanel.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
-            LongDocQueuePanel.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
-
-            // Output card: result text vs PDF output fields
-            LongDocResultTextBox.Visibility = isManual ? Visibility.Visible : Visibility.Collapsed;
-            LongDocOutputFieldsPanel.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
+            // Update file filter hint based on selected mode
+            var placeholder = selected switch
+            {
+                "plaintext" => "Plain text file path (.txt)...",
+                "markdown" => "Markdown file path (.md)...",
+                _ => "PDF file path (.pdf)..."
+            };
+            LongDocPdfPathTextBox.PlaceholderText = placeholder;
 
             // Title updates
-            LongDocInputTitle.Text = isPdfMode ? "PDF Input" : "Source Text";
-            LongDocOutputTitle.Text = isPdfMode ? "PDF Output" : "Translation Result";
-
-            if (!IsLongDocTaskRunning())
+            LongDocInputTitle.Text = selected switch
             {
-                LongDocStartQueueButton.IsEnabled = isPdfMode;
-            }
-
-            LongDocStartQueueButton.Visibility = isPdfMode ? Visibility.Visible : Visibility.Collapsed;
+                "plaintext" => "Text Input",
+                "markdown" => "Markdown Input",
+                _ => "PDF Input"
+            };
+            LongDocOutputTitle.Text = "Translation Output";
         }
 
         private void OnLongDocPdfPathChanged(object sender, TextChangedEventArgs e)
@@ -1853,18 +1857,15 @@ namespace Easydict.WinUI.Views
                     return;
                 }
 
-                var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "manual";
+                var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pdf";
                 var mode = modeTag switch
                 {
-                    "pdf" => LongDocumentInputMode.Pdf,
-                    _ => LongDocumentInputMode.Manual
+                    "plaintext" => LongDocumentInputMode.PlainText,
+                    "markdown" => LongDocumentInputMode.Markdown,
+                    _ => LongDocumentInputMode.Pdf
                 };
 
-                var input = mode switch
-                {
-                    LongDocumentInputMode.Pdf => LongDocPdfPathTextBox.Text?.Trim() ?? string.Empty,
-                    _ => LongDocManualTextBox.Text?.Trim() ?? string.Empty
-                };
+                var input = LongDocPdfPathTextBox.Text?.Trim() ?? string.Empty;
 
                 if (string.IsNullOrWhiteSpace(input))
                 {
@@ -1896,6 +1897,7 @@ namespace Easydict.WinUI.Views
                     return;
                 }
 
+                var outputMode = GetDocumentOutputModeFromSettings();
                 var result = await _longDocumentService.TranslateToPdfAsync(
                     mode,
                     input,
@@ -1904,7 +1906,8 @@ namespace Easydict.WinUI.Views
                     outputPath,
                     serviceId,
                     progress => DispatcherQueue.TryEnqueue(() => LongDocStatusText.Text = progress),
-                    cancellationToken);
+                    cancellationToken,
+                    outputMode: outputMode);
 
                 _longDocCheckpoint = result.Checkpoint;
                 LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
@@ -1915,15 +1918,6 @@ namespace Easydict.WinUI.Views
                 if (result.State == LongDocumentJobState.Completed)
                 {
                     await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
-                }
-
-                // Show translated text in-UI for manual mode
-                if (mode == LongDocumentInputMode.Manual && result.Checkpoint is not null)
-                {
-                    var translatedText = string.Join("\n\n", result.Checkpoint.TranslatedChunks
-                        .OrderBy(kvp => kvp.Key)
-                        .Select(kvp => kvp.Value));
-                    LongDocResultTextBox.Text = translatedText;
                 }
 
                 RefreshLongDocSuggestedOutputFileName();
@@ -1970,6 +1964,7 @@ namespace Easydict.WinUI.Views
                     return;
                 }
 
+                var retryOutputMode = GetDocumentOutputModeFromSettings();
                 var result = await _longDocumentService.RetryFailedChunksAsync(
                     _longDocCheckpoint,
                     _longDocLastFrom,
@@ -1977,7 +1972,8 @@ namespace Easydict.WinUI.Views
                     outputPath,
                     _longDocLastServiceId,
                     progress => DispatcherQueue.TryEnqueue(() => LongDocStatusText.Text = progress),
-                    cancellationToken);
+                    cancellationToken,
+                    outputMode: retryOutputMode);
 
                 _longDocCheckpoint = result.Checkpoint;
                 LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
@@ -1988,15 +1984,6 @@ namespace Easydict.WinUI.Views
                 if (result.State == LongDocumentJobState.Completed && !string.IsNullOrWhiteSpace(_longDocLastDedupKey))
                 {
                     await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
-                }
-
-                // Show translated text in-UI for manual mode retries
-                if (_longDocCheckpoint?.InputMode == LongDocumentInputMode.Manual && result.Checkpoint is not null)
-                {
-                    var translatedText = string.Join("\n\n", result.Checkpoint.TranslatedChunks
-                        .OrderBy(kvp => kvp.Key)
-                        .Select(kvp => kvp.Value));
-                    LongDocResultTextBox.Text = translatedText;
                 }
 
                 RefreshLongDocSuggestedOutputFileName("translated-retry");

@@ -308,4 +308,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Dokumentoutputtilstand</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Vælg outputformat. Tosproget tilstand skifter mellem originalt og oversat indhold.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Ensproget (Standard)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Tosproget (Alternerende)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Begge</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>Tosproget PDF: alternerende sider. Markdown/Tekst: original+oversættelsesblokke.</value>
+  </data>
 </root>

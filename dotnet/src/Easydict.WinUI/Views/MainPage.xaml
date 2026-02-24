@@ -530,16 +530,15 @@
 
                     <ComboBox x:Name="LongDocInputModeCombo"
                               Grid.Column="1"
-                              SelectedIndex="0"
+                              SelectedIndex="2"
                               SelectionChanged="OnLongDocInputModeChanged"
-                              MinWidth="120"
+                              MinWidth="140"
                               VerticalAlignment="Center"
                               Margin="8,0,0,0"
                               ToolTipService.ToolTip="Input Mode">
-                        <ComboBoxItem Content="Manual Input"
-                                Tag="manual"/>
-                        <ComboBoxItem Content="PDF File"
-                                Tag="pdf"/>
+                        <ComboBoxItem Content="Plain Text (.txt)" Tag="plaintext" />
+                        <ComboBoxItem Content="Markdown (.md)" Tag="markdown" />
+                        <ComboBoxItem Content="PDF (.pdf)" Tag="pdf" />
                     </ComboBox>
 
                     <!-- Translate Button -->
@@ -580,23 +579,8 @@
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Margin="0,0,0,4"/>
 
-                        <!-- Manual mode input -->
-                        <TextBox x:Name="LongDocManualTextBox"
-                                 Grid.Row="1"
-                                 Style="{StaticResource TranslationTextBoxStyle}"
-                                 BorderThickness="0"
-                                 Background="Transparent"
-                                 PlaceholderText="Paste long text content here..."
-                                 AcceptsReturn="True"
-                                 TextWrapping="Wrap"
-                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                 VerticalAlignment="Stretch"
-                                 HorizontalAlignment="Stretch"/>
-
-                        <!-- PDF mode input -->
-                        <Grid x:Name="LongDocPdfPanel"
-                                Grid.Row="1"
-                                Visibility="Collapsed"
+                        <!-- File input panel (all modes use file selection) -->
+                        <Grid x:Name="LongDocFilePanel" Grid.Row="1"
                               VerticalAlignment="Top">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -675,25 +659,9 @@
                                     FontSize="12"/>
                         </Grid>
 
-                        <!-- Manual mode result -->
-                        <TextBox x:Name="LongDocResultTextBox"
-                                 Grid.Row="1"
-                                 Style="{StaticResource TranslationTextBoxStyle}"
-                                 BorderThickness="0"
-                                 Background="Transparent"
-                                 IsReadOnly="True"
-                                 PlaceholderText="Translation will appear here..."
-                                 TextWrapping="Wrap"
-                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                 VerticalAlignment="Stretch"
-                                 HorizontalAlignment="Stretch"/>
-
-                        <!-- PDF mode output fields -->
-                        <StackPanel x:Name="LongDocOutputFieldsPanel"
-                                Grid.Row="1"
-                                Spacing="8"
-                                    Visibility="Collapsed"
-                                VerticalAlignment="Top">
+                        <!-- Output fields -->
+                        <StackPanel x:Name="LongDocOutputFieldsPanel" Grid.Row="1" Spacing="8"
+                                    VerticalAlignment="Top">
                             <TextBlock Text="Output Folder"
                                        FontSize="12"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>

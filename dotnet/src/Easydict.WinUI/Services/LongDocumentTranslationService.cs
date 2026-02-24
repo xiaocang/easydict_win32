@@ -2,9 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
-using PdfSharpCore.Pdf.IO;
+using Easydict.WinUI.Services.DocumentExport;
 using UglyToad.PdfPig;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using UglyToad.PdfPig.Content;
@@ -15,7 +13,8 @@ namespace Easydict.WinUI.Services;
 
 public enum LongDocumentInputMode
 {
-    Manual,
+    PlainText,
+    Markdown,
     Pdf
 }
 
@@ -57,7 +56,7 @@ public enum LayoutRegionSource
 public sealed class LongDocumentTranslationCheckpoint
 {
     public required LongDocumentInputMode InputMode { get; init; }
-    public string? SourcePdfPath { get; init; }
+    public string? SourceFilePath { get; init; }
     public required List<string> SourceChunks { get; init; }
     public required List<LongDocumentChunkMetadata> ChunkMetadata { get; init; }
     public required Dictionary<int, string> TranslatedChunks { get; init; }
@@ -83,6 +82,7 @@ public sealed class LongDocumentTranslationResult
 {
     public required LongDocumentJobState State { get; init; }
     public required string OutputPath { get; init; }
+    public string? BilingualOutputPath { get; init; }
     public required int TotalChunks { get; init; }
     public required int SucceededChunks { get; init; }
     public required IReadOnlyList<int> FailedChunkIndexes { get; init; }
@@ -93,31 +93,6 @@ public sealed class LongDocumentTranslationResult
 public sealed class LongDocumentTranslationService
 {
     private sealed record RetryExecutionSummary(LongDocumentQualityReport? CoreQualityReport, int ReusedByCanonicalCount);
-    private sealed record BackfillRenderingMetrics(
-        int CandidateBlocks,
-        int RenderedBlocks,
-        int MissingBoundingBoxBlocks,
-        int ShrinkFontBlocks,
-        int TruncatedBlocks,
-        int ObjectReplaceBlocks,
-        int OverlayModeBlocks,
-        int StructuredFallbackBlocks,
-        IReadOnlyDictionary<int, BackfillPageMetrics>? PageMetrics)
-    {
-        public static BackfillRenderingMetrics Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, null);
-    }
-
-    private sealed class PageBackfillAccumulator
-    {
-        public int CandidateBlocks { get; set; }
-        public int RenderedBlocks { get; set; }
-        public int MissingBoundingBoxBlocks { get; set; }
-        public int ShrinkFontBlocks { get; set; }
-        public int TruncatedBlocks { get; set; }
-        public int ObjectReplaceBlocks { get; set; }
-        public int OverlayModeBlocks { get; set; }
-        public int StructuredFallbackBlocks { get; set; }
-    }
 
     private sealed record CanonicalTranslationEntry(int ChunkIndex, int PageNumber, string Translation);
 
@@ -165,6 +140,7 @@ public sealed class LongDocumentTranslationService
         Action<string>? onProgress = null,
         CancellationToken cancellationToken = default,
         LayoutDetectionMode layoutDetection = LayoutDetectionMode.Heuristic,
+        DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
         string? visionEndpoint = null,
         string? visionApiKey = null,
         string? visionModel = null)
@@ -172,7 +148,7 @@ public sealed class LongDocumentTranslationService
         var sourceDocument = await BuildSourceDocumentAsync(
             mode, input, layoutDetection, visionEndpoint, visionApiKey, visionModel,
             onProgress, cancellationToken);
-        var sourcePdfPath = mode == LongDocumentInputMode.Pdf ? input : null;
+        var sourceFilePath = input;
         var hasAnySourceText = sourceDocument.Pages
             .SelectMany(page => page.Blocks)
             .Any(block => !string.IsNullOrWhiteSpace(block.Text));
@@ -213,7 +189,7 @@ public sealed class LongDocumentTranslationService
         var checkpoint = new LongDocumentTranslationCheckpoint
         {
             InputMode = mode,
-            SourcePdfPath = sourcePdfPath,
+            SourceFilePath = sourceFilePath,
             SourceChunks = allBlocks.Select(item => item.Block.OriginalText).ToList(),
             ChunkMetadata = allBlocks
                 .Select((item, index) =>
@@ -265,7 +241,7 @@ public sealed class LongDocumentTranslationService
         EnforceTerminologyConsistency(checkpoint);
 
         onProgress?.Invoke("Rendering translated output...");
-        return FinalizeResult(checkpoint, outputPath, onProgress, coreResult.QualityReport);
+        return FinalizeResult(checkpoint, outputPath, onProgress, coreResult.QualityReport, outputMode);
     }
 
     public async Task<LongDocumentTranslationResult> RetryFailedChunksAsync(
@@ -275,20 +251,21 @@ public sealed class LongDocumentTranslationService
         string outputPath,
         string serviceId,
         Action<string>? onProgress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DocumentOutputMode outputMode = DocumentOutputMode.Monolingual)
     {
         ValidateCheckpointOrThrow(checkpoint);
 
         if (checkpoint.FailedChunkIndexes.Count == 0)
         {
-            return FinalizeResult(checkpoint, outputPath, onProgress, BuildQualityReportFromCheckpoint(checkpoint));
+            return FinalizeResult(checkpoint, outputPath, onProgress, BuildQualityReportFromCheckpoint(checkpoint), outputMode);
         }
 
         onProgress?.Invoke($"Retrying {checkpoint.FailedChunkIndexes.Count} failed chunks...");
         var retrySummary = await TranslatePendingChunksAsync(_coreLongDocumentService, checkpoint, from, to, serviceId, onProgress, cancellationToken);
         EnforceTerminologyConsistency(checkpoint);
         var qualityReport = BuildQualityReportFromRetry(checkpoint, retrySummary);
-        return FinalizeResult(checkpoint, outputPath, onProgress, qualityReport);
+        return FinalizeResult(checkpoint, outputPath, onProgress, qualityReport, outputMode);
     }
 
     private static async Task<RetryExecutionSummary> TranslatePendingChunksAsync(
@@ -409,11 +386,24 @@ public sealed class LongDocumentTranslationService
         return new RetryExecutionSummary(retryResult.QualityReport, reusedByCanonical);
     }
 
+    private static IDocumentExportService ResolveExportService(string? sourceFilePath)
+    {
+        var ext = Path.GetExtension(sourceFilePath)?.ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => new PdfExportService(),
+            ".md" => new MarkdownExportService(),
+            ".txt" => new PlainTextExportService(),
+            _ => throw new NotSupportedException($"Unsupported file format: {ext}")
+        };
+    }
+
     private static LongDocumentTranslationResult FinalizeResult(
         LongDocumentTranslationCheckpoint checkpoint,
         string outputPath,
         Action<string>? onProgress,
-        LongDocumentQualityReport qualityReport)
+        LongDocumentQualityReport qualityReport,
+        DocumentOutputMode outputMode = DocumentOutputMode.Monolingual)
     {
         ValidateCheckpointOrThrow(checkpoint);
 
@@ -423,20 +413,10 @@ public sealed class LongDocumentTranslationService
             throw new InvalidOperationException("Translation failed for all chunks.");
         }
 
-        onProgress?.Invoke("Generating output PDF...");
-        BackfillRenderingMetrics backfillMetrics;
-        if (checkpoint.InputMode == LongDocumentInputMode.Pdf &&
-            !string.IsNullOrWhiteSpace(checkpoint.SourcePdfPath) &&
-            File.Exists(checkpoint.SourcePdfPath))
-        {
-            backfillMetrics = ExportPdfWithCoordinateBackfill(checkpoint, checkpoint.SourcePdfPath, outputPath);
-        }
-        else
-        {
-            backfillMetrics = ExportStructuredPdf(checkpoint, outputPath);
-        }
+        onProgress?.Invoke("Generating output document...");
 
-        qualityReport = MergeBackfillMetrics(qualityReport, backfillMetrics);
+        var exportService = ResolveExportService(checkpoint.SourceFilePath);
+        var exportResult = exportService.Export(checkpoint, checkpoint.SourceFilePath!, outputPath, outputMode);
 
         var state = checkpoint.FailedChunkIndexes.Count switch
         {
@@ -444,14 +424,18 @@ public sealed class LongDocumentTranslationService
             _ => LongDocumentJobState.PartialSuccess
         };
 
+        var primaryPath = exportResult.OutputPath;
         onProgress?.Invoke(state == LongDocumentJobState.Completed
-            ? $"Completed: {outputPath}"
+            ? exportResult.BilingualOutputPath != null && exportResult.BilingualOutputPath != primaryPath
+                ? $"Completed: {primaryPath} + {exportResult.BilingualOutputPath}"
+                : $"Completed: {primaryPath}"
             : $"Partially completed: {succeededCount}/{checkpoint.SourceChunks.Count} chunks. You can retry failed chunks.");
 
         return new LongDocumentTranslationResult
         {
             State = state,
-            OutputPath = outputPath,
+            OutputPath = primaryPath,
+            BilingualOutputPath = exportResult.BilingualOutputPath,
             TotalChunks = checkpoint.SourceChunks.Count,
             SucceededChunks = succeededCount,
             FailedChunkIndexes = checkpoint.FailedChunkIndexes.OrderBy(i => i).ToList(),
@@ -511,28 +495,80 @@ public sealed class LongDocumentTranslationService
 
     private static SourceDocument BuildSourceDocument(LongDocumentInputMode mode, string input)
     {
-        if (mode == LongDocumentInputMode.Manual)
-        {
-            var manualBlocks = SplitManualTextIntoBlocks(input, 1).ToList();
-            return new SourceDocument
-            {
-                DocumentId = "manual-input",
-                Pages =
-                [
-                    new SourceDocumentPage
-                    {
-                        PageNumber = 1,
-                        Blocks = manualBlocks
-                    }
-                ]
-            };
-        }
-
         if (!File.Exists(input))
         {
-            throw new FileNotFoundException("PDF file not found.", input);
+            throw new FileNotFoundException("Source file not found.", input);
         }
 
+        if (mode is LongDocumentInputMode.PlainText or LongDocumentInputMode.Markdown)
+        {
+            return BuildSourceDocumentFromTextFile(input);
+        }
+
+        return BuildSourceDocumentFromPdf(input);
+    }
+
+    private static SourceDocument BuildSourceDocumentFromTextFile(string filePath)
+    {
+        var text = File.ReadAllText(filePath);
+        var blocks = SplitTextIntoBlocks(text, 1).ToList();
+
+        return new SourceDocument
+        {
+            DocumentId = Path.GetFileNameWithoutExtension(filePath),
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks = blocks
+                }
+            ]
+        };
+    }
+
+    private static IEnumerable<SourceDocumentBlock> SplitTextIntoBlocks(string text, int pageNumber)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            yield return new SourceDocumentBlock
+            {
+                BlockId = $"p{pageNumber}-b1",
+                BlockType = SourceBlockType.Paragraph,
+                Text = string.Empty
+            };
+
+            yield break;
+        }
+
+        var normalized = text.Replace("\r\n", "\n");
+        var rawBlocks = normalized
+            .Split("\n\n", StringSplitOptions.TrimEntries)
+            .Where(block => !string.IsNullOrWhiteSpace(block))
+            .ToList();
+
+        if (rawBlocks.Count == 0)
+        {
+            rawBlocks.Add(normalized.Trim());
+        }
+
+        for (var i = 0; i < rawBlocks.Count; i++)
+        {
+            var blockText = rawBlocks[i].Trim();
+            var blockType = GuessBlockType(blockText);
+
+            yield return new SourceDocumentBlock
+            {
+                BlockId = $"p{pageNumber}-b{i + 1}",
+                BlockType = blockType,
+                Text = blockText,
+                IsFormulaLike = blockType == SourceBlockType.Formula
+            };
+        }
+    }
+
+    private static SourceDocument BuildSourceDocumentFromPdf(string input)
+    {
         using var document = PdfPigDocument.Open(input);
         var pages = document.GetPages()
             .Select(page =>
@@ -567,7 +603,8 @@ public sealed class LongDocumentTranslationService
 
     /// <summary>
     /// Async version of BuildSourceDocument that supports ML layout detection.
-    /// Falls back to heuristic for manual input or when ML detection is set to Heuristic.
+    /// Text/Markdown modes always use heuristic (no PDF pages to analyze).
+    /// Falls back to heuristic when ML detection is set to Heuristic.
     /// </summary>
     private async Task<SourceDocument> BuildSourceDocumentAsync(
         LongDocumentInputMode mode,
@@ -579,15 +616,16 @@ public sealed class LongDocumentTranslationService
         Action<string>? onProgress,
         CancellationToken ct)
     {
-        // Manual mode always uses heuristic (no PDF pages to analyze)
-        if (mode == LongDocumentInputMode.Manual || layoutDetection == LayoutDetectionMode.Heuristic)
+        // Text/Markdown modes don't have PDF pages for ML layout detection
+        if (mode is LongDocumentInputMode.PlainText or LongDocumentInputMode.Markdown ||
+            layoutDetection == LayoutDetectionMode.Heuristic)
         {
             return BuildSourceDocument(mode, input);
         }
 
         if (!File.Exists(input))
         {
-            throw new FileNotFoundException("PDF file not found.", input);
+            throw new FileNotFoundException("Source file not found.", input);
         }
 
         var strategy = GetLayoutDetectionStrategy();
@@ -706,498 +744,7 @@ public sealed class LongDocumentTranslationService
         };
     }
 
-    private static BackfillRenderingMetrics ExportPdfWithCoordinateBackfill(LongDocumentTranslationCheckpoint checkpoint, string sourcePdfPath, string outputPath)
-    {
-        var outputDirectory = Path.GetDirectoryName(outputPath);
-        if (!string.IsNullOrWhiteSpace(outputDirectory))
-        {
-            Directory.CreateDirectory(outputDirectory);
-        }
-
-        using var doc = PdfReader.Open(sourcePdfPath, PdfDocumentOpenMode.Modify);
-        var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
-
-        var candidateBlocks = 0;
-        var renderedBlocks = 0;
-        var missingBoundingBoxBlocks = 0;
-        var shrinkFontBlocks = 0;
-        var truncatedBlocks = 0;
-        var objectReplaceBlocks = 0;
-        var overlayModeBlocks = 0;
-        var pageMetrics = new Dictionary<int, PageBackfillAccumulator>();
-
-        foreach (var chunkIndex in Enumerable.Range(0, checkpoint.SourceChunks.Count))
-        {
-            if (!checkpoint.TranslatedChunks.TryGetValue(chunkIndex, out var translated) || string.IsNullOrWhiteSpace(translated))
-            {
-                continue;
-            }
-
-            var metadata = metadataByChunkIndex[chunkIndex];
-            if (metadata.SourceBlockType == SourceBlockType.Formula || metadata.IsFormulaLike)
-            {
-                continue;
-            }
-
-            candidateBlocks++;
-            var perPage = GetOrCreatePageBackfill(pageMetrics, metadata.PageNumber);
-            perPage.CandidateBlocks++;
-
-            if (metadata.BoundingBox is null)
-            {
-                missingBoundingBoxBlocks++;
-                perPage.MissingBoundingBoxBlocks++;
-                continue;
-            }
-
-            var pageIndex = metadata.PageNumber - 1;
-            if (pageIndex < 0 || pageIndex >= doc.Pages.Count)
-            {
-                missingBoundingBoxBlocks++;
-                perPage.MissingBoundingBoxBlocks++;
-                continue;
-            }
-
-            var page = doc.Pages[pageIndex];
-            var sourceText = checkpoint.SourceChunks[chunkIndex];
-            if (TryReplacePdfTextObject(page, sourceText, translated))
-            {
-                renderedBlocks++;
-                objectReplaceBlocks++;
-                perPage.RenderedBlocks++;
-                perPage.ObjectReplaceBlocks++;
-                continue;
-            }
-
-            using var gfx = XGraphics.FromPdfPage(page, XGraphicsPdfPageOptions.Append);
-            var box = metadata.BoundingBox.Value;
-
-            var drawX = Math.Max(0, box.X);
-            var drawY = Math.Max(0, page.Height.Point - (box.Y + box.Height));
-            var drawWidth = Math.Max(40, box.Width);
-            var drawHeight = Math.Max(14, box.Height);
-
-            var rect = new XRect(drawX, drawY, drawWidth, drawHeight);
-            var baseFont = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike);
-            var font = FitFontToRect(gfx, translated, baseFont, rect.Width, rect.Height);
-            if (font.Size < baseFont.Size)
-            {
-                shrinkFontBlocks++;
-                perPage.ShrinkFontBlocks++;
-            }
-
-            var wrappedLines = WrapTextByWidth(gfx, translated, font, rect.Width).ToList();
-            var maxVisibleLines = Math.Max(1, (int)Math.Floor(rect.Height / 14d));
-            if (wrappedLines.Count > maxVisibleLines)
-            {
-                wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
-                var last = wrappedLines[^1];
-                wrappedLines[^1] = last.Length > 1 ? $"{last.TrimEnd('.', ' ')}…" : "…";
-                truncatedBlocks++;
-                perPage.TruncatedBlocks++;
-            }
-
-            var lineY = rect.Y;
-            foreach (var line in wrappedLines)
-            {
-                gfx.DrawString(line, font, XBrushes.Black, new XRect(rect.X, lineY, rect.Width, 20), XStringFormats.TopLeft);
-                lineY += 14;
-            }
-
-            renderedBlocks++;
-            overlayModeBlocks++;
-            perPage.RenderedBlocks++;
-            perPage.OverlayModeBlocks++;
-        }
-
-        doc.Save(outputPath);
-
-        return new BackfillRenderingMetrics(
-            candidateBlocks,
-            renderedBlocks,
-            missingBoundingBoxBlocks,
-            shrinkFontBlocks,
-            truncatedBlocks,
-            objectReplaceBlocks,
-            overlayModeBlocks,
-            0,
-            BuildPageBackfillMetrics(pageMetrics));
-    }
-
-    private static BackfillRenderingMetrics ExportStructuredPdf(LongDocumentTranslationCheckpoint checkpoint, string outputPath)
-    {
-        var outputDirectory = Path.GetDirectoryName(outputPath);
-        if (!string.IsNullOrWhiteSpace(outputDirectory))
-        {
-            Directory.CreateDirectory(outputDirectory);
-        }
-
-        var doc = new PdfSharpCore.Pdf.PdfDocument();
-        var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
-        var groupedChunks = Enumerable.Range(0, checkpoint.SourceChunks.Count)
-            .OrderBy(index => metadataByChunkIndex[index].PageNumber)
-            .ThenBy(index => metadataByChunkIndex[index].OrderInPage)
-            .ThenBy(index => index)
-            .GroupBy(index => metadataByChunkIndex[index].PageNumber);
-
-        foreach (var pageGroup in groupedChunks)
-        {
-            var page = doc.AddPage();
-            var gfx = XGraphics.FromPdfPage(page);
-
-            try
-            {
-                const int margin = 40;
-                var y = margin;
-                var width = page.Width - margin * 2;
-
-                var headingFont = new XFont("Arial", 14, XFontStyle.Bold);
-                gfx.DrawString($"Page {pageGroup.Key}", headingFont, XBrushes.Black, new XRect(margin, y, width, 24), XStringFormats.TopLeft);
-                y += 24;
-
-                foreach (var chunkIndex in pageGroup)
-                {
-                    var metadata = metadataByChunkIndex[chunkIndex];
-                    var content = checkpoint.TranslatedChunks.TryGetValue(chunkIndex, out var translated)
-                        ? translated
-                        : $"[Chunk {chunkIndex + 1} translation failed. Retry required.]";
-
-                    var font = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike);
-                    foreach (var line in WrapText(content, 95))
-                    {
-                        if (y > page.Height - margin)
-                        {
-                            page = doc.AddPage();
-                            var nextGraphics = XGraphics.FromPdfPage(page);
-                            gfx.Dispose();
-                            gfx = nextGraphics;
-                            y = margin;
-                        }
-
-                        gfx.DrawString(line, font, XBrushes.Black, new XRect(margin, y, width, 20), XStringFormats.TopLeft);
-                        y += 16;
-                    }
-
-                    y += 8;
-                }
-            }
-            finally
-            {
-                gfx.Dispose();
-            }
-        }
-
-        doc.Save(outputPath);
-
-        var structuredPageMetrics = groupedChunks.ToDictionary(
-            group => group.Key,
-            group => new BackfillPageMetrics
-            {
-                CandidateBlocks = 0,
-                RenderedBlocks = 0,
-                MissingBoundingBoxBlocks = 0,
-                ShrinkFontBlocks = 0,
-                TruncatedBlocks = 0,
-                ObjectReplaceBlocks = 0,
-                OverlayModeBlocks = 0,
-                StructuredFallbackBlocks = group.Count()
-            });
-
-        return new BackfillRenderingMetrics(0, 0, 0, 0, 0, 0, 0, checkpoint.SourceChunks.Count, structuredPageMetrics);
-    }
-
-    private static bool TryReplacePdfTextObject(PdfPage page, string sourceText, string translatedText)
-    {
-        if (string.IsNullOrWhiteSpace(sourceText) || string.IsNullOrWhiteSpace(translatedText))
-        {
-            return false;
-        }
-
-        if (!IsAscii(sourceText) || !IsAscii(translatedText))
-        {
-            return false;
-        }
-
-        try
-        {
-            var createSingleContent = page.Contents.GetType().GetMethod("CreateSingleContent");
-            if (createSingleContent is null)
-            {
-                return false;
-            }
-
-            var contentStream = createSingleContent.Invoke(page.Contents, null);
-            if (contentStream is null)
-            {
-                return false;
-            }
-
-            var streamProperty = contentStream.GetType().GetProperty("Stream");
-            var streamValue = streamProperty?.GetValue(contentStream);
-            if (streamValue is null)
-            {
-                return false;
-            }
-
-            var valueProperty = streamValue.GetType().GetProperty("Value");
-            var raw = valueProperty?.GetValue(streamValue) as byte[];
-            if (raw is null || raw.Length == 0)
-            {
-                return false;
-            }
-
-            var content = Encoding.ASCII.GetString(raw);
-            if (!TryPatchPdfLiteralToken(content, sourceText, translatedText, out var patched))
-            {
-                return false;
-            }
-
-            valueProperty?.SetValue(streamValue, Encoding.ASCII.GetBytes(patched));
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static bool TryPatchPdfLiteralToken(string content, string sourceText, string translatedText, out string patched)
-    {
-        patched = content;
-
-        var escapedSource = EscapePdfLiteralString(sourceText);
-        var sourceToken = $"({escapedSource})";
-        var idx = content.IndexOf(sourceToken, StringComparison.Ordinal);
-        if (idx >= 0)
-        {
-            if (translatedText.Length > sourceText.Length)
-            {
-                return false;
-            }
-
-            var padded = translatedText.PadRight(sourceText.Length);
-            var escapedTranslated = EscapePdfLiteralString(padded);
-            var targetToken = $"({escapedTranslated})";
-
-            patched = content.Remove(idx, sourceToken.Length).Insert(idx, targetToken);
-            return true;
-        }
-
-        if (!TryPatchPdfArrayTextToken(content, sourceText, translatedText, out patched))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool TryPatchPdfArrayTextToken(string content, string sourceText, string translatedText, out string patched)
-    {
-        patched = content;
-        var normalizedSource = NormalizePdfTextForMatch(sourceText);
-        if (string.IsNullOrWhiteSpace(normalizedSource))
-        {
-            return false;
-        }
-
-        foreach (Match match in Regex.Matches(content, @"\[(?<body>.*?)\]\s*TJ", RegexOptions.Singleline))
-        {
-            var bodyGroup = match.Groups["body"];
-            if (!bodyGroup.Success)
-            {
-                continue;
-            }
-
-            var extracted = ExtractPdfLiteralStrings(bodyGroup.Value);
-            if (extracted.Count == 0)
-            {
-                continue;
-            }
-
-            var combined = string.Concat(extracted.Select(item => item.Value));
-            if (!string.Equals(NormalizePdfTextForMatch(combined), normalizedSource, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var escapedTranslated = EscapePdfLiteralString(translatedText);
-            var replacement = $"({escapedTranslated}) Tj";
-            patched = content.Remove(match.Index, match.Length).Insert(match.Index, replacement);
-            return true;
-        }
-
-        return false;
-    }
-
-    private static List<(int Start, int Length, string Value)> ExtractPdfLiteralStrings(string content)
-    {
-        var items = new List<(int Start, int Length, string Value)>();
-
-        for (var i = 0; i < content.Length; i++)
-        {
-            if (content[i] != '(')
-            {
-                continue;
-            }
-
-            var (length, value) = ParsePdfLiteralString(content, i);
-            if (length <= 0)
-            {
-                continue;
-            }
-
-            items.Add((i, length, value));
-            i += length - 1;
-        }
-
-        return items;
-    }
-
-    private static (int Length, string Value) ParsePdfLiteralString(string content, int startIndex)
-    {
-        var builder = new StringBuilder();
-        var nesting = 0;
-        var escaped = false;
-
-        for (var index = startIndex; index < content.Length; index++)
-        {
-            var current = content[index];
-
-            if (index == startIndex)
-            {
-                nesting = 1;
-                continue;
-            }
-
-            if (escaped)
-            {
-                builder.Append(current);
-                escaped = false;
-                continue;
-            }
-
-            if (current == '\\')
-            {
-                escaped = true;
-                continue;
-            }
-
-            if (current == '(')
-            {
-                nesting++;
-                builder.Append(current);
-                continue;
-            }
-
-            if (current == ')')
-            {
-                nesting--;
-                if (nesting == 0)
-                {
-                    return (index - startIndex + 1, builder.ToString());
-                }
-
-                builder.Append(current);
-                continue;
-            }
-
-            builder.Append(current);
-        }
-
-        return (0, string.Empty);
-    }
-
-    private static string NormalizePdfTextForMatch(string text)
-    {
-        return string.Concat(text.Where(c => !char.IsWhiteSpace(c)));
-    }
-
-    private static string EscapePdfLiteralString(string text)
-    {
-        return text
-            .Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("(", "\\(", StringComparison.Ordinal)
-            .Replace(")", "\\)", StringComparison.Ordinal);
-    }
-
-    private static bool IsAscii(string text)
-    {
-        return text.All(c => c <= 0x7F);
-    }
-
-    private static XFont PickFont(SourceBlockType sourceBlockType, bool isFormulaLike)
-    {
-        if (sourceBlockType == SourceBlockType.Heading)
-        {
-            return new XFont("Arial", 14, XFontStyle.Bold);
-        }
-
-        if (sourceBlockType == SourceBlockType.Formula || isFormulaLike)
-        {
-            return new XFont("Consolas", 11, XFontStyle.Italic);
-        }
-
-        return new XFont("Arial", 11);
-    }
-
-    private static XFont FitFontToRect(XGraphics gfx, string text, XFont baseFont, double width, double height)
-    {
-        var size = baseFont.Size;
-        while (size >= 8)
-        {
-            var candidate = new XFont(baseFont.Name, size, baseFont.Style);
-            var lines = WrapTextByWidth(gfx, text, candidate, width).ToList();
-            var maxLines = Math.Max(1, (int)Math.Floor(height / 14d));
-            if (lines.Count <= maxLines)
-            {
-                return candidate;
-            }
-
-            size -= 0.5;
-        }
-
-        return new XFont(baseFont.Name, 8, baseFont.Style);
-    }
-
-    private static IEnumerable<SourceDocumentBlock> SplitManualTextIntoBlocks(string? text, int pageNumber)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            yield return new SourceDocumentBlock
-            {
-                BlockId = $"p{pageNumber}-b1",
-                BlockType = SourceBlockType.Paragraph,
-                Text = string.Empty
-            };
-
-            yield break;
-        }
-
-        var normalized = text.Replace("\r\n", "\n");
-        var rawBlocks = normalized
-            .Split("\n\n", StringSplitOptions.TrimEntries)
-            .Where(block => !string.IsNullOrWhiteSpace(block))
-            .ToList();
-
-        if (rawBlocks.Count == 0)
-        {
-            rawBlocks.Add(normalized.Trim());
-        }
-
-        for (var i = 0; i < rawBlocks.Count; i++)
-        {
-            var blockText = rawBlocks[i].Trim();
-            var blockType = GuessBlockType(blockText);
-
-            yield return new SourceDocumentBlock
-            {
-                BlockId = $"p{pageNumber}-b{i + 1}",
-                BlockType = blockType,
-                Text = blockText,
-                IsFormulaLike = blockType == SourceBlockType.Formula
-            };
-        }
-    }
+    // --- PDF export methods removed; see PdfExportService ---
 
     private static IEnumerable<SourceDocumentBlock> ExtractLayoutBlocksFromPage(PdfPigPage page)
     {
@@ -1534,99 +1081,6 @@ public sealed class LongDocumentTranslationService
         return SourceBlockType.Paragraph;
     }
 
-    private static IEnumerable<string> WrapText(string text, int maxChars)
-    {
-        foreach (var paragraph in text.Split('\n'))
-        {
-            var p = paragraph.TrimEnd('\r');
-            if (p.Length <= maxChars)
-            {
-                yield return p;
-                continue;
-            }
-
-            var start = 0;
-            while (start < p.Length)
-            {
-                var len = Math.Min(maxChars, p.Length - start);
-                yield return p.Substring(start, len);
-                start += len;
-            }
-        }
-    }
-
-    private static IEnumerable<string> WrapTextByWidth(XGraphics gfx, string text, XFont font, double maxWidth)
-    {
-        foreach (var paragraph in text.Replace("\r\n", "\n").Split('\n'))
-        {
-            if (string.IsNullOrEmpty(paragraph))
-            {
-                yield return string.Empty;
-                continue;
-            }
-
-            var words = paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (words.Length == 0)
-            {
-                yield return string.Empty;
-                continue;
-            }
-
-            var line = words[0];
-            for (var i = 1; i < words.Length; i++)
-            {
-                var candidate = $"{line} {words[i]}";
-                if (gfx.MeasureString(candidate, font).Width <= maxWidth)
-                {
-                    line = candidate;
-                }
-                else
-                {
-                    yield return line;
-                    line = words[i];
-                }
-            }
-
-            yield return line;
-        }
-    }
-
-    private static PageBackfillAccumulator GetOrCreatePageBackfill(
-        IDictionary<int, PageBackfillAccumulator> pageMetrics,
-        int pageNumber)
-    {
-        if (!pageMetrics.TryGetValue(pageNumber, out var metrics))
-        {
-            metrics = new PageBackfillAccumulator();
-            pageMetrics[pageNumber] = metrics;
-        }
-
-        return metrics;
-    }
-
-    private static IReadOnlyDictionary<int, BackfillPageMetrics>? BuildPageBackfillMetrics(
-        IReadOnlyDictionary<int, PageBackfillAccumulator> pageMetrics)
-    {
-        if (pageMetrics.Count == 0)
-        {
-            return null;
-        }
-
-        return pageMetrics.ToDictionary(
-            entry => entry.Key,
-            entry => new BackfillPageMetrics
-            {
-                CandidateBlocks = entry.Value.CandidateBlocks,
-                RenderedBlocks = entry.Value.RenderedBlocks,
-                MissingBoundingBoxBlocks = entry.Value.MissingBoundingBoxBlocks,
-                ShrinkFontBlocks = entry.Value.ShrinkFontBlocks,
-                TruncatedBlocks = entry.Value.TruncatedBlocks,
-                ObjectReplaceBlocks = entry.Value.ObjectReplaceBlocks,
-                OverlayModeBlocks = entry.Value.OverlayModeBlocks,
-                StructuredFallbackBlocks = entry.Value.StructuredFallbackBlocks
-            });
-    }
-
     private static IReadOnlyDictionary<int, BackfillPageMetrics>? MergePageBackfillMetrics(
         IReadOnlyDictionary<int, BackfillPageMetrics>? previous,
         IReadOnlyDictionary<int, BackfillPageMetrics>? current)
@@ -1669,33 +1123,6 @@ public sealed class LongDocumentTranslationService
         }
 
         return merged;
-    }
-
-    private static LongDocumentQualityReport MergeBackfillMetrics(LongDocumentQualityReport baseReport, BackfillRenderingMetrics metrics)
-    {
-        var backfill = new BackfillQualityMetrics
-        {
-            CandidateBlocks = metrics.CandidateBlocks,
-            RenderedBlocks = metrics.RenderedBlocks,
-            MissingBoundingBoxBlocks = metrics.MissingBoundingBoxBlocks,
-            ShrinkFontBlocks = metrics.ShrinkFontBlocks,
-            TruncatedBlocks = metrics.TruncatedBlocks,
-            ObjectReplaceBlocks = metrics.ObjectReplaceBlocks,
-            OverlayModeBlocks = metrics.OverlayModeBlocks,
-            StructuredFallbackBlocks = metrics.StructuredFallbackBlocks,
-            PageMetrics = metrics.PageMetrics,
-            RetryMergeStrategy = baseReport.BackfillMetrics?.RetryMergeStrategy
-        };
-
-        return new LongDocumentQualityReport
-        {
-            StageTimingsMs = new Dictionary<string, long>(baseReport.StageTimingsMs, StringComparer.Ordinal),
-            BackfillMetrics = backfill,
-            TotalBlocks = baseReport.TotalBlocks,
-            TranslatedBlocks = baseReport.TranslatedBlocks,
-            SkippedBlocks = baseReport.SkippedBlocks,
-            FailedBlocks = baseReport.FailedBlocks
-        };
     }
 
     private static LongDocumentQualityReport BuildQualityReportFromCheckpoint(LongDocumentTranslationCheckpoint checkpoint)

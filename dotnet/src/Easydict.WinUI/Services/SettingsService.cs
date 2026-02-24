@@ -171,6 +171,15 @@ public sealed class SettingsService
     /// </summary>
     public bool OnnxModelDownloaded { get; set; }
 
+    /// <summary>
+    /// Document output mode for long document translation.
+    /// Values: "Monolingual", "Bilingual", "Both".
+    /// Monolingual = translated-only (default).
+    /// Bilingual = original + translated interleaved.
+    /// Both = generates both monolingual and bilingual outputs.
+    /// </summary>
+    public string DocumentOutputMode { get; set; } = "Monolingual";
+
     // UI settings
     public bool AlwaysOnTop { get; set; } = false;
 

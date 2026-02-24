@@ -614,6 +614,28 @@
                 </Border>
             </StackPanel>
 
+            <!-- Document Output Mode -->
+            <StackPanel x:Name="DocumentOutputModeSection" Spacing="12">
+                <TextBlock x:Name="DocumentOutputModeHeaderText" Text="Document Output Mode" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="DocumentOutputModeDescriptionText"
+                           Text="Choose output format for long document translation. Bilingual mode interleaves original and translated content."
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <ComboBox x:Name="DocumentOutputModeCombo" Header="Output Mode" Width="300"
+                                  SelectionChanged="OnDocumentOutputModeChanged">
+                            <ComboBoxItem x:Name="DocumentOutputMonolingualItem" Content="Monolingual (Default)" Tag="Monolingual" />
+                            <ComboBoxItem x:Name="DocumentOutputBilingualItem" Content="Bilingual (Interleaved)" Tag="Bilingual" />
+                            <ComboBoxItem x:Name="DocumentOutputBothItem" Content="Both" Tag="Both" />
+                        </ComboBox>
+                        <TextBlock x:Name="DocumentOutputModeNoteText"
+                                   Text="Bilingual PDF: interleaved pages. Markdown/Text: original + translation blocks."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
             <!-- HTTP Proxy -->
             <StackPanel x:Name="HttpProxySection" Spacing="12">
                 <TextBlock x:Name="HttpProxyHeaderText" Text="HTTP Proxy" FontSize="18" FontWeight="SemiBold" />

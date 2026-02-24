@@ -922,4 +922,22 @@
   <data name="LayoutDetection_VisionService" xml:space="preserve">
     <value>视觉服务</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>文档输出模式</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>选择输出格式。双语模式将原文和译文交替排列。</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>单语（默认）</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>双语（交替排列）</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>同时生成</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF 双语：交替页面。Markdown/文本：原文+译文段落。</value>
+  </data>
 </root>

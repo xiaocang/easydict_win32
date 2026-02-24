@@ -881,4 +881,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>Aucun problème de grammaire trouvé.</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Mode de sortie du document</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Choisissez le format de sortie. Le mode bilingue alterne le contenu original et traduit.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Monolingue (Par défaut)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Bilingue (Alternée)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Les deux</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF bilingue : pages alternées. Markdown/Texte : blocs original+traduction.</value>
+  </data>
 </root>

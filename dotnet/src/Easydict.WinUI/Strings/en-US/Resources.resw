@@ -922,4 +922,22 @@
   <data name="LayoutDetection_VisionService" xml:space="preserve">
     <value>Vision Service</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Document Output Mode</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Choose output format. Bilingual mode interleaves original and translated content.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Monolingual (Default)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Bilingual (Interleaved)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Both</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>Bilingual PDF: interleaved pages. Markdown/Text: original + translation blocks.</value>
+  </data>
 </root>

@@ -308,4 +308,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Mod Output Dokumen</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Pilih format output. Mod dwibahasa menyelang-selikan kandungan asal dan terjemahan.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Satu bahasa (Lalai)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Dwibahasa (Berselang-seli)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Kedua-dua</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF dwibahasa: halaman berselang-seli. Markdown/Teks: blok asal+terjemahan.</value>
+  </data>
 </root>

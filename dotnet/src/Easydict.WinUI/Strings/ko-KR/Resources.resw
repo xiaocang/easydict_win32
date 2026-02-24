@@ -881,4 +881,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>문법 문제가 발견되지 않았습니다.</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>문서 출력 모드</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>출력 형식을 선택합니다. 이중 언어 모드는 원문과 번역을 교대로 배치합니다.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>단일 언어 (기본값)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>이중 언어 (교대 배치)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>모두</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>이중 언어 PDF: 교대 페이지. Markdown/텍스트: 원문+번역 블록.</value>
+  </data>
 </root>

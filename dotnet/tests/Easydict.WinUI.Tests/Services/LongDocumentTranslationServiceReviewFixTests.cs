@@ -1,6 +1,7 @@
 using System.Reflection;
 using Easydict.TranslationService.LongDocument;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.DocumentExport;
 using WinUiLongDocumentTranslationService = Easydict.WinUI.Services.LongDocumentTranslationService;
 using FluentAssertions;
 using Xunit;
@@ -28,35 +29,37 @@ public class LongDocumentTranslationServiceReviewFixTests
     }
 
     [Fact]
-    public void MergeBackfillMetrics_ShouldNotPolluteStageTimingKeys()
+    public void TryPatchPdfLiteralToken_ShouldPatchMultiSegmentTjArray()
     {
-        var serviceType = typeof(WinUiLongDocumentTranslationService);
-        var metricsType = serviceType.GetNestedType("BackfillRenderingMetrics", BindingFlags.NonPublic);
-        var mergeMethod = serviceType.GetMethod("MergeBackfillMetrics", BindingFlags.NonPublic | BindingFlags.Static);
+        var serviceType = typeof(PdfExportService);
+        var method = serviceType.GetMethod("TryPatchPdfLiteralToken", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
 
-        metricsType.Should().NotBeNull();
-        mergeMethod.Should().NotBeNull();
+        const string content = "BT /F1 11 Tf [(Hello) -80 (World)] TJ ET";
+        var args = new object?[] { content, "Hello World", "Bonjour World", null };
 
-        var metrics = Activator.CreateInstance(metricsType!, [10, 8, 1, 2, 1, 3, 5, 0, null]);
-        var baseReport = new LongDocumentQualityReport
-        {
-            StageTimingsMs = new Dictionary<string, long>
-            {
-                ["translate"] = 123,
-                ["structured-layout-output"] = 20
-            },
-            BackfillMetrics = null,
-            TotalBlocks = 10,
-            TranslatedBlocks = 8,
-            SkippedBlocks = 1,
-            FailedBlocks = []
-        };
+        var patched = (bool)method!.Invoke(null, args)!;
+        patched.Should().BeTrue();
+        args[3].Should().BeOfType<string>();
+        var patchedContent = (string)args[3]!;
+        patchedContent.Should().Contain(" Tj");
+        patchedContent.Should().Contain("(Bonjour World)");
+        patchedContent.Should().NotContain("[(Hello)");
+    }
 
-        var merged = (LongDocumentQualityReport)mergeMethod!.Invoke(null, [baseReport, metrics!])!;
-        merged.StageTimingsMs.Keys.Should().Contain(["translate", "structured-layout-output"]);
-        merged.StageTimingsMs.Keys.Should().NotContain(key => key.StartsWith("backfill", StringComparison.OrdinalIgnoreCase));
-        merged.BackfillMetrics.Should().NotBeNull();
-        merged.BackfillMetrics!.ObjectReplaceBlocks.Should().Be(3);
+    [Fact]
+    public void TryPatchPdfLiteralToken_ShouldReturnFalseWhenTranslationWouldBeTruncated()
+    {
+        var serviceType = typeof(PdfExportService);
+        var method = serviceType.GetMethod("TryPatchPdfLiteralToken", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        const string content = "BT /F1 11 Tf (short) Tj ET";
+        var args = new object?[] { content, "short", "this translation is longer", null };
+
+        var patched = (bool)method!.Invoke(null, args)!;
+        patched.Should().BeFalse();
+        args[3].Should().Be(content);
     }
 
     [Fact]
@@ -71,7 +74,7 @@ public class LongDocumentTranslationServiceReviewFixTests
 
         var checkpoint = new LongDocumentTranslationCheckpoint
         {
-            InputMode = LongDocumentInputMode.Manual,
+            InputMode = LongDocumentInputMode.Pdf,
             SourceChunks = ["a"],
             ChunkMetadata =
             [
@@ -159,8 +162,6 @@ public class LongDocumentTranslationServiceReviewFixTests
         merged.RetryMergeStrategy.Should().Be("accumulate");
     }
 
-
-
     [Fact]
     public void MergeRetryBackfillMetrics_ShouldMergePageMetrics()
     {
@@ -242,43 +243,6 @@ public class LongDocumentTranslationServiceReviewFixTests
     }
 
     [Fact]
-    public void TryPatchPdfLiteralToken_ShouldPatchMultiSegmentTjArray()
-    {
-        var serviceType = typeof(WinUiLongDocumentTranslationService);
-        var method = serviceType.GetMethod("TryPatchPdfLiteralToken", BindingFlags.NonPublic | BindingFlags.Static);
-        method.Should().NotBeNull();
-
-        const string content = "BT /F1 11 Tf [(Hello) -80 (World)] TJ ET";
-        var args = new object?[] { content, "Hello World", "Bonjour World", null };
-
-        var patched = (bool)method!.Invoke(null, args)!;
-        patched.Should().BeTrue();
-        args[3].Should().BeOfType<string>();
-        var patchedContent = (string)args[3]!;
-        patchedContent.Should().Contain(" Tj");
-        patchedContent.Should().Contain("(Bonjour World)");
-        patchedContent.Should().NotContain("[(Hello)");
-    }
-
-
-
-    [Fact]
-    public void TryPatchPdfLiteralToken_ShouldReturnFalseWhenTranslationWouldBeTruncated()
-    {
-        var serviceType = typeof(WinUiLongDocumentTranslationService);
-        var method = serviceType.GetMethod("TryPatchPdfLiteralToken", BindingFlags.NonPublic | BindingFlags.Static);
-        method.Should().NotBeNull();
-
-        const string content = "BT /F1 11 Tf (short) Tj ET";
-        var args = new object?[] { content, "short", "this translation is longer", null };
-
-        var patched = (bool)method!.Invoke(null, args)!;
-        patched.Should().BeFalse();
-        args[3].Should().Be(content);
-    }
-
-
-    [Fact]
     public void EnforceTerminologyConsistency_ShouldPreferNearbyPageCanonicalTranslation()
     {
         var serviceType = typeof(WinUiLongDocumentTranslationService);
@@ -287,7 +251,7 @@ public class LongDocumentTranslationServiceReviewFixTests
 
         var checkpoint = new LongDocumentTranslationCheckpoint
         {
-            InputMode = LongDocumentInputMode.Manual,
+            InputMode = LongDocumentInputMode.Pdf,
             SourceChunks = ["Term A", "Term A", "Term A"],
             ChunkMetadata =
             [
@@ -414,13 +378,12 @@ public class LongDocumentTranslationServiceReviewFixTests
             80d
         ]);
 
-        var left = (LayoutRegionType)inferMethod!.Invoke(null, [profile!, 120d, 320d, 900d, 820d, "left paragraph"])!;
-        var right = (LayoutRegionType)inferMethod.Invoke(null, [profile!, 700d, 900d, 900d, 820d, "right paragraph"])!;
-        var body = (LayoutRegionType)inferMethod.Invoke(null, [profile!, 470d, 530d, 900d, 820d, "center bridge"])!;
+        var leftCol = (LayoutRegionType)inferMethod!.Invoke(null, [profile!, 50d, 400d, 700d, 650d, "Left column text"])!;
+        var rightCol = (LayoutRegionType)inferMethod.Invoke(null, [profile!, 600d, 950d, 700d, 650d, "Right column text"])!;
+        var body = (LayoutRegionType)inferMethod.Invoke(null, [profile!, 440d, 560d, 700d, 650d, "Center text"])!;
 
-        left.Should().Be(LayoutRegionType.LeftColumn);
-        right.Should().Be(LayoutRegionType.RightColumn);
+        leftCol.Should().Be(LayoutRegionType.LeftColumn);
+        rightCol.Should().Be(LayoutRegionType.RightColumn);
         body.Should().Be(LayoutRegionType.Body);
     }
-
 }

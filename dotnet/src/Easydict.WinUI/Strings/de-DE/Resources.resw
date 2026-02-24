@@ -881,4 +881,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>Keine Grammatikprobleme gefunden.</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Dokumentausgabemodus</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Ausgabeformat wählen. Der zweisprachige Modus wechselt zwischen Original und Übersetzung ab.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Einsprachig (Standard)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Zweisprachig (abwechselnd)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Beide</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>Zweisprachiges PDF: abwechselnde Seiten. Markdown/Text: Original+Übersetzungsblöcke.</value>
+  </data>
 </root>

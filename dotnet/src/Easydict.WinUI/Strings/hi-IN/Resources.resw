@@ -308,4 +308,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>दस्तावेज़ आउटपुट मोड</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>आउटपुट प्रारूप चुनें। द्विभाषी मोड मूल और अनुवादित सामग्री को बारी-बारी से दिखाता है।</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>एकभाषी (डिफ़ॉल्ट)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>द्विभाषी (बारी-बारी से)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>दोनों</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>द्विभाषी PDF: बारी-बारी पृष्ठ। Markdown/टेक्स्ट: मूल+अनुवाद ब्लॉक।</value>
+  </data>
 </root>

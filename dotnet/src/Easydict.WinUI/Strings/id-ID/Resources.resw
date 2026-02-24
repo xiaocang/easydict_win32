@@ -710,4 +710,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Mode Output Dokumen</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Pilih format output. Mode bilingual menyelang-nyeling konten asli dan terjemahan.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Monolingual (Default)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Bilingual (Bergantian)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Keduanya</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF bilingual: halaman bergantian. Markdown/Teks: blok asli+terjemahan.</value>
+  </data>
 </root>

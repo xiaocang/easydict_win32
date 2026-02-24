@@ -764,4 +764,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>وضع إخراج المستند</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>اختر تنسيق الإخراج. الوضع ثنائي اللغة يتناوب بين المحتوى الأصلي والمترجم.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>أحادي اللغة (افتراضي)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>ثنائي اللغة (متناوب)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>كلاهما</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF ثنائي اللغة: صفحات متناوبة. Markdown/نص: كتل أصلية+ترجمة.</value>
+  </data>
 </root>

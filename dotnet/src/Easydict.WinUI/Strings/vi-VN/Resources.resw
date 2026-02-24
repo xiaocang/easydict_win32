@@ -764,4 +764,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Chế độ xuất tài liệu</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Chọn định dạng xuất. Chế độ song ngữ xen kẽ nội dung gốc và bản dịch.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Đơn ngữ (Mặc định)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Song ngữ (Xen kẽ)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Cả hai</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF song ngữ: các trang xen kẽ. Markdown/Văn bản: khối gốc+bản dịch.</value>
+  </data>
 </root>

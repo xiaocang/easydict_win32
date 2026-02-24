@@ -881,4 +881,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>未發現語法問題。</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>文件輸出模式</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>選擇輸出格式。雙語模式將原文和譯文交替排列。</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>單語（預設）</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>雙語（交替排列）</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>同時產生</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF 雙語：交替頁面。Markdown/文字：原文+譯文段落。</value>
+  </data>
 </root>

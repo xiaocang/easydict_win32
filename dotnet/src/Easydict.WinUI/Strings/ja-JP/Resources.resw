@@ -881,4 +881,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>文法の問題は見つかりませんでした。</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>ドキュメント出力モード</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>出力形式を選択します。バイリンガルモードは原文と翻訳を交互に配置します。</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>単言語（デフォルト）</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>バイリンガル（交互配置）</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>両方</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>バイリンガルPDF：交互ページ。Markdown/テキスト：原文+翻訳ブロック。</value>
+  </data>
 </root>

@@ -718,4 +718,22 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
   </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>โหมดเอาต์พุตเอกสาร</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>เลือกรูปแบบเอาต์พุต โหมดสองภาษาจะสลับเนื้อหาต้นฉบับและแปลสลับกัน</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>ภาษาเดียว (ค่าเริ่มต้น)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>สองภาษา (สลับกัน)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>ทั้งสอง</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF สองภาษา: หน้าสลับกัน Markdown/ข้อความ: บล็อกต้นฉบับ+แปล</value>
+  </data>
 </root>

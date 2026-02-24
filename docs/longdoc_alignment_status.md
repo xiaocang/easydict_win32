@@ -130,12 +130,240 @@
 
 ---
 
+## 上游对标差距分析（vs PDFMathTranslate，桌面端适用）
+
+> 参考项目：[PDFMathTranslate](https://github.com/Byaidu/PDFMathTranslate)（Python，AGPL-3.0）
+> 对标版本：v1.9.11
+> 分析日期：2026-02-24
+>
+> 以下仅列出**适用于桌面端**的差距项，已排除 Gradio Web UI、Flask/Celery REST API、MCP Server、Docker 部署等纯服务端/Web 特性。
+
+---
+
+### G1（P0）：双语/对照 PDF 输出
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 输出模式 | 每次翻译产出 **两份** PDF：单语 (`*-mono.pdf`) + 双语对照 (`*-dual.pdf`) | 仅输出**单语** PDF（翻译后文本替换/覆盖） |
+| 双语实现 | `doc_en.move_page()` 交错插入原文页与译文页 | 无 |
+
+**差距说明**：
+- 学术论文翻译场景中，用户常需原文/译文对照阅读。
+- 建议增加 `OutputMode` 选项：`Monolingual` / `Bilingual` / `Both`。
+- 双语模式可采用交错页或左右分栏两种策略。
+
+---
+
+### G2（P0）：ML 布局检测（DocLayout-YOLO）
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 检测方式 | **DocLayout-YOLO ONNX 模型**推理（HuggingFace 下载） | **纯启发式**（行间距阈值 + 四分位分析） |
+| 检测类别 | Text、Figure、Table、Formula、Caption、Isolated Formula 等 | Header、Footer、Body、LeftColumn、RightColumn、TableLike |
+| 置信度 | 模型输出 confidence（阈值 0.25） | 启发式 `RegionConfidence`（0~1 规则打分） |
+| 图表/公式区域保护 | Figures/Tables/Formulas 标记 “abandoned”（整块跳过） | 仅 `SourceBlockType.Formula` 跳过翻译 |
+
+**差距说明**：
+- 启发式在复杂学术论文（多栏、浮动图表、数学密集）上误判率较高。
+- ML 模型可准确识别 Figure/Table 边界，避免将图注或表格内容送翻译。
+- 建议：引入 ONNX Runtime (.NET) + DocLayout-YOLO 模型，作为可选增强路径（启发式为默认，ML 为 opt-in）。
+- ONNX Runtime 支持 CPU 推理，无需 GPU；模型约 25MB，可首次使用时下载。
+
+---
+
+### G3（P1）：三级公式检测
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 第 1 级：布局级 | DocLayout-YOLO 检测整块公式区域 → 整块跳过 | 无（依赖 `SourceBlockType` 标记） |
+| 第 2 级：字体级 | 正则匹配数学字体名：`CM[^R]|MS.M|XY|MT` 等 | 无 |
+| 第 3 级：字符级 | Unicode 分类分析（数学符号、希腊字母、修饰符）+ 上下标检测（`child.size < parent.size * 0.79`） | 正则匹配 LaTeX 分隔符：`$...$`、`\(...\)`、`\[...\]` |
+| 占位符机制 | `{vN}` 占位，翻译后恢复原始 glyph 数据（`var`/`varl`/`varf` 列表） | `[[FORMULA_N_HASH]]` 占位 + 类型分类（InlineMath/DisplayMath/UnitFragment） |
+| 用户可配 | `--vfont`（字体正则）、`--vchar`（字符正则）CLI 参数 | 无用户可配选项 |
+
+**差距说明**：
+- 当前仅有正则级检测，对 PDF 内嵌公式（非 LaTeX 源码）的识别能力不足。
+- 字体级检测在 PDF 原生文本场景中效果显著（PDF 内含字体元信息）。
+- 建议：在 `ExtractLayoutBlocksFromPage` 中增加字体名匹配逻辑（PdfPig 提供 `Letter.FontName`）。
+- 用户可配正则可在设置页面公式保护分组下暴露。
+
+---
+
+### G4（P1）：并行翻译
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 并发模型 | 默认 **4 线程**（`--thread` 可配） | **顺序逐块**（`await` 逐个调用） |
+| 粒度 | 页内文本段并行翻译 | 无并行 |
+
+**差距说明**：
+- 对于 50+ 页文档，顺序翻译耗时显著（每块 1~3 秒，数百块累计数分钟）。
+- 建议：引入 `SemaphoreSlim` 控制并发度，使用 `Task.WhenAll` 批量提交翻译请求。
+- 需考虑各翻译 API 的限频策略（Google 免费版较严格，LLM 服务通常更宽松）。
+- 并发度可在 `LongDocumentTranslationOptions` 中配置（默认 1 保持向后兼容）。
+
+---
+
+### G5（P1）：CJK/多语言字体嵌入
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| CJK 字体 | 按目标语言下载 SourceHanSerif 区域变体（CN/JP/KR/TW） | 使用系统 Arial（不支持 CJK 字符渲染） |
+| 非拉丁文 | 19 种 Noto 字体系列（Arabic、Thai、Hindi、Bengali 等） | 无 |
+| 回退字体 | GoNotoKurrent（通用回退） | 无 |
+| 字体子集化 | 默认启用，减小输出文件体积（`--skip-subset-fonts` 可关闭） | 无 |
+| 行高适配 | `LANG_LINEHEIGHT_MAP` 按目标语言调整（中文 1.4、俄文 0.8 等） | 固定字号（Arial 11pt / Heading 14pt） |
+
+**差距说明**：
+- 当前 overlay 模式使用 Arial 字体，**CJK 译文实际输出为空白或方块**。
+- 这是影响输出质量的**最关键差距**之一。
+- 建议：
+  1. 按目标语言嵌入合适字体（SourceHanSans/SourceHanSerif 开源免费）。
+  2. 增加字体子集化（仅嵌入使用到的字符，控制文件大小）。
+  3. 引入 `LANG_LINEHEIGHT_MAP` 按语言适配行高。
+
+---
+
+### G6（P1）：持久化翻译缓存
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 缓存粒度 | **段落级**（每段翻译结果独立缓存） | **文档级**去重（SHA256 哈希 → 输出路径映射） |
+| 存储 | SQLite（Peewee ORM）+ WAL 模式 | JSON 文件（`longdoc_dedup_index.json`） |
+| 缓存键 | `(translate_engine, engine_params, original_text)` 复合唯一键 | `(InputMode, ServiceId, From, To, InputHash)` |
+| 断点续传 | 隐式：中断后重跑，已翻译段落自动从缓存命中 | 内存 checkpoint + 手动重试失败块 |
+| 绕过缓存 | `--ignore-cache` CLI 参数 | 无 |
+
+**差距说明**：
+- 当前 checkpoint 仅在内存中，应用重启后丢失。
+- 段落级持久缓存可显著减少重复翻译的 API 调用（尤其跨文档共享术语段落）。
+- 建议：引入 SQLite 本地缓存（.NET 有 `Microsoft.Data.Sqlite` + Dapper 或 EF Core Sqlite）。
+
+---
+
+### G7（P2）：页范围选择
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 选择方式 | `--pages` 参数：All / First / First 5 / 自定义范围（如 `1-5,8,10-12`） | 固定翻译全部页面 |
+| GUI 支持 | Gradio 下拉 + 自定义输入框 | 无 |
+
+**差距说明**：
+- 大型文档（100+ 页）用户常只需翻译摘要/前几页。
+- 全量翻译浪费 API 配额且耗时长。
+- 建议：在 `LongDocumentTranslationOptions` 增加 `PageRange` 属性，UI 提供选项。
+
+---
+
+### G8（P2）：URL 输入支持
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 输入源 | 本地文件 **+** URL（自动下载 PDF） | 仅本地文件（文件选择器） |
+
+**差距说明**：
+- 用户常从 arXiv、学术网站直接获取 PDF 链接。
+- 建议：在手动输入模式增加 URL 粘贴支持，自动下载后进入翻译流程。
+
+---
+
+### G9（P2）：源字体保留与匹配
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 字体保留 | 通过 `page.insert_font()` 插入字体，引用源 PDF 资源字典 | 对象级替换保留源字体，overlay 使用固定 Arial |
+| CID 字体 | 支持 4 位十六进制编码 | 不支持 |
+| 源字体匹配 | 通过 PDF xref 关联字体 | 无 |
+
+**差距说明**：
+- overlay 模式下字体风格与原文差异较大（学术论文常用 Times/Computer Modern，overlay 用 Arial）。
+- 建议：overlay 渲染时尝试从源 PDF 提取字体名并匹配（PdfPig 可获取 `Letter.FontName`），至少做到衬线/无衬线的区分。
+
+---
+
+### G10（P2）：批量目录处理
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 方式 | `--dir` 递归遍历目录下所有 PDF，逐一翻译 | 文件选择器多选 → 队列逐个处理 |
+| 自动化 | CLI 可脚本化调用 | GUI 操作为主 |
+
+**差距说明**：
+- 当前队列功能已基本覆盖此需求，但缺少 CLI 入口。
+- 建议：为长文档翻译增加 CLI 模式（便于自动化脚本集成）。
+
+---
+
+### G11（P3）：PDF/A 兼容模式
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 支持 | `--compatible` 模式预转 PDF/A 格式 | 无 |
+
+**差距说明**：
+- 部分 PDF 因加密、权限限制或格式异常导致文本提取失败。
+- PDF/A 预转换可提升兼容性。
+- 优先级较低，视用户反馈决定是否引入。
+
+---
+
+### G12（P3）：PDF 压缩与优化
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 压缩 | Deflate 压缩 + garbage collection level 3 | 无主动压缩 |
+| 文件大小 | 输出文件接近或小于输入 | 输出文件可能显著大于输入（overlay 叠加） |
+
+**差距说明**：
+- overlay 模式在每个文本区域叠加白色背景 + 新文本层，累积导致文件膨胀。
+- 建议：导出完成后对 PDF 执行压缩（PdfSharp 支持 `PdfDocument.Save` 时压缩选项）。
+
+---
+
+### 差距汇总矩阵
+
+| 编号 | 差距项 | 优先级 | 难度 | 影响范围 |
+|------|--------|--------|------|----------|
+| G1 | 双语/对照 PDF 输出 | P0 | 中 | 输出质量 |
+| G2 | ML 布局检测（DocLayout-YOLO） | P0 | 高 | 布局准确度 |
+| G3 | 三级公式检测 | P1 | 中 | 公式保护 |
+| G4 | 并行翻译 | P1 | 低 | 性能 |
+| G5 | CJK/多语言字体嵌入 | P1 | 中 | 输出可读性（关键） |
+| G6 | 持久化翻译缓存 | P1 | 中 | 断点续传/API 节省 |
+| G7 | 页范围选择 | P2 | 低 | 用户体验 |
+| G8 | URL 输入支持 | P2 | 低 | 用户体验 |
+| G9 | 源字体保留与匹配 | P2 | 中 | 输出质量 |
+| G10 | 批量目录处理 / CLI 入口 | P2 | 低 | 自动化 |
+| G11 | PDF/A 兼容模式 | P3 | 低 | 兼容性 |
+| G12 | PDF 压缩与优化 | P3 | 低 | 文件大小 |
+
+---
+
+### 已对齐项（无差距或 Easydict 已实现等效能力）
+
+| 能力 | Easydict 实现 | 备注 |
+|------|--------------|------|
+| 翻译服务插件架构 | 15+ 服务，`BaseTranslationService` 继承体系 | 服务数量与 PDFMathTranslate 相当 |
+| LLM 流式翻译 | `IStreamTranslationService` + SSE 解析 | 已支持 |
+| 公式占位符保护 | `[[FORMULA_N_HASH]]` + 类型分类 + 恢复校验 | 已对齐核心机制（M4 完成） |
+| 布局区域推断 | `LayoutProfile` + 自适应阈值 + 双栏检测 | 启发式已成熟（M2 完成） |
+| 术语一致性 | 按页窗口优先 + 全局回退 | 已对齐（M3 完成） |
+| 质量报告 | `BackfillQualityMetrics` + page-level 明细 | 已对齐（M1 完成） |
+| OCR 回退 | `WindowsOcrService` 集成 | 已支持 |
+| Checkpoint/重试 | 内存 checkpoint + 失败块重试 | 核心机制已有（持久化为差距） |
+| 文件去重 | SHA256 哈希 + dedup index | 已支持 |
+| 取消操作 | `CancellationTokenSource` + 任务级取消 | 已支持 |
+
+---
+
 ## 风险与备注
 
 - 对象级替换目前仍依赖 PDF 内容格式前提，无法保证所有 PDF 均成功替换。
 - 对于非 ASCII / 复杂编码内容，仍会走 overlay 降级路径。
 - 建议在 CI 中引入样本 PDF 回归，以防布局/回填逻辑回退。
 - 当前 `RetryMergeStrategy` 采用累计策略（accumulate），后续可按产品需求调整为 latest-only。
+- G5（CJK 字体嵌入）虽列为 P1，但实际是**阻塞非拉丁语系输出可用性**的关键项，建议优先处理。
+- G2（ML 布局检测）技术难度最高，需评估 ONNX Runtime .NET 包大小对分发包的影响。
 
 
 ## 本轮实现说明
@@ -147,7 +375,7 @@
   - 自适应 header/footer 与 table-like 判定
   - 双栏边界判定（left/right/body）
 - CI 新增长文档测试门禁，确保 longdoc 相关回归在主流程中可见。
-- 已细化“中期改进列表”为 M1~M6 执行计划（含优先级、建议实现与验收标准）。
+- 已细化”中期改进列表”为 M1~M6 执行计划（含优先级、建议实现与验收标准）。
 
 - 本轮按 roadmap 落地 M1：新增 page-level 回填指标（含 object replace / overlay / structured fallback），并覆盖重试合并逻辑测试。
 - 本轮按 roadmap 落地 M2：为 RegionType 增加置信度与来源标签，并补充对应反射测试。

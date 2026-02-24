@@ -1,8 +1,7 @@
 name: ARM64 MSIX Smoke Test
 
 on:
-  pull_request:
-    branches: [master]
+  workflow_dispatch:
 
 permissions:
   contents: read

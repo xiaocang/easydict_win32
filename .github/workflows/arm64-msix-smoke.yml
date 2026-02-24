@@ -124,6 +124,12 @@ jobs:
       - name: Install MSIX package
         shell: pwsh
         run: |
+          $existing = Get-AppxPackage -Name "xiaocang.EasydictforWindows" -ErrorAction SilentlyContinue
+          if ($existing) {
+            Write-Host "Removing existing package: $($existing.PackageFullName)"
+            Remove-AppxPackage -Package $existing.PackageFullName
+            Write-Host "Old package removed"
+          }
           $msixPath = Resolve-Path "dotnet/msix/Easydict-arm64-smoke.msix"
           Add-AppxPackage -Path $msixPath
 

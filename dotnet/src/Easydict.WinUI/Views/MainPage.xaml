@@ -579,49 +579,75 @@
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Margin="0,0,0,4"/>
 
-                        <!-- File input panel (all modes use file selection) -->
-                        <Grid x:Name="LongDocFilePanel" Grid.Row="1"
-                              VerticalAlignment="Top">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
+                        <!-- File input panel (file picker + file list) -->
+                        <StackPanel x:Name="LongDocFilePanel" Grid.Row="1"
+                                    VerticalAlignment="Top" Spacing="8">
 
-                            <TextBox x:Name="LongDocPdfPathTextBox"
-                                     Grid.Row="0"
-                                     PlaceholderText="PDF file path..."
-                                     HorizontalAlignment="Stretch"
-                                     TextChanged="OnLongDocPdfPathChanged"/>
+                            <!-- Browse button + selected file display -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="LongDocFilePathDisplay"
+                                           Grid.Column="0"
+                                           Text="No file selected"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Button x:Name="LongDocBrowseButton"
+                                        Grid.Column="1"
+                                        Content="Browse..."
+                                        Click="OnLongDocBrowseClicked"
+                                        Margin="8,0,0,0" />
+                            </Grid>
 
-                            <!-- Queue panel (PDF only) -->
-                            <StackPanel x:Name="LongDocQueuePanel"
-                                    Grid.Row="1"
-                                    Spacing="8"
-                                        Margin="0,8,0,0"
-                                    Visibility="Collapsed">
-                                <TextBlock Text="Batch PDF Queue (one path per line, optional)"
-                                           FontSize="12"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                <TextBox x:Name="LongDocBatchPdfPathsTextBox"
-                                         AcceptsReturn="True"
-                                         TextWrapping="Wrap"
-                                         Height="100"
-                                         PlaceholderText="D:\docs\a.pdf&#10;D:\docs\b.pdf"/>
+                            <!-- Selected file list (visible when multiple files selected) -->
+                            <ListView x:Name="LongDocFileListView"
+                                      MaxHeight="150"
+                                      Visibility="Collapsed"
+                                      SelectionMode="None"
+                                      Padding="0">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding}" Grid.Column="0"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"
+                                                       FontSize="12" />
+                                            <Button Grid.Column="1"
+                                                    Click="OnLongDocRemoveFileClicked"
+                                                    Tag="{Binding}"
+                                                    Padding="4,2"
+                                                    Background="Transparent"
+                                                    BorderThickness="0">
+                                                <FontIcon Glyph="&#xE711;" FontSize="10" />
+                                            </Button>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+
+                            <!-- Queue controls (visible when multiple files selected) -->
+                            <StackPanel x:Name="LongDocQueuePanel" Orientation="Horizontal" Spacing="8"
+                                        Visibility="Collapsed">
+                                <Button x:Name="LongDocStartQueueButton"
+                                        Content="Start Queue"
+                                        Click="OnLongDocStartQueueClicked" />
+                                <Button x:Name="LongDocCancelQueueButton"
+                                        Content="Cancel Queue"
+                                        Click="OnLongDocCancelQueueClicked"
+                                        IsEnabled="False" />
                                 <CheckBox x:Name="LongDocRunInBackgroundCheckBox"
-                                          Content="Run queue in background"
-                                          IsChecked="True"/>
-                                <StackPanel Orientation="Horizontal"
-                                        Spacing="8">
-                                    <Button x:Name="LongDocStartQueueButton"
-                                            Content="Start PDF Queue"
-                                            Click="OnLongDocStartQueueClicked"/>
-                                    <Button x:Name="LongDocCancelQueueButton"
-                                            Content="Cancel Queue"
-                                            Click="OnLongDocCancelQueueClicked"
-                                            IsEnabled="False"/>
-                                </StackPanel>
+                                          Content="Background"
+                                          IsChecked="True"
+                                          VerticalAlignment="Center" />
                             </StackPanel>
-                        </Grid>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
@@ -662,17 +688,31 @@
                         <!-- Output fields -->
                         <StackPanel x:Name="LongDocOutputFieldsPanel" Grid.Row="1" Spacing="8"
                                     VerticalAlignment="Top">
-                            <TextBlock Text="Output Folder"
+                            <TextBlock x:Name="LongDocOutputFolderLabel" Text="Output Folder"
                                        FontSize="12"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                            <TextBox x:Name="LongDocOutputFolderTextBox"
-                                     PlaceholderText="e.g. C:\Users\&lt;you&gt;\Documents\Easydict\LongDocOutputs"/>
-
-                            <TextBlock Text="Output File Name"
-                                       FontSize="12"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                            <TextBox x:Name="LongDocOutputFileNameTextBox"
-                                     PlaceholderText="translated.pdf"/>
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="LongDocOutputFolderDisplay"
+                                           Grid.Column="0"
+                                           Text="(same as input file folder)"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Button x:Name="LongDocOutputBrowseButton"
+                                        Grid.Column="1"
+                                        Content="Browse..."
+                                        Click="OnLongDocOutputBrowseClicked"
+                                        Margin="8,0,0,0" />
+                            </Grid>
+                            <TextBlock x:Name="LongDocOutputNamingHint"
+                                       Text="Output: {filename}_translated.pdf"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                       FontStyle="Italic" />
                         </StackPanel>
                     </Grid>
                 </Border>

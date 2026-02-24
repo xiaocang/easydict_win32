@@ -968,4 +968,19 @@
   <data name="CustomPrompt_Note" xml:space="preserve">
     <value>Diese Anweisungen werden dem System-Prompt für LLM-Dienste angehängt. Kein Effekt auf Nicht-LLM-Dienste (Google, DeepL usw.).</value>
   </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>Durchsuchen...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>Durchsuchen...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>Keine Datei ausgewählt</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0} Dateien ausgewählt</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>Ausgabe: {filename}_translated.pdf</value>
+  </data>
 </root>

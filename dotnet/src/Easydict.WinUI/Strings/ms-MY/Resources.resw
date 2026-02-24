@@ -395,4 +395,19 @@
   <data name="CustomPrompt_Note" xml:space="preserve">
     <value>Arahan ini ditambahkan pada prompt sistem untuk perkhidmatan LLM. Tiada kesan pada perkhidmatan bukan LLM (Google, DeepL, dll.).</value>
   </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>Semak imbas...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>Semak imbas...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>Tiada fail dipilih</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0} fail dipilih</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>Output: {filename}_translated.pdf</value>
+  </data>
 </root>

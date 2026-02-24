@@ -851,4 +851,19 @@
   <data name="CustomPrompt_Note" xml:space="preserve">
     <value>تُضاف هذه التعليمات إلى موجه النظام لخدمات LLM. لا تأثير على الخدمات غير LLM (Google، DeepL، إلخ).</value>
   </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>استعراض...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>استعراض...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>لم يتم تحديد ملف</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>تم تحديد {0} ملفات</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>الإخراج: {filename}_translated.pdf</value>
+  </data>
 </root>

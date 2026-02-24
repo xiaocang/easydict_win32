@@ -851,4 +851,19 @@
   <data name="CustomPrompt_Note" xml:space="preserve">
     <value>Các hướng dẫn này được thêm vào prompt hệ thống cho các dịch vụ LLM. Không ảnh hưởng đến các dịch vụ không phải LLM (Google, DeepL, v.v.).</value>
   </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>Duyệt...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>Duyệt...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>Chưa chọn tệp</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>Đã chọn {0} tệp</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>Đầu ra: {filename}_translated.pdf</value>
+  </data>
 </root>

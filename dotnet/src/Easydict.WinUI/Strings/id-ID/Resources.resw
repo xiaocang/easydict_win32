@@ -797,4 +797,19 @@
   <data name="CustomPrompt_Note" xml:space="preserve">
     <value>Instruksi ini ditambahkan ke prompt sistem untuk layanan LLM. Tidak berpengaruh pada layanan non-LLM (Google, DeepL, dll.).</value>
   </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>Telusuri...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>Telusuri...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>Tidak ada file dipilih</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0} file dipilih</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>Output: {filename}_translated.pdf</value>
+  </data>
 </root>

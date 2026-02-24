@@ -50,6 +50,8 @@ namespace Easydict.WinUI.Views
         private CancellationTokenSource? _longDocSingleTaskCts;
         private CancellationTokenSource? _longDocQueueCts;
         private Task? _longDocQueueTask;
+        private readonly List<string> _longDocSelectedFiles = new();
+        private string _longDocOutputFolder = "";
 
         /// <summary>
         /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -1475,68 +1477,29 @@ namespace Easydict.WinUI.Views
 
         private void InitializeLongDocOutputDefaults()
         {
-            var defaultDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "Easydict",
-                "LongDocOutputs");
-
-            if (string.IsNullOrWhiteSpace(LongDocOutputFolderTextBox.Text))
+            if (string.IsNullOrWhiteSpace(_longDocOutputFolder))
             {
-                LongDocOutputFolderTextBox.Text = defaultDir;
-            }
-
-            if (string.IsNullOrWhiteSpace(LongDocOutputFileNameTextBox.Text))
-            {
-                LongDocOutputFileNameTextBox.Text = $"translated-{DateTime.Now:yyyyMMdd-HHmmss}.pdf";
+                _longDocOutputFolder = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "Easydict",
+                    "LongDocOutputs");
+                LongDocOutputFolderDisplay.Text = _longDocOutputFolder;
             }
         }
 
-        private bool TryBuildLongDocOutputPath(out string outputPath, out string errorMessage)
+        private bool TryValidateLongDocOutputFolder(out string errorMessage)
         {
-            outputPath = string.Empty;
             errorMessage = string.Empty;
 
-            var folder = LongDocOutputFolderTextBox.Text?.Trim() ?? string.Empty;
-            var fileName = LongDocOutputFileNameTextBox.Text?.Trim() ?? string.Empty;
-
-            if (string.IsNullOrWhiteSpace(folder))
+            if (string.IsNullOrWhiteSpace(_longDocOutputFolder))
             {
-                errorMessage = "Output folder is required.";
+                errorMessage = "Output folder is required. Click Browse to select a folder.";
                 return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(fileName))
-            {
-                errorMessage = "Output file name is required.";
-                return false;
-            }
-
-            foreach (var c in Path.GetInvalidFileNameChars())
-            {
-                if (fileName.Contains(c))
-                {
-                    errorMessage = "Output file name contains invalid characters.";
-                    return false;
-                }
-            }
-
-            foreach (var c in Path.GetInvalidPathChars())
-            {
-                if (folder.Contains(c))
-                {
-                    errorMessage = "Output folder contains invalid path characters.";
-                    return false;
-                }
-            }
-
-            if (!fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
-            {
-                fileName += ".pdf";
             }
 
             try
             {
-                Directory.CreateDirectory(folder);
+                Directory.CreateDirectory(_longDocOutputFolder);
             }
             catch (Exception ex)
             {
@@ -1544,13 +1507,30 @@ namespace Easydict.WinUI.Views
                 return false;
             }
 
-            outputPath = Path.Combine(folder, fileName);
             return true;
         }
 
-        private void RefreshLongDocSuggestedOutputFileName(string prefix = "translated")
+        private string BuildOutputPath(string sourceFilePath)
         {
-            LongDocOutputFileNameTextBox.Text = $"{prefix}-{DateTime.Now:yyyyMMdd-HHmmss}.pdf";
+            var folder = !string.IsNullOrWhiteSpace(_longDocOutputFolder)
+                ? _longDocOutputFolder
+                : Path.GetDirectoryName(sourceFilePath)
+                  ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var name = Path.GetFileNameWithoutExtension(sourceFilePath);
+            if (string.IsNullOrWhiteSpace(name)) name = "translated";
+            var ext = GetOutputExtension();
+            return Path.Combine(folder, $"{name}_translated{ext}");
+        }
+
+        private string GetOutputExtension()
+        {
+            var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pdf";
+            return modeTag switch
+            {
+                "plaintext" => ".txt",
+                "markdown" => ".md",
+                _ => ".pdf"
+            };
         }
 
         private static DocumentOutputMode GetDocumentOutputModeFromSettings()
@@ -1564,11 +1544,9 @@ namespace Easydict.WinUI.Views
             };
         }
 
-        private List<string> ParseBatchPdfQueueInputs()
+        private List<string> GetSelectedFilesList()
         {
-            var raw = LongDocBatchPdfPathsTextBox.Text ?? string.Empty;
-            return raw
-                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            return _longDocSelectedFiles
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -1604,11 +1582,9 @@ namespace Easydict.WinUI.Views
             LongDocTranslateButton.IsEnabled = !running;
             LongDocServiceCombo.IsEnabled = !running;
             LongDocInputModeCombo.IsEnabled = !running;
-            LongDocPdfPathTextBox.IsEnabled = !running;
-            LongDocBatchPdfPathsTextBox.IsEnabled = !running;
+            LongDocBrowseButton.IsEnabled = !running;
             LongDocRunInBackgroundCheckBox.IsEnabled = !running;
-            LongDocOutputFolderTextBox.IsEnabled = !running;
-            LongDocOutputFileNameTextBox.IsEnabled = !running;
+            LongDocOutputBrowseButton.IsEnabled = !running;
 
             if (running)
             {
@@ -1617,19 +1593,20 @@ namespace Easydict.WinUI.Views
             }
         }
 
-        private string BuildQueueOutputPath(string outputFolder, string sourcePdfPath, int queueIndex)
+        private string BuildQueueOutputPath(string outputFolder, string sourceFilePath, int queueIndex)
         {
-            var safeName = Path.GetFileNameWithoutExtension(sourcePdfPath);
+            var safeName = Path.GetFileNameWithoutExtension(sourceFilePath);
             if (string.IsNullOrWhiteSpace(safeName))
             {
                 safeName = $"file-{queueIndex:000}";
             }
 
-            var outputName = $"{safeName}-translated-{DateTime.Now:yyyyMMdd-HHmmss}.pdf";
+            var ext = GetOutputExtension();
+            var outputName = $"{safeName}_translated{ext}";
             return Path.Combine(outputFolder, outputName);
         }
 
-        private async Task ProcessLongDocQueueAsync(List<string> pdfPaths, string serviceId, string outputFolder, CancellationToken cancellationToken)
+        private async Task ProcessLongDocQueueAsync(List<string> filePaths, string serviceId, string outputFolder, LongDocumentInputMode mode, CancellationToken cancellationToken)
         {
             var from = GetSourceLanguage();
             var to = GetTargetLanguage();
@@ -1638,24 +1615,24 @@ namespace Easydict.WinUI.Views
             var skipped = 0;
             var failed = 0;
 
-            for (var i = 0; i < pdfPaths.Count; i++)
+            for (var i = 0; i < filePaths.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var pdfPath = pdfPaths[i];
-                if (!File.Exists(pdfPath))
+                var filePath = filePaths[i];
+                if (!File.Exists(filePath))
                 {
                     failed++;
                     DispatcherQueue.TryEnqueue(() =>
                     {
-                        LongDocStatusText.Text = $"Queue {i + 1}/{pdfPaths.Count} failed (file not found): {pdfPath}";
+                        LongDocStatusText.Text = $"Queue {i + 1}/{filePaths.Count} failed (file not found): {filePath}";
                     });
                     continue;
                 }
 
                 var dedupKey = await _longDocDedupService.CreateDedupKeyAsync(
-                    LongDocumentInputMode.Pdf,
-                    pdfPath,
+                    mode,
+                    filePath,
                     serviceId,
                     from,
                     to,
@@ -1667,24 +1644,24 @@ namespace Easydict.WinUI.Views
                     skipped++;
                     DispatcherQueue.TryEnqueue(() =>
                     {
-                        LongDocStatusText.Text = $"Queue {i + 1}/{pdfPaths.Count} skipped duplicate: {existingPath}";
+                        LongDocStatusText.Text = $"Queue {i + 1}/{filePaths.Count} skipped duplicate: {existingPath}";
                     });
                     continue;
                 }
 
-                var outputPath = BuildQueueOutputPath(outputFolder, pdfPath, i + 1);
+                var outputPath = BuildQueueOutputPath(outputFolder, filePath, i + 1);
 
                 var queueOutputMode = GetDocumentOutputModeFromSettings();
                 var result = await _longDocumentService.TranslateToPdfAsync(
-                    LongDocumentInputMode.Pdf,
-                    pdfPath,
+                    mode,
+                    filePath,
                     from,
                     to,
                     outputPath,
                     serviceId,
                     progress => DispatcherQueue.TryEnqueue(() =>
                     {
-                        LongDocStatusText.Text = $"Queue {i + 1}/{pdfPaths.Count}: {progress}";
+                        LongDocStatusText.Text = $"Queue {i + 1}/{filePaths.Count}: {progress}";
                     }),
                     cancellationToken,
                     outputMode: queueOutputMode);
@@ -1720,19 +1697,27 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            if (!TryBuildLongDocOutputPath(out var sampleOutputPath, out var outputError))
+            if (!TryValidateLongDocOutputFolder(out var outputError))
             {
                 LongDocStatusText.Text = outputError;
                 return;
             }
 
-            var outputFolder = Path.GetDirectoryName(sampleOutputPath) ?? string.Empty;
-            var queueItems = ParseBatchPdfQueueInputs();
+            var outputFolder = _longDocOutputFolder;
+            var queueItems = GetSelectedFilesList();
             if (queueItems.Count == 0)
             {
-                LongDocStatusText.Text = "Queue is empty. Add one PDF path per line.";
+                LongDocStatusText.Text = "No files selected. Click Browse to select files.";
                 return;
             }
+
+            var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pdf";
+            var mode = modeTag switch
+            {
+                "plaintext" => LongDocumentInputMode.PlainText,
+                "markdown" => LongDocumentInputMode.Markdown,
+                _ => LongDocumentInputMode.Pdf
+            };
 
             _longDocQueueCts?.Cancel();
             _longDocQueueCts?.Dispose();
@@ -1741,7 +1726,7 @@ namespace Easydict.WinUI.Views
             SetLongDocTaskUiState(true);
             LongDocStatusText.Text = $"Queue started: {queueItems.Count} file(s).";
 
-            _longDocQueueTask = ProcessLongDocQueueAsync(queueItems, serviceId, outputFolder, _longDocQueueCts.Token);
+            _longDocQueueTask = ProcessLongDocQueueAsync(queueItems, serviceId, outputFolder, mode, _longDocQueueCts.Token);
 
             var runInBackground = LongDocRunInBackgroundCheckBox.IsChecked == true;
             if (runInBackground)
@@ -1804,15 +1789,6 @@ namespace Easydict.WinUI.Views
 
             var selected = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
 
-            // Update file filter hint based on selected mode
-            var placeholder = selected switch
-            {
-                "plaintext" => "Plain text file path (.txt)...",
-                "markdown" => "Markdown file path (.md)...",
-                _ => "PDF file path (.pdf)..."
-            };
-            LongDocPdfPathTextBox.PlaceholderText = placeholder;
-
             // Title updates
             LongDocInputTitle.Text = selected switch
             {
@@ -1821,18 +1797,123 @@ namespace Easydict.WinUI.Views
                 _ => "PDF Input"
             };
             LongDocOutputTitle.Text = "Translation Output";
+
+            // Clear file selection when mode changes
+            _longDocSelectedFiles.Clear();
+            UpdateLongDocFileDisplay();
+
+            // Update output naming hint
+            var ext = GetOutputExtension();
+            LongDocOutputNamingHint.Text = $"Output: {{filename}}_translated{ext}";
         }
 
-        private void OnLongDocPdfPathChanged(object sender, TextChangedEventArgs e)
+        private async void OnLongDocBrowseClicked(object sender, RoutedEventArgs e)
         {
-            var pdfPath = LongDocPdfPathTextBox.Text?.Trim();
-            if (string.IsNullOrWhiteSpace(pdfPath)) return;
-            var dir = Path.GetDirectoryName(pdfPath) ?? "";
-            var name = Path.GetFileNameWithoutExtension(pdfPath);
-            if (!string.IsNullOrWhiteSpace(name))
+            try
             {
-                LongDocOutputFolderTextBox.Text = dir;
-                LongDocOutputFileNameTextBox.Text = $"{name}_translated.pdf";
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+
+                // WinUI 3 requires HWND initialization
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                // Set file filter based on current mode
+                var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pdf";
+                switch (modeTag)
+                {
+                    case "plaintext":
+                        picker.FileTypeFilter.Add(".txt");
+                        break;
+                    case "markdown":
+                        picker.FileTypeFilter.Add(".md");
+                        break;
+                    default:
+                        picker.FileTypeFilter.Add(".pdf");
+                        break;
+                }
+
+                var files = await picker.PickMultipleFilesAsync();
+                if (files == null || files.Count == 0) return;
+
+                _longDocSelectedFiles.Clear();
+                foreach (var file in files)
+                {
+                    _longDocSelectedFiles.Add(file.Path);
+                }
+
+                UpdateLongDocFileDisplay();
+                UpdateLongDocOutputFolder();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainPage] File picker error: {ex.Message}");
+            }
+        }
+
+        private void UpdateLongDocFileDisplay()
+        {
+            if (_longDocSelectedFiles.Count == 0)
+            {
+                LongDocFilePathDisplay.Text = "No file selected";
+                LongDocFileListView.Visibility = Visibility.Collapsed;
+                LongDocQueuePanel.Visibility = Visibility.Collapsed;
+            }
+            else if (_longDocSelectedFiles.Count == 1)
+            {
+                LongDocFilePathDisplay.Text = _longDocSelectedFiles[0];
+                LongDocFileListView.Visibility = Visibility.Collapsed;
+                LongDocQueuePanel.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                LongDocFilePathDisplay.Text = $"{_longDocSelectedFiles.Count} files selected";
+                LongDocFileListView.ItemsSource = null;
+                LongDocFileListView.ItemsSource = new List<string>(_longDocSelectedFiles);
+                LongDocFileListView.Visibility = Visibility.Visible;
+                LongDocQueuePanel.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void UpdateLongDocOutputFolder()
+        {
+            if (_longDocSelectedFiles.Count > 0)
+            {
+                var dir = Path.GetDirectoryName(_longDocSelectedFiles[0]);
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    _longDocOutputFolder = dir;
+                    LongDocOutputFolderDisplay.Text = dir;
+                }
+            }
+        }
+
+        private void OnLongDocRemoveFileClicked(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string path)
+            {
+                _longDocSelectedFiles.Remove(path);
+                UpdateLongDocFileDisplay();
+            }
+        }
+
+        private async void OnLongDocOutputBrowseClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FolderPicker();
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                picker.FileTypeFilter.Add("*");
+
+                var folder = await picker.PickSingleFolderAsync();
+                if (folder == null) return;
+
+                _longDocOutputFolder = folder.Path;
+                LongDocOutputFolderDisplay.Text = folder.Path;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainPage] Folder picker error: {ex.Message}");
             }
         }
 
@@ -1841,6 +1922,19 @@ namespace Easydict.WinUI.Views
             if (IsLongDocTaskRunning())
             {
                 LongDocStatusText.Text = "A task is already running. Please wait or cancel current task.";
+                return;
+            }
+
+            if (_longDocSelectedFiles.Count == 0)
+            {
+                LongDocStatusText.Text = "No file selected. Click Browse to select files.";
+                return;
+            }
+
+            // Multiple files: auto-redirect to queue processing
+            if (_longDocSelectedFiles.Count > 1)
+            {
+                OnLongDocStartQueueClicked(sender, e);
                 return;
             }
 
@@ -1865,19 +1959,15 @@ namespace Easydict.WinUI.Views
                     _ => LongDocumentInputMode.Pdf
                 };
 
-                var input = LongDocPdfPathTextBox.Text?.Trim() ?? string.Empty;
+                var input = _longDocSelectedFiles[0];
 
-                if (string.IsNullOrWhiteSpace(input))
-                {
-                    LongDocStatusText.Text = "Input cannot be empty.";
-                    return;
-                }
-
-                if (!TryBuildLongDocOutputPath(out var outputPath, out var outputError))
+                if (!TryValidateLongDocOutputFolder(out var outputError))
                 {
                     LongDocStatusText.Text = outputError;
                     return;
                 }
+
+                var outputPath = BuildOutputPath(input);
 
                 _longDocLastFrom = GetSourceLanguage();
                 _longDocLastTo = GetTargetLanguage();
@@ -1919,8 +2009,6 @@ namespace Easydict.WinUI.Views
                 {
                     await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
                 }
-
-                RefreshLongDocSuggestedOutputFileName();
             }
             catch (OperationCanceledException)
             {
@@ -1958,11 +2046,14 @@ namespace Easydict.WinUI.Views
                 SetLongDocTaskUiState(true);
                 LongDocRetryButton.IsEnabled = false;
 
-                if (!TryBuildLongDocOutputPath(out var outputPath, out var outputError))
+                if (!TryValidateLongDocOutputFolder(out var outputError))
                 {
                     LongDocStatusText.Text = outputError;
                     return;
                 }
+
+                var retrySourcePath = _longDocCheckpoint.SourceFilePath ?? "retry";
+                var outputPath = BuildOutputPath(retrySourcePath);
 
                 var retryOutputMode = GetDocumentOutputModeFromSettings();
                 var result = await _longDocumentService.RetryFailedChunksAsync(
@@ -1986,7 +2077,6 @@ namespace Easydict.WinUI.Views
                     await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
                 }
 
-                RefreshLongDocSuggestedOutputFileName("translated-retry");
             }
             catch (OperationCanceledException)
             {

@@ -968,4 +968,19 @@
   <data name="CustomPrompt_Note" xml:space="preserve">
     <value>これらの指示はLLMサービスのシステムプロンプトに追加されます。非LLMサービス（Google、DeepL等）には影響しません。</value>
   </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>参照...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>参照...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>ファイルが選択されていません</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0} 個のファイルを選択</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>出力: {filename}_translated.pdf</value>
+  </data>
 </root>

@@ -968,4 +968,19 @@
   <data name="CustomPrompt_Note" xml:space="preserve">
     <value>這些指令會追加到 LLM 服務的系統提示詞中。對非 LLM 服務（Google、DeepL 等）無效。</value>
   </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>瀏覽檔案...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>瀏覽目錄...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>未選擇檔案</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>已選擇 {0} 個檔案</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>輸出：{filename}_translated.pdf</value>
+  </data>
 </root>

@@ -968,4 +968,19 @@
   <data name="CustomPrompt_Note" xml:space="preserve">
     <value>이 지침은 LLM 서비스의 시스템 프롬프트에 추가됩니다. 비 LLM 서비스(Google, DeepL 등)에는 영향을 미치지 않습니다.</value>
   </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>찾아보기...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>찾아보기...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>선택된 파일 없음</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0}개 파일 선택됨</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>출력: {filename}_translated.pdf</value>
+  </data>
 </root>

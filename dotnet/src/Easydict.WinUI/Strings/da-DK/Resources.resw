@@ -395,4 +395,19 @@
   <data name="CustomPrompt_Note" xml:space="preserve">
     <value>Disse instruktioner tilføjes til systemprompt for LLM-tjenester. Ingen effekt på ikke-LLM-tjenester (Google, DeepL osv.).</value>
   </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>Gennemse...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>Gennemse...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>Ingen fil valgt</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0} filer valgt</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>Output: {filename}_translated.pdf</value>
+  </data>
 </root>

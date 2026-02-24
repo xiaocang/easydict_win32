@@ -884,4 +884,42 @@
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>未发现语法问题。</value>
   </data>
+
+  <!-- Layout Detection -->
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>布局检测</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>基于 ML 的长文档布局检测，提升学术论文中图表、表格和公式的识别准确度。</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>自动（推荐）</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>本地 ONNX 模型</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>视觉大模型</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>仅启发式</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>下载模型（约 75MB）</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX 模型：已就绪</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX 模型：未下载</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>下载失败</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>检测模式</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>视觉服务</value>
+  </data>
 </root>

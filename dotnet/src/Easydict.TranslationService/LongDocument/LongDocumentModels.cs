@@ -97,6 +97,7 @@ public sealed record LongDocumentTranslationOptions
     public bool EnableOcrFallback { get; init; } = true;
     public int MaxRetriesPerBlock { get; init; } = 1;
     public IReadOnlyDictionary<string, string>? Glossary { get; init; }
+    public LayoutDetectionMode LayoutDetection { get; init; } = LayoutDetectionMode.Auto;
 }
 
 public sealed record FailedBlockInfo

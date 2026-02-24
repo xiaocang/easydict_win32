@@ -152,6 +152,25 @@ public sealed class SettingsService
     /// </summary>
     public string OcrLanguage { get; set; } = "auto";
 
+    // Layout detection settings (long document translation)
+
+    /// <summary>
+    /// Layout detection mode for long document translation.
+    /// Values: "Auto", "OnnxLocal", "VisionLLM", "Heuristic".
+    /// Auto = prefer local ONNX → fallback to heuristic.
+    /// </summary>
+    public string LayoutDetectionMode { get; set; } = "Auto";
+
+    /// <summary>
+    /// Service ID for vision LLM layout detection (e.g., "openai", "gemini").
+    /// </summary>
+    public string VisionLayoutServiceId { get; set; } = "gemini";
+
+    /// <summary>
+    /// Whether the ONNX model has been downloaded.
+    /// </summary>
+    public bool OnnxModelDownloaded { get; set; }
+
     // UI settings
     public bool AlwaysOnTop { get; set; } = false;
 

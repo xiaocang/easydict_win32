@@ -34,7 +34,14 @@ public enum LayoutRegionType
     Body,
     LeftColumn,
     RightColumn,
-    TableLike
+    TableLike,
+    // ML-detected types (DocLayout-YOLO)
+    Figure,
+    Table,
+    Formula,
+    Caption,
+    Title,
+    IsolatedFormula
 }
 
 
@@ -42,7 +49,9 @@ public enum LayoutRegionSource
 {
     Unknown,
     Heuristic,
-    BlockIdFallback
+    BlockIdFallback,
+    OnnxModel,
+    VisionLLM
 }
 
 public sealed class LongDocumentTranslationCheckpoint
@@ -114,6 +123,38 @@ public sealed class LongDocumentTranslationService
 
     private readonly CoreLongDocumentTranslationService _coreLongDocumentService = new();
 
+    // Layout detection services (lazy-initialized)
+    private LayoutModelDownloadService? _layoutModelDownloadService;
+    private DocLayoutYoloService? _docLayoutYoloService;
+    private VisionLayoutDetectionService? _visionLayoutDetectionService;
+    private LayoutDetectionStrategy? _layoutDetectionStrategy;
+
+    /// <summary>
+    /// Gets or creates the layout detection strategy instance.
+    /// </summary>
+    private LayoutDetectionStrategy GetLayoutDetectionStrategy()
+    {
+        if (_layoutDetectionStrategy is not null)
+            return _layoutDetectionStrategy;
+
+        _layoutModelDownloadService ??= new LayoutModelDownloadService();
+        _docLayoutYoloService ??= new DocLayoutYoloService(_layoutModelDownloadService);
+        _visionLayoutDetectionService ??= new VisionLayoutDetectionService(new HttpClient());
+        _layoutDetectionStrategy = new LayoutDetectionStrategy(
+            _docLayoutYoloService, _visionLayoutDetectionService, _layoutModelDownloadService);
+
+        return _layoutDetectionStrategy;
+    }
+
+    /// <summary>
+    /// Gets the layout model download service for UI status checks.
+    /// </summary>
+    public LayoutModelDownloadService GetLayoutModelDownloadService()
+    {
+        _layoutModelDownloadService ??= new LayoutModelDownloadService();
+        return _layoutModelDownloadService;
+    }
+
     public async Task<LongDocumentTranslationResult> TranslateToPdfAsync(
         LongDocumentInputMode mode,
         string input,
@@ -122,9 +163,15 @@ public sealed class LongDocumentTranslationService
         string outputPath,
         string serviceId,
         Action<string>? onProgress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        LayoutDetectionMode layoutDetection = LayoutDetectionMode.Heuristic,
+        string? visionEndpoint = null,
+        string? visionApiKey = null,
+        string? visionModel = null)
     {
-        var sourceDocument = BuildSourceDocument(mode, input);
+        var sourceDocument = await BuildSourceDocumentAsync(
+            mode, input, layoutDetection, visionEndpoint, visionApiKey, visionModel,
+            onProgress, cancellationToken);
         var sourcePdfPath = mode == LongDocumentInputMode.Pdf ? input : null;
         var hasAnySourceText = sourceDocument.Pages
             .SelectMany(page => page.Blocks)
@@ -500,6 +547,147 @@ public sealed class LongDocumentTranslationService
                 };
             })
             .ToList();
+
+        if (pages.Count == 0)
+        {
+            pages.Add(new SourceDocumentPage
+            {
+                PageNumber = 1,
+                IsScanned = true,
+                Blocks = []
+            });
+        }
+
+        return new SourceDocument
+        {
+            DocumentId = Path.GetFileNameWithoutExtension(input),
+            Pages = pages
+        };
+    }
+
+    /// <summary>
+    /// Async version of BuildSourceDocument that supports ML layout detection.
+    /// Falls back to heuristic for manual input or when ML detection is set to Heuristic.
+    /// </summary>
+    private async Task<SourceDocument> BuildSourceDocumentAsync(
+        LongDocumentInputMode mode,
+        string input,
+        LayoutDetectionMode layoutDetection,
+        string? visionEndpoint,
+        string? visionApiKey,
+        string? visionModel,
+        Action<string>? onProgress,
+        CancellationToken ct)
+    {
+        // Manual mode always uses heuristic (no PDF pages to analyze)
+        if (mode == LongDocumentInputMode.Manual || layoutDetection == LayoutDetectionMode.Heuristic)
+        {
+            return BuildSourceDocument(mode, input);
+        }
+
+        if (!File.Exists(input))
+        {
+            throw new FileNotFoundException("PDF file not found.", input);
+        }
+
+        var strategy = GetLayoutDetectionStrategy();
+
+        // For Auto mode, check if ONNX is available; if not, fall back to sync heuristic
+        if (layoutDetection == LayoutDetectionMode.Auto && !strategy.IsOnnxDownloaded)
+        {
+            return BuildSourceDocument(mode, input);
+        }
+
+        onProgress?.Invoke("Analyzing page layouts with ML model...");
+
+        using var document = PdfPigDocument.Open(input);
+        var pdfPages = document.GetPages().ToList();
+        var pages = new List<SourceDocumentPage>();
+
+        for (var i = 0; i < pdfPages.Count; i++)
+        {
+            var page = pdfPages[i];
+            var pageText = page.Text;
+            var scanned = string.IsNullOrWhiteSpace(pageText);
+
+            if (scanned)
+            {
+                pages.Add(new SourceDocumentPage
+                {
+                    PageNumber = page.Number,
+                    IsScanned = true,
+                    Blocks = []
+                });
+                continue;
+            }
+
+            // First extract heuristic blocks (always needed for text content)
+            var heuristicBlocks = ExtractLayoutBlocksFromPage(page).ToList();
+            if (heuristicBlocks.Count == 0)
+            {
+                pages.Add(new SourceDocumentPage
+                {
+                    PageNumber = page.Number,
+                    IsScanned = true,
+                    Blocks = []
+                });
+                continue;
+            }
+
+            // Try ML-enhanced detection
+            try
+            {
+                var enhancedBlocks = await strategy.DetectAndExtractAsync(
+                    page, input, i, layoutDetection,
+                    visionEndpoint, visionApiKey, visionModel, ct);
+
+                if (enhancedBlocks.Count > 0)
+                {
+                    // Use enhanced blocks: update BlockId region tags and apply ML region types
+                    var mlBlocks = enhancedBlocks.Select((eb, blockIdx) =>
+                    {
+                        var regionTag = eb.RegionType switch
+                        {
+                            LayoutRegionType.Header => "header",
+                            LayoutRegionType.Footer => "footer",
+                            LayoutRegionType.LeftColumn => "left",
+                            LayoutRegionType.RightColumn => "right",
+                            LayoutRegionType.TableLike or LayoutRegionType.Table => "table",
+                            LayoutRegionType.Figure => "figure",
+                            LayoutRegionType.Formula or LayoutRegionType.IsolatedFormula => "formula",
+                            LayoutRegionType.Caption => "caption",
+                            LayoutRegionType.Title => "title",
+                            _ => "body"
+                        };
+
+                        return eb.Block with
+                        {
+                            BlockId = $"p{page.Number}-{regionTag}-b{blockIdx + 1}"
+                        };
+                    }).ToList();
+
+                    pages.Add(new SourceDocumentPage
+                    {
+                        PageNumber = page.Number,
+                        IsScanned = false,
+                        Blocks = mlBlocks
+                    });
+                    continue;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LongDoc] ML detection failed for page {page.Number}: {ex.Message}");
+            }
+
+            // Fallback: use heuristic blocks
+            pages.Add(new SourceDocumentPage
+            {
+                PageNumber = page.Number,
+                IsScanned = false,
+                Blocks = heuristicBlocks
+            });
+        }
 
         if (pages.Count == 0)
         {
@@ -1295,6 +1483,27 @@ public sealed class LongDocumentTranslationService
         if (sourceBlockId.Contains("-table-", StringComparison.OrdinalIgnoreCase))
         {
             return (LayoutRegionType.TableLike, 0.88d, LayoutRegionSource.Heuristic);
+        }
+
+        // ML-detected region types (from ONNX or Vision LLM)
+        if (sourceBlockId.Contains("-figure-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.Figure, 0.90d, LayoutRegionSource.OnnxModel);
+        }
+
+        if (sourceBlockId.Contains("-formula-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.Formula, 0.90d, LayoutRegionSource.OnnxModel);
+        }
+
+        if (sourceBlockId.Contains("-caption-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.Caption, 0.85d, LayoutRegionSource.OnnxModel);
+        }
+
+        if (sourceBlockId.Contains("-title-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.Title, 0.88d, LayoutRegionSource.OnnxModel);
         }
 
         if (sourceBlockId.Contains("-body-", StringComparison.OrdinalIgnoreCase))

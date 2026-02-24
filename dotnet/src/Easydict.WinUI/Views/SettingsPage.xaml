@@ -568,6 +568,52 @@
                 </Border>
             </StackPanel>
 
+            <!-- Layout Detection (Long Document) -->
+            <StackPanel x:Name="LayoutDetectionSection" Spacing="12">
+                <TextBlock x:Name="LayoutDetectionHeaderText" Text="Layout Detection" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="LayoutDetectionDescriptionText"
+                           Text="ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas."
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <ComboBox x:Name="LayoutDetectionModeCombo" Header="Detection Mode" Width="300">
+                            <ComboBoxItem x:Name="LayoutDetectionAutoItem" Content="Auto (Recommended)" Tag="Auto" />
+                            <ComboBoxItem x:Name="LayoutDetectionOnnxItem" Content="Local ONNX Model" Tag="OnnxLocal" />
+                            <ComboBoxItem x:Name="LayoutDetectionVisionItem" Content="Vision LLM" Tag="VisionLLM" />
+                            <ComboBoxItem x:Name="LayoutDetectionHeuristicItem" Content="Heuristic Only" Tag="Heuristic" />
+                        </ComboBox>
+
+                        <!-- ONNX Model Download -->
+                        <StackPanel x:Name="OnnxModelPanel" Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <TextBlock x:Name="OnnxModelStatusText" Text="ONNX Model: Not Downloaded" VerticalAlignment="Center" />
+                                <FontIcon x:Name="OnnxModelStatusIcon" Glyph="&#xE946;" FontSize="14" Visibility="Collapsed"
+                                          Foreground="{ThemeResource SystemFillColorSuccessBrush}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="DownloadOnnxModelButton" Content="Download Model (~75MB)" Click="OnDownloadOnnxModelClick" />
+                                <Button x:Name="DeleteOnnxModelButton" Content="Delete" Click="OnDeleteOnnxModelClick" Visibility="Collapsed" />
+                            </StackPanel>
+                            <ProgressBar x:Name="OnnxDownloadProgress" Visibility="Collapsed" Minimum="0" Maximum="100" />
+                            <TextBlock x:Name="OnnxDownloadProgressText" Visibility="Collapsed"
+                                       FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+
+                        <!-- Vision LLM Service Selection (visible when VisionLLM mode selected) -->
+                        <StackPanel x:Name="VisionLLMPanel" Spacing="8" Visibility="Collapsed">
+                            <ComboBox x:Name="VisionLayoutServiceCombo" Header="Vision Service" Width="300">
+                                <ComboBoxItem Content="OpenAI (GPT-4o)" Tag="openai" />
+                                <ComboBoxItem Content="Gemini" Tag="gemini" />
+                                <ComboBoxItem Content="Custom OpenAI" Tag="custom_openai" />
+                            </ComboBox>
+                            <TextBlock Text="Requires a configured API key for the selected service."
+                                       FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
             <!-- HTTP Proxy -->
             <StackPanel x:Name="HttpProxySection" Spacing="12">
                 <TextBlock x:Name="HttpProxyHeaderText" Text="HTTP Proxy" FontSize="18" FontWeight="SemiBold" />

@@ -341,6 +341,10 @@ public sealed partial class SettingsPage : Page
         YoudaoAppSecretBox.PasswordChanged += OnSettingChanged;
         YoudaoUseOfficialApiToggle.Toggled += OnSettingChanged;
 
+        // Layout detection changes
+        LayoutDetectionModeCombo.SelectionChanged += OnLayoutDetectionModeChanged;
+        VisionLayoutServiceCombo.SelectionChanged += OnSettingChanged;
+
         // CheckBox changes
         DeepLFreeCheck.Checked += OnSettingChanged;
         DeepLFreeCheck.Unchecked += OnSettingChanged;
@@ -458,6 +462,11 @@ public sealed partial class SettingsPage : Page
         ProxyEnabledToggle.IsOn = _settings.ProxyEnabled;
         ProxyUriBox.Text = _settings.ProxyUri;
         ProxyBypassLocalToggle.IsOn = _settings.ProxyBypassLocal;
+
+        // Layout Detection settings
+        SelectComboByTag(LayoutDetectionModeCombo, _settings.LayoutDetectionMode);
+        SelectComboByTag(VisionLayoutServiceCombo, _settings.VisionLayoutServiceId);
+        UpdateLayoutDetectionUI();
 
         // Behavior
         // App Theme - select based on current setting
@@ -889,6 +898,10 @@ public sealed partial class SettingsPage : Page
         _settings.MiniWindowEnabledServices = GetEnabledServicesFromCollection(_miniWindowServices);
         _settings.FixedWindowEnabledServices = GetEnabledServicesFromCollection(_fixedWindowServices);
 
+        // Layout Detection settings
+        _settings.LayoutDetectionMode = GetSelectedTag(LayoutDetectionModeCombo) ?? "Auto";
+        _settings.VisionLayoutServiceId = GetSelectedTag(VisionLayoutServiceCombo) ?? "gemini";
+
         // Save EnabledQuery settings for each window
         _settings.MainWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_mainWindowServices);
         _settings.MiniWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_miniWindowServices);
@@ -1054,6 +1067,7 @@ public sealed partial class SettingsPage : Page
             new NavSection("LanguagePreferencesSection", "Language Preferences", "\uE774", LanguagePreferencesSection), // Globe
             new NavSection("EnabledServicesSection", "Enabled Services", "\uE73E", EnabledServicesSection),           // Checkmark
             new NavSection("ServiceConfigurationSection", "Service Configuration", "\uE90F", ServiceConfigurationSection), // Key
+            new NavSection("LayoutDetectionSection", "Layout Detection", "\uE8A1", LayoutDetectionSection),  // Page
             new NavSection("HttpProxySection", "HTTP Proxy", "\uE968", HttpProxySection),      // Network
             new NavSection("BehaviorSection", "Behavior", "\uE771", BehaviorSection),          // Touch
             new NavSection("HotkeysSection", "Hotkeys", "\uE765", HotkeysSection),             // Keyboard
@@ -1701,6 +1715,122 @@ public sealed partial class SettingsPage : Page
             }
         }, TestNiuTransButton, NiuTransStatusText);
     }
+
+    #region Layout Detection
+
+    private void OnLayoutDetectionModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        OnSettingChanged(sender, e);
+        UpdateLayoutDetectionUI();
+    }
+
+    private void UpdateLayoutDetectionUI()
+    {
+        var mode = GetSelectedTag(LayoutDetectionModeCombo) ?? "Auto";
+
+        // Show/hide ONNX model panel for Auto and OnnxLocal modes
+        var showOnnx = mode is "Auto" or "OnnxLocal";
+        OnnxModelPanel.Visibility = showOnnx ? Visibility.Visible : Visibility.Collapsed;
+
+        // Show/hide Vision LLM panel for VisionLLM mode
+        VisionLLMPanel.Visibility = mode == "VisionLLM" ? Visibility.Visible : Visibility.Collapsed;
+
+        // Update ONNX model status
+        UpdateOnnxModelStatus();
+    }
+
+    private void UpdateOnnxModelStatus()
+    {
+        var downloadService = new LongDocumentTranslationService().GetLayoutModelDownloadService();
+        var loc = LocalizationService.Instance;
+
+        if (downloadService.IsReady)
+        {
+            OnnxModelStatusText.Text = loc.GetString("LayoutDetection_Downloaded");
+            OnnxModelStatusIcon.Visibility = Visibility.Visible;
+            DownloadOnnxModelButton.Visibility = Visibility.Collapsed;
+            DeleteOnnxModelButton.Visibility = Visibility.Visible;
+            _settings.OnnxModelDownloaded = true;
+        }
+        else
+        {
+            OnnxModelStatusText.Text = loc.GetString("LayoutDetection_NotDownloaded");
+            OnnxModelStatusIcon.Visibility = Visibility.Collapsed;
+            DownloadOnnxModelButton.Visibility = Visibility.Visible;
+            DeleteOnnxModelButton.Visibility = Visibility.Collapsed;
+            _settings.OnnxModelDownloaded = false;
+        }
+    }
+
+    private async void OnDownloadOnnxModelClick(object sender, RoutedEventArgs e)
+    {
+        DownloadOnnxModelButton.IsEnabled = false;
+        OnnxDownloadProgress.Visibility = Visibility.Visible;
+        OnnxDownloadProgressText.Visibility = Visibility.Visible;
+
+        try
+        {
+            var downloadService = new LongDocumentTranslationService().GetLayoutModelDownloadService();
+            var progress = new Progress<ModelDownloadProgress>(p =>
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (p.Percentage >= 0)
+                    {
+                        OnnxDownloadProgress.IsIndeterminate = false;
+                        OnnxDownloadProgress.Value = p.Percentage;
+                    }
+                    else
+                    {
+                        OnnxDownloadProgress.IsIndeterminate = true;
+                    }
+
+                    var stageName = p.Stage == "runtime" ? "ONNX Runtime" : "Model";
+                    var mb = p.BytesDownloaded / (1024.0 * 1024.0);
+                    var totalMb = p.TotalBytes > 0 ? p.TotalBytes / (1024.0 * 1024.0) : 0;
+                    OnnxDownloadProgressText.Text = totalMb > 0
+                        ? $"{stageName}: {mb:F1} / {totalMb:F1} MB"
+                        : $"{stageName}: {mb:F1} MB";
+                });
+            });
+
+            await downloadService.EnsureAvailableAsync(progress);
+
+            _settings.OnnxModelDownloaded = true;
+            _settings.Save();
+            UpdateOnnxModelStatus();
+        }
+        catch (Exception ex)
+        {
+            var loc = LocalizationService.Instance;
+            var dialog = new ContentDialog
+            {
+                Title = loc.GetString("LayoutDetection_DownloadFailed"),
+                Content = ex.Message,
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(dialog);
+        }
+        finally
+        {
+            DownloadOnnxModelButton.IsEnabled = true;
+            OnnxDownloadProgress.Visibility = Visibility.Collapsed;
+            OnnxDownloadProgressText.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void OnDeleteOnnxModelClick(object sender, RoutedEventArgs e)
+    {
+        var downloadService = new LongDocumentTranslationService().GetLayoutModelDownloadService();
+        downloadService.DeleteAll();
+        _settings.OnnxModelDownloaded = false;
+        _settings.Save();
+        UpdateOnnxModelStatus();
+    }
+
+    #endregion
 
     /// <summary>
     /// Shows a ContentDialog, hiding any currently-open dialog first.

@@ -48,31 +48,103 @@ public sealed class LongDocumentTranslationService
         }
 
         var timings = new Dictionary<string, long>();
+        var progress = options.Progress;
+        var totalPages = source.Pages.Count;
+
+        // Parsing stage
+        progress?.Report(new LongDocumentTranslationProgress
+        {
+            Stage = LongDocumentTranslationStage.Parsing,
+            CurrentBlock = 0,
+            TotalBlocks = source.Pages.Sum(p => p.Blocks.Count),
+            CurrentPage = 0,
+            TotalPages = totalPages,
+            Percentage = 0
+        });
 
         var ingestSw = Stopwatch.StartNew();
-        var ingested = await IngestAsync(source, options, cancellationToken);
+        var ingested = await IngestAsync(source, options, cancellationToken).ConfigureAwait(false);
         ingestSw.Stop();
         timings["ingest"] = ingestSw.ElapsedMilliseconds;
 
+        // Yield control to allow UI thread to process messages
+        await Task.Yield();
+
+        // Building IR stage
+        progress?.Report(new LongDocumentTranslationProgress
+        {
+            Stage = LongDocumentTranslationStage.BuildingIr,
+            CurrentBlock = 0,
+            TotalBlocks = ingested.Pages.Sum(p => p.Blocks.Count),
+            CurrentPage = 0,
+            TotalPages = totalPages,
+            Percentage = 5
+        });
+
         var buildIrSw = Stopwatch.StartNew();
-        var ir = BuildIr(ingested, options);
+        var ir = await BuildIrAsync(ingested, options, cancellationToken).ConfigureAwait(false);
         buildIrSw.Stop();
         timings["build-ir"] = buildIrSw.ElapsedMilliseconds;
 
+        // Yield control to allow UI thread to process messages
+        await Task.Yield();
+
+        // Formula protection stage
+        if (options.EnableFormulaProtection)
+        {
+            progress?.Report(new LongDocumentTranslationProgress
+            {
+                Stage = LongDocumentTranslationStage.FormulaProtection,
+                CurrentBlock = 0,
+                TotalBlocks = ir.Blocks.Count,
+                CurrentPage = 0,
+                TotalPages = totalPages,
+                Percentage = 10
+            });
+        }
+
         var formulaSw = Stopwatch.StartNew();
-        ir = options.EnableFormulaProtection ? ApplyFormulaProtection(ir) : ir;
+        ir = options.EnableFormulaProtection ? await ApplyFormulaProtectionAsync(ir, cancellationToken).ConfigureAwait(false) : ir;
         formulaSw.Stop();
         timings["formula-protection"] = formulaSw.ElapsedMilliseconds;
 
+        // Yield control to allow UI thread to process messages
+        await Task.Yield();
+
         var translateSw = Stopwatch.StartNew();
-        var translatedBlocks = await TranslateBlocksAsync(ir, options, cancellationToken);
+        var translatedBlocks = await TranslateBlocksAsync(ir, options, cancellationToken).ConfigureAwait(false);
         translateSw.Stop();
         timings["translate"] = translateSw.ElapsedMilliseconds;
+
+        // Yield control to allow UI thread to process messages
+        await Task.Yield();
+
+        // Exporting stage
+        progress?.Report(new LongDocumentTranslationProgress
+        {
+            Stage = LongDocumentTranslationStage.Exporting,
+            CurrentBlock = ir.Blocks.Count,
+            TotalBlocks = ir.Blocks.Count,
+            CurrentPage = totalPages,
+            TotalPages = totalPages,
+            Percentage = 95
+        });
 
         var layoutSw = Stopwatch.StartNew();
         var pages = BuildStructuredOutput(ir, translatedBlocks);
         layoutSw.Stop();
         timings["structured-layout-output"] = layoutSw.ElapsedMilliseconds;
+
+        // Complete
+        progress?.Report(new LongDocumentTranslationProgress
+        {
+            Stage = LongDocumentTranslationStage.Exporting,
+            CurrentBlock = ir.Blocks.Count,
+            TotalBlocks = ir.Blocks.Count,
+            CurrentPage = totalPages,
+            TotalPages = totalPages,
+            Percentage = 100
+        });
 
         var failedBlocks = translatedBlocks.Values
             .Where(block => !string.IsNullOrWhiteSpace(block.LastError))
@@ -151,66 +223,76 @@ public sealed class LongDocumentTranslationService
         return source with { Pages = pages };
     }
 
-    private static DocumentIr BuildIr(SourceDocument source, LongDocumentTranslationOptions? options = null)
+    private static Task<DocumentIr> BuildIrAsync(SourceDocument source, LongDocumentTranslationOptions? options = null, CancellationToken cancellationToken = default)
     {
-        var irBlocks = new List<DocumentBlockIr>();
-
-        foreach (var page in source.Pages)
+        return Task.Run(() =>
         {
-            foreach (var block in page.Blocks)
+            var irBlocks = new List<DocumentBlockIr>();
+
+            foreach (var page in source.Pages)
             {
-                var blockText = block.Text ?? string.Empty;
-                var irBlockId = $"ir-{page.PageNumber}-{block.BlockId}";
-                var sourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(blockText)));
+                cancellationToken.ThrowIfCancellationRequested();
 
-                var translationSkipped = block.BlockType == SourceBlockType.Formula || block.IsFormulaLike
-                    || IsFontBasedFormula(block.DetectedFontNames, options?.FormulaFontPattern)
-                    || IsCharacterBasedFormula(blockText, options?.FormulaCharPattern);
-
-                irBlocks.Add(new DocumentBlockIr
+                foreach (var block in page.Blocks)
                 {
-                    IrBlockId = irBlockId,
-                    PageNumber = page.PageNumber,
-                    SourceBlockId = block.BlockId,
-                    BlockType = MapBlockType(block.BlockType),
-                    OriginalText = blockText,
-                    ProtectedText = blockText,
-                    SourceHash = sourceHash,
-                    BoundingBox = block.BoundingBox,
-                    ParentIrBlockId = block.ParentBlockId is null ? null : $"ir-{page.PageNumber}-{block.ParentBlockId}",
-                    TranslationSkipped = translationSkipped
-                });
-            }
-        }
+                    var blockText = block.Text ?? string.Empty;
+                    var irBlockId = $"ir-{page.PageNumber}-{block.BlockId}";
+                    var sourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(blockText)));
 
-        return new DocumentIr
-        {
-            DocumentId = source.DocumentId,
-            Blocks = irBlocks
-        };
+                    var translationSkipped = block.BlockType == SourceBlockType.Formula || block.IsFormulaLike
+                        || IsFontBasedFormula(block.DetectedFontNames, options?.FormulaFontPattern)
+                        || IsCharacterBasedFormula(blockText, options?.FormulaCharPattern);
+
+                    irBlocks.Add(new DocumentBlockIr
+                    {
+                        IrBlockId = irBlockId,
+                        PageNumber = page.PageNumber,
+                        SourceBlockId = block.BlockId,
+                        BlockType = MapBlockType(block.BlockType),
+                        OriginalText = blockText,
+                        ProtectedText = blockText,
+                        SourceHash = sourceHash,
+                        BoundingBox = block.BoundingBox,
+                        ParentIrBlockId = block.ParentBlockId is null ? null : $"ir-{page.PageNumber}-{block.ParentBlockId}",
+                        TranslationSkipped = translationSkipped
+                    });
+                }
+            }
+
+            return new DocumentIr
+            {
+                DocumentId = source.DocumentId,
+                Blocks = irBlocks
+            };
+        }, cancellationToken);
     }
 
-    private static DocumentIr ApplyFormulaProtection(DocumentIr ir)
+    private static Task<DocumentIr> ApplyFormulaProtectionAsync(DocumentIr ir, CancellationToken cancellationToken = default)
     {
-        var blocks = ir.Blocks.Select(block =>
+        return Task.Run(() =>
         {
-            if (block.TranslationSkipped)
+            var blocks = ir.Blocks.Select(block =>
             {
-                return block;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            var protection = ProtectFormulaSpans(block.ProtectedText);
-            var protectedText = protection.ProtectedText;
-            var shouldSkip = IsFormulaOnlyText(protectedText);
+                if (block.TranslationSkipped)
+                {
+                    return block;
+                }
 
-            return block with
-            {
-                ProtectedText = protectedText,
-                TranslationSkipped = shouldSkip
-            };
-        }).ToList();
+                var protection = ProtectFormulaSpans(block.ProtectedText);
+                var protectedText = protection.ProtectedText;
+                var shouldSkip = IsFormulaOnlyText(protectedText);
 
-        return ir with { Blocks = blocks };
+                return block with
+                {
+                    ProtectedText = protectedText,
+                    TranslationSkipped = shouldSkip
+                };
+            }).ToList();
+
+            return ir with { Blocks = blocks };
+        }, cancellationToken);
     }
 
     private async Task<Dictionary<string, TranslatedDocumentBlock>> TranslateBlocksAsync(
@@ -246,15 +328,48 @@ public sealed class LongDocumentTranslationService
             }
         }
 
+        var totalPages = ir.Blocks.Max(b => b.PageNumber);
+        var totalBlocks = blocksToTranslate.Count;
+        var completedBlocks = 0;
+        var progress = options.Progress;
+
+        // Report initial progress
+        progress?.Report(new LongDocumentTranslationProgress
+        {
+            Stage = LongDocumentTranslationStage.Translating,
+            CurrentBlock = 0,
+            TotalBlocks = totalBlocks,
+            CurrentPage = 0,
+            TotalPages = totalPages,
+            Percentage = 0,
+            CurrentBlockPreview = null
+        });
+
         var concurrency = Math.Max(1, options.MaxConcurrency);
         if (concurrency == 1)
         {
             // Sequential path (default, backward-compatible)
-            foreach (var block in blocksToTranslate)
+            for (var i = 0; i < blocksToTranslate.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var block = blocksToTranslate[i];
                 var translated = await TranslateSingleBlockAsync(block, options, cancellationToken);
                 result[block.IrBlockId] = translated;
+                completedBlocks++;
+
+                // Report progress after each block
+                progress?.Report(new LongDocumentTranslationProgress
+                {
+                    Stage = LongDocumentTranslationStage.Translating,
+                    CurrentBlock = completedBlocks,
+                    TotalBlocks = totalBlocks,
+                    CurrentPage = block.PageNumber,
+                    TotalPages = totalPages,
+                    Percentage = (double)completedBlocks / totalBlocks * 100,
+                    CurrentBlockPreview = block.OriginalText.Length > 50
+                        ? block.OriginalText.Substring(0, 50) + "..."
+                        : block.OriginalText
+                });
             }
         }
         else
@@ -268,6 +383,21 @@ public sealed class LongDocumentTranslationService
                 {
                     var translated = await TranslateSingleBlockAsync(block, options, cancellationToken);
                     result[block.IrBlockId] = translated;
+
+                    // Thread-safe progress reporting in parallel path
+                    var current = Interlocked.Increment(ref completedBlocks);
+                    progress?.Report(new LongDocumentTranslationProgress
+                    {
+                        Stage = LongDocumentTranslationStage.Translating,
+                        CurrentBlock = current,
+                        TotalBlocks = totalBlocks,
+                        CurrentPage = block.PageNumber,
+                        TotalPages = totalPages,
+                        Percentage = (double)current / totalBlocks * 100,
+                        CurrentBlockPreview = block.OriginalText.Length > 50
+                            ? block.OriginalText.Substring(0, 50) + "..."
+                            : block.OriginalText
+                    });
                 }
                 finally
                 {

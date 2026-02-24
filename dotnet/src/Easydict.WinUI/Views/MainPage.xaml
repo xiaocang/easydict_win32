@@ -718,10 +718,50 @@
                 </Border>
 
                 <!-- Row 3: Footer -->
-                <Grid Grid.Row="3"
-                        Margin="0,4,0,0">
+                <Grid Grid.Row="3" Margin="0,4,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Progress bar and cancel button -->
+                    <Grid Grid.Row="0" Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Spacing="4">
+                            <ProgressBar
+                                x:Name="LongDocProgressBar"
+                                Height="4"
+                                IsIndeterminate="False"
+                                Visibility="Collapsed" />
+                            <TextBlock
+                                x:Name="LongDocProgressDetailText"
+                                Text=""
+                                FontSize="11"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Visibility="Collapsed"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <Button
+                            x:Name="LongDocCancelButton"
+                            Grid.Column="1"
+                            Content="Cancel"
+                            Click="OnLongDocCancelClicked"
+                            IsEnabled="False"
+                            Visibility="Collapsed"
+                            Margin="8,0,0,0"
+                            FontSize="12"
+                            Padding="12,4" />
+                    </Grid>
+
+                    <!-- Status text -->
                     <TextBlock
                         x:Name="LongDocStatusText"
+                        Grid.Row="1"
                         Text="Idle"
                         FontSize="12"
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"

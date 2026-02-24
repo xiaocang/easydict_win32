@@ -145,12 +145,16 @@ public sealed class LongDocumentTranslationService
         DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
         string? visionEndpoint = null,
         string? visionApiKey = null,
-        string? visionModel = null)
+        string? visionModel = null,
+        System.IProgress<LongDocumentTranslationProgress>? progress = null)
     {
         var pageRange = string.IsNullOrWhiteSpace(SettingsService.Instance.LongDocPageRange) ? null : SettingsService.Instance.LongDocPageRange;
+
+        // Build source document (now natively async, CPU-bound work is wrapped inside)
         var sourceDocument = await BuildSourceDocumentAsync(
             mode, input, layoutDetection, visionEndpoint, visionApiKey, visionModel,
-            onProgress, cancellationToken, pageRange);
+            onProgress, cancellationToken, pageRange).ConfigureAwait(false);
+
         var sourceFilePath = input;
         var hasAnySourceText = sourceDocument.Pages
             .SelectMany(page => page.Blocks)
@@ -179,8 +183,9 @@ public sealed class LongDocumentTranslationService
             MaxConcurrency = maxConcurrency,
             FormulaFontPattern = formulaFontPattern,
             FormulaCharPattern = formulaCharPattern,
-            CustomPrompt = customPrompt
-        }, cancellationToken);
+            CustomPrompt = customPrompt,
+            Progress = progress
+        }, cancellationToken).ConfigureAwait(false);
 
         var allBlocks = coreResult.Pages
             .SelectMany(page => page.Blocks.Select(block => new
@@ -253,7 +258,7 @@ public sealed class LongDocumentTranslationService
         // Try to resolve failed chunks from persistent cache before retrying
         if (SettingsService.Instance.EnableTranslationCache && checkpoint.FailedChunkIndexes.Count > 0)
         {
-            await ReadCacheEntriesAsync(checkpoint, serviceId, from, to, cancellationToken);
+            await ReadCacheEntriesAsync(checkpoint, serviceId, from, to, cancellationToken).ConfigureAwait(false);
         }
 
         EnforceTerminologyConsistency(checkpoint);
@@ -261,7 +266,7 @@ public sealed class LongDocumentTranslationService
         // Write successful translations to persistent cache
         if (SettingsService.Instance.EnableTranslationCache)
         {
-            await WriteCacheEntriesAsync(checkpoint, serviceId, from, to, cancellationToken);
+            await WriteCacheEntriesAsync(checkpoint, serviceId, from, to, cancellationToken).ConfigureAwait(false);
         }
 
         onProgress?.Invoke("Rendering translated output...");
@@ -276,7 +281,8 @@ public sealed class LongDocumentTranslationService
         string serviceId,
         Action<string>? onProgress = null,
         CancellationToken cancellationToken = default,
-        DocumentOutputMode outputMode = DocumentOutputMode.Monolingual)
+        DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
+        System.IProgress<LongDocumentTranslationProgress>? progress = null)
     {
         ValidateCheckpointOrThrow(checkpoint);
 
@@ -287,7 +293,7 @@ public sealed class LongDocumentTranslationService
 
         onProgress?.Invoke($"Retrying {checkpoint.FailedChunkIndexes.Count} failed chunks...");
         var retryCacheService = SettingsService.Instance.EnableTranslationCache ? _cacheService : null;
-        var retrySummary = await TranslatePendingChunksAsync(_coreLongDocumentService, checkpoint, from, to, serviceId, onProgress, cancellationToken, retryCacheService);
+        var retrySummary = await TranslatePendingChunksAsync(_coreLongDocumentService, checkpoint, from, to, serviceId, onProgress, cancellationToken, retryCacheService, progress).ConfigureAwait(false);
         EnforceTerminologyConsistency(checkpoint);
         var qualityReport = BuildQualityReportFromRetry(checkpoint, retrySummary);
         return FinalizeResult(checkpoint, outputPath, onProgress, qualityReport, outputMode);
@@ -301,7 +307,8 @@ public sealed class LongDocumentTranslationService
         string serviceId,
         Action<string>? onProgress,
         CancellationToken cancellationToken,
-        TranslationCacheService? cacheService = null)
+        TranslationCacheService? cacheService = null,
+        System.IProgress<LongDocumentTranslationProgress>? progress = null)
     {
         var pendingIndexes = checkpoint.FailedChunkIndexes.Count > 0
             ? checkpoint.FailedChunkIndexes.OrderBy(i => i).ToList()
@@ -340,7 +347,7 @@ public sealed class LongDocumentTranslationService
                 var hash = TranslationCacheService.ComputeHash(sourceText);
                 try
                 {
-                    var cached = await cacheService.TryGetAsync(serviceId, from, to, hash, cancellationToken);
+                    var cached = await cacheService.TryGetAsync(serviceId, from, to, hash, cancellationToken).ConfigureAwait(false);
                     if (cached != null)
                     {
                         checkpoint.TranslatedChunks[chunkIndex] = cached;
@@ -400,13 +407,14 @@ public sealed class LongDocumentTranslationService
             FromLanguage = from,
             ToLanguage = to,
             EnableFormulaProtection = true,
-            EnableOcrFallback = true,
+            EnableOcrFallback = false,
             MaxRetriesPerBlock = 1,
             MaxConcurrency = retryConcurrency,
             FormulaFontPattern = retryFormulaFontPattern,
             FormulaCharPattern = retryFormulaCharPattern,
-            CustomPrompt = retryCustomPrompt
-        }, cancellationToken);
+            CustomPrompt = retryCustomPrompt,
+            Progress = progress
+        }, cancellationToken).ConfigureAwait(false);
 
         foreach (var translatedBlock in retryResult.Pages.SelectMany(page => page.Blocks))
         {
@@ -455,7 +463,7 @@ public sealed class LongDocumentTranslationService
                 if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(translated))
                     continue;
                 var hash = TranslationCacheService.ComputeHash(source);
-                await _cacheService.SetAsync(serviceId, from, to, hash, source, translated, ct);
+                await _cacheService.SetAsync(serviceId, from, to, hash, source, translated, ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -482,7 +490,7 @@ public sealed class LongDocumentTranslationService
                 if (string.IsNullOrWhiteSpace(source))
                     continue;
                 var hash = TranslationCacheService.ComputeHash(source);
-                var cached = await _cacheService.TryGetAsync(serviceId, from, to, hash, ct);
+                var cached = await _cacheService.TryGetAsync(serviceId, from, to, hash, ct).ConfigureAwait(false);
                 if (cached != null)
                 {
                     checkpoint.TranslatedChunks[chunkIndex] = cached;
@@ -612,7 +620,7 @@ public sealed class LongDocumentTranslationService
 
     private static readonly Regex FormulaHeuristicRegex = new(@"(\$[^$]+\$|\\([^)]+\\)|\\[[^\]]+\\]|\b\w+\s*=\s*[-+*/^()\w]+)", RegexOptions.Compiled);
 
-    private static SourceDocument BuildSourceDocument(LongDocumentInputMode mode, string input, string? pageRange = null)
+    private static Task<SourceDocument> BuildSourceDocumentBasicAsync(LongDocumentInputMode mode, string input, string? pageRange = null)
     {
         if (!File.Exists(input))
         {
@@ -621,10 +629,10 @@ public sealed class LongDocumentTranslationService
 
         if (mode is LongDocumentInputMode.PlainText or LongDocumentInputMode.Markdown)
         {
-            return BuildSourceDocumentFromTextFile(input);
+            return Task.FromResult(BuildSourceDocumentFromTextFile(input));
         }
 
-        return BuildSourceDocumentFromPdf(input, pageRange);
+        return BuildSourceDocumentFromPdfAsync(input, pageRange);
     }
 
     private static SourceDocument BuildSourceDocumentFromTextFile(string filePath)
@@ -686,41 +694,44 @@ public sealed class LongDocumentTranslationService
         }
     }
 
-    private static SourceDocument BuildSourceDocumentFromPdf(string input, string? pageRange = null)
+    private static Task<SourceDocument> BuildSourceDocumentFromPdfAsync(string input, string? pageRange = null)
     {
-        using var document = PdfPigDocument.Open(input);
-        var allPdfPages = document.GetPages().ToList();
-        var selectedPages = PageRangeParser.Parse(pageRange, allPdfPages.Count);
-        var pages = allPdfPages
-            .Where(page => selectedPages == null || selectedPages.Contains(page.Number))
-            .Select(page =>
-            {
-                var blocks = ExtractLayoutBlocksFromPage(page).ToList();
-                var scanned = string.IsNullOrWhiteSpace(page.Text) || blocks.Count == 0;
-                return new SourceDocumentPage
+        return Task.Run(() =>
+        {
+            using var document = PdfPigDocument.Open(input);
+            var allPdfPages = document.GetPages().ToList();
+            var selectedPages = PageRangeParser.Parse(pageRange, allPdfPages.Count);
+            var pages = allPdfPages
+                .Where(page => selectedPages == null || selectedPages.Contains(page.Number))
+                .Select(page =>
                 {
-                    PageNumber = page.Number,
-                    IsScanned = scanned,
-                    Blocks = scanned ? [] : blocks
-                };
-            })
-            .ToList();
+                    var blocks = ExtractLayoutBlocksFromPage(page).ToList();
+                    var scanned = string.IsNullOrWhiteSpace(page.Text) || blocks.Count == 0;
+                    return new SourceDocumentPage
+                    {
+                        PageNumber = page.Number,
+                        IsScanned = scanned,
+                        Blocks = scanned ? [] : blocks
+                    };
+                })
+                .ToList();
 
-        if (pages.Count == 0)
-        {
-            pages.Add(new SourceDocumentPage
+            if (pages.Count == 0)
             {
-                PageNumber = 1,
-                IsScanned = true,
-                Blocks = []
-            });
-        }
+                pages.Add(new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    IsScanned = true,
+                    Blocks = []
+                });
+            }
 
-        return new SourceDocument
-        {
-            DocumentId = Path.GetFileNameWithoutExtension(input),
-            Pages = pages
-        };
+            return new SourceDocument
+            {
+                DocumentId = Path.GetFileNameWithoutExtension(input),
+                Pages = pages
+            };
+        });
     }
 
     /// <summary>
@@ -743,7 +754,7 @@ public sealed class LongDocumentTranslationService
         if (mode is LongDocumentInputMode.PlainText or LongDocumentInputMode.Markdown ||
             layoutDetection == LayoutDetectionMode.Heuristic)
         {
-            return BuildSourceDocument(mode, input, pageRange);
+            return await BuildSourceDocumentBasicAsync(mode, input, pageRange).ConfigureAwait(false);
         }
 
         if (!File.Exists(input))
@@ -753,10 +764,10 @@ public sealed class LongDocumentTranslationService
 
         var strategy = GetLayoutDetectionStrategy();
 
-        // For Auto mode, check if ONNX is available; if not, fall back to sync heuristic
+        // For Auto mode, check if ONNX is available; if not, fall back to async heuristic
         if (layoutDetection == LayoutDetectionMode.Auto && !strategy.IsOnnxDownloaded)
         {
-            return BuildSourceDocument(mode, input, pageRange);
+            return await BuildSourceDocumentBasicAsync(mode, input, pageRange).ConfigureAwait(false);
         }
 
         onProgress?.Invoke("Analyzing page layouts with ML model...");
@@ -805,7 +816,7 @@ public sealed class LongDocumentTranslationService
             {
                 var enhancedBlocks = await strategy.DetectAndExtractAsync(
                     page, input, i, layoutDetection,
-                    visionEndpoint, visionApiKey, visionModel, ct);
+                    visionEndpoint, visionApiKey, visionModel, ct).ConfigureAwait(false);
 
                 if (enhancedBlocks.Count > 0)
                 {

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Easydict.TranslationService;
+using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
@@ -40,7 +41,7 @@ namespace Easydict.WinUI.Views
         private bool _suppressTargetLanguageSelectionChanged;
         private bool _suppressSourceLanguageSelectionChanged;
         private QueryMode _currentMode = QueryMode.Translation;
-        private readonly LongDocumentTranslationService _longDocumentService = new();
+        private readonly Services.LongDocumentTranslationService _longDocumentService = new();
         private readonly LongDocumentDeduplicationService _longDocDedupService = new();
         private LongDocumentTranslationCheckpoint? _longDocCheckpoint;
         private TranslationLanguage _longDocLastFrom = TranslationLanguage.Auto;
@@ -1586,10 +1587,25 @@ namespace Easydict.WinUI.Views
             LongDocRunInBackgroundCheckBox.IsEnabled = !running;
             LongDocOutputBrowseButton.IsEnabled = !running;
 
+            // Show/hide progress controls for single-file translation
             if (running)
             {
+                LongDocCancelButton.Visibility = Visibility.Visible;
+                LongDocCancelButton.IsEnabled = true;
+                LongDocProgressBar.Visibility = Visibility.Visible;
+                LongDocProgressDetailText.Visibility = Visibility.Visible;
                 LongDocRetryButton.IsEnabled = false;
                 LongDocStatusText.Text = "Task running, settings are locked. Changes will apply to the next task.";
+            }
+            else
+            {
+                LongDocCancelButton.Visibility = Visibility.Collapsed;
+                LongDocCancelButton.IsEnabled = false;
+                LongDocProgressBar.Visibility = Visibility.Collapsed;
+                LongDocProgressBar.Value = 0;
+                LongDocProgressBar.IsIndeterminate = false;
+                LongDocProgressDetailText.Visibility = Visibility.Collapsed;
+                LongDocProgressDetailText.Text = "";
             }
         }
 
@@ -1782,6 +1798,13 @@ namespace Easydict.WinUI.Views
             LongDocStatusText.Text = "Canceling current task...";
         }
 
+        private void OnLongDocCancelClicked(object sender, RoutedEventArgs e)
+        {
+            _longDocSingleTaskCts?.Cancel();
+            LongDocCancelButton.IsEnabled = false;
+            LongDocStatusText.Text = "Canceling translation...";
+        }
+
 
         private void OnLongDocInputModeChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -1940,6 +1963,45 @@ namespace Easydict.WinUI.Views
 
             var cancellationToken = PrepareLongDocSingleTaskCancellationToken();
 
+            // Create progress tracker with throttled UI updates (max 4 per second, 1% increments)
+            var lastUpdateTime = DateTime.MinValue;
+            var lastReportedPercentage = -1.0;
+            var progress = new Progress<LongDocumentTranslationProgress>(p =>
+            {
+                var now = DateTime.UtcNow;
+                var timeElapsed = (now - lastUpdateTime).TotalMilliseconds;
+
+                // Only update if at least 250ms elapsed OR percentage changed by at least 1%
+                var percentageChanged = Math.Abs(p.Percentage - lastReportedPercentage) >= 1.0;
+                if (timeElapsed >= 250 || percentageChanged)
+                {
+                    lastUpdateTime = now;
+                    lastReportedPercentage = p.Percentage;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+
+                        // Update progress bar
+                        if (p.Percentage >= 0 && p.Percentage <= 100)
+                        {
+                            LongDocProgressBar.IsIndeterminate = false;
+                            LongDocProgressBar.Value = p.Percentage;
+                        }
+                        else
+                        {
+                            LongDocProgressBar.IsIndeterminate = true;
+                        }
+
+                        // Update detail text
+                        var stageText = p.GetStageDisplayName();
+                        var detailText = p.TotalBlocks > 0
+                            ? $"{stageText}: {p.CurrentBlock}/{p.TotalBlocks} blocks (page {p.CurrentPage}/{p.TotalPages})"
+                            : stageText;
+                        LongDocProgressDetailText.Text = detailText;
+                    });
+                }
+            });
+
             try
             {
                 SetLongDocTaskUiState(true);
@@ -1995,9 +2057,14 @@ namespace Easydict.WinUI.Views
                     _longDocLastTo,
                     outputPath,
                     serviceId,
-                    progress => DispatcherQueue.TryEnqueue(() => LongDocStatusText.Text = progress),
+                    progressMsg => DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        LongDocStatusText.Text = progressMsg;
+                    }),
                     cancellationToken,
-                    outputMode: outputMode);
+                    outputMode: outputMode,
+                    progress: progress);
 
                 _longDocCheckpoint = result.Checkpoint;
                 LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
@@ -2041,6 +2108,45 @@ namespace Easydict.WinUI.Views
 
             var cancellationToken = PrepareLongDocSingleTaskCancellationToken();
 
+            // Create progress tracker with throttled UI updates (max 4 per second, 1% increments)
+            var lastUpdateTime = DateTime.MinValue;
+            var lastReportedPercentage = -1.0;
+            var progress = new Progress<LongDocumentTranslationProgress>(p =>
+            {
+                var now = DateTime.UtcNow;
+                var timeElapsed = (now - lastUpdateTime).TotalMilliseconds;
+
+                // Only update if at least 250ms elapsed OR percentage changed by at least 1%
+                var percentageChanged = Math.Abs(p.Percentage - lastReportedPercentage) >= 1.0;
+                if (timeElapsed >= 250 || percentageChanged)
+                {
+                    lastUpdateTime = now;
+                    lastReportedPercentage = p.Percentage;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+
+                        // Update progress bar
+                        if (p.Percentage >= 0 && p.Percentage <= 100)
+                        {
+                            LongDocProgressBar.IsIndeterminate = false;
+                            LongDocProgressBar.Value = p.Percentage;
+                        }
+                        else
+                        {
+                            LongDocProgressBar.IsIndeterminate = true;
+                        }
+
+                        // Update detail text
+                        var stageText = p.GetStageDisplayName();
+                        var detailText = p.TotalBlocks > 0
+                            ? $"{stageText}: {p.CurrentBlock}/{p.TotalBlocks} blocks (page {p.CurrentPage}/{p.TotalPages})"
+                            : stageText;
+                        LongDocProgressDetailText.Text = detailText;
+                    });
+                }
+            });
+
             try
             {
                 SetLongDocTaskUiState(true);
@@ -2062,9 +2168,14 @@ namespace Easydict.WinUI.Views
                     _longDocLastTo,
                     outputPath,
                     _longDocLastServiceId,
-                    progress => DispatcherQueue.TryEnqueue(() => LongDocStatusText.Text = progress),
+                    progressMsg => DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        LongDocStatusText.Text = progressMsg;
+                    }),
                     cancellationToken,
-                    outputMode: retryOutputMode);
+                    outputMode: retryOutputMode,
+                    progress: progress);
 
                 _longDocCheckpoint = result.Checkpoint;
                 LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;

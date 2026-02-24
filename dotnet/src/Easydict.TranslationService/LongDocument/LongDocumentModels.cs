@@ -104,6 +104,7 @@ public sealed record LongDocumentTranslationOptions
     public string? FormulaCharPattern { get; init; }
     public string? PageRange { get; init; }
     public string? CustomPrompt { get; init; }
+    public System.IProgress<LongDocumentTranslationProgress>? Progress { get; init; }
 }
 
 /// <summary>
@@ -198,4 +199,40 @@ public sealed record LongDocumentTranslationResult
     public required DocumentIr Ir { get; init; }
     public required IReadOnlyList<TranslatedDocumentPage> Pages { get; init; }
     public required LongDocumentQualityReport QualityReport { get; init; }
+}
+
+/// <summary>
+/// Progress stage for long document translation.
+/// </summary>
+public enum LongDocumentTranslationStage
+{
+    Parsing,
+    BuildingIr,
+    FormulaProtection,
+    Translating,
+    Exporting
+}
+
+/// <summary>
+/// Progress information for long document translation.
+/// </summary>
+public sealed record LongDocumentTranslationProgress
+{
+    public required LongDocumentTranslationStage Stage { get; init; }
+    public int CurrentBlock { get; init; }
+    public int TotalBlocks { get; init; }
+    public int CurrentPage { get; init; }
+    public int TotalPages { get; init; }
+    public double Percentage { get; init; }
+    public string? CurrentBlockPreview { get; init; }
+
+    public string GetStageDisplayName() => Stage switch
+    {
+        LongDocumentTranslationStage.Parsing => "Parsing document",
+        LongDocumentTranslationStage.BuildingIr => "Building intermediate representation",
+        LongDocumentTranslationStage.FormulaProtection => "Applying formula protection",
+        LongDocumentTranslationStage.Translating => "Translating blocks",
+        LongDocumentTranslationStage.Exporting => "Exporting document",
+        _ => "Processing"
+    };
 }

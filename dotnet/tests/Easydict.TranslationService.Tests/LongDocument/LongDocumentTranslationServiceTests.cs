@@ -78,7 +78,7 @@ public class LongDocumentTranslationServiceTests
 
         calls.Should().Be(1);
         result.Pages.SelectMany(p => p.Blocks).Single(b => b.SourceBlockId == "formula").TranslationSkipped.Should().BeTrue();
-        result.Ir.Blocks.Single(b => b.SourceBlockId == "text").ProtectedText.Should().Contain("[[FORMULA_");
+        result.Ir.Blocks.Single(b => b.SourceBlockId == "text").ProtectedText.Should().Contain("{v");
         result.Pages.SelectMany(p => p.Blocks).Single(b => b.SourceBlockId == "text").TranslatedText.Should().Contain("$E = mc^2$");
     }
 
@@ -125,7 +125,7 @@ public class LongDocumentTranslationServiceTests
 
         var translated = result.Pages.SelectMany(p => p.Blocks).Single().TranslatedText;
         translated.Should().Contain("$a^2+b^2=c^2$");
-        translated.Should().NotContain("[[FORMULA_");
+        translated.Should().NotContain("{v");
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public class LongDocumentTranslationServiceTests
             Task.FromResult(new TranslationResult
             {
                 OriginalText = "x",
-                TranslatedText = "ZH:[[FORMULA_0_ABCDEF12]](",
+                TranslatedText = "ZH:{v0}(",
                 ServiceName = "fake",
                 TargetLanguage = Language.SimplifiedChinese
             }));
@@ -459,6 +459,141 @@ public class LongDocumentTranslationServiceTests
 
         await act.Should().ThrowAsync<ArgumentOutOfRangeException>()
             .WithParameterName("MaxRetriesPerBlock");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ShouldUseNumericPlaceholdersForMultipleFormulas()
+    {
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+            Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = request.Text,
+                ServiceName = "fake",
+                TargetLanguage = Language.English
+            }));
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-multiple-formulas",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "text-multi",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "The equations $a^2+b^2=c^2$ and $E=mc^2$ are famous."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        var protectedText = result.Ir.Blocks.Single(b => b.SourceBlockId == "text-multi").ProtectedText;
+        protectedText.Should().Contain("{v0}");
+        protectedText.Should().Contain("{v1}");
+        protectedText.Should().NotContain("$a^2+b^2=c^2$");
+        protectedText.Should().NotContain("$E=mc^2$");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ShouldRestoreNumericPlaceholdersInCorrectOrder()
+    {
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+            Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = request.Text,
+                ServiceName = "fake",
+                TargetLanguage = Language.English
+            }));
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-restore-order",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "text-order",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "First $x=1$ then $y=2$ finally $z=3$."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        var translated = result.Pages.SelectMany(p => p.Blocks).Single().TranslatedText;
+        translated.Should().Be("First $x=1$ then $y=2$ finally $z=3$.");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ShouldHandleMixedFormulaAndText()
+    {
+        var sut = new LongDocumentTranslationService(translateWithService: (_, _, _) =>
+            Task.FromResult(new TranslationResult
+            {
+                OriginalText = "x",
+                TranslatedText = "The {v0} represents energy in physics.",
+                ServiceName = "fake",
+                TargetLanguage = Language.English
+            }));
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-mixed",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "text-mixed",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "The $E=mc^2$ represents energy in physics."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        var translated = result.Pages.SelectMany(p => p.Blocks).Single().TranslatedText;
+        translated.Should().Be("The $E=mc^2$ represents energy in physics.");
     }
 
     private static Task<TranslationResult> FakeTranslate(TranslationRequest request, string _, CancellationToken __)

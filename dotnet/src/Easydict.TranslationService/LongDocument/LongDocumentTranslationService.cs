@@ -414,29 +414,31 @@ public sealed class LongDocumentTranslationService
 
     private sealed record FormulaToken(string RawText, FormulaTokenKind Kind);
 
-    private sealed record FormulaProtectionResult(string ProtectedText, IReadOnlyDictionary<string, FormulaToken> TokenMap)
+    private sealed record FormulaProtectionResult(string ProtectedText, IReadOnlyList<FormulaToken> TokenMap)
     {
-        public static FormulaProtectionResult Empty { get; } = new(string.Empty, new Dictionary<string, FormulaToken>(StringComparer.Ordinal));
+        public static FormulaProtectionResult Empty { get; } = new(string.Empty, new List<FormulaToken>());
     }
+
+    private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
 
     private static FormulaProtectionResult ProtectFormulaSpans(string text)
     {
         if (string.IsNullOrEmpty(text))
         {
-            return new FormulaProtectionResult(text, new Dictionary<string, FormulaToken>(StringComparer.Ordinal));
+            return new FormulaProtectionResult(text, new List<FormulaToken>());
         }
 
-        var map = new Dictionary<string, FormulaToken>(StringComparer.Ordinal);
+        var tokens = new List<FormulaToken>();
         var counter = 0;
         var protectedText = FormulaRegex.Replace(text, match =>
         {
-            var token = $"[[FORMULA_{counter}_{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(match.Value)))[..8]}]]";
-            map[token] = new FormulaToken(match.Value, ClassifyFormulaToken(match.Value));
+            var token = $"{{v{counter}}}";
+            tokens.Add(new FormulaToken(match.Value, ClassifyFormulaToken(match.Value)));
             counter++;
             return token;
         });
 
-        return new FormulaProtectionResult(protectedText, map);
+        return new FormulaProtectionResult(protectedText, tokens);
     }
 
     private static bool IsFormulaOnlyText(string protectedText)
@@ -446,7 +448,7 @@ public sealed class LongDocumentTranslationService
             return false;
         }
 
-        var cleaned = Regex.Replace(protectedText, @"\[\[FORMULA_[^\]]+\]\]", string.Empty).Trim();
+        var cleaned = NumericPlaceholderRegex.Replace(protectedText, string.Empty).Trim();
         return cleaned.Length == 0;
     }
 
@@ -457,13 +459,17 @@ public sealed class LongDocumentTranslationService
             return text;
         }
 
-        var restored = text;
-        foreach (var pair in protection.TokenMap)
+        var restored = NumericPlaceholderRegex.Replace(text, match =>
         {
-            restored = restored.Replace(pair.Key, pair.Value.RawText, StringComparison.Ordinal);
-        }
+            var indexStr = match.Groups[1].Value;
+            if (int.TryParse(indexStr, out var index) && index >= 0 && index < protection.TokenMap.Count)
+            {
+                return protection.TokenMap[index].RawText;
+            }
+            return match.Value;
+        });
 
-        if (Regex.IsMatch(restored, @"\[\[FORMULA_[^\]]+\]\]"))
+        if (NumericPlaceholderRegex.IsMatch(restored))
         {
             return originalText;
         }

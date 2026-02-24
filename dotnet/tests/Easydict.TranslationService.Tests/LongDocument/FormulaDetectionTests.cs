@@ -1,4 +1,5 @@
 using Easydict.TranslationService.LongDocument;
+using Easydict.TranslationService.Models;
 using FluentAssertions;
 using Xunit;
 
@@ -107,7 +108,7 @@ public class FormulaDetectionTests
     }
 
     [Fact]
-    public void BuildIr_FontBasedFormula_SkipsTranslation()
+    public async Task BuildIr_FontBasedFormula_SkipsTranslation()
     {
         var source = new SourceDocument
         {
@@ -138,7 +139,7 @@ public class FormulaDetectionTests
             ]
         };
 
-        var options = new LongDocumentTranslationOptions { ToLanguage = Models.Language.English };
+        var options = new LongDocumentTranslationOptions { ToLanguage = Language.English };
 
         // Use the translation service to test BuildIr indirectly through TranslateAsync
         // Since BuildIr is private, we test it through the full pipeline with a mock translator
@@ -147,14 +148,15 @@ public class FormulaDetectionTests
             translateWithService: (request, serviceId, ct) =>
             {
                 translationCalled.Add(request.Text);
-                return Task.FromResult(new Models.TranslationResult
+                return Task.FromResult(new TranslationResult
                 {
+                    OriginalText = request.Text,
                     TranslatedText = $"translated: {request.Text}",
-                    ServiceId = serviceId
+                    ServiceName = serviceId
                 });
             });
 
-        var result = service.TranslateAsync(source, options, CancellationToken.None).GetAwaiter().GetResult();
+        var result = await service.TranslateAsync(source, options, CancellationToken.None);
 
         // b2 should be skipped (font-based formula detection) and not sent to translator
         translationCalled.Should().ContainSingle()

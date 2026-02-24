@@ -614,48 +614,6 @@
                 </Border>
             </StackPanel>
 
-            <!-- Document Output Mode -->
-            <StackPanel x:Name="DocumentOutputModeSection" Spacing="12">
-                <TextBlock x:Name="DocumentOutputModeHeaderText" Text="Document Output Mode" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock x:Name="DocumentOutputModeDescriptionText"
-                           Text="Choose output format for long document translation. Bilingual mode interleaves original and translated content."
-                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <ComboBox x:Name="DocumentOutputModeCombo" Header="Output Mode" Width="300"
-                                  SelectionChanged="OnDocumentOutputModeChanged">
-                            <ComboBoxItem x:Name="DocumentOutputMonolingualItem" Content="Monolingual (Default)" Tag="Monolingual" />
-                            <ComboBoxItem x:Name="DocumentOutputBilingualItem" Content="Bilingual (Interleaved)" Tag="Bilingual" />
-                            <ComboBoxItem x:Name="DocumentOutputBothItem" Content="Both" Tag="Both" />
-                        </ComboBox>
-                        <TextBlock x:Name="DocumentOutputModeNoteText"
-                                   Text="Bilingual PDF: interleaved pages. Markdown/Text: original + translation blocks."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- Translation Concurrency -->
-            <StackPanel x:Name="TranslationConcurrencySection" Spacing="12">
-                <TextBlock x:Name="TranslationConcurrencyHeaderText" Text="Translation Concurrency" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock x:Name="TranslationConcurrencyDescriptionText"
-                           Text="Maximum number of parallel translation requests for long document translation. Higher values speed up translation but may hit API rate limits."
-                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <NumberBox x:Name="ConcurrencyNumberBox" Header="Max Concurrent Requests"
-                                   Minimum="1" Maximum="16" SpinButtonPlacementMode="Inline"
-                                   SmallChange="1" LargeChange="4" Value="4"
-                                   ValueChanged="OnConcurrencyValueChanged" />
-                        <TextBlock x:Name="TranslationConcurrencyNoteText"
-                                   Text="Recommended: 4 for LLM services, 1-2 for free API tiers with strict rate limits."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
             <!-- CJK Font -->
             <StackPanel x:Name="CjkFontSection" Spacing="12">
                 <TextBlock x:Name="CjkFontHeaderText" Text="CJK Font" FontSize="18" FontWeight="SemiBold" />
@@ -719,25 +677,6 @@
                         </StackPanel>
                         <TextBlock x:Name="TranslationCacheNoteText"
                                    Text="Cached translations are stored locally in SQLite. Clear cache if translations become stale."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- Page Range -->
-            <StackPanel x:Name="PageRangeSection" Spacing="12">
-                <TextBlock x:Name="PageRangeHeaderText" Text="Page Range" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock x:Name="PageRangeDescriptionText"
-                           Text="Specify which pages to translate. Leave empty to translate all pages."
-                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <TextBox x:Name="PageRangeBox" Header="Page Range"
-                                 Width="450" PlaceholderText="e.g. 1-3,5,7-10"
-                                 HorizontalAlignment="Left" TextChanged="OnPageRangeChanged" />
-                        <TextBlock x:Name="PageRangeNoteText"
-                                   Text="Formats: '1-5' (range), '3' (single page), '1-3,5,7-10' (mixed). Empty or 'all' = translate all pages."
                                    FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>

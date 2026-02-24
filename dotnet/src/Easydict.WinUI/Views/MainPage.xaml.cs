@@ -1,9 +1,11 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.DocumentExport;
 using Easydict.WinUI.Views.Controls;
@@ -51,13 +53,20 @@ namespace Easydict.WinUI.Views
         private CancellationTokenSource? _longDocSingleTaskCts;
         private CancellationTokenSource? _longDocQueueCts;
         private Task? _longDocQueueTask;
-        private readonly List<string> _longDocSelectedFiles = new();
+        private readonly ObservableCollection<LongDocFileItem> _longDocFileItems = new();
+        private readonly ObservableCollection<LongDocHistoryItem> _longDocHistoryItems = new();
         private string _longDocOutputFolder = "";
+        private bool _isLongDocTranslating;
 
         /// <summary>
         /// Maximum time to wait for in-flight query to complete during cleanup.
         /// </summary>
         private const int QueryShutdownTimeoutSeconds = 2;
+
+        /// <summary>
+        /// Maximum history items to keep.
+        /// </summary>
+        private const int MaxHistoryItems = 50;
 
         public MainPage()
         {
@@ -1478,6 +1487,7 @@ namespace Easydict.WinUI.Views
 
         private void InitializeLongDocOutputDefaults()
         {
+            // Initialize output folder
             if (string.IsNullOrWhiteSpace(_longDocOutputFolder))
             {
                 _longDocOutputFolder = Path.Combine(
@@ -1485,6 +1495,40 @@ namespace Easydict.WinUI.Views
                     "Easydict",
                     "LongDocOutputs");
                 LongDocOutputFolderDisplay.Text = _longDocOutputFolder;
+            }
+
+            // Initialize settings controls from SettingsService
+            InitializeLongDocSettingsControls();
+        }
+
+        private void InitializeLongDocSettingsControls()
+        {
+            // Initialize Output Mode combo
+            var outputMode = _settings.DocumentOutputMode ?? "Monolingual";
+            SelectComboByTag(LongDocOutputModeCombo, outputMode);
+
+            // Initialize Concurrency NumberBox
+            LongDocConcurrencyBox.Value = Math.Clamp(_settings.LongDocMaxConcurrency, 1, 16);
+
+            // Initialize Page Range TextBox
+            LongDocPageRangeBox.Text = _settings.LongDocPageRange ?? "";
+        }
+
+        private static void SelectComboByTag(ComboBox combo, string? tag)
+        {
+            if (combo is null) return;
+            for (int i = 0; i < combo.Items.Count; i++)
+            {
+                if (combo.Items[i] is ComboBoxItem item && item.Tag?.ToString() == tag)
+                {
+                    combo.SelectedIndex = i;
+                    return;
+                }
+            }
+            // Default to first item if not found
+            if (combo.Items.Count > 0)
+            {
+                combo.SelectedIndex = 0;
             }
         }
 
@@ -1547,7 +1591,8 @@ namespace Easydict.WinUI.Views
 
         private List<string> GetSelectedFilesList()
         {
-            return _longDocSelectedFiles
+            return _longDocFileItems
+                .Select(item => item.FilePath)
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -1578,34 +1623,20 @@ namespace Easydict.WinUI.Views
 
         private void SetLongDocTaskUiState(bool running)
         {
-            LongDocStartQueueButton.IsEnabled = !running;
-            LongDocCancelQueueButton.IsEnabled = running;
-            LongDocTranslateButton.IsEnabled = !running;
+            LongDocTranslateButton.IsEnabled = !running || _isLongDocTranslating; // Allow if in cancel mode
             LongDocServiceCombo.IsEnabled = !running;
             LongDocInputModeCombo.IsEnabled = !running;
             LongDocBrowseButton.IsEnabled = !running;
-            LongDocRunInBackgroundCheckBox.IsEnabled = !running;
             LongDocOutputBrowseButton.IsEnabled = !running;
+            LongDocRetryButton.IsEnabled = !running;
 
-            // Show/hide progress controls for single-file translation
             if (running)
             {
-                LongDocCancelButton.Visibility = Visibility.Visible;
-                LongDocCancelButton.IsEnabled = true;
-                LongDocProgressBar.Visibility = Visibility.Visible;
-                LongDocProgressDetailText.Visibility = Visibility.Visible;
-                LongDocRetryButton.IsEnabled = false;
                 LongDocStatusText.Text = "Task running, settings are locked. Changes will apply to the next task.";
             }
             else
             {
-                LongDocCancelButton.Visibility = Visibility.Collapsed;
-                LongDocCancelButton.IsEnabled = false;
-                LongDocProgressBar.Visibility = Visibility.Collapsed;
-                LongDocProgressBar.Value = 0;
-                LongDocProgressBar.IsIndeterminate = false;
-                LongDocProgressDetailText.Visibility = Visibility.Collapsed;
-                LongDocProgressDetailText.Text = "";
+                LongDocStatusText.Text = "Idle";
             }
         }
 
@@ -1699,7 +1730,7 @@ namespace Easydict.WinUI.Views
             });
         }
 
-        private async void OnLongDocStartQueueClicked(object sender, RoutedEventArgs e)
+        private void OnLongDocStartQueueClicked(object sender, RoutedEventArgs e)
         {
             if (IsLongDocTaskRunning())
             {
@@ -1744,55 +1775,30 @@ namespace Easydict.WinUI.Views
 
             _longDocQueueTask = ProcessLongDocQueueAsync(queueItems, serviceId, outputFolder, mode, _longDocQueueCts.Token);
 
-            var runInBackground = LongDocRunInBackgroundCheckBox.IsChecked == true;
-            if (runInBackground)
+            // Always run queue in background with continuation
+            _ = _longDocQueueTask.ContinueWith(task =>
             {
-                _ = _longDocQueueTask.ContinueWith(task =>
+                DispatcherQueue.TryEnqueue(() =>
                 {
-                    DispatcherQueue.TryEnqueue(() =>
+                    if (task.IsCanceled)
                     {
-                        if (task.IsCanceled)
-                        {
-                            LongDocStatusText.Text = "Queue canceled.";
-                        }
-                        else if (task.IsFaulted)
-                        {
-                            LongDocStatusText.Text = $"Queue failed: {task.Exception?.GetBaseException().Message}";
-                        }
+                        LongDocStatusText.Text = "Queue canceled.";
+                    }
+                    else if (task.IsFaulted)
+                    {
+                        LongDocStatusText.Text = $"Queue failed: {task.Exception?.GetBaseException().Message}";
+                    }
 
-                        SetLongDocTaskUiState(false);
-                        _longDocQueueTask = null;
-                        _longDocQueueCts?.Dispose();
-                        _longDocQueueCts = null;
-                    });
-                }, TaskScheduler.Default);
-                return;
-            }
-
-            try
-            {
-                await _longDocQueueTask;
-            }
-            catch (OperationCanceledException)
-            {
-                LongDocStatusText.Text = "Queue canceled.";
-            }
-            catch (Exception ex)
-            {
-                LongDocStatusText.Text = $"Queue failed: {ex.Message}";
-            }
-            finally
-            {
-                SetLongDocTaskUiState(false);
-                _longDocQueueTask = null;
-                _longDocQueueCts?.Dispose();
-                _longDocQueueCts = null;
-            }
+                    SetLongDocTaskUiState(false);
+                    _longDocQueueTask = null;
+                    _longDocQueueCts?.Dispose();
+                    _longDocQueueCts = null;
+                });
+            }, TaskScheduler.Default);
         }
 
         private void OnLongDocCancelQueueClicked(object sender, RoutedEventArgs e)
         {
-            LongDocCancelQueueButton.IsEnabled = false;
             _longDocSingleTaskCts?.Cancel();
             _longDocQueueCts?.Cancel();
             LongDocStatusText.Text = "Canceling current task...";
@@ -1801,10 +1807,8 @@ namespace Easydict.WinUI.Views
         private void OnLongDocCancelClicked(object sender, RoutedEventArgs e)
         {
             _longDocSingleTaskCts?.Cancel();
-            LongDocCancelButton.IsEnabled = false;
             LongDocStatusText.Text = "Canceling translation...";
         }
-
 
         private void OnLongDocInputModeChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -1822,12 +1826,63 @@ namespace Easydict.WinUI.Views
             LongDocOutputTitle.Text = "Translation Output";
 
             // Clear file selection when mode changes
-            _longDocSelectedFiles.Clear();
+            _longDocFileItems.Clear();
             UpdateLongDocFileDisplay();
 
             // Update output naming hint
             var ext = GetOutputExtension();
             LongDocOutputNamingHint.Text = $"Output: {{filename}}_translated{ext}";
+        }
+
+        private void OnLongDocOutputModeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (LongDocOutputModeCombo is null) return;
+
+            var selectedTag = (LongDocOutputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+            if (selectedTag != null)
+            {
+                _settings.DocumentOutputMode = selectedTag;
+            }
+        }
+
+        private void OnLongDocConcurrencyChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+        {
+            if (double.IsNaN(args.NewValue))
+            {
+                sender.Value = 4; // Reset to default if cleared
+            }
+            _settings.LongDocMaxConcurrency = (int)Math.Clamp(sender.Value, 1, 16);
+        }
+
+        private void OnLongDocPageRangeChanged(object sender, TextChangedEventArgs e)
+        {
+            if (LongDocPageRangeBox is null) return;
+            _settings.LongDocPageRange = LongDocPageRangeBox.Text?.Trim() ?? "";
+        }
+
+        private void OnLongDocClearHistoryClicked(object sender, RoutedEventArgs e)
+        {
+            _longDocHistoryItems.Clear();
+        }
+
+        private void SetLongDocButtonState(bool isTranslating)
+        {
+            _isLongDocTranslating = isTranslating;
+            var glyph = isTranslating ? "\uE711" : "\uE8C1"; // X or document
+            LongDocTranslateIcon.Glyph = glyph;
+            ToolTipService.SetToolTip(LongDocTranslateButton, isTranslating ? "Cancel" : "Translate");
+        }
+
+        private void AddToHistory(LongDocFileItem fileItem, string serviceName, string targetLanguage)
+        {
+            var historyItem = LongDocHistoryItem.FromFileItem(fileItem, serviceName, targetLanguage);
+            _longDocHistoryItems.Insert(0, historyItem);
+
+            // Enforce max history size (FIFO)
+            while (_longDocHistoryItems.Count > MaxHistoryItems)
+            {
+                _longDocHistoryItems.RemoveAt(_longDocHistoryItems.Count - 1);
+            }
         }
 
         private async void OnLongDocBrowseClicked(object sender, RoutedEventArgs e)
@@ -1858,10 +1913,14 @@ namespace Easydict.WinUI.Views
                 var files = await picker.PickMultipleFilesAsync();
                 if (files == null || files.Count == 0) return;
 
-                _longDocSelectedFiles.Clear();
+                _longDocFileItems.Clear();
                 foreach (var file in files)
                 {
-                    _longDocSelectedFiles.Add(file.Path);
+                    _longDocFileItems.Add(new LongDocFileItem
+                    {
+                        FilePath = file.Path,
+                        Status = LongDocItemStatus.Pending
+                    });
                 }
 
                 UpdateLongDocFileDisplay();
@@ -1875,33 +1934,25 @@ namespace Easydict.WinUI.Views
 
         private void UpdateLongDocFileDisplay()
         {
-            if (_longDocSelectedFiles.Count == 0)
+            if (_longDocFileItems.Count == 0)
             {
                 LongDocFilePathDisplay.Text = "No file selected";
-                LongDocFileListView.Visibility = Visibility.Collapsed;
-                LongDocQueuePanel.Visibility = Visibility.Collapsed;
             }
-            else if (_longDocSelectedFiles.Count == 1)
+            else if (_longDocFileItems.Count == 1)
             {
-                LongDocFilePathDisplay.Text = _longDocSelectedFiles[0];
-                LongDocFileListView.Visibility = Visibility.Collapsed;
-                LongDocQueuePanel.Visibility = Visibility.Collapsed;
+                LongDocFilePathDisplay.Text = _longDocFileItems[0].FileName;
             }
             else
             {
-                LongDocFilePathDisplay.Text = $"{_longDocSelectedFiles.Count} files selected";
-                LongDocFileListView.ItemsSource = null;
-                LongDocFileListView.ItemsSource = new List<string>(_longDocSelectedFiles);
-                LongDocFileListView.Visibility = Visibility.Visible;
-                LongDocQueuePanel.Visibility = Visibility.Visible;
+                LongDocFilePathDisplay.Text = $"{_longDocFileItems.Count} files selected";
             }
         }
 
         private void UpdateLongDocOutputFolder()
         {
-            if (_longDocSelectedFiles.Count > 0)
+            if (_longDocFileItems.Count > 0)
             {
-                var dir = Path.GetDirectoryName(_longDocSelectedFiles[0]);
+                var dir = Path.GetDirectoryName(_longDocFileItems[0].FilePath);
                 if (!string.IsNullOrWhiteSpace(dir))
                 {
                     _longDocOutputFolder = dir;
@@ -1912,9 +1963,9 @@ namespace Easydict.WinUI.Views
 
         private void OnLongDocRemoveFileClicked(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.Tag is string path)
+            if (sender is Button btn && btn.Tag is LongDocFileItem item)
             {
-                _longDocSelectedFiles.Remove(path);
+                _longDocFileItems.Remove(item);
                 UpdateLongDocFileDisplay();
             }
         }
@@ -1942,20 +1993,27 @@ namespace Easydict.WinUI.Views
 
         private async void OnLongDocTranslateClicked(object sender, RoutedEventArgs e)
         {
-            if (IsLongDocTaskRunning())
+            // Handle toggle button behavior
+            if (_isLongDocTranslating)
             {
-                LongDocStatusText.Text = "A task is already running. Please wait or cancel current task.";
+                // Cancel operation
+                _longDocSingleTaskCts?.Cancel();
+                _longDocQueueCts?.Cancel();
+                LongDocStatusText.Text = "Canceling translation...";
+                SetLongDocButtonState(false);
                 return;
             }
 
-            if (_longDocSelectedFiles.Count == 0)
+            if (_longDocFileItems.Count == 0)
             {
                 LongDocStatusText.Text = "No file selected. Click Browse to select files.";
                 return;
             }
 
+            SetLongDocButtonState(true);
+
             // Multiple files: auto-redirect to queue processing
-            if (_longDocSelectedFiles.Count > 1)
+            if (_longDocFileItems.Count > 1)
             {
                 OnLongDocStartQueueClicked(sender, e);
                 return;
@@ -1981,23 +2039,19 @@ namespace Easydict.WinUI.Views
                     {
                         if (_isClosing) return;
 
-                        // Update progress bar
-                        if (p.Percentage >= 0 && p.Percentage <= 100)
-                        {
-                            LongDocProgressBar.IsIndeterminate = false;
-                            LongDocProgressBar.Value = p.Percentage;
-                        }
-                        else
-                        {
-                            LongDocProgressBar.IsIndeterminate = true;
-                        }
-
-                        // Update detail text
+                        // Update status text with progress
                         var stageText = p.GetStageDisplayName();
                         var detailText = p.TotalBlocks > 0
                             ? $"{stageText}: {p.CurrentBlock}/{p.TotalBlocks} blocks (page {p.CurrentPage}/{p.TotalPages})"
                             : stageText;
-                        LongDocProgressDetailText.Text = detailText;
+                        LongDocStatusText.Text = detailText;
+
+                        // Update file item progress if we have a single file
+                        if (_longDocFileItems.Count == 1)
+                        {
+                            var fileItem = _longDocFileItems[0];
+                            fileItem.UpdateProgress((int)p.Percentage, detailText);
+                        }
                     });
                 }
             });
@@ -2021,7 +2075,7 @@ namespace Easydict.WinUI.Views
                     _ => LongDocumentInputMode.Pdf
                 };
 
-                var input = _longDocSelectedFiles[0];
+                var input = _longDocFileItems[0].FilePath;
 
                 if (!TryValidateLongDocOutputFolder(out var outputError))
                 {
@@ -2126,23 +2180,19 @@ namespace Easydict.WinUI.Views
                     {
                         if (_isClosing) return;
 
-                        // Update progress bar
-                        if (p.Percentage >= 0 && p.Percentage <= 100)
-                        {
-                            LongDocProgressBar.IsIndeterminate = false;
-                            LongDocProgressBar.Value = p.Percentage;
-                        }
-                        else
-                        {
-                            LongDocProgressBar.IsIndeterminate = true;
-                        }
-
-                        // Update detail text
+                        // Update status text with progress
                         var stageText = p.GetStageDisplayName();
                         var detailText = p.TotalBlocks > 0
                             ? $"{stageText}: {p.CurrentBlock}/{p.TotalBlocks} blocks (page {p.CurrentPage}/{p.TotalPages})"
                             : stageText;
-                        LongDocProgressDetailText.Text = detailText;
+                        LongDocStatusText.Text = detailText;
+
+                        // Update file item progress if we have a single file
+                        if (_longDocFileItems.Count == 1)
+                        {
+                            var fileItem = _longDocFileItems[0];
+                            fileItem.UpdateProgress((int)p.Percentage, detailText);
+                        }
                     });
                 }
             });

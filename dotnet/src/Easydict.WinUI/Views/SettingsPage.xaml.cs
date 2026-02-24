@@ -170,27 +170,6 @@ public sealed partial class SettingsPage : Page
         if (FreeServicesDescriptionText != null)
             FreeServicesDescriptionText.Text = loc.GetString("FreeServicesDescription");
 
-        // Document Output Mode section
-        if (DocumentOutputModeHeaderText != null)
-            DocumentOutputModeHeaderText.Text = loc.GetString("DocumentOutputMode_Title");
-        if (DocumentOutputModeDescriptionText != null)
-            DocumentOutputModeDescriptionText.Text = loc.GetString("DocumentOutputMode_Description");
-        DocumentOutputModeCombo.Header = loc.GetString("DocumentOutputMode_Title");
-        DocumentOutputMonolingualItem.Content = loc.GetString("DocumentOutputMode_Monolingual");
-        DocumentOutputBilingualItem.Content = loc.GetString("DocumentOutputMode_Bilingual");
-        DocumentOutputBothItem.Content = loc.GetString("DocumentOutputMode_Both");
-        if (DocumentOutputModeNoteText != null)
-            DocumentOutputModeNoteText.Text = loc.GetString("DocumentOutputMode_Note");
-
-        // Translation Concurrency section
-        if (TranslationConcurrencyHeaderText != null)
-            TranslationConcurrencyHeaderText.Text = loc.GetString("TranslationConcurrency_Title");
-        if (TranslationConcurrencyDescriptionText != null)
-            TranslationConcurrencyDescriptionText.Text = loc.GetString("TranslationConcurrency_Description");
-        ConcurrencyNumberBox.Header = loc.GetString("TranslationConcurrency_Title");
-        if (TranslationConcurrencyNoteText != null)
-            TranslationConcurrencyNoteText.Text = loc.GetString("TranslationConcurrency_Note");
-
         // CJK Font section
         if (CjkFontHeaderText != null)
             CjkFontHeaderText.Text = loc.GetString("CjkFont_Title");
@@ -220,15 +199,6 @@ public sealed partial class SettingsPage : Page
         ClearCacheButton.Content = loc.GetString("TranslationCache_Clear");
         if (TranslationCacheNoteText != null)
             TranslationCacheNoteText.Text = loc.GetString("TranslationCache_Note");
-
-        // Page Range section
-        if (PageRangeHeaderText != null)
-            PageRangeHeaderText.Text = loc.GetString("PageRange_Title");
-        if (PageRangeDescriptionText != null)
-            PageRangeDescriptionText.Text = loc.GetString("PageRange_Description");
-        PageRangeBox.Header = loc.GetString("PageRange_Title");
-        if (PageRangeNoteText != null)
-            PageRangeNoteText.Text = loc.GetString("PageRange_Note");
 
         // Custom Prompt section
         if (CustomPromptHeaderText != null)
@@ -414,10 +384,6 @@ public sealed partial class SettingsPage : Page
 
         // Layout detection changes
         LayoutDetectionModeCombo.SelectionChanged += OnLayoutDetectionModeChanged;
-
-        // Document output mode
-        DocumentOutputModeCombo.SelectionChanged += OnDocumentOutputModeChanged;
-        ConcurrencyNumberBox.ValueChanged += OnConcurrencyValueChanged;
         VisionLayoutServiceCombo.SelectionChanged += OnSettingChanged;
 
         // CheckBox changes
@@ -543,12 +509,6 @@ public sealed partial class SettingsPage : Page
         SelectComboByTag(VisionLayoutServiceCombo, _settings.VisionLayoutServiceId);
         UpdateLayoutDetectionUI();
 
-        // Document Output Mode
-        SelectComboByTag(DocumentOutputModeCombo, _settings.DocumentOutputMode);
-
-        // Translation Concurrency
-        ConcurrencyNumberBox.Value = Math.Clamp(_settings.LongDocMaxConcurrency, 1, 16);
-
         // Formula Detection
         FormulaFontPatternBox.Text = _settings.FormulaFontPattern;
         FormulaCharPatternBox.Text = _settings.FormulaCharPattern;
@@ -556,9 +516,6 @@ public sealed partial class SettingsPage : Page
         // Translation Cache
         TranslationCacheToggle.IsOn = _settings.EnableTranslationCache;
         _ = UpdateCacheStatusAsync();
-
-        // Page Range
-        PageRangeBox.Text = _settings.LongDocPageRange;
 
         // Custom Prompt
         CustomPromptBox.Text = _settings.LongDocCustomPrompt;
@@ -997,21 +954,12 @@ public sealed partial class SettingsPage : Page
         _settings.LayoutDetectionMode = GetSelectedTag(LayoutDetectionModeCombo) ?? "Auto";
         _settings.VisionLayoutServiceId = GetSelectedTag(VisionLayoutServiceCombo) ?? "gemini";
 
-        // Document Output Mode
-        _settings.DocumentOutputMode = GetSelectedTag(DocumentOutputModeCombo) ?? "Monolingual";
-
-        // Translation Concurrency
-        _settings.LongDocMaxConcurrency = (int)Math.Clamp(ConcurrencyNumberBox.Value, 1, 16);
-
         // Formula Detection
         _settings.FormulaFontPattern = FormulaFontPatternBox.Text?.Trim() ?? "";
         _settings.FormulaCharPattern = FormulaCharPatternBox.Text?.Trim() ?? "";
 
         // Translation Cache
         _settings.EnableTranslationCache = TranslationCacheToggle.IsOn;
-
-        // Page Range
-        _settings.LongDocPageRange = PageRangeBox.Text?.Trim() ?? "";
 
         // Custom Prompt
         _settings.LongDocCustomPrompt = CustomPromptBox.Text?.Trim() ?? "";
@@ -1182,12 +1130,9 @@ public sealed partial class SettingsPage : Page
             new NavSection("EnabledServicesSection", "Enabled Services", "\uE73E", EnabledServicesSection),           // Checkmark
             new NavSection("ServiceConfigurationSection", "Service Configuration", "\uE90F", ServiceConfigurationSection), // Key
             new NavSection("LayoutDetectionSection", "Layout Detection", "\uE8A1", LayoutDetectionSection),  // Page
-            new NavSection("DocumentOutputModeSection", "Document Output", "\uE8C8", DocumentOutputModeSection),  // Document
-            new NavSection("TranslationConcurrencySection", "Concurrency", "\uE916", TranslationConcurrencySection),  // Speed
             new NavSection("CjkFontSection", "CJK Font", "\uE8D2", CjkFontSection),  // Font
             new NavSection("FormulaDetectionSection", "Formula Detection", "\uE8EF", FormulaDetectionSection),  // Calculator
             new NavSection("TranslationCacheSection", "Translation Cache", "\uE74E", TranslationCacheSection),  // Save
-            new NavSection("PageRangeSection", "Page Range", "\uE7C3", PageRangeSection),      // Page
             new NavSection("CustomPromptSection", "Custom Prompt", "\uE8BD", CustomPromptSection),  // Comment
             new NavSection("HttpProxySection", "HTTP Proxy", "\uE968", HttpProxySection),      // Network
             new NavSection("BehaviorSection", "Behavior", "\uE771", BehaviorSection),          // Touch
@@ -1953,30 +1898,6 @@ public sealed partial class SettingsPage : Page
 
     #endregion
 
-    #region Document Output Mode
-
-    private void OnDocumentOutputModeChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isLoading) return;
-        OnSettingChanged(sender, e);
-    }
-
-    #endregion
-
-    #region Translation Concurrency
-
-    private void OnConcurrencyValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
-    {
-        if (_isLoading) return;
-        if (double.IsNaN(args.NewValue))
-        {
-            sender.Value = 4; // Reset to default if cleared
-        }
-        OnSettingChanged(sender, new RoutedEventArgs());
-    }
-
-    #endregion
-
     #region Formula Detection
 
     private void OnFormulaPatternChanged(object sender, TextChangedEventArgs e)
@@ -2029,16 +1950,6 @@ public sealed partial class SettingsPage : Page
         {
             // Ignore if cache DB doesn't exist yet
         }
-    }
-
-    #endregion
-
-    #region Page Range
-
-    private void OnPageRangeChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_isLoading) return;
-        OnSettingChanged(sender, new RoutedEventArgs());
     }
 
     #endregion

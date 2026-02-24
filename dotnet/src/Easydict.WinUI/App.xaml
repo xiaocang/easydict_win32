@@ -44,7 +44,9 @@
                         <ControlTemplate TargetType="RadioButton">
                             <Grid x:Name="RootGrid" Background="{TemplateBinding Background}"
                                   CornerRadius="{TemplateBinding CornerRadius}"
-                                  Padding="{TemplateBinding Padding}">
+                                  Padding="{TemplateBinding Padding}"
+                                  BorderThickness="1"
+                                  BorderBrush="Transparent">
                                 <VisualStateManager.VisualStateGroups>
                                     <VisualStateGroup x:Name="CommonStates">
                                         <VisualState x:Name="Normal" />
@@ -67,8 +69,10 @@
                                         <VisualState x:Name="Unchecked" />
                                         <VisualState x:Name="Checked">
                                             <VisualState.Setters>
-                                                <Setter Target="RootGrid.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                                <Setter Target="RootGrid.Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
+                                                <Setter Target="RootGrid.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                                                 <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                                <Setter Target="ContentPresenter.FontWeight" Value="Bold" />
                                             </VisualState.Setters>
                                         </VisualState>
                                     </VisualStateGroup>

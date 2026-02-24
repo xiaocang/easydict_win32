@@ -27,7 +27,12 @@ jobs:
           global-json-file: dotnet/global.json
 
       - name: Setup WinApp CLI
-        uses: microsoft/setup-WinAppCli@v0.1
+        shell: pwsh
+        run: |
+          # Workaround: install winapp CLI directly via winget instead of
+          # microsoft/setup-WinAppCli action, which fails to extract on
+          # runners < 2.311.0 (Expand-Archive rejects extensionless temp files).
+          winget install Microsoft.WinAppCli --source winget --accept-package-agreements --accept-source-agreements --silent
 
       - name: Restore WinUI project (arm64)
         working-directory: dotnet

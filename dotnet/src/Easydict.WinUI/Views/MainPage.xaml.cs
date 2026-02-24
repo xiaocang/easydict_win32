@@ -1515,6 +1515,8 @@ namespace Easydict.WinUI.Views
 
         private void OnLongDocInputModeChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (LongDocManualTextBox is null) return; // Fired during InitializeComponent before controls exist
+
             var selected = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
             var isPdfMode = string.Equals(selected, "pdf", StringComparison.Ordinal);
 

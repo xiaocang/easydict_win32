@@ -33,3 +33,9 @@ src/Easydict.WinUI/Assets/Square150x150Logo*.png
 src/Easydict.WinUI/Assets/Wide310x150Logo*.png
 src/Easydict.WinUI/Assets/SplashScreen*.png
 src/Easydict.WinUI/Assets/StoreLogo*.png
+
+temp_*/
+test-extracted/
+*.txt
+*.md
+bundle-input/

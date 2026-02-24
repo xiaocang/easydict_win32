@@ -136,4 +136,6 @@ internal sealed class CjkFontResolver : IFontResolver
         // Not a CJK font face - return null to let PdfSharpCore try other resolvers
         return null;
     }
+
+    public string DefaultFontName => "Arial";
 }

@@ -30,7 +30,7 @@ public sealed class PdfExportService : IDocumentExportService
         public static BackfillRenderingMetrics Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, null);
     }
 
-    private sealed class PageBackfillAccumulator
+    internal sealed class PageBackfillAccumulator
     {
         public int CandidateBlocks { get; set; }
         public int RenderedBlocks { get; set; }

@@ -23,6 +23,7 @@ public readonly record struct LayoutDetection(
 public sealed class DocLayoutYoloService : IDisposable
 {
     private const int ModelInputSize = 1024;
+    private const string OnnxRuntimeFileName = "onnxruntime.dll";
 
     // DocLayout-YOLO DocStructBench class names (10 classes)
     internal static readonly string[] ClassNames =

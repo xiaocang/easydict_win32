@@ -106,19 +106,11 @@ jobs:
           Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow
           Write-Host "Windows App Runtime arm64 installed"
 
-      - name: Install MSIX package (register from extracted layout)
+      - name: Install MSIX package
         shell: pwsh
         run: |
-          $msixPath = "dotnet/msix/Easydict-arm64-smoke.msix"
-          $extractDir = "dotnet/msix/extracted-arm64"
-
-          if (Test-Path $extractDir) {
-            Remove-Item $extractDir -Recurse -Force
-          }
-          Expand-Archive -Path $msixPath -DestinationPath $extractDir -Force
-
-          $manifest = Join-Path $extractDir "AppxManifest.xml"
-          Add-AppxPackage -Register $manifest -DisableDevelopmentMode
+          $msixPath = Resolve-Path "dotnet/msix/Easydict-arm64-smoke.msix"
+          Add-AppxPackage -Path $msixPath
 
       - name: Launch app and verify main window appears
         shell: pwsh

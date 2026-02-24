@@ -102,6 +102,50 @@ public sealed record LongDocumentTranslationOptions
     public int MaxConcurrency { get; init; } = 1;
     public string? FormulaFontPattern { get; init; }
     public string? FormulaCharPattern { get; init; }
+    public string? PageRange { get; init; }
+    public string? CustomPrompt { get; init; }
+}
+
+/// <summary>
+/// Parses page range strings into a set of 1-based page numbers.
+/// Supports formats: "1-3,5,7-10", "1-5", "3", "all", null/empty (= all pages).
+/// </summary>
+public static class PageRangeParser
+{
+    public static HashSet<int>? Parse(string? pageRange, int totalPages)
+    {
+        if (string.IsNullOrWhiteSpace(pageRange))
+            return null;
+
+        var trimmed = pageRange.Trim();
+        if (trimmed.Equals("all", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var result = new HashSet<int>();
+        var parts = trimmed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            var dashIndex = part.IndexOf('-');
+            if (dashIndex > 0 && dashIndex < part.Length - 1)
+            {
+                if (int.TryParse(part.AsSpan(0, dashIndex), out var start) &&
+                    int.TryParse(part.AsSpan(dashIndex + 1), out var end))
+                {
+                    start = Math.Max(1, start);
+                    end = Math.Min(totalPages, end);
+                    for (var i = start; i <= end; i++)
+                        result.Add(i);
+                }
+            }
+            else if (int.TryParse(part, out var page))
+            {
+                if (page >= 1 && page <= totalPages)
+                    result.Add(page);
+            }
+        }
+
+        return result.Count > 0 ? result : null;
+    }
 }
 
 public sealed record FailedBlockInfo

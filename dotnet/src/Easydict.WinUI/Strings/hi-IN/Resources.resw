@@ -377,4 +377,22 @@
   <data name="TranslationCache_Note" xml:space="preserve">
     <value>कैश किए गए अनुवाद स्थानीय SQLite में संग्रहीत हैं। अगर अनुवाद पुराने हो जाएं तो कैश साफ़ करें।</value>
   </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>पृष्ठ सीमा</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>अनुवाद करने के लिए पृष्ठ निर्दिष्ट करें। सभी पृष्ठों का अनुवाद करने के लिए खाली छोड़ दें।</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>प्रारूप: "1-5" (सीमा), "3" (एकल पृष्ठ), "1-3,5,7-10" (मिश्रित)। खाली या "all" = सभी पृष्ठों का अनुवाद।</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>कस्टम अनुवाद प्रॉम्प्ट</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>LLM-आधारित अनुवाद सेवाओं (OpenAI, DeepSeek, Gemini, आदि) के लिए कस्टम निर्देश जोड़ें।</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>ये निर्देश LLM सेवाओं के सिस्टम प्रॉम्प्ट में जोड़े जाते हैं। गैर-LLM सेवाओं (Google, DeepL, आदि) पर कोई प्रभाव नहीं।</value>
+  </data>
 </root>

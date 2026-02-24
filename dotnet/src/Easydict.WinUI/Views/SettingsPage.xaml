@@ -724,6 +724,45 @@
                 </Border>
             </StackPanel>
 
+            <!-- Page Range -->
+            <StackPanel x:Name="PageRangeSection" Spacing="12">
+                <TextBlock x:Name="PageRangeHeaderText" Text="Page Range" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="PageRangeDescriptionText"
+                           Text="Specify which pages to translate. Leave empty to translate all pages."
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <TextBox x:Name="PageRangeBox" Header="Page Range"
+                                 Width="450" PlaceholderText="e.g. 1-3,5,7-10"
+                                 HorizontalAlignment="Left" TextChanged="OnPageRangeChanged" />
+                        <TextBlock x:Name="PageRangeNoteText"
+                                   Text="Formats: '1-5' (range), '3' (single page), '1-3,5,7-10' (mixed). Empty or 'all' = translate all pages."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Custom LLM Prompt -->
+            <StackPanel x:Name="CustomPromptSection" Spacing="12">
+                <TextBlock x:Name="CustomPromptHeaderText" Text="Custom Translation Prompt" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="CustomPromptDescriptionText"
+                           Text="Add custom instructions for LLM-based translation services (OpenAI, DeepSeek, Gemini, etc.)."
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="16">
+                        <TextBox x:Name="CustomPromptBox" Header="Additional Instructions"
+                                 Width="450" Height="120" AcceptsReturn="True" TextWrapping="Wrap"
+                                 PlaceholderText="e.g. You are translating a medical research paper. Preserve all LaTeX commands and scientific terminology."
+                                 HorizontalAlignment="Left" TextChanged="OnCustomPromptChanged" />
+                        <TextBlock x:Name="CustomPromptNoteText"
+                                   Text="These instructions are appended to the system prompt for LLM services. Has no effect on non-LLM services (Google, DeepL, etc.)."
+                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
             <!-- HTTP Proxy -->
             <StackPanel x:Name="HttpProxySection" Spacing="12">
                 <TextBlock x:Name="HttpProxyHeaderText" Text="HTTP Proxy" FontSize="18" FontWeight="SemiBold" />

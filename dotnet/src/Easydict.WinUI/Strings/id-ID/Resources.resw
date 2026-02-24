@@ -779,4 +779,22 @@
   <data name="TranslationCache_Note" xml:space="preserve">
     <value>Terjemahan yang di-cache disimpan secara lokal di SQLite. Hapus cache jika terjemahan sudah usang.</value>
   </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>Rentang Halaman</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>Tentukan halaman yang akan diterjemahkan. Kosongkan untuk menerjemahkan semua halaman.</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>Format: "1-5" (rentang), "3" (halaman tunggal), "1-3,5,7-10" (campuran). Kosong atau "all" = terjemahkan semua halaman.</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>Prompt Terjemahan Kustom</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>Tambahkan instruksi kustom untuk layanan terjemahan berbasis LLM (OpenAI, DeepSeek, Gemini, dll.).</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>Instruksi ini ditambahkan ke prompt sistem untuk layanan LLM. Tidak berpengaruh pada layanan non-LLM (Google, DeepL, dll.).</value>
+  </data>
 </root>

@@ -787,4 +787,22 @@
   <data name="TranslationCache_Note" xml:space="preserve">
     <value>การแปลที่แคชจะถูกเก็บไว้ใน SQLite ในเครื่อง ล้างแคชหากการแปลล้าสมัย</value>
   </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>ช่วงหน้า</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>ระบุหน้าที่ต้องการแปล เว้นว่างเพื่อแปลทุกหน้า</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>รูปแบบ: "1-5" (ช่วง), "3" (หน้าเดียว), "1-3,5,7-10" (ผสม) เว้นว่างหรือ "all" = แปลทุกหน้า</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>พรอมต์การแปลที่กำหนดเอง</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>เพิ่มคำสั่งที่กำหนดเองสำหรับบริการแปลที่ใช้ LLM (OpenAI, DeepSeek, Gemini เป็นต้น)</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>คำสั่งเหล่านี้จะถูกเพิ่มไปยังพรอมต์ระบบสำหรับบริการ LLM ไม่มีผลต่อบริการที่ไม่ใช่ LLM (Google, DeepL เป็นต้น)</value>
+  </data>
 </root>

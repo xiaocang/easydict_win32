@@ -833,4 +833,22 @@
   <data name="TranslationCache_Note" xml:space="preserve">
     <value>Bản dịch được lưu trong SQLite cục bộ. Xóa bộ nhớ đệm nếu bản dịch đã lỗi thời.</value>
   </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>Phạm vi trang</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>Chỉ định các trang cần dịch. Để trống để dịch tất cả các trang.</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>Định dạng: "1-5" (phạm vi), "3" (trang đơn), "1-3,5,7-10" (hỗn hợp). Trống hoặc "all" = dịch tất cả các trang.</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>Prompt dịch tùy chỉnh</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>Thêm hướng dẫn tùy chỉnh cho các dịch vụ dịch dựa trên LLM (OpenAI, DeepSeek, Gemini, v.v.).</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>Các hướng dẫn này được thêm vào prompt hệ thống cho các dịch vụ LLM. Không ảnh hưởng đến các dịch vụ không phải LLM (Google, DeepL, v.v.).</value>
+  </data>
 </root>

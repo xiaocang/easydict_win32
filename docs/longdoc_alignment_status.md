@@ -256,6 +256,8 @@
 **已实现**：
 - `TranslationCacheService`：SQLite 持久化缓存，UPSERT 语义，SHA256 源文本哈希
 - `WriteCacheEntriesAsync`：翻译完成后自动写入缓存
+- `ReadCacheEntriesAsync`：翻译前查询缓存，命中则跳过 API 调用（P2 修复）
+- `TranslatePendingChunksAsync` 缓存集成：重试路径自动查缓存
 - `EnableTranslationCache` 设置：开/关切换
 - 设置页面：Translation Cache section（开关 + 清除缓存按钮 + 缓存条目计数）
 - NuGet：`Microsoft.Data.Sqlite 9.0.0`
@@ -264,17 +266,19 @@
 
 ---
 
-### G7（P2）：页范围选择
+### G7（P2）：页范围选择 ✅
 
 | 维度 | PDFMathTranslate | Easydict Win32 |
 |------|-----------------|----------------|
-| 选择方式 | `--pages` 参数：All / First / First 5 / 自定义范围（如 `1-5,8,10-12`） | 固定翻译全部页面 |
-| GUI 支持 | Gradio 下拉 + 自定义输入框 | 无 |
+| 选择方式 | `--pages` 参数：All / First / First 5 / 自定义范围（如 `1-5,8,10-12`） | `LongDocPageRange` 设置 + `PageRangeParser`（如 `1-3,5,7-10`） |
+| GUI 支持 | Gradio 下拉 + 自定义输入框 | 设置页 TextBox + 格式说明 |
 
-**差距说明**：
-- 大型文档（100+ 页）用户常只需翻译摘要/前几页。
-- 全量翻译浪费 API 配额且耗时长。
-- 建议：在 `LongDocumentTranslationOptions` 增加 `PageRange` 属性，UI 提供选项。
+**已实现**：
+- `PageRangeParser`：解析页范围字符串为页码集合（支持 `1-3,5,7-10`、`all`、空值）
+- `BuildSourceDocumentAsync` / `BuildSourceDocumentFromPdf`：ML 和启发式路径均支持页范围过滤
+- `LongDocPageRange` 设置：设置页 TextBox + 格式说明
+- 本地化：15 语言 × 3 条
+- 测试：`PageRangeParserTests`（12 个测试）
 
 ---
 
@@ -343,6 +347,61 @@
 
 ---
 
+### G13（P2）：自定义 LLM 翻译 Prompt ✅
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 自定义 Prompt | `--prompt` CLI 参数 | `LongDocCustomPrompt` 设置 + 设置页多行 TextBox |
+| 作用范围 | LLM 翻译服务 | OpenAI、DeepSeek、Gemini 等 LLM 服务（`BaseOpenAIService` + `GeminiService`） |
+
+**已实现**：
+- `TranslationRequest.CustomPrompt`：可选属性，追加到 LLM 系统 prompt
+- `BaseOpenAIService.BuildChatMessages`：若 `CustomPrompt` 非空，追加 "Additional instructions"
+- `GeminiService`：同样支持 CustomPrompt 注入到 systemInstruction
+- `LongDocCustomPrompt` 设置：多行 TextBox + 说明
+- 本地化：15 语言 × 3 条
+
+---
+
+### G14（P2）：PDF 书签/目录保留 ✅
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 书签保留 | `doc.get_toc()` / `doc.set_toc()` | 单语 PDF：PdfSharpCore Modify 模式自动保留；双语 PDF：`CopyBookmarksForBilingual` 递归复制 |
+| 页码映射 | 双语页码翻倍 | 源页码 N → 双语页码 2N-1（交错页映射） |
+
+**已实现**：
+- 单语 PDF：`ExportPdfWithCoordinateBackfill` 使用 `PdfDocumentOpenMode.Modify`，自动保留源 PDF 书签
+- 双语 PDF：`CopyBookmarksForBilingual` 递归复制书签树，自动映射页码
+- `CopyOutlineLevel` / `FindOutlinePageIndex`：递归遍历 + 页对象引用匹配
+
+---
+
+### G15（P3）：字体子集化
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 字体子集化 | 默认启用（`--skip-subset-fonts` 禁用） | 暂无（全量字体嵌入 ~16MB/语言） |
+
+**差距说明**：
+- 全量 CJK 字体嵌入导致输出 PDF 体积较大。
+- PdfSharpCore 不原生支持字体子集化，需第三方库或手动实现。
+- 优先级较低，视用户反馈决定。
+
+---
+
+### G16（P2）：表格专门处理
+
+| 维度 | PDFMathTranslate | Easydict Win32 |
+|------|-----------------|----------------|
+| 表格处理 | 识别表格结构，保留格式 | DocLayout-YOLO 检测表格区域，标记为 `TableLike`，但无结构保留 |
+
+**差距说明**：
+- 当前表格区域被识别但仍作为普通文本块翻译，可能破坏表格结构。
+- 建议：表格块保持原始布局，仅翻译单元格内文本。
+
+---
+
 ### 差距汇总矩阵
 
 | 编号 | 差距项 | 优先级 | 难度 | 影响范围 |
@@ -353,12 +412,16 @@
 | G4 | 并行翻译 ✅ | P1 | 低 | 性能 |
 | G5 | CJK/多语言字体嵌入 ✅ | P1 | 中 | 输出可读性（关键） |
 | G6 | 持久化翻译缓存 ✅ | P1 | 中 | 断点续传/API 节省 |
-| G7 | 页范围选择 | P2 | 低 | 用户体验 |
+| G7 | 页范围选择 ✅ | P2 | 低 | 用户体验 |
 | G8 | URL 输入支持 | P2 | 低 | 用户体验 |
 | G9 | 源字体保留与匹配 | P2 | 中 | 输出质量 |
 | G10 | 批量目录处理 / CLI 入口 | P2 | 低 | 自动化 |
 | G11 | PDF/A 兼容模式 | P3 | 低 | 兼容性 |
 | G12 | PDF 压缩与优化 | P3 | 低 | 文件大小 |
+| G13 | 自定义 LLM 翻译 Prompt ✅ | P2 | 低 | 翻译质量 |
+| G14 | PDF 书签/目录保留 ✅ | P2 | 中 | 输出质量 |
+| G15 | 字体子集化 | P3 | 中 | 文件大小 |
+| G16 | 表格专门处理 | P2 | 中 | 输出质量 |
 
 ---
 

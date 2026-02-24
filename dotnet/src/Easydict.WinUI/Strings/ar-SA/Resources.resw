@@ -833,4 +833,22 @@
   <data name="TranslationCache_Note" xml:space="preserve">
     <value>يتم تخزين الترجمات المخزنة مؤقتًا في SQLite محليًا. امسح ذاكرة التخزين المؤقت إذا أصبحت الترجمات قديمة.</value>
   </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>نطاق الصفحات</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>حدد الصفحات المراد ترجمتها. اتركه فارغاً لترجمة جميع الصفحات.</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>التنسيقات: "1-5" (نطاق)، "3" (صفحة واحدة)، "1-3,5,7-10" (مختلط). فارغ أو "all" = ترجمة جميع الصفحات.</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>موجه ترجمة مخصص</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>أضف تعليمات مخصصة لخدمات الترجمة القائمة على LLM (OpenAI، DeepSeek، Gemini، إلخ).</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>تُضاف هذه التعليمات إلى موجه النظام لخدمات LLM. لا تأثير على الخدمات غير LLM (Google، DeepL، إلخ).</value>
+  </data>
 </root>

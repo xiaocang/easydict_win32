@@ -130,7 +130,94 @@ public sealed class PdfExportService : IDocumentExportService
             }
         }
 
+        // Copy bookmarks from source PDF, mapping page numbers for interleaved layout
+        CopyBookmarksForBilingual(sourceDoc, bilingualDoc);
+
         bilingualDoc.Save(bilingualOutputPath);
+    }
+
+    /// <summary>
+    /// Copies bookmarks from the source PDF to the bilingual PDF,
+    /// adjusting page references for the interleaved layout (source page N → bilingual page 2N-1).
+    /// </summary>
+    internal static void CopyBookmarksForBilingual(PdfDocument sourceDoc, PdfDocument bilingualDoc)
+    {
+        try
+        {
+            if (sourceDoc.Outlines.Count == 0)
+                return;
+
+            CopyOutlineLevel(sourceDoc.Outlines, bilingualDoc.Outlines, sourceDoc, bilingualDoc);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[PdfExport] Bookmark copy failed: {ex.Message}");
+        }
+    }
+
+    private static void CopyOutlineLevel(
+        PdfOutlineCollection sourceOutlines,
+        PdfOutlineCollection targetOutlines,
+        PdfDocument sourceDoc,
+        PdfDocument bilingualDoc)
+    {
+        foreach (var sourceOutline in sourceOutlines)
+        {
+            try
+            {
+                var sourcePageIndex = FindOutlinePageIndex(sourceOutline, sourceDoc);
+                if (sourcePageIndex < 0)
+                {
+                    // No page reference, add as title-only bookmark
+                    var newOutline = targetOutlines.Add(sourceOutline.Title, bilingualDoc.Pages[0]);
+                    if (sourceOutline.Outlines.Count > 0)
+                        CopyOutlineLevel(sourceOutline.Outlines, newOutline.Outlines, sourceDoc, bilingualDoc);
+                    continue;
+                }
+
+                // Map source page index to bilingual page index: source page i → bilingual page 2*i
+                var bilingualPageIndex = sourcePageIndex * 2;
+                if (bilingualPageIndex >= bilingualDoc.PageCount)
+                    bilingualPageIndex = bilingualDoc.PageCount - 1;
+
+                var targetOutline = targetOutlines.Add(sourceOutline.Title, bilingualDoc.Pages[bilingualPageIndex]);
+
+                // Recurse into children
+                if (sourceOutline.Outlines.Count > 0)
+                    CopyOutlineLevel(sourceOutline.Outlines, targetOutline.Outlines, sourceDoc, bilingualDoc);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[PdfExport] Failed to copy bookmark '{sourceOutline.Title}': {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Finds the 0-based page index for a bookmark outline entry.
+    /// Returns -1 if the page reference cannot be resolved.
+    /// </summary>
+    private static int FindOutlinePageIndex(PdfOutline outline, PdfDocument doc)
+    {
+        try
+        {
+            // PdfSharpCore's PdfOutline.DestinationPage returns the PdfPage
+            var destPage = outline.DestinationPage;
+            if (destPage == null)
+                return -1;
+
+            for (var i = 0; i < doc.PageCount; i++)
+            {
+                if (ReferenceEquals(doc.Pages[i], destPage))
+                    return i;
+            }
+        }
+        catch
+        {
+            // Some bookmarks may reference invalid pages
+        }
+
+        return -1;
     }
 
     /// <summary>

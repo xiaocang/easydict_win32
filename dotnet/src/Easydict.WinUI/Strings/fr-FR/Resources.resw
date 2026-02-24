@@ -950,4 +950,22 @@
   <data name="TranslationCache_Note" xml:space="preserve">
     <value>Les traductions en cache sont stockées localement dans SQLite. Videz le cache si les traductions deviennent obsolètes.</value>
   </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>Plage de pages</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>Spécifiez les pages à traduire. Laissez vide pour traduire toutes les pages.</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>Formats : "1-5" (plage), "3" (page unique), "1-3,5,7-10" (mixte). Vide ou "all" = traduire toutes les pages.</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>Prompt de traduction personnalisé</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>Ajoutez des instructions personnalisées pour les services de traduction basés sur LLM (OpenAI, DeepSeek, Gemini, etc.).</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>Ces instructions sont ajoutées au prompt système des services LLM. Sans effet sur les services non-LLM (Google, DeepL, etc.).</value>
+  </data>
 </root>

@@ -221,6 +221,24 @@ public sealed partial class SettingsPage : Page
         if (TranslationCacheNoteText != null)
             TranslationCacheNoteText.Text = loc.GetString("TranslationCache_Note");
 
+        // Page Range section
+        if (PageRangeHeaderText != null)
+            PageRangeHeaderText.Text = loc.GetString("PageRange_Title");
+        if (PageRangeDescriptionText != null)
+            PageRangeDescriptionText.Text = loc.GetString("PageRange_Description");
+        PageRangeBox.Header = loc.GetString("PageRange_Title");
+        if (PageRangeNoteText != null)
+            PageRangeNoteText.Text = loc.GetString("PageRange_Note");
+
+        // Custom Prompt section
+        if (CustomPromptHeaderText != null)
+            CustomPromptHeaderText.Text = loc.GetString("CustomPrompt_Title");
+        if (CustomPromptDescriptionText != null)
+            CustomPromptDescriptionText.Text = loc.GetString("CustomPrompt_Description");
+        CustomPromptBox.Header = loc.GetString("CustomPrompt_Title");
+        if (CustomPromptNoteText != null)
+            CustomPromptNoteText.Text = loc.GetString("CustomPrompt_Note");
+
         // HTTP Proxy section
         if (HttpProxyHeaderText != null)
             HttpProxyHeaderText.Text = loc.GetString("HttpProxy");
@@ -538,6 +556,12 @@ public sealed partial class SettingsPage : Page
         // Translation Cache
         TranslationCacheToggle.IsOn = _settings.EnableTranslationCache;
         _ = UpdateCacheStatusAsync();
+
+        // Page Range
+        PageRangeBox.Text = _settings.LongDocPageRange;
+
+        // Custom Prompt
+        CustomPromptBox.Text = _settings.LongDocCustomPrompt;
 
         // Behavior
         // App Theme - select based on current setting
@@ -986,6 +1010,12 @@ public sealed partial class SettingsPage : Page
         // Translation Cache
         _settings.EnableTranslationCache = TranslationCacheToggle.IsOn;
 
+        // Page Range
+        _settings.LongDocPageRange = PageRangeBox.Text?.Trim() ?? "";
+
+        // Custom Prompt
+        _settings.LongDocCustomPrompt = CustomPromptBox.Text?.Trim() ?? "";
+
         // Save EnabledQuery settings for each window
         _settings.MainWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_mainWindowServices);
         _settings.MiniWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_miniWindowServices);
@@ -1157,6 +1187,8 @@ public sealed partial class SettingsPage : Page
             new NavSection("CjkFontSection", "CJK Font", "\uE8D2", CjkFontSection),  // Font
             new NavSection("FormulaDetectionSection", "Formula Detection", "\uE8EF", FormulaDetectionSection),  // Calculator
             new NavSection("TranslationCacheSection", "Translation Cache", "\uE74E", TranslationCacheSection),  // Save
+            new NavSection("PageRangeSection", "Page Range", "\uE7C3", PageRangeSection),      // Page
+            new NavSection("CustomPromptSection", "Custom Prompt", "\uE8BD", CustomPromptSection),  // Comment
             new NavSection("HttpProxySection", "HTTP Proxy", "\uE968", HttpProxySection),      // Network
             new NavSection("BehaviorSection", "Behavior", "\uE771", BehaviorSection),          // Touch
             new NavSection("HotkeysSection", "Hotkeys", "\uE765", HotkeysSection),             // Keyboard
@@ -1997,6 +2029,26 @@ public sealed partial class SettingsPage : Page
         {
             // Ignore if cache DB doesn't exist yet
         }
+    }
+
+    #endregion
+
+    #region Page Range
+
+    private void OnPageRangeChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        OnSettingChanged(sender, new RoutedEventArgs());
+    }
+
+    #endregion
+
+    #region Custom Prompt
+
+    private void OnCustomPromptChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        OnSettingChanged(sender, new RoutedEventArgs());
     }
 
     #endregion

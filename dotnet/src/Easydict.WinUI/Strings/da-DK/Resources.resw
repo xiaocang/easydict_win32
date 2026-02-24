@@ -377,4 +377,22 @@
   <data name="TranslationCache_Note" xml:space="preserve">
     <value>Cachede oversættelser gemmes lokalt i SQLite. Ryd cachen, hvis oversættelser bliver forældede.</value>
   </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>Sideområde</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>Angiv hvilke sider der skal oversættes. Lad feltet stå tomt for at oversætte alle sider.</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>Formater: "1-5" (område), "3" (enkelt side), "1-3,5,7-10" (blandet). Tom eller "all" = oversæt alle sider.</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>Brugerdefineret oversættelsesprompt</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>Tilføj brugerdefinerede instruktioner til LLM-baserede oversættelsestjenester (OpenAI, DeepSeek, Gemini osv.).</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>Disse instruktioner tilføjes til systemprompt for LLM-tjenester. Ingen effekt på ikke-LLM-tjenester (Google, DeepL osv.).</value>
+  </data>
 </root>

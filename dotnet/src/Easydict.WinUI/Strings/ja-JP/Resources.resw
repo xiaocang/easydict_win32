@@ -950,4 +950,22 @@
   <data name="TranslationCache_Note" xml:space="preserve">
     <value>キャッシュされた翻訳はローカルのSQLiteに保存されます。翻訳が古くなった場合はクリアしてください。</value>
   </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>ページ範囲</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>翻訳するページを指定します。空欄の場合はすべてのページを翻訳します。</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>形式："1-5"（範囲）、"3"（単一ページ）、"1-3,5,7-10"（混合）。空欄または "all" = 全ページ翻訳。</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>カスタム翻訳プロンプト</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>LLMベースの翻訳サービス（OpenAI、DeepSeek、Gemini等）にカスタム指示を追加します。</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>これらの指示はLLMサービスのシステムプロンプトに追加されます。非LLMサービス（Google、DeepL等）には影響しません。</value>
+  </data>
 </root>

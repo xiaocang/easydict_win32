@@ -299,7 +299,8 @@ public sealed class LongDocumentTranslationService
                 {
                     Text = block.ProtectedText,
                     FromLanguage = options.FromLanguage,
-                    ToLanguage = options.ToLanguage
+                    ToLanguage = options.ToLanguage,
+                    CustomPrompt = options.CustomPrompt
                 };
 
                 var translated = await _translateWithService(request, options.ServiceId, cancellationToken);

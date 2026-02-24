@@ -204,6 +204,18 @@ public sealed class SettingsService
     /// </summary>
     public bool EnableTranslationCache { get; set; } = true;
 
+    /// <summary>
+    /// Page range for long document translation. Empty = all pages.
+    /// Supports formats: "1-3,5,7-10", "1-5", "3".
+    /// </summary>
+    public string LongDocPageRange { get; set; } = "";
+
+    /// <summary>
+    /// Custom LLM prompt for long document translation.
+    /// Appended to the system prompt for LLM-based translation services.
+    /// </summary>
+    public string LongDocCustomPrompt { get; set; } = "";
+
     // UI settings
     public bool AlwaysOnTop { get; set; } = false;
 
@@ -562,6 +574,10 @@ public sealed class SettingsService
 
         // Translation cache
         EnableTranslationCache = GetValue(nameof(EnableTranslationCache), true);
+
+        // Page range and custom prompt
+        LongDocPageRange = GetValue(nameof(LongDocPageRange), "");
+        LongDocCustomPrompt = GetValue(nameof(LongDocCustomPrompt), "");
     }
 
     public void Save()
@@ -695,6 +711,10 @@ public sealed class SettingsService
 
         // Translation cache
         _settings[nameof(EnableTranslationCache)] = EnableTranslationCache;
+
+        // Page range and custom prompt
+        _settings[nameof(LongDocPageRange)] = LongDocPageRange;
+        _settings[nameof(LongDocCustomPrompt)] = LongDocCustomPrompt;
 
         try
         {

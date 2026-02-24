@@ -91,6 +91,21 @@ jobs:
             -OutputMsixPath "dotnet/msix/Easydict-arm64-smoke.msix" `
             -VerifyTargetsizeIcons
 
+      - name: Trust signing certificate
+        shell: pwsh
+        run: |
+          $pfxPath = Join-Path $HOME "Downloads/dev-signing.pfx"
+          $password = ConvertTo-SecureString -String "password" -Force -AsPlainText
+          Import-PfxCertificate -FilePath $pfxPath -Password $password `
+            -CertStoreLocation "Cert:\LocalMachine\TrustedPeople"
+          Write-Host "Signing certificate trusted"
+
+      - name: Sign MSIX package
+        shell: pwsh
+        run: |
+          $pfxPath = Join-Path $HOME "Downloads/dev-signing.pfx"
+          winapp sign "dotnet/msix/Easydict-arm64-smoke.msix" $pfxPath --password "password" --verbose
+
       - name: Enable Developer Mode (sideloading)
         shell: pwsh
         run: |

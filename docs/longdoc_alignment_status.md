@@ -154,20 +154,29 @@
 
 ---
 
-### G2（P0）：ML 布局检测（DocLayout-YOLO）
+### G2（P0）：ML 布局检测（DocLayout-YOLO） ✅
 
 | 维度 | PDFMathTranslate | Easydict Win32 |
 |------|-----------------|----------------|
-| 检测方式 | **DocLayout-YOLO ONNX 模型**推理（HuggingFace 下载） | **纯启发式**（行间距阈值 + 四分位分析） |
-| 检测类别 | Text、Figure、Table、Formula、Caption、Isolated Formula 等 | Header、Footer、Body、LeftColumn、RightColumn、TableLike |
-| 置信度 | 模型输出 confidence（阈值 0.25） | 启发式 `RegionConfidence`（0~1 规则打分） |
-| 图表/公式区域保护 | Figures/Tables/Formulas 标记 “abandoned”（整块跳过） | 仅 `SourceBlockType.Formula` 跳过翻译 |
+| 检测方式 | **DocLayout-YOLO ONNX 模型**推理（HuggingFace 下载） | **DocLayout-YOLO ONNX 模型**推理（HuggingFace + GitHub Releases 双源下载） + 启发式回退 |
+| 检测类别 | Text、Figure、Table、Formula、Caption、Isolated Formula 等 | Title、PlainText、Figure、Table、Formula、Caption、TableCaption、TableFootnote、IsolatedFormula、FormulaCation（10 类） + 启发式 6 类 |
+| 置信度 | 模型输出 confidence（阈值 0.25） | ONNX 模型 confidence（阈值 0.25） + 启发式 `RegionConfidence` |
+| 图表/公式区域保护 | Figures/Tables/Formulas 标记 “abandoned”（整块跳过） | ML 检测 Figure/Formula/IsolatedFormula 标记 `IsFormulaLike = true` 跳过翻译 |
+| 模式选择 | 固定使用 ML | 四种模式：Auto（ONNX → 启发式回退）/ OnnxLocal / VisionLLM / Heuristic |
+| Vision LLM | 无 | 支持 GPT-4V / Gemini Vision 等视觉大模型布局检测（结构化 JSON prompt） |
+| 模型管理 | 随 pip 包安装 | 首次使用时下载（`LayoutModelDownloadService`），支持 HuggingFace → GitHub Releases 双源回退 |
 
-**差距说明**：
-- 启发式在复杂学术论文（多栏、浮动图表、数学密集）上误判率较高。
-- ML 模型可准确识别 Figure/Table 边界，避免将图注或表格内容送翻译。
-- 建议：引入 ONNX Runtime (.NET) + DocLayout-YOLO 模型，作为可选增强路径（启发式为默认，ML 为 opt-in）。
-- ONNX Runtime 支持 CPU 推理，无需 GPU；模型约 25MB，可首次使用时下载。
+**已实现**：
+- `LayoutDetectionMode` 枚举：`Heuristic` / `OnnxLocal` / `VisionLLM` / `Auto`
+- `LayoutModelDownloadService`：ONNX Runtime 原生 DLL + DocLayout-YOLO 模型首次使用时下载至 `%LocalAppData%\Easydict\Models\`，多源回退 + 指数退避重试 + 进度报告
+- `DocLayoutYoloService`：ONNX 推理服务，letterbox 预处理（1024×1024）、YOLO 输出解析、NMS 后处理、`NativeLibrary.SetDllImportResolver` 动态加载
+- `VisionLayoutDetectionService`：视觉大模型布局检测，结构化 JSON prompt，百分比坐标输出
+- `LayoutDetectionStrategy`：策略编排，PDF 页面渲染（`Windows.Data.Pdf` WinRT），IoU 匹配（阈值 0.3）合并 ML 检测与启发式文本块
+- `LongDocumentTranslationService`：扩展 `LayoutRegionType`（+6 ML 类型）、`LayoutRegionSource`（+OnnxModel / VisionLLM），新增异步 `BuildSourceDocumentAsync`
+- 设置页面：布局检测模式选择、ONNX 模型下载/删除/进度 UI、Vision LLM 服务选择
+- 本地化：en-US / zh-CN 共 24 条新增字符串
+- NuGet 依赖：`Microsoft.ML.OnnxRuntime.Managed 1.21.0`（仅托管 API，原生 DLL 按需下载）
+- 测试：`DocLayoutYoloServiceTests`、`LayoutDetectionStrategyTests`、`LayoutModelDownloadServiceTests`（含 VisionLayoutDetection 响应解析测试）
 
 ---
 
@@ -325,7 +334,7 @@
 | 编号 | 差距项 | 优先级 | 难度 | 影响范围 |
 |------|--------|--------|------|----------|
 | G1 | 双语/对照 PDF 输出 | P0 | 中 | 输出质量 |
-| G2 | ML 布局检测（DocLayout-YOLO） | P0 | 高 | 布局准确度 |
+| G2 | ML 布局检测（DocLayout-YOLO） ✅ | P0 | 高 | 布局准确度 |
 | G3 | 三级公式检测 | P1 | 中 | 公式保护 |
 | G4 | 并行翻译 | P1 | 低 | 性能 |
 | G5 | CJK/多语言字体嵌入 | P1 | 中 | 输出可读性（关键） |
@@ -347,6 +356,7 @@
 | LLM 流式翻译 | `IStreamTranslationService` + SSE 解析 | 已支持 |
 | 公式占位符保护 | `[[FORMULA_N_HASH]]` + 类型分类 + 恢复校验 | 已对齐核心机制（M4 完成） |
 | 布局区域推断 | `LayoutProfile` + 自适应阈值 + 双栏检测 | 启发式已成熟（M2 完成） |
+| ML 布局检测 | DocLayout-YOLO ONNX + VisionLLM + 四模式策略 | G2 已完成：ONNX 本地下载优先 + 视觉大模型 + IoU 合并 |
 | 术语一致性 | 按页窗口优先 + 全局回退 | 已对齐（M3 完成） |
 | 质量报告 | `BackfillQualityMetrics` + page-level 明细 | 已对齐（M1 完成） |
 | OCR 回退 | `WindowsOcrService` 集成 | 已支持 |
@@ -363,7 +373,7 @@
 - 建议在 CI 中引入样本 PDF 回归，以防布局/回填逻辑回退。
 - 当前 `RetryMergeStrategy` 采用累计策略（accumulate），后续可按产品需求调整为 latest-only。
 - G5（CJK 字体嵌入）虽列为 P1，但实际是**阻塞非拉丁语系输出可用性**的关键项，建议优先处理。
-- G2（ML 布局检测）技术难度最高，需评估 ONNX Runtime .NET 包大小对分发包的影响。
+- ~~G2（ML 布局检测）技术难度最高，需评估 ONNX Runtime .NET 包大小对分发包的影响。~~ ✅ 已解决：NuGet 仅引入托管 API（~1-2MB），原生 DLL（~15MB）+ 模型（~25MB）按需下载至 `%LocalAppData%`。
 
 
 ## 本轮实现说明
@@ -381,3 +391,163 @@
 - 本轮按 roadmap 落地 M2：为 RegionType 增加置信度与来源标签，并补充对应反射测试。
 - 本轮按 roadmap 落地 M3：术语复用增加按页窗口优先策略（当前页邻近优先，超窗回退全局）。
 - 本轮按 roadmap 落地 M4：细化公式 token 类型并加入恢复校验（未恢复 token / 分隔符失衡回退原文）。
+
+### G2 实现（ONNX 本地下载优先 + 视觉大模型布局检测）
+
+- **核心架构**：四模式策略（Auto / OnnxLocal / VisionLLM / Heuristic），Auto 模式优先使用 ONNX 本地模型，不可用时自动回退启发式。
+- **模型管理**：`LayoutModelDownloadService` 实现首次使用时下载，HuggingFace → GitHub Releases 双源回退，指数退避重试，进度报告。
+- **ONNX 推理**：`DocLayoutYoloService` 实现 DocLayout-YOLO 10 类检测（letterbox 1024×1024 预处理、YOLO 输出解析、NMS 后处理）。
+- **原生库加载**：使用 `NativeLibrary.SetDllImportResolver` 将 ONNX Runtime 原生 DLL 从下载目录动态加载，避免打包体积膨胀。
+- **视觉大模型**：`VisionLayoutDetectionService` 支持 GPT-4V / Gemini Vision 等，通过结构化 JSON prompt 输出百分比坐标区域。
+- **策略编排**：`LayoutDetectionStrategy` 负责 PDF 页面渲染（`Windows.Data.Pdf` WinRT）、ML 检测、IoU 匹配（阈值 0.3）合并 ML 与启发式结果。
+- **ML 区域保护**：Figure / Formula / IsolatedFormula 检测结果标记 `IsFormulaLike = true`，跳过翻译。
+- **设置 UI**：模式选择 ComboBox、ONNX 模型下载/删除/进度条、Vision LLM 服务选择（条件可见）。
+- **NuGet 策略**：仅引入 `Microsoft.ML.OnnxRuntime.Managed`（托管 API），原生 DLL 按需下载至 `%LocalAppData%\Easydict\Models\`。
+- **新增文件**：16 files changed, 2195 insertions — 含 6 个新服务文件、3 个测试文件、2 个本地化文件、设置 UI 扩展。
+
+---
+
+## 下一 P0 任务：G1 — 双语/对照 PDF 输出
+
+> 优先级：P0 | 难度：中 | 影响：输出质量（学术论文核心需求）
+
+### 背景
+
+学术论文翻译场景中，用户常需原文/译文对照阅读。当前仅输出单语 PDF（翻译后文本替换/覆盖），无法满足对照需求。PDFMathTranslate 每次翻译产出两份 PDF：单语 (`*-mono.pdf`) + 双语对照 (`*-dual.pdf`)。
+
+### 目标
+
+1. 新增 `PdfOutputMode` 枚举：`Monolingual`（默认，兼容现有行为）/ `Bilingual`（交错页）/ `Both`（同时输出两种）
+2. 双语模式：原文页与译文页交错排列（第 1 页原文 → 第 1 页译文 → 第 2 页原文 → 第 2 页译文 → ...）
+3. 输出文件命名：`{name}-translated.pdf`（单语）、`{name}-bilingual.pdf`（双语）
+4. 设置页面：增加输出模式选择
+5. 保持向后兼容：默认行为不变
+
+### 实现计划
+
+#### Step 1：定义 `PdfOutputMode` 枚举
+
+**文件**: `dotnet/src/Easydict.TranslationService/LongDocument/PdfOutputMode.cs`（新建）
+
+```csharp
+public enum PdfOutputMode
+{
+    Monolingual,   // 仅输出译文 PDF（默认，兼容现有行为）
+    Bilingual,     // 交错页：原文页 + 译文页 交替排列
+    Both           // 同时输出 Monolingual + Bilingual 两个文件
+}
+```
+
+#### Step 2：扩展 `LongDocumentTranslationOptions` 和 `LongDocumentTranslationResult`
+
+**文件**: `dotnet/src/Easydict.TranslationService/LongDocument/LongDocumentModels.cs`
+
+- `LongDocumentTranslationOptions` 新增 `PdfOutputMode OutputMode { get; init; } = PdfOutputMode.Monolingual;`
+
+**文件**: `dotnet/src/Easydict.WinUI/Services/LongDocumentTranslationService.cs`
+
+- `LongDocumentTranslationResult` 新增 `string? BilingualOutputPath { get; init; }`（Bilingual/Both 模式时有值）
+- `TranslateToPdfAsync` 签名新增 `PdfOutputMode outputMode = PdfOutputMode.Monolingual` 参数
+
+#### Step 3：实现双语 PDF 导出方法
+
+**文件**: `dotnet/src/Easydict.WinUI/Services/LongDocumentTranslationService.cs`
+
+新增 `ExportBilingualPdf` 私有方法：
+
+```
+ExportBilingualPdf(checkpoint, sourcePdfPath, bilingualOutputPath) → BackfillRenderingMetrics
+```
+
+**核心逻辑**：
+1. 使用 `PdfReader.Open(sourcePdfPath, PdfDocumentOpenMode.Import)` 以只读模式打开源 PDF
+2. 创建新 `PdfSharpCore.Pdf.PdfDocument`
+3. 遍历源 PDF 每一页（pageIndex = 0..N-1）：
+   a. **插入原文页**：`newDoc.AddPage(sourceDoc.Pages[pageIndex])` — 直接复制原始页面
+   b. **插入译文页**：创建新页面（与原始页面同尺寸），使用现有 overlay 逻辑渲染翻译文本
+4. 保存为 `bilingualOutputPath`
+
+**关键设计决策**：
+- 采用**交错页**策略（而非左右分栏），因为：
+  - 保持原始页面布局完整不变
+  - 实现简单——直接复制原始页面，无需重新排版
+  - 与 PDFMathTranslate 行为一致
+  - 支持任意页面尺寸（A4、Letter、自定义）
+- 译文页使用现有的 coordinate backfill 逻辑（对象替换 + overlay 降级），不额外创建新的渲染路径
+- 对于非 PDF 输入（Text/URL），Bilingual 模式不生效（无原文页可交错），静默回退 Monolingual
+
+#### Step 4：修改 `FinalizeResult` 支持多输出模式
+
+**文件**: `dotnet/src/Easydict.WinUI/Services/LongDocumentTranslationService.cs`
+
+修改 `FinalizeResult` 方法逻辑：
+
+```
+FinalizeResult(checkpoint, outputPath, outputMode, onProgress, qualityReport)
+├── outputMode == Monolingual:
+│   └── 现有逻辑不变（ExportPdfWithCoordinateBackfill 或 ExportStructuredPdf）
+├── outputMode == Bilingual:
+│   ├── ExportPdfWithCoordinateBackfill → monoOutputPath（仍需生成用于 backfill metrics）
+│   └── ExportBilingualPdf → bilingualOutputPath
+│   └── result.OutputPath = bilingualOutputPath
+├── outputMode == Both:
+│   ├── ExportPdfWithCoordinateBackfill → monoOutputPath
+│   └── ExportBilingualPdf → bilingualOutputPath
+│   └── result.OutputPath = monoOutputPath, result.BilingualOutputPath = bilingualOutputPath
+```
+
+输出路径推导规则：
+- `outputPath` 保持原有逻辑（`{name}-translated-{timestamp}.pdf`）
+- `bilingualOutputPath` = `outputPath.Replace("-translated-", "-bilingual-")`
+
+#### Step 5：UI 设置集成
+
+**文件**: `dotnet/src/Easydict.WinUI/Services/SettingsService.cs`
+- 新增 `PdfOutputMode` 设置项（string，默认 `"Monolingual"`）
+
+**文件**: `dotnet/src/Easydict.WinUI/Views/SettingsPage.xaml` + `.cs`
+- 在"Layout Detection"分组附近增加"PDF Output Mode"ComboBox
+- 选项：`Monolingual (Translation Only)` / `Bilingual (Interleaved Pages)` / `Both`
+
+**文件**: `dotnet/src/Easydict.WinUI/Views/MainPage.xaml.cs`
+- 读取设置中的 `PdfOutputMode`，传递给 `TranslateToPdfAsync`
+- `Both` 模式完成后，进度提示显示两个输出路径
+
+**文件**: `dotnet/src/Easydict.WinUI/Strings/en-US/Resources.resw` + `zh-CN/Resources.resw`
+- 新增 6 条本地化字符串：
+  - `SettingsLayoutPdfOutputMode` / `SettingsLayoutPdfOutputModeDesc`
+  - `PdfOutputModeMonolingual` / `PdfOutputModeBilingual` / `PdfOutputModeBoth`
+  - `LongDocBilingualOutputReady`
+
+#### Step 6：测试
+
+**文件**: `dotnet/tests/Easydict.WinUI.Tests/Services/` 新增测试
+
+1. **BilingualPdfExportTests**：
+   - `ExportBilingualPdf_InterleavesOriginalAndTranslatedPages` — 验证页面数 = 原始页数 × 2
+   - `ExportBilingualPdf_OriginalPagesPreserved` — 验证奇数页（原文）内容未被修改
+   - `ExportBilingualPdf_TranslatedPagesHaveContent` — 验证偶数页（译文）有渲染内容
+
+2. **FinalizeResult 扩展测试**：
+   - `FinalizeResult_MonolingualMode_SingleOutput` — 默认模式验证
+   - `FinalizeResult_BilingualMode_ProducesBilingualOutput` — Bilingual 模式输出路径验证
+   - `FinalizeResult_BothMode_ProducesTwoOutputs` — Both 模式双路径验证
+   - `FinalizeResult_NonPdfInput_BilingualFallsBackToMono` — 非 PDF 输入回退验证
+
+3. **OutputPath 命名测试**：
+   - 验证 `-translated-` → `-bilingual-` 替换规则
+
+### 验收标准
+
+1. 默认行为（Monolingual）完全不变 — 向后兼容
+2. Bilingual 模式输出交错页 PDF：第 2k-1 页为原文，第 2k 页为译文（k = 1, 2, ...）
+3. Both 模式同时输出两个文件，UI 显示两个路径
+4. 非 PDF 输入（Text/URL）在 Bilingual/Both 模式下静默回退 Monolingual
+5. 设置页面可选择输出模式，保存后重启生效
+6. 所有新增逻辑有测试覆盖
+
+### 依赖分析
+
+- **无新 NuGet 依赖**：PdfSharpCore 已有，`PdfReader.Open(PdfDocumentOpenMode.Import)` + `AddPage()` 可直接复制页面
+- **无破坏性变更**：所有新参数有默认值，`LongDocumentTranslationResult.BilingualOutputPath` 为可空
+- **工作量评估**：~400-600 行新增代码（含测试）

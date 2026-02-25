@@ -52,7 +52,7 @@ public class DocLayoutYoloServiceTests
         var pixels = new byte[10 * 10 * 4];
         var (tensor, scaleX, scaleY, padX, padY) = DocLayoutYoloService.PreprocessImage(pixels, 10, 10);
 
-        tensor.Dimensions.Should().HaveCount(4);
+        tensor.Dimensions.ToArray().Should().HaveCount(4);
         tensor.Dimensions[0].Should().Be(1);
         tensor.Dimensions[1].Should().Be(3);
         tensor.Dimensions[2].Should().Be(1024);

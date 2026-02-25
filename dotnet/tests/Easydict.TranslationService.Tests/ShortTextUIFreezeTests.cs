@@ -204,7 +204,7 @@ public class ShortTextUIFreezeTests : IDisposable
         // Arrange: service that fails first 2 times, succeeds on 3rd
         var attempts = 0;
         var service = new CallbackTranslationService("retry-svc", "Retry Service",
-            async (request, ct) =>
+            (request, ct) =>
             {
                 var attempt = Interlocked.Increment(ref attempts);
                 if (attempt <= 2)
@@ -215,13 +215,13 @@ public class ShortTextUIFreezeTests : IDisposable
                     };
                 }
 
-                return new TranslationResult
+                return Task.FromResult(new TranslationResult
                 {
                     OriginalText = request.Text,
                     TranslatedText = $"T:{request.Text}",
                     ServiceName = "retry-svc",
                     TargetLanguage = request.ToLanguage
-                };
+                });
             });
         _manager.RegisterService(service);
 

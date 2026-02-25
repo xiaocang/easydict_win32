@@ -237,9 +237,9 @@ public class LongDocumentTranslationServiceReviewFixTests
         merged!.PageMetrics.Should().NotBeNull();
         merged.PageMetrics!.Should().ContainKey(1);
         merged.PageMetrics.Should().ContainKey(2);
-        merged.PageMetrics[1].CandidateBlocks.Should().Be(3);
-        merged.PageMetrics[1].OverlayModeBlocks.Should().Be(1);
-        merged.PageMetrics[2].MissingBoundingBoxBlocks.Should().Be(1);
+        merged.PageMetrics![1].CandidateBlocks.Should().Be(3);
+        merged.PageMetrics![1].OverlayModeBlocks.Should().Be(1);
+        merged.PageMetrics![2].MissingBoundingBoxBlocks.Should().Be(1);
     }
 
     [Fact]

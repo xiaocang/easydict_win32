@@ -536,6 +536,16 @@
                                             HorizontalSpacing="8"
                                             VerticalSpacing="6"
                                             VerticalAlignment="Center">
+                            <ComboBox x:Name="LongDocSourceLangCombo"
+                                      MinWidth="130"
+                                      VerticalAlignment="Center"
+                                      ToolTipService.ToolTip="Source Language" />
+
+                            <ComboBox x:Name="LongDocTargetLangCombo"
+                                      MinWidth="130"
+                                      VerticalAlignment="Center"
+                                      ToolTipService.ToolTip="Target Language" />
+
                             <ComboBox x:Name="LongDocServiceCombo"
                                       MinWidth="140"
                                       VerticalAlignment="Center"

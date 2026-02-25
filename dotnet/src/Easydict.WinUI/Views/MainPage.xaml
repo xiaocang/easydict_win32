@@ -622,14 +622,27 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <TextBlock
-                            x:Name="LongDocInputTitle"
-                            Grid.Row="0"
-                            Text="Source Text"
-                            FontSize="13"
-                            FontWeight="SemiBold"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Margin="0,0,0,4"/>
+                        <Grid Grid.Row="0" Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                x:Name="LongDocInputTitle"
+                                Grid.Column="0"
+                                Text="Source Text"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock
+                                x:Name="LongDocServiceHint"
+                                Grid.Column="1"
+                                FontSize="11"
+                                FontStyle="Italic"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center" />
+                        </Grid>
 
                         <!-- File input panel (file picker + file list) -->
                         <StackPanel x:Name="LongDocFilePanel" Grid.Row="1"

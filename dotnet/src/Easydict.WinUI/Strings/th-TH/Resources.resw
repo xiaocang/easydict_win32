@@ -820,4 +820,25 @@
   <data name="LongDoc_OutputNamingHint" xml:space="preserve">
     <value>เอาต์พุต: {filename}_translated.pdf</value>
   </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>กำหนดค่าบริการในการตั้งค่า</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>ดาวน์โหลดโมเดลเลย์เอาต์</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>โมเดลตรวจจับเลย์เอาต์ (~75MB) ช่วยปรับปรุงการจดจำโครงสร้างเอกสาร ดาวน์โหลดตอนนี้หรือไม่?</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>ดาวน์โหลดฟอนต์ CJK</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>จำเป็นต้องใช้ฟอนต์ CJK (~16MB) สำหรับการแสดงผล{0}อย่างถูกต้องใน PDF ดาวน์โหลดตอนนี้หรือไม่?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>ดาวน์โหลด</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>ข้าม</value>
+  </data>
 </root>

@@ -812,4 +812,25 @@
   <data name="LongDoc_OutputNamingHint" xml:space="preserve">
     <value>Output: {filename}_translated.pdf</value>
   </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>Konfigurasikan layanan di Pengaturan</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>Unduh Model Tata Letak</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>Model deteksi tata letak (~75MB) meningkatkan pengenalan struktur dokumen. Unduh sekarang?</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>Unduh Font CJK</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>Font CJK (~16MB) diperlukan untuk rendering {0} yang benar di PDF. Unduh sekarang?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>Unduh</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>Lewati</value>
+  </data>
 </root>

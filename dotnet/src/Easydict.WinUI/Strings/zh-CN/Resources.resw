@@ -1024,4 +1024,25 @@
   <data name="LongDoc_OutputNamingHint" xml:space="preserve">
     <value>输出：{filename}_translated.pdf</value>
   </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>在设置中配置服务</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>下载版面检测模型</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>版面检测模型（约75MB）可提升文档结构识别效果。是否下载？</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>下载 CJK 字体</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>需要 CJK 字体（约16MB）才能正确渲染 PDF 中的{0}文字。是否下载？</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>下载</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>跳过</value>
+  </data>
 </root>

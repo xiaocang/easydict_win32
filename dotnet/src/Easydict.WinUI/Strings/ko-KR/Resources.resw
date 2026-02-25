@@ -983,4 +983,25 @@
   <data name="LongDoc_OutputNamingHint" xml:space="preserve">
     <value>출력: {filename}_translated.pdf</value>
   </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>설정에서 서비스 구성</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>레이아웃 모델 다운로드</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>레이아웃 감지 모델(~75MB)은 문서 구조 인식을 개선합니다. 지금 다운로드하시겠습니까?</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>CJK 글꼴 다운로드</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>PDF에서 {0}을(를) 올바르게 렌더링하려면 CJK 글꼴(~16MB)이 필요합니다. 지금 다운로드하시겠습니까?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>다운로드</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>건너뛰기</value>
+  </data>
 </root>

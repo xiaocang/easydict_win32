@@ -983,4 +983,25 @@
   <data name="LongDoc_OutputNamingHint" xml:space="preserve">
     <value>出力: {filename}_translated.pdf</value>
   </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>設定でサービスを構成</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>レイアウトモデルをダウンロード</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>レイアウト検出モデル（約75MB）はドキュメント構造の認識を改善します。ダウンロードしますか？</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>CJKフォントをダウンロード</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>PDFで{0}を正しく表示するにはCJKフォント（約16MB）が必要です。ダウンロードしますか？</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>ダウンロード</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>スキップ</value>
+  </data>
 </root>

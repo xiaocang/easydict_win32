@@ -1024,4 +1024,25 @@
   <data name="LongDoc_OutputNamingHint" xml:space="preserve">
     <value>Output: {filename}_translated.pdf</value>
   </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>Configure services in Settings</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>Download Layout Model</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>Layout detection model (~75MB) improves document structure recognition. Download now?</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>Download CJK Font</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>CJK font (~16MB) is needed for proper {0} rendering in PDF. Download now?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>Skip</value>
+  </data>
 </root>

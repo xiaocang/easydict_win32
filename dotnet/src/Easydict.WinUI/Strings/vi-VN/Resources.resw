@@ -866,4 +866,25 @@
   <data name="LongDoc_OutputNamingHint" xml:space="preserve">
     <value>Đầu ra: {filename}_translated.pdf</value>
   </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>Cấu hình dịch vụ trong Cài đặt</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>Tải xuống mô hình bố cục</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>Mô hình phát hiện bố cục (~75MB) cải thiện nhận dạng cấu trúc tài liệu. Tải xuống ngay?</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>Tải xuống phông chữ CJK</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>Phông chữ CJK (~16MB) cần thiết để hiển thị {0} chính xác trong PDF. Tải xuống ngay?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>Tải xuống</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>Bỏ qua</value>
+  </data>
 </root>

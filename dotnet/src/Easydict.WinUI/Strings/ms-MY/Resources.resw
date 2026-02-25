@@ -410,4 +410,25 @@
   <data name="LongDoc_OutputNamingHint" xml:space="preserve">
     <value>Output: {filename}_translated.pdf</value>
   </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>Konfigurasikan perkhidmatan dalam Tetapan</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>Muat Turun Model Susun Atur</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>Model pengesanan susun atur (~75MB) meningkatkan pengecaman struktur dokumen. Muat turun sekarang?</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>Muat Turun Fon CJK</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>Fon CJK (~16MB) diperlukan untuk pemaparan {0} yang betul dalam PDF. Muat turun sekarang?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>Muat Turun</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>Langkau</value>
+  </data>
 </root>

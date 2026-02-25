@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LongDocument;
@@ -57,6 +58,7 @@ namespace Easydict.WinUI.Views
         private readonly ObservableCollection<LongDocHistoryItem> _longDocHistoryItems = new();
         private string _longDocOutputFolder = "";
         private bool _isLongDocTranslating;
+        private ContentDialog? _currentDialog;
 
         /// <summary>
         /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -224,6 +226,9 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(LangHelpIcon, loc.GetString("LanguagePickerHelpTip"));
             ToolTipService.SetToolTip(LangHelpIconNarrow, loc.GetString("LanguagePickerHelpTip"));
             ToolTipService.SetToolTip(InputHelpIcon, loc.GetString("InputHelpTip"));
+
+            // Long doc service hint
+            LongDocServiceHint.Text = loc.GetString("LongDoc_ServiceHint");
         }
 
         private void UpdateQueryModeButton()
@@ -1458,24 +1463,35 @@ namespace Easydict.WinUI.Views
             var manager = TranslationManagerService.Instance.Manager;
             foreach (var service in manager.Services.Values.Where(IsLongDocSupportedService).OrderBy(s => s.DisplayName))
             {
+                var isReady = service.IsConfigured
+                    && _settings.ServiceTestStatus.TryGetValue(service.ServiceId, out var passed)
+                    && passed;
+
                 var item = new ComboBoxItem
                 {
                     Content = service.DisplayName,
-                    Tag = service.ServiceId
+                    Tag = service.ServiceId,
+                    FontStyle = isReady ? Windows.UI.Text.FontStyle.Normal : Windows.UI.Text.FontStyle.Italic,
+                    Foreground = isReady ? null
+                        : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray)
                 };
                 LongDocServiceCombo.Items.Add(item);
             }
 
-            if (LongDocServiceCombo.Items.Count > 0)
-            {
-                LongDocServiceCombo.SelectedIndex = 0;
-            }
+            // Prefer first ready (configured + tested) service
+            var firstReady = LongDocServiceCombo.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(i => i.FontStyle == Windows.UI.Text.FontStyle.Normal);
+            LongDocServiceCombo.SelectedItem = firstReady ?? LongDocServiceCombo.Items.FirstOrDefault();
         }
 
         private static bool IsLongDocSupportedService(ITranslationService service)
         {
+            // Built-in AI uses free proxy and is not stable enough for long document translation.
+            if (string.Equals(service.ServiceId, "builtin", StringComparison.OrdinalIgnoreCase))
+                return false;
+
             // Long-document mode focuses on AI/LLM services similar to PDFMathTranslate style pipelines.
-            return service is IStreamTranslationService || string.Equals(service.ServiceId, "builtin", StringComparison.OrdinalIgnoreCase);
+            return service is IStreamTranslationService;
         }
 
         private bool TryGetSelectedLongDocServiceId(out string serviceId)
@@ -1653,7 +1669,7 @@ namespace Easydict.WinUI.Views
             return Path.Combine(outputFolder, outputName);
         }
 
-        private async Task ProcessLongDocQueueAsync(List<string> filePaths, string serviceId, string outputFolder, LongDocumentInputMode mode, CancellationToken cancellationToken)
+        private async Task ProcessLongDocQueueAsync(List<string> filePaths, string serviceId, string outputFolder, LongDocumentInputMode mode, LayoutDetectionMode layoutDetection, CancellationToken cancellationToken)
         {
             var from = GetSourceLanguage();
             var to = GetTargetLanguage();
@@ -1711,6 +1727,7 @@ namespace Easydict.WinUI.Views
                         LongDocStatusText.Text = $"Queue {i + 1}/{filePaths.Count}: {progress}";
                     }),
                     cancellationToken,
+                    layoutDetection: layoutDetection,
                     outputMode: queueOutputMode);
 
                 if (result.State == LongDocumentJobState.Completed)
@@ -1730,7 +1747,7 @@ namespace Easydict.WinUI.Views
             });
         }
 
-        private void OnLongDocStartQueueClicked(object sender, RoutedEventArgs e)
+        private async void OnLongDocStartQueueClicked(object sender, RoutedEventArgs e)
         {
             if (IsLongDocTaskRunning())
             {
@@ -1771,9 +1788,20 @@ namespace Easydict.WinUI.Views
             _longDocQueueCts = new CancellationTokenSource();
 
             SetLongDocTaskUiState(true);
+
+            // Check ONNX layout model availability (once before starting queue)
+            var layoutMode = await EnsureOnnxReadyAsync(_longDocQueueCts.Token);
+
+            // Check CJK font availability for PDF output (once before starting queue)
+            if (mode == LongDocumentInputMode.Pdf)
+            {
+                var targetLang = GetTargetLanguage();
+                await EnsureCjkFontReadyAsync(targetLang, _longDocQueueCts.Token);
+            }
+
             LongDocStatusText.Text = $"Queue started: {queueItems.Count} file(s).";
 
-            _longDocQueueTask = ProcessLongDocQueueAsync(queueItems, serviceId, outputFolder, mode, _longDocQueueCts.Token);
+            _longDocQueueTask = ProcessLongDocQueueAsync(queueItems, serviceId, outputFolder, mode, layoutMode, _longDocQueueCts.Token);
 
             // Always run queue in background with continuation
             _ = _longDocQueueTask.ContinueWith(task =>
@@ -2103,7 +2131,17 @@ namespace Easydict.WinUI.Views
                     return;
                 }
 
+                // Check ONNX layout model availability (prompt download if needed)
+                var layoutMode = await EnsureOnnxReadyAsync(cancellationToken);
+
+                // Check CJK font availability for PDF output
                 var outputMode = GetDocumentOutputModeFromSettings();
+                if (mode == LongDocumentInputMode.Pdf)
+                {
+                    await EnsureCjkFontReadyAsync(_longDocLastTo, cancellationToken);
+                }
+
+                LongDocStatusText.Text = "Preparing...";
                 var result = await _longDocumentService.TranslateToPdfAsync(
                     mode,
                     input,
@@ -2117,6 +2155,7 @@ namespace Easydict.WinUI.Views
                         LongDocStatusText.Text = progressMsg;
                     }),
                     cancellationToken,
+                    layoutDetection: layoutMode,
                     outputMode: outputMode,
                     progress: progress);
 
@@ -2321,6 +2360,115 @@ namespace Easydict.WinUI.Views
                 {
                     shownPhonetics.Add(key);
                 }
+            }
+        }
+
+        // ═══════════════════════════════════════════════
+        //  ContentDialog helpers
+        // ═══════════════════════════════════════════════
+
+        /// <summary>
+        /// Shows a ContentDialog, hiding any currently-open dialog first.
+        /// WinUI 3 allows only one ContentDialog open at a time per XamlRoot.
+        /// </summary>
+        private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
+        {
+            try { _currentDialog?.Hide(); } catch (COMException) { }
+            _currentDialog = dialog;
+
+            try
+            {
+                return await dialog.ShowAsync();
+            }
+            finally
+            {
+                if (_currentDialog == dialog)
+                {
+                    _currentDialog = null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks whether the ONNX layout model is downloaded. If not, prompts the user
+        /// to download it. Returns the layout detection mode to use.
+        /// </summary>
+        private async Task<LayoutDetectionMode> EnsureOnnxReadyAsync(CancellationToken ct)
+        {
+            var downloadService = _longDocumentService.GetLayoutModelDownloadService();
+            if (downloadService.IsReady)
+                return LayoutDetectionMode.OnnxLocal;
+
+            var loc = LocalizationService.Instance;
+            var dialog = new ContentDialog
+            {
+                Title = loc.GetString("LongDoc_OnnxDownloadTitle"),
+                Content = loc.GetString("LongDoc_OnnxDownloadMessage"),
+                PrimaryButtonText = loc.GetString("LongDoc_Download"),
+                CloseButtonText = loc.GetString("LongDoc_Skip"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot
+            };
+
+            var result = await ShowDialogAsync(dialog);
+            if (result == ContentDialogResult.Primary)
+            {
+                LongDocStatusText.Text = loc.GetString("LongDoc_OnnxDownloadTitle") + "...";
+                var progress = new Progress<ModelDownloadProgress>(p =>
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        var pct = p.TotalBytes > 0 ? (int)(p.BytesDownloaded * 100 / p.TotalBytes) : 0;
+                        LongDocStatusText.Text = $"{loc.GetString("LongDoc_OnnxDownloadTitle")}: {pct}%";
+                    });
+                });
+                await downloadService.EnsureAvailableAsync(progress, ct);
+            }
+
+            return downloadService.IsReady ? LayoutDetectionMode.OnnxLocal : LayoutDetectionMode.Heuristic;
+        }
+
+        /// <summary>
+        /// Checks whether a CJK font is needed for the target language and output is PDF.
+        /// If the font is not downloaded, prompts the user to download it.
+        /// </summary>
+        private async Task EnsureCjkFontReadyAsync(TranslationLanguage targetLang, CancellationToken ct)
+        {
+            if (!FontDownloadService.RequiresCjkFont(targetLang))
+                return;
+
+            using var fontService = new FontDownloadService();
+            if (fontService.IsFontDownloaded(targetLang))
+                return;
+
+            var loc = LocalizationService.Instance;
+            var langEntry = LanguageComboHelper.AllLanguages.FirstOrDefault(l => l.Language == targetLang);
+            var langName = langEntry.LocalizationKey != null ? loc.GetString(langEntry.LocalizationKey) : targetLang.ToString();
+            var dialog = new ContentDialog
+            {
+                Title = loc.GetString("LongDoc_CjkFontTitle"),
+                Content = string.Format(loc.GetString("LongDoc_CjkFontMessage"), langName),
+                PrimaryButtonText = loc.GetString("LongDoc_Download"),
+                CloseButtonText = loc.GetString("LongDoc_Skip"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot
+            };
+
+            var result = await ShowDialogAsync(dialog);
+            if (result == ContentDialogResult.Primary)
+            {
+                LongDocStatusText.Text = loc.GetString("LongDoc_CjkFontTitle") + "...";
+                var progress = new Progress<ModelDownloadProgress>(p =>
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        var pct = p.TotalBytes > 0 ? (int)(p.BytesDownloaded * 100 / p.TotalBytes) : 0;
+                        LongDocStatusText.Text = $"{loc.GetString("LongDoc_CjkFontTitle")}: {pct}%";
+                    });
+                });
+                await fontService.EnsureFontAsync(targetLang, progress, ct);
             }
         }
     }

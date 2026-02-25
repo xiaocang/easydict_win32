@@ -410,4 +410,25 @@
   <data name="LongDoc_OutputNamingHint" xml:space="preserve">
     <value>आउटपुट: {filename}_translated.pdf</value>
   </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>सेटिंग्स में सेवाएँ कॉन्फ़िगर करें</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>लेआउट मॉडल डाउनलोड करें</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>लेआउट डिटेक्शन मॉडल (~75MB) दस्तावेज़ संरचना पहचान को बेहतर बनाता है। अभी डाउनलोड करें?</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>CJK फ़ॉन्ट डाउनलोड करें</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>PDF में {0} को सही ढंग से प्रदर्शित करने के लिए CJK फ़ॉन्ट (~16MB) आवश्यक है। अभी डाउनलोड करें?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>डाउनलोड</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>छोड़ें</value>
+  </data>
 </root>

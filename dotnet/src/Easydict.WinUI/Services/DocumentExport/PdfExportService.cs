@@ -301,45 +301,58 @@ public sealed class PdfExportService : IDocumentExportService
                 continue;
             }
 
-            using var gfx = XGraphics.FromPdfPage(page, XGraphicsPdfPageOptions.Append);
-            var box = metadata.BoundingBox.Value;
-
-            var drawX = Math.Max(0, box.X);
-            var drawY = Math.Max(0, page.Height.Point - (box.Y + box.Height));
-            var drawWidth = Math.Max(40, box.Width);
-            var drawHeight = Math.Max(14, box.Height);
-
-            var rect = new XRect(drawX, drawY, drawWidth, drawHeight);
-            var baseFont = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike, targetLanguage);
-            var font = FitFontToRect(gfx, translated, baseFont, rect.Width, rect.Height, lineHeight);
-            if (font.Size < baseFont.Size)
+            try
             {
-                shrinkFontBlocks++;
-                perPage.ShrinkFontBlocks++;
-            }
+                using var gfx = XGraphics.FromPdfPage(page, XGraphicsPdfPageOptions.Append);
+                var box = metadata.BoundingBox.Value;
 
-            var wrappedLines = WrapTextByWidth(gfx, translated, font, rect.Width).ToList();
-            var maxVisibleLines = Math.Max(1, (int)Math.Floor(rect.Height / lineHeight));
-            if (wrappedLines.Count > maxVisibleLines)
+                var drawX = Math.Max(0, box.X);
+                var drawY = Math.Max(0, page.Height.Point - (box.Y + box.Height));
+                var drawWidth = Math.Max(40, box.Width);
+                var drawHeight = Math.Max(14, box.Height);
+
+                var rect = new XRect(drawX, drawY, drawWidth, drawHeight);
+
+                // Cover original text with white background before drawing translation
+                gfx.DrawRectangle(XBrushes.White, rect);
+
+                var baseFont = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike, targetLanguage);
+                var font = FitFontToRect(gfx, translated, baseFont, rect.Width, rect.Height, lineHeight);
+                if (font.Size < baseFont.Size)
+                {
+                    shrinkFontBlocks++;
+                    perPage.ShrinkFontBlocks++;
+                }
+
+                var wrappedLines = WrapTextByWidth(gfx, translated, font, rect.Width).ToList();
+                var maxVisibleLines = Math.Max(1, (int)Math.Floor(rect.Height / lineHeight));
+                if (wrappedLines.Count > maxVisibleLines)
+                {
+                    wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
+                    var last = wrappedLines[^1];
+                    wrappedLines[^1] = last.Length > 1 ? $"{last.TrimEnd('.', ' ')}…" : "…";
+                    truncatedBlocks++;
+                    perPage.TruncatedBlocks++;
+                }
+
+                var lineY = rect.Y;
+                foreach (var line in wrappedLines)
+                {
+                    gfx.DrawString(line, font, XBrushes.Black, new XRect(rect.X, lineY, rect.Width, 20), XStringFormats.TopLeft);
+                    lineY += lineHeight;
+                }
+
+                renderedBlocks++;
+                overlayModeBlocks++;
+                perPage.RenderedBlocks++;
+                perPage.OverlayModeBlocks++;
+            }
+            catch (InvalidOperationException ex)
             {
-                wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
-                var last = wrappedLines[^1];
-                wrappedLines[^1] = last.Length > 1 ? $"{last.TrimEnd('.', ' ')}…" : "…";
-                truncatedBlocks++;
-                perPage.TruncatedBlocks++;
+                Debug.WriteLine($"[PdfExport] Skipping block {chunkIndex} on page {metadata.PageNumber}: {ex.Message}");
+                missingBoundingBoxBlocks++;
+                perPage.MissingBoundingBoxBlocks++;
             }
-
-            var lineY = rect.Y;
-            foreach (var line in wrappedLines)
-            {
-                gfx.DrawString(line, font, XBrushes.Black, new XRect(rect.X, lineY, rect.Width, 20), XStringFormats.TopLeft);
-                lineY += lineHeight;
-            }
-
-            renderedBlocks++;
-            overlayModeBlocks++;
-            perPage.RenderedBlocks++;
-            perPage.OverlayModeBlocks++;
         }
 
         doc.Save(outputPath);

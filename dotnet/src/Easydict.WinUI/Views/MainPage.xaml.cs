@@ -196,6 +196,10 @@ namespace Easydict.WinUI.Views
                 LanguageComboHelper.PopulateSourceCombo(SourceLangComboNarrow, loc);
                 LanguageComboHelper.PopulateTargetCombo(TargetLangCombo, loc);
                 LanguageComboHelper.PopulateTargetCombo(TargetLangComboNarrow, loc);
+
+                // Long Doc language combos — default source to Auto, target to user's FirstLanguage
+                LanguageComboHelper.PopulateSourceCombo(LongDocSourceLangCombo, loc);
+                LanguageComboHelper.PopulateTargetCombo(LongDocTargetLangCombo, loc, _settings.FirstLanguage);
             }
             finally
             {
@@ -226,6 +230,10 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(LangHelpIcon, loc.GetString("LanguagePickerHelpTip"));
             ToolTipService.SetToolTip(LangHelpIconNarrow, loc.GetString("LanguagePickerHelpTip"));
             ToolTipService.SetToolTip(InputHelpIcon, loc.GetString("InputHelpTip"));
+
+            // Long doc language combo tooltips
+            ToolTipService.SetToolTip(LongDocSourceLangCombo, loc.GetString("SourceLanguageTooltip"));
+            ToolTipService.SetToolTip(LongDocTargetLangCombo, loc.GetString("TargetLanguageTooltip"));
 
             // Long doc service hint
             LongDocServiceHint.Text = loc.GetString("LongDoc_ServiceHint");
@@ -1287,6 +1295,16 @@ namespace Easydict.WinUI.Views
             return LanguageComboHelper.GetSelectedLanguage(TargetLangCombo);
         }
 
+        private TranslationLanguage GetLongDocSourceLanguage()
+        {
+            return LanguageComboHelper.GetSelectedLanguage(LongDocSourceLangCombo);
+        }
+
+        private TranslationLanguage GetLongDocTargetLanguage()
+        {
+            return LanguageComboHelper.GetSelectedLanguage(LongDocTargetLangCombo);
+        }
+
         /// <summary>
         /// Update detected language display label.
         /// </summary>
@@ -1646,6 +1664,8 @@ namespace Easydict.WinUI.Views
         private void SetLongDocTaskUiState(bool running)
         {
             LongDocTranslateButton.IsEnabled = !running || _isLongDocTranslating; // Allow if in cancel mode
+            LongDocSourceLangCombo.IsEnabled = !running;
+            LongDocTargetLangCombo.IsEnabled = !running;
             LongDocServiceCombo.IsEnabled = !running;
             LongDocInputModeCombo.IsEnabled = !running;
             LongDocBrowseButton.IsEnabled = !running;
@@ -1656,10 +1676,8 @@ namespace Easydict.WinUI.Views
             {
                 LongDocStatusText.Text = "Task running, settings are locked. Changes will apply to the next task.";
             }
-            else
-            {
-                LongDocStatusText.Text = "Idle";
-            }
+            // When !running, the caller has already set the appropriate status
+            // (Completed/Partial success/Failed/Canceled), so don't overwrite it.
         }
 
         private string BuildQueueOutputPath(string outputFolder, string sourceFilePath, int queueIndex)
@@ -1677,8 +1695,8 @@ namespace Easydict.WinUI.Views
 
         private async Task ProcessLongDocQueueAsync(List<string> filePaths, string serviceId, string outputFolder, LongDocumentInputMode mode, LayoutDetectionMode layoutDetection, CancellationToken cancellationToken)
         {
-            var from = GetSourceLanguage();
-            var to = GetTargetLanguage();
+            var from = GetLongDocSourceLanguage();
+            var to = GetLongDocTargetLanguage();
 
             var completed = 0;
             var skipped = 0;
@@ -1820,6 +1838,7 @@ namespace Easydict.WinUI.Views
                     }
                     else if (task.IsFaulted)
                     {
+                        Debug.WriteLine($"[LongDoc] Queue failed: {task.Exception}");
                         LongDocStatusText.Text = $"Queue failed: {task.Exception?.GetBaseException().Message}";
                     }
 
@@ -2124,8 +2143,8 @@ namespace Easydict.WinUI.Views
 
                 var outputPath = BuildOutputPath(input);
 
-                _longDocLastFrom = GetSourceLanguage();
-                _longDocLastTo = GetTargetLanguage();
+                _longDocLastFrom = GetLongDocSourceLanguage();
+                _longDocLastTo = GetLongDocTargetLanguage();
                 _longDocLastServiceId = serviceId;
                 _longDocLastDedupKey = await _longDocDedupService.CreateDedupKeyAsync(
                     mode,
@@ -2187,6 +2206,7 @@ namespace Easydict.WinUI.Views
             }
             catch (Exception ex)
             {
+                Debug.WriteLine($"[LongDoc] Translation failed: {ex}");
                 LongDocStatusText.Text = $"Failed: {ex.Message}";
             }
             finally
@@ -2295,6 +2315,7 @@ namespace Easydict.WinUI.Views
             }
             catch (Exception ex)
             {
+                Debug.WriteLine($"[LongDoc] Retry failed: {ex}");
                 LongDocStatusText.Text = $"Retry failed: {ex.Message}";
             }
             finally

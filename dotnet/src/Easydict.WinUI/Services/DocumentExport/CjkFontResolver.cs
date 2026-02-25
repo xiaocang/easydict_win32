@@ -4,9 +4,11 @@ using PdfSharpCore.Fonts;
 namespace Easydict.WinUI.Services.DocumentExport;
 
 /// <summary>
-/// Custom font resolver for PdfSharpCore that supports CJK fonts loaded from disk.
-/// Falls back to the default platform font resolver for non-CJK fonts.
-/// Must be registered via <c>GlobalFontSettings.FontResolver</c> before any PDF operations.
+/// Custom font resolver for PdfSharpCore that supports CJK fonts loaded from disk
+/// and system fonts (Arial, Consolas) from the Windows Fonts directory.
+/// Once registered as GlobalFontSettings.FontResolver, PdfSharpCore routes ALL
+/// font resolution through this class — returning null does NOT fall back to
+/// platform resolution, so we must handle system fonts ourselves.
 /// </summary>
 internal sealed class CjkFontResolver : IFontResolver
 {
@@ -28,14 +30,34 @@ internal sealed class CjkFontResolver : IFontResolver
     // Maps font file paths keyed by face name
     private static readonly Dictionary<string, string> FontFilePaths = new(StringComparer.OrdinalIgnoreCase);
 
-    // Maps family name → face name
+    // Maps family name → face name (includes aliases for internal TTF names from variable fonts)
     private static readonly Dictionary<string, string> FamilyToFace = new(StringComparer.OrdinalIgnoreCase)
     {
         [NotoSansSC] = FaceNotoSansSC,
         [NotoSansTC] = FaceNotoSansTC,
         [NotoSansJP] = FaceNotoSansJP,
         [NotoSansKR] = FaceNotoSansKR,
+        // Aliases: the NotoSansCJK variable fonts report these internal family names
+        ["Noto Sans CJK SC"] = FaceNotoSansSC,
+        ["Noto Sans CJK TC"] = FaceNotoSansTC,
+        ["Noto Sans CJK JP"] = FaceNotoSansJP,
+        ["Noto Sans CJK KR"] = FaceNotoSansKR,
     };
+
+    // System font file names in %WINDIR%\Fonts, keyed by face name
+    private static readonly Dictionary<string, string> SystemFontFiles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Arial#R"] = "arial.ttf",
+        ["Arial#B"] = "arialbd.ttf",
+        ["Arial#I"] = "ariali.ttf",
+        ["Arial#BI"] = "arialbi.ttf",
+        ["Consolas#R"] = "consola.ttf",
+        ["Consolas#B"] = "consolab.ttf",
+        ["Consolas#I"] = "consolai.ttf",
+        ["Consolas#BI"] = "consolabi.ttf",
+    };
+
+    private static readonly string SystemFontsDir = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
 
     /// <summary>
     /// Registers a CJK font file for use in PDF rendering.
@@ -115,12 +137,28 @@ internal sealed class CjkFontResolver : IFontResolver
             }
         }
 
-        // Fall through to platform resolver for system fonts (Arial, Consolas, etc.)
-        return PlatformFontResolver.ResolveTypeface(familyName, isBold, isItalic);
+        // Try system fonts (Arial, Consolas) — once this resolver is registered,
+        // PdfSharpCore does NOT fall back to platform resolution on null return.
+        var systemFace = MakeSystemFaceName(familyName, isBold, isItalic);
+        if (SystemFontFiles.ContainsKey(systemFace))
+        {
+            return new FontResolverInfo(systemFace);
+        }
+
+        // Fall back to Arial for unknown fonts
+        var fallback = MakeSystemFaceName("Arial", isBold, isItalic);
+        if (SystemFontFiles.ContainsKey(fallback))
+        {
+            Debug.WriteLine($"[CjkFontResolver] Unknown font '{familyName}', falling back to Arial");
+            return new FontResolverInfo(fallback);
+        }
+
+        return null;
     }
 
     public byte[]? GetFont(string faceName)
     {
+        // Check CJK fonts first
         string? fontPath;
         lock (FontFilePaths)
         {
@@ -129,12 +167,34 @@ internal sealed class CjkFontResolver : IFontResolver
 
         if (fontPath != null && File.Exists(fontPath))
         {
-            Debug.WriteLine($"[CjkFontResolver] Loading font data from: {fontPath}");
+            Debug.WriteLine($"[CjkFontResolver] Loading CJK font data from: {fontPath}");
             return File.ReadAllBytes(fontPath);
         }
 
-        // Not a CJK font face - return null to let PdfSharpCore try other resolvers
+        // Check system fonts
+        if (SystemFontFiles.TryGetValue(faceName, out var fileName))
+        {
+            var fullPath = Path.Combine(SystemFontsDir, fileName);
+            if (File.Exists(fullPath))
+            {
+                Debug.WriteLine($"[CjkFontResolver] Loading system font from: {fullPath}");
+                return File.ReadAllBytes(fullPath);
+            }
+        }
+
         return null;
+    }
+
+    private static string MakeSystemFaceName(string familyName, bool isBold, bool isItalic)
+    {
+        var suffix = (isBold, isItalic) switch
+        {
+            (true, true) => "#BI",
+            (true, false) => "#B",
+            (false, true) => "#I",
+            _ => "#R"
+        };
+        return $"{familyName}{suffix}";
     }
 
     public string DefaultFontName => "Arial";

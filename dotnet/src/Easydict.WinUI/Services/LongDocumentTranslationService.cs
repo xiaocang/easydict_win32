@@ -97,7 +97,9 @@ public sealed class LongDocumentTranslationService
 
     private sealed record CanonicalTranslationEntry(int ChunkIndex, int PageNumber, string Translation);
 
-    private readonly CoreLongDocumentTranslationService _coreLongDocumentService = new();
+    private readonly CoreLongDocumentTranslationService _coreLongDocumentService = new(
+        translateWithService: (request, serviceId, ct) =>
+            TranslationManagerService.Instance.Manager.TranslateAsync(request, ct, serviceId));
     private readonly TranslationCacheService _cacheService = new();
 
     // Layout detection services (lazy-initialized)

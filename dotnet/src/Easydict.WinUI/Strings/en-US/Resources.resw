@@ -1033,6 +1033,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>Layout detection model (~75MB) improves document structure recognition. Download now?</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Layout model download failed. Continuing with basic layout detection.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Choose input format: Text (plain text), Markdown, or PDF. PDF mode supports ML layout detection for better accuracy.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Mono: target language only. Bilingual: source and target side by side. Both: generates both mono and bilingual outputs.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Number of pages to translate simultaneously. Higher values are faster but use more API quota. Recommended: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Specify pages to translate (PDF only). Examples: 1-3, 5, 7-10. Leave empty to translate all pages.</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>Download CJK Font</value>
   </data>

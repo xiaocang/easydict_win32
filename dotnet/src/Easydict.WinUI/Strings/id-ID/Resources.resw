@@ -821,6 +821,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>Model deteksi tata letak (~75MB) meningkatkan pengenalan struktur dokumen. Unduh sekarang?</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Gagal mengunduh model tata letak. Melanjutkan terjemahan dengan deteksi tata letak dasar.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Pilih format input: Teks (teks biasa), Markdown, atau PDF. Mode PDF mendukung deteksi tata letak ML untuk akurasi yang lebih baik.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Mono: hanya bahasa target. Bilingual: sumber dan target berdampingan. Keduanya: menghasilkan output mono dan bilingual.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Jumlah halaman yang diterjemahkan secara bersamaan. Nilai lebih tinggi lebih cepat tetapi menggunakan lebih banyak kuota API. Disarankan: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Tentukan halaman yang akan diterjemahkan (hanya PDF). Contoh: 1-3, 5, 7-10. Kosongkan untuk menerjemahkan semua halaman.</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>Unduh Font CJK</value>
   </data>

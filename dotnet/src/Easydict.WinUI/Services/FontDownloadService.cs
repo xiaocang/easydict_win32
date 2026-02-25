@@ -15,8 +15,6 @@ internal sealed record FontAsset(string FileName, string[] DownloadUrls);
 public sealed class FontDownloadService : IDisposable
 {
     private const string FontsSubDir = "Fonts";
-    private const int MaxRetries = 3;
-    private static readonly TimeSpan[] RetryDelays = [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8)];
 
     // Google Noto Sans CJK fonts (OFL license, full CJK + Latin coverage)
     // Using individual weight files from GitHub mirror for reliable direct downloads
@@ -50,7 +48,7 @@ public sealed class FontDownloadService : IDisposable
     };
 
     private readonly string _fontsDir;
-    private readonly HttpClient _httpClient;
+    private readonly ModelDownloadClient _client;
     private readonly SemaphoreSlim _downloadLock = new(1, 1);
     private bool _disposed;
 
@@ -62,7 +60,7 @@ public sealed class FontDownloadService : IDisposable
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Easydict", FontsSubDir);
         Directory.CreateDirectory(_fontsDir);
-        _httpClient = httpClient ?? CreateDefaultHttpClient();
+        _client = new ModelDownloadClient(httpClient);
     }
 
     /// <summary>Whether font for the given language is downloaded and available.</summary>
@@ -141,7 +139,7 @@ public sealed class FontDownloadService : IDisposable
             }
 
             Debug.WriteLine($"[FontDownload] Downloading font for {targetLanguage} ({asset.FileName})...");
-            await DownloadWithRetryAsync(asset.DownloadUrls, fontPath, $"font-{key}", progress, ct);
+            await _client.DownloadWithRetryAsync(asset.DownloadUrls, fontPath, $"font-{key}", progress, ct);
             Debug.WriteLine($"[FontDownload] Font downloaded to {fontPath}");
             return fontPath;
         }
@@ -157,7 +155,7 @@ public sealed class FontDownloadService : IDisposable
         foreach (var asset in FontAssets.Values)
         {
             var path = Path.Combine(_fontsDir, asset.FileName);
-            TryDeleteFile(path);
+            ModelDownloadClient.TryDeleteFile(path);
         }
     }
 
@@ -176,90 +174,6 @@ public sealed class FontDownloadService : IDisposable
         return total;
     }
 
-    private async Task DownloadWithRetryAsync(
-        string[] urls,
-        string outputPath,
-        string stage,
-        IProgress<ModelDownloadProgress>? progress,
-        CancellationToken ct)
-    {
-        var tempPath = outputPath + ".tmp";
-        Exception? lastException = null;
-
-        foreach (var url in urls)
-        {
-            for (var retry = 0; retry <= MaxRetries; retry++)
-            {
-                try
-                {
-                    ct.ThrowIfCancellationRequested();
-
-                    if (retry > 0)
-                    {
-                        var delay = RetryDelays[Math.Min(retry - 1, RetryDelays.Length - 1)];
-                        Debug.WriteLine($"[FontDownload] Retry {retry}/{MaxRetries} after {delay.TotalSeconds}s...");
-                        await Task.Delay(delay, ct);
-                    }
-
-                    using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
-                    response.EnsureSuccessStatusCode();
-
-                    var totalBytes = response.Content.Headers.ContentLength ?? -1;
-                    await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-                    await using var fileStream = File.Create(tempPath);
-
-                    var buffer = new byte[81920];
-                    long downloaded = 0;
-                    int bytesRead;
-
-                    while ((bytesRead = await contentStream.ReadAsync(buffer, ct)) > 0)
-                    {
-                        await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
-                        downloaded += bytesRead;
-
-                        if (totalBytes > 0)
-                        {
-                            progress?.Report(new ModelDownloadProgress(
-                                stage, downloaded, totalBytes, (double)downloaded / totalBytes * 100));
-                        }
-                    }
-
-                    await fileStream.FlushAsync(ct);
-                    fileStream.Close();
-
-                    // Move temp to final location
-                    File.Move(tempPath, outputPath, overwrite: true);
-                    return; // Success
-                }
-                catch (OperationCanceledException)
-                {
-                    TryDeleteFile(tempPath);
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    lastException = ex;
-                    Debug.WriteLine($"[FontDownload] Download failed: {ex.Message}");
-                    TryDeleteFile(tempPath);
-                }
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Failed to download font after trying all URLs with retries.", lastException);
-    }
-
-    private static HttpClient CreateDefaultHttpClient()
-    {
-        var handler = new HttpClientHandler { AllowAutoRedirect = true };
-        return new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
-    }
-
-    private static void TryDeleteFile(string path)
-    {
-        try { if (File.Exists(path)) File.Delete(path); } catch { }
-    }
-
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 
     public void Dispose()
@@ -267,6 +181,6 @@ public sealed class FontDownloadService : IDisposable
         if (_disposed) return;
         _disposed = true;
         _downloadLock.Dispose();
-        _httpClient.Dispose();
+        _client.Dispose();
     }
 }

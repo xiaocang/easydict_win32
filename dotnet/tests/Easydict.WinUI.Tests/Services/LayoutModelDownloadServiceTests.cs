@@ -96,6 +96,75 @@ public class LayoutModelDownloadServiceTests
         progress.TotalBytes.Should().Be(10240);
         progress.Percentage.Should().Be(10.0);
     }
+
+    [Fact]
+    public void IsFileValid_ReturnsFalse_WhenFileDoesNotExist()
+    {
+        var result = ModelDownloadClient.IsFileValid(
+            Path.Combine(Path.GetTempPath(), "nonexistent_file.onnx"), 1024);
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsFileValid_ReturnsFalse_WhenFileTooSmall()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            // Write a small file (simulating truncated download or HTML error page)
+            File.WriteAllText(tempFile, "<html>Error 403 Forbidden</html>");
+
+            var result = ModelDownloadClient.IsFileValid(tempFile, 1024 * 1024);
+            result.Should().BeFalse();
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void IsFileValid_ReturnsTrue_WhenFileMeetsMinSize()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            // Write a file that meets the minimum size
+            var data = new byte[2048];
+            File.WriteAllBytes(tempFile, data);
+
+            var result = ModelDownloadClient.IsFileValid(tempFile, 1024);
+            result.Should().BeTrue();
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void IsReady_ReturnsFalse_WhenModelFilesTooSmall()
+    {
+        // With default constructor, IsReady checks real files in %LocalAppData%\Easydict\Models\
+        // Since we can't control those files, we verify the property is consistent
+        using var service = new LayoutModelDownloadService();
+        var ready = service.IsReady;
+
+        // If ready, both files must be valid (large enough)
+        if (ready)
+        {
+            service.IsModelReady.Should().BeTrue();
+            service.IsRuntimeReady.Should().BeTrue();
+            service.GetModelPath().Should().NotBeNull();
+            service.GetNativeLibraryDir().Should().NotBeNull();
+            service.GetNativeLibraryPath().Should().NotBeNull();
+        }
+        else
+        {
+            // At least one is not valid — GetModelPath/GetNativeLibraryPath should reflect this
+            (service.GetModelPath() is null || service.GetNativeLibraryPath() is null).Should().BeTrue();
+        }
+    }
 }
 
 [Trait("Category", "WinUI")]

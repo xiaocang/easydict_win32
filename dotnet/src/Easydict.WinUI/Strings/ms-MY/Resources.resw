@@ -419,6 +419,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>Model pengesanan susun atur (~75MB) meningkatkan pengecaman struktur dokumen. Muat turun sekarang?</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Muat turun model susun atur gagal. Meneruskan terjemahan dengan pengesanan susun atur asas.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Pilih format input: Teks (teks biasa), Markdown atau PDF. Mod PDF menyokong pengesanan susun atur ML untuk ketepatan yang lebih baik.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Mono: bahasa sasaran sahaja. Dwibahasa: sumber dan sasaran sebelah menyebelah. Kedua-dua: menghasilkan output mono dan dwibahasa.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Bilangan halaman untuk diterjemah secara serentak. Nilai lebih tinggi lebih pantas tetapi menggunakan lebih banyak kuota API. Disyorkan: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Tentukan halaman untuk diterjemah (PDF sahaja). Contoh: 1-3, 5, 7-10. Biarkan kosong untuk menterjemah semua halaman.</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>Muat Turun Fon CJK</value>
   </data>

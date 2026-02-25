@@ -867,6 +867,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>Il modello di rilevamento layout (~75 MB) migliora il riconoscimento della struttura del documento. Scaricare ora?</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Download del modello di layout non riuscito. La traduzione continua con il rilevamento layout di base.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Scegli il formato di input: Testo (testo semplice), Markdown o PDF. La modalità PDF supporta il rilevamento ML del layout per una maggiore precisione.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Mono: solo lingua di destinazione. Bilingue: lingua di origine e destinazione affiancate. Entrambi: genera output sia monolingue che bilingue.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Numero di pagine da tradurre contemporaneamente. Valori più alti sono più veloci ma consumano più quota API. Consigliato: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Specificare le pagine da tradurre (solo PDF). Esempi: 1-3, 5, 7-10. Lasciare vuoto per tradurre tutte le pagine.</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>Scarica font CJK</value>
   </data>

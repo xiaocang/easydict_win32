@@ -992,6 +992,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>Das Layout-Erkennungsmodell (~75 MB) verbessert die Dokumentstrukturerkennung. Jetzt herunterladen?</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Download des Layout-Modells fehlgeschlagen. Übersetzung wird mit einfacher Layout-Erkennung fortgesetzt.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Eingabeformat wählen: Text (Klartext), Markdown oder PDF. Der PDF-Modus unterstützt ML-Layouterkennung für bessere Genauigkeit.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Mono: nur Zielsprache. Zweisprachig: Quell- und Zielsprache nebeneinander. Beide: erzeugt sowohl einsprachige als auch zweisprachige Ausgaben.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Anzahl gleichzeitig zu übersetzender Seiten. Höhere Werte sind schneller, verbrauchen aber mehr API-Kontingent. Empfohlen: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Zu übersetzende Seiten angeben (nur PDF). Beispiele: 1-3, 5, 7-10. Leer lassen, um alle Seiten zu übersetzen.</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>CJK-Schriftart herunterladen</value>
   </data>

@@ -229,6 +229,12 @@ namespace Easydict.WinUI.Views
 
             // Long doc service hint
             LongDocServiceHint.Text = loc.GetString("LongDoc_ServiceHint");
+
+            // Long doc control help icons
+            ToolTipService.SetToolTip(LongDocInputModeHint, loc.GetString("LongDoc_InputModeHelpTip"));
+            ToolTipService.SetToolTip(LongDocOutputModeHint, loc.GetString("LongDoc_OutputModeHelpTip"));
+            ToolTipService.SetToolTip(LongDocConcurrencyHint, loc.GetString("LongDoc_ConcurrencyHelpTip"));
+            ToolTipService.SetToolTip(LongDocPageRangeHint, loc.GetString("LongDoc_PageRangeHelpTip"));
         }
 
         private void UpdateQueryModeButton()
@@ -1790,7 +1796,7 @@ namespace Easydict.WinUI.Views
             SetLongDocTaskUiState(true);
 
             // Check ONNX layout model availability (once before starting queue)
-            var layoutMode = await EnsureOnnxReadyAsync(_longDocQueueCts.Token);
+            var layoutMode = await EnsureOnnxReadyAsync(mode, _longDocQueueCts.Token);
 
             // Check CJK font availability for PDF output (once before starting queue)
             if (mode == LongDocumentInputMode.Pdf)
@@ -1974,6 +1980,11 @@ namespace Easydict.WinUI.Views
             {
                 LongDocFilePathDisplay.Text = $"{_longDocFileItems.Count} files selected";
             }
+
+            LongDocFileItemsControl.ItemsSource = _longDocFileItems;
+            LongDocFileItemsControl.Visibility = _longDocFileItems.Count >= 2
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
         private void UpdateLongDocOutputFolder()
@@ -2132,7 +2143,7 @@ namespace Easydict.WinUI.Views
                 }
 
                 // Check ONNX layout model availability (prompt download if needed)
-                var layoutMode = await EnsureOnnxReadyAsync(cancellationToken);
+                var layoutMode = await EnsureOnnxReadyAsync(mode, cancellationToken);
 
                 // Check CJK font availability for PDF output
                 var outputMode = GetDocumentOutputModeFromSettings();
@@ -2392,9 +2403,16 @@ namespace Easydict.WinUI.Views
         /// <summary>
         /// Checks whether the ONNX layout model is downloaded. If not, prompts the user
         /// to download it. Returns the layout detection mode to use.
+        /// Only prompts for PDF mode; non-PDF modes always use heuristic.
+        /// If download fails, falls back to heuristic instead of failing the translation.
         /// </summary>
-        private async Task<LayoutDetectionMode> EnsureOnnxReadyAsync(CancellationToken ct)
+        private async Task<LayoutDetectionMode> EnsureOnnxReadyAsync(
+            LongDocumentInputMode inputMode, CancellationToken ct)
         {
+            // ONNX layout detection only applies to PDF input
+            if (inputMode is not LongDocumentInputMode.Pdf)
+                return LayoutDetectionMode.Heuristic;
+
             var downloadService = _longDocumentService.GetLayoutModelDownloadService();
             if (downloadService.IsReady)
                 return LayoutDetectionMode.OnnxLocal;
@@ -2423,7 +2441,20 @@ namespace Easydict.WinUI.Views
                         LongDocStatusText.Text = $"{loc.GetString("LongDoc_OnnxDownloadTitle")}: {pct}%";
                     });
                 });
-                await downloadService.EnsureAvailableAsync(progress, ct);
+
+                try
+                {
+                    await downloadService.EnsureAvailableAsync(progress, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw; // User cancellation should abort the entire operation
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MainPage] ONNX download failed, falling back to heuristic: {ex.Message}");
+                    LongDocStatusText.Text = loc.GetString("LongDoc_OnnxDownloadFailed_Fallback");
+                }
             }
 
             return downloadService.IsReady ? LayoutDetectionMode.OnnxLocal : LayoutDetectionMode.Heuristic;

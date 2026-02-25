@@ -829,6 +829,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>โมเดลตรวจจับเลย์เอาต์ (~75MB) ช่วยปรับปรุงการจดจำโครงสร้างเอกสาร ดาวน์โหลดตอนนี้หรือไม่?</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>ดาวน์โหลดโมเดลเลย์เอาต์ล้มเหลว จะใช้การตรวจจับเลย์เอาต์พื้นฐานในการแปลต่อไป</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>เลือกรูปแบบอินพุต: ข้อความ (ข้อความธรรมดา), Markdown หรือ PDF โหมด PDF รองรับการตรวจจับเลย์เอาต์ ML เพื่อความแม่นยำที่ดีขึ้น</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>ภาษาเดียว: เฉพาะภาษาเป้าหมาย สองภาษา: ต้นทางและเป้าหมายเคียงข้างกัน ทั้งสอง: สร้างเอาต์พุตทั้งภาษาเดียวและสองภาษา</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>จำนวนหน้าที่แปลพร้อมกัน ค่าที่สูงขึ้นเร็วกว่าแต่ใช้โควต้า API มากขึ้น แนะนำ: 2-4</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>ระบุหน้าที่จะแปล (เฉพาะ PDF) ตัวอย่าง: 1-3, 5, 7-10 เว้นว่างเพื่อแปลทุกหน้า</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>ดาวน์โหลดฟอนต์ CJK</value>
   </data>

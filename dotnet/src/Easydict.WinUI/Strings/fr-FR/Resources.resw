@@ -992,6 +992,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>Le modèle de détection de mise en page (~75 Mo) améliore la reconnaissance de la structure du document. Télécharger maintenant ?</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Échec du téléchargement du modèle de mise en page. La traduction continue avec la détection de mise en page basique.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Choisir le format d'entrée : Texte (texte brut), Markdown ou PDF. Le mode PDF prend en charge la détection ML de mise en page pour une meilleure précision.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Mono : langue cible uniquement. Bilingue : source et cible côte à côte. Les deux : génère des sorties monolingues et bilingues.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Nombre de pages à traduire simultanément. Des valeurs plus élevées sont plus rapides mais consomment plus de quota API. Recommandé : 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Spécifier les pages à traduire (PDF uniquement). Exemples : 1-3, 5, 7-10. Laisser vide pour traduire toutes les pages.</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>Télécharger la police CJK</value>
   </data>

@@ -992,6 +992,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>版面偵測模型（約75MB）可提升文件結構辨識效果。是否下載？</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>版面偵測模型下載失敗，將使用基礎版面偵測繼續翻譯。</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>選擇輸入格式：文字（純文字）、Markdown 或 PDF。PDF 模式支援 ML 版面偵測以提高準確性。</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>單語：僅目標語言。雙語：來源語言和目標語言並排顯示。兩者：同時產生單語和雙語輸出。</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>同時翻譯的頁面數。值越大速度越快，但消耗更多 API 配額。建議：2-4。</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>指定要翻譯的頁面（僅 PDF）。範例：1-3, 5, 7-10。留空則翻譯所有頁面。</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>下載 CJK 字型</value>
   </data>

@@ -875,6 +875,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>Mô hình phát hiện bố cục (~75MB) cải thiện nhận dạng cấu trúc tài liệu. Tải xuống ngay?</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Tải mô hình bố cục thất bại. Tiếp tục dịch với phát hiện bố cục cơ bản.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Chọn định dạng đầu vào: Văn bản (văn bản thuần), Markdown hoặc PDF. Chế độ PDF hỗ trợ phát hiện bố cục ML để tăng độ chính xác.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Đơn ngữ: chỉ ngôn ngữ đích. Song ngữ: ngôn ngữ nguồn và đích cạnh nhau. Cả hai: tạo cả đầu ra đơn ngữ và song ngữ.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Số trang dịch đồng thời. Giá trị cao hơn nhanh hơn nhưng sử dụng nhiều hạn mức API hơn. Khuyến nghị: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Chỉ định các trang cần dịch (chỉ PDF). Ví dụ: 1-3, 5, 7-10. Để trống để dịch tất cả các trang.</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>Tải xuống phông chữ CJK</value>
   </data>

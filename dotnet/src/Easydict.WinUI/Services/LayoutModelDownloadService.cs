@@ -1,21 +1,11 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 
 namespace Easydict.WinUI.Services;
 
 /// <summary>
-/// Progress report for model/runtime downloads.
-/// </summary>
-public sealed record ModelDownloadProgress(
-    string Stage,
-    long BytesDownloaded,
-    long TotalBytes,
-    double Percentage);
-
-/// <summary>
 /// Manages downloading and caching of ONNX Runtime native library and DocLayout-YOLO model.
 /// All artifacts are stored under <c>%LocalAppData%\Easydict\Models\</c>.
+/// Downloads auto-select the fastest source from multiple mirrors.
 /// </summary>
 public sealed class LayoutModelDownloadService : IDisposable
 {
@@ -23,30 +13,31 @@ public sealed class LayoutModelDownloadService : IDisposable
     private const string OnnxRuntimeFileName = "onnxruntime.dll";
     private const string ModelFileName = "doclayout_yolo.onnx";
 
+    // Minimum valid file sizes to detect truncated downloads or HTML error pages
+    private const long MinRuntimeFileSize = 5 * 1024 * 1024;   // 5 MB (actual ~10 MB)
+    private const long MinModelFileSize = 20 * 1024 * 1024;     // 20 MB (actual ~50 MB)
+
     // ONNX Runtime 1.21.0 - win-x64 native library
-    // Download URLs: primary (GitHub Release), fallback (NuGet extract)
     private static readonly string[] OnnxRuntimeUrls =
     [
         "https://github.com/microsoft/onnxruntime/releases/download/v1.21.0/onnxruntime-win-x64-1.21.0.zip",
     ];
 
-    // DocLayout-YOLO model - primary (HuggingFace), fallback (GitHub Releases)
+    // DocLayout-YOLO model — HuggingFace, HF Mirror (China), ModelScope (China)
     private static readonly string[] ModelUrls =
     [
-        "https://huggingface.co/juliozhao/DocLayout-YOLO-DocStructBench-onnx/resolve/main/doclayout_yolo_docstructbench_imgsz1024.onnx",
-        "https://github.com/opendatalab/DocLayout-YOLO/releases/download/v0.0.1/doclayout_yolo_docstructbench_imgsz1024.onnx",
+        "https://huggingface.co/wybxc/DocLayout-YOLO-DocStructBench-onnx/resolve/main/doclayout_yolo_docstructbench_imgsz1024.onnx",
+        "https://hf-mirror.com/wybxc/DocLayout-YOLO-DocStructBench-onnx/resolve/main/doclayout_yolo_docstructbench_imgsz1024.onnx",
+        "https://www.modelscope.cn/models/AI-ModelScope/DocLayout-YOLO-DocStructBench-onnx/resolve/master/doclayout_yolo_docstructbench_imgsz1024.onnx",
     ];
 
     // Path within the ONNX Runtime zip to the native DLL
     private const string OnnxRuntimeZipEntryPath = "onnxruntime-win-x64-1.21.0/lib/onnxruntime.dll";
 
-    private const int MaxRetries = 3;
-    private static readonly TimeSpan[] RetryDelays = [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8)];
-
     private readonly string _modelsDir;
     private readonly string _nativeLibPath;
     private readonly string _modelPath;
-    private readonly HttpClient _httpClient;
+    private readonly ModelDownloadClient _client;
     private readonly SemaphoreSlim _downloadLock = new(1, 1);
     private bool _disposed;
 
@@ -61,30 +52,31 @@ public sealed class LayoutModelDownloadService : IDisposable
 
         _nativeLibPath = Path.Combine(_modelsDir, OnnxRuntimeFileName);
         _modelPath = Path.Combine(_modelsDir, ModelFileName);
-        _httpClient = httpClient ?? CreateDefaultHttpClient();
+        _client = new ModelDownloadClient(httpClient);
     }
 
     /// <summary>Whether both native runtime and model file are present and valid.</summary>
-    public bool IsReady => File.Exists(_nativeLibPath) && File.Exists(_modelPath);
+    public bool IsReady => IsRuntimeReady && IsModelReady;
 
-    /// <summary>Whether the ONNX native runtime is downloaded.</summary>
-    public bool IsRuntimeReady => File.Exists(_nativeLibPath);
+    /// <summary>Whether the ONNX native runtime is downloaded and valid.</summary>
+    public bool IsRuntimeReady => ModelDownloadClient.IsFileValid(_nativeLibPath, MinRuntimeFileSize);
 
-    /// <summary>Whether the ONNX model file is downloaded.</summary>
-    public bool IsModelReady => File.Exists(_modelPath);
+    /// <summary>Whether the ONNX model file is downloaded and valid.</summary>
+    public bool IsModelReady => ModelDownloadClient.IsFileValid(_modelPath, MinModelFileSize);
 
-    /// <summary>Gets the path to the ONNX model file, or null if not downloaded.</summary>
-    public string? GetModelPath() => File.Exists(_modelPath) ? _modelPath : null;
+    /// <summary>Gets the path to the ONNX model file, or null if not downloaded/valid.</summary>
+    public string? GetModelPath() => IsModelReady ? _modelPath : null;
 
     /// <summary>Gets the directory containing the native ONNX Runtime library.</summary>
-    public string? GetNativeLibraryDir() => File.Exists(_nativeLibPath) ? _modelsDir : null;
+    public string? GetNativeLibraryDir() => IsRuntimeReady ? _modelsDir : null;
 
     /// <summary>Gets the full path to the native ONNX Runtime library.</summary>
-    public string? GetNativeLibraryPath() => File.Exists(_nativeLibPath) ? _nativeLibPath : null;
+    public string? GetNativeLibraryPath() => IsRuntimeReady ? _nativeLibPath : null;
 
     /// <summary>
     /// Ensures both ONNX Runtime and model are downloaded and available.
     /// Downloads missing files with progress reporting and retry logic.
+    /// Auto-selects the fastest source from multiple mirrors.
     /// </summary>
     public async Task EnsureAvailableAsync(
         IProgress<ModelDownloadProgress>? progress = null,
@@ -95,12 +87,15 @@ public sealed class LayoutModelDownloadService : IDisposable
         await _downloadLock.WaitAsync(ct);
         try
         {
-            if (!File.Exists(_nativeLibPath))
+            // Clean up invalid files from previous failed/truncated downloads
+            CleanupInvalidFiles();
+
+            if (!IsRuntimeReady)
             {
                 await DownloadOnnxRuntimeAsync(progress, ct);
             }
 
-            if (!File.Exists(_modelPath))
+            if (!IsModelReady)
             {
                 await DownloadModelAsync(progress, ct);
             }
@@ -118,7 +113,7 @@ public sealed class LayoutModelDownloadService : IDisposable
         var tempZipPath = Path.Combine(_modelsDir, "onnxruntime_temp.zip");
         try
         {
-            await DownloadWithRetryAsync(OnnxRuntimeUrls, tempZipPath, "runtime", progress, ct);
+            await _client.DownloadWithRetryAsync(OnnxRuntimeUrls, tempZipPath, "runtime", progress, ct);
 
             // Extract the native DLL from the zip
             using var archive = System.IO.Compression.ZipFile.OpenRead(tempZipPath);
@@ -131,95 +126,38 @@ public sealed class LayoutModelDownloadService : IDisposable
             await entryStream.CopyToAsync(fileStream, ct);
 
             Debug.WriteLine($"[LayoutModelDownload] ONNX Runtime extracted to {_nativeLibPath}");
+
+            // Validate extracted file
+            if (!ModelDownloadClient.IsFileValid(_nativeLibPath, MinRuntimeFileSize))
+            {
+                ModelDownloadClient.TryDeleteFile(_nativeLibPath);
+                throw new InvalidOperationException(
+                    "Extracted runtime file is too small, likely corrupted.");
+            }
         }
         finally
         {
-            TryDeleteFile(tempZipPath);
+            ModelDownloadClient.TryDeleteFile(tempZipPath);
         }
     }
 
     private async Task DownloadModelAsync(IProgress<ModelDownloadProgress>? progress, CancellationToken ct)
     {
         Debug.WriteLine("[LayoutModelDownload] Downloading DocLayout-YOLO model...");
-        await DownloadWithRetryAsync(ModelUrls, _modelPath, "model", progress, ct);
+
+        // Auto-select fastest source
+        var orderedUrls = await _client.GetOrderedUrlsAsync(ModelUrls, ct);
+        await _client.DownloadWithRetryAsync(orderedUrls, _modelPath, "model", progress, ct);
+
+        // Validate downloaded file
+        if (!ModelDownloadClient.IsFileValid(_modelPath, MinModelFileSize))
+        {
+            ModelDownloadClient.TryDeleteFile(_modelPath);
+            throw new InvalidOperationException(
+                "Downloaded model file is too small, likely corrupted or an error page.");
+        }
+
         Debug.WriteLine($"[LayoutModelDownload] Model downloaded to {_modelPath}");
-    }
-
-    private async Task DownloadWithRetryAsync(
-        string[] urls,
-        string outputPath,
-        string stage,
-        IProgress<ModelDownloadProgress>? progress,
-        CancellationToken ct)
-    {
-        var tempPath = outputPath + ".tmp";
-        Exception? lastException = null;
-
-        foreach (var url in urls)
-        {
-            for (var attempt = 0; attempt <= MaxRetries; attempt++)
-            {
-                try
-                {
-                    if (attempt > 0)
-                    {
-                        var delay = RetryDelays[Math.Min(attempt - 1, RetryDelays.Length - 1)];
-                        Debug.WriteLine($"[LayoutModelDownload] Retry {attempt}/{MaxRetries} after {delay.TotalSeconds}s for {url}");
-                        await Task.Delay(delay, ct);
-                    }
-
-                    await DownloadFileAsync(url, tempPath, stage, progress, ct);
-
-                    // Move temp to final location atomically
-                    File.Move(tempPath, outputPath, overwrite: true);
-                    return;
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    TryDeleteFile(tempPath);
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    lastException = ex;
-                    Debug.WriteLine($"[LayoutModelDownload] Download failed: {ex.Message}");
-                    TryDeleteFile(tempPath);
-                }
-            }
-
-            Debug.WriteLine($"[LayoutModelDownload] All retries exhausted for {url}, trying next source...");
-        }
-
-        throw new InvalidOperationException(
-            $"Failed to download {stage} from all sources.", lastException);
-    }
-
-    private async Task DownloadFileAsync(
-        string url,
-        string outputPath,
-        string stage,
-        IProgress<ModelDownloadProgress>? progress,
-        CancellationToken ct)
-    {
-        using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-
-        var totalBytes = response.Content.Headers.ContentLength ?? -1;
-        long bytesDownloaded = 0;
-
-        await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-        await using var fileStream = File.Create(outputPath);
-
-        var buffer = new byte[81920];
-        int bytesRead;
-        while ((bytesRead = await contentStream.ReadAsync(buffer, ct)) > 0)
-        {
-            await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
-            bytesDownloaded += bytesRead;
-
-            var percentage = totalBytes > 0 ? (double)bytesDownloaded / totalBytes * 100 : -1;
-            progress?.Report(new ModelDownloadProgress(stage, bytesDownloaded, totalBytes, percentage));
-        }
     }
 
     /// <summary>
@@ -228,24 +166,26 @@ public sealed class LayoutModelDownloadService : IDisposable
     public void DeleteAll()
     {
         ThrowIfDisposed();
-        TryDeleteFile(_nativeLibPath);
-        TryDeleteFile(_modelPath);
+        ModelDownloadClient.TryDeleteFile(_nativeLibPath);
+        ModelDownloadClient.TryDeleteFile(_modelPath);
     }
 
-    private static void TryDeleteFile(string path)
+    /// <summary>
+    /// Removes files that exist but are too small (truncated or error page downloads).
+    /// </summary>
+    private void CleanupInvalidFiles()
     {
-        try { File.Delete(path); } catch { /* ignore cleanup errors */ }
-    }
-
-    private static HttpClient CreateDefaultHttpClient()
-    {
-        var handler = new HttpClientHandler();
-        var client = new HttpClient(handler)
+        if (File.Exists(_nativeLibPath) && !ModelDownloadClient.IsFileValid(_nativeLibPath, MinRuntimeFileSize))
         {
-            Timeout = TimeSpan.FromMinutes(10)
-        };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Easydict-Win32/1.0");
-        return client;
+            Debug.WriteLine($"[LayoutModelDownload] Cleaning up invalid runtime file ({new FileInfo(_nativeLibPath).Length} bytes)");
+            ModelDownloadClient.TryDeleteFile(_nativeLibPath);
+        }
+
+        if (File.Exists(_modelPath) && !ModelDownloadClient.IsFileValid(_modelPath, MinModelFileSize))
+        {
+            Debug.WriteLine($"[LayoutModelDownload] Cleaning up invalid model file ({new FileInfo(_modelPath).Length} bytes)");
+            ModelDownloadClient.TryDeleteFile(_modelPath);
+        }
     }
 
     private void ThrowIfDisposed()
@@ -257,7 +197,7 @@ public sealed class LayoutModelDownloadService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _httpClient.Dispose();
+        _client.Dispose();
         _downloadLock.Dispose();
     }
 }

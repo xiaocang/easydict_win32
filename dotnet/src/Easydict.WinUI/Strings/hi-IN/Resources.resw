@@ -419,6 +419,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>लेआउट डिटेक्शन मॉडल (~75MB) दस्तावेज़ संरचना पहचान को बेहतर बनाता है। अभी डाउनलोड करें?</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>लेआउट मॉडल डाउनलोड विफल। बुनियादी लेआउट डिटेक्शन के साथ अनुवाद जारी रहेगा।</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>इनपुट प्रारूप चुनें: टेक्स्ट (सादा टेक्स्ट), Markdown, या PDF। PDF मोड बेहतर सटीकता के लिए ML लेआउट पहचान का समर्थन करता है।</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>मोनो: केवल लक्ष्य भाषा। द्विभाषी: स्रोत और लक्ष्य साथ-साथ। दोनों: मोनो और द्विभाषी दोनों आउटपुट उत्पन्न करता है।</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>एक साथ अनुवाद करने के लिए पृष्ठों की संख्या। अधिक मान तेज़ हैं लेकिन अधिक API कोटा का उपयोग करते हैं। अनुशंसित: 2-4।</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>अनुवाद करने के लिए पृष्ठ निर्दिष्ट करें (केवल PDF)। उदाहरण: 1-3, 5, 7-10। सभी पृष्ठों का अनुवाद करने के लिए खाली छोड़ें।</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>CJK फ़ॉन्ट डाउनलोड करें</value>
   </data>

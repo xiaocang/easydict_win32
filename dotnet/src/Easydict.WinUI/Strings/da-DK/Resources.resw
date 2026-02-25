@@ -419,6 +419,21 @@
   <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
     <value>Layoutgenkendelsesmodel (~75 MB) forbedrer genkendelsen af dokumentstruktur. Download nu?</value>
   </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Download af layoutmodel mislykkedes. Fortsætter oversættelse med grundlæggende layoutgenkendelse.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Vælg inputformat: Tekst (almindelig tekst), Markdown eller PDF. PDF-tilstand understøtter ML-layoutgenkendelse for bedre nøjagtighed.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Mono: kun målsprog. Tosproget: kilde og mål side om side. Begge: genererer både ensproget og tosproget output.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Antal sider der oversættes samtidigt. Højere værdier er hurtigere men bruger mere API-kvote. Anbefalet: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Angiv sider der skal oversættes (kun PDF). Eksempler: 1-3, 5, 7-10. Lad feltet stå tomt for at oversætte alle sider.</value>
+  </data>
   <data name="LongDoc_CjkFontTitle" xml:space="preserve">
     <value>Download CJK-skrifttype</value>
   </data>

@@ -111,7 +111,7 @@ public class LongDocUIFreezeTests
     public async Task TranslateAsync_ProgressReportsAllStages()
     {
         var stages = new List<LongDocumentTranslationStage>();
-        var progress = new Progress<LongDocumentTranslationProgress>(p => stages.Add(p.Stage));
+        var progress = new SynchronousProgress<LongDocumentTranslationProgress>(p => stages.Add(p.Stage));
 
         var sut = new LongDocumentTranslationService(translateWithService: FakeTranslate);
         var source = BuildSourceWithNBlocks(3);
@@ -123,9 +123,6 @@ public class LongDocUIFreezeTests
             EnableFormulaProtection = true,
             Progress = progress
         });
-
-        // Allow progress callbacks to fire (they're posted asynchronously via Progress<T>)
-        await Task.Delay(100);
 
         _output.WriteLine($"Stages reported: {string.Join(" → ", stages)}");
 
@@ -284,7 +281,7 @@ public class LongDocUIFreezeTests
     {
         var timestamps = new List<(LongDocumentTranslationStage Stage, long Ms)>();
         var stopwatch = Stopwatch.StartNew();
-        var progress = new Progress<LongDocumentTranslationProgress>(p =>
+        var progress = new SynchronousProgress<LongDocumentTranslationProgress>(p =>
         {
             timestamps.Add((p.Stage, stopwatch.ElapsedMilliseconds));
         });
@@ -302,8 +299,6 @@ public class LongDocUIFreezeTests
             Progress = progress
         });
 
-        // Allow progress callbacks to fire
-        await Task.Delay(200);
         stopwatch.Stop();
 
         _output.WriteLine("Stage timeline:");
@@ -384,5 +379,17 @@ public class LongDocUIFreezeTests
                 }
             ]
         };
+    }
+
+    /// <summary>
+    /// Synchronous IProgress implementation for tests.
+    /// Unlike <see cref="Progress{T}"/>, invokes the callback inline on Report(),
+    /// avoiding async dispatch race conditions in unit tests.
+    /// </summary>
+    private sealed class SynchronousProgress<T> : IProgress<T>
+    {
+        private readonly Action<T> _handler;
+        public SynchronousProgress(Action<T> handler) => _handler = handler;
+        public void Report(T value) => _handler(value);
     }
 }

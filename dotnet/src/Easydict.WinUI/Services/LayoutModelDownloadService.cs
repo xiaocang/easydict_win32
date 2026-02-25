@@ -257,6 +257,7 @@ public sealed class LayoutModelDownloadService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _httpClient.Dispose();
         _downloadLock.Dispose();
     }
 }

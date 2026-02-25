@@ -36,6 +36,7 @@ src/Easydict.WinUI/Assets/StoreLogo*.png
 
 temp_*/
 test-extracted/
-*.txt
-*.md
+# Long doc translation intermediate output
+bundle-input/*.txt
+bundle-input/*.md
 bundle-input/

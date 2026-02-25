@@ -11,12 +11,12 @@ public class FontDownloadServiceTests : IDisposable
     private readonly FontDownloadService _service = new();
 
     [Fact]
-    public void GetCachedFontPath_ReturnsNull_WhenNotDownloaded()
+    public void GetCachedFontPath_ForNonCjkLanguage_DoesNotThrow()
     {
-        // Non-downloaded font should return null (unless already cached on this machine)
-        // This test verifies the API contract; actual null depends on local state
-        var result = _service.GetCachedFontPath(Language.English);
-        result.Should().BeNull("English does not have a CJK font");
+        // English is not a CJK language — verify the method doesn't throw
+        FontDownloadService.RequiresCjkFont(Language.English).Should().BeFalse();
+        var act = () => _service.GetCachedFontPath(Language.English);
+        act.Should().NotThrow();
     }
 
     [Fact]

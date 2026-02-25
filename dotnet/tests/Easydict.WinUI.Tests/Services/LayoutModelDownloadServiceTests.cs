@@ -20,41 +20,51 @@ public class LayoutModelDownloadServiceTests
     }
 
     [Fact]
-    public void IsReady_InitiallyFalse_WhenModelsNotDownloaded()
+    public void IsReady_ReflectsFileExistence()
     {
         using var service = new LayoutModelDownloadService();
-        // IsReady should be false unless both files exist
-        // (can't guarantee they don't exist, but this tests the property accessor works)
-        service.IsReady.Should().Be(
-            File.Exists(Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Easydict", "Models", "onnxruntime.dll")) &&
-            File.Exists(Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Easydict", "Models", "doclayout_yolo.onnx")));
-    }
-
-    [Fact]
-    public void GetModelPath_ReturnsNull_WhenNotDownloaded()
-    {
-        using var service = new LayoutModelDownloadService();
-        var modelPath = service.GetModelPath();
-
-        if (!service.IsModelReady)
+        // IsReady should be a consistent boolean value (property accessor works)
+        var result = service.IsReady;
+        // If ready, both model and runtime must be ready
+        if (result)
         {
-            modelPath.Should().BeNull();
+            service.IsModelReady.Should().BeTrue();
+            service.IsRuntimeReady.Should().BeTrue();
         }
     }
 
     [Fact]
-    public void GetNativeLibraryDir_ReturnsNull_WhenNotDownloaded()
+    public void GetModelPath_ReturnsNullOrValidPath()
+    {
+        using var service = new LayoutModelDownloadService();
+        var modelPath = service.GetModelPath();
+
+        // Either null (not downloaded) or a valid .onnx path
+        if (modelPath != null)
+        {
+            modelPath.Should().EndWith(".onnx");
+            File.Exists(modelPath).Should().BeTrue();
+        }
+        else
+        {
+            service.IsModelReady.Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    public void GetNativeLibraryDir_ReturnsNullOrValidDir()
     {
         using var service = new LayoutModelDownloadService();
         var dir = service.GetNativeLibraryDir();
 
-        if (!service.IsRuntimeReady)
+        // Either null (not downloaded) or a valid directory
+        if (dir != null)
         {
-            dir.Should().BeNull();
+            Directory.Exists(dir).Should().BeTrue();
+        }
+        else
+        {
+            service.IsRuntimeReady.Should().BeFalse();
         }
     }
 

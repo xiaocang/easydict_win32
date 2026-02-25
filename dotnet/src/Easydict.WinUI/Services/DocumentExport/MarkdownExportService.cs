@@ -66,13 +66,15 @@ public sealed class MarkdownExportService : IDocumentExportService
             .ThenBy(index => index)
             .ToList();
 
+        var isMultiPage = checkpoint.ChunkMetadata.Select(m => m.PageNumber).Distinct().Count() > 1;
+
         int? currentPage = null;
         foreach (var chunkIndex in orderedChunkIndexes)
         {
             var metadata = metadataByChunkIndex[chunkIndex];
 
             // Page header for multi-page documents
-            if (currentPage != metadata.PageNumber && checkpoint.ChunkMetadata.Select(m => m.PageNumber).Distinct().Count() > 1)
+            if (currentPage != metadata.PageNumber && isMultiPage)
             {
                 if (currentPage != null) sb.AppendLine();
                 sb.AppendLine($"## Page {metadata.PageNumber}");
@@ -115,13 +117,15 @@ public sealed class MarkdownExportService : IDocumentExportService
             .ThenBy(index => index)
             .ToList();
 
+        var isMultiPage = checkpoint.ChunkMetadata.Select(m => m.PageNumber).Distinct().Count() > 1;
+
         int? currentPage = null;
         foreach (var chunkIndex in orderedChunkIndexes)
         {
             var metadata = metadataByChunkIndex[chunkIndex];
 
             // Page header for multi-page documents
-            if (currentPage != metadata.PageNumber && checkpoint.ChunkMetadata.Select(m => m.PageNumber).Distinct().Count() > 1)
+            if (currentPage != metadata.PageNumber && isMultiPage)
             {
                 if (currentPage != null) sb.AppendLine();
                 sb.AppendLine($"## Page {metadata.PageNumber}");

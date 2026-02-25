@@ -55,29 +55,35 @@ public class LayoutDetectionStrategyTests
     }
 
     [Fact]
-    public void MergeDetections_NoMLDetections_ReturnsHeuristicResults()
+    public void ParseHeuristicBlocks_FallsBackToHeuristic_WhenNoMLDetections()
     {
-        var blocks = new List<HeuristicBlock>
+        // MergeDetections requires a PdfPigPage which can't be constructed in unit tests.
+        // Verify the heuristic path via ParseHeuristicBlocks which feeds into MergeDetections.
+        var blocks = new[]
         {
-            new(new SourceDocumentBlock
+            new SourceDocumentBlock
             {
                 BlockId = "p1-body-b1",
                 BlockType = SourceBlockType.Paragraph,
                 Text = "Text",
                 BoundingBox = new BlockRect(10, 10, 200, 50)
-            }, LayoutRegionType.Body)
+            },
+            new SourceDocumentBlock
+            {
+                BlockId = "p1-header-b2",
+                BlockType = SourceBlockType.Heading,
+                Text = "Header",
+                BoundingBox = new BlockRect(10, 5, 200, 20)
+            }
         };
 
-        var mlDetections = new List<LayoutDetection>();
+        var result = LayoutDetectionStrategy.ParseHeuristicBlocks(blocks);
 
-        // We can't easily create a PdfPig page in tests, but we can test the merge logic
-        // by checking the static method behavior with the blocks having no BoundingBox match
-        var emptyMl = new List<LayoutDetection>();
-
-        // When ML detections are empty, the strategy falls back to heuristic
-        // (tested via the DetectAndExtractAsync method indirectly)
-        blocks.Should().HaveCount(1);
-        blocks[0].RegionType.Should().Be(LayoutRegionType.Body);
+        result.Should().HaveCount(2);
+        result[0].RegionType.Should().Be(LayoutRegionType.Body);
+        result[0].Block.Text.Should().Be("Text");
+        result[1].RegionType.Should().Be(LayoutRegionType.Header);
+        result[1].Block.Text.Should().Be("Header");
     }
 
     [Fact]

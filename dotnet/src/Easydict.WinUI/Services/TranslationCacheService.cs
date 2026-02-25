@@ -8,6 +8,7 @@ namespace Easydict.WinUI.Services;
 public sealed class TranslationCacheService : IDisposable
 {
     private readonly string _dbPath;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
     private SqliteConnection? _connection;
     private bool _initialized;
     private bool _disposed;
@@ -62,6 +63,7 @@ public sealed class TranslationCacheService : IDisposable
     public async Task<string?> TryGetAsync(
         string serviceId, Language from, Language to, string sourceTextHash, CancellationToken ct = default)
     {
+        ThrowIfDisposed();
         await EnsureInitializedAsync(ct);
 
         using var cmd = _connection!.CreateCommand();
@@ -85,6 +87,7 @@ public sealed class TranslationCacheService : IDisposable
         string serviceId, Language from, Language to, string sourceTextHash,
         string sourceText, string translatedText, CancellationToken ct = default)
     {
+        ThrowIfDisposed();
         await EnsureInitializedAsync(ct);
 
         using var cmd = _connection!.CreateCommand();
@@ -107,6 +110,7 @@ public sealed class TranslationCacheService : IDisposable
 
     public async Task<long> GetEntryCountAsync(CancellationToken ct = default)
     {
+        ThrowIfDisposed();
         await EnsureInitializedAsync(ct);
 
         using var cmd = _connection!.CreateCommand();
@@ -117,6 +121,7 @@ public sealed class TranslationCacheService : IDisposable
 
     public async Task ClearAsync(CancellationToken ct = default)
     {
+        ThrowIfDisposed();
         await EnsureInitializedAsync(ct);
 
         using var cmd = _connection!.CreateCommand();
@@ -129,11 +134,26 @@ public sealed class TranslationCacheService : IDisposable
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     }
 
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+
     private async Task EnsureInitializedAsync(CancellationToken ct)
     {
-        if (!_initialized)
+        if (_initialized) return;
+
+        await _initLock.WaitAsync(ct);
+        try
         {
-            await InitializeAsync(ct);
+            if (!_initialized)
+            {
+                await InitializeAsync(ct);
+            }
+        }
+        finally
+        {
+            _initLock.Release();
         }
     }
 
@@ -142,5 +162,6 @@ public sealed class TranslationCacheService : IDisposable
         if (_disposed) return;
         _disposed = true;
         _connection?.Dispose();
+        _initLock.Dispose();
     }
 }

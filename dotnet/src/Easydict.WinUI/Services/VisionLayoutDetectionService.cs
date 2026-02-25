@@ -66,7 +66,7 @@ public sealed class VisionLayoutDetectionService
         string model,
         CancellationToken ct = default)
     {
-        var base64Image = ConvertBgraToBase64Png(imagePixels, width, height);
+        var base64Image = ConvertBgraToBase64Bmp(imagePixels, width, height);
 
         var requestBody = BuildVisionRequest(base64Image, model);
         var jsonContent = JsonSerializer.Serialize(requestBody);
@@ -98,7 +98,7 @@ public sealed class VisionLayoutDetectionService
                         new
                         {
                             type = "image_url",
-                            image_url = new { url = $"data:image/png;base64,{base64Image}" }
+                            image_url = new { url = $"data:image/bmp;base64,{base64Image}" }
                         }
                     }
                 }
@@ -182,10 +182,10 @@ public sealed class VisionLayoutDetectionService
     }
 
     /// <summary>
-    /// Convert BGRA8 pixel data to a base64-encoded PNG string.
+    /// Convert BGRA8 pixel data to a base64-encoded BMP string.
     /// Uses a simple uncompressed BMP → base64 approach for portability.
     /// </summary>
-    private static string ConvertBgraToBase64Png(byte[] bgra, int width, int height)
+    private static string ConvertBgraToBase64Bmp(byte[] bgra, int width, int height)
     {
         // Create a BMP file in memory (simpler than PNG, widely supported by vision APIs)
         var bmpHeaderSize = 54;

@@ -732,4 +732,33 @@
   <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
     <value>Enter &#1571;&#1608; &#1575;&#1606;&#1602;&#1585; &#1605;&#1585;&#1578;&#1610;&#1606; &#1604;&#1604;&#1578;&#1571;&#1603;&#1610;&#1583;  |  &#1605;&#1601;&#1575;&#1578;&#1610;&#1581; &#1575;&#1604;&#1571;&#1587;&#1607;&#1605; &#1604;&#1604;&#1590;&#1576;&#1591;  |  &#1575;&#1606;&#1602;&#1585; &#1576;&#1586;&#1585; &#1575;&#1604;&#1605;&#1575;&#1608;&#1587; &#1575;&#1604;&#1571;&#1610;&#1605;&#1606; &#1571;&#1608; Esc &#1604;&#1573;&#1593;&#1575;&#1583;&#1577; &#1575;&#1604;&#1578;&#1581;&#1583;&#1610;&#1583;</value>
   </data>
+
+  <!-- Grammar Correction Mode -->
+  <data name="QueryMode_Translation" xml:space="preserve">
+    <value>Translate</value>
+  </data>
+  <data name="QueryMode_GrammarCorrection" xml:space="preserve">
+    <value>Grammar Check</value>
+  </data>
+  <data name="InputPlaceholder_Grammar" xml:space="preserve">
+    <value>Enter text to check grammar...</value>
+  </data>
+  <data name="ResultsTitle_Grammar" xml:space="preserve">
+    <value>Grammar Check Results</value>
+  </data>
+  <data name="GrammarPlaceholder" xml:space="preserve">
+    <value>Grammar check results will appear here...</value>
+  </data>
+  <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
+    <value>Check Grammar</value>
+  </data>
+  <data name="GrammarResult_Original" xml:space="preserve">
+    <value>Original:</value>
+  </data>
+  <data name="GrammarResult_Changes" xml:space="preserve">
+    <value>Changes:</value>
+  </data>
+  <data name="GrammarResult_NoIssues" xml:space="preserve">
+    <value>No grammar issues found.</value>
+  </data>
 </root>

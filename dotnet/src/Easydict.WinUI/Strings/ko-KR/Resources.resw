@@ -849,4 +849,33 @@
   <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
     <value>Enter 또는 더블클릭으로 확인  |  방향키로 미세 조정  |  우클릭 또는 Esc로 다시 선택</value>
   </data>
+
+  <!-- Grammar Correction Mode -->
+  <data name="QueryMode_Translation" xml:space="preserve">
+    <value>번역</value>
+  </data>
+  <data name="QueryMode_GrammarCorrection" xml:space="preserve">
+    <value>문법 검사</value>
+  </data>
+  <data name="InputPlaceholder_Grammar" xml:space="preserve">
+    <value>문법을 검사할 텍스트를 입력하세요...</value>
+  </data>
+  <data name="ResultsTitle_Grammar" xml:space="preserve">
+    <value>문법 검사 결과</value>
+  </data>
+  <data name="GrammarPlaceholder" xml:space="preserve">
+    <value>문법 검사 결과가 여기에 표시됩니다...</value>
+  </data>
+  <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
+    <value>문법 검사</value>
+  </data>
+  <data name="GrammarResult_Original" xml:space="preserve">
+    <value>원문:</value>
+  </data>
+  <data name="GrammarResult_Changes" xml:space="preserve">
+    <value>수정 사항:</value>
+  </data>
+  <data name="GrammarResult_NoIssues" xml:space="preserve">
+    <value>문법 문제가 발견되지 않았습니다.</value>
+  </data>
 </root>

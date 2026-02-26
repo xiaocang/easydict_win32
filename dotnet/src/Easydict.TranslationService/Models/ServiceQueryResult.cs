@@ -18,6 +18,8 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     private bool _manuallyToggled;
     private bool _enabledQuery = true;
     private bool _hasQueried;
+    private QueryMode _currentMode = QueryMode.Translation;
+    private GrammarCorrectionResult? _grammarResult;
 
     /// <summary>
     /// Service identifier (e.g., "google", "deepl").
@@ -157,6 +159,44 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// The current query mode (Translation or GrammarCorrection).
+    /// </summary>
+    public QueryMode CurrentMode
+    {
+        get => _currentMode;
+        set
+        {
+            if (SetField(ref _currentMode, value))
+            {
+                OnPropertyChanged(nameof(IsGrammarMode));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether the current mode is grammar correction.
+    /// </summary>
+    public bool IsGrammarMode => CurrentMode == QueryMode.GrammarCorrection;
+
+    /// <summary>
+    /// The grammar correction result if in grammar mode and completed.
+    /// </summary>
+    public GrammarCorrectionResult? GrammarResult
+    {
+        get => _grammarResult;
+        set
+        {
+            if (SetField(ref _grammarResult, value))
+            {
+                OnPropertyChanged(nameof(HasResult));
+                OnPropertyChanged(nameof(DisplayText));
+                OnPropertyChanged(nameof(StatusText));
+                OnPropertyChanged(nameof(ContentVisibility));
+            }
+        }
+    }
+
+    /// <summary>
     /// Mark this service as having been queried.
     /// </summary>
     public void MarkQueried() => HasQueried = true;
@@ -172,7 +212,7 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     /// <summary>
     /// Whether there is a result or error to display.
     /// </summary>
-    public bool HasResult => Result != null || Error != null;
+    public bool HasResult => Result != null || Error != null || GrammarResult != null;
 
     /// <summary>
     /// Whether the result is an error.
@@ -195,6 +235,7 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     /// <summary>
     /// The translated text to display (or error message).
     /// During streaming, shows accumulated streaming text.
+    /// In grammar mode, shows corrected text.
     /// </summary>
     public string DisplayText
     {
@@ -203,6 +244,9 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
             // During streaming, show accumulated text
             if (IsStreaming && !string.IsNullOrEmpty(StreamingText))
                 return StreamingText;
+
+            if (IsGrammarMode && GrammarResult != null)
+                return GrammarResult.CorrectedText;
 
             return Result?.TranslatedText ?? Error?.Message ?? "";
         }
@@ -227,12 +271,12 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
         get
         {
             if (IsStreaming) return "Streaming...";
-            if (IsLoading) return "Translating...";
+            if (IsLoading) return IsGrammarMode ? "Checking..." : "Translating...";
             if (Error != null) return "Error";
+            if (IsGrammarMode && GrammarResult != null)
+                return $"{GrammarResult.TimingMs}ms";
             if (Result != null)
-            {
                 return Result.FromCache ? "cached" : $"{Result.TimingMs}ms";
-            }
             return "";
         }
     }
@@ -269,6 +313,7 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     {
         Result = null;
         Error = null;
+        GrammarResult = null;
         IsLoading = false;
         IsStreaming = false;
         StreamingText = "";

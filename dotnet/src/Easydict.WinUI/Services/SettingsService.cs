@@ -282,6 +282,11 @@ public sealed class SettingsService
     public bool EnableDpiAwareness { get; set; } = true;
 
     /// <summary>
+    /// Whether grammar correction results should include explanations of changes.
+    /// </summary>
+    public bool GrammarIncludeExplanations { get; set; } = true;
+
+    /// <summary>
     /// Window width stored in DIPs (Device-Independent Pixels).
     /// Ensures consistent sizing across different DPI monitors.
     /// </summary>

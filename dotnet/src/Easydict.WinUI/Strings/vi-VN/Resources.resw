@@ -732,4 +732,33 @@
   <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
     <value>Enter ho&#7863;c nh&#7845;p &#273;&#250;p &#273;&#7875; x&#225;c nh&#7853;n  |  Ph&#237;m m&#361;i t&#234;n &#273;&#7875; tinh ch&#7881;nh  |  Nh&#7845;p ph&#7843;i ho&#7863;c Esc &#273;&#7875; ch&#7885;n l&#7841;i</value>
   </data>
+
+  <!-- Grammar Correction Mode -->
+  <data name="QueryMode_Translation" xml:space="preserve">
+    <value>Translate</value>
+  </data>
+  <data name="QueryMode_GrammarCorrection" xml:space="preserve">
+    <value>Grammar Check</value>
+  </data>
+  <data name="InputPlaceholder_Grammar" xml:space="preserve">
+    <value>Enter text to check grammar...</value>
+  </data>
+  <data name="ResultsTitle_Grammar" xml:space="preserve">
+    <value>Grammar Check Results</value>
+  </data>
+  <data name="GrammarPlaceholder" xml:space="preserve">
+    <value>Grammar check results will appear here...</value>
+  </data>
+  <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
+    <value>Check Grammar</value>
+  </data>
+  <data name="GrammarResult_Original" xml:space="preserve">
+    <value>Original:</value>
+  </data>
+  <data name="GrammarResult_Changes" xml:space="preserve">
+    <value>Changes:</value>
+  </data>
+  <data name="GrammarResult_NoIssues" xml:space="preserve">
+    <value>No grammar issues found.</value>
+  </data>
 </root>

@@ -849,4 +849,33 @@
   <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
     <value>Enter oder Doppelklick best&#228;tigen  |  Pfeiltasten anpassen  |  Rechtsklick oder Esc wiederholen</value>
   </data>
+
+  <!-- Grammar Correction Mode -->
+  <data name="QueryMode_Translation" xml:space="preserve">
+    <value>Übersetzen</value>
+  </data>
+  <data name="QueryMode_GrammarCorrection" xml:space="preserve">
+    <value>Grammatikprüfung</value>
+  </data>
+  <data name="InputPlaceholder_Grammar" xml:space="preserve">
+    <value>Text zur Grammatikprüfung eingeben...</value>
+  </data>
+  <data name="ResultsTitle_Grammar" xml:space="preserve">
+    <value>Grammatikprüfung Ergebnisse</value>
+  </data>
+  <data name="GrammarPlaceholder" xml:space="preserve">
+    <value>Grammatikprüfung Ergebnisse erscheinen hier...</value>
+  </data>
+  <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
+    <value>Grammatik prüfen</value>
+  </data>
+  <data name="GrammarResult_Original" xml:space="preserve">
+    <value>Original:</value>
+  </data>
+  <data name="GrammarResult_Changes" xml:space="preserve">
+    <value>Änderungen:</value>
+  </data>
+  <data name="GrammarResult_NoIssues" xml:space="preserve">
+    <value>Keine Grammatikprobleme gefunden.</value>
+  </data>
 </root>

@@ -852,4 +852,33 @@
   <data name="WebFree" xml:space="preserve">
     <value>网页版（免费）</value>
   </data>
+
+  <!-- Grammar Correction Mode -->
+  <data name="QueryMode_Translation" xml:space="preserve">
+    <value>翻译</value>
+  </data>
+  <data name="QueryMode_GrammarCorrection" xml:space="preserve">
+    <value>语法纠错</value>
+  </data>
+  <data name="InputPlaceholder_Grammar" xml:space="preserve">
+    <value>输入文本以检查语法...</value>
+  </data>
+  <data name="ResultsTitle_Grammar" xml:space="preserve">
+    <value>语法检查结果</value>
+  </data>
+  <data name="GrammarPlaceholder" xml:space="preserve">
+    <value>语法检查结果将在此处显示...</value>
+  </data>
+  <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
+    <value>检查语法</value>
+  </data>
+  <data name="GrammarResult_Original" xml:space="preserve">
+    <value>原文：</value>
+  </data>
+  <data name="GrammarResult_Changes" xml:space="preserve">
+    <value>修改说明：</value>
+  </data>
+  <data name="GrammarResult_NoIssues" xml:space="preserve">
+    <value>未发现语法问题。</value>
+  </data>
 </root>

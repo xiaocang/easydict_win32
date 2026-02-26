@@ -849,4 +849,33 @@
   <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
     <value>Entr&#233;e ou double-clic pour confirmer  |  Fl&#232;ches pour ajuster  |  Clic droit ou Esc pour refaire</value>
   </data>
+
+  <!-- Grammar Correction Mode -->
+  <data name="QueryMode_Translation" xml:space="preserve">
+    <value>Traduire</value>
+  </data>
+  <data name="QueryMode_GrammarCorrection" xml:space="preserve">
+    <value>Vérification grammaticale</value>
+  </data>
+  <data name="InputPlaceholder_Grammar" xml:space="preserve">
+    <value>Saisissez le texte à vérifier...</value>
+  </data>
+  <data name="ResultsTitle_Grammar" xml:space="preserve">
+    <value>Résultats de la vérification grammaticale</value>
+  </data>
+  <data name="GrammarPlaceholder" xml:space="preserve">
+    <value>Les résultats de la vérification apparaîtront ici...</value>
+  </data>
+  <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
+    <value>Vérifier la grammaire</value>
+  </data>
+  <data name="GrammarResult_Original" xml:space="preserve">
+    <value>Original :</value>
+  </data>
+  <data name="GrammarResult_Changes" xml:space="preserve">
+    <value>Modifications :</value>
+  </data>
+  <data name="GrammarResult_NoIssues" xml:space="preserve">
+    <value>Aucun problème de grammaire trouvé.</value>
+  </data>
 </root>

@@ -849,4 +849,33 @@
   <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
     <value>Enter 或雙擊確認  |  方向鍵微調  |  右鍵或 Esc 重選</value>
   </data>
+
+  <!-- Grammar Correction Mode -->
+  <data name="QueryMode_Translation" xml:space="preserve">
+    <value>翻譯</value>
+  </data>
+  <data name="QueryMode_GrammarCorrection" xml:space="preserve">
+    <value>語法糾錯</value>
+  </data>
+  <data name="InputPlaceholder_Grammar" xml:space="preserve">
+    <value>輸入文字以檢查語法...</value>
+  </data>
+  <data name="ResultsTitle_Grammar" xml:space="preserve">
+    <value>語法檢查結果</value>
+  </data>
+  <data name="GrammarPlaceholder" xml:space="preserve">
+    <value>語法檢查結果將在此處顯示...</value>
+  </data>
+  <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
+    <value>檢查語法</value>
+  </data>
+  <data name="GrammarResult_Original" xml:space="preserve">
+    <value>原文：</value>
+  </data>
+  <data name="GrammarResult_Changes" xml:space="preserve">
+    <value>修改說明：</value>
+  </data>
+  <data name="GrammarResult_NoIssues" xml:space="preserve">
+    <value>未發現語法問題。</value>
+  </data>
 </root>

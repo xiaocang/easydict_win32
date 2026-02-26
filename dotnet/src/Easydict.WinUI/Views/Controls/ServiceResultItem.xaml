@@ -126,6 +126,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <!-- Pending Query Hint (for manual-query services not yet queried) -->
@@ -169,11 +170,65 @@
                         FontSize="12"
                         Visibility="Collapsed" />
 
+                    <!-- Grammar Correction Result (visible only in grammar mode) -->
+                    <StackPanel
+                        x:Name="GrammarResultPanel"
+                        Grid.Row="4"
+                        Spacing="8"
+                        Visibility="Collapsed">
+
+                        <!-- Corrected text (primary result, same style as ResultText) -->
+                        <TextBlock
+                            x:Name="CorrectedText"
+                            TextWrapping="Wrap"
+                            IsTextSelectionEnabled="True"
+                            Foreground="{ThemeResource QueryTextBrush}"
+                            FontSize="13" />
+
+                        <!-- Original text (secondary, muted) -->
+                        <StackPanel Spacing="2">
+                            <TextBlock
+                                x:Name="OriginalLabel"
+                                Text="Original:"
+                                FontSize="11"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock
+                                x:Name="OriginalText"
+                                TextWrapping="Wrap"
+                                IsTextSelectionEnabled="True"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                FontSize="12" />
+                        </StackPanel>
+
+                        <!-- Explanation of changes -->
+                        <StackPanel x:Name="ExplanationPanel" Spacing="2" Visibility="Collapsed">
+                            <TextBlock
+                                x:Name="ChangesLabel"
+                                Text="Changes:"
+                                FontSize="11"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock
+                                x:Name="ExplanationText"
+                                TextWrapping="Wrap"
+                                IsTextSelectionEnabled="True"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+
+                        <!-- No corrections needed -->
+                        <TextBlock
+                            x:Name="NoCorrectionsText"
+                            Text="No grammar issues found."
+                            Visibility="Collapsed"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            FontSize="12" />
+                    </StackPanel>
+
                     <!-- Action Buttons (floating overlay, top-right corner) -->
                     <StackPanel
                         x:Name="ActionButtons"
                         Grid.Row="0"
-                        Grid.RowSpan="4"
+                        Grid.RowSpan="5"
                         Height="27"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"

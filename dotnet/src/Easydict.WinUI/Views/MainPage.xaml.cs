@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI.Input;
@@ -37,6 +38,7 @@ namespace Easydict.WinUI.Views
         private volatile bool _isClosing;
         private bool _suppressTargetLanguageSelectionChanged;
         private bool _suppressSourceLanguageSelectionChanged;
+        private QueryMode _currentMode = QueryMode.Translation;
 
         /// <summary>
         /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -76,6 +78,8 @@ namespace Easydict.WinUI.Views
             };
             TargetLangCombo.SelectionChanged += (s, e) => SyncComboSelection(TargetLangCombo, TargetLangComboNarrow);
             TargetLangComboNarrow.SelectionChanged += (s, e) => SyncComboSelection(TargetLangComboNarrow, TargetLangCombo);
+            QueryModeCombo.SelectionChanged += (s, e) => SyncComboSelection(QueryModeCombo, QueryModeComboNarrow);
+            QueryModeComboNarrow.SelectionChanged += (s, e) => SyncComboSelection(QueryModeComboNarrow, QueryModeCombo);
 
             // Subscribe to clipboard events from App
             App.ClipboardTextReceived += OnClipboardTextReceived;
@@ -174,6 +178,10 @@ namespace Easydict.WinUI.Views
                 _suppressTargetLanguageSelectionChanged = false;
             }
 
+            // Populate query mode combos
+            PopulateQueryModeCombo(QueryModeCombo, loc);
+            PopulateQueryModeCombo(QueryModeComboNarrow, loc);
+
             // Input placeholder
             InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
 
@@ -194,6 +202,78 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(LangHelpIcon, loc.GetString("LanguagePickerHelpTip"));
             ToolTipService.SetToolTip(LangHelpIconNarrow, loc.GetString("LanguagePickerHelpTip"));
             ToolTipService.SetToolTip(InputHelpIcon, loc.GetString("InputHelpTip"));
+        }
+
+        private static void PopulateQueryModeCombo(ComboBox combo, LocalizationService loc)
+        {
+            combo.Items.Clear();
+            combo.Items.Add(new ComboBoxItem
+            {
+                Content = loc.GetString("QueryMode_Translation") ?? "Translate",
+                Tag = "Translation"
+            });
+            combo.Items.Add(new ComboBoxItem
+            {
+                Content = loc.GetString("QueryMode_GrammarCorrection") ?? "Grammar Check",
+                Tag = "GrammarCorrection"
+            });
+            combo.SelectedIndex = 0;
+        }
+
+        private void OnQueryModeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_isLoaded) return;
+
+            var combo = sender as ComboBox;
+            var newMode = combo?.SelectedIndex == 1
+                ? QueryMode.GrammarCorrection
+                : QueryMode.Translation;
+
+            if (newMode == _currentMode) return;
+            _currentMode = newMode;
+
+            var loc = LocalizationService.Instance;
+            if (_currentMode == QueryMode.GrammarCorrection)
+            {
+                // Hide translation-specific controls
+                TargetLangCombo.Visibility = Visibility.Collapsed;
+                SwapLanguageButton.Visibility = Visibility.Collapsed;
+                LangHelpIcon.Visibility = Visibility.Collapsed;
+                TargetLangComboNarrow.Visibility = Visibility.Collapsed;
+                SwapLanguageButtonNarrow.Visibility = Visibility.Collapsed;
+                LangHelpIconNarrow.Visibility = Visibility.Collapsed;
+
+                InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder_Grammar")
+                    ?? "Enter text to check grammar...";
+                ResultsTitleText.Text = loc.GetString("ResultsTitle_Grammar")
+                    ?? "Grammar Check Results";
+                PlaceholderText.Text = loc.GetString("GrammarPlaceholder")
+                    ?? "Grammar check results will appear here...";
+                ToolTipService.SetToolTip(TranslateButton,
+                    loc.GetString("TranslateButton_Grammar_Tooltip") ?? "Check Grammar");
+                ToolTipService.SetToolTip(TranslateButtonNarrow,
+                    loc.GetString("TranslateButton_Grammar_Tooltip") ?? "Check Grammar");
+            }
+            else
+            {
+                // Restore translation-mode controls
+                TargetLangCombo.Visibility = Visibility.Visible;
+                SwapLanguageButton.Visibility = Visibility.Visible;
+                LangHelpIcon.Visibility = Visibility.Visible;
+                TargetLangComboNarrow.Visibility = Visibility.Visible;
+                SwapLanguageButtonNarrow.Visibility = Visibility.Visible;
+                LangHelpIconNarrow.Visibility = Visibility.Visible;
+
+                InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
+                ResultsTitleText.Text = loc.GetString("TranslationResults")
+                    ?? "Translation Results";
+                PlaceholderText.Text = loc.GetString("TranslationPlaceholder");
+                ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
+                ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
+            }
+
+            // Rebuild service results list (grammar mode only shows LLM services)
+            InitializeServiceResults();
         }
 
         private void OnClipboardTextReceived(string text)
@@ -260,9 +340,16 @@ namespace Easydict.WinUI.Views
             foreach (var serviceId in enabledServices)
             {
                 // Use service-provided DisplayName, fallback to serviceId if not found
-                var displayName = manager.Services.TryGetValue(serviceId, out var service)
-                    ? service.DisplayName
-                    : serviceId;
+                if (!manager.Services.TryGetValue(serviceId, out var service))
+                    continue;
+                var displayName = service.DisplayName;
+
+                // In grammar mode, only show LLM services that implement IGrammarCorrectionService
+                if (_currentMode == QueryMode.GrammarCorrection &&
+                    service is not IGrammarCorrectionService)
+                {
+                    continue;
+                }
 
                 // Get EnabledQuery setting (default true if not found)
                 var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
@@ -272,7 +359,8 @@ namespace Easydict.WinUI.Views
                     ServiceId = serviceId,
                     ServiceDisplayName = displayName,
                     EnabledQuery = enabledQuery,
-                    IsExpanded = enabledQuery // Manual-query services start collapsed
+                    IsExpanded = enabledQuery, // Manual-query services start collapsed
+                    CurrentMode = _currentMode
                 };
 
                 var control = new ServiceResultItem
@@ -635,6 +723,13 @@ namespace Easydict.WinUI.Views
                 // Hide placeholder
                 PlaceholderText.Visibility = Visibility.Collapsed;
 
+                // Route based on mode
+                if (_currentMode == QueryMode.GrammarCorrection)
+                {
+                    await StartGrammarCorrectionInternalAsync(inputText, detectionService, ct);
+                    return;
+                }
+
                 // Step 1: Detect language (only when source = Auto)
                 // Run detection on thread pool to avoid blocking UI thread
                 var sourceLanguage = GetSourceLanguage();
@@ -848,6 +943,174 @@ namespace Easydict.WinUI.Views
                 serviceResult.IsLoading = false;
                 serviceResult.IsStreaming = false;
                 serviceResult.StreamingText = "";
+            }
+        }
+
+        /// <summary>
+        /// Execute grammar correction for all enabled LLM services in parallel.
+        /// Bypasses the translation pipeline entirely — no TargetLanguageSelector, no TranslationManager.
+        /// </summary>
+        private async Task StartGrammarCorrectionInternalAsync(
+            string inputText,
+            LanguageDetectionService detectionService,
+            CancellationToken ct)
+        {
+            // Optional: detect language for prompt hint only
+            var detectedLang = TranslationLanguage.Auto;
+            var sourceLanguage = GetSourceLanguage();
+            if (sourceLanguage != TranslationLanguage.Auto)
+            {
+                detectedLang = sourceLanguage;
+            }
+            else
+            {
+                try
+                {
+                    detectedLang = await Task.Run(() => detectionService.DetectAsync(inputText, ct));
+                    UpdateDetectedLanguageDisplay(detectedLang);
+                }
+                catch
+                {
+                    // Best-effort: continue without language hint
+                    DetectedLanguageText.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            var request = new GrammarCorrectionRequest
+            {
+                Text = inputText,
+                Language = detectedLang,
+                IncludeExplanations = true,
+            };
+
+            // Parallel-execute all grammar-capable services
+            var tasks = _serviceResults
+                .Where(sr => sr.EnabledQuery)
+                .Select(sr => ExecuteGrammarCorrectionForServiceAsync(sr, request, ct))
+                .ToArray();
+
+            var taskResults = await Task.WhenAll(tasks);
+
+            // Update status
+            var successCount = taskResults.Count(r => r == true);
+            var errorCount = taskResults.Count(r => r == false);
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+
+                var loc = LocalizationService.Instance;
+                if (successCount > 0)
+                {
+                    StatusSummaryText.Text = string.Format(
+                        loc.GetString("ServiceResultsComplete") ?? "{0} service(s) completed",
+                        successCount);
+                    UpdateStatus(true, loc.GetString("StatusReady"));
+                }
+                else if (errorCount > 0)
+                {
+                    StatusSummaryText.Text = loc.GetString("TranslationFailed") ?? "Check failed";
+                    UpdateStatus(false, loc.GetString("StatusError"));
+                }
+                else
+                {
+                    StatusSummaryText.Text = "";
+                    UpdateStatus(true, loc.GetString("StatusReady"));
+                }
+            });
+        }
+
+        /// <summary>
+        /// Execute grammar correction for a single service with streaming.
+        /// Returns true on success, false on error, null on cancelled/skipped.
+        /// </summary>
+        private async Task<bool?> ExecuteGrammarCorrectionForServiceAsync(
+            ServiceQueryResult serviceResult,
+            GrammarCorrectionRequest request,
+            CancellationToken ct)
+        {
+            serviceResult.MarkQueried();
+
+            try
+            {
+                using var handle = TranslationManagerService.Instance.AcquireHandle();
+                if (!handle.Manager.Services.TryGetValue(serviceResult.ServiceId, out var service)
+                    || service is not IGrammarCorrectionService grammarService)
+                    return null;
+
+                var stopwatch = Stopwatch.StartNew();
+                var sb = new StringBuilder();
+                var lastUpdateTime = DateTime.UtcNow;
+                const int throttleMs = 50;
+
+                // Mark as streaming
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_isClosing) return;
+                    serviceResult.IsLoading = false;
+                    serviceResult.IsStreaming = true;
+                    serviceResult.StreamingText = "";
+                });
+
+                await foreach (var chunk in grammarService
+                    .CorrectGrammarStreamAsync(request, ct).ConfigureAwait(false))
+                {
+                    sb.Append(chunk);
+
+                    var now = DateTime.UtcNow;
+                    if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
+                    {
+                        var currentText = sb.ToString();
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (_isClosing) return;
+                            serviceResult.StreamingText = currentText;
+                        });
+                        lastUpdateTime = now;
+                    }
+                }
+
+                stopwatch.Stop();
+                var rawOutput = sb.ToString();
+                var grammarResult = GrammarCorrectionParser.Parse(
+                    rawOutput, request.Text, serviceResult.ServiceDisplayName,
+                    stopwatch.ElapsedMilliseconds);
+
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_isClosing) return;
+                    serviceResult.IsStreaming = false;
+                    serviceResult.StreamingText = "";
+                    serviceResult.GrammarResult = grammarResult;
+                });
+
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_isClosing) return;
+                    serviceResult.IsLoading = false;
+                    serviceResult.IsStreaming = false;
+                    serviceResult.ClearQueried();
+                });
+                return null;
+            }
+            catch (Exception ex)
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_isClosing) return;
+                    serviceResult.Error = new TranslationException(ex.Message, ex)
+                    {
+                        ErrorCode = TranslationErrorCode.Unknown,
+                        ServiceId = serviceResult.ServiceId
+                    };
+                    serviceResult.IsLoading = false;
+                    serviceResult.IsStreaming = false;
+                });
+                return false;
             }
         }
 

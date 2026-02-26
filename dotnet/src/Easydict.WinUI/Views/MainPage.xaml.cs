@@ -1508,6 +1508,8 @@ namespace Easydict.WinUI.Views
             var firstReady = LongDocServiceCombo.Items.OfType<ComboBoxItem>()
                 .FirstOrDefault(i => i.FontStyle == Windows.UI.Text.FontStyle.Normal);
             LongDocServiceCombo.SelectedItem = firstReady ?? LongDocServiceCombo.Items.FirstOrDefault();
+
+            LongDocHistoryListView.ItemsSource = _longDocHistoryItems;
         }
 
         private static bool IsLongDocSupportedService(ITranslationService service)
@@ -1760,6 +1762,12 @@ namespace Easydict.WinUI.Views
                 {
                     await _longDocDedupService.RegisterOutputAsync(dedupKey, result.OutputPath, cancellationToken);
                     completed++;
+
+                    var fileItem = new LongDocFileItem { FilePath = filePath };
+                    fileItem.MarkCompleted(result.OutputPath);
+                    var svcName = (LongDocServiceCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? serviceId;
+                    var tgtName = (LongDocTargetLangCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Unknown";
+                    DispatcherQueue.TryEnqueue(() => AddToHistory(fileItem, svcName, tgtName));
                 }
                 else
                 {
@@ -2200,6 +2208,14 @@ namespace Easydict.WinUI.Views
                 if (result.State == LongDocumentJobState.Completed)
                 {
                     await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
+
+                    if (_longDocFileItems.Count > 0)
+                    {
+                        _longDocFileItems[0].MarkCompleted(result.OutputPath);
+                        var serviceName = (LongDocServiceCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? serviceId;
+                        var targetName = (LongDocTargetLangCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Unknown";
+                        AddToHistory(_longDocFileItems[0], serviceName, targetName);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -2308,6 +2324,14 @@ namespace Easydict.WinUI.Views
                 if (result.State == LongDocumentJobState.Completed && !string.IsNullOrWhiteSpace(_longDocLastDedupKey))
                 {
                     await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
+                }
+
+                if (result.State == LongDocumentJobState.Completed && _longDocFileItems.Count > 0)
+                {
+                    _longDocFileItems[0].MarkCompleted(result.OutputPath);
+                    var serviceName = (LongDocServiceCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? _longDocLastServiceId;
+                    var targetName = (LongDocTargetLangCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Unknown";
+                    AddToHistory(_longDocFileItems[0], serviceName, targetName);
                 }
 
             }

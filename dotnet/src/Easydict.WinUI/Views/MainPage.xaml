@@ -633,157 +633,151 @@
                     </Grid>
                 </Border>
 
-                <!-- Row 1: Control bar -->
-                <Grid Grid.Row="1" Margin="0,4,0,4">
+                <!-- Row 1: Control bar — single unified Grid with headers above controls -->
+                <Grid Grid.Row="1" Margin="0,4,0,4" ColumnSpacing="8" RowSpacing="4">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                    <controls:WrapPanel Grid.Column="0"
-                                        HorizontalSpacing="8"
-                                        VerticalSpacing="6"
-                                        VerticalAlignment="Center">
-                        <!-- Group 1: Language pair -->
-                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                <TextBlock Text="🌐" FontSize="14" VerticalAlignment="Center" />
-                                <ComboBox x:Name="LongDocSourceLangCombo"
-                                          MinWidth="130"
-                                          VerticalAlignment="Center"
-                                          ToolTipService.ToolTip="Source Language" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                <TextBlock Text="🎯" FontSize="14" VerticalAlignment="Center" />
-                                <ComboBox x:Name="LongDocTargetLangCombo"
-                                          MinWidth="130"
-                                          VerticalAlignment="Center"
-                                          ToolTipService.ToolTip="Target Language" />
-                            </StackPanel>
-                        </StackPanel>
+                    <!-- Row 0, Col 0: Source Language -->
+                    <ComboBox x:Name="LongDocSourceLangCombo"
+                              Grid.Row="0" Grid.Column="0"
+                              Header="&#x1F310; Source"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Source Language" />
 
-                        <!-- Group 2: Service -->
-                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
-                                <TextBlock Text="🤖" FontSize="14" VerticalAlignment="Center" />
+                    <!-- Row 0, Col 1: Target Language -->
+                    <ComboBox x:Name="LongDocTargetLangCombo"
+                              Grid.Row="0" Grid.Column="1"
+                              Header="&#x1F3AF; Target"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Target Language" />
+
+                    <!-- Row 0, Cols 2-3: Service (spans 2 columns for extra width) -->
+                    <ComboBox x:Name="LongDocServiceCombo"
+                              Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="2"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Translation Service">
+                        <ComboBox.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="&#x1F916;" FontSize="13" />
+                                <TextBlock Text="Service" FontSize="12" />
                                 <FontIcon x:Name="LongDocServiceHint"
                                           Glyph="&#xE897;"
                                           FontSize="11"
-                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                          VerticalAlignment="Center" />
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                             </StackPanel>
-                            <ComboBox x:Name="LongDocServiceCombo"
-                                      MinWidth="140"
-                                      VerticalAlignment="Center"
-                                      ToolTipService.ToolTip="Translation Service" />
-                        </StackPanel>
+                        </ComboBox.Header>
+                    </ComboBox>
 
-                        <!-- Group 3: Input/Output mode -->
-                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
-                                    <TextBlock Text="📄" FontSize="14" VerticalAlignment="Center" />
-                                    <FontIcon x:Name="LongDocInputModeHint"
-                                              Glyph="&#xE897;"
-                                              FontSize="11"
-                                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                              VerticalAlignment="Center" />
-                                </StackPanel>
-                                <ComboBox x:Name="LongDocInputModeCombo"
-                                          SelectedIndex="2"
-                                          SelectionChanged="OnLongDocInputModeChanged"
-                                          MinWidth="120"
-                                          VerticalAlignment="Center"
-                                          ToolTipService.ToolTip="Input Mode">
-                                    <ComboBoxItem Content="Text" Tag="plaintext" />
-                                    <ComboBoxItem Content="Markdown" Tag="markdown" />
-                                    <ComboBoxItem Content="PDF" Tag="pdf" />
-                                </ComboBox>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
-                                    <TextBlock Text="📝" FontSize="14" VerticalAlignment="Center" />
-                                    <FontIcon x:Name="LongDocOutputModeHint"
-                                              Glyph="&#xE897;"
-                                              FontSize="11"
-                                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                              VerticalAlignment="Center" />
-                                </StackPanel>
-                                <ComboBox x:Name="LongDocOutputModeCombo"
-                                          SelectedIndex="0"
-                                          SelectionChanged="OnLongDocOutputModeChanged"
-                                          MinWidth="120"
-                                          VerticalAlignment="Center"
-                                          ToolTipService.ToolTip="Output Format">
-                                    <ComboBoxItem Content="Mono" Tag="Monolingual" />
-                                    <ComboBoxItem Content="Bilingual" Tag="Bilingual" />
-                                    <ComboBoxItem Content="Both" Tag="Both" />
-                                </ComboBox>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!-- Group 4: Advanced -->
-                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
-                                    <TextBlock Text="⚡" FontSize="14" VerticalAlignment="Center" />
-                                    <FontIcon x:Name="LongDocConcurrencyHint"
-                                              Glyph="&#xE897;"
-                                              FontSize="11"
-                                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                              VerticalAlignment="Center" />
-                                </StackPanel>
-                                <NumberBox x:Name="LongDocConcurrencyBox"
-                                           Minimum="1" Maximum="16"
-                                           SmallChange="1" LargeChange="4"
-                                           Value="4"
-                                           SpinButtonPlacementMode="Compact"
-                                           Width="70"
-                                           VerticalAlignment="Center"
-                                           ToolTipService.ToolTip="Max Concurrent Requests"
-                                           ValueChanged="OnLongDocConcurrencyChanged" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
-                                    <TextBlock Text="📑" FontSize="14" VerticalAlignment="Center" />
-                                    <FontIcon x:Name="LongDocPageRangeHint"
-                                              Glyph="&#xE897;"
-                                              FontSize="11"
-                                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                              VerticalAlignment="Center" />
-                                </StackPanel>
-                                <TextBox x:Name="LongDocPageRangeBox"
-                                         PlaceholderText="Pages: 1-3,5,7-10"
-                                         Width="130"
-                                         VerticalAlignment="Center"
-                                         ToolTipService.ToolTip="Page range (leave empty for all)"
-                                         TextChanged="OnLongDocPageRangeChanged" />
-                            </StackPanel>
-                        </StackPanel>
-                    </controls:WrapPanel>
-
-                    <!-- Translate/Cancel Toggle Button -->
-                    <Button
-                        x:Name="LongDocTranslateButton"
-                        Grid.Column="1"
-                        Click="OnLongDocTranslateClicked"
-                        Width="40"
-                        Height="40"
-                        Padding="0"
-                        CornerRadius="20"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Top"
-                        Margin="8,0,0,0"
-                        Background="{ThemeResource AccentBrush}"
-                        ToolTipService.ToolTip="Translate">
-                        <Grid>
-                            <FontIcon
-                                x:Name="LongDocTranslateIcon"
-                                Glyph="&#xE8C1;"
-                                FontSize="16"
-                                Foreground="White" />
-                        </Grid>
+                    <!-- Row 2, Col 3: Translate button (right-aligned, own row) -->
+                    <Button x:Name="LongDocTranslateButton"
+                            Grid.Row="2" Grid.Column="3"
+                            Click="OnLongDocTranslateClicked"
+                            Width="40" Height="40"
+                            Padding="0" CornerRadius="20"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource AccentBrush}"
+                            ToolTipService.ToolTip="Translate">
+                        <FontIcon x:Name="LongDocTranslateIcon"
+                                  Glyph="&#xE8C1;"
+                                  FontSize="16"
+                                  Foreground="White" />
                     </Button>
+
+                    <!-- Row 1, Col 0: Input Mode -->
+                    <ComboBox x:Name="LongDocInputModeCombo"
+                              Grid.Row="1" Grid.Column="0"
+                              SelectedIndex="2"
+                              SelectionChanged="OnLongDocInputModeChanged"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Input Mode">
+                        <ComboBox.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="&#x1F4C4;" FontSize="13" />
+                                <TextBlock Text="Input" FontSize="12" />
+                                <FontIcon x:Name="LongDocInputModeHint"
+                                          Glyph="&#xE897;"
+                                          FontSize="11"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </StackPanel>
+                        </ComboBox.Header>
+                        <ComboBoxItem Content="Text" Tag="plaintext" />
+                        <ComboBoxItem Content="Markdown" Tag="markdown" />
+                        <ComboBoxItem Content="PDF" Tag="pdf" />
+                    </ComboBox>
+
+                    <!-- Row 1, Col 1: Output Mode -->
+                    <ComboBox x:Name="LongDocOutputModeCombo"
+                              Grid.Row="1" Grid.Column="1"
+                              SelectedIndex="0"
+                              SelectionChanged="OnLongDocOutputModeChanged"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Output Format">
+                        <ComboBox.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="&#x1F4DD;" FontSize="13" />
+                                <TextBlock Text="Output" FontSize="12" />
+                                <FontIcon x:Name="LongDocOutputModeHint"
+                                          Glyph="&#xE897;"
+                                          FontSize="11"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </StackPanel>
+                        </ComboBox.Header>
+                        <ComboBoxItem Content="Mono" Tag="Monolingual" />
+                        <ComboBoxItem Content="Bilingual" Tag="Bilingual" />
+                        <ComboBoxItem Content="Both" Tag="Both" />
+                    </ComboBox>
+
+                    <!-- Row 1, Col 2: Concurrency -->
+                    <NumberBox x:Name="LongDocConcurrencyBox"
+                               Grid.Row="1" Grid.Column="2"
+                               Minimum="1" Maximum="16"
+                               SmallChange="1" LargeChange="4"
+                               Value="4"
+                               SpinButtonPlacementMode="Compact"
+                               HorizontalAlignment="Stretch"
+                               ToolTipService.ToolTip="Max Concurrent Requests"
+                               ValueChanged="OnLongDocConcurrencyChanged">
+                        <NumberBox.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="&#x26A1;" FontSize="13" />
+                                <TextBlock Text="Threads" FontSize="12" />
+                                <FontIcon x:Name="LongDocConcurrencyHint"
+                                          Glyph="&#xE897;"
+                                          FontSize="11"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </StackPanel>
+                        </NumberBox.Header>
+                    </NumberBox>
+
+                    <!-- Row 1, Col 3: Page Range -->
+                    <TextBox x:Name="LongDocPageRangeBox"
+                             Grid.Row="1" Grid.Column="3"
+                             PlaceholderText="1-3,5,7-10"
+                             MinWidth="110"
+                             ToolTipService.ToolTip="Page range (leave empty for all)"
+                             TextChanged="OnLongDocPageRangeChanged">
+                        <TextBox.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="&#x1F4D1;" FontSize="13" />
+                                <TextBlock Text="Pages" FontSize="12" />
+                                <FontIcon x:Name="LongDocPageRangeHint"
+                                          Glyph="&#xE897;"
+                                          FontSize="11"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </StackPanel>
+                        </TextBox.Header>
+                    </TextBox>
                 </Grid>
 
                 <!-- Row 2: Output Card -->

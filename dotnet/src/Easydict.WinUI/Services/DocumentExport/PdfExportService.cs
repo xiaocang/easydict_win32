@@ -373,6 +373,36 @@ public sealed class PdfExportService : IDocumentExportService
                     var rect = block.Rect;
 
                     var style = metadata.TextStyle;
+                    var rotationAngle = style?.RotationAngle ?? 0;
+
+                    // Handle rotated text (e.g., vertical sidebar text like arXiv identifiers)
+                    if (rotationAngle is not 0)
+                    {
+                        var rotatedFont = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike, targetLanguage, metadata.BoundingBox!.Value.Width, style);
+                        var brush = CreateBrush(style);
+
+                        var state = gfx.Save();
+                        var centerX = rect.X + rect.Width / 2;
+                        var centerY = rect.Y + rect.Height / 2;
+                        gfx.RotateAtTransform(rotationAngle, new XPoint(centerX, centerY));
+
+                        // In rotated space, swap width/height for the text rectangle
+                        var rotatedRect = new XRect(
+                            centerX - rect.Height / 2,
+                            centerY - rect.Width / 2,
+                            rect.Height,
+                            rect.Width);
+
+                        gfx.DrawString(block.TranslatedText, rotatedFont, brush, rotatedRect, XStringFormats.TopLeft);
+                        gfx.Restore(state);
+
+                        renderedBlocks++;
+                        overlayModeBlocks++;
+                        perPage.RenderedBlocks++;
+                        perPage.OverlayModeBlocks++;
+                        continue;
+                    }
+
                     var effectiveLineHeight = style?.LineSpacing > 0 ? style.LineSpacing : lineHeight;
 
                     // For CJK targets, ensure minimum line height based on font size
@@ -400,14 +430,16 @@ public sealed class PdfExportService : IDocumentExportService
                         perPage.TruncatedBlocks++;
                     }
 
-                    var brush = CreateBrush(style);
-                    var stringFormat = GetStringFormat(style);
-
-                    var lineY = rect.Y;
-                    foreach (var line in wrappedLines)
                     {
-                        gfx.DrawString(line, font, brush, new XRect(rect.X, lineY, rect.Width, effectiveLineHeight), stringFormat);
-                        lineY += effectiveLineHeight;
+                        var brush = CreateBrush(style);
+                        var stringFormat = GetStringFormat(style);
+
+                        var lineY = rect.Y;
+                        foreach (var line in wrappedLines)
+                        {
+                            gfx.DrawString(line, font, brush, new XRect(rect.X, lineY, rect.Width, effectiveLineHeight), stringFormat);
+                            lineY += effectiveLineHeight;
+                        }
                     }
 
                     renderedBlocks++;
@@ -858,6 +890,38 @@ public sealed class PdfExportService : IDocumentExportService
         if (cjkFamily != null && CjkFontResolver.IsFontRegistered(cjkFamily))
         {
             return cjkFamily;
+        }
+
+        // Fall back to Windows system CJK fonts before Arial
+        var systemCjk = targetLanguage switch
+        {
+            Language.SimplifiedChinese => CjkFontResolver.MicrosoftYaHei,
+            Language.TraditionalChinese => CjkFontResolver.MicrosoftJhengHei,
+            Language.Japanese => CjkFontResolver.YuGothic,
+            Language.Korean => CjkFontResolver.MalgunGothic,
+            _ => null
+        };
+
+        if (systemCjk != null)
+        {
+            var systemFontFile = systemCjk switch
+            {
+                CjkFontResolver.MicrosoftYaHei => "msyh.ttc",
+                CjkFontResolver.MicrosoftJhengHei => "msjh.ttc",
+                CjkFontResolver.YuGothic => "yugothm.ttc",
+                CjkFontResolver.MalgunGothic => "malgun.ttf",
+                _ => null
+            };
+
+            if (systemFontFile != null)
+            {
+                var fontsDir = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+                if (File.Exists(Path.Combine(fontsDir, systemFontFile)))
+                {
+                    Debug.WriteLine($"[PdfExportService] Using system CJK font: {systemCjk}");
+                    return systemCjk;
+                }
+            }
         }
 
         return "Arial";

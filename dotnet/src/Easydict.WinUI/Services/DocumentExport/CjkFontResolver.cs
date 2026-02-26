@@ -44,6 +44,12 @@ internal sealed class CjkFontResolver : IFontResolver
         ["Noto Sans CJK KR"] = FaceNotoSansKR,
     };
 
+    // System CJK font family names (Windows built-in)
+    public const string MicrosoftYaHei = "Microsoft YaHei";
+    public const string MicrosoftJhengHei = "Microsoft JhengHei";
+    public const string YuGothic = "Yu Gothic";
+    public const string MalgunGothic = "Malgun Gothic";
+
     // System font file names in %WINDIR%\Fonts, keyed by face name
     private static readonly Dictionary<string, string> SystemFontFiles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -55,6 +61,15 @@ internal sealed class CjkFontResolver : IFontResolver
         ["Consolas#B"] = "consolab.ttf",
         ["Consolas#I"] = "consolai.ttf",
         ["Consolas#BI"] = "consolabi.ttf",
+        // System CJK fonts (Windows built-in)
+        ["Microsoft YaHei#R"] = "msyh.ttc",
+        ["Microsoft YaHei#B"] = "msyhbd.ttc",
+        ["Microsoft JhengHei#R"] = "msjh.ttc",
+        ["Microsoft JhengHei#B"] = "msjhbd.ttc",
+        ["Yu Gothic#R"] = "yugothm.ttc",
+        ["Yu Gothic#B"] = "yugothb.ttc",
+        ["Malgun Gothic#R"] = "malgun.ttf",
+        ["Malgun Gothic#B"] = "malgunbd.ttf",
     };
 
     private static readonly string SystemFontsDir = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
@@ -138,12 +153,27 @@ internal sealed class CjkFontResolver : IFontResolver
             }
         }
 
-        // Try system fonts (Arial, Consolas) — once this resolver is registered,
+        // Try system fonts (Arial, Consolas, system CJK) — once this resolver is registered,
         // PdfSharpCore does NOT fall back to platform resolution on null return.
         var systemFace = MakeSystemFaceName(familyName, isBold, isItalic);
         if (SystemFontFiles.ContainsKey(systemFace))
         {
             return new FontResolverInfo(systemFace);
+        }
+
+        // Try system CJK fonts as fallback before Arial (for unregistered CJK family requests)
+        foreach (var cjkFamily in new[] { MicrosoftYaHei, MicrosoftJhengHei, YuGothic, MalgunGothic })
+        {
+            var cjkFace = MakeSystemFaceName(cjkFamily, isBold, isItalic);
+            if (SystemFontFiles.TryGetValue(cjkFace, out var cjkFile))
+            {
+                var cjkPath = Path.Combine(SystemFontsDir, cjkFile);
+                if (File.Exists(cjkPath))
+                {
+                    Debug.WriteLine($"[CjkFontResolver] Unknown font '{familyName}', falling back to system CJK font '{cjkFamily}'");
+                    return new FontResolverInfo(cjkFace);
+                }
+            }
         }
 
         // Fall back to Arial for unknown fonts

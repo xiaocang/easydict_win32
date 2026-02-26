@@ -67,6 +67,9 @@ public sealed record BlockTextStyle
     /// <summary>Per-line baseline coordinates from the source PDF (PDF coordinate space).</summary>
     public IReadOnlyList<BlockLinePosition>? LinePositions { get; init; }
 
+    /// <summary>Rotation angle in degrees. 0 = normal horizontal text, -90 = vertical sidebar text (read bottom-to-top).</summary>
+    public double RotationAngle { get; init; }
+
     /// <summary>True if the color is effectively black (all components ≤ 30).</summary>
     public bool IsBlack => ColorR <= 30 && ColorG <= 30 && ColorB <= 30;
 }

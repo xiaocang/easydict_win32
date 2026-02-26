@@ -905,34 +905,45 @@ public sealed class LongDocumentTranslationService : IDisposable
     private static IEnumerable<SourceDocumentBlock> ExtractLayoutBlocksFromPage(PdfPigPage page)
     {
         var pageWidth = (double)page.Width;
-        var words = page.GetWords()
+        var allWords = page.GetWords()
             .Where(word => !string.IsNullOrWhiteSpace(word.Text))
-            // Filter out rotated sidebar text (e.g., arXiv identifiers):
-            // words whose bounding box is very tall and narrow (height > width × 3)
-            // and positioned in the page margin (X < 5% or X > 95% of page width)
-            .Where(word =>
+            .ToList();
+
+        // Separate rotated sidebar words from normal words
+        var rotatedWords = new List<Word>();
+        var normalWords = new List<Word>();
+        foreach (var word in allWords)
+        {
+            var bb = word.BoundingBox;
+            var w = Math.Max(0.1, bb.Width);
+            var h = bb.Height;
+            if (h > w * 3 && (bb.Left < pageWidth * 0.05 || bb.Right > pageWidth * 0.95))
             {
-                var bb = word.BoundingBox;
-                var w = Math.Max(0.1, bb.Width);
-                var h = bb.Height;
-                if (h > w * 3 && (bb.Left < pageWidth * 0.05 || bb.Right > pageWidth * 0.95))
-                    return false;
-                return true;
-            })
+                rotatedWords.Add(word);
+            }
+            else
+            {
+                normalWords.Add(word);
+            }
+        }
+
+        var words = normalWords
             .OrderByDescending(word => word.BoundingBox.Top)
             .ThenBy(word => word.BoundingBox.Left)
             .ToList();
 
-        if (words.Count == 0)
+        if (words.Count == 0 && rotatedWords.Count == 0)
         {
             yield break;
         }
 
-        var medianWordHeight = words
-            .Select(w => Math.Max(1d, w.BoundingBox.Height))
-            .OrderBy(h => h)
-            .Skip(words.Count / 2)
-            .FirstOrDefault();
+        var medianWordHeight = words.Count > 0
+            ? words
+                .Select(w => Math.Max(1d, w.BoundingBox.Height))
+                .OrderBy(h => h)
+                .Skip(words.Count / 2)
+                .FirstOrDefault()
+            : 10d;
 
         var sameLineThreshold = Math.Max(2.5, medianWordHeight * 0.35);
         var paragraphGapThreshold = Math.Max(8, medianWordHeight * 1.8);
@@ -956,10 +967,15 @@ public sealed class LongDocumentTranslationService : IDisposable
             .OrderByDescending(l => l.Top)
             .ToList();
 
+        // Split lines at large intra-line gaps to preserve column structure
+        // (e.g., author grids where names sit at the same Y separated by large gaps)
+        lines = SplitLinesAtColumnGaps(lines, medianWordHeight);
+
         var orderedLines = OrderLinesByLayout(lines, Convert.ToDecimal(page.Width));
         var paragraphs = BuildParagraphs(orderedLines, paragraphGapThreshold);
         var layoutProfile = BuildLayoutProfile(orderedLines, (double)page.Width, (double)page.Height);
 
+        var blockIndex = 0;
         for (var i = 0; i < paragraphs.Count; i++)
         {
             var linesInBlock = paragraphs[i];
@@ -990,9 +1006,10 @@ public sealed class LongDocumentTranslationService : IDisposable
             var blockFontNames = CollectFontNamesForBlock(page, left, right, top, bottom);
             var textStyle = ExtractTextStyleForBlock(page, linesInBlock, left, right, top, bottom);
 
+            blockIndex++;
             yield return new SourceDocumentBlock
             {
-                BlockId = $"p{page.Number}-{regionTag}-b{i + 1}",
+                BlockId = $"p{page.Number}-{regionTag}-b{blockIndex}",
                 BlockType = type,
                 Text = blockText,
                 IsFormulaLike = type == SourceBlockType.Formula,
@@ -1000,6 +1017,68 @@ public sealed class LongDocumentTranslationService : IDisposable
                 DetectedFontNames = blockFontNames.Count > 0 ? blockFontNames : null,
                 TextStyle = textStyle
             };
+        }
+
+        // Emit rotated sidebar text as separate blocks with RotationAngle = -90
+        if (rotatedWords.Count > 0)
+        {
+            // Group rotated words by horizontal proximity (they share similar X positions)
+            var rotatedGroups = new List<List<Word>>();
+            var sortedRotated = rotatedWords.OrderBy(w => w.BoundingBox.Left).ThenByDescending(w => w.BoundingBox.Top).ToList();
+
+            foreach (var word in sortedRotated)
+            {
+                var added = false;
+                foreach (var group in rotatedGroups)
+                {
+                    var groupLeft = group.Min(w => w.BoundingBox.Left);
+                    var groupRight = group.Max(w => w.BoundingBox.Right);
+                    // Words in the same rotated text block share similar X coordinates
+                    if (Math.Abs(word.BoundingBox.Left - groupLeft) < medianWordHeight * 2 ||
+                        Math.Abs(word.BoundingBox.Right - groupRight) < medianWordHeight * 2)
+                    {
+                        group.Add(word);
+                        added = true;
+                        break;
+                    }
+                }
+
+                if (!added)
+                {
+                    rotatedGroups.Add([word]);
+                }
+            }
+
+            foreach (var group in rotatedGroups)
+            {
+                // Sort bottom-to-top for rotated text (read order for -90° rotation)
+                var sorted = group.OrderBy(w => w.BoundingBox.Bottom).ToList();
+                var blockText = string.Join(" ", sorted.Select(w => w.Text)).Trim();
+                if (string.IsNullOrWhiteSpace(blockText))
+                {
+                    continue;
+                }
+
+                var left = sorted.Min(w => w.BoundingBox.Left);
+                var right = sorted.Max(w => w.BoundingBox.Right);
+                var top = sorted.Max(w => w.BoundingBox.Top);
+                var bottom = sorted.Min(w => w.BoundingBox.Bottom);
+
+                blockIndex++;
+                yield return new SourceDocumentBlock
+                {
+                    BlockId = $"p{page.Number}-sidebar-b{blockIndex}",
+                    BlockType = SourceBlockType.Paragraph,
+                    Text = blockText,
+                    IsFormulaLike = false,
+                    BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
+                    TextStyle = new BlockTextStyle
+                    {
+                        FontSize = Math.Clamp(right - left, 6, 12), // Rotated: width ≈ font size
+                        RotationAngle = -90
+                    }
+                };
+            }
         }
     }
 
@@ -1328,6 +1407,85 @@ public sealed class LongDocumentTranslationService : IDisposable
         }
 
         return paragraphs;
+    }
+
+    /// <summary>
+    /// Splits lines at large intra-line horizontal gaps to preserve column structure.
+    /// For example, author grids in academic papers where names at the same Y coordinate
+    /// are separated by large gaps should become separate lines (and thus separate blocks).
+    /// </summary>
+    private static List<PdfTextLine> SplitLinesAtColumnGaps(List<PdfTextLine> lines, double medianWordHeight)
+    {
+        var result = new List<PdfTextLine>(lines.Count);
+
+        foreach (var line in lines)
+        {
+            // Need at least 2 words to have a gap to split on
+            if (line.Words.Count < 2)
+            {
+                result.Add(line);
+                continue;
+            }
+
+            var sortedWords = line.Words.OrderBy(w => w.BoundingBox.Left).ToList();
+
+            // Calculate gaps between consecutive words
+            var gaps = new List<double>(sortedWords.Count - 1);
+            for (var i = 0; i < sortedWords.Count - 1; i++)
+            {
+                var gap = sortedWords[i + 1].BoundingBox.Left - sortedWords[i].BoundingBox.Right;
+                gaps.Add(Math.Max(0, gap));
+            }
+
+            // Compute median gap within the line
+            var sortedGaps = gaps.OrderBy(g => g).ToList();
+            var medianGap = sortedGaps[sortedGaps.Count / 2];
+
+            // Threshold: a gap must exceed both relative and absolute minimums to be a column boundary
+            var gapThreshold = Math.Max(medianGap * 3, medianWordHeight * 1.5);
+
+            // Find split points
+            var splitIndices = new List<int>();
+            for (var i = 0; i < gaps.Count; i++)
+            {
+                if (gaps[i] > gapThreshold)
+                {
+                    splitIndices.Add(i);
+                }
+            }
+
+            if (splitIndices.Count == 0)
+            {
+                result.Add(line);
+                continue;
+            }
+
+            // Split into sub-lines at each split point
+            var start = 0;
+            foreach (var splitAfter in splitIndices)
+            {
+                var subLine = new PdfTextLine(line.Top);
+                for (var i = start; i <= splitAfter; i++)
+                {
+                    subLine.Words.Add(sortedWords[i]);
+                }
+                result.Add(subLine.Normalize());
+                start = splitAfter + 1;
+            }
+
+            // Add remaining words as last sub-line
+            if (start < sortedWords.Count)
+            {
+                var lastSubLine = new PdfTextLine(line.Top);
+                for (var i = start; i < sortedWords.Count; i++)
+                {
+                    lastSubLine.Words.Add(sortedWords[i]);
+                }
+                result.Add(lastSubLine.Normalize());
+            }
+        }
+
+        return result;
     }
 
     private sealed class PdfTextLine(double top)

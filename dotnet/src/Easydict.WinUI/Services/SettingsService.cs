@@ -578,6 +578,13 @@ public sealed class SettingsService
         // Page range and custom prompt
         LongDocPageRange = GetValue(nameof(LongDocPageRange), "");
         LongDocCustomPrompt = GetValue(nameof(LongDocCustomPrompt), "");
+
+        // Layout detection settings
+        LayoutDetectionMode = GetValue(nameof(LayoutDetectionMode), "Auto");
+        VisionLayoutServiceId = GetValue(nameof(VisionLayoutServiceId), "gemini");
+        OnnxModelDownloaded = GetValue(nameof(OnnxModelDownloaded), false);
+        DocumentOutputMode = GetValue(nameof(DocumentOutputMode), "Monolingual");
+        LongDocMaxConcurrency = GetValue(nameof(LongDocMaxConcurrency), 4);
     }
 
     public void Save()
@@ -715,6 +722,13 @@ public sealed class SettingsService
         // Page range and custom prompt
         _settings[nameof(LongDocPageRange)] = LongDocPageRange;
         _settings[nameof(LongDocCustomPrompt)] = LongDocCustomPrompt;
+
+        // Layout detection settings
+        _settings[nameof(LayoutDetectionMode)] = LayoutDetectionMode;
+        _settings[nameof(VisionLayoutServiceId)] = VisionLayoutServiceId;
+        _settings[nameof(OnnxModelDownloaded)] = OnnxModelDownloaded;
+        _settings[nameof(DocumentOutputMode)] = DocumentOutputMode;
+        _settings[nameof(LongDocMaxConcurrency)] = LongDocMaxConcurrency;
 
         try
         {

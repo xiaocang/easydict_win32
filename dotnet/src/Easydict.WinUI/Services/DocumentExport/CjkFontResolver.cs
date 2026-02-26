@@ -123,13 +123,14 @@ internal sealed class CjkFontResolver : IFontResolver
         // Check if this is a registered CJK family
         if (FamilyToFace.TryGetValue(familyName, out var faceName))
         {
-            bool hasFile;
+            string? fontPath;
             lock (FontFilePaths)
             {
-                hasFile = FontFilePaths.ContainsKey(faceName);
+                FontFilePaths.TryGetValue(faceName, out fontPath);
             }
 
-            if (hasFile)
+            // Validate that the font file actually exists on disk (#17)
+            if (fontPath != null && File.Exists(fontPath))
             {
                 // CJK fonts typically don't have bold/italic variants in the file we download,
                 // so we always return the regular face and let PdfSharpCore simulate bold/italic
@@ -182,6 +183,16 @@ internal sealed class CjkFontResolver : IFontResolver
             }
         }
 
+        // PdfSharpCore requires non-null for any face returned by ResolveTypeface.
+        // Fall back to Arial regular as a last resort (#12).
+        var arialPath = Path.Combine(SystemFontsDir, "arial.ttf");
+        if (File.Exists(arialPath))
+        {
+            Debug.WriteLine($"[CjkFontResolver] Font '{faceName}' not found, falling back to Arial");
+            return File.ReadAllBytes(arialPath);
+        }
+
+        Debug.WriteLine($"[CjkFontResolver] CRITICAL: No font data available for '{faceName}' and Arial fallback missing");
         return null;
     }
 

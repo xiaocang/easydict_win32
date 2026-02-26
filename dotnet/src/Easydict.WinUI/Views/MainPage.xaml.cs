@@ -235,8 +235,8 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(LongDocSourceLangCombo, loc.GetString("SourceLanguageTooltip"));
             ToolTipService.SetToolTip(LongDocTargetLangCombo, loc.GetString("TargetLanguageTooltip"));
 
-            // Long doc service hint
-            LongDocServiceHint.Text = loc.GetString("LongDoc_ServiceHint");
+            // Long doc service hint (shown as tooltip on 🤖? icon next to service combo)
+            ToolTipService.SetToolTip(LongDocServiceHint, loc.GetString("LongDoc_ServiceHint"));
 
             // Long doc control help icons
             ToolTipService.SetToolTip(LongDocInputModeHint, loc.GetString("LongDoc_InputModeHelpTip"));

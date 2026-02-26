@@ -25,9 +25,10 @@ public sealed class PdfExportService : IDocumentExportService
         int ObjectReplaceBlocks,
         int OverlayModeBlocks,
         int StructuredFallbackBlocks,
-        IReadOnlyDictionary<int, BackfillPageMetrics>? PageMetrics)
+        IReadOnlyDictionary<int, BackfillPageMetrics>? PageMetrics,
+        IReadOnlyList<BackfillBlockIssue>? BlockIssues)
     {
-        public static BackfillRenderingMetrics Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, null);
+        public static BackfillRenderingMetrics Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, null, null);
     }
 
     internal sealed class PageBackfillAccumulator
@@ -66,7 +67,8 @@ public sealed class PdfExportService : IDocumentExportService
         EnsureCjkFontSetup(checkpoint.TargetLanguage);
 
         // 1. Always generate monolingual PDF first (existing backfill logic)
-        ExportPdfWithCoordinateBackfill(checkpoint, sourceFilePath, outputPath);
+        var renderingMetrics = ExportPdfWithCoordinateBackfill(checkpoint, sourceFilePath, outputPath);
+        var qualityMetrics = ToQualityMetrics(renderingMetrics);
 
         // 2. Handle bilingual mode
         string? bilingualPath = null;
@@ -83,7 +85,8 @@ public sealed class PdfExportService : IDocumentExportService
             return new DocumentExportResult
             {
                 OutputPath = bilingualPath,
-                BilingualOutputPath = bilingualPath
+                BilingualOutputPath = bilingualPath,
+                BackfillMetrics = qualityMetrics
             };
         }
 
@@ -91,7 +94,8 @@ public sealed class PdfExportService : IDocumentExportService
         return new DocumentExportResult
         {
             OutputPath = outputPath,
-            BilingualOutputPath = bilingualPath
+            BilingualOutputPath = bilingualPath,
+            BackfillMetrics = qualityMetrics
         };
     }
 
@@ -272,6 +276,7 @@ public sealed class PdfExportService : IDocumentExportService
         var objectReplaceBlocks = 0;
         var overlayModeBlocks = 0;
         var pageMetrics = new Dictionary<int, PageBackfillAccumulator>();
+        var blockIssues = new List<BackfillBlockIssue>();
 
         // Collect overlay blocks grouped by page for two-pass rendering
         var overlayBlocksByPage = new Dictionary<int, List<OverlayBlockInfo>>();
@@ -297,6 +302,13 @@ public sealed class PdfExportService : IDocumentExportService
             {
                 missingBoundingBoxBlocks++;
                 perPage.MissingBoundingBoxBlocks++;
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = chunkIndex,
+                    SourceBlockId = metadata.SourceBlockId,
+                    PageNumber = metadata.PageNumber,
+                    Kind = "skipped-no-bbox"
+                });
                 continue;
             }
 
@@ -305,6 +317,14 @@ public sealed class PdfExportService : IDocumentExportService
             {
                 missingBoundingBoxBlocks++;
                 perPage.MissingBoundingBoxBlocks++;
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = chunkIndex,
+                    SourceBlockId = metadata.SourceBlockId,
+                    PageNumber = metadata.PageNumber,
+                    Kind = "skipped-no-bbox",
+                    Detail = $"Page {metadata.PageNumber} out of range (document has {doc.Pages.Count} pages)"
+                });
                 continue;
             }
 
@@ -324,6 +344,45 @@ public sealed class PdfExportService : IDocumentExportService
             var rotationAngle = metadata.TextStyle?.RotationAngle ?? 0;
             if (Math.Abs(rotationAngle) > 0.01)
             {
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = chunkIndex,
+                    SourceBlockId = metadata.SourceBlockId,
+                    PageNumber = metadata.PageNumber,
+                    Kind = "skipped-rotated",
+                    Detail = $"Rotation angle: {rotationAngle:F2}°"
+                });
+                continue;
+            }
+
+            // Table-like / table regions and explicit table-cell blocks are high-risk for overlay corruption
+            // (grid layouts, aligned columns). If object replacement failed, preserve original PDF content.
+            if (metadata.SourceBlockType == SourceBlockType.TableCell ||
+                metadata.RegionType is LayoutRegionType.TableLike or LayoutRegionType.Table)
+            {
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = chunkIndex,
+                    SourceBlockId = metadata.SourceBlockId,
+                    PageNumber = metadata.PageNumber,
+                    Kind = "skipped-table-like"
+                });
+                continue;
+            }
+
+            // If extracted line positions indicate a same-baseline grid (multiple cells in the same row),
+            // a single translated paragraph cannot be mapped back safely. Preserve original.
+            var linePositions = metadata.TextStyle?.LinePositions;
+            if (linePositions is { Count: > 1 } && LooksLikeGridLinePositions(linePositions))
+            {
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = chunkIndex,
+                    SourceBlockId = metadata.SourceBlockId,
+                    PageNumber = metadata.PageNumber,
+                    Kind = "skipped-grid",
+                    Detail = $"{linePositions.Count} line positions with same-baseline grid pattern"
+                });
                 continue;
             }
 
@@ -340,7 +399,11 @@ public sealed class PdfExportService : IDocumentExportService
 
             // Scale padding with font size: larger fonts need more padding to cover descenders
             var fontSize = metadata.TextStyle?.FontSize > 0 ? metadata.TextStyle.FontSize : 11.0;
-            var pad = Math.Min(6, Math.Max(2, fontSize * 0.15));
+            var pad = Math.Clamp(fontSize * 0.25, 2.5, 10);
+            if (isCjkTarget)
+            {
+                pad = Math.Max(pad, Math.Clamp(fontSize * 0.30, 3, 12));
+            }
 
             if (!overlayBlocksByPage.TryGetValue(pageIndex, out var pageBlocks))
             {
@@ -423,6 +486,14 @@ public sealed class PdfExportService : IDocumentExportService
                     {
                         shrinkFontBlocks++;
                         perPage.ShrinkFontBlocks++;
+                        blockIssues.Add(new BackfillBlockIssue
+                        {
+                            ChunkIndex = block.ChunkIndex,
+                            SourceBlockId = metadata.SourceBlockId,
+                            PageNumber = metadata.PageNumber,
+                            Kind = "shrink-font",
+                            Detail = $"Font shrunk from {baseFont.Size:F1}pt to {font.Size:F1}pt"
+                        });
                     }
 
                     var wrappedLines = block.LineRects is { Count: > 0 }
@@ -432,6 +503,7 @@ public sealed class PdfExportService : IDocumentExportService
                     var maxVisibleLines = block.LineRects is { Count: > 0 }
                         ? block.LineRects.Count
                         : Math.Max(1, (int)Math.Floor(rect.Height / effectiveLineHeight));
+                    var originalLineCount = wrappedLines.Count;
                     if (wrappedLines.Count > maxVisibleLines)
                     {
                         wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
@@ -439,6 +511,14 @@ public sealed class PdfExportService : IDocumentExportService
                         wrappedLines[^1] = last.Length > 1 ? $"{last.TrimEnd('.', ' ')}…" : "…";
                         truncatedBlocks++;
                         perPage.TruncatedBlocks++;
+                        blockIssues.Add(new BackfillBlockIssue
+                        {
+                            ChunkIndex = block.ChunkIndex,
+                            SourceBlockId = metadata.SourceBlockId,
+                            PageNumber = metadata.PageNumber,
+                            Kind = "truncated",
+                            Detail = $"Truncated from {originalLineCount} to {maxVisibleLines} lines"
+                        });
                     }
 
                     {
@@ -477,6 +557,14 @@ public sealed class PdfExportService : IDocumentExportService
                     var perPage = GetOrCreatePageBackfill(pageMetrics, block.Metadata.PageNumber);
                     missingBoundingBoxBlocks++;
                     perPage.MissingBoundingBoxBlocks++;
+                    blockIssues.Add(new BackfillBlockIssue
+                    {
+                        ChunkIndex = block.ChunkIndex,
+                        SourceBlockId = block.Metadata.SourceBlockId,
+                        PageNumber = block.Metadata.PageNumber,
+                        Kind = "skipped-no-bbox",
+                        Detail = $"Page graphics error: {ex.Message}"
+                    });
                 }
             }
         }
@@ -492,7 +580,8 @@ public sealed class PdfExportService : IDocumentExportService
             objectReplaceBlocks,
             overlayModeBlocks,
             0,
-            BuildPageBackfillMetrics(pageMetrics));
+            BuildPageBackfillMetrics(pageMetrics),
+            blockIssues.Count > 0 ? blockIssues : null);
     }
 
     // --------------------------------------------------
@@ -580,7 +669,7 @@ public sealed class PdfExportService : IDocumentExportService
                 StructuredFallbackBlocks = group.Count()
             });
 
-        return new BackfillRenderingMetrics(0, 0, 0, 0, 0, 0, 0, checkpoint.SourceChunks.Count, structuredPageMetrics);
+        return new BackfillRenderingMetrics(0, 0, 0, 0, 0, 0, 0, checkpoint.SourceChunks.Count, structuredPageMetrics, null);
     }
 
     // --------------------------------------------------
@@ -1216,6 +1305,48 @@ public sealed class PdfExportService : IDocumentExportService
         if (positions == null || positions.Count == 0)
             return null;
 
+        // Single-line blocks (e.g., titles/headings) often have a tall bounding box.
+        // If we force a single output line, long translations can over-shrink fonts.
+        // Instead, allow a small number of virtual lines when height permits.
+        if (positions.Count == 1)
+        {
+            var p = positions[0];
+            var leftSingle = Math.Max(blockRect.X, p.Left);
+            var rightSingle = Math.Min(blockRect.Right, p.Right);
+            if (rightSingle - leftSingle < 5 || blockRect.Height < 3)
+                return null;
+
+            var singleLineSpacing = style?.LineSpacing > 0 ? style.LineSpacing : 0;
+            if (singleLineSpacing <= 0 && style?.FontSize > 0)
+            {
+                singleLineSpacing = style.FontSize * 1.3;
+            }
+            if (singleLineSpacing <= 0)
+            {
+                singleLineSpacing = Math.Max(8, fallbackLineHeight);
+            }
+
+            var suggested = (int)Math.Floor(blockRect.Height / Math.Max(1, singleLineSpacing));
+            var lineCount = Math.Clamp(suggested, 1, 3);
+            if (lineCount <= 1)
+            {
+                return [new XRect(leftSingle, blockRect.Y, rightSingle - leftSingle, blockRect.Height)];
+            }
+
+            var h = blockRect.Height / lineCount;
+            if (h < 3)
+            {
+                return [new XRect(leftSingle, blockRect.Y, rightSingle - leftSingle, blockRect.Height)];
+            }
+
+            var rects = new List<XRect>(lineCount);
+            for (var i = 0; i < lineCount; i++)
+            {
+                rects.Add(new XRect(leftSingle, blockRect.Y + i * h, rightSingle - leftSingle, h));
+            }
+            return rects;
+        }
+
         // If multiple line entries share (approximately) the same baseline, this is likely a grid/row layout.
         // We can't reliably map a single translated paragraph back into multiple same-row cells, so fall back.
         var sortedBaselines = positions.Select(p => p.BaselineY).OrderByDescending(v => v).ToList();
@@ -1271,6 +1402,21 @@ public sealed class PdfExportService : IDocumentExportService
         }
 
         return result.Count > 0 ? result : null;
+    }
+
+    internal static bool LooksLikeGridLinePositions(IReadOnlyList<BlockLinePosition> positions)
+    {
+        if (positions.Count < 2)
+            return false;
+
+        // Same-baseline multiple segments (columns on the same row) => grid.
+        var sortedBaselines = positions.Select(p => p.BaselineY).OrderByDescending(v => v).ToList();
+        for (var i = 1; i < sortedBaselines.Count; i++)
+        {
+            if (Math.Abs(sortedBaselines[i - 1] - sortedBaselines[i]) < 0.5)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -1359,5 +1505,22 @@ public sealed class PdfExportService : IDocumentExportService
                 OverlayModeBlocks = entry.Value.OverlayModeBlocks,
                 StructuredFallbackBlocks = entry.Value.StructuredFallbackBlocks
             });
+    }
+
+    internal static BackfillQualityMetrics ToQualityMetrics(BackfillRenderingMetrics metrics)
+    {
+        return new BackfillQualityMetrics
+        {
+            CandidateBlocks = metrics.CandidateBlocks,
+            RenderedBlocks = metrics.RenderedBlocks,
+            MissingBoundingBoxBlocks = metrics.MissingBoundingBoxBlocks,
+            ShrinkFontBlocks = metrics.ShrinkFontBlocks,
+            TruncatedBlocks = metrics.TruncatedBlocks,
+            ObjectReplaceBlocks = metrics.ObjectReplaceBlocks,
+            OverlayModeBlocks = metrics.OverlayModeBlocks,
+            StructuredFallbackBlocks = metrics.StructuredFallbackBlocks,
+            PageMetrics = metrics.PageMetrics,
+            BlockIssues = metrics.BlockIssues
+        };
     }
 }

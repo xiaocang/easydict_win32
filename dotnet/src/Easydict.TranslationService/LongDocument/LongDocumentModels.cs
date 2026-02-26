@@ -240,6 +240,32 @@ public sealed record BackfillQualityMetrics
     public required long StructuredFallbackBlocks { get; init; }
     public IReadOnlyDictionary<int, BackfillPageMetrics>? PageMetrics { get; init; }
     public string? RetryMergeStrategy { get; init; }
+
+    /// <summary>
+    /// Optional per-block issues encountered during PDF coordinate backfill (e.g., skipped grid blocks, truncation).
+    /// Kept optional to avoid bloating reports in normal cases.
+    /// </summary>
+    public IReadOnlyList<BackfillBlockIssue>? BlockIssues { get; init; }
+}
+
+/// <summary>
+/// Per-block rendering/backfill issue for diagnostics.
+/// </summary>
+public sealed record BackfillBlockIssue
+{
+    public required int ChunkIndex { get; init; }
+    public required string SourceBlockId { get; init; }
+    public required int PageNumber { get; init; }
+
+    /// <summary>
+    /// Short machine-readable kind, e.g. "skipped-rotated", "skipped-grid", "skipped-table-like", "truncated".
+    /// </summary>
+    public required string Kind { get; init; }
+
+    /// <summary>
+    /// Optional human-readable detail.
+    /// </summary>
+    public string? Detail { get; init; }
 }
 
 public sealed record LongDocumentQualityReport

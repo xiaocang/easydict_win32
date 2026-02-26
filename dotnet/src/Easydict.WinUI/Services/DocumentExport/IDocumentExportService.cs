@@ -1,3 +1,4 @@
+using Easydict.TranslationService.LongDocument;
 using Easydict.WinUI.Services;
 
 namespace Easydict.WinUI.Services.DocumentExport;
@@ -27,6 +28,12 @@ public sealed record DocumentExportResult
 
     /// <summary>Bilingual output path (non-null for Bilingual and Both modes).</summary>
     public string? BilingualOutputPath { get; init; }
+
+    /// <summary>
+    /// Optional export/backfill quality metrics (e.g., PDF coordinate backfill issues).
+    /// Null for formats that don't support such metrics.
+    /// </summary>
+    public BackfillQualityMetrics? BackfillMetrics { get; init; }
 }
 
 /// <summary>

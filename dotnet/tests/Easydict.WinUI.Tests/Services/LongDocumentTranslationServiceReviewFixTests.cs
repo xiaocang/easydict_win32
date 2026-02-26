@@ -359,6 +359,108 @@ public class LongDocumentTranslationServiceReviewFixTests
     }
 
     [Fact]
+    public void MergeRetryBackfillMetrics_Accumulate_MergesBlockIssues()
+    {
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
+        var method = serviceType.GetMethod("MergeRetryBackfillMetrics", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var previous = new BackfillQualityMetrics
+        {
+            CandidateBlocks = 1, RenderedBlocks = 0, MissingBoundingBoxBlocks = 1,
+            ShrinkFontBlocks = 0, TruncatedBlocks = 0, ObjectReplaceBlocks = 0,
+            OverlayModeBlocks = 0, StructuredFallbackBlocks = 0,
+            BlockIssues = [new BackfillBlockIssue { ChunkIndex = 0, SourceBlockId = "p1-body-b1", PageNumber = 1, Kind = "skipped-rotated" }]
+        };
+        var current = new BackfillQualityMetrics
+        {
+            CandidateBlocks = 1, RenderedBlocks = 0, MissingBoundingBoxBlocks = 0,
+            ShrinkFontBlocks = 0, TruncatedBlocks = 1, ObjectReplaceBlocks = 0,
+            OverlayModeBlocks = 0, StructuredFallbackBlocks = 0,
+            BlockIssues = [new BackfillBlockIssue { ChunkIndex = 1, SourceBlockId = "p1-body-b2", PageNumber = 1, Kind = "truncated" }]
+        };
+
+        var merged = (BackfillQualityMetrics?)method!.Invoke(null, [previous, current]);
+        merged.Should().NotBeNull();
+        merged!.BlockIssues.Should().NotBeNull();
+        merged.BlockIssues!.Should().HaveCount(2);
+        merged.BlockIssues[0].Kind.Should().Be("skipped-rotated");
+        merged.BlockIssues[1].Kind.Should().Be("truncated");
+    }
+
+    [Fact]
+    public void MergeRetryBackfillMetrics_CoreOnly_PreservesBlockIssues()
+    {
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
+        var method = serviceType.GetMethod("MergeRetryBackfillMetrics", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var current = new BackfillQualityMetrics
+        {
+            CandidateBlocks = 1, RenderedBlocks = 0, MissingBoundingBoxBlocks = 0,
+            ShrinkFontBlocks = 0, TruncatedBlocks = 0, ObjectReplaceBlocks = 0,
+            OverlayModeBlocks = 0, StructuredFallbackBlocks = 0,
+            BlockIssues = [new BackfillBlockIssue { ChunkIndex = 0, SourceBlockId = "p1-body-b1", PageNumber = 1, Kind = "skipped-grid" }]
+        };
+
+        var merged = (BackfillQualityMetrics?)method!.Invoke(null, [null, current]);
+        merged.Should().NotBeNull();
+        merged!.RetryMergeStrategy.Should().Be("core-only");
+        merged.BlockIssues.Should().NotBeNull();
+        merged.BlockIssues!.Should().HaveCount(1);
+        merged.BlockIssues[0].Kind.Should().Be("skipped-grid");
+    }
+
+    [Fact]
+    public void MergeRetryBackfillMetrics_CheckpointOnly_PreservesBlockIssues()
+    {
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
+        var method = serviceType.GetMethod("MergeRetryBackfillMetrics", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var previous = new BackfillQualityMetrics
+        {
+            CandidateBlocks = 1, RenderedBlocks = 0, MissingBoundingBoxBlocks = 0,
+            ShrinkFontBlocks = 0, TruncatedBlocks = 0, ObjectReplaceBlocks = 0,
+            OverlayModeBlocks = 0, StructuredFallbackBlocks = 0,
+            BlockIssues = [new BackfillBlockIssue { ChunkIndex = 0, SourceBlockId = "p1-body-b1", PageNumber = 1, Kind = "skipped-table-like" }]
+        };
+
+        var merged = (BackfillQualityMetrics?)method!.Invoke(null, [previous, null]);
+        merged.Should().NotBeNull();
+        merged!.RetryMergeStrategy.Should().Be("checkpoint-only");
+        merged.BlockIssues.Should().NotBeNull();
+        merged.BlockIssues!.Should().HaveCount(1);
+        merged.BlockIssues[0].Kind.Should().Be("skipped-table-like");
+    }
+
+    [Fact]
+    public void MergeRetryBackfillMetrics_Accumulate_NullBlockIssues_StaysNull()
+    {
+        var serviceType = typeof(WinUiLongDocumentTranslationService);
+        var method = serviceType.GetMethod("MergeRetryBackfillMetrics", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var previous = new BackfillQualityMetrics
+        {
+            CandidateBlocks = 1, RenderedBlocks = 1, MissingBoundingBoxBlocks = 0,
+            ShrinkFontBlocks = 0, TruncatedBlocks = 0, ObjectReplaceBlocks = 0,
+            OverlayModeBlocks = 1, StructuredFallbackBlocks = 0
+        };
+        var current = new BackfillQualityMetrics
+        {
+            CandidateBlocks = 1, RenderedBlocks = 1, MissingBoundingBoxBlocks = 0,
+            ShrinkFontBlocks = 0, TruncatedBlocks = 0, ObjectReplaceBlocks = 0,
+            OverlayModeBlocks = 1, StructuredFallbackBlocks = 0
+        };
+
+        var merged = (BackfillQualityMetrics?)method!.Invoke(null, [previous, current]);
+        merged.Should().NotBeNull();
+        merged!.RetryMergeStrategy.Should().Be("accumulate");
+        merged.BlockIssues.Should().BeNull();
+    }
+
+    [Fact]
     public void InferRegionType_ShouldRespectTwoColumnBoundariesWhenEnabled()
     {
         var serviceType = typeof(WinUiLongDocumentTranslationService);

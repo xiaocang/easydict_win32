@@ -562,6 +562,11 @@ public sealed class LongDocumentTranslationService : IDisposable
         var exportService = ResolveExportService(checkpoint.SourceFilePath);
         var exportResult = exportService.Export(checkpoint, checkpoint.SourceFilePath!, outputPath, outputMode);
 
+        if (exportResult.BackfillMetrics != null)
+        {
+            qualityReport = qualityReport with { BackfillMetrics = exportResult.BackfillMetrics };
+        }
+
         var state = checkpoint.FailedChunkIndexes.Count switch
         {
             0 => LongDocumentJobState.Completed,
@@ -972,7 +977,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         lines = SplitLinesAtColumnGaps(lines, medianWordHeight);
 
         var orderedLines = OrderLinesByLayout(lines, Convert.ToDecimal(page.Width));
-        var paragraphs = BuildParagraphs(orderedLines, paragraphGapThreshold);
+        var paragraphs = BuildParagraphs(orderedLines, paragraphGapThreshold, sameLineThreshold);
         var layoutProfile = BuildLayoutProfile(orderedLines, (double)page.Width, (double)page.Height);
 
         var blockIndex = 0;
@@ -1356,7 +1361,8 @@ public sealed class LongDocumentTranslationService : IDisposable
     {
         if (lines.Count < 8)
         {
-            return lines.OrderByDescending(l => l.Top).ToList();
+            // For small sets (e.g., title/author grids), preserve left-to-right ordering within the same row.
+            return lines.OrderByDescending(l => l.Top).ThenBy(l => l.Left).ToList();
         }
 
         var width = (double)pageWidth;
@@ -1364,22 +1370,101 @@ public sealed class LongDocumentTranslationService : IDisposable
         var leftLines = lines.Where(l => l.CenterX < mid * 0.92).ToList();
         var rightLines = lines.Where(l => l.CenterX > mid * 1.08).ToList();
 
+        // If many rows have multiple aligned cells at the same Y (common for author grids),
+        // prefer row-wise ordering: same row left->right, then top->bottom.
+        if (LooksLikeRowAlignedGrid(lines, width))
+        {
+            return OrderLinesRowWise(lines);
+        }
+
         var isTwoColumn = leftLines.Count >= lines.Count * 0.25 && rightLines.Count >= lines.Count * 0.25;
         if (!isTwoColumn)
         {
-            return lines.OrderByDescending(l => l.Top).ToList();
+            return lines.OrderByDescending(l => l.Top).ThenBy(l => l.Left).ToList();
         }
 
         var ordered = new List<PdfTextLine>(lines.Count);
-        ordered.AddRange(leftLines.OrderByDescending(l => l.Top));
-        ordered.AddRange(rightLines.OrderByDescending(l => l.Top));
+        ordered.AddRange(leftLines.OrderByDescending(l => l.Top).ThenBy(l => l.Left));
+        ordered.AddRange(rightLines.OrderByDescending(l => l.Top).ThenBy(l => l.Left));
 
-        var remaining = lines.Except(ordered).OrderByDescending(l => l.Top);
+        var remaining = lines.Except(ordered).OrderByDescending(l => l.Top).ThenBy(l => l.Left);
         ordered.AddRange(remaining);
         return ordered;
     }
 
-    private static List<List<PdfTextLine>> BuildParagraphs(IReadOnlyList<PdfTextLine> lines, double paragraphGapThreshold)
+    private static bool LooksLikeRowAlignedGrid(IReadOnlyList<PdfTextLine> lines, double pageWidth)
+    {
+        if (lines.Count < 6)
+        {
+            return false;
+        }
+
+        var heights = lines.Select(l => Math.Max(1d, l.Top - l.Bottom)).OrderBy(v => v).ToList();
+        var medianHeight = heights[heights.Count / 2];
+        var rowTol = Math.Max(2.5, medianHeight * 0.35);
+
+        var rows = GroupIntoRows(lines, rowTol);
+        if (rows.Count < 3)
+        {
+            return false;
+        }
+
+        var multiCellRows = rows.Count(r => r.Count >= 2);
+        if (multiCellRows < 2)
+        {
+            return false;
+        }
+
+        var wideRows = rows
+            .Where(r => r.Count >= 2)
+            .Count(r => (r.Max(x => x.Right) - r.Min(x => x.Left)) > pageWidth * 0.45);
+
+        var ratio = (double)multiCellRows / Math.Max(1, rows.Count);
+        return ratio >= 0.20 && wideRows >= 1;
+    }
+
+    private static List<PdfTextLine> OrderLinesRowWise(IReadOnlyList<PdfTextLine> lines)
+    {
+        var heights = lines.Select(l => Math.Max(1d, l.Top - l.Bottom)).OrderBy(v => v).ToList();
+        var medianHeight = heights[heights.Count / 2];
+        var rowTol = Math.Max(2.5, medianHeight * 0.35);
+        var rows = GroupIntoRows(lines, rowTol);
+        var ordered = new List<PdfTextLine>(lines.Count);
+        foreach (var row in rows)
+        {
+            ordered.AddRange(row.OrderBy(l => l.Left));
+        }
+        return ordered;
+    }
+
+    private static List<List<PdfTextLine>> GroupIntoRows(IReadOnlyList<PdfTextLine> lines, double rowTolerance)
+    {
+        var rows = new List<List<PdfTextLine>>();
+        foreach (var line in lines.OrderByDescending(l => l.Top).ThenBy(l => l.Left))
+        {
+            var placed = false;
+            foreach (var row in rows)
+            {
+                var rowTop = row[0].Top;
+                if (Math.Abs(rowTop - line.Top) <= rowTolerance)
+                {
+                    row.Add(line);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed)
+            {
+                rows.Add([line]);
+            }
+        }
+        return rows;
+    }
+
+    private static List<List<PdfTextLine>> BuildParagraphs(
+        IReadOnlyList<PdfTextLine> lines,
+        double paragraphGapThreshold,
+        double sameRowThreshold)
     {
         var paragraphs = new List<List<PdfTextLine>>();
         foreach (var line in lines)
@@ -1392,9 +1477,16 @@ public sealed class LongDocumentTranslationService : IDisposable
 
             var current = paragraphs[^1];
             var prev = current[^1];
+            // If two items share nearly the same Y (same baseline row), treat them as separate cells.
+            // This is critical for author grids / multi-column rows: left->right cells must not be merged.
+            var sameRow = Math.Abs(prev.Top - line.Top) <= sameRowThreshold;
             var gap = Math.Abs(prev.Bottom - line.Top);
             var horizontalOffset = Math.Abs(prev.Left - line.Left);
-            var shouldSplit = gap > paragraphGapThreshold || horizontalOffset > Math.Max(30, prev.Width * 0.6);
+            var shouldSplit =
+                sameRow ||
+                (prev.IsColumnSplitFragment && !sameRow) ||
+                gap > paragraphGapThreshold ||
+                horizontalOffset > Math.Max(30, prev.Width * 0.6);
 
             if (shouldSplit)
             {
@@ -1444,11 +1536,16 @@ public sealed class LongDocumentTranslationService : IDisposable
             // Threshold: a gap must exceed both relative and absolute minimums to be a column boundary
             var gapThreshold = Math.Max(medianGap * 3, medianWordHeight * 1.5);
 
+            // When a line consists of a few large tokens (e.g., emails/URLs), all gaps can be large and the
+            // median becomes large too, causing the relative threshold to never trigger.
+            // Add an absolute threshold to still split obvious multi-column lines.
+            var absoluteGapThreshold = Math.Max(50, medianWordHeight * 4);
+
             // Find split points
             var splitIndices = new List<int>();
             for (var i = 0; i < gaps.Count; i++)
             {
-                if (gaps[i] > gapThreshold)
+                if (gaps[i] > gapThreshold || gaps[i] > absoluteGapThreshold)
                 {
                     splitIndices.Add(i);
                 }
@@ -1465,6 +1562,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             foreach (var splitAfter in splitIndices)
             {
                 var subLine = new PdfTextLine(line.Top);
+                subLine.IsColumnSplitFragment = true;
                 for (var i = start; i <= splitAfter; i++)
                 {
                     subLine.Words.Add(sortedWords[i]);
@@ -1477,6 +1575,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             if (start < sortedWords.Count)
             {
                 var lastSubLine = new PdfTextLine(line.Top);
+                lastSubLine.IsColumnSplitFragment = true;
                 for (var i = start; i < sortedWords.Count; i++)
                 {
                     lastSubLine.Words.Add(sortedWords[i]);
@@ -1491,6 +1590,7 @@ public sealed class LongDocumentTranslationService : IDisposable
     private sealed class PdfTextLine(double top)
     {
         public double Top { get; } = top;
+        public bool IsColumnSplitFragment { get; set; }
         public List<Word> Words { get; } = [];
         public double Left { get; private set; }
         public double Right { get; private set; }
@@ -1703,8 +1803,27 @@ public sealed class LongDocumentTranslationService : IDisposable
             OverlayModeBlocks = previous.OverlayModeBlocks + current.OverlayModeBlocks,
             StructuredFallbackBlocks = previous.StructuredFallbackBlocks + current.StructuredFallbackBlocks,
             PageMetrics = MergePageBackfillMetrics(previous.PageMetrics, current.PageMetrics),
+            BlockIssues = MergeBlockIssues(previous.BlockIssues, current.BlockIssues),
             RetryMergeStrategy = "accumulate"
         };
+    }
+
+    private static IReadOnlyList<BackfillBlockIssue>? MergeBlockIssues(
+        IReadOnlyList<BackfillBlockIssue>? previous,
+        IReadOnlyList<BackfillBlockIssue>? current)
+    {
+        if (previous is null or { Count: 0 } && current is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        var merged = new List<BackfillBlockIssue>();
+        if (previous is { Count: > 0 })
+            merged.AddRange(previous);
+        if (current is { Count: > 0 })
+            merged.AddRange(current);
+
+        return merged.Count > 0 ? merged : null;
     }
 
     private static LongDocumentQualityReport BuildQualityReportFromRetry(

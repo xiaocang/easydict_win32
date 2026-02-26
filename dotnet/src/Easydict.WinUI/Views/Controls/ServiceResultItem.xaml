@@ -150,10 +150,20 @@
                         Visibility="Collapsed">
                     </StackPanel>
 
+                    <!-- Dictionary Definitions and Examples -->
+                    <StackPanel
+                        x:Name="DictionaryPanel"
+                        AutomationProperties.AutomationId="DictionaryPanel"
+                        Grid.Row="2"
+                        Spacing="2"
+                        Margin="0,0,0,4"
+                        Visibility="Collapsed">
+                    </StackPanel>
+
                     <!-- Translation Result -->
                     <TextBlock
                         x:Name="ResultText"
-                        Grid.Row="2"
+                        Grid.Row="3"
                         TextWrapping="Wrap"
                         IsTextSelectionEnabled="True"
                         Foreground="{ThemeResource QueryTextBrush}"
@@ -163,7 +173,7 @@
                     <!-- Error Message -->
                     <TextBlock
                         x:Name="ErrorText"
-                        Grid.Row="3"
+                        Grid.Row="4"
                         TextWrapping="Wrap"
                         IsTextSelectionEnabled="True"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"

@@ -323,7 +323,7 @@ public class YoudaoServiceIntegrationTests : IDisposable
     [Fact]
     public void DisplayName_IsYoudao()
     {
-        _service.DisplayName.Should().Be("Youdao");
+        _service.DisplayName.Should().Be("📖 Youdao");
     }
 
     [Fact]

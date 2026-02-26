@@ -52,7 +52,7 @@ public sealed class YoudaoService : BaseTranslationService
     public YoudaoService(HttpClient httpClient) : base(httpClient) { }
 
     public override string ServiceId => "youdao";
-    public override string DisplayName => "Youdao";
+    public override string DisplayName => "📖 Youdao";
     public override bool RequiresApiKey => false; // Web mode doesn't require API key
     public override bool IsConfigured => true; // Web mode is always available
     public override IReadOnlyList<Language> SupportedLanguages => _youdaoLanguages;

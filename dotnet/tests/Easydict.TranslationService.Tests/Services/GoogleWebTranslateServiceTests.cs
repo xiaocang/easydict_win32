@@ -32,7 +32,7 @@ public class GoogleWebTranslateServiceTests
     [Fact]
     public void DisplayName_IsGoogleDict()
     {
-        _service.DisplayName.Should().Be("Google Dict");
+        _service.DisplayName.Should().Be("📖 Google Dict");
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class GoogleWebTranslateServiceTests
         // Assert
         result.TranslatedText.Should().Be("Hello");
         result.OriginalText.Should().Be("你好");
-        result.ServiceName.Should().Be("Google Dict");
+        result.ServiceName.Should().Be("📖 Google Dict");
     }
 
     [Fact]

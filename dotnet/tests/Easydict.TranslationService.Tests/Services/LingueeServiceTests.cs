@@ -32,7 +32,7 @@ public class LingueeServiceTests
     [Fact]
     public void DisplayName_IsLingueeDictionary()
     {
-        _service.DisplayName.Should().Be("Linguee Dictionary");
+        _service.DisplayName.Should().Be("📖 Linguee Dictionary");
     }
 
     [Fact]

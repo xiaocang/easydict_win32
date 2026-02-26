@@ -77,6 +77,7 @@ public sealed class LongDocumentChunkMetadata
     public LayoutRegionSource RegionSource { get; init; }
     public double ReadingOrderScore { get; init; }
     public BlockRect? BoundingBox { get; init; }
+    public BlockTextStyle? TextStyle { get; init; }
 }
 
 public sealed class LongDocumentTranslationResult
@@ -242,7 +243,8 @@ public sealed class LongDocumentTranslationService
                             ? scoreOrder
                             : 0,
                         pageBlockCounts.TryGetValue(item.PageNumber, out var pageCount) ? pageCount : 1),
-                        BoundingBox = item.Block.BoundingBox
+                        BoundingBox = item.Block.BoundingBox,
+                        TextStyle = item.Block.TextStyle
                     };
                 })
                 .ToList(),
@@ -382,7 +384,8 @@ public sealed class LongDocumentTranslationService
                         BlockType = metadata.SourceBlockType,
                         Text = checkpoint.SourceChunks[chunkIndex],
                         IsFormulaLike = metadata.IsFormulaLike,
-                        BoundingBox = metadata.BoundingBox
+                        BoundingBox = metadata.BoundingBox,
+                        TextStyle = metadata.TextStyle
                     }
                 ]
             });
@@ -889,8 +892,21 @@ public sealed class LongDocumentTranslationService
 
     private static IEnumerable<SourceDocumentBlock> ExtractLayoutBlocksFromPage(PdfPigPage page)
     {
+        var pageWidth = (double)page.Width;
         var words = page.GetWords()
             .Where(word => !string.IsNullOrWhiteSpace(word.Text))
+            // Filter out rotated sidebar text (e.g., arXiv identifiers):
+            // words whose bounding box is very tall and narrow (height > width × 3)
+            // and positioned in the page margin (X < 5% or X > 95% of page width)
+            .Where(word =>
+            {
+                var bb = word.BoundingBox;
+                var w = Math.Max(0.1, bb.Width);
+                var h = bb.Height;
+                if (h > w * 3 && (bb.Left < pageWidth * 0.05 || bb.Right > pageWidth * 0.95))
+                    return false;
+                return true;
+            })
             .OrderByDescending(word => word.BoundingBox.Top)
             .ThenBy(word => word.BoundingBox.Left)
             .ToList();
@@ -958,8 +974,9 @@ public sealed class LongDocumentTranslationService
                 _ => "body"
             };
 
-            // Collect font names from letters within this block's bounding region
+            // Collect font names and text style from letters within this block's bounding region
             var blockFontNames = CollectFontNamesForBlock(page, left, right, top, bottom);
+            var textStyle = ExtractTextStyleForBlock(page, linesInBlock, left, right, top, bottom);
 
             yield return new SourceDocumentBlock
             {
@@ -968,7 +985,8 @@ public sealed class LongDocumentTranslationService
                 Text = blockText,
                 IsFormulaLike = type == SourceBlockType.Formula,
                 BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
-                DetectedFontNames = blockFontNames.Count > 0 ? blockFontNames : null
+                DetectedFontNames = blockFontNames.Count > 0 ? blockFontNames : null,
+                TextStyle = textStyle
             };
         }
     }
@@ -996,6 +1014,165 @@ public sealed class LongDocumentTranslationService
             // PdfPig may throw on some PDFs; ignore and return what we have
         }
         return fontNames;
+    }
+
+    /// <summary>
+    /// Extracts aggregated text styling from PdfPig letters within a block's bounding region.
+    /// Uses median font size, majority vote for bold/italic, average color, alignment from line positions,
+    /// and median baseline distance for line spacing.
+    /// </summary>
+    private static BlockTextStyle? ExtractTextStyleForBlock(
+        PdfPigPage page, List<PdfTextLine> linesInBlock,
+        double left, double right, double top, double bottom)
+    {
+        try
+        {
+            var fontSizes = new List<double>();
+            var boldCount = 0;
+            var italicCount = 0;
+            var totalLetters = 0;
+            var colorR = new List<double>();
+            var colorG = new List<double>();
+            var colorB = new List<double>();
+
+            foreach (var letter in page.Letters)
+            {
+                var lbox = letter.GlyphRectangle;
+                if (lbox.Left < left - 1 || lbox.Right > right + 1 ||
+                    lbox.Bottom < bottom - 1 || lbox.Top > top + 1)
+                {
+                    continue;
+                }
+
+                totalLetters++;
+
+                // Font size: use PointSize (actual size in points)
+                if (letter.PointSize > 0)
+                {
+                    fontSizes.Add(letter.PointSize);
+                }
+
+                // Bold/italic: infer from font name heuristics
+                var fontName = letter.FontName ?? string.Empty;
+                if (fontName.Contains("Bold", StringComparison.OrdinalIgnoreCase))
+                    boldCount++;
+                if (fontName.Contains("Italic", StringComparison.OrdinalIgnoreCase) ||
+                    fontName.Contains("Oblique", StringComparison.OrdinalIgnoreCase))
+                    italicCount++;
+
+                // Color: extract RGB from fill color (non-stroking color)
+                try
+                {
+                    var color = letter.Color;
+                    if (color != null)
+                    {
+                        var rgb = color.ToRGBValues();
+                        colorR.Add(rgb.r);
+                        colorG.Add(rgb.g);
+                        colorB.Add(rgb.b);
+                    }
+                }
+                catch
+                {
+                    // PatternColor or unsupported color space — skip
+                }
+            }
+
+            if (totalLetters == 0)
+                return null;
+
+            // Median font size
+            fontSizes.Sort();
+            var medianFontSize = fontSizes.Count > 0
+                ? fontSizes[fontSizes.Count / 2]
+                : 0;
+
+            // Majority vote for bold/italic
+            var halfLetters = totalLetters / 2;
+            var isBold = boldCount > halfLetters;
+            var isItalic = italicCount > halfLetters;
+
+            // Average color
+            var avgR = colorR.Count > 0 ? (byte)Math.Clamp(colorR.Average() * 255, 0, 255) : (byte)0;
+            var avgG = colorG.Count > 0 ? (byte)Math.Clamp(colorG.Average() * 255, 0, 255) : (byte)0;
+            var avgB = colorB.Count > 0 ? (byte)Math.Clamp(colorB.Average() * 255, 0, 255) : (byte)0;
+
+            // Alignment: detect from line left/right positions relative to block bounds
+            var blockWidth = Math.Max(1, right - left);
+            var alignment = DetectAlignment(linesInBlock, left, blockWidth);
+
+            // Line spacing: median baseline-to-baseline distance
+            var lineSpacing = 0d;
+            var linePositions = new List<BlockLinePosition>();
+            if (linesInBlock.Count > 1)
+            {
+                var baselines = linesInBlock
+                    .OrderByDescending(l => l.Top)
+                    .Select(l => l.Bottom)
+                    .ToList();
+
+                var gaps = new List<double>();
+                for (var g = 0; g < baselines.Count - 1; g++)
+                {
+                    var gap = Math.Abs(baselines[g] - baselines[g + 1]);
+                    if (gap > 0.5) gaps.Add(gap);
+                }
+
+                if (gaps.Count > 0)
+                {
+                    gaps.Sort();
+                    lineSpacing = gaps[gaps.Count / 2];
+                }
+            }
+
+            // Build per-line positions
+            foreach (var line in linesInBlock.OrderByDescending(l => l.Top))
+            {
+                linePositions.Add(new BlockLinePosition(line.Bottom, line.Left, line.Right));
+            }
+
+            return new BlockTextStyle
+            {
+                FontSize = medianFontSize,
+                IsBold = isBold,
+                IsItalic = isItalic,
+                ColorR = avgR,
+                ColorG = avgG,
+                ColorB = avgB,
+                Alignment = alignment,
+                LineSpacing = lineSpacing,
+                LinePositions = linePositions.Count > 0 ? linePositions : null
+            };
+        }
+        catch
+        {
+            // PdfPig may throw on some PDFs; return null gracefully
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Detects text alignment from line positions within a block.
+    /// Compares line left edges and right edges to determine L/C/R alignment.
+    /// </summary>
+    private static Easydict.TranslationService.LongDocument.TextAlignment DetectAlignment(List<PdfTextLine> lines, double blockLeft, double blockWidth)
+    {
+        if (lines.Count <= 1)
+            return Easydict.TranslationService.LongDocument.TextAlignment.Left;
+
+        const double tolerance = 3.0; // points
+
+        var leftAligned = lines.Count(l => Math.Abs(l.Left - blockLeft) <= tolerance);
+        var rightAligned = lines.Count(l => Math.Abs(l.Right - (blockLeft + blockWidth)) <= tolerance);
+        var centerAligned = lines.Count(l =>
+            Math.Abs(l.CenterX - (blockLeft + blockWidth / 2)) <= tolerance);
+
+        if (centerAligned > lines.Count / 2)
+            return Easydict.TranslationService.LongDocument.TextAlignment.Center;
+        if (rightAligned > leftAligned && rightAligned > lines.Count / 2)
+            return Easydict.TranslationService.LongDocument.TextAlignment.Right;
+
+        return Easydict.TranslationService.LongDocument.TextAlignment.Left;
     }
 
     private static LayoutRegionType InferRegionType(LayoutProfile profile, double left, double right, double top, double bottom, string blockText)

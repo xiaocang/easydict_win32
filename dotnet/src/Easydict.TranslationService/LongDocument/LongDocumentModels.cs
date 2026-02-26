@@ -24,6 +24,58 @@ public enum BlockType
 
 public readonly record struct BlockRect(double X, double Y, double Width, double Height);
 
+/// <summary>
+/// Text alignment detected from source PDF line positions.
+/// </summary>
+public enum TextAlignment
+{
+    Left,
+    Center,
+    Right
+}
+
+/// <summary>
+/// Text styling extracted from source PDF letters within a block.
+/// Values are aggregated (median font size, majority vote for bold/italic, average color).
+/// </summary>
+public sealed record BlockTextStyle
+{
+    /// <summary>Median font size in points from source PDF letters.</summary>
+    public double FontSize { get; init; }
+
+    /// <summary>Whether the majority of letters use a bold font.</summary>
+    public bool IsBold { get; init; }
+
+    /// <summary>Whether the majority of letters use an italic font.</summary>
+    public bool IsItalic { get; init; }
+
+    /// <summary>Average red component (0–255) of source text color.</summary>
+    public byte ColorR { get; init; }
+
+    /// <summary>Average green component (0–255) of source text color.</summary>
+    public byte ColorG { get; init; }
+
+    /// <summary>Average blue component (0–255) of source text color.</summary>
+    public byte ColorB { get; init; }
+
+    /// <summary>Text alignment detected from line positions within the block.</summary>
+    public TextAlignment Alignment { get; init; }
+
+    /// <summary>Median baseline-to-baseline distance between lines (0 if single-line block).</summary>
+    public double LineSpacing { get; init; }
+
+    /// <summary>Per-line baseline coordinates from the source PDF (PDF coordinate space).</summary>
+    public IReadOnlyList<BlockLinePosition>? LinePositions { get; init; }
+
+    /// <summary>True if the color is effectively black (all components ≤ 30).</summary>
+    public bool IsBlack => ColorR <= 30 && ColorG <= 30 && ColorB <= 30;
+}
+
+/// <summary>
+/// Baseline position of a single text line within a block, in PDF coordinate space.
+/// </summary>
+public readonly record struct BlockLinePosition(double BaselineY, double Left, double Right);
+
 public sealed record SourceDocumentBlock
 {
     public required string BlockId { get; init; }
@@ -33,6 +85,7 @@ public sealed record SourceDocumentBlock
     public string? ParentBlockId { get; init; }
     public bool IsFormulaLike { get; init; }
     public IReadOnlyList<string>? DetectedFontNames { get; init; }
+    public BlockTextStyle? TextStyle { get; init; }
 }
 
 public sealed record SourceDocumentPage
@@ -60,6 +113,7 @@ public sealed record DocumentBlockIr
     public BlockRect? BoundingBox { get; init; }
     public string? ParentIrBlockId { get; init; }
     public bool TranslationSkipped { get; init; }
+    public BlockTextStyle? TextStyle { get; init; }
 }
 
 public sealed record DocumentIr
@@ -87,6 +141,7 @@ public sealed record TranslatedDocumentBlock
     public bool TranslationSkipped { get; init; }
     public int RetryCount { get; init; }
     public string? LastError { get; init; }
+    public BlockTextStyle? TextStyle { get; init; }
 }
 
 public sealed record LongDocumentTranslationOptions

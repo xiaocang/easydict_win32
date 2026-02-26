@@ -254,7 +254,8 @@ public sealed class LongDocumentTranslationService
                         SourceHash = sourceHash,
                         BoundingBox = block.BoundingBox,
                         ParentIrBlockId = block.ParentBlockId is null ? null : $"ir-{page.PageNumber}-{block.ParentBlockId}",
-                        TranslationSkipped = translationSkipped
+                        TranslationSkipped = translationSkipped,
+                        TextStyle = block.TextStyle
                     });
                 }
             }
@@ -319,7 +320,8 @@ public sealed class LongDocumentTranslationService
                     SourceHash = block.SourceHash,
                     BoundingBox = block.BoundingBox,
                     TranslationSkipped = true,
-                    RetryCount = 0
+                    RetryCount = 0,
+                    TextStyle = block.TextStyle
                 };
             }
             else
@@ -473,7 +475,8 @@ public sealed class LongDocumentTranslationService
             BoundingBox = block.BoundingBox,
             TranslationSkipped = false,
             RetryCount = effectiveRetryCount,
-            LastError = lastError
+            LastError = lastError,
+            TextStyle = block.TextStyle
         };
     }
 

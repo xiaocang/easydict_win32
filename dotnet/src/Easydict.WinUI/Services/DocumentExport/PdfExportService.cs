@@ -236,6 +236,19 @@ public sealed class PdfExportService : IDocumentExportService
     // PDF coordinate backfill export (migrated)
     // --------------------------------------------------
 
+    /// <summary>
+    /// Data collected during the pre-processing pass for a single overlay block.
+    /// Used to separate the white-background pass from the text-drawing pass.
+    /// </summary>
+    private sealed class OverlayBlockInfo
+    {
+        public required int ChunkIndex { get; init; }
+        public required string TranslatedText { get; init; }
+        public required LongDocumentChunkMetadata Metadata { get; init; }
+        public required XRect Rect { get; init; }
+        public required double Padding { get; init; }
+    }
+
     internal static BackfillRenderingMetrics ExportPdfWithCoordinateBackfill(LongDocumentTranslationCheckpoint checkpoint, string sourcePdfPath, string outputPath)
     {
         var outputDirectory = Path.GetDirectoryName(outputPath);
@@ -246,6 +259,7 @@ public sealed class PdfExportService : IDocumentExportService
 
         var targetLanguage = checkpoint.TargetLanguage;
         var lineHeight = GetLineHeight(targetLanguage);
+        var isCjkTarget = targetLanguage != null && LineHeightMultipliers.ContainsKey(targetLanguage.Value);
         using var doc = PdfReader.Open(sourcePdfPath, PdfDocumentOpenMode.Modify);
         var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
 
@@ -257,6 +271,9 @@ public sealed class PdfExportService : IDocumentExportService
         var objectReplaceBlocks = 0;
         var overlayModeBlocks = 0;
         var pageMetrics = new Dictionary<int, PageBackfillAccumulator>();
+
+        // Collect overlay blocks grouped by page for two-pass rendering
+        var overlayBlocksByPage = new Dictionary<int, List<OverlayBlockInfo>>();
 
         foreach (var chunkIndex in Enumerable.Range(0, checkpoint.SourceChunks.Count))
         {
@@ -301,57 +318,113 @@ public sealed class PdfExportService : IDocumentExportService
                 continue;
             }
 
+            var box = metadata.BoundingBox.Value;
+            var drawX = Math.Max(0, box.X);
+            var drawY = Math.Max(0, page.Height.Point - (box.Y + box.Height));
+            var drawWidth = Math.Max(10, box.Width);
+            var drawHeight = Math.Max(10, box.Height);
+            var rect = new XRect(drawX, drawY, drawWidth, drawHeight);
+
+            // Scale padding with font size: larger fonts need more padding to cover descenders
+            var fontSize = metadata.TextStyle?.FontSize > 0 ? metadata.TextStyle.FontSize : 11.0;
+            var pad = Math.Min(6, Math.Max(2, fontSize * 0.15));
+
+            if (!overlayBlocksByPage.TryGetValue(pageIndex, out var pageBlocks))
+            {
+                pageBlocks = new List<OverlayBlockInfo>();
+                overlayBlocksByPage[pageIndex] = pageBlocks;
+            }
+
+            pageBlocks.Add(new OverlayBlockInfo
+            {
+                ChunkIndex = chunkIndex,
+                TranslatedText = translated,
+                Metadata = metadata,
+                Rect = rect,
+                Padding = pad
+            });
+        }
+
+        // Two-pass rendering: for each page, draw all white backgrounds first, then all text
+        foreach (var (pageIndex, blocks) in overlayBlocksByPage)
+        {
+            var page = doc.Pages[pageIndex];
+
             try
             {
                 using var gfx = XGraphics.FromPdfPage(page, XGraphicsPdfPageOptions.Append);
-                var box = metadata.BoundingBox.Value;
 
-                var drawX = Math.Max(0, box.X);
-                var drawY = Math.Max(0, page.Height.Point - (box.Y + box.Height));
-                var drawWidth = Math.Max(40, box.Width);
-                var drawHeight = Math.Max(14, box.Height);
-
-                var rect = new XRect(drawX, drawY, drawWidth, drawHeight);
-
-                // Cover original text with white background before drawing translation
-                gfx.DrawRectangle(XBrushes.White, rect);
-
-                var baseFont = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike, targetLanguage);
-                var font = FitFontToRect(gfx, translated, baseFont, rect.Width, rect.Height, lineHeight);
-                if (font.Size < baseFont.Size)
+                // Pass 1: Draw all white background rectangles
+                foreach (var block in blocks)
                 {
-                    shrinkFontBlocks++;
-                    perPage.ShrinkFontBlocks++;
+                    gfx.DrawRectangle(XBrushes.White,
+                        new XRect(
+                            block.Rect.X - block.Padding,
+                            block.Rect.Y - block.Padding,
+                            block.Rect.Width + block.Padding * 2,
+                            block.Rect.Height + block.Padding * 2));
                 }
 
-                var wrappedLines = WrapTextByWidth(gfx, translated, font, rect.Width).ToList();
-                var maxVisibleLines = Math.Max(1, (int)Math.Floor(rect.Height / lineHeight));
-                if (wrappedLines.Count > maxVisibleLines)
+                // Pass 2: Draw all translated text
+                foreach (var block in blocks)
                 {
-                    wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
-                    var last = wrappedLines[^1];
-                    wrappedLines[^1] = last.Length > 1 ? $"{last.TrimEnd('.', ' ')}…" : "…";
-                    truncatedBlocks++;
-                    perPage.TruncatedBlocks++;
-                }
+                    var metadata = block.Metadata;
+                    var perPage = GetOrCreatePageBackfill(pageMetrics, metadata.PageNumber);
+                    var rect = block.Rect;
 
-                var lineY = rect.Y;
-                foreach (var line in wrappedLines)
-                {
-                    gfx.DrawString(line, font, XBrushes.Black, new XRect(rect.X, lineY, rect.Width, 20), XStringFormats.TopLeft);
-                    lineY += lineHeight;
-                }
+                    var style = metadata.TextStyle;
+                    var effectiveLineHeight = style?.LineSpacing > 0 ? style.LineSpacing : lineHeight;
 
-                renderedBlocks++;
-                overlayModeBlocks++;
-                perPage.RenderedBlocks++;
-                perPage.OverlayModeBlocks++;
+                    // For CJK targets, ensure minimum line height based on font size
+                    var baseFont = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike, targetLanguage, metadata.BoundingBox!.Value.Height, style);
+                    if (isCjkTarget)
+                    {
+                        effectiveLineHeight = Math.Max(effectiveLineHeight, baseFont.Size * 1.4);
+                    }
+
+                    var font = FitFontToRect(gfx, block.TranslatedText, baseFont, rect.Width, rect.Height, effectiveLineHeight);
+                    if (font.Size < baseFont.Size)
+                    {
+                        shrinkFontBlocks++;
+                        perPage.ShrinkFontBlocks++;
+                    }
+
+                    var wrappedLines = WrapTextByWidth(gfx, block.TranslatedText, font, rect.Width).ToList();
+                    var maxVisibleLines = Math.Max(1, (int)Math.Floor(rect.Height / effectiveLineHeight));
+                    if (wrappedLines.Count > maxVisibleLines)
+                    {
+                        wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
+                        var last = wrappedLines[^1];
+                        wrappedLines[^1] = last.Length > 1 ? $"{last.TrimEnd('.', ' ')}…" : "…";
+                        truncatedBlocks++;
+                        perPage.TruncatedBlocks++;
+                    }
+
+                    var brush = CreateBrush(style);
+                    var stringFormat = GetStringFormat(style);
+
+                    var lineY = rect.Y;
+                    foreach (var line in wrappedLines)
+                    {
+                        gfx.DrawString(line, font, brush, new XRect(rect.X, lineY, rect.Width, effectiveLineHeight), stringFormat);
+                        lineY += effectiveLineHeight;
+                    }
+
+                    renderedBlocks++;
+                    overlayModeBlocks++;
+                    perPage.RenderedBlocks++;
+                    perPage.OverlayModeBlocks++;
+                }
             }
             catch (InvalidOperationException ex)
             {
-                Debug.WriteLine($"[PdfExport] Skipping block {chunkIndex} on page {metadata.PageNumber}: {ex.Message}");
-                missingBoundingBoxBlocks++;
-                perPage.MissingBoundingBoxBlocks++;
+                Debug.WriteLine($"[PdfExport] Skipping page {pageIndex + 1}: {ex.Message}");
+                foreach (var block in blocks)
+                {
+                    var perPage = GetOrCreatePageBackfill(pageMetrics, block.Metadata.PageNumber);
+                    missingBoundingBoxBlocks++;
+                    perPage.MissingBoundingBoxBlocks++;
+                }
             }
         }
 
@@ -684,7 +757,8 @@ public sealed class PdfExportService : IDocumentExportService
     // Font and text rendering helpers (migrated)
     // --------------------------------------------------
 
-    internal static XFont PickFont(SourceBlockType sourceBlockType, bool isFormulaLike, Language? targetLanguage = null)
+    internal static XFont PickFont(SourceBlockType sourceBlockType, bool isFormulaLike,
+        Language? targetLanguage = null, double? boxHeight = null, BlockTextStyle? textStyle = null)
     {
         if (sourceBlockType == SourceBlockType.Formula || isFormulaLike)
         {
@@ -693,12 +767,71 @@ public sealed class PdfExportService : IDocumentExportService
 
         var fontFamily = ResolveFontFamily(targetLanguage);
 
-        if (sourceBlockType == SourceBlockType.Heading)
+        // Use extracted font size when available, otherwise estimate from bounding box height.
+        double fontSize;
+        if (textStyle?.FontSize > 0)
         {
-            return new XFont(fontFamily, 14, XFontStyle.Bold);
+            fontSize = Math.Clamp(textStyle.FontSize, 6, 28);
+        }
+        else if (boxHeight.HasValue)
+        {
+            // For single-line blocks, box height ≈ font size × 1.3 (line spacing).
+            fontSize = Math.Clamp(boxHeight.Value / 1.3, 6, 28);
+        }
+        else
+        {
+            fontSize = sourceBlockType == SourceBlockType.Heading ? 14.0 : 11.0;
         }
 
-        return new XFont(fontFamily, 11);
+        // Use extracted bold/italic when available, otherwise infer from block type.
+        XFontStyle style;
+        if (textStyle != null)
+        {
+            style = (textStyle.IsBold, textStyle.IsItalic) switch
+            {
+                (true, true) => XFontStyle.BoldItalic,
+                (true, false) => XFontStyle.Bold,
+                (false, true) => XFontStyle.Italic,
+                _ => XFontStyle.Regular
+            };
+        }
+        else
+        {
+            style = sourceBlockType == SourceBlockType.Heading ? XFontStyle.Bold : XFontStyle.Regular;
+        }
+
+        return new XFont(fontFamily, fontSize, style);
+    }
+
+    /// <summary>
+    /// Creates an XBrush from the extracted text color, falling back to black.
+    /// </summary>
+    internal static XBrush CreateBrush(BlockTextStyle? style)
+    {
+        if (style == null || style.IsBlack)
+            return XBrushes.Black;
+
+        return new XSolidBrush(XColor.FromArgb(style.ColorR, style.ColorG, style.ColorB));
+    }
+
+    /// <summary>
+    /// Returns the XStringFormat matching the extracted text alignment, falling back to TopLeft.
+    /// </summary>
+    internal static XStringFormat GetStringFormat(BlockTextStyle? style)
+    {
+        if (style == null)
+            return XStringFormats.TopLeft;
+
+        return style.Alignment switch
+        {
+            Easydict.TranslationService.LongDocument.TextAlignment.Center => XStringFormats.TopCenter,
+            Easydict.TranslationService.LongDocument.TextAlignment.Right => new XStringFormat
+            {
+                Alignment = XStringAlignment.Far,
+                LineAlignment = XLineAlignment.Near
+            },
+            _ => XStringFormats.TopLeft
+        };
     }
 
     /// <summary>
@@ -829,30 +962,75 @@ public sealed class PdfExportService : IDocumentExportService
                 continue;
             }
 
-            var words = paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (words.Length == 0)
+            var line = new StringBuilder();
+            var lineWidth = 0.0;
+
+            foreach (var token in TokenizeForWrapping(paragraph))
             {
-                yield return string.Empty;
-                continue;
+                var tokenWidth = gfx.MeasureString(token, font).Width;
+
+                if (line.Length > 0 && lineWidth + tokenWidth > maxWidth)
+                {
+                    yield return line.ToString();
+                    line.Clear();
+                    lineWidth = 0;
+                }
+
+                line.Append(token);
+                lineWidth += tokenWidth;
             }
 
-            var line = words[0];
-            for (var i = 1; i < words.Length; i++)
-            {
-                var candidate = $"{line} {words[i]}";
-                if (gfx.MeasureString(candidate, font).Width <= maxWidth)
-                {
-                    line = candidate;
-                }
-                else
-                {
-                    yield return line;
-                    line = words[i];
-                }
-            }
-
-            yield return line;
+            if (line.Length > 0)
+                yield return line.ToString();
         }
+    }
+
+    /// <summary>
+    /// Splits text into wrappable tokens: individual CJK characters and space-delimited Latin words.
+    /// CJK text can break at any character boundary; Latin text breaks at spaces.
+    /// </summary>
+    private static IEnumerable<string> TokenizeForWrapping(string text)
+    {
+        var wordBuffer = new StringBuilder();
+        foreach (var ch in text)
+        {
+            if (IsCjkCharacter(ch))
+            {
+                if (wordBuffer.Length > 0)
+                {
+                    yield return wordBuffer.ToString();
+                    wordBuffer.Clear();
+                }
+                yield return ch.ToString();
+            }
+            else if (ch == ' ')
+            {
+                if (wordBuffer.Length > 0)
+                {
+                    yield return wordBuffer.ToString();
+                    wordBuffer.Clear();
+                }
+                wordBuffer.Append(ch);
+            }
+            else
+            {
+                wordBuffer.Append(ch);
+            }
+        }
+        if (wordBuffer.Length > 0)
+            yield return wordBuffer.ToString();
+    }
+
+    private static bool IsCjkCharacter(char ch)
+    {
+        return ch is >= '\u4E00' and <= '\u9FFF'    // CJK Unified Ideographs
+            or >= '\u3400' and <= '\u4DBF'           // CJK Extension A
+            or >= '\u3000' and <= '\u303F'           // CJK Symbols and Punctuation
+            or >= '\u3040' and <= '\u309F'           // Hiragana
+            or >= '\u30A0' and <= '\u30FF'           // Katakana
+            or >= '\uAC00' and <= '\uD7AF'           // Hangul Syllables
+            or >= '\uFF00' and <= '\uFFEF'           // Fullwidth Forms
+            or >= '\uF900' and <= '\uFAFF';          // CJK Compatibility Ideographs
     }
 
     // --------------------------------------------------

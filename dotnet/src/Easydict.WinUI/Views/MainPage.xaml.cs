@@ -1867,7 +1867,7 @@ namespace Easydict.WinUI.Views
 
         private void OnLongDocInputModeChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (LongDocFilePanel is null) return; // Fired during InitializeComponent before controls exist
+            if (LongDocFilePanel is null || LongDocOutputTitle is null) return; // Fired during InitializeComponent before controls exist
 
             var selected = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
 

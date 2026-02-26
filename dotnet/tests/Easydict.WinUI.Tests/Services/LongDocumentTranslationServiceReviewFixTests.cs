@@ -4,6 +4,7 @@ using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.DocumentExport;
 using WinUiLongDocumentTranslationService = Easydict.WinUI.Services.LongDocumentTranslationService;
 using FluentAssertions;
+using PdfSharpCore.Pdf;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
@@ -65,6 +66,83 @@ public class LongDocumentTranslationServiceReviewFixTests
 
         var splits = (IReadOnlyList<int>)method!.Invoke(null, [wordBoxes, 10d])!;
         splits.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void IsSafeTableLikeCell_ShouldAllowWideHeaderSentenceInHeaderBand()
+    {
+        var method = typeof(PdfExportService)
+            .GetMethod("IsSafeTableLikeCell", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var doc = new PdfDocument();
+        var page = doc.AddPage();
+        page.Width = 612;
+        page.Height = 792;
+
+        var metadata = new LongDocumentChunkMetadata
+        {
+            ChunkIndex = 0,
+            PageNumber = 1,
+            SourceBlockId = "p1-header-b1",
+            SourceBlockType = SourceBlockType.Paragraph,
+            OrderInPage = 0,
+            RegionType = LayoutRegionType.TableLike,
+            RegionConfidence = 0.8,
+            RegionSource = LayoutRegionSource.Heuristic,
+            ReadingOrderScore = 1,
+            BoundingBox = new BlockRect(10, 720, 580, 24),
+            TextStyle = new BlockTextStyle { RotationAngle = 0 }
+        };
+
+        var result = (bool)method!.Invoke(null, [metadata, page, "Provided proper attribution is provided."])!;
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsSafeTableLikeCell_ShouldRejectWideNumericTableLikeRowEvenInHeaderBand()
+    {
+        var method = typeof(PdfExportService)
+            .GetMethod("IsSafeTableLikeCell", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var doc = new PdfDocument();
+        var page = doc.AddPage();
+        page.Width = 612;
+        page.Height = 792;
+
+        var metadata = new LongDocumentChunkMetadata
+        {
+            ChunkIndex = 0,
+            PageNumber = 1,
+            SourceBlockId = "p1-header-b2",
+            SourceBlockType = SourceBlockType.Paragraph,
+            OrderInPage = 0,
+            RegionType = LayoutRegionType.TableLike,
+            RegionConfidence = 0.8,
+            RegionSource = LayoutRegionSource.Heuristic,
+            ReadingOrderScore = 1,
+            BoundingBox = new BlockRect(10, 720, 580, 24),
+            TextStyle = new BlockTextStyle { RotationAngle = 0 }
+        };
+
+        var result = (bool)method!.Invoke(null, [metadata, page, "1.0  2.0  3.0"])!;
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void NormalizeTranslationForOverlay_ShouldPreserveAsteriskMarker()
+    {
+        var method = typeof(PdfExportService)
+            .GetMethod("NormalizeTranslationForOverlay", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var result = (string)method!.Invoke(null, ["Ashish Vaswani*", "阿希什·瓦斯瓦尼＊"])!;
+        result.Should().Contain("*");
+
+        var square = (string)method.Invoke(null, ["Name*", "名字□"])!;
+        square.Should().Contain("*");
+        square.Should().NotContain("□");
     }
 
     [Fact]

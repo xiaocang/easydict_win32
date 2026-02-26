@@ -913,15 +913,13 @@ public sealed class LongDocumentTranslationService : IDisposable
             .Where(word => !string.IsNullOrWhiteSpace(word.Text))
             .ToList();
 
-        // Separate rotated sidebar words from normal words
+        // Separate rotated/vertical words from normal words based on PdfPig's orientation signal.
+        // This avoids partially translating rotated sidebars based on shape heuristics.
         var rotatedWords = new List<Word>();
         var normalWords = new List<Word>();
         foreach (var word in allWords)
         {
-            var bb = word.BoundingBox;
-            var w = Math.Max(0.1, bb.Width);
-            var h = bb.Height;
-            if (h > w * 3 && (bb.Left < pageWidth * 0.05 || bb.Right > pageWidth * 0.95))
+            if (word.TextOrientation != TextOrientation.Horizontal)
             {
                 rotatedWords.Add(word);
             }
@@ -1023,12 +1021,22 @@ public sealed class LongDocumentTranslationService : IDisposable
             };
         }
 
-        // Emit rotated sidebar text as separate blocks with RotationAngle = -90
+        // Emit rotated sidebar text as separate blocks with RotationAngle != 0 (skipped during backfill)
         if (rotatedWords.Count > 0)
         {
+            foreach (var orientationGroup in rotatedWords.GroupBy(w => w.TextOrientation))
+            {
+                var rotationAngle = orientationGroup.Key switch
+                {
+                    TextOrientation.Rotate90 => 90,
+                    TextOrientation.Rotate270 => -90,
+                    TextOrientation.Rotate180 => 180,
+                    _ => -90
+                };
+
             // Group rotated words by horizontal proximity (they share similar X positions)
             var rotatedGroups = new List<List<Word>>();
-            var sortedRotated = rotatedWords.OrderBy(w => w.BoundingBox.Left).ThenByDescending(w => w.BoundingBox.Top).ToList();
+            var sortedRotated = orientationGroup.OrderBy(w => w.BoundingBox.Left).ThenByDescending(w => w.BoundingBox.Top).ToList();
 
             foreach (var word in sortedRotated)
             {
@@ -1056,7 +1064,12 @@ public sealed class LongDocumentTranslationService : IDisposable
             foreach (var group in rotatedGroups)
             {
                 // Sort bottom-to-top for rotated text (read order for -90° rotation)
-                var sorted = group.OrderBy(w => w.BoundingBox.Bottom).ToList();
+                var sorted = rotationAngle switch
+                {
+                    90 => group.OrderByDescending(w => w.BoundingBox.Top).ToList(),
+                    180 => group.OrderByDescending(w => w.BoundingBox.Right).ToList(),
+                    _ => group.OrderBy(w => w.BoundingBox.Bottom).ToList()
+                };
                 var blockText = string.Join(" ", sorted.Select(w => w.Text)).Trim();
                 if (string.IsNullOrWhiteSpace(blockText))
                 {
@@ -1079,9 +1092,10 @@ public sealed class LongDocumentTranslationService : IDisposable
                     TextStyle = new BlockTextStyle
                     {
                         FontSize = Math.Clamp(right - left, 6, 12), // Rotated: width ≈ font size
-                        RotationAngle = -90
+                        RotationAngle = rotationAngle
                     }
                 };
+            }
             }
         }
     }
@@ -1147,12 +1161,11 @@ public sealed class LongDocumentTranslationService : IDisposable
                     fontSizes.Add(letter.PointSize);
                 }
 
-                // Bold/italic: infer from font name heuristics
+                // Bold/italic: infer from font name heuristics (covers common TeX / embedded font naming patterns)
                 var fontName = letter.FontName ?? string.Empty;
-                if (fontName.Contains("Bold", StringComparison.OrdinalIgnoreCase))
+                if (FontNameLooksBold(fontName))
                     boldCount++;
-                if (fontName.Contains("Italic", StringComparison.OrdinalIgnoreCase) ||
-                    fontName.Contains("Oblique", StringComparison.OrdinalIgnoreCase))
+                if (FontNameLooksItalic(fontName))
                     italicCount++;
 
                 // Color: extract RGB from fill color (non-stroking color)
@@ -1181,6 +1194,11 @@ public sealed class LongDocumentTranslationService : IDisposable
             var medianFontSize = fontSizes.Count > 0
                 ? fontSizes[fontSizes.Count / 2]
                 : 0;
+            if (medianFontSize > 0)
+            {
+                // Snap to 0.5pt to stabilize minor extraction jitter across nearby blocks.
+                medianFontSize = Math.Round(medianFontSize * 2, MidpointRounding.AwayFromZero) / 2d;
+            }
 
             // Majority vote for bold/italic
             var halfLetters = totalLetters / 2;
@@ -1244,6 +1262,41 @@ public sealed class LongDocumentTranslationService : IDisposable
             // PdfPig may throw on some PDFs; return null gracefully
             return null;
         }
+    }
+
+    private static bool FontNameLooksBold(string fontName)
+    {
+        if (string.IsNullOrWhiteSpace(fontName))
+        {
+            return false;
+        }
+
+        return fontName.Contains("Bold", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("Black", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("Heavy", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("SemiBold", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("Semibold", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("Demi", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("CMBX", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("CMSSBX", StringComparison.OrdinalIgnoreCase) ||
+               fontName.EndsWith("-B", StringComparison.OrdinalIgnoreCase) ||
+               fontName.EndsWith("#B", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool FontNameLooksItalic(string fontName)
+    {
+        if (string.IsNullOrWhiteSpace(fontName))
+        {
+            return false;
+        }
+
+        return fontName.Contains("Italic", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("Oblique", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("Slanted", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("CMTI", StringComparison.OrdinalIgnoreCase) ||
+               fontName.Contains("CMSL", StringComparison.OrdinalIgnoreCase) ||
+               fontName.EndsWith("-I", StringComparison.OrdinalIgnoreCase) ||
+               fontName.EndsWith("#I", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -1716,7 +1769,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         IReadOnlyList<(double Left, double Right)> wordBoxes,
         double medianWordHeight)
     {
-        return FindColumnSplitIndices(wordBoxes, medianWordHeight, aggressive: false);
+        return FindColumnSplitIndices(wordBoxes, medianWordHeight, aggressive: true);
     }
 
     private static IReadOnlyList<int> FindColumnSplitIndices(

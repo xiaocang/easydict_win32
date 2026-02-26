@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
-using Easydict.WinUI.Services;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;

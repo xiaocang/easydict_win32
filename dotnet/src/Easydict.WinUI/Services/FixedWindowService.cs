@@ -1,7 +1,5 @@
 using System.Diagnostics;
-using Easydict.WinUI.Views;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Services;
 

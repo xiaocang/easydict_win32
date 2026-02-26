@@ -29,6 +29,45 @@ public class LongDocumentTranslationServiceReviewFixTests
     }
 
     [Fact]
+    public void FindColumnSplitIndices_ShouldSplitThreeColumnsWithLargeGaps()
+    {
+        var method = typeof(WinUiLongDocumentTranslationService)
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+            .FirstOrDefault(m => m.Name == "FindColumnSplitIndices" && m.GetParameters().Length == 2);
+        method.Should().NotBeNull();
+
+        var wordBoxes = new List<(double Left, double Right)>
+        {
+            (10, 80),
+            (120, 190), // gap = 40
+            (230, 300)  // gap = 40
+        };
+
+        var splits = (IReadOnlyList<int>)method!.Invoke(null, [wordBoxes, 10d])!;
+        splits.Should().Equal([0, 1]);
+    }
+
+    [Fact]
+    public void FindColumnSplitIndices_ShouldNotSplitNormalSentenceWithSmallGaps()
+    {
+        var method = typeof(WinUiLongDocumentTranslationService)
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+            .FirstOrDefault(m => m.Name == "FindColumnSplitIndices" && m.GetParameters().Length == 2);
+        method.Should().NotBeNull();
+
+        var wordBoxes = new List<(double Left, double Right)>
+        {
+            (10, 40),
+            (48, 78),  // gap = 8
+            (86, 116), // gap = 8
+            (124, 154) // gap = 8
+        };
+
+        var splits = (IReadOnlyList<int>)method!.Invoke(null, [wordBoxes, 10d])!;
+        splits.Should().BeEmpty();
+    }
+
+    [Fact]
     public void TryPatchPdfLiteralToken_ShouldPatchMultiSegmentTjArray()
     {
         var serviceType = typeof(PdfExportService);

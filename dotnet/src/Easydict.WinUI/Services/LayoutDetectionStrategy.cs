@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Easydict.TranslationService.LongDocument;
-using UglyToad.PdfPig.Content;
 using PdfPigPage = UglyToad.PdfPig.Content.Page;
 
 namespace Easydict.WinUI.Services;

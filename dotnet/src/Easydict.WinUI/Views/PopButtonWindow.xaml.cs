@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI;
-using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;

@@ -13,7 +13,6 @@ using Easydict.WinUI.Views.Controls;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
-using Windows.UI.Core;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 
 namespace Easydict.WinUI.Views

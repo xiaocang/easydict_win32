@@ -3,7 +3,6 @@ using System.Text.RegularExpressions;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services.DocumentExport;
-using UglyToad.PdfPig;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using UglyToad.PdfPig.Content;
 using PdfPigPage = UglyToad.PdfPig.Content.Page;
@@ -974,10 +973,10 @@ public sealed class LongDocumentTranslationService : IDisposable
 
         // Split lines at large intra-line gaps to preserve column structure
         // (e.g., author grids where names sit at the same Y separated by large gaps)
-        lines = SplitLinesAtColumnGaps(lines, medianWordHeight);
+        lines = SplitLinesAtColumnGaps(lines, medianWordHeight, pageWidth);
 
         var orderedLines = OrderLinesByLayout(lines, Convert.ToDecimal(page.Width));
-        var paragraphs = BuildParagraphs(orderedLines, paragraphGapThreshold, sameLineThreshold);
+        var paragraphs = BuildParagraphsWithGridCellMerging(orderedLines, paragraphGapThreshold, sameLineThreshold);
         var layoutProfile = BuildLayoutProfile(orderedLines, (double)page.Width, (double)page.Height);
 
         var blockIndex = 0;
@@ -1501,12 +1500,157 @@ public sealed class LongDocumentTranslationService : IDisposable
         return paragraphs;
     }
 
+    private static List<List<PdfTextLine>> BuildParagraphsWithGridCellMerging(
+        IReadOnlyList<PdfTextLine> lines,
+        double paragraphGapThreshold,
+        double sameRowThreshold)
+    {
+        if (lines.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = GroupIntoRows(lines, sameRowThreshold)
+            .Select(row => row.OrderBy(l => l.Left).ToList())
+            .ToList();
+
+        var paragraphs = new List<List<PdfTextLine>>();
+        var nonGridBuffer = new List<PdfTextLine>();
+
+        var index = 0;
+        while (index < rows.Count)
+        {
+            if (TryDetectGridWindow(rows, index, paragraphGapThreshold, out var gridEndExclusive))
+            {
+                if (nonGridBuffer.Count > 0)
+                {
+                    paragraphs.AddRange(BuildParagraphs(nonGridBuffer, paragraphGapThreshold, sameRowThreshold));
+                    nonGridBuffer.Clear();
+                }
+
+                var gridRows = rows.GetRange(index, gridEndExclusive - index);
+                paragraphs.AddRange(BuildGridCellParagraphs(gridRows, paragraphGapThreshold));
+                index = gridEndExclusive;
+                continue;
+            }
+
+            nonGridBuffer.AddRange(rows[index]);
+            index++;
+        }
+
+        if (nonGridBuffer.Count > 0)
+        {
+            paragraphs.AddRange(BuildParagraphs(nonGridBuffer, paragraphGapThreshold, sameRowThreshold));
+        }
+
+        return paragraphs;
+    }
+
+    private static bool TryDetectGridWindow(
+        IReadOnlyList<List<PdfTextLine>> rows,
+        int startIndex,
+        double paragraphGapThreshold,
+        out int endExclusive)
+    {
+        endExclusive = startIndex;
+        if (startIndex < 0 || startIndex >= rows.Count || rows[startIndex].Count < 2)
+        {
+            return false;
+        }
+
+        var maxVerticalGap = paragraphGapThreshold * 1.2;
+        var index = startIndex;
+        while (index < rows.Count)
+        {
+            if (index > startIndex)
+            {
+                var previous = rows[index - 1];
+                var current = rows[index];
+                var prevBottom = previous.Min(l => l.Bottom);
+                var currentTop = current.Max(l => l.Top);
+                var verticalGap = Math.Abs(prevBottom - currentTop);
+                if (verticalGap > maxVerticalGap)
+                {
+                    break;
+                }
+            }
+
+            index++;
+        }
+
+        var candidateRows = rows.Skip(startIndex).Take(index - startIndex).ToList();
+        var multiCellRows = candidateRows.Count(row => row.Count >= 2);
+        if (candidateRows.Count < 2 || multiCellRows < 2)
+        {
+            return false;
+        }
+
+        var multiCellRatio = multiCellRows / (double)candidateRows.Count;
+        if (multiCellRatio < 0.5)
+        {
+            return false;
+        }
+
+        endExclusive = index;
+        return true;
+    }
+
+    private static List<List<PdfTextLine>> BuildGridCellParagraphs(
+        IReadOnlyList<List<PdfTextLine>> gridRows,
+        double paragraphGapThreshold)
+    {
+        var cells = new List<GridCellAccumulator>();
+        var maxVerticalGap = paragraphGapThreshold * 1.2;
+
+        foreach (var row in gridRows)
+        {
+            foreach (var segment in row.OrderBy(l => l.Left))
+            {
+                GridCellAccumulator? bestCell = null;
+                var bestOverlap = 0d;
+                foreach (var cell in cells)
+                {
+                    if (Math.Abs(cell.LastBottom - segment.Top) > maxVerticalGap)
+                    {
+                        continue;
+                    }
+
+                    var overlapLeft = Math.Max(cell.Left, segment.Left);
+                    var overlapRight = Math.Min(cell.Right, segment.Right);
+                    var overlapWidth = Math.Max(0, overlapRight - overlapLeft);
+                    var denominator = Math.Max(1, Math.Min(cell.Width, segment.Width));
+                    var overlapRatio = overlapWidth / denominator;
+                    if (overlapRatio >= 0.35 && overlapRatio > bestOverlap)
+                    {
+                        bestOverlap = overlapRatio;
+                        bestCell = cell;
+                    }
+                }
+
+                if (bestCell is null)
+                {
+                    cells.Add(new GridCellAccumulator(segment));
+                }
+                else
+                {
+                    bestCell.Add(segment);
+                }
+            }
+        }
+
+        return cells
+            .OrderByDescending(cell => cell.FirstTop)
+            .ThenBy(cell => cell.FirstLeft)
+            .Select(cell => cell.Segments.OrderByDescending(s => s.Top).ToList())
+            .ToList();
+    }
+
     /// <summary>
     /// Splits lines at large intra-line horizontal gaps to preserve column structure.
     /// For example, author grids in academic papers where names at the same Y coordinate
     /// are separated by large gaps should become separate lines (and thus separate blocks).
     /// </summary>
-    private static List<PdfTextLine> SplitLinesAtColumnGaps(List<PdfTextLine> lines, double medianWordHeight)
+    private static List<PdfTextLine> SplitLinesAtColumnGaps(List<PdfTextLine> lines, double medianWordHeight, double pageWidth)
     {
         var result = new List<PdfTextLine>(lines.Count);
 
@@ -1521,35 +1665,16 @@ public sealed class LongDocumentTranslationService : IDisposable
 
             var sortedWords = line.Words.OrderBy(w => w.BoundingBox.Left).ToList();
 
-            // Calculate gaps between consecutive words
-            var gaps = new List<double>(sortedWords.Count - 1);
-            for (var i = 0; i < sortedWords.Count - 1; i++)
+            var wordBoxes = new List<(double Left, double Right)>(sortedWords.Count);
+            for (var i = 0; i < sortedWords.Count; i++)
             {
-                var gap = sortedWords[i + 1].BoundingBox.Left - sortedWords[i].BoundingBox.Right;
-                gaps.Add(Math.Max(0, gap));
+                wordBoxes.Add((sortedWords[i].BoundingBox.Left, sortedWords[i].BoundingBox.Right));
             }
 
-            // Compute median gap within the line
-            var sortedGaps = gaps.OrderBy(g => g).ToList();
-            var medianGap = sortedGaps[sortedGaps.Count / 2];
-
-            // Threshold: a gap must exceed both relative and absolute minimums to be a column boundary
-            var gapThreshold = Math.Max(medianGap * 3, medianWordHeight * 1.5);
-
-            // When a line consists of a few large tokens (e.g., emails/URLs), all gaps can be large and the
-            // median becomes large too, causing the relative threshold to never trigger.
-            // Add an absolute threshold to still split obvious multi-column lines.
-            var absoluteGapThreshold = Math.Max(50, medianWordHeight * 4);
-
-            // Find split points
-            var splitIndices = new List<int>();
-            for (var i = 0; i < gaps.Count; i++)
-            {
-                if (gaps[i] > gapThreshold || gaps[i] > absoluteGapThreshold)
-                {
-                    splitIndices.Add(i);
-                }
-            }
+            var likelyMultiColumnLine =
+                (line.Words.Count <= 6 && line.Width >= pageWidth * 0.45) ||
+                line.Text.Contains('@');
+            var splitIndices = FindColumnSplitIndices(wordBoxes, medianWordHeight, likelyMultiColumnLine);
 
             if (splitIndices.Count == 0)
             {
@@ -1587,6 +1712,50 @@ public sealed class LongDocumentTranslationService : IDisposable
         return result;
     }
 
+    internal static IReadOnlyList<int> FindColumnSplitIndices(
+        IReadOnlyList<(double Left, double Right)> wordBoxes,
+        double medianWordHeight)
+    {
+        return FindColumnSplitIndices(wordBoxes, medianWordHeight, aggressive: false);
+    }
+
+    private static IReadOnlyList<int> FindColumnSplitIndices(
+        IReadOnlyList<(double Left, double Right)> wordBoxes,
+        double medianWordHeight,
+        bool aggressive)
+    {
+        if (wordBoxes.Count < 2)
+        {
+            return [];
+        }
+
+        var gaps = new List<double>(wordBoxes.Count - 1);
+        for (var i = 0; i < wordBoxes.Count - 1; i++)
+        {
+            var gap = wordBoxes[i + 1].Left - wordBoxes[i].Right;
+            gaps.Add(Math.Max(0, gap));
+        }
+
+        var sortedGaps = gaps.OrderBy(g => g).ToList();
+        var medianGap = sortedGaps[sortedGaps.Count / 2];
+        var relativeMultiplier = aggressive ? 2.5 : 3.0;
+        var gapThreshold = Math.Max(medianGap * relativeMultiplier, medianWordHeight * 1.5);
+        var absoluteGapThreshold = aggressive
+            ? Math.Max(28, medianWordHeight * 3)
+            : Math.Max(50, medianWordHeight * 4);
+
+        var splitIndices = new List<int>();
+        for (var i = 0; i < gaps.Count; i++)
+        {
+            if (gaps[i] > gapThreshold || gaps[i] > absoluteGapThreshold)
+            {
+                splitIndices.Add(i);
+            }
+        }
+
+        return splitIndices;
+    }
+
     private sealed class PdfTextLine(double top)
     {
         public double Top { get; } = top;
@@ -1607,6 +1776,35 @@ public sealed class LongDocumentTranslationService : IDisposable
             Bottom = sorted.Min(w => w.BoundingBox.Bottom);
             Text = string.Join(" ", sorted.Select(w => w.Text));
             return this;
+        }
+    }
+
+    private sealed class GridCellAccumulator
+    {
+        public GridCellAccumulator(PdfTextLine segment)
+        {
+            Segments.Add(segment);
+            Left = segment.Left;
+            Right = segment.Right;
+            FirstLeft = segment.Left;
+            FirstTop = segment.Top;
+            LastBottom = segment.Bottom;
+        }
+
+        public List<PdfTextLine> Segments { get; } = [];
+        public double Left { get; private set; }
+        public double Right { get; private set; }
+        public double Width => Right - Left;
+        public double FirstTop { get; }
+        public double FirstLeft { get; }
+        public double LastBottom { get; private set; }
+
+        public void Add(PdfTextLine segment)
+        {
+            Segments.Add(segment);
+            Left = Math.Min(Left, segment.Left);
+            Right = Math.Max(Right, segment.Right);
+            LastBottom = segment.Bottom;
         }
     }
 

@@ -9,8 +9,6 @@ using Easydict.TranslationService.Services;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
 namespace Easydict.WinUI.Views;

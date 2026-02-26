@@ -1,5 +1,4 @@
 using Easydict.WinUI.Services;
-using Easydict.WinUI.Views;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Navigation;

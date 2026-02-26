@@ -92,7 +92,7 @@ public sealed class LongDocumentTranslationResult
     public required LongDocumentTranslationCheckpoint Checkpoint { get; init; }
 }
 
-public sealed class LongDocumentTranslationService
+public sealed class LongDocumentTranslationService : IDisposable
 {
     private sealed record RetryExecutionSummary(LongDocumentQualityReport? CoreQualityReport, int ReusedByCanonicalCount);
 
@@ -106,8 +106,10 @@ public sealed class LongDocumentTranslationService
     // Layout detection services (lazy-initialized)
     private LayoutModelDownloadService? _layoutModelDownloadService;
     private DocLayoutYoloService? _docLayoutYoloService;
+    private HttpClient? _visionHttpClient;
     private VisionLayoutDetectionService? _visionLayoutDetectionService;
     private LayoutDetectionStrategy? _layoutDetectionStrategy;
+    private bool _disposed;
 
     /// <summary>
     /// Gets or creates the layout detection strategy instance.
@@ -119,7 +121,8 @@ public sealed class LongDocumentTranslationService
 
         _layoutModelDownloadService ??= new LayoutModelDownloadService();
         _docLayoutYoloService ??= new DocLayoutYoloService(_layoutModelDownloadService);
-        _visionLayoutDetectionService ??= new VisionLayoutDetectionService(new HttpClient());
+        _visionHttpClient ??= new HttpClient();
+        _visionLayoutDetectionService ??= new VisionLayoutDetectionService(_visionHttpClient);
         _layoutDetectionStrategy = new LayoutDetectionStrategy(
             _docLayoutYoloService, _visionLayoutDetectionService, _layoutModelDownloadService);
 
@@ -133,6 +136,15 @@ public sealed class LongDocumentTranslationService
     {
         _layoutModelDownloadService ??= new LayoutModelDownloadService();
         return _layoutModelDownloadService;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _layoutModelDownloadService?.Dispose();
+        _visionHttpClient?.Dispose();
+        _cacheService.Dispose();
     }
 
     public async Task<LongDocumentTranslationResult> TranslateToPdfAsync(
@@ -1567,6 +1579,11 @@ public sealed class LongDocumentTranslationService
 
     private static void ValidateCheckpointOrThrow(LongDocumentTranslationCheckpoint checkpoint)
     {
+        if (string.IsNullOrWhiteSpace(checkpoint.SourceFilePath))
+        {
+            throw new InvalidOperationException("Checkpoint source file path is required for export.");
+        }
+
         if (checkpoint.ChunkMetadata.Count != checkpoint.SourceChunks.Count)
         {
             throw new InvalidOperationException("Checkpoint metadata count does not match source chunk count.");

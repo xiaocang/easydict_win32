@@ -1808,7 +1808,7 @@ public sealed partial class SettingsPage : Page
 
     private void UpdateOnnxModelStatus()
     {
-        var downloadService = new LongDocumentTranslationService().GetLayoutModelDownloadService();
+        using var downloadService = new LayoutModelDownloadService();
         var loc = LocalizationService.Instance;
 
         if (downloadService.IsReady)
@@ -1837,7 +1837,7 @@ public sealed partial class SettingsPage : Page
 
         try
         {
-            var downloadService = new LongDocumentTranslationService().GetLayoutModelDownloadService();
+            using var downloadService = new LayoutModelDownloadService();
             var progress = new Progress<ModelDownloadProgress>(p =>
             {
                 DispatcherQueue.TryEnqueue(() =>
@@ -1889,7 +1889,7 @@ public sealed partial class SettingsPage : Page
 
     private void OnDeleteOnnxModelClick(object sender, RoutedEventArgs e)
     {
-        var downloadService = new LongDocumentTranslationService().GetLayoutModelDownloadService();
+        using var downloadService = new LayoutModelDownloadService();
         downloadService.DeleteAll();
         _settings.OnnxModelDownloaded = false;
         _settings.Save();

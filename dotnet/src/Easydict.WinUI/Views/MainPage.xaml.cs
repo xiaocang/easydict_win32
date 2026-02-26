@@ -543,6 +543,8 @@ namespace Easydict.WinUI.Views
         {
             CancelCurrentQuery();
 
+            _longDocumentService.Dispose();
+
             var singleTaskCts = Interlocked.Exchange(ref _longDocSingleTaskCts, null);
             try { singleTaskCts?.Cancel(); } catch (ObjectDisposedException) { }
             singleTaskCts?.Dispose();

@@ -83,7 +83,7 @@ public class LayoutModelDownloadServiceTests
         service.Dispose();
 
         var act = () => service.EnsureAvailableAsync();
-        act.Should().ThrowAsync<ObjectDisposedException>();
+        act.Should().Throw<ObjectDisposedException>();
     }
 
     [Fact]

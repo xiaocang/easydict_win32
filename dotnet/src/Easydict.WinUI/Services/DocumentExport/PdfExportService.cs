@@ -583,8 +583,9 @@ public sealed class PdfExportService : IDocumentExportService
             valueProperty?.SetValue(streamValue, Encoding.ASCII.GetBytes(patched));
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"[PdfExport] TryReplacePdfTextObject failed: {ex.Message}");
             return false;
         }
     }
@@ -887,7 +888,7 @@ public sealed class PdfExportService : IDocumentExportService
         CjkFontResolver.EnsureInitialized();
 
         // Try to register font from the download cache
-        var fontService = new FontDownloadService();
+        using var fontService = new FontDownloadService();
         var fontPath = fontService.GetCachedFontPath(targetLanguage.Value);
         if (fontPath != null)
         {
@@ -909,7 +910,6 @@ public sealed class PdfExportService : IDocumentExportService
         {
             Debug.WriteLine($"[PdfExportService] CJK font not downloaded for {targetLanguage}. Using Arial fallback.");
         }
-        fontService.Dispose();
     }
 
     internal static XFont FitFontToRect(XGraphics gfx, string text, XFont baseFont, double width, double height, double lineHeight = 14d)

@@ -447,13 +447,17 @@ public sealed class LongDocumentTranslationService
             }
             catch (OperationCanceledException)
             {
+                Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: cancelled at attempt {retryCount + 1}");
                 throw;
             }
             catch (Exception ex)
             {
                 lastError = ex.Message;
+                var errorType = ex is TranslationException te ? te.ErrorCode.ToString() : ex.GetType().Name;
+                Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: attempt {retryCount + 1}/{options.MaxRetriesPerBlock + 1} failed ({errorType}): {ex.Message}");
                 if (retryCount >= options.MaxRetriesPerBlock)
                 {
+                    Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId} permanently failed after {retryCount + 1} attempt(s)");
                     translatedText = block.OriginalText;
                 }
             }

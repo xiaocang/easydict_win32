@@ -56,13 +56,11 @@ public abstract class BaseTranslationService : ITranslationService
                 ServiceId = ServiceId
             };
         }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        catch (OperationCanceledException)
         {
-            throw new TranslationException("Request timed out", ex)
-            {
-                ErrorCode = TranslationErrorCode.Timeout,
-                ServiceId = ServiceId
-            };
+            // Per-request timeout (CTS fired) or user cancellation — let the caller handle.
+            // TranslateWithRetryAsync distinguishes the two cases via cancellationToken.IsCancellationRequested.
+            throw;
         }
         catch (TranslationException)
         {

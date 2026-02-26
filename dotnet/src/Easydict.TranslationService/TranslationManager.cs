@@ -436,6 +436,24 @@ public sealed class TranslationManager : IDisposable
                 // Don't retry rate limit errors
                 throw;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // User-initiated cancellation — propagate immediately without retry
+                throw;
+            }
+            catch (OperationCanceledException oce)
+            {
+                // Per-request timeout: the linked CTS fired but the user did not cancel.
+                // Wrap as Timeout and retry (or surface on final attempt).
+                lastException = new TranslationException("Request timed out", oce)
+                {
+                    ErrorCode = TranslationErrorCode.Timeout,
+                    ServiceId = service.ServiceId
+                };
+                if (attempt >= maxRetries)
+                    throw (TranslationException)lastException;
+                await Task.Delay(500 * (attempt + 1), cancellationToken);
+            }
             catch (Exception ex) when (attempt < maxRetries)
             {
                 lastException = ex;

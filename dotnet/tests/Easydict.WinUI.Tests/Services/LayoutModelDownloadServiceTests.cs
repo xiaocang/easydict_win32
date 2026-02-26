@@ -77,13 +77,13 @@ public class LayoutModelDownloadServiceTests
     }
 
     [Fact]
-    public void ThrowsObjectDisposedException_AfterDispose()
+    public async Task ThrowsObjectDisposedException_AfterDispose()
     {
         var service = new LayoutModelDownloadService();
         service.Dispose();
 
-        var act = () => service.EnsureAvailableAsync();
-        act.Should().Throw<ObjectDisposedException>();
+        Func<Task> act = () => service.EnsureAvailableAsync();
+        await act.Should().ThrowAsync<ObjectDisposedException>();
     }
 
     [Fact]

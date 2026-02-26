@@ -247,6 +247,7 @@ public sealed class PdfExportService : IDocumentExportService
         public required LongDocumentChunkMetadata Metadata { get; init; }
         public required XRect Rect { get; init; }
         public required double Padding { get; init; }
+        public IReadOnlyList<XRect>? LineRects { get; init; }
     }
 
     internal static BackfillRenderingMetrics ExportPdfWithCoordinateBackfill(LongDocumentTranslationCheckpoint checkpoint, string sourcePdfPath, string outputPath)
@@ -318,12 +319,24 @@ public sealed class PdfExportService : IDocumentExportService
                 continue;
             }
 
+            // If the block is rotated (vertical sidebar text), keep the original text rather than
+            // attempting overlay redraw. Overlay for rotated blocks tends to collide with nearby content.
+            var rotationAngle = metadata.TextStyle?.RotationAngle ?? 0;
+            if (Math.Abs(rotationAngle) > 0.01)
+            {
+                continue;
+            }
+
             var box = metadata.BoundingBox.Value;
             var drawX = Math.Max(0, box.X);
             var drawY = Math.Max(0, page.Height.Point - (box.Y + box.Height));
             var drawWidth = Math.Max(10, box.Width);
             var drawHeight = Math.Max(10, box.Height);
             var rect = new XRect(drawX, drawY, drawWidth, drawHeight);
+
+            // When available, use per-line positions to build narrower per-line rectangles.
+            // This reduces accidental erasure/drawing across adjacent columns and helps keep layout stable.
+            var lineRects = TryBuildLineRects(page.Height.Point, rect, metadata.TextStyle, lineHeight);
 
             // Scale padding with font size: larger fonts need more padding to cover descenders
             var fontSize = metadata.TextStyle?.FontSize > 0 ? metadata.TextStyle.FontSize : 11.0;
@@ -341,7 +354,8 @@ public sealed class PdfExportService : IDocumentExportService
                 TranslatedText = translated,
                 Metadata = metadata,
                 Rect = rect,
-                Padding = pad
+                Padding = pad,
+                LineRects = lineRects
             });
         }
 
@@ -357,12 +371,27 @@ public sealed class PdfExportService : IDocumentExportService
                 // Pass 1: Draw all white background rectangles
                 foreach (var block in blocks)
                 {
-                    gfx.DrawRectangle(XBrushes.White,
-                        new XRect(
-                            block.Rect.X - block.Padding,
-                            block.Rect.Y - block.Padding,
-                            block.Rect.Width + block.Padding * 2,
-                            block.Rect.Height + block.Padding * 2));
+                    if (block.LineRects is { Count: > 0 })
+                    {
+                        foreach (var r in block.LineRects)
+                        {
+                            gfx.DrawRectangle(XBrushes.White,
+                                new XRect(
+                                    r.X - block.Padding,
+                                    r.Y - block.Padding,
+                                    r.Width + block.Padding * 2,
+                                    r.Height + block.Padding * 2));
+                        }
+                    }
+                    else
+                    {
+                        gfx.DrawRectangle(XBrushes.White,
+                            new XRect(
+                                block.Rect.X - block.Padding,
+                                block.Rect.Y - block.Padding,
+                                block.Rect.Width + block.Padding * 2,
+                                block.Rect.Height + block.Padding * 2));
+                    }
                 }
 
                 // Pass 2: Draw all translated text
@@ -373,35 +402,10 @@ public sealed class PdfExportService : IDocumentExportService
                     var rect = block.Rect;
 
                     var style = metadata.TextStyle;
+                    // Rotated blocks are filtered out during collection; keep this as a safety net.
                     var rotationAngle = style?.RotationAngle ?? 0;
-
-                    // Handle rotated text (e.g., vertical sidebar text like arXiv identifiers)
-                    if (rotationAngle is not 0)
-                    {
-                        var rotatedFont = PickFont(metadata.SourceBlockType, metadata.IsFormulaLike, targetLanguage, metadata.BoundingBox!.Value.Width, style);
-                        var brush = CreateBrush(style);
-
-                        var state = gfx.Save();
-                        var centerX = rect.X + rect.Width / 2;
-                        var centerY = rect.Y + rect.Height / 2;
-                        gfx.RotateAtTransform(rotationAngle, new XPoint(centerX, centerY));
-
-                        // In rotated space, swap width/height for the text rectangle
-                        var rotatedRect = new XRect(
-                            centerX - rect.Height / 2,
-                            centerY - rect.Width / 2,
-                            rect.Height,
-                            rect.Width);
-
-                        gfx.DrawString(block.TranslatedText, rotatedFont, brush, rotatedRect, XStringFormats.TopLeft);
-                        gfx.Restore(state);
-
-                        renderedBlocks++;
-                        overlayModeBlocks++;
-                        perPage.RenderedBlocks++;
-                        perPage.OverlayModeBlocks++;
+                    if (Math.Abs(rotationAngle) > 0.01)
                         continue;
-                    }
 
                     var effectiveLineHeight = style?.LineSpacing > 0 ? style.LineSpacing : lineHeight;
 
@@ -412,15 +416,22 @@ public sealed class PdfExportService : IDocumentExportService
                         effectiveLineHeight = Math.Max(effectiveLineHeight, baseFont.Size * 1.4);
                     }
 
-                    var font = FitFontToRect(gfx, block.TranslatedText, baseFont, rect.Width, rect.Height, effectiveLineHeight);
+                    var font = block.LineRects is { Count: > 0 }
+                        ? FitFontToLineRects(gfx, block.TranslatedText, baseFont, block.LineRects)
+                        : FitFontToRect(gfx, block.TranslatedText, baseFont, rect.Width, rect.Height, effectiveLineHeight);
                     if (font.Size < baseFont.Size)
                     {
                         shrinkFontBlocks++;
                         perPage.ShrinkFontBlocks++;
                     }
 
-                    var wrappedLines = WrapTextByWidth(gfx, block.TranslatedText, font, rect.Width).ToList();
-                    var maxVisibleLines = Math.Max(1, (int)Math.Floor(rect.Height / effectiveLineHeight));
+                    var wrappedLines = block.LineRects is { Count: > 0 }
+                        ? WrapTextByWidths(gfx, block.TranslatedText, font, block.LineRects.Select(r => r.Width).ToList()).ToList()
+                        : WrapTextByWidth(gfx, block.TranslatedText, font, rect.Width).ToList();
+
+                    var maxVisibleLines = block.LineRects is { Count: > 0 }
+                        ? block.LineRects.Count
+                        : Math.Max(1, (int)Math.Floor(rect.Height / effectiveLineHeight));
                     if (wrappedLines.Count > maxVisibleLines)
                     {
                         wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
@@ -434,11 +445,21 @@ public sealed class PdfExportService : IDocumentExportService
                         var brush = CreateBrush(style);
                         var stringFormat = GetStringFormat(style);
 
-                        var lineY = rect.Y;
-                        foreach (var line in wrappedLines)
+                        if (block.LineRects is { Count: > 0 })
                         {
-                            gfx.DrawString(line, font, brush, new XRect(rect.X, lineY, rect.Width, effectiveLineHeight), stringFormat);
-                            lineY += effectiveLineHeight;
+                            for (var i = 0; i < wrappedLines.Count && i < block.LineRects.Count; i++)
+                            {
+                                gfx.DrawString(wrappedLines[i], font, brush, block.LineRects[i], stringFormat);
+                            }
+                        }
+                        else
+                        {
+                            var lineY = rect.Y;
+                            foreach (var line in wrappedLines)
+                            {
+                                gfx.DrawString(line, font, brush, new XRect(rect.X, lineY, rect.Width, effectiveLineHeight), stringFormat);
+                                lineY += effectiveLineHeight;
+                            }
                         }
                     }
 
@@ -995,6 +1016,38 @@ public sealed class PdfExportService : IDocumentExportService
         return new XFont(baseFont.Name, 8, baseFont.Style);
     }
 
+    /// <summary>
+    /// Fits a font to a set of line rectangles by shrinking until the text can be wrapped
+    /// into at most <paramref name="lineRects"/>.Count lines (and fits the smallest line height).
+    /// </summary>
+    internal static XFont FitFontToLineRects(XGraphics gfx, string text, XFont baseFont, IReadOnlyList<XRect> lineRects)
+    {
+        if (lineRects.Count == 0)
+            return baseFont;
+
+        var widths = lineRects.Select(r => Math.Max(10, r.Width)).ToList();
+        var minHeight = Math.Max(8, lineRects.Min(r => Math.Max(1, r.Height)));
+
+        var size = baseFont.Size;
+        while (size >= 8)
+        {
+            var candidate = new XFont(baseFont.Name, size, baseFont.Style);
+            if (candidate.Size > minHeight * 0.98)
+            {
+                size -= 0.5;
+                continue;
+            }
+
+            var lines = WrapTextByWidths(gfx, text, candidate, widths).ToList();
+            if (lines.Count <= lineRects.Count)
+                return candidate;
+
+            size -= 0.5;
+        }
+
+        return new XFont(baseFont.Name, 8, baseFont.Style);
+    }
+
     internal static IEnumerable<string> WrapText(string text, int maxChars)
     {
         foreach (var paragraph in text.Split('\n'))
@@ -1047,6 +1100,177 @@ public sealed class PdfExportService : IDocumentExportService
             if (line.Length > 0)
                 yield return line.ToString();
         }
+    }
+
+    /// <summary>
+    /// Wraps text using a different max width for each output line. If the text exceeds the number of
+    /// widths provided, wrapping continues using the last width (so callers can detect overflow by line count).
+    /// </summary>
+    internal static IEnumerable<string> WrapTextByWidths(XGraphics gfx, string text, XFont font, IReadOnlyList<double> maxWidths)
+    {
+        if (maxWidths.Count == 0)
+            yield break;
+
+        var widths = maxWidths.Select(w => Math.Max(10, w)).ToArray();
+        var lineIndex = 0;
+
+        foreach (var paragraph in text.Replace("\r\n", "\n").Split('\n'))
+        {
+            // Preserve explicit blank lines
+            if (paragraph.Length == 0)
+            {
+                yield return string.Empty;
+                lineIndex++;
+                continue;
+            }
+
+            var line = new StringBuilder();
+            var lineWidth = 0.0;
+
+            foreach (var token in TokenizeForWrapping(paragraph))
+            {
+                var maxWidth = widths[Math.Min(lineIndex, widths.Length - 1)];
+                var tokenWidth = gfx.MeasureString(token, font).Width;
+
+                if (line.Length > 0 && lineWidth + tokenWidth > maxWidth)
+                {
+                    yield return line.ToString();
+                    line.Clear();
+                    lineWidth = 0;
+                    lineIndex++;
+                    maxWidth = widths[Math.Min(lineIndex, widths.Length - 1)];
+                }
+
+                // If the token itself is too wide for an empty line, split it into characters.
+                if (line.Length == 0 && tokenWidth > maxWidth && token.Length > 1)
+                {
+                    foreach (var piece in SplitTokenByWidth(gfx, token, font, () => widths[Math.Min(lineIndex, widths.Length - 1)], () => lineIndex++))
+                    {
+                        yield return piece;
+                    }
+
+                    // After splitting, we're at the start of a new line.
+                    continue;
+                }
+
+                line.Append(token);
+                lineWidth += tokenWidth;
+            }
+
+            if (line.Length > 0)
+            {
+                yield return line.ToString();
+                lineIndex++;
+            }
+        }
+    }
+
+    private static IEnumerable<string> SplitTokenByWidth(
+        XGraphics gfx,
+        string token,
+        XFont font,
+        Func<double> getMaxWidth,
+        Action advanceLine)
+    {
+        var part = new StringBuilder();
+        var partWidth = 0.0;
+
+        foreach (var ch in token)
+        {
+            var maxWidth = getMaxWidth();
+            var chStr = ch.ToString();
+            var chWidth = gfx.MeasureString(chStr, font).Width;
+
+            if (part.Length > 0 && partWidth + chWidth > maxWidth)
+            {
+                yield return part.ToString();
+                part.Clear();
+                partWidth = 0;
+                advanceLine();
+                maxWidth = getMaxWidth();
+            }
+
+            // If even a single character doesn't fit (extremely narrow column), still emit it.
+            part.Append(chStr);
+            partWidth += chWidth;
+        }
+
+        if (part.Length > 0)
+        {
+            yield return part.ToString();
+            advanceLine();
+        }
+    }
+
+    /// <summary>
+    /// Builds per-line rectangles from extracted source line positions.
+    /// Returns null when line positions are missing or look like a multi-column same-baseline grid.
+    /// </summary>
+    internal static IReadOnlyList<XRect>? TryBuildLineRects(
+        double pageHeightPoints,
+        XRect blockRect,
+        BlockTextStyle? style,
+        double fallbackLineHeight)
+    {
+        var positions = style?.LinePositions;
+        if (positions == null || positions.Count == 0)
+            return null;
+
+        // If multiple line entries share (approximately) the same baseline, this is likely a grid/row layout.
+        // We can't reliably map a single translated paragraph back into multiple same-row cells, so fall back.
+        var sortedBaselines = positions.Select(p => p.BaselineY).OrderByDescending(v => v).ToList();
+        for (var i = 1; i < sortedBaselines.Count; i++)
+        {
+            if (Math.Abs(sortedBaselines[i - 1] - sortedBaselines[i]) < 0.5)
+                return null;
+        }
+
+        var lineSpacing = style?.LineSpacing > 0 ? style.LineSpacing : 0;
+        if (lineSpacing <= 0 && sortedBaselines.Count > 1)
+        {
+            var gaps = new List<double>();
+            for (var i = 0; i < sortedBaselines.Count - 1; i++)
+            {
+                var gap = sortedBaselines[i] - sortedBaselines[i + 1];
+                if (gap > 0.1)
+                    gaps.Add(gap);
+            }
+            gaps.Sort();
+            if (gaps.Count > 0)
+                lineSpacing = gaps[gaps.Count / 2];
+        }
+        if (lineSpacing <= 0)
+            lineSpacing = Math.Max(8, fallbackLineHeight);
+
+        var result = new List<XRect>(positions.Count);
+        var ordered = positions.OrderByDescending(p => p.BaselineY).ToList();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var pos = ordered[i];
+            var upperPdf = i == 0 ? pos.BaselineY + lineSpacing / 2 : (ordered[i - 1].BaselineY + pos.BaselineY) / 2;
+            var lowerPdf = i == ordered.Count - 1 ? pos.BaselineY - lineSpacing / 2 : (pos.BaselineY + ordered[i + 1].BaselineY) / 2;
+            if (upperPdf <= lowerPdf)
+                continue;
+
+            var y = pageHeightPoints - upperPdf;
+            var height = upperPdf - lowerPdf;
+
+            var left = Math.Max(blockRect.X, pos.Left);
+            var right = Math.Min(blockRect.Right, pos.Right);
+            if (right - left < 5)
+                continue;
+
+            // Clamp vertically into the block rect.
+            var yTop = Math.Max(blockRect.Y, y);
+            var yBottom = Math.Min(blockRect.Bottom, y + height);
+            var h = yBottom - yTop;
+            if (h < 3)
+                continue;
+
+            result.Add(new XRect(left, yTop, right - left, h));
+        }
+
+        return result.Count > 0 ? result : null;
     }
 
     /// <summary>

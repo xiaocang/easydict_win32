@@ -207,6 +207,7 @@ public sealed class SettingsService
     /// <summary>
     /// Page range for long document translation. Empty = all pages.
     /// Supports formats: "1-3,5,7-10", "1-5", "3".
+    /// Not persisted - starts empty each session so default is translating all pages.
     /// </summary>
     public string LongDocPageRange { get; set; } = "";
 
@@ -575,8 +576,7 @@ public sealed class SettingsService
         // Translation cache
         EnableTranslationCache = GetValue(nameof(EnableTranslationCache), true);
 
-        // Page range and custom prompt
-        LongDocPageRange = GetValue(nameof(LongDocPageRange), "");
+        // Custom prompt (page range is intentionally not persisted - starts empty each session)
         LongDocCustomPrompt = GetValue(nameof(LongDocCustomPrompt), "");
 
         // Layout detection settings
@@ -719,8 +719,7 @@ public sealed class SettingsService
         // Translation cache
         _settings[nameof(EnableTranslationCache)] = EnableTranslationCache;
 
-        // Page range and custom prompt
-        _settings[nameof(LongDocPageRange)] = LongDocPageRange;
+        // Custom prompt (page range is intentionally not persisted - starts empty each session)
         _settings[nameof(LongDocCustomPrompt)] = LongDocCustomPrompt;
 
         // Layout detection settings

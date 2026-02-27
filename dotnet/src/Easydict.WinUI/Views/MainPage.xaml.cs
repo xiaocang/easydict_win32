@@ -2350,13 +2350,17 @@ namespace Easydict.WinUI.Views
             }
         }
 
-        private void OnNavSegmentChanged(object sender, RoutedEventArgs e)
+        private void OnModeMenuItemClick(object sender, RoutedEventArgs e)
         {
             if (QuickTranslateContent is null) return;
-            QuickTranslateContent.Visibility = QuickTranslateTab.IsChecked == true
-                ? Visibility.Visible : Visibility.Collapsed;
-            LongDocContent.Visibility = LongDocTab.IsChecked == true
-                ? Visibility.Visible : Visibility.Collapsed;
+
+            var isLongDoc = ReferenceEquals(sender, LongDocMenuItem);
+            QuickTranslateMenuItem.IsChecked = !isLongDoc;
+            LongDocMenuItem.IsChecked = isLongDoc;
+
+            QuickTranslateContent.Visibility = isLongDoc ? Visibility.Collapsed : Visibility.Visible;
+            LongDocContent.Visibility = isLongDoc ? Visibility.Visible : Visibility.Collapsed;
+            ModeSubtitle.Visibility = isLongDoc ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void OnSettingsClicked(object sender, RoutedEventArgs e)

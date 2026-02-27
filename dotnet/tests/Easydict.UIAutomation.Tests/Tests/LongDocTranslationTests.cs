@@ -1,6 +1,7 @@
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;
@@ -10,9 +11,10 @@ using Xunit.Abstractions;
 namespace Easydict.UIAutomation.Tests.Tests;
 
 /// <summary>
-/// UI regression tests for the Long Document Translation tab.
+/// UI regression tests for the Long Document Translation mode.
 /// Verifies all control buttons and combos work correctly without executing translation.
 /// Each test captures screenshots at key states for visual regression comparison.
+/// Mode switching is done via the title dropdown (Easydict ▾) menu flyout.
 /// </summary>
 [Trait("Category", "UIAutomation")]
 [Collection("UIAutomation")]
@@ -235,13 +237,8 @@ public class LongDocTranslationTests : IDisposable
         FindControl(window, "LongDocSourceLangCombo").Should().NotBeNull();
         CaptureAndCompare(window, "longdoc_10a_on_longdoc");
 
-        // Switch back to Quick Translate
-        var quickTab = Retry.WhileNull(
-            () => FindByAutomationIdOrName(window, "QuickTranslateTab"),
-            TimeSpan.FromSeconds(5)).Result;
-        quickTab.Should().NotBeNull("QuickTranslateTab should exist");
-        quickTab!.Click();
-        Thread.Sleep(1000);
+        // Switch back to Quick Translate via title dropdown
+        SwitchToQuickTranslateMode(window);
 
         // Verify Quick Translate controls are visible again
         var inputTextBox = FindControl(window, "InputTextBox");
@@ -314,11 +311,46 @@ public class LongDocTranslationTests : IDisposable
 
     private void SwitchToLongDocTab(Window window)
     {
-        var longDocTab = Retry.WhileNull(
-            () => FindByAutomationIdOrName(window, "LongDocTab"),
+        ClickModeMenuItem(window, "LongDocMenuItem");
+    }
+
+    private void SwitchToQuickTranslateMode(Window window)
+    {
+        ClickModeMenuItem(window, "QuickTranslateMenuItem");
+    }
+
+    /// <summary>
+    /// Opens the title dropdown flyout and clicks a mode menu item by AutomationId.
+    /// </summary>
+    private void ClickModeMenuItem(Window window, string menuItemAutomationId)
+    {
+        // The title dropdown button contains the "Easydict" text; find it by content.
+        // The button's AutomationId is empty, so locate via the Easydict text inside it.
+        var titleButton = Retry.WhileNull(
+            () =>
+            {
+                var easydictText = window.FindFirstDescendant(cf => cf.ByName("Easydict"));
+                // Walk up to find the Button parent that hosts the flyout
+                var current = easydictText;
+                while (current != null)
+                {
+                    if (current.ControlType == ControlType.Button)
+                        return current;
+                    current = current.Parent;
+                }
+                return null;
+            },
             TimeSpan.FromSeconds(10)).Result;
-        longDocTab.Should().NotBeNull("LongDocTab RadioButton should exist");
-        longDocTab!.Click();
+        titleButton.Should().NotBeNull("Title dropdown button should exist");
+        titleButton!.Click();
+        Thread.Sleep(500);
+
+        // Find and click the menu item in the opened flyout
+        var menuItem = Retry.WhileNull(
+            () => FindByAutomationIdOrName(window, menuItemAutomationId),
+            TimeSpan.FromSeconds(5)).Result;
+        menuItem.Should().NotBeNull($"{menuItemAutomationId} should exist in flyout");
+        menuItem!.Click();
         Thread.Sleep(1000);
     }
 

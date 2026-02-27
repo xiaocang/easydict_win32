@@ -146,6 +146,32 @@ public class LongDocumentTranslationServiceReviewFixTests
     }
 
     [Fact]
+    public void WriteBackfillIssuesSidecar_ShouldWriteBothFilenamesEvenWhenEmpty()
+    {
+        var method = typeof(PdfExportService)
+            .GetMethod("WriteBackfillIssuesSidecar", BindingFlags.NonPublic | BindingFlags.Static);
+        method.Should().NotBeNull();
+
+        var tempDir = Path.Combine(Path.GetTempPath(), "Easydict.WinUI.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        var outputPath = Path.Combine(tempDir, "out.pdf");
+        try
+        {
+            method!.Invoke(null, [outputPath, null]);
+
+            File.Exists($"{outputPath}.backfill_issue.json").Should().BeTrue();
+            File.Exists($"{outputPath}.backfill_issues.json").Should().BeTrue();
+
+            File.ReadAllText($"{outputPath}.backfill_issue.json").Trim().Should().Be("[]");
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
     public void TryPatchPdfLiteralToken_ShouldPatchMultiSegmentTjArray()
     {
         var serviceType = typeof(PdfExportService);

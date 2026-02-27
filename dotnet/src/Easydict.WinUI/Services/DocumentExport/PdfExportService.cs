@@ -68,8 +68,8 @@ public sealed class PdfExportService : IDocumentExportService
 
         // 1. Always generate monolingual PDF first (existing backfill logic)
         var renderingMetrics = ExportPdfWithCoordinateBackfill(checkpoint, sourceFilePath, outputPath);
-        WriteBackfillIssuesSidecar(outputPath, renderingMetrics.BlockIssues);
         var qualityMetrics = ToQualityMetrics(renderingMetrics);
+        WriteBackfillIssuesSidecar(outputPath, renderingMetrics.BlockIssues);
 
         // 2. Handle bilingual mode
         string? bilingualPath = null;
@@ -77,6 +77,7 @@ public sealed class PdfExportService : IDocumentExportService
         {
             bilingualPath = BuildBilingualOutputPath(outputPath);
             ExportBilingualPdf(sourceFilePath, outputPath, bilingualPath);
+            WriteBackfillIssuesSidecar(bilingualPath, renderingMetrics.BlockIssues);
         }
 
         // 3. Bilingual-only: delete intermediate monolingual file, return bilingual path
@@ -461,10 +462,11 @@ public sealed class PdfExportService : IDocumentExportService
                 // Pass 1: Draw all white background rectangles
                 foreach (var block in blocks)
                 {
+                    var clipRect = ExpandOverlayClipRect(block.Rect, block.Padding, page);
                     var clipState = gfx.Save();
                     try
                     {
-                        gfx.IntersectClip(block.Rect);
+                        gfx.IntersectClip(clipRect);
                         if (block.LineRects is { Count: > 0 })
                         {
                             foreach (var r in block.LineRects)
@@ -499,6 +501,7 @@ public sealed class PdfExportService : IDocumentExportService
                     var metadata = block.Metadata;
                     var perPage = GetOrCreatePageBackfill(pageMetrics, metadata.PageNumber);
                     var rect = block.Rect;
+                    var clipRect = ExpandOverlayClipRect(rect, block.Padding, page);
 
                     var style = metadata.TextStyle;
                     // Rotated blocks are filtered out during collection; keep this as a safety net.
@@ -560,7 +563,7 @@ public sealed class PdfExportService : IDocumentExportService
                     var clipState = gfx.Save();
                     try
                     {
-                        gfx.IntersectClip(rect);
+                        gfx.IntersectClip(clipRect);
                         var brush = CreateBrush(style);
                         var stringFormat = GetStringFormat(style);
 
@@ -636,11 +639,6 @@ public sealed class PdfExportService : IDocumentExportService
 
     private static void WriteBackfillIssuesSidecar(string outputPath, IReadOnlyList<BackfillBlockIssue>? blockIssues)
     {
-        if (blockIssues is null || blockIssues.Count == 0)
-        {
-            return;
-        }
-
         try
         {
             var issueKinds = new HashSet<string>(StringComparer.Ordinal)
@@ -655,15 +653,18 @@ public sealed class PdfExportService : IDocumentExportService
                 "shrink-font"
             };
 
-            var issueList = blockIssues.Where(i => issueKinds.Contains(i.Kind)).ToList();
-            if (issueList.Count == 0)
-            {
-                return;
-            }
+            var issueList = (blockIssues ?? Array.Empty<BackfillBlockIssue>())
+                .Where(i => issueKinds.Contains(i.Kind))
+                .ToList();
 
-            var sidecarPath = $"{outputPath}.backfill_issues.json";
             var json = JsonSerializer.Serialize(issueList, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(sidecarPath, json, Encoding.UTF8);
+
+            // Keep both filenames for backward/forward compatibility.
+            // Users may look for either suffix in the output directory.
+            var singular = $"{outputPath}.backfill_issue.json";
+            var plural = $"{outputPath}.backfill_issues.json";
+            File.WriteAllText(singular, json, Encoding.UTF8);
+            File.WriteAllText(plural, json, Encoding.UTF8);
         }
         catch (Exception ex)
         {
@@ -778,6 +779,27 @@ public sealed class PdfExportService : IDocumentExportService
         }
 
         return translatedText;
+    }
+
+    private static XRect ExpandOverlayClipRect(XRect rect, double padding, PdfPage page)
+    {
+        // Tight bounding boxes from PDF extraction can clip ascenders/descenders.
+        // Expand the clip rectangle slightly (mostly vertically) to avoid truncated glyphs,
+        // while keeping horizontal expansion tiny to minimize cross-column risk.
+        var expandX = Math.Min(2.0, Math.Max(0, padding * 0.4));
+        var expandY = Math.Min(8.0, Math.Max(2.0, padding * 0.9));
+
+        var pageWidth = page.Width.Point;
+        var pageHeight = page.Height.Point;
+
+        var x = Math.Max(0, rect.X - expandX);
+        var y = Math.Max(0, rect.Y - expandY);
+        var right = Math.Min(pageWidth, rect.Right + expandX);
+        var bottom = Math.Min(pageHeight, rect.Bottom + expandY);
+
+        var w = Math.Max(1, right - x);
+        var h = Math.Max(1, bottom - y);
+        return new XRect(x, y, w, h);
     }
 
     private static IReadOnlyList<XRect>? ExpandLineRectsForCell(

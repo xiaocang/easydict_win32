@@ -50,6 +50,10 @@ internal sealed class CjkFontResolver : IFontResolver
     public const string YuGothic = "Yu Gothic";
     public const string MalgunGothic = "Malgun Gothic";
 
+    // Math font family name for formula rendering
+    public const string CambriaMath = "Cambria Math";
+    public const string TimesNewRoman = "Times New Roman";
+
     // System font file names in %WINDIR%\Fonts, keyed by face name
     private static readonly Dictionary<string, string> SystemFontFiles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -61,6 +65,15 @@ internal sealed class CjkFontResolver : IFontResolver
         ["Consolas#B"] = "consolab.ttf",
         ["Consolas#I"] = "consolai.ttf",
         ["Consolas#BI"] = "consolabi.ttf",
+        // Math fonts (for formula rendering)
+        ["Cambria Math#R"] = "cambria.ttc",
+        ["Cambria Math#B"] = "cambria.ttc",
+        ["Cambria Math#I"] = "cambria.ttc",
+        ["Cambria Math#BI"] = "cambria.ttc",
+        ["Times New Roman#R"] = "times.ttf",
+        ["Times New Roman#B"] = "timesbd.ttf",
+        ["Times New Roman#I"] = "timesi.ttf",
+        ["Times New Roman#BI"] = "timesbi.ttf",
         // System CJK fonts (Windows built-in)
         ["Microsoft YaHei#R"] = "msyh.ttc",
         ["Microsoft YaHei#B"] = "msyhbd.ttc",

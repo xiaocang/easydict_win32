@@ -79,6 +79,34 @@ public sealed record BlockTextStyle
 /// </summary>
 public readonly record struct BlockLinePosition(double BaselineY, double Left, double Right);
 
+/// <summary>
+/// Per-character font/position data extracted from a PDF letter within a formula block.
+/// Used for multi-font rendering and subscript/superscript detection in PDF export.
+/// </summary>
+public readonly record struct FormulaCharacterInfo(
+    string Value,
+    string FontName,
+    double PointSize,
+    double GlyphLeft,
+    double GlyphBottom,
+    double GlyphWidth,
+    double GlyphHeight,
+    bool IsMathFont,
+    bool IsSubscript,
+    bool IsSuperscript);
+
+/// <summary>
+/// Aggregated formula character data for a block, including per-character info
+/// and block-level statistics for rendering decisions.
+/// </summary>
+public sealed record BlockFormulaCharacters
+{
+    public required IReadOnlyList<FormulaCharacterInfo> Characters { get; init; }
+    public double MedianTextFontSize { get; init; }
+    public double MedianBaselineY { get; init; }
+    public bool HasMathFontCharacters { get; init; }
+}
+
 public sealed record SourceDocumentBlock
 {
     public required string BlockId { get; init; }
@@ -89,6 +117,7 @@ public sealed record SourceDocumentBlock
     public bool IsFormulaLike { get; init; }
     public IReadOnlyList<string>? DetectedFontNames { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
+    public BlockFormulaCharacters? FormulaCharacters { get; init; }
 }
 
 public sealed record SourceDocumentPage
@@ -117,6 +146,7 @@ public sealed record DocumentBlockIr
     public string? ParentIrBlockId { get; init; }
     public bool TranslationSkipped { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
+    public BlockFormulaCharacters? FormulaCharacters { get; init; }
 }
 
 public sealed record DocumentIr
@@ -145,6 +175,7 @@ public sealed record TranslatedDocumentBlock
     public int RetryCount { get; init; }
     public string? LastError { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
+    public BlockFormulaCharacters? FormulaCharacters { get; init; }
 }
 
 public sealed record LongDocumentTranslationOptions

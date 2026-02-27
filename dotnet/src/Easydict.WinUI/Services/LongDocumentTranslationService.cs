@@ -77,6 +77,7 @@ public sealed class LongDocumentChunkMetadata
     public double ReadingOrderScore { get; init; }
     public BlockRect? BoundingBox { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
+    public BlockFormulaCharacters? FormulaCharacters { get; init; }
 }
 
 public sealed class LongDocumentTranslationResult
@@ -255,7 +256,8 @@ public sealed class LongDocumentTranslationService : IDisposable
                             : 0,
                         pageBlockCounts.TryGetValue(item.PageNumber, out var pageCount) ? pageCount : 1),
                         BoundingBox = item.Block.BoundingBox,
-                        TextStyle = item.Block.TextStyle
+                        TextStyle = item.Block.TextStyle,
+                        FormulaCharacters = item.Block.FormulaCharacters
                     };
                 })
                 .ToList(),
@@ -1004,9 +1006,8 @@ public sealed class LongDocumentTranslationService : IDisposable
                 _ => "body"
             };
 
-            // Collect font names and text style from letters within this block's bounding region
-            var blockFontNames = CollectFontNamesForBlock(page, left, right, top, bottom);
-            var textStyle = ExtractTextStyleForBlock(page, linesInBlock, left, right, top, bottom);
+            // Combined pass: collect font names, text style, and formula character data from letters
+            var (blockFontNames, textStyle, formulaChars) = ExtractBlockLetterData(page, linesInBlock, left, right, top, bottom);
 
             blockIndex++;
             yield return new SourceDocumentBlock
@@ -1017,7 +1018,8 @@ public sealed class LongDocumentTranslationService : IDisposable
                 IsFormulaLike = type == SourceBlockType.Formula,
                 BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
                 DetectedFontNames = blockFontNames.Count > 0 ? blockFontNames : null,
-                TextStyle = textStyle
+                TextStyle = textStyle,
+                FormulaCharacters = formulaChars
             };
         }
 
@@ -1100,40 +1102,25 @@ public sealed class LongDocumentTranslationService : IDisposable
         }
     }
 
-    private static List<string> CollectFontNamesForBlock(PdfPigPage page, double left, double right, double top, double bottom)
-    {
-        var fontNames = new List<string>();
-        try
-        {
-            foreach (var letter in page.Letters)
-            {
-                var lbox = letter.GlyphRectangle;
-                if (lbox.Left >= left - 1 && lbox.Right <= right + 1 &&
-                    lbox.Bottom >= bottom - 1 && lbox.Top <= top + 1)
-                {
-                    if (!string.IsNullOrWhiteSpace(letter.FontName))
-                    {
-                        fontNames.Add(letter.FontName);
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // PdfPig may throw on some PDFs; ignore and return what we have
-        }
-        return fontNames;
-    }
+    /// <summary>
+    /// Regex matching mathematical font names (TeX Computer Modern, MS math fonts, etc.).
+    /// Duplicated from CoreLongDocumentTranslationService for use in extraction.
+    /// </summary>
+    private static readonly Regex MathFontRegex = new(
+        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
-    /// Extracts aggregated text styling from PdfPig letters within a block's bounding region.
-    /// Uses median font size, majority vote for bold/italic, average color, alignment from line positions,
-    /// and median baseline distance for line spacing.
+    /// Combined single-pass extraction of font names, text style, and formula character data
+    /// from PdfPig letters within a block's bounding region. This avoids iterating page.Letters
+    /// multiple times per block.
     /// </summary>
-    private static BlockTextStyle? ExtractTextStyleForBlock(
-        PdfPigPage page, List<PdfTextLine> linesInBlock,
-        double left, double right, double top, double bottom)
+    private static (List<string> FontNames, BlockTextStyle? TextStyle, BlockFormulaCharacters? FormulaCharacters)
+        ExtractBlockLetterData(
+            PdfPigPage page, List<PdfTextLine> linesInBlock,
+            double left, double right, double top, double bottom)
     {
+        var fontNames = new List<string>();
         try
         {
             var fontSizes = new List<double>();
@@ -1143,6 +1130,8 @@ public sealed class LongDocumentTranslationService : IDisposable
             var colorR = new List<double>();
             var colorG = new List<double>();
             var colorB = new List<double>();
+            var formulaChars = new List<FormulaCharacterInfo>();
+            var hasMathFont = false;
 
             foreach (var letter in page.Letters)
             {
@@ -1155,20 +1144,26 @@ public sealed class LongDocumentTranslationService : IDisposable
 
                 totalLetters++;
 
-                // Font size: use PointSize (actual size in points)
+                // Font names
+                var fontName = letter.FontName ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(fontName))
+                {
+                    fontNames.Add(fontName);
+                }
+
+                // Font size
                 if (letter.PointSize > 0)
                 {
                     fontSizes.Add(letter.PointSize);
                 }
 
-                // Bold/italic: infer from font name heuristics (covers common TeX / embedded font naming patterns)
-                var fontName = letter.FontName ?? string.Empty;
+                // Bold/italic
                 if (FontNameLooksBold(fontName))
                     boldCount++;
                 if (FontNameLooksItalic(fontName))
                     italicCount++;
 
-                // Color: extract RGB from fill color (non-stroking color)
+                // Color
                 try
                 {
                     var color = letter.Color;
@@ -1184,10 +1179,27 @@ public sealed class LongDocumentTranslationService : IDisposable
                 {
                     // PatternColor or unsupported color space — skip
                 }
+
+                // Formula character data
+                var isMathFont = !string.IsNullOrWhiteSpace(fontName) && MathFontRegex.IsMatch(fontName);
+                if (isMathFont)
+                    hasMathFont = true;
+
+                formulaChars.Add(new FormulaCharacterInfo(
+                    Value: letter.Value,
+                    FontName: fontName,
+                    PointSize: letter.PointSize,
+                    GlyphLeft: lbox.Left,
+                    GlyphBottom: lbox.Bottom,
+                    GlyphWidth: Math.Max(0, lbox.Width),
+                    GlyphHeight: Math.Max(0, lbox.Height),
+                    IsMathFont: isMathFont,
+                    IsSubscript: false,
+                    IsSuperscript: false));
             }
 
             if (totalLetters == 0)
-                return null;
+                return (fontNames, null, null);
 
             // Median font size
             fontSizes.Sort();
@@ -1196,7 +1208,6 @@ public sealed class LongDocumentTranslationService : IDisposable
                 : 0;
             if (medianFontSize > 0)
             {
-                // Snap to 0.5pt to stabilize minor extraction jitter across nearby blocks.
                 medianFontSize = Math.Round(medianFontSize * 2, MidpointRounding.AwayFromZero) / 2d;
             }
 
@@ -1210,11 +1221,11 @@ public sealed class LongDocumentTranslationService : IDisposable
             var avgG = colorG.Count > 0 ? (byte)Math.Clamp(colorG.Average() * 255, 0, 255) : (byte)0;
             var avgB = colorB.Count > 0 ? (byte)Math.Clamp(colorB.Average() * 255, 0, 255) : (byte)0;
 
-            // Alignment: detect from line left/right positions relative to block bounds
+            // Alignment
             var blockWidth = Math.Max(1, right - left);
             var alignment = DetectAlignment(linesInBlock, left, blockWidth);
 
-            // Line spacing: median baseline-to-baseline distance
+            // Line spacing
             var lineSpacing = 0d;
             var linePositions = new List<BlockLinePosition>();
             if (linesInBlock.Count > 1)
@@ -1238,13 +1249,12 @@ public sealed class LongDocumentTranslationService : IDisposable
                 }
             }
 
-            // Build per-line positions
             foreach (var line in linesInBlock.OrderByDescending(l => l.Top))
             {
                 linePositions.Add(new BlockLinePosition(line.Bottom, line.Left, line.Right));
             }
 
-            return new BlockTextStyle
+            var textStyle = new BlockTextStyle
             {
                 FontSize = medianFontSize,
                 IsBold = isBold,
@@ -1256,11 +1266,43 @@ public sealed class LongDocumentTranslationService : IDisposable
                 LineSpacing = lineSpacing,
                 LinePositions = linePositions.Count > 0 ? linePositions : null
             };
+
+            // Build formula characters only if math fonts were found
+            BlockFormulaCharacters? formulaData = null;
+            if (hasMathFont)
+            {
+                // Post-pass: compute median baseline and size, then mark subscripts/superscripts
+                var baselineYs = formulaChars
+                    .Where(c => c.PointSize > 0)
+                    .Select(c => c.GlyphBottom)
+                    .OrderBy(y => y)
+                    .ToList();
+                var medianBaselineY = baselineYs.Count > 0 ? baselineYs[baselineYs.Count / 2] : 0;
+
+                var sizeThreshold = medianFontSize * 0.8;
+                var updatedChars = new List<FormulaCharacterInfo>(formulaChars.Count);
+                foreach (var fc in formulaChars)
+                {
+                    var isSmall = fc.PointSize > 0 && fc.PointSize < sizeThreshold;
+                    var isSub = isSmall && fc.GlyphBottom < medianBaselineY - 0.5;
+                    var isSup = isSmall && fc.GlyphBottom > medianBaselineY + 0.5;
+                    updatedChars.Add(fc with { IsSubscript = isSub, IsSuperscript = isSup });
+                }
+
+                formulaData = new BlockFormulaCharacters
+                {
+                    Characters = updatedChars,
+                    MedianTextFontSize = medianFontSize,
+                    MedianBaselineY = medianBaselineY,
+                    HasMathFontCharacters = true
+                };
+            }
+
+            return (fontNames, textStyle, formulaData);
         }
         catch
         {
-            // PdfPig may throw on some PDFs; return null gracefully
-            return null;
+            return (fontNames, null, null);
         }
     }
 

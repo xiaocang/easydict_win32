@@ -56,6 +56,8 @@ public sealed class PdfExportService : IDocumentExportService
         [Language.Japanese] = 1.4,
         [Language.Korean] = 1.3,
     };
+    private static readonly Regex InlineScriptLatinWordRegex = new(@"[A-Za-z]{3,}", RegexOptions.Compiled);
+    private static readonly Regex CitationLikeInlineScriptRegex = new(@"^\[\s*\d+(?:\s*,\s*\d+)*\s*\]$", RegexOptions.Compiled);
 
     public DocumentExportResult Export(
         LongDocumentTranslationCheckpoint checkpoint,
@@ -253,7 +255,9 @@ public sealed class PdfExportService : IDocumentExportService
         public required LongDocumentChunkMetadata Metadata { get; init; }
         public required XRect Rect { get; init; }
         public required double Padding { get; init; }
-        public IReadOnlyList<XRect>? LineRects { get; init; }
+        public IReadOnlyList<XRect>? BackgroundLineRects { get; init; }
+        public IReadOnlyList<XRect>? RenderLineRects { get; init; }
+        public IReadOnlyList<XRect> ProtectedInlineRects { get; init; } = [];
     }
 
     internal static BackfillRenderingMetrics ExportPdfWithCoordinateBackfill(LongDocumentTranslationCheckpoint checkpoint, string sourcePdfPath, string outputPath)
@@ -282,11 +286,13 @@ public sealed class PdfExportService : IDocumentExportService
 
         // Collect overlay blocks grouped by page for two-pass rendering
         var overlayBlocksByPage = new Dictionary<int, List<OverlayBlockInfo>>();
+        var protectedFormulaRectsByPage = new Dictionary<int, List<XRect>>();
 
         foreach (var chunkIndex in Enumerable.Range(0, checkpoint.SourceChunks.Count))
         {
             var metadata = metadataByChunkIndex[chunkIndex];
             var sourceText = checkpoint.SourceChunks[chunkIndex];
+            CollectProtectedFormulaRect(protectedFormulaRectsByPage, doc, metadata);
             if (!checkpoint.TranslatedChunks.TryGetValue(chunkIndex, out var translated) || string.IsNullOrWhiteSpace(translated))
             {
                 blockIssues.Add(new BackfillBlockIssue
@@ -410,11 +416,7 @@ public sealed class PdfExportService : IDocumentExportService
             }
 
             var box = metadata.BoundingBox.Value;
-            var drawX = Math.Max(0, box.X);
-            var drawY = Math.Max(0, page.Height.Point - (box.Y + box.Height));
-            var drawWidth = Math.Max(10, box.Width);
-            var drawHeight = Math.Max(10, box.Height);
-            var rect = new XRect(drawX, drawY, drawWidth, drawHeight);
+            var rect = ToPageRect(page, box, minSize: 10);
 
             // When available, use per-line positions to build narrower per-line rectangles.
             // This reduces accidental erasure/drawing across adjacent columns and helps keep layout stable.
@@ -424,6 +426,23 @@ public sealed class PdfExportService : IDocumentExportService
                 rect,
                 lineHeight,
                 metadata.RegionType == LayoutRegionType.TableLike || rect.Width <= page.Width.Point * 0.55);
+            var (translatedText, renderLineRects, backgroundLineRects, protectedInlineRects) =
+                HandleInlineScriptLinesForOverlay(sourceText, translated, lineRects);
+            if (lineRects is { Count: > 0 } && renderLineRects is { Count: 0 })
+            {
+                // All lines are inline scripts — fall through to block-level rendering
+                // instead of skipping entirely. Clear lineRects so rendering uses block rect.
+                renderLineRects = null;
+                backgroundLineRects = null;
+                protectedInlineRects = [];
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = chunkIndex,
+                    SourceBlockId = metadata.SourceBlockId,
+                    PageNumber = metadata.PageNumber,
+                    Kind = "inline-script-fallback"
+                });
+            }
 
             // Scale padding with font size: larger fonts need more padding to cover descenders
             var fontSize = metadata.TextStyle?.FontSize > 0 ? metadata.TextStyle.FontSize : 11.0;
@@ -442,11 +461,13 @@ public sealed class PdfExportService : IDocumentExportService
             pageBlocks.Add(new OverlayBlockInfo
             {
                 ChunkIndex = chunkIndex,
-                TranslatedText = translated,
+                TranslatedText = translatedText,
                 Metadata = metadata,
                 Rect = rect,
                 Padding = pad,
-                LineRects = lineRects
+                BackgroundLineRects = backgroundLineRects,
+                RenderLineRects = renderLineRects,
+                ProtectedInlineRects = protectedInlineRects
             });
         }
 
@@ -463,13 +484,17 @@ public sealed class PdfExportService : IDocumentExportService
                 foreach (var block in blocks)
                 {
                     var clipRect = ExpandOverlayClipRect(block.Rect, block.Padding, page);
+                    var formulaRects = protectedFormulaRectsByPage.TryGetValue(pageIndex, out var protectedRects)
+                        ? protectedRects
+                        : null;
                     var clipState = gfx.Save();
                     try
                     {
-                        gfx.IntersectClip(clipRect);
-                        if (block.LineRects is { Count: > 0 })
+                        IntersectClipWithProtectionHoles(gfx, clipRect, block.Padding, page, block.ProtectedInlineRects, formulaRects, block.Rect);
+                        var backgroundLineRects = block.BackgroundLineRects ?? block.RenderLineRects;
+                        if (backgroundLineRects is { Count: > 0 })
                         {
-                            foreach (var r in block.LineRects)
+                            foreach (var r in backgroundLineRects)
                             {
                                 gfx.DrawRectangle(XBrushes.White,
                                     new XRect(
@@ -502,6 +527,9 @@ public sealed class PdfExportService : IDocumentExportService
                     var perPage = GetOrCreatePageBackfill(pageMetrics, metadata.PageNumber);
                     var rect = block.Rect;
                     var clipRect = ExpandOverlayClipRect(rect, block.Padding, page);
+                    var formulaRects = protectedFormulaRectsByPage.TryGetValue(pageIndex, out var protectedRects)
+                        ? protectedRects
+                        : null;
 
                     var style = metadata.TextStyle;
                     // Rotated blocks are filtered out during collection; keep this as a safety net.
@@ -518,8 +546,8 @@ public sealed class PdfExportService : IDocumentExportService
                         effectiveLineHeight = Math.Max(effectiveLineHeight, baseFont.Size * 1.4);
                     }
 
-                    var font = block.LineRects is { Count: > 0 }
-                        ? FitFontToLineRects(gfx, block.TranslatedText, baseFont, block.LineRects)
+                    var font = block.RenderLineRects is { Count: > 0 }
+                        ? FitFontToLineRects(gfx, block.TranslatedText, baseFont, block.RenderLineRects)
                         : FitFontToRect(gfx, block.TranslatedText, baseFont, rect.Width, rect.Height, effectiveLineHeight);
                     if (font.Size < baseFont.Size)
                     {
@@ -535,12 +563,12 @@ public sealed class PdfExportService : IDocumentExportService
                         });
                     }
 
-                    var wrappedLines = block.LineRects is { Count: > 0 }
-                        ? WrapTextByWidths(gfx, block.TranslatedText, font, block.LineRects.Select(r => r.Width).ToList()).ToList()
+                    var wrappedLines = block.RenderLineRects is { Count: > 0 }
+                        ? WrapTextByWidths(gfx, block.TranslatedText, font, block.RenderLineRects.Select(r => r.Width).ToList()).ToList()
                         : WrapTextByWidth(gfx, block.TranslatedText, font, rect.Width).ToList();
 
-                    var maxVisibleLines = block.LineRects is { Count: > 0 }
-                        ? block.LineRects.Count
+                    var maxVisibleLines = block.RenderLineRects is { Count: > 0 }
+                        ? block.RenderLineRects.Count
                         : Math.Max(1, (int)Math.Floor(rect.Height / effectiveLineHeight));
                     var originalLineCount = wrappedLines.Count;
                     if (wrappedLines.Count > maxVisibleLines)
@@ -563,15 +591,16 @@ public sealed class PdfExportService : IDocumentExportService
                     var clipState = gfx.Save();
                     try
                     {
-                        gfx.IntersectClip(clipRect);
+                        IntersectClipWithProtectionHoles(gfx, clipRect, block.Padding, page, block.ProtectedInlineRects, formulaRects, block.Rect);
                         var brush = CreateBrush(style);
                         var stringFormat = GetStringFormat(style);
+                        var formulaContext = IsFormulaContext(metadata, block.TranslatedText);
 
-                        if (block.LineRects is { Count: > 0 })
+                        if (block.RenderLineRects is { Count: > 0 })
                         {
-                            for (var i = 0; i < wrappedLines.Count && i < block.LineRects.Count; i++)
+                            for (var i = 0; i < wrappedLines.Count && i < block.RenderLineRects.Count; i++)
                             {
-                                gfx.DrawString(wrappedLines[i], font, brush, block.LineRects[i], stringFormat);
+                                DrawStringMultiFont(gfx, wrappedLines[i], font, brush, block.RenderLineRects[i], stringFormat, formulaContext);
                             }
                         }
                         else
@@ -579,7 +608,7 @@ public sealed class PdfExportService : IDocumentExportService
                             var lineY = rect.Y;
                             foreach (var line in wrappedLines)
                             {
-                                gfx.DrawString(line, font, brush, new XRect(rect.X, lineY, rect.Width, effectiveLineHeight), stringFormat);
+                                DrawStringMultiFont(gfx, line, font, brush, new XRect(rect.X, lineY, rect.Width, effectiveLineHeight), stringFormat, formulaContext);
                                 lineY += effectiveLineHeight;
                             }
                         }
@@ -779,6 +808,836 @@ public sealed class PdfExportService : IDocumentExportService
         }
 
         return translatedText;
+    }
+
+    private static void CollectProtectedFormulaRect(
+        Dictionary<int, List<XRect>> protectedFormulaRectsByPage,
+        PdfDocument doc,
+        LongDocumentChunkMetadata metadata)
+    {
+        if (metadata.BoundingBox is null)
+        {
+            return;
+        }
+
+        if (metadata.SourceBlockType != SourceBlockType.Formula && !metadata.IsFormulaLike)
+        {
+            return;
+        }
+
+        var pageIndex = metadata.PageNumber - 1;
+        if (pageIndex < 0 || pageIndex >= doc.Pages.Count)
+        {
+            return;
+        }
+
+        var page = doc.Pages[pageIndex];
+        var formulaRect = ToPageRect(page, metadata.BoundingBox.Value, minSize: 1);
+        if (formulaRect.Width < 1 || formulaRect.Height < 1)
+        {
+            return;
+        }
+
+        if (!protectedFormulaRectsByPage.TryGetValue(pageIndex, out var pageRects))
+        {
+            pageRects = [];
+            protectedFormulaRectsByPage[pageIndex] = pageRects;
+        }
+
+        pageRects.Add(formulaRect);
+    }
+
+    internal static XRect ToPageRect(PdfPage page, BlockRect box, double minSize)
+    {
+        var drawX = Math.Max(0, box.X);
+        var drawY = Math.Max(0, page.Height.Point - (box.Y + box.Height));
+        var drawWidth = Math.Max(minSize, box.Width);
+        var drawHeight = Math.Max(minSize, box.Height);
+        return new XRect(drawX, drawY, drawWidth, drawHeight);
+    }
+
+    internal static (IReadOnlyList<XRect>? RenderLineRects, IReadOnlyList<XRect> ProtectedInlineRects) SplitLineRectsForInlineScriptProtection(
+        string sourceText,
+        IReadOnlyList<XRect>? lineRects)
+    {
+        if (lineRects is null || lineRects.Count == 0)
+        {
+            return (lineRects, []);
+        }
+
+        var sourceLines = sourceText.Replace("\r\n", "\n").Split('\n');
+        if (sourceLines.Length < 2)
+        {
+            return (lineRects, []);
+        }
+
+        var pairedCount = Math.Min(sourceLines.Length, lineRects.Count);
+        if (pairedCount == 0)
+        {
+            return (lineRects, []);
+        }
+
+        var sortedHeights = lineRects
+            .Take(pairedCount)
+            .Select(rect => Math.Max(1, rect.Height))
+            .OrderBy(height => height)
+            .ToList();
+        var medianRectHeight = sortedHeights[sortedHeights.Count / 2];
+
+        var protectedIndexes = new HashSet<int>();
+        for (var i = 0; i < pairedCount; i++)
+        {
+            var rect = lineRects[i];
+            if (!LooksLikeInlineScriptLine(sourceLines[i]))
+            {
+                continue;
+            }
+
+            if (rect.Height <= medianRectHeight * 0.75)
+            {
+                protectedIndexes.Add(i);
+            }
+        }
+
+        if (protectedIndexes.Count == 0)
+        {
+            return (lineRects, []);
+        }
+
+        var renderLineRects = new List<XRect>(lineRects.Count - protectedIndexes.Count);
+        var protectedInlineRects = new List<XRect>(protectedIndexes.Count);
+        for (var i = 0; i < lineRects.Count; i++)
+        {
+            var rect = lineRects[i];
+            if (protectedIndexes.Contains(i))
+            {
+                protectedInlineRects.Add(rect);
+            }
+            else
+            {
+                renderLineRects.Add(rect);
+            }
+        }
+
+        return (renderLineRects, protectedInlineRects);
+    }
+
+    internal static (string TranslatedText, IReadOnlyList<XRect>? RenderLineRects, IReadOnlyList<XRect>? BackgroundLineRects, IReadOnlyList<XRect> ProtectedInlineRects)
+        HandleInlineScriptLinesForOverlay(
+            string sourceText,
+            string translatedText,
+            IReadOnlyList<XRect>? lineRects)
+    {
+        if (lineRects is null || lineRects.Count == 0)
+        {
+            return (translatedText, lineRects, lineRects, []);
+        }
+
+        var (renderLineRects, detectedProtectedRects) = SplitLineRectsForInlineScriptProtection(sourceText, lineRects);
+        if (detectedProtectedRects.Count == 0)
+        {
+            return (translatedText, renderLineRects, renderLineRects, []);
+        }
+
+        var normalizedTranslation = NormalizeTranslationForInlineScriptLines(translatedText);
+
+        var protectedRectSet = new HashSet<XRect>(detectedProtectedRects);
+        var scriptLineIndices = new HashSet<int>();
+        for (var i = 0; i < lineRects.Count; i++)
+        {
+            if (protectedRectSet.Contains(lineRects[i]))
+            {
+                scriptLineIndices.Add(i);
+            }
+        }
+
+        if (scriptLineIndices.Count == 0)
+        {
+            return (normalizedTranslation, renderLineRects, renderLineRects, []);
+        }
+
+        var sourceLines = sourceText.Replace("\r\n", "\n").Split('\n');
+        var protectedIndices = new HashSet<int>(scriptLineIndices);
+        foreach (var scriptLineIndex in scriptLineIndices.OrderBy(i => i))
+        {
+            if (scriptLineIndex < 0 || scriptLineIndex >= sourceLines.Length)
+            {
+                continue;
+            }
+
+            var scriptText = sourceLines[scriptLineIndex].Trim();
+            if (scriptText.Length == 0)
+            {
+                continue;
+            }
+
+            if (IsCitationLikeInlineScript(scriptText))
+            {
+                if (ContainsInlineScriptFragment(normalizedTranslation, scriptText))
+                {
+                    protectedIndices.Remove(scriptLineIndex);
+                }
+                continue;
+            }
+
+            if (!IsProbablySubscriptLine(lineRects, scriptLineIndex, scriptLineIndices))
+            {
+                continue;
+            }
+
+            if (!TryBuildInlineSubscriptAttachmentsForScriptLine(sourceLines, scriptLineIndices, scriptLineIndex, out var attachments))
+            {
+                continue;
+            }
+
+            if (TryApplyInlineSubscriptAttachments(normalizedTranslation, attachments, out var augmented))
+            {
+                normalizedTranslation = augmented;
+                protectedIndices.Remove(scriptLineIndex);
+            }
+        }
+
+        var backgroundLineRects = new List<XRect>(lineRects.Count);
+        var protectedInlineRects = new List<XRect>();
+        for (var i = 0; i < lineRects.Count; i++)
+        {
+            if (protectedIndices.Contains(i))
+            {
+                protectedInlineRects.Add(lineRects[i]);
+            }
+            else
+            {
+                backgroundLineRects.Add(lineRects[i]);
+            }
+        }
+
+        return (normalizedTranslation, renderLineRects, backgroundLineRects, protectedInlineRects);
+    }
+
+    internal static string NormalizeTranslationForInlineScriptLines(string translatedText)
+    {
+        if (string.IsNullOrEmpty(translatedText))
+        {
+            return translatedText;
+        }
+
+        var lines = translatedText.Replace("\r\n", "\n").Split('\n');
+        var normalized = new List<string>(lines.Length);
+
+        foreach (var line in lines)
+        {
+            if (!LooksLikeInlineScriptLine(line))
+            {
+                normalized.Add(line);
+                continue;
+            }
+
+            if (IsCitationLikeInlineScript(line))
+            {
+                var trimmed = line.Trim();
+                if (normalized.Count > 0)
+                {
+                    normalized[^1] = normalized[^1] + trimmed;
+                }
+                else
+                {
+                    normalized.Add(trimmed);
+                }
+            }
+        }
+
+        return string.Join("\n", normalized);
+    }
+
+    internal static bool IsCitationLikeInlineScript(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        return CitationLikeInlineScriptRegex.IsMatch(text.Trim());
+    }
+
+    private static bool ContainsInlineScriptFragment(string text, string fragment)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(fragment))
+        {
+            return false;
+        }
+
+        var normalizedText = NormalizeInlineScriptSearchText(text);
+        var normalizedFragment = NormalizeInlineScriptSearchText(fragment);
+        return normalizedText.Contains(normalizedFragment, StringComparison.Ordinal);
+    }
+
+    private static string NormalizeInlineScriptSearchText(string text)
+    {
+        var noWhitespace = string.Concat(text.Where(c => !char.IsWhiteSpace(c)));
+        return noWhitespace
+            .Replace('［', '[')
+            .Replace('］', ']')
+            .Replace('，', ',');
+    }
+
+    private static bool IsProbablySubscriptLine(IReadOnlyList<XRect> lineRects, int scriptLineIndex, HashSet<int> scriptLineIndices)
+    {
+        if (scriptLineIndex < 0 || scriptLineIndex >= lineRects.Count)
+        {
+            return false;
+        }
+
+        var scriptRect = lineRects[scriptLineIndex];
+        var scriptCenterY = scriptRect.Y + scriptRect.Height / 2;
+
+        int? baseIndex = null;
+        for (var i = scriptLineIndex - 1; i >= 0; i--)
+        {
+            if (scriptLineIndices.Contains(i))
+            {
+                continue;
+            }
+
+            baseIndex = i;
+            break;
+        }
+
+        if (baseIndex == null)
+        {
+            for (var i = scriptLineIndex + 1; i < lineRects.Count; i++)
+            {
+                if (scriptLineIndices.Contains(i))
+                {
+                    continue;
+                }
+
+                baseIndex = i;
+                break;
+            }
+        }
+
+        if (baseIndex == null)
+        {
+            return false;
+        }
+
+        var baseRect = lineRects[baseIndex.Value];
+        var baseCenterY = baseRect.Y + baseRect.Height / 2;
+        return scriptCenterY > baseCenterY + 0.5;
+    }
+
+    private static bool TryBuildInlineSubscriptAttachmentsForScriptLine(
+        IReadOnlyList<string> sourceLines,
+        HashSet<int> scriptLineIndices,
+        int scriptLineIndex,
+        out List<(char BaseChar, string Subscript)> attachments)
+    {
+        attachments = [];
+
+        if (scriptLineIndex < 0 || scriptLineIndex >= sourceLines.Count)
+        {
+            return false;
+        }
+
+        var scriptText = sourceLines[scriptLineIndex];
+        var tokens = SplitInlineScriptTokens(scriptText);
+        if (tokens.Count == 0)
+        {
+            return false;
+        }
+
+        var previousIndex = FindPreviousNonScriptLineIndex(sourceLines, scriptLineIndices, scriptLineIndex);
+        if (previousIndex < 0)
+        {
+            return false;
+        }
+
+        var previousLine = sourceLines[previousIndex];
+        if (!TryInferBaseCharForInlineScript(previousLine, tokens.Count, out var baseChar))
+        {
+            return false;
+        }
+
+        attachments = new List<(char BaseChar, string Subscript)>(tokens.Count);
+        foreach (var token in tokens)
+        {
+            if (!TryConvertToUnicodeSubscript(token, out var subscript))
+            {
+                attachments = [];
+                return false;
+            }
+            attachments.Add((baseChar, subscript));
+        }
+
+        return attachments.Count > 0;
+    }
+
+    private static int FindPreviousNonScriptLineIndex(IReadOnlyList<string> sourceLines, HashSet<int> scriptLineIndices, int scriptLineIndex)
+    {
+        for (var i = scriptLineIndex - 1; i >= 0; i--)
+        {
+            if (scriptLineIndices.Contains(i))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(sourceLines[i]))
+            {
+                continue;
+            }
+
+            return i;
+        }
+
+        return -1;
+    }
+
+    private static IReadOnlyList<string> SplitInlineScriptTokens(string scriptText)
+    {
+        if (string.IsNullOrWhiteSpace(scriptText))
+        {
+            return [];
+        }
+
+        var trimmed = scriptText.Trim();
+        if (trimmed.Length == 0)
+        {
+            return [];
+        }
+
+        var parts = trimmed.Split([',', '，'], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1)
+        {
+            parts = trimmed.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        var tokens = new List<string>(parts.Length);
+        foreach (var part in parts)
+        {
+            var token = part.Trim().TrimEnd(',', ';', '.', ':');
+            if (token.Length > 0)
+            {
+                tokens.Add(token);
+            }
+        }
+
+        return tokens;
+    }
+
+    private static bool TryInferBaseCharForInlineScript(string previousLine, int tokenCount, out char baseChar)
+    {
+        baseChar = default;
+
+        if (tokenCount <= 0)
+        {
+            return false;
+        }
+
+        if (tokenCount == 1 && TryExtractTrailingIsolatedAsciiSymbol(previousLine, out baseChar))
+        {
+            return true;
+        }
+
+        var isolatedSymbols = ExtractIsolatedAsciiSymbols(previousLine);
+        if (isolatedSymbols.Count == 0)
+        {
+            return false;
+        }
+
+        if (tokenCount > 1)
+        {
+            var candidates = isolatedSymbols
+                .GroupBy(ch => ch)
+                .Where(g => g.Count() >= tokenCount)
+                .Select(g => g.Key)
+                .ToList();
+
+            if (candidates.Count == 1)
+            {
+                baseChar = candidates[0];
+                return true;
+            }
+
+            return false;
+        }
+
+        var unique = isolatedSymbols.Distinct().ToList();
+        if (unique.Count == 1)
+        {
+            baseChar = unique[0];
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryExtractTrailingIsolatedAsciiSymbol(string line, out char symbol)
+    {
+        symbol = default;
+
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return false;
+        }
+
+        var trimmed = line.TrimEnd();
+        var end = trimmed.Length - 1;
+        while (end >= 0 && IsTrailingScriptPunctuation(trimmed[end]))
+        {
+            end--;
+        }
+
+        if (end < 0)
+        {
+            return false;
+        }
+
+        var ch = trimmed[end];
+        if (!IsAsciiLetterOrDigit(ch))
+        {
+            return false;
+        }
+
+        if (end > 0 && IsAsciiLetterOrDigit(trimmed[end - 1]))
+        {
+            return false;
+        }
+
+        symbol = ch;
+        return true;
+    }
+
+    private static bool IsTrailingScriptPunctuation(char ch)
+    {
+        return ch is ',' or '.' or ';' or ':' or ')' or ']' or '}' or '>' or '?' or '!' or '，' or '。' or '；' or '：' or '）' or '】' or '」' or '』';
+    }
+
+    private static List<char> ExtractIsolatedAsciiSymbols(string line)
+    {
+        if (string.IsNullOrEmpty(line))
+        {
+            return [];
+        }
+
+        var result = new List<char>();
+        for (var i = 0; i < line.Length; i++)
+        {
+            var ch = line[i];
+            if (!IsAsciiLetterOrDigit(ch))
+            {
+                continue;
+            }
+
+            if (i > 0 && IsAsciiLetterOrDigit(line[i - 1]))
+            {
+                continue;
+            }
+
+            if (i + 1 < line.Length && IsAsciiLetterOrDigit(line[i + 1]))
+            {
+                continue;
+            }
+
+            result.Add(ch);
+        }
+
+        return result;
+    }
+
+    private static bool IsAsciiLetterOrDigit(char ch)
+    {
+        return ch is >= '0' and <= '9' ||
+               ch is >= 'A' and <= 'Z' ||
+               ch is >= 'a' and <= 'z';
+    }
+
+    internal static bool TryConvertToUnicodeSubscript(string token, out string subscript)
+    {
+        subscript = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return false;
+        }
+
+        var trimmed = token.Trim();
+        var builder = new StringBuilder(trimmed.Length);
+        foreach (var ch in trimmed)
+        {
+            if (char.IsWhiteSpace(ch))
+            {
+                continue;
+            }
+
+            if (!TryMapToUnicodeSubscript(ch, out var mapped))
+            {
+                subscript = string.Empty;
+                return false;
+            }
+
+            builder.Append(mapped);
+        }
+
+        subscript = builder.ToString();
+        return subscript.Length > 0;
+    }
+
+    private static bool TryMapToUnicodeSubscript(char ch, out char mapped)
+    {
+        mapped = ch;
+
+        if (ch is >= '0' and <= '9')
+        {
+            mapped = (char)('₀' + (ch - '0'));
+            return true;
+        }
+
+        mapped = char.ToLowerInvariant(ch) switch
+        {
+            '+' => '₊',
+            '-' => '₋',
+            '\u2212' => '₋',
+            '=' => '₌',
+            '(' => '₍',
+            ')' => '₎',
+            'a' => 'ₐ',
+            'e' => 'ₑ',
+            'h' => 'ₕ',
+            'i' => 'ᵢ',
+            'j' => 'ⱼ',
+            'k' => 'ₖ',
+            'l' => 'ₗ',
+            'm' => 'ₘ',
+            'n' => 'ₙ',
+            'o' => 'ₒ',
+            'p' => 'ₚ',
+            'r' => 'ᵣ',
+            's' => 'ₛ',
+            't' => 'ₜ',
+            'u' => 'ᵤ',
+            'v' => 'ᵥ',
+            'x' => 'ₓ',
+            _ => '\0'
+        };
+
+        return mapped != '\0';
+    }
+
+    internal static bool TryApplyInlineSubscriptAttachments(
+        string translatedText,
+        IReadOnlyList<(char BaseChar, string Subscript)> attachments,
+        out string augmentedText)
+    {
+        augmentedText = translatedText;
+
+        if (string.IsNullOrEmpty(translatedText) || attachments.Count == 0)
+        {
+            return false;
+        }
+
+        var cursor = 0;
+        var builder = new StringBuilder(translatedText.Length + attachments.Count * 3);
+
+        foreach (var (baseChar, subscript) in attachments)
+        {
+            if (!TryFindNextEligibleBaseOccurrence(translatedText, baseChar, cursor, out var matchIndex))
+            {
+                augmentedText = translatedText;
+                return false;
+            }
+
+            builder.Append(translatedText.AsSpan(cursor, matchIndex - cursor));
+            builder.Append(baseChar);
+            builder.Append(subscript);
+            cursor = matchIndex + 1;
+        }
+
+        builder.Append(translatedText.AsSpan(cursor));
+        augmentedText = builder.ToString();
+        return true;
+    }
+
+    private static bool TryFindNextEligibleBaseOccurrence(string text, char baseChar, int startIndex, out int matchIndex)
+    {
+        matchIndex = -1;
+
+        if (startIndex < 0)
+        {
+            startIndex = 0;
+        }
+
+        for (var i = startIndex; i < text.Length; i++)
+        {
+            if (text[i] != baseChar)
+            {
+                continue;
+            }
+
+            if (i > 0 && IsAsciiLetterOrDigit(text[i - 1]))
+            {
+                continue;
+            }
+
+            if (i + 1 < text.Length)
+            {
+                var next = text[i + 1];
+                if (IsAsciiLetterOrDigit(next))
+                {
+                    continue;
+                }
+
+                if (next is '_' or '^' || IsUnicodeSubscriptChar(next))
+                {
+                    continue;
+                }
+            }
+
+            matchIndex = i;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsUnicodeSubscriptChar(char ch)
+    {
+        return (ch is >= '\u2080' and <= '\u209F') ||
+               ch is '\u1D62' or '\u1D63' or '\u1D64' or '\u1D65' or '\u2C7C';
+    }
+
+    internal static bool LooksLikeInlineScriptLine(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var trimmed = text.Trim();
+        if (trimmed.Length is < 1 or > 24)
+        {
+            return false;
+        }
+
+        if (trimmed.Any(IsCjkCharacter))
+        {
+            return false;
+        }
+
+        if (InlineScriptLatinWordRegex.IsMatch(trimmed))
+        {
+            return false;
+        }
+
+        if (!trimmed.Any(char.IsLetterOrDigit))
+        {
+            return false;
+        }
+
+        var hasDigits = trimmed.Any(char.IsDigit);
+        var hasSymbols = trimmed.Any(IsInlineScriptSymbol);
+        return hasDigits || hasSymbols || trimmed.Length <= 2;
+    }
+
+    private static bool IsInlineScriptSymbol(char ch)
+    {
+        return ch switch
+        {
+            '[' or ']' or '(' or ')' or '{' or '}' or '=' or '+' or '-' or '_' or '^' or '*' or '/' => true,
+            '\u2212' => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Determines whether a formula protection hole should be applied when rendering a text block.
+    /// Returns false when the formula hole has ANY intersection with the text block rect.
+    /// Standalone display equations don't spatially overlap with text blocks, so any intersection
+    /// means the formula is inline or the bounding box is imprecise — the translated text
+    /// should cover that area.
+    /// </summary>
+    internal static bool ShouldApplyFormulaHole(XRect formulaHole, XRect textBlockRect)
+    {
+        var interLeft = Math.Max(formulaHole.X, textBlockRect.X);
+        var interTop = Math.Max(formulaHole.Y, textBlockRect.Y);
+        var interRight = Math.Min(formulaHole.Right, textBlockRect.Right);
+        var interBottom = Math.Min(formulaHole.Bottom, textBlockRect.Bottom);
+
+        // No intersection → apply the hole (formula is external to this block)
+        // Any intersection → skip the hole (formula overlaps with this text block)
+        return interRight <= interLeft || interBottom <= interTop;
+    }
+
+    private static void IntersectClipWithProtectionHoles(
+        XGraphics gfx,
+        XRect clipRect,
+        double padding,
+        PdfPage page,
+        IReadOnlyList<XRect>? protectedInlineRects,
+        IReadOnlyList<XRect>? protectedFormulaRects,
+        XRect? textBlockRect = null)
+    {
+        var holes = new List<XRect>();
+        if (protectedInlineRects is { Count: > 0 })
+        {
+            holes.AddRange(protectedInlineRects.Where(rect => RectsIntersect(rect, clipRect)));
+        }
+
+        if (protectedFormulaRects is { Count: > 0 })
+        {
+            foreach (var rect in protectedFormulaRects)
+            {
+                if (!RectsIntersect(rect, clipRect))
+                    continue;
+
+                // When we know the text block rect, skip formula holes that overlap significantly
+                if (textBlockRect.HasValue && !ShouldApplyFormulaHole(rect, textBlockRect.Value))
+                    continue;
+
+                holes.Add(rect);
+            }
+        }
+
+        if (holes.Count == 0)
+        {
+            gfx.IntersectClip(clipRect);
+            return;
+        }
+
+        var holePad = Math.Clamp(padding * 0.6, 1.5, 4.0);
+        var path = new XGraphicsPath { FillMode = XFillMode.Alternate };
+        path.AddRectangle(clipRect);
+
+        foreach (var hole in holes)
+        {
+            var expanded = InflateAndClampRect(hole, holePad, page);
+            if (!RectsIntersect(expanded, clipRect))
+            {
+                continue;
+            }
+
+            path.AddRectangle(expanded);
+        }
+
+        gfx.IntersectClip(path);
+    }
+
+    private static XRect InflateAndClampRect(XRect rect, double padding, PdfPage page)
+    {
+        var pageWidth = page.Width.Point;
+        var pageHeight = page.Height.Point;
+        var left = Math.Max(0, rect.X - padding);
+        var top = Math.Max(0, rect.Y - padding);
+        var right = Math.Min(pageWidth, rect.Right + padding);
+        var bottom = Math.Min(pageHeight, rect.Bottom + padding);
+        return new XRect(left, top, Math.Max(1, right - left), Math.Max(1, bottom - top));
+    }
+
+    private static bool RectsIntersect(XRect left, XRect right)
+    {
+        return left.X < right.Right &&
+               left.Right > right.X &&
+               left.Y < right.Bottom &&
+               left.Bottom > right.Y;
     }
 
     private static XRect ExpandOverlayClipRect(XRect rect, double padding, PdfPage page)
@@ -1772,5 +2631,336 @@ public sealed class PdfExportService : IDocumentExportService
             PageMetrics = metrics.PageMetrics,
             BlockIssues = metrics.BlockIssues
         };
+    }
+
+    // --------------------------------------------------
+    // Multi-font rendering for math characters
+    // --------------------------------------------------
+
+    /// <summary>
+    /// Returns true for Unicode characters that need a math-capable font (Cambria Math)
+    /// because CJK fonts typically lack these glyphs.
+    /// </summary>
+    internal static bool NeedsMathFont(char ch)
+    {
+        return ch is >= '\u2200' and <= '\u22FF'   // Mathematical Operators
+            or >= '\u0370' and <= '\u03FF'          // Greek and Coptic
+            or >= '\u2100' and <= '\u214F'          // Letterlike Symbols
+            or >= '\u2070' and <= '\u209F'          // Superscripts and Subscripts
+            or '\u2212'                             // Minus sign
+            or '\u00D7'                             // Multiplication sign
+            or '\u00F7'                             // Division sign
+            or >= '\u2190' and <= '\u21FF'          // Arrows
+            or >= '\u2300' and <= '\u23FF'          // Miscellaneous Technical
+            or >= '\u27C0' and <= '\u27EF'          // Miscellaneous Mathematical Symbols-A
+            or >= '\u2980' and <= '\u29FF'          // Miscellaneous Mathematical Symbols-B
+            or >= '\u2A00' and <= '\u2AFF'          // Supplemental Mathematical Operators
+            or >= '\u25A0' and <= '\u25FF'          // Geometric Shapes (includes □ U+25A1)
+            or >= '\u2500' and <= '\u257F'          // Box Drawing
+            or >= '\u2150' and <= '\u218F';         // Number Forms (fractions like ½)
+    }
+
+    /// <summary>
+    /// A font segment within a line: text that shares the same font requirement.
+    /// </summary>
+    internal readonly record struct FontSegment(string Text, bool NeedsMathFont);
+
+    /// <summary>
+    /// Splits a line into contiguous segments that share the same font requirement.
+    /// </summary>
+    internal static List<FontSegment> SegmentLineByFont(string line)
+    {
+        if (string.IsNullOrEmpty(line))
+            return [new FontSegment(string.Empty, false)];
+
+        var segments = new List<FontSegment>();
+        var current = new StringBuilder();
+        var currentNeedsMath = NeedsMathFont(line[0]);
+
+        foreach (var ch in line)
+        {
+            var charNeedsMath = NeedsMathFont(ch);
+            if (charNeedsMath != currentNeedsMath)
+            {
+                if (current.Length > 0)
+                    segments.Add(new FontSegment(current.ToString(), currentNeedsMath));
+                current.Clear();
+                currentNeedsMath = charNeedsMath;
+            }
+            current.Append(ch);
+        }
+
+        if (current.Length > 0)
+            segments.Add(new FontSegment(current.ToString(), currentNeedsMath));
+
+        return segments;
+    }
+
+    /// <summary>
+    /// Returns true if a block has formula context (math font characters or formula-like content).
+    /// </summary>
+    private static bool IsFormulaContext(LongDocumentChunkMetadata metadata, string translatedText)
+    {
+        if (metadata.FormulaCharacters?.HasMathFontCharacters == true)
+            return true;
+
+        if (metadata.IsFormulaLike)
+            return true;
+
+        // Check if translated text contains formula-like patterns
+        foreach (var ch in translatedText)
+        {
+            if (NeedsMathFont(ch))
+                return true;
+        }
+
+        // Check for script patterns (e.g. h_{t-1}, x^{2}) even without math font chars
+        if (ContainsScriptPatterns(translatedText))
+            return true;
+
+        return false;
+    }
+
+    private static readonly Regex ScriptPatternRegex = new(@"[_^]\{[^}]+\}|[_^]\w", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Returns true if the text contains subscript/superscript patterns like x_{t-1} or x^2.
+    /// </summary>
+    private static bool ContainsScriptPatterns(string text)
+    {
+        return ScriptPatternRegex.IsMatch(text);
+    }
+
+    /// <summary>
+    /// Draws a line of text using multiple fonts: base font for normal characters,
+    /// Cambria Math for math/Greek/symbol characters. Falls through to regular DrawString
+    /// when no math characters are detected (fast path).
+    /// </summary>
+    private static void DrawStringMultiFont(
+        XGraphics gfx,
+        string line,
+        XFont baseFont,
+        XBrush brush,
+        XRect lineRect,
+        XStringFormat format,
+        bool isFormulaContext)
+    {
+        if (!isFormulaContext)
+        {
+            gfx.DrawString(line, baseFont, brush, lineRect, format);
+            return;
+        }
+
+        // Check if any character needs a math font
+        var hasMathChars = false;
+        foreach (var ch in line)
+        {
+            if (NeedsMathFont(ch))
+            {
+                hasMathChars = true;
+                break;
+            }
+        }
+
+        // Check for subscript/superscript patterns
+        if (ContainsScriptPatterns(line))
+        {
+            var fragments = ParseFormulaFragments(line);
+            if (fragments.Count > 1 || fragments.Any(f => f.Kind != FormulaFragmentKind.Normal))
+            {
+                DrawFormulaLine(gfx, fragments, baseFont, brush, lineRect);
+                return;
+            }
+        }
+
+        if (!hasMathChars)
+        {
+            gfx.DrawString(line, baseFont, brush, lineRect, format);
+            return;
+        }
+
+        // Segment-based multi-font rendering
+        var segments = SegmentLineByFont(line);
+        if (segments.Count <= 1 && !segments[0].NeedsMathFont)
+        {
+            gfx.DrawString(line, baseFont, brush, lineRect, format);
+            return;
+        }
+
+        var mathFont = CreateMathFont(baseFont.Size, baseFont.Style);
+        var x = lineRect.X;
+        var y = lineRect.Y;
+
+        foreach (var segment in segments)
+        {
+            var font = segment.NeedsMathFont ? mathFont : baseFont;
+            var size = gfx.MeasureString(segment.Text, font);
+            gfx.DrawString(segment.Text, font, brush, new XRect(x, y, size.Width + 1, lineRect.Height), XStringFormats.TopLeft);
+            x += size.Width;
+        }
+    }
+
+    /// <summary>
+    /// Creates a math-capable font (Cambria Math) at the specified size.
+    /// Falls back to Times New Roman if Cambria Math is unavailable.
+    /// </summary>
+    private static XFont CreateMathFont(double size, XFontStyle style)
+    {
+        try
+        {
+            return new XFont(CjkFontResolver.CambriaMath, size, style);
+        }
+        catch
+        {
+            try
+            {
+                return new XFont(CjkFontResolver.TimesNewRoman, size, style);
+            }
+            catch
+            {
+                return new XFont("Arial", size, style);
+            }
+        }
+    }
+
+    // --------------------------------------------------
+    // Formula subscript/superscript rendering
+    // --------------------------------------------------
+
+    internal enum FormulaFragmentKind
+    {
+        Normal,
+        Subscript,
+        Superscript
+    }
+
+    internal readonly record struct FormulaFragment(string Text, FormulaFragmentKind Kind);
+
+    /// <summary>
+    /// Parses a line containing formula patterns (_{...}, ^{...}, _x, ^x) into
+    /// a list of fragments with their rendering kind.
+    /// </summary>
+    internal static List<FormulaFragment> ParseFormulaFragments(string line)
+    {
+        if (string.IsNullOrEmpty(line))
+            return [new FormulaFragment(string.Empty, FormulaFragmentKind.Normal)];
+
+        var fragments = new List<FormulaFragment>();
+        var normalBuffer = new StringBuilder();
+        var i = 0;
+
+        while (i < line.Length)
+        {
+            var ch = line[i];
+            if (ch is '_' or '^' && i + 1 < line.Length)
+            {
+                // Flush normal text
+                if (normalBuffer.Length > 0)
+                {
+                    fragments.Add(new FormulaFragment(normalBuffer.ToString(), FormulaFragmentKind.Normal));
+                    normalBuffer.Clear();
+                }
+
+                var kind = ch == '_' ? FormulaFragmentKind.Subscript : FormulaFragmentKind.Superscript;
+                i++; // skip _ or ^
+
+                if (i < line.Length && line[i] == '{')
+                {
+                    // Grouped: _{...} or ^{...}
+                    i++; // skip {
+                    var groupContent = new StringBuilder();
+                    var nesting = 1;
+                    while (i < line.Length && nesting > 0)
+                    {
+                        if (line[i] == '{') nesting++;
+                        else if (line[i] == '}') nesting--;
+
+                        if (nesting > 0)
+                            groupContent.Append(line[i]);
+                        i++;
+                    }
+                    fragments.Add(new FormulaFragment(groupContent.ToString(), kind));
+                }
+                else if (i < line.Length)
+                {
+                    // Single character: _x or ^2
+                    fragments.Add(new FormulaFragment(line[i].ToString(), kind));
+                    i++;
+                }
+            }
+            else
+            {
+                normalBuffer.Append(ch);
+                i++;
+            }
+        }
+
+        if (normalBuffer.Length > 0)
+            fragments.Add(new FormulaFragment(normalBuffer.ToString(), FormulaFragmentKind.Normal));
+
+        return fragments.Count > 0 ? fragments : [new FormulaFragment(line, FormulaFragmentKind.Normal)];
+    }
+
+    /// <summary>
+    /// Renders a line with formula fragments, applying vertical offsets for subscripts and superscripts.
+    /// Subscripts are drawn smaller and lower, superscripts smaller and higher.
+    /// </summary>
+    private static void DrawFormulaLine(
+        XGraphics gfx,
+        List<FormulaFragment> fragments,
+        XFont baseFont,
+        XBrush brush,
+        XRect lineRect)
+    {
+        var x = lineRect.X;
+        var baselineY = lineRect.Y;
+        var scriptSize = Math.Max(6, baseFont.Size * 0.7);
+
+        foreach (var fragment in fragments)
+        {
+            XFont font;
+            double yOffset;
+
+            switch (fragment.Kind)
+            {
+                case FormulaFragmentKind.Subscript:
+                    font = new XFont(baseFont.Name, scriptSize, baseFont.Style);
+                    yOffset = baseFont.Size * 0.3; // shift down
+                    break;
+                case FormulaFragmentKind.Superscript:
+                    font = new XFont(baseFont.Name, scriptSize, baseFont.Style);
+                    yOffset = -baseFont.Size * 0.35; // shift up
+                    break;
+                default:
+                    font = baseFont;
+                    yOffset = 0;
+                    break;
+            }
+
+            // Check if segment has math characters and use math font
+            var hasMathChars = fragment.Text.Any(NeedsMathFont);
+            if (hasMathChars)
+            {
+                var mathFont = CreateMathFont(font.Size, font.Style);
+                var segments = SegmentLineByFont(fragment.Text);
+                foreach (var seg in segments)
+                {
+                    var segFont = seg.NeedsMathFont ? mathFont : font;
+                    var segSize = gfx.MeasureString(seg.Text, segFont);
+                    gfx.DrawString(seg.Text, segFont, brush,
+                        new XRect(x, baselineY + yOffset, segSize.Width + 1, lineRect.Height),
+                        XStringFormats.TopLeft);
+                    x += segSize.Width;
+                }
+            }
+            else
+            {
+                var textSize = gfx.MeasureString(fragment.Text, font);
+                gfx.DrawString(fragment.Text, font, brush,
+                    new XRect(x, baselineY + yOffset, textSize.Width + 1, lineRect.Height),
+                    XStringFormats.TopLeft);
+                x += textSize.Width;
+            }
+        }
     }
 }

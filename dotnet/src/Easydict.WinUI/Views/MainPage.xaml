@@ -47,12 +47,9 @@
             </StackPanel>
 
             <!-- Segmented Control -->
-            <Border Grid.Column="1"
-                    CornerRadius="6"
+            <Border Grid.Column="1" CornerRadius="4"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    VerticalAlignment="Center"
-                    Margin="12,0,0,0"
+                    BorderThickness="1" VerticalAlignment="Center" Margin="8,0,0,0"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Orientation="Horizontal">
                     <RadioButton x:Name="QuickTranslateTab"

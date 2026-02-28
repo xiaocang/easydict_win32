@@ -191,7 +191,6 @@ public sealed class MuPdfExportService : IDocumentExportService
                 fontId,
                 fontSize,
                 bbox,
-                pdfPigPage.Height,
                 embeddedFonts);
 
             opsText.Append(blockOps);
@@ -201,8 +200,21 @@ public sealed class MuPdfExportService : IDocumentExportService
         // Step 4: Build and replace content stream
         if (rendered > 0)
         {
+            // Generate white rectangle erasure ops to cover original content (including
+            // Form XObject text) in all translated block areas, preventing bleed-through.
+            var opsErase = new StringBuilder();
+            foreach (var block in blocks)
+            {
+                if (block.TranslationSkipped || string.IsNullOrWhiteSpace(block.TranslatedText) || block.BoundingBox is null)
+                    continue;
+
+                var bbox = block.BoundingBox.Value;
+                // bbox.Y is the bottom-left Y in PDF bottom-up coords; use directly for 're' operator
+                opsErase.Append($"1 1 1 rg {bbox.X:F6} {bbox.Y:F6} {bbox.Width:F6} {bbox.Height:F6} re f ");
+            }
+
             var contentStream = ContentStreamInterpreter.BuildContentStream(
-                opsBase, opsText.ToString());
+                opsBase, opsText.ToString(), eraseOps: opsErase.ToString());
 
             // Create a new xref for the content stream
             var xref = muDoc.GetNewXref();
@@ -223,15 +235,17 @@ public sealed class MuPdfExportService : IDocumentExportService
         string fontId,
         double fontSize,
         BlockRect bbox,
-        double pageHeight,
         EmbeddedFontInfo fonts)
     {
         var sb = new StringBuilder();
         var lineHeight = fontSize * 1.2;
 
-        // PDF coordinate system: origin at bottom-left, Y increases upward
+        // PDF coordinate system: origin at bottom-left, Y increases upward.
+        // bbox.Y is the BOTTOM of the block in PDF bottom-up coords.
+        // Place the first baseline one font-size below the top edge so that
+        // ascenders sit inside the box rather than protruding above it.
         var startX = bbox.X;
-        var startY = pageHeight - bbox.Y; // Convert from top-down to bottom-up
+        var startY = bbox.Y + bbox.Height - fontSize;
         var maxWidth = bbox.Width;
         var maxHeight = bbox.Height;
 
@@ -272,7 +286,29 @@ public sealed class MuPdfExportService : IDocumentExportService
                         charFontId = fonts.NotoFontId;
                     }
 
-                    var hexCid = ((int)ch).ToString("X4");
+                    // Encode the character for the content stream.
+                    // MuPDF embeds fonts with Identity-H encoding: the char code in
+                    // [<XXXX>] TJ must be the GID (glyph index), not the Unicode code point.
+                    // This matches pdf2zh's raw_string() for the SourceHanSerif/Noto path.
+                    string hexCid;
+                    if (charFontId == fontId && fonts.PrimaryGlyphMap is not null)
+                    {
+                        if (!fonts.PrimaryGlyphMap.TryGetValue(ch, out var gid) || gid == 0)
+                            continue; // character not in font — skip (matches pdf2zh behavior)
+                        hexCid = gid.ToString("X4");
+                    }
+                    else if (charFontId == fonts.NotoFontId && fonts.NotoGlyphMap is not null)
+                    {
+                        if (!fonts.NotoGlyphMap.TryGetValue(ch, out var gid) || gid == 0)
+                            continue; // character not in font — skip
+                        hexCid = gid.ToString("X4");
+                    }
+                    else
+                    {
+                        // Built-in font (e.g., Helvetica fallback) — use Unicode code point directly
+                        hexCid = ((int)ch).ToString("X4");
+                    }
+
                     sb.Append(ContentStreamInterpreter.GenerateTextOperator(
                         charFontId, fontSize, startX, currentY, hexCid));
                     startX += avgCharWidth;
@@ -333,6 +369,8 @@ public sealed class MuPdfExportService : IDocumentExportService
     {
         string? primaryFontId = null;
         string? notoFontId = null;
+        IReadOnlyDictionary<char, ushort>? primaryGlyphMap = null;
+        IReadOnlyDictionary<char, ushort>? notoGlyphMap = null;
 
         // Embed primary font (CJK or Latin)
         if (fontPaths.PrimaryFontPath is not null && File.Exists(fontPaths.PrimaryFontPath))
@@ -347,6 +385,10 @@ public sealed class MuPdfExportService : IDocumentExportService
             {
                 Debug.WriteLine($"[MuPdfExport] Failed to embed primary font: {ex.Message}");
             }
+
+            // Load GID map for Identity-H encoding — only when the font was embedded from file
+            if (primaryFontId is not null)
+                primaryGlyphMap = TrueTypeCmapParser.LoadGlyphMap(fontPaths.PrimaryFontPath);
         }
 
         // Fallback to built-in Helvetica if no custom font was embedded
@@ -376,9 +418,12 @@ public sealed class MuPdfExportService : IDocumentExportService
             {
                 Debug.WriteLine($"[MuPdfExport] Failed to embed Noto font: {ex.Message}");
             }
+
+            if (notoFontId is not null)
+                notoGlyphMap = TrueTypeCmapParser.LoadGlyphMap(fontPaths.NotoFontPath);
         }
 
-        return new EmbeddedFontInfo(primaryFontId, notoFontId);
+        return new EmbeddedFontInfo(primaryFontId, notoFontId, primaryGlyphMap, notoGlyphMap);
     }
 
     /// <summary>
@@ -482,7 +527,9 @@ public sealed class MuPdfExportService : IDocumentExportService
         string? primaryPath = null;
         string? notoPath = null;
 
-        // Try to find CJK font
+        // Try to find CJK font — preference order:
+        // 1. SourceHanSerif (preferred, matches pdf2zh)
+        // 2. NotoSans CJK variant downloaded by FontDownloadService
         if (targetLanguage.HasValue && CjkFontNames.TryGetValue(targetLanguage.Value, out var cjkName))
         {
             var cjkPath = Path.Combine(appDataPath, $"{cjkName}.otf");
@@ -493,6 +540,28 @@ public sealed class MuPdfExportService : IDocumentExportService
             {
                 primaryName = cjkName;
                 primaryPath = cjkPath;
+            }
+        }
+
+        // Fallback: Noto CJK fonts downloaded by FontDownloadService
+        if (primaryPath is null && targetLanguage.HasValue)
+        {
+            var notoVariant = targetLanguage.Value switch
+            {
+                Language.SimplifiedChinese  => "NotoSansSC-Regular",
+                Language.TraditionalChinese => "NotoSansTC-Regular",
+                Language.Japanese           => "NotoSansJP-Regular",
+                Language.Korean             => "NotoSansKR-Regular",
+                _                           => null,
+            };
+            if (notoVariant is not null)
+            {
+                var path = Path.Combine(appDataPath, $"{notoVariant}.ttf");
+                if (File.Exists(path))
+                {
+                    primaryName = notoVariant;
+                    primaryPath = path;
+                }
             }
         }
 
@@ -521,7 +590,11 @@ public sealed class MuPdfExportService : IDocumentExportService
         public bool TranslationSkipped { get; init; }
     }
 
-    private sealed record EmbeddedFontInfo(string PrimaryFontId, string? NotoFontId);
+    private sealed record EmbeddedFontInfo(
+        string PrimaryFontId,
+        string? NotoFontId,
+        IReadOnlyDictionary<char, ushort>? PrimaryGlyphMap,
+        IReadOnlyDictionary<char, ushort>? NotoGlyphMap);
 
     private sealed record FontPaths(string PrimaryFontName, string? PrimaryFontPath, string? NotoFontPath);
 }

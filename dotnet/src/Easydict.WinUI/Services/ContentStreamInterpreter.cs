@@ -297,8 +297,9 @@ public static class ContentStreamInterpreter
     /// <param name="textOps">Text operation strings to include.</param>
     /// <param name="originX">X origin offset for the text coordinate system.</param>
     /// <param name="originY">Y origin offset for the text coordinate system.</param>
+    /// <param name="eraseOps">Optional white rectangle erasure operations to cover original content.</param>
     /// <returns>Complete content stream bytes.</returns>
-    public static byte[] BuildContentStream(byte[] graphicsOpsBytes, string textOps, double originX = 0, double originY = 0)
+    public static byte[] BuildContentStream(byte[] graphicsOpsBytes, string textOps, double originX = 0, double originY = 0, string eraseOps = "")
     {
         using var ms = new MemoryStream();
         using var writer = new StreamWriter(ms, System.Text.Encoding.ASCII, leaveOpen: true);
@@ -308,6 +309,14 @@ public static class ContentStreamInterpreter
         writer.Flush();
         ms.Write(graphicsOpsBytes, 0, graphicsOpsBytes.Length);
         writer.Write("Q ");
+
+        // White rectangle erasure: cover original content (including Form XObject text) in translated areas
+        if (!string.IsNullOrEmpty(eraseOps))
+        {
+            writer.Write("q ");
+            writer.Write(eraseOps);
+            writer.Write("Q ");
+        }
 
         // Set coordinate origin and write text block
         writer.Write($"1 0 0 1 {originX:F6} {originY:F6} cm ");

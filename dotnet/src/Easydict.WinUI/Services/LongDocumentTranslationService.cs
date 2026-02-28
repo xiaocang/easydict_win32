@@ -158,6 +158,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         CancellationToken cancellationToken = default,
         LayoutDetectionMode layoutDetection = LayoutDetectionMode.Heuristic,
         DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
+        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement,
         string? visionEndpoint = null,
         string? visionApiKey = null,
         string? visionModel = null,
@@ -287,7 +288,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         }
 
         onProgress?.Invoke("Rendering translated output...");
-        return FinalizeResult(checkpoint, outputPath, onProgress, coreResult.QualityReport, outputMode);
+        return FinalizeResult(checkpoint, outputPath, onProgress, coreResult.QualityReport, outputMode, pdfExportMode);
     }
 
     public async Task<LongDocumentTranslationResult> RetryFailedChunksAsync(
@@ -533,7 +534,7 @@ public sealed class LongDocumentTranslationService : IDisposable
 
     private static IDocumentExportService ResolveExportService(
         string? sourceFilePath,
-        PdfExportMode pdfExportMode = PdfExportMode.Overlay)
+        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement)
     {
         var ext = Path.GetExtension(sourceFilePath)?.ToLowerInvariant();
         return ext switch
@@ -555,7 +556,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         Action<string>? onProgress,
         LongDocumentQualityReport qualityReport,
         DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
-        PdfExportMode pdfExportMode = PdfExportMode.Overlay)
+        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement)
     {
         ValidateCheckpointOrThrow(checkpoint);
 

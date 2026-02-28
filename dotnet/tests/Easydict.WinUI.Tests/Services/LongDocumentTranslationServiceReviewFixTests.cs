@@ -603,6 +603,118 @@ public class LongDocumentTranslationServiceReviewFixTests
         merged.BlockIssues.Should().BeNull();
     }
 
+    [Theory]
+    // "BT /F1 11 Tf " is 13 chars; "(Hello World)" is at 13..25, " Tj" ends at 29
+    [InlineData("BT /F1 11 Tf (Hello World) Tj ET", "Hello World", 13, 29)]
+    // "(Hello)" is at 13..19, " Tj" ends at 23
+    [InlineData("BT /F1 11 Tf (Hello) Tj ET", "Hello", 13, 23)]
+    // escaped parens: "(escaped\(paren\))" is at 0..17, " Tj" ends at 21
+    [InlineData("(escaped\\(paren\\)) Tj", "escaped(paren)", 0, 21)]
+    public void FindTextOperatorRange_ShouldFindLiteralTjForm(string content, string source, int expectedStart, int expectedEnd)
+    {
+        var (start, end) = PdfExportService.FindTextOperatorRange(content, source);
+        start.Should().Be(expectedStart);
+        end.Should().Be(expectedEnd);
+    }
+
+    [Fact]
+    public void FindTextOperatorRange_ShouldFindTjArrayForm()
+    {
+        const string content = "BT /F1 11 Tf [(Hello) -80 (World)] TJ ET";
+        var (start, end) = PdfExportService.FindTextOperatorRange(content, "Hello World");
+        start.Should().Be(13);
+        end.Should().Be(37);
+    }
+
+    [Theory]
+    [InlineData("BT /F1 11 Tf (Other text) Tj ET", "Hello World")]   // different text
+    [InlineData("BT ET", "Hello")]                                      // no text operators
+    [InlineData("", "Hello")]                                           // empty stream
+    public void FindTextOperatorRange_ShouldReturnMinusOneWhenNotFound(string content, string source)
+    {
+        var (start, end) = PdfExportService.FindTextOperatorRange(content, source);
+        start.Should().Be(-1);
+        end.Should().Be(-1);
+    }
+
+    [Fact]
+    public void BuildPerLetterEraseRects_ShouldReturnNullWhenNoCharacterData()
+    {
+        var metadata = new LongDocumentChunkMetadata
+        {
+            ChunkIndex = 0, PageNumber = 1, SourceBlockId = "p1-body-b1",
+            SourceBlockType = SourceBlockType.Paragraph, OrderInPage = 0,
+            RegionType = LayoutRegionType.Body, RegionConfidence = 0.9,
+            RegionSource = LayoutRegionSource.BlockIdFallback, ReadingOrderScore = 1,
+            FormulaCharacters = null
+        };
+
+        var result = PdfExportService.BuildPerLetterEraseRects(metadata, 792.0);
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildPerLetterEraseRects_ShouldConvertGlyphCoordsFromPdfToScreenSpace()
+    {
+        // Glyph at PDF coords: left=50, bottom=100, width=20, height=12
+        // In PDF space Y increases upward, so glyph top = bottom + height = 112.
+        // In screen space (Y-down, pageHeight=792): drawY = 792 - 112 = 680.
+        var metadata = new LongDocumentChunkMetadata
+        {
+            ChunkIndex = 0, PageNumber = 1, SourceBlockId = "p1-body-b1",
+            SourceBlockType = SourceBlockType.Paragraph, OrderInPage = 0,
+            RegionType = LayoutRegionType.Body, RegionConfidence = 0.9,
+            RegionSource = LayoutRegionSource.BlockIdFallback, ReadingOrderScore = 1,
+            FormulaCharacters = new BlockFormulaCharacters
+            {
+                Characters =
+                [
+                    new FormulaCharacterInfo("A", "TimesNewRoman", 11, GlyphLeft: 50, GlyphBottom: 100,
+                        GlyphWidth: 20, GlyphHeight: 12, IsMathFont: false, IsSubscript: false, IsSuperscript: false)
+                ],
+                MedianTextFontSize = 11,
+                MedianBaselineY = 100,
+                HasMathFontCharacters = false
+            }
+        };
+
+        var rects = PdfExportService.BuildPerLetterEraseRects(metadata, pageHeight: 792.0);
+        rects.Should().NotBeNull().And.HaveCount(1);
+        rects![0].X.Should().BeApproximately(50, 0.001);
+        rects[0].Y.Should().BeApproximately(680, 0.001);   // 792 - (100 + 12) = 680
+        rects[0].Width.Should().BeApproximately(20, 0.001);
+        rects[0].Height.Should().BeApproximately(12, 0.001);
+    }
+
+    [Fact]
+    public void BuildPerLetterEraseRects_ShouldSkipGlyphsWithZeroDimensions()
+    {
+        var metadata = new LongDocumentChunkMetadata
+        {
+            ChunkIndex = 0, PageNumber = 1, SourceBlockId = "p1-body-b1",
+            SourceBlockType = SourceBlockType.Paragraph, OrderInPage = 0,
+            RegionType = LayoutRegionType.Body, RegionConfidence = 0.9,
+            RegionSource = LayoutRegionSource.BlockIdFallback, ReadingOrderScore = 1,
+            FormulaCharacters = new BlockFormulaCharacters
+            {
+                Characters =
+                [
+                    new FormulaCharacterInfo(" ", "TimesNewRoman", 11, 50, 100, GlyphWidth: 0, GlyphHeight: 12,
+                        false, false, false),  // zero width — space, skip
+                    new FormulaCharacterInfo("A", "TimesNewRoman", 11, 70, 100, GlyphWidth: 10, GlyphHeight: 12,
+                        false, false, false)   // valid
+                ],
+                MedianTextFontSize = 11,
+                MedianBaselineY = 100,
+                HasMathFontCharacters = false
+            }
+        };
+
+        var rects = PdfExportService.BuildPerLetterEraseRects(metadata, pageHeight: 792.0);
+        rects.Should().NotBeNull().And.HaveCount(1);
+        rects![0].X.Should().BeApproximately(70, 0.001);
+    }
+
     [Fact]
     public void InferRegionType_ShouldRespectTwoColumnBoundariesWhenEnabled()
     {

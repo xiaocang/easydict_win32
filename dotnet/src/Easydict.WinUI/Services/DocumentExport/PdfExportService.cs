@@ -258,6 +258,11 @@ public sealed class PdfExportService : IDocumentExportService
         public IReadOnlyList<XRect>? BackgroundLineRects { get; init; }
         public IReadOnlyList<XRect>? RenderLineRects { get; init; }
         public IReadOnlyList<XRect> ProtectedInlineRects { get; init; } = [];
+        /// <summary>
+        /// True when the source text was hidden in the PDF content stream via "3 Tr" (invisible
+        /// rendering mode), so no white-rectangle erasure is needed in Pass 1.
+        /// </summary>
+        public bool SourceHidden { get; init; }
     }
 
     internal static BackfillRenderingMetrics ExportPdfWithCoordinateBackfill(LongDocumentTranslationCheckpoint checkpoint, string sourcePdfPath, string outputPath)
@@ -458,6 +463,11 @@ public sealed class PdfExportService : IDocumentExportService
                 overlayBlocksByPage[pageIndex] = pageBlocks;
             }
 
+            // Prefer hiding the source text via "3 Tr" (invisible rendering mode) in the content
+            // stream rather than drawing a white rectangle over it. This preserves table borders,
+            // column dividers, and other adjacent graphics that a white box would erase.
+            var sourceHidden = TryHideSourceTextInStream(page, sourceText);
+
             pageBlocks.Add(new OverlayBlockInfo
             {
                 ChunkIndex = chunkIndex,
@@ -467,7 +477,8 @@ public sealed class PdfExportService : IDocumentExportService
                 Padding = pad,
                 BackgroundLineRects = backgroundLineRects,
                 RenderLineRects = renderLineRects,
-                ProtectedInlineRects = protectedInlineRects
+                ProtectedInlineRects = protectedInlineRects,
+                SourceHidden = sourceHidden
             });
         }
 
@@ -480,9 +491,15 @@ public sealed class PdfExportService : IDocumentExportService
             {
                 using var gfx = XGraphics.FromPdfPage(page, XGraphicsPdfPageOptions.Append);
 
-                // Pass 1: Draw all white background rectangles
+                // Pass 1: Draw all white background rectangles.
+                // Blocks where TryHideSourceTextInStream succeeded (SourceHidden=true) skip this
+                // entirely — the source text is already invisible via "3 Tr" in the content stream,
+                // so no white-box erasure is needed (and would only damage adjacent graphics).
                 foreach (var block in blocks)
                 {
+                    if (block.SourceHidden)
+                        continue;
+
                     var clipRect = ExpandOverlayClipRect(block.Rect, block.Padding, page);
                     var formulaRects = protectedFormulaRectsByPage.TryGetValue(pageIndex, out var protectedRects)
                         ? protectedRects
@@ -491,8 +508,26 @@ public sealed class PdfExportService : IDocumentExportService
                     try
                     {
                         IntersectClipWithProtectionHoles(gfx, clipRect, block.Padding, page, block.ProtectedInlineRects, formulaRects, block.Rect);
+
+                        // Prefer per-letter glyph rectangles when available (formula blocks with
+                        // math-font character data). Per-letter erasure targets only the ink area of
+                        // each glyph, leaving the gaps between characters — where table rules and
+                        // column dividers typically run — untouched.
+                        var letterRects = BuildPerLetterEraseRects(block.Metadata, page.Height.Point);
                         var backgroundLineRects = block.BackgroundLineRects ?? block.RenderLineRects;
-                        if (backgroundLineRects is { Count: > 0 })
+                        if (letterRects is { Count: > 0 })
+                        {
+                            foreach (var r in letterRects)
+                            {
+                                gfx.DrawRectangle(XBrushes.White,
+                                    new XRect(
+                                        r.X - block.Padding * 0.5,
+                                        r.Y - block.Padding,
+                                        r.Width + block.Padding,
+                                        r.Height + block.Padding * 2));
+                            }
+                        }
+                        else if (backgroundLineRects is { Count: > 0 })
                         {
                             foreach (var r in backgroundLineRects)
                             {
@@ -570,6 +605,11 @@ public sealed class PdfExportService : IDocumentExportService
                     var maxVisibleLines = block.RenderLineRects is { Count: > 0 }
                         ? block.RenderLineRects.Count
                         : Math.Max(1, (int)Math.Floor(rect.Height / effectiveLineHeight));
+                    // When the source was hidden via "3 Tr" there is no white box clipping the
+                    // bbox below, so allow a couple of extra lines to flow into natural whitespace
+                    // rather than hard-truncating — mirroring pdf2zh's natural overflow behaviour.
+                    if (block.SourceHidden)
+                        maxVisibleLines += 2;
                     var originalLineCount = wrappedLines.Count;
                     if (wrappedLines.Count > maxVisibleLines)
                     {
@@ -627,7 +667,7 @@ public sealed class PdfExportService : IDocumentExportService
                         ChunkIndex = block.ChunkIndex,
                         SourceBlockId = metadata.SourceBlockId,
                         PageNumber = metadata.PageNumber,
-                        Kind = "overlay-rendered"
+                        Kind = block.SourceHidden ? "invisible-hidden" : "overlay-rendered"
                     });
                 }
             }
@@ -679,7 +719,8 @@ public sealed class PdfExportService : IDocumentExportService
                 "missing-bbox",
                 "page-out-of-range",
                 "truncated",
-                "shrink-font"
+                "shrink-font",
+                "invisible-hidden"   // source text hidden via "3 Tr" in content stream (no white-box erasure)
             };
 
             var issueList = (blockIssues ?? Array.Empty<BackfillBlockIssue>())
@@ -1839,6 +1880,150 @@ public sealed class PdfExportService : IDocumentExportService
             Debug.WriteLine($"[PdfExport] TryReplacePdfTextObject failed: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Finds the Tj/TJ operator for <paramref name="sourceText"/> in the page content stream and
+    /// wraps it with "3 Tr … 0 Tr" to make the source text invisible without erasing any adjacent
+    /// graphics (table borders, column dividers, images, etc.).
+    /// <para>
+    /// Unlike <see cref="TryReplacePdfTextObject"/>, this method works for any source text whose
+    /// bytes are representable in Latin-1 (ISO 8859-1), including all ASCII text. The translated
+    /// text is written by the normal XGraphics overlay path — no white rectangle is needed.
+    /// </para>
+    /// Returns <c>true</c> if the operator was found and hidden; <c>false</c> if it could not be
+    /// located (caller should fall back to the white-rectangle overlay path).
+    /// </summary>
+    internal static bool TryHideSourceTextInStream(PdfPage page, string sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText))
+            return false;
+
+        try
+        {
+            var createSingleContent = page.Contents.GetType().GetMethod("CreateSingleContent");
+            if (createSingleContent is null)
+                return false;
+
+            var contentStream = createSingleContent.Invoke(page.Contents, null);
+            if (contentStream is null)
+                return false;
+
+            var streamProperty = contentStream.GetType().GetProperty("Stream");
+            var streamValue = streamProperty?.GetValue(contentStream);
+            if (streamValue is null)
+                return false;
+
+            var valueProperty = streamValue.GetType().GetProperty("Value");
+            var raw = valueProperty?.GetValue(streamValue) as byte[];
+            if (raw is null || raw.Length == 0)
+                return false;
+
+            // Decode as Latin-1 (ISO 8859-1). Every byte value 0x00-0xFF maps to the same Unicode
+            // code point, so binary content round-trips without corruption, and ASCII text is
+            // identical to Latin-1 in the 0x00-0x7F range.
+            var content = Encoding.Latin1.GetString(raw);
+            var (start, end) = FindTextOperatorRange(content, sourceText);
+            if (start < 0)
+                return false;
+
+            // Inject "3 Tr" before the text-show operator and restore "0 Tr" immediately after.
+            // PDF text rendering mode 3 = neither fill nor stroke (invisible), 0 = fill (normal).
+            var modified = content[..start] + "3 Tr " + content[start..end] + " 0 Tr" + content[end..];
+            valueProperty?.SetValue(streamValue, Encoding.Latin1.GetBytes(modified));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[PdfExport] TryHideSourceTextInStream failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Locates the PDF text-show operator (Tj or TJ) that renders <paramref name="sourceText"/>
+    /// in the content stream <paramref name="content"/> (decoded as Latin-1).
+    /// </summary>
+    /// <returns>
+    /// <c>(start, end)</c> character indices of the complete operator span
+    /// (from the opening <c>(</c> or <c>[</c> to just past <c>j</c>/<c>J</c>), or
+    /// <c>(-1, -1)</c> if not found.
+    /// </returns>
+    internal static (int Start, int End) FindTextOperatorRange(string content, string sourceText)
+    {
+        // --- Literal Tj form: (escapedSource) Tj ---
+        var escapedSource = EscapePdfLiteralString(sourceText);
+        var sourceToken = $"({escapedSource})";
+        var idx = content.IndexOf(sourceToken, StringComparison.Ordinal);
+        if (idx >= 0)
+        {
+            // Scan past optional whitespace to confirm "Tj" follows.
+            var pos = idx + sourceToken.Length;
+            while (pos < content.Length && content[pos] is ' ' or '\t' or '\r' or '\n')
+                pos++;
+            if (pos + 2 <= content.Length && content[pos] == 'T' && content[pos + 1] == 'j')
+            {
+                var afterOp = pos + 2;
+                // Guard: Tj must be a complete token (not "Tj0" or similar).
+                if (afterOp >= content.Length || !char.IsLetterOrDigit(content[afterOp]))
+                    return (idx, afterOp);
+            }
+            // If Tj doesn't follow, fall through to the TJ-array search below.
+        }
+
+        // --- TJ array form: [(body)] TJ ---
+        var normalizedSource = NormalizePdfTextForMatch(sourceText);
+        if (string.IsNullOrWhiteSpace(normalizedSource))
+            return (-1, -1);
+
+        foreach (Match match in Regex.Matches(content, @"\[(?<body>.*?)\]\s*TJ", RegexOptions.Singleline))
+        {
+            var bodyGroup = match.Groups["body"];
+            if (!bodyGroup.Success)
+                continue;
+
+            var extracted = ExtractPdfLiteralStrings(bodyGroup.Value);
+            if (extracted.Count == 0)
+                continue;
+
+            var combined = string.Concat(extracted.Select(item => item.Value));
+            if (string.Equals(NormalizePdfTextForMatch(combined), normalizedSource, StringComparison.Ordinal))
+                return (match.Index, match.Index + match.Length);
+        }
+
+        return (-1, -1);
+    }
+
+    /// <summary>
+    /// Builds a list of per-letter glyph rectangles in XGraphics coordinates (Y-down) from
+    /// <see cref="LongDocumentChunkMetadata.FormulaCharacters"/>, which stores PDF-coordinate
+    /// (Y-up) glyph positions extracted at analysis time.
+    /// Returns <c>null</c> when no character data is available (most non-formula blocks).
+    /// </summary>
+    internal static IReadOnlyList<XRect>? BuildPerLetterEraseRects(LongDocumentChunkMetadata metadata, double pageHeight)
+    {
+        var characters = metadata.FormulaCharacters?.Characters;
+        if (characters is null || characters.Count == 0)
+            return null;
+
+        var rects = new List<XRect>(characters.Count);
+        foreach (var glyph in characters)
+        {
+            if (glyph.GlyphWidth <= 0 || glyph.GlyphHeight <= 0)
+                continue;
+
+            // Flip Y from PDF space (origin = bottom-left, Y increases upward)
+            // to XGraphics space (origin = top-left, Y increases downward).
+            // GlyphBottom is the lower edge of the glyph in PDF coordinates, so
+            // GlyphBottom + GlyphHeight is the upper edge — which becomes the top in screen space.
+            rects.Add(new XRect(
+                Math.Max(0, glyph.GlyphLeft),
+                Math.Max(0, pageHeight - (glyph.GlyphBottom + glyph.GlyphHeight)),
+                glyph.GlyphWidth,
+                glyph.GlyphHeight));
+        }
+
+        return rects.Count > 0 ? rects : null;
     }
 
     internal static bool TryPatchPdfLiteralToken(string content, string sourceText, string translatedText, out string patched)

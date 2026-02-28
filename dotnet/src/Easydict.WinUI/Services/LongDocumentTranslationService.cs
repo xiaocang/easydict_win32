@@ -843,34 +843,13 @@ public sealed class LongDocumentTranslationService : IDisposable
 
                 if (enhancedBlocks.Count > 0)
                 {
-                    // Use enhanced blocks: update BlockId region tags and apply ML region types
-                    var mlBlocks = enhancedBlocks.Select((eb, blockIdx) =>
-                    {
-                        var regionTag = eb.RegionType switch
-                        {
-                            LayoutRegionType.Header => "header",
-                            LayoutRegionType.Footer => "footer",
-                            LayoutRegionType.LeftColumn => "left",
-                            LayoutRegionType.RightColumn => "right",
-                            LayoutRegionType.TableLike or LayoutRegionType.Table => "table",
-                            LayoutRegionType.Figure => "figure",
-                            LayoutRegionType.Formula or LayoutRegionType.IsolatedFormula => "formula",
-                            LayoutRegionType.Caption => "caption",
-                            LayoutRegionType.Title => "title",
-                            _ => "body"
-                        };
-
-                        return eb.Block with
-                        {
-                            BlockId = $"p{page.Number}-{regionTag}-b{blockIdx + 1}"
-                        };
-                    }).ToList();
-
+                    // ML-driven blocks already carry correct BlockIds and IsFormulaLike flags
+                    // (set by LayoutDetectionStrategy.ExtractBlocksByMlRegions → GroupWordsIntoBlocks).
                     pages.Add(new SourceDocumentPage
                     {
                         PageNumber = page.Number,
                         IsScanned = false,
-                        Blocks = mlBlocks
+                        Blocks = enhancedBlocks.Select(eb => eb.Block).ToList()
                     });
                     continue;
                 }
@@ -1036,70 +1015,163 @@ public sealed class LongDocumentTranslationService : IDisposable
                     _ => -90
                 };
 
-            // Group rotated words by horizontal proximity (they share similar X positions)
-            var rotatedGroups = new List<List<Word>>();
-            var sortedRotated = orientationGroup.OrderBy(w => w.BoundingBox.Left).ThenByDescending(w => w.BoundingBox.Top).ToList();
+                // Group rotated words by horizontal proximity (they share similar X positions)
+                var rotatedGroups = new List<List<Word>>();
+                var sortedRotated = orientationGroup.OrderBy(w => w.BoundingBox.Left).ThenByDescending(w => w.BoundingBox.Top).ToList();
 
-            foreach (var word in sortedRotated)
-            {
-                var added = false;
+                foreach (var word in sortedRotated)
+                {
+                    var added = false;
+                    foreach (var group in rotatedGroups)
+                    {
+                        var groupLeft = group.Min(w => w.BoundingBox.Left);
+                        var groupRight = group.Max(w => w.BoundingBox.Right);
+                        // Words in the same rotated text block share similar X coordinates
+                        if (Math.Abs(word.BoundingBox.Left - groupLeft) < medianWordHeight * 2 ||
+                            Math.Abs(word.BoundingBox.Right - groupRight) < medianWordHeight * 2)
+                        {
+                            group.Add(word);
+                            added = true;
+                            break;
+                        }
+                    }
+
+                    if (!added)
+                    {
+                        rotatedGroups.Add([word]);
+                    }
+                }
+
                 foreach (var group in rotatedGroups)
                 {
-                    var groupLeft = group.Min(w => w.BoundingBox.Left);
-                    var groupRight = group.Max(w => w.BoundingBox.Right);
-                    // Words in the same rotated text block share similar X coordinates
-                    if (Math.Abs(word.BoundingBox.Left - groupLeft) < medianWordHeight * 2 ||
-                        Math.Abs(word.BoundingBox.Right - groupRight) < medianWordHeight * 2)
+                    // Sort bottom-to-top for rotated text (read order for -90° rotation)
+                    var sorted = rotationAngle switch
                     {
-                        group.Add(word);
-                        added = true;
-                        break;
-                    }
-                }
-
-                if (!added)
-                {
-                    rotatedGroups.Add([word]);
-                }
-            }
-
-            foreach (var group in rotatedGroups)
-            {
-                // Sort bottom-to-top for rotated text (read order for -90° rotation)
-                var sorted = rotationAngle switch
-                {
-                    90 => group.OrderByDescending(w => w.BoundingBox.Top).ToList(),
-                    180 => group.OrderByDescending(w => w.BoundingBox.Right).ToList(),
-                    _ => group.OrderBy(w => w.BoundingBox.Bottom).ToList()
-                };
-                var blockText = string.Join(" ", sorted.Select(w => w.Text)).Trim();
-                if (string.IsNullOrWhiteSpace(blockText))
-                {
-                    continue;
-                }
-
-                var left = sorted.Min(w => w.BoundingBox.Left);
-                var right = sorted.Max(w => w.BoundingBox.Right);
-                var top = sorted.Max(w => w.BoundingBox.Top);
-                var bottom = sorted.Min(w => w.BoundingBox.Bottom);
-
-                blockIndex++;
-                yield return new SourceDocumentBlock
-                {
-                    BlockId = $"p{page.Number}-sidebar-b{blockIndex}",
-                    BlockType = SourceBlockType.Paragraph,
-                    Text = blockText,
-                    IsFormulaLike = false,
-                    BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
-                    TextStyle = new BlockTextStyle
+                        90 => group.OrderByDescending(w => w.BoundingBox.Top).ToList(),
+                        180 => group.OrderByDescending(w => w.BoundingBox.Right).ToList(),
+                        _ => group.OrderBy(w => w.BoundingBox.Bottom).ToList()
+                    };
+                    var blockText = string.Join(" ", sorted.Select(w => w.Text)).Trim();
+                    if (string.IsNullOrWhiteSpace(blockText))
                     {
-                        FontSize = Math.Clamp(right - left, 6, 12), // Rotated: width ≈ font size
-                        RotationAngle = rotationAngle
+                        continue;
                     }
-                };
-            }
+
+                    var left = sorted.Min(w => w.BoundingBox.Left);
+                    var right = sorted.Max(w => w.BoundingBox.Right);
+                    var top = sorted.Max(w => w.BoundingBox.Top);
+                    var bottom = sorted.Min(w => w.BoundingBox.Bottom);
+
+                    blockIndex++;
+                    yield return new SourceDocumentBlock
+                    {
+                        BlockId = $"p{page.Number}-sidebar-b{blockIndex}",
+                        BlockType = SourceBlockType.Paragraph,
+                        Text = blockText,
+                        IsFormulaLike = false,
+                        BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
+                        TextStyle = new BlockTextStyle
+                        {
+                            FontSize = Math.Clamp(right - left, 6, 12), // Rotated: width ≈ font size
+                            RotationAngle = rotationAngle
+                        }
+                    };
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// Groups a pre-filtered list of horizontal words into <see cref="SourceDocumentBlock"/>s
+    /// for a single layout region (e.g., one ML-detected bounding box).
+    /// Unlike <see cref="ExtractLayoutBlocksFromPage"/>, this method does NOT apply
+    /// column-gap splitting or multi-column ordering — the caller is responsible for
+    /// constraining which words are passed in.
+    /// </summary>
+    /// <param name="regionWords">Horizontal words already filtered to this region.</param>
+    /// <param name="page">PdfPig page for letter-level font/style extraction.</param>
+    /// <param name="pageNumber">1-based page number for BlockId generation.</param>
+    /// <param name="regionTag">Region tag embedded in the BlockId (e.g., "body", "title").</param>
+    /// <param name="blockIndex">Counter incremented for each emitted block (shared across regions on the same page).</param>
+    internal static List<SourceDocumentBlock> GroupWordsIntoBlocks(
+        List<Word> regionWords,
+        PdfPigPage page,
+        int pageNumber,
+        string regionTag,
+        ref int blockIndex)
+    {
+        var result = new List<SourceDocumentBlock>();
+
+        if (regionWords.Count == 0)
+            return result;
+
+        var medianWordHeight = regionWords
+            .Select(w => Math.Max(1d, w.BoundingBox.Height))
+            .OrderBy(h => h)
+            .Skip(regionWords.Count / 2)
+            .FirstOrDefault(defaultValue: 10d);
+
+        var sameLineThreshold = Math.Max(2.5, medianWordHeight * 0.35);
+        var paragraphGapThreshold = Math.Max(8, medianWordHeight * 1.8);
+
+        // Sort top-to-bottom, left-to-right
+        var sorted = regionWords
+            .OrderByDescending(w => w.BoundingBox.Top)
+            .ThenBy(w => w.BoundingBox.Left)
+            .ToList();
+
+        // Group words into text lines by Y proximity
+        var lines = new List<PdfTextLine>();
+        foreach (var word in sorted)
+        {
+            var box = word.BoundingBox;
+            var line = lines.FirstOrDefault(l => Math.Abs(l.Top - box.Top) <= sameLineThreshold);
+            if (line is null)
+            {
+                line = new PdfTextLine(box.Top);
+                lines.Add(line);
+            }
+            line.Words.Add(word);
+        }
+
+        lines = lines
+            .Select(l => l.Normalize())
+            .OrderByDescending(l => l.Top)
+            .ToList();
+
+        // Within a single ML region, columns are already delimited — no column-gap splitting needed.
+        // Use simple top-to-bottom order instead of the multi-column OrderLinesByLayout heuristic.
+        var paragraphs = BuildParagraphsWithGridCellMerging(lines, paragraphGapThreshold, sameLineThreshold);
+
+        foreach (var linesInBlock in paragraphs)
+        {
+            var blockText = string.Join("\n", linesInBlock.Select(l => l.Text)).Trim();
+            if (string.IsNullOrWhiteSpace(blockText))
+                continue;
+
+            var left = linesInBlock.Min(l => l.Left);
+            var right = linesInBlock.Max(l => l.Right);
+            var top = linesInBlock.Max(l => l.Top);
+            var bottom = linesInBlock.Min(l => l.Bottom);
+
+            var type = GuessBlockType(blockText);
+            var (blockFontNames, textStyle, formulaChars) = ExtractBlockLetterData(page, linesInBlock, left, right, top, bottom);
+
+            blockIndex++;
+            result.Add(new SourceDocumentBlock
+            {
+                BlockId = $"p{pageNumber}-{regionTag}-b{blockIndex}",
+                BlockType = type,
+                Text = blockText,
+                IsFormulaLike = type == SourceBlockType.Formula,
+                BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
+                DetectedFontNames = blockFontNames.Count > 0 ? blockFontNames : null,
+                TextStyle = textStyle,
+                FormulaCharacters = formulaChars
+            });
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -1115,7 +1187,7 @@ public sealed class LongDocumentTranslationService : IDisposable
     /// from PdfPig letters within a block's bounding region. This avoids iterating page.Letters
     /// multiple times per block.
     /// </summary>
-    private static (List<string> FontNames, BlockTextStyle? TextStyle, BlockFormulaCharacters? FormulaCharacters)
+    internal static (List<string> FontNames, BlockTextStyle? TextStyle, BlockFormulaCharacters? FormulaCharacters)
         ExtractBlockLetterData(
             PdfPigPage page, List<PdfTextLine> linesInBlock,
             double left, double right, double top, double bottom)
@@ -1306,7 +1378,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         }
     }
 
-    private static bool FontNameLooksBold(string fontName)
+    internal static bool FontNameLooksBold(string fontName)
     {
         if (string.IsNullOrWhiteSpace(fontName))
         {
@@ -1325,7 +1397,7 @@ public sealed class LongDocumentTranslationService : IDisposable
                fontName.EndsWith("#B", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool FontNameLooksItalic(string fontName)
+    internal static bool FontNameLooksItalic(string fontName)
     {
         if (string.IsNullOrWhiteSpace(fontName))
         {
@@ -1595,7 +1667,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         return paragraphs;
     }
 
-    private static List<List<PdfTextLine>> BuildParagraphsWithGridCellMerging(
+    internal static List<List<PdfTextLine>> BuildParagraphsWithGridCellMerging(
         IReadOnlyList<PdfTextLine> lines,
         double paragraphGapThreshold,
         double sameRowThreshold)
@@ -1851,7 +1923,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         return splitIndices;
     }
 
-    private sealed class PdfTextLine(double top)
+    internal sealed class PdfTextLine(double top)
     {
         public double Top { get; } = top;
         public bool IsColumnSplitFragment { get; set; }
@@ -1971,7 +2043,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         return (LayoutRegionType.Unknown, 0.35d, LayoutRegionSource.Unknown);
     }
 
-    private static SourceBlockType GuessBlockType(string text)
+    internal static SourceBlockType GuessBlockType(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {

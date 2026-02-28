@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Easydict.TranslationService.LongDocument;
+using UglyToad.PdfPig.Content;
 using PdfPigPage = UglyToad.PdfPig.Content.Page;
 
 namespace Easydict.WinUI.Services;
@@ -10,7 +11,10 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 internal sealed class LayoutDetectionStrategy
 {
-    /// <summary>IoU threshold for matching text blocks to ML-detected regions.</summary>
+    // Rendering target size — must match RenderPdfPageAsync in this file.
+    private const int RenderTargetSize = 1024;
+
+    /// <summary>IoU threshold for matching text blocks to ML-detected regions (legacy MergeDetections path).</summary>
     private const float IoUMatchThreshold = 0.3f;
 
     private readonly DocLayoutYoloService _onnxService;
@@ -29,9 +33,14 @@ internal sealed class LayoutDetectionStrategy
 
     /// <summary>
     /// Detect layout regions and extract text blocks from a PDF page.
-    /// Falls back to heuristic if ML detection is unavailable or fails.
+    /// Uses an ML-first, pixel-mask-style approach similar to pdf2zh:
+    /// ML bounding boxes are the authoritative column boundaries; page words are
+    /// assigned to the smallest enclosing ML region by their centre point, then
+    /// grouped into paragraphs within each region.
+    /// Returns an empty list when ML detection is unavailable — the caller
+    /// (<see cref="LongDocumentTranslationService"/>) falls back to heuristic extraction.
     /// </summary>
-    /// <param name="textPage">PdfPig page for text extraction.</param>
+    /// <param name="textPage">PdfPig page for text/word extraction.</param>
     /// <param name="pdfPath">Path to the PDF file (for page rendering).</param>
     /// <param name="pageIndex">Zero-based page index.</param>
     /// <param name="mode">Layout detection mode.</param>
@@ -39,7 +48,7 @@ internal sealed class LayoutDetectionStrategy
     /// <param name="visionApiKey">Vision LLM API key (for VisionLLM mode).</param>
     /// <param name="visionModel">Vision LLM model (for VisionLLM mode).</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>List of source document blocks with enhanced layout information.</returns>
+    /// <returns>ML-driven source document blocks, or empty when ML is unavailable.</returns>
     public async Task<IReadOnlyList<EnhancedSourceBlock>> DetectAndExtractAsync(
         PdfPigPage textPage,
         string pdfPath,
@@ -50,13 +59,9 @@ internal sealed class LayoutDetectionStrategy
         string? visionModel = null,
         CancellationToken ct = default)
     {
-        // Always extract text blocks using the existing heuristic pipeline
-        var heuristicBlocks = ExtractHeuristicBlocks(textPage);
-
-        if (mode == LayoutDetectionMode.Heuristic || heuristicBlocks.Count == 0)
-        {
-            return heuristicBlocks.Select(b => new EnhancedSourceBlock(b.Block, b.RegionType, 1.0, LayoutRegionSource.Heuristic)).ToList();
-        }
+        // Heuristic mode: skip ML entirely; caller uses ExtractLayoutBlocksFromPage.
+        if (mode == LayoutDetectionMode.Heuristic)
+            return [];
 
         // Try ML detection
         List<LayoutDetection>? mlDetections = null;
@@ -66,9 +71,7 @@ internal sealed class LayoutDetectionStrategy
         {
             mlDetections = await TryOnnxDetectionAsync(pdfPath, pageIndex, ct);
             if (mlDetections is not null)
-            {
                 mlSource = LayoutRegionSource.OnnxModel;
-            }
         }
 
         if (mlDetections is null && mode is LayoutDetectionMode.VisionLLM)
@@ -76,20 +79,17 @@ internal sealed class LayoutDetectionStrategy
             mlDetections = await TryVisionDetectionAsync(
                 pdfPath, pageIndex, visionEndpoint, visionApiKey, visionModel, ct);
             if (mlDetections is not null)
-            {
                 mlSource = LayoutRegionSource.VisionLLM;
-            }
         }
 
-        // If ML detection failed or returned nothing, fall back to heuristic
         if (mlDetections is null || mlDetections.Count == 0)
         {
-            Debug.WriteLine($"[LayoutStrategy] ML detection unavailable for page {pageIndex + 1}, using heuristic");
-            return heuristicBlocks.Select(b => new EnhancedSourceBlock(b.Block, b.RegionType, 1.0, LayoutRegionSource.Heuristic)).ToList();
+            Debug.WriteLine($"[LayoutStrategy] ML detection unavailable for page {pageIndex + 1}, caller will use heuristic");
+            return [];
         }
 
-        // Merge ML detections with heuristic text blocks
-        return MergeDetections(heuristicBlocks, mlDetections, mlSource, textPage);
+        // ML-driven: assign page words to ML regions by centre point, then group into blocks.
+        return ExtractBlocksByMlRegions(textPage, mlDetections, mlSource);
     }
 
     /// <summary>
@@ -295,28 +295,164 @@ internal sealed class LayoutDetectionStrategy
         return (pixelData.DetachPixelData(), (int)decoder.PixelWidth, (int)decoder.PixelHeight);
     }
 
+    // -----------------------------------------------------------------------
+    // ML-driven word-to-region extraction (pdf2zh-style)
+    // -----------------------------------------------------------------------
+
     /// <summary>
-    /// Extract text blocks using the existing heuristic pipeline.
-    /// This delegates to the static methods in LongDocumentTranslationService.
+    /// Assign every horizontal word on the page to the smallest ML-detected region
+    /// that contains its centre point.  Words with no enclosing region are grouped
+    /// heuristically as orphans.  Each region's words are then turned into
+    /// <see cref="SourceDocumentBlock"/>s via
+    /// <see cref="LongDocumentTranslationService.GroupWordsIntoBlocks"/>.
     /// </summary>
-    private static List<HeuristicBlock> ExtractHeuristicBlocks(PdfPigPage page)
+    private static IReadOnlyList<EnhancedSourceBlock> ExtractBlocksByMlRegions(
+        PdfPigPage page,
+        List<LayoutDetection> mlDetections,
+        LayoutRegionSource mlSource)
     {
-        // We use the existing ExtractLayoutBlocksFromPage logic.
-        // Since it's a private static method, we replicate the call pattern here.
-        // The actual method is called by LongDocumentTranslationService directly;
-        // this wrapper just captures the region type alongside the block.
-        //
-        // For the strategy layer, we invoke the heuristic extraction via the
-        // LongDocumentTranslationService's public pipeline. The blocks come with
-        // region tags baked into their BlockId (e.g., "p1-header-b1").
-        //
-        // We parse the region tag from BlockId to recover the heuristic region type.
-        var blocks = new List<HeuristicBlock>();
-        // Note: actual heuristic extraction happens via ExtractLayoutBlocksFromPage
-        // which is called by BuildSourceDocument. This method is a placeholder
-        // for the merge strategy; the actual blocks are provided by the caller.
-        return blocks;
+        var pageWidthPdf = (double)page.Width;
+        var pageHeightPdf = (double)page.Height;
+
+        // Convert every ML detection box from rendered-image pixels (top-left origin)
+        // to PDF point coordinates (bottom-left origin) for comparison with PdfPig words.
+        var pdfRegions = mlDetections
+            .Select(det =>
+            {
+                var (rx, ry, rw, rh) = DetectionToPdfCoords(det, pageWidthPdf, pageHeightPdf);
+                return (Det: det, PdfX: rx, PdfY: ry, PdfW: rw, PdfH: rh);
+            })
+            .ToList();
+
+        // Collect all horizontal words (rotated words are handled by the heuristic fallback).
+        var allWords = page.GetWords()
+            .Where(w => !string.IsNullOrWhiteSpace(w.Text)
+                     && w.TextOrientation == TextOrientation.Horizontal)
+            .ToList();
+
+        // Assign each word to the smallest enclosing ML region.
+        var wordsByRegion = new List<Word>[pdfRegions.Count];
+        for (var i = 0; i < pdfRegions.Count; i++)
+            wordsByRegion[i] = [];
+
+        var orphanWords = new List<Word>();
+
+        foreach (var word in allWords)
+        {
+            var box = word.BoundingBox;
+            var cx = (box.Left + box.Right) / 2.0;
+            var cy = (box.Bottom + box.Top) / 2.0;
+
+            var bestIdx = -1;
+            var bestArea = double.MaxValue;
+
+            for (var i = 0; i < pdfRegions.Count; i++)
+            {
+                var r = pdfRegions[i];
+                if (cx >= r.PdfX && cx <= r.PdfX + r.PdfW &&
+                    cy >= r.PdfY && cy <= r.PdfY + r.PdfH)
+                {
+                    var area = r.PdfW * r.PdfH;
+                    if (area < bestArea)
+                    {
+                        bestArea = area;
+                        bestIdx = i;
+                    }
+                }
+            }
+
+            if (bestIdx >= 0)
+                wordsByRegion[bestIdx].Add(word);
+            else
+                orphanWords.Add(word);
+        }
+
+        var results = new List<EnhancedSourceBlock>();
+        var blockIndex = 0;
+
+        // Process each ML region in visual reading order (top-to-bottom, left-to-right).
+        var sortedRegionIndices = Enumerable.Range(0, pdfRegions.Count)
+            .OrderByDescending(i => pdfRegions[i].PdfY + pdfRegions[i].PdfH) // top of region
+            .ThenBy(i => pdfRegions[i].PdfX)
+            .ToList();
+
+        foreach (var i in sortedRegionIndices)
+        {
+            if (wordsByRegion[i].Count == 0)
+                continue;
+
+            var (det, _, _, _, _) = pdfRegions[i];
+            var regionTag = RegionTypeToTag(det.RegionType);
+
+            // Figure, isolated formula and abandon regions: mark blocks as formula-like
+            // so the translation pipeline skips them.
+            var skipTranslation = det.RegionType is
+                LayoutRegionType.Figure or
+                LayoutRegionType.Formula or
+                LayoutRegionType.IsolatedFormula;
+
+            foreach (var block in LongDocumentTranslationService.GroupWordsIntoBlocks(
+                wordsByRegion[i], page, page.Number, regionTag, ref blockIndex))
+            {
+                var finalBlock = skipTranslation
+                    ? block with { IsFormulaLike = true }
+                    : block;
+
+                results.Add(new EnhancedSourceBlock(finalBlock, det.RegionType, det.Confidence, mlSource));
+            }
+        }
+
+        // Orphan words: use simple heuristic grouping so no text is lost.
+        if (orphanWords.Count > 0)
+        {
+            foreach (var block in LongDocumentTranslationService.GroupWordsIntoBlocks(
+                orphanWords, page, page.Number, "body", ref blockIndex))
+            {
+                results.Add(new EnhancedSourceBlock(block, LayoutRegionType.Body, 0.5, LayoutRegionSource.Heuristic));
+            }
+        }
+
+        Debug.WriteLine($"[LayoutStrategy] ML-driven extraction: {results.Count} blocks from {pdfRegions.Count} regions + {orphanWords.Count} orphan words on page {page.Number}");
+        return results;
     }
+
+    /// <summary>
+    /// Converts a <see cref="LayoutDetection"/> bounding box from rendered-image pixel
+    /// coordinates (top-left origin, pixels) to PDF point coordinates (bottom-left origin).
+    /// The scale factor is derived from the same <c>min(1024/w, 1024/h)</c> formula used
+    /// by <c>RenderPdfPageAsync</c> so the two coordinate spaces are always consistent.
+    /// </summary>
+    private static (double X, double Y, double Width, double Height) DetectionToPdfCoords(
+        LayoutDetection det, double pageWidthPdf, double pageHeightPdf)
+    {
+        var scale = Math.Min(RenderTargetSize / pageWidthPdf, RenderTargetSize / pageHeightPdf);
+        var x = det.X / scale;
+        var y = pageHeightPdf - (det.Y + det.Height) / scale;  // flip to bottom-left origin
+        var w = det.Width / scale;
+        var h = det.Height / scale;
+        return (Math.Max(0, x), Math.Max(0, y), w, h);
+    }
+
+    /// <summary>Maps a <see cref="LayoutRegionType"/> to the region tag embedded in BlockIds.</summary>
+    private static string RegionTypeToTag(LayoutRegionType type) => type switch
+    {
+        LayoutRegionType.Header => "header",
+        LayoutRegionType.Footer => "footer",
+        LayoutRegionType.Title => "title",
+        LayoutRegionType.Figure => "figure",
+        LayoutRegionType.Formula
+            or LayoutRegionType.IsolatedFormula => "formula",
+        LayoutRegionType.Table
+            or LayoutRegionType.TableLike => "table",
+        LayoutRegionType.Caption => "caption",
+        LayoutRegionType.LeftColumn => "left",
+        LayoutRegionType.RightColumn => "right",
+        _ => "body",
+    };
+
+    // -----------------------------------------------------------------------
+    // Legacy helpers — kept for unit-test compatibility
+    // -----------------------------------------------------------------------
 
     /// <summary>
     /// Extract heuristic blocks directly from the static method results.

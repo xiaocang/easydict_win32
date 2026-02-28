@@ -273,6 +273,127 @@ public class FormulaDetectionTests
             because: "when no {v*} placeholders are generated, no formula prompt should be injected");
     }
 
+    // --- Round 2: Font subset prefix stripping ---
+
+    [Theory]
+    [InlineData("ABCDE+CMSY10")]      // Standard prefix
+    [InlineData("BCDEFG+CMMI12")]      // Different prefix
+    [InlineData("XYZABC+Symbol")]      // Symbol font with prefix
+    public void IsFontBasedFormula_WithSubsetPrefix_StillDetected(string fontName)
+    {
+        var fontNames = new List<string> { fontName };
+        LongDocumentTranslationService.IsFontBasedFormula(fontNames, null).Should().BeTrue(
+            because: $"'{fontName}' should match after stripping the subset prefix");
+    }
+
+    [Theory]
+    [InlineData("BCMSY+TimesNewRoman")]  // Prefix that accidentally contains "CMSY" but is not a math font
+    [InlineData("ABCDE+Arial")]           // Normal font with prefix
+    public void IsFontBasedFormula_WithSubsetPrefix_NormalFont_ReturnsFalse(string fontName)
+    {
+        var fontNames = new List<string> { fontName };
+        LongDocumentTranslationService.IsFontBasedFormula(fontNames, null).Should().BeFalse(
+            because: $"'{fontName}' after prefix stripping should not be a math font");
+    }
+
+    // --- Round 2: Control character removal ---
+
+    [Fact]
+    public void RemoveControlCharacters_RemovesUnicodeControlChars()
+    {
+        var input = "Hello\u0000World\u0001!\u001FEnd";
+        var result = LongDocumentTranslationService.RemoveControlCharacters(input);
+        result.Should().Be("HelloWorld!End");
+    }
+
+    [Fact]
+    public void RemoveControlCharacters_PreservesNewlineTabCarriageReturn()
+    {
+        var input = "Line1\nLine2\r\nLine3\tTabbed";
+        var result = LongDocumentTranslationService.RemoveControlCharacters(input);
+        result.Should().Be(input);
+    }
+
+    [Fact]
+    public void RemoveControlCharacters_EmptyAndNull_ReturnsSame()
+    {
+        LongDocumentTranslationService.RemoveControlCharacters("").Should().Be("");
+        LongDocumentTranslationService.RemoveControlCharacters(null!).Should().BeNull();
+    }
+
+    // --- Round 2: Subscript density formula detection ---
+
+    [Fact]
+    public void IsSubscriptDenseFormula_HighSubscriptDensity_ReturnsTrue()
+    {
+        // 3 out of 6 chars are subscripts (50% > 25%) + HasMathFontCharacters
+        var chars = new List<FormulaCharacterInfo>
+        {
+            new("x", "CMMI10", 12, 0, 0, 6, 12, true, false, false),
+            new("_", "CMSY10", 8, 6, -2, 4, 8, true, true, false),
+            new("1", "CMMI10", 8, 10, -2, 5, 8, true, true, false),
+            new("+", "CMSY10", 12, 15, 0, 8, 12, true, false, false),
+            new("y", "CMMI10", 12, 23, 0, 6, 12, true, false, false),
+            new("_", "CMSY10", 8, 29, -2, 4, 8, true, true, false),
+        };
+        var formulaChars = new BlockFormulaCharacters
+        {
+            Characters = chars,
+            MedianTextFontSize = 12,
+            MedianBaselineY = 0,
+            HasMathFontCharacters = true
+        };
+        LongDocumentTranslationService.IsSubscriptDenseFormula(formulaChars).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsSubscriptDenseFormula_NoSubscripts_ReturnsFalse()
+    {
+        var chars = new List<FormulaCharacterInfo>
+        {
+            new("a", "CMMI10", 12, 0, 0, 6, 12, true, false, false),
+            new("+", "CMSY10", 12, 6, 0, 8, 12, true, false, false),
+            new("b", "CMMI10", 12, 14, 0, 6, 12, true, false, false),
+        };
+        var formulaChars = new BlockFormulaCharacters
+        {
+            Characters = chars,
+            MedianTextFontSize = 12,
+            MedianBaselineY = 0,
+            HasMathFontCharacters = true
+        };
+        LongDocumentTranslationService.IsSubscriptDenseFormula(formulaChars).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsSubscriptDenseFormula_NoMathFont_ReturnsFalse()
+    {
+        var chars = new List<FormulaCharacterInfo>
+        {
+            new("x", "Arial", 12, 0, 0, 6, 12, false, true, false),
+            new("1", "Arial", 8, 6, -2, 5, 8, false, true, false),
+        };
+        var formulaChars = new BlockFormulaCharacters
+        {
+            Characters = chars,
+            MedianTextFontSize = 12,
+            MedianBaselineY = 0,
+            HasMathFontCharacters = false
+        };
+        LongDocumentTranslationService.IsSubscriptDenseFormula(formulaChars).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsSubscriptDenseFormula_NullOrEmpty_ReturnsFalse()
+    {
+        LongDocumentTranslationService.IsSubscriptDenseFormula(null).Should().BeFalse();
+        LongDocumentTranslationService.IsSubscriptDenseFormula(new BlockFormulaCharacters
+        {
+            Characters = new List<FormulaCharacterInfo>(),
+            HasMathFontCharacters = true
+        }).Should().BeFalse();
+    }
+
     [Fact]
     public async Task BuildIr_FontBasedFormula_SkipsTranslation()
     {

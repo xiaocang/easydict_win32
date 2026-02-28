@@ -82,18 +82,28 @@ public class PdfExportServiceFontTests
     }
 
     [Fact]
-    public void GetLineHeight_ReturnsDefault_ForNonCjkLanguage()
+    public void GetLineHeight_ReturnsDefaultMultiplied_ForNonConfiguredLanguage()
     {
-        PdfExportService.GetLineHeight(Language.English).Should().Be(14d);
-        PdfExportService.GetLineHeight(null).Should().Be(14d);
+        // Non-configured languages now use 1.15× default multiplier
+        PdfExportService.GetLineHeight(Language.English).Should().BeApproximately(14d * 1.15, 0.01);
+        PdfExportService.GetLineHeight(null).Should().BeApproximately(14d * 1.15, 0.01);
     }
 
     [Fact]
     public void GetLineHeight_ReturnsMultiplied_ForCjkLanguage()
     {
-        PdfExportService.GetLineHeight(Language.SimplifiedChinese).Should().BeApproximately(19.6, 0.01);
-        PdfExportService.GetLineHeight(Language.Japanese).Should().BeApproximately(19.6, 0.01);
-        PdfExportService.GetLineHeight(Language.Korean).Should().BeApproximately(18.2, 0.01);
+        PdfExportService.GetLineHeight(Language.SimplifiedChinese).Should().BeApproximately(19.6, 0.01);  // 14 * 1.4
+        PdfExportService.GetLineHeight(Language.Japanese).Should().BeApproximately(16.8, 0.01);           // 14 * 1.2 (lowered from 1.4)
+        PdfExportService.GetLineHeight(Language.Korean).Should().BeApproximately(18.2, 0.01);             // 14 * 1.3
+    }
+
+    [Fact]
+    public void GetLineHeight_ReturnsMultiplied_ForNewLanguages()
+    {
+        // New language entries aligned with pdf2zh LANG_LINEHEIGHT_MAP
+        PdfExportService.GetLineHeight(Language.Arabic).Should().BeApproximately(14.0, 0.01);   // 14 * 1.0
+        PdfExportService.GetLineHeight(Language.Russian).Should().BeApproximately(14.0, 0.01);  // 14 * 1.0
+        PdfExportService.GetLineHeight(Language.Thai).Should().BeApproximately(18.2, 0.01);     // 14 * 1.3
     }
 
     [Fact]

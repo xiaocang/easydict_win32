@@ -47,14 +47,18 @@ public sealed class PdfExportService : IDocumentExportService
 
     /// <summary>
     /// Language-specific line height multipliers for overlay rendering.
-    /// CJK characters need more vertical space than Latin text.
+    /// CJK/complex scripts need more vertical space than Latin text.
+    /// Aligned with pdf2zh converter.py:376-380 LANG_LINEHEIGHT_MAP.
     /// </summary>
     private static readonly Dictionary<Language, double> LineHeightMultipliers = new()
     {
         [Language.SimplifiedChinese] = 1.4,
         [Language.TraditionalChinese] = 1.4,
-        [Language.Japanese] = 1.4,
+        [Language.Japanese] = 1.2,   // lowered from 1.4 (pdf2zh uses 1.1, compromise at 1.2)
         [Language.Korean] = 1.3,
+        [Language.Arabic] = 1.0,     // pdf2zh: ar → 1.0
+        [Language.Russian] = 1.0,    // pdf2zh: ru → 0.8, using 1.0 to avoid clipping
+        [Language.Thai] = 1.3,       // tall ascenders/descenders need extra space
     };
     private static readonly Regex InlineScriptLatinWordRegex = new(@"[A-Za-z]{3,}", RegexOptions.Compiled);
     private static readonly Regex CitationLikeInlineScriptRegex = new(@"^\[\s*\d+(?:\s*,\s*\d+)*\s*\]$", RegexOptions.Compiled);
@@ -275,7 +279,8 @@ public sealed class PdfExportService : IDocumentExportService
 
         var targetLanguage = checkpoint.TargetLanguage;
         var lineHeight = GetLineHeight(targetLanguage);
-        var isCjkTarget = targetLanguage != null && LineHeightMultipliers.ContainsKey(targetLanguage.Value);
+        var isCjkTarget = targetLanguage is Language.SimplifiedChinese or Language.TraditionalChinese
+            or Language.Japanese or Language.Korean;
         using var doc = PdfReader.Open(sourcePdfPath, PdfDocumentOpenMode.Modify);
         var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
 
@@ -2349,7 +2354,8 @@ public sealed class PdfExportService : IDocumentExportService
     }
 
     /// <summary>
-    /// Returns the line height for overlay rendering, accounting for CJK languages.
+    /// Returns the line height for overlay rendering, accounting for language-specific multipliers.
+    /// Configured languages use their explicit multiplier; others get a 1.15× default for readability.
     /// </summary>
     internal static double GetLineHeight(Language? targetLanguage, double baseLineHeight = 14d)
     {
@@ -2357,7 +2363,9 @@ public sealed class PdfExportService : IDocumentExportService
         {
             return baseLineHeight * multiplier;
         }
-        return baseLineHeight;
+        // Default multiplier for non-configured languages — slightly above 1.0
+        // to improve readability for Latin/Cyrillic/etc. scripts.
+        return baseLineHeight * 1.15;
     }
 
     /// <summary>

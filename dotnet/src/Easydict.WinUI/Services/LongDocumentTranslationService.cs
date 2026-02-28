@@ -1220,8 +1220,12 @@ public sealed class LongDocumentTranslationService : IDisposable
 
                 totalLetters++;
 
-                // Font names
+                // Font names — strip PDF subset prefix (e.g. "ABCDE+CMSY10" → "CMSY10")
+                // Aligned with pdf2zh converter.py:196: font.split("+")[-1]
                 var fontName = letter.FontName ?? string.Empty;
+                var plusIdx = fontName.IndexOf('+');
+                if (plusIdx >= 0 && plusIdx < fontName.Length - 1)
+                    fontName = fontName[(plusIdx + 1)..];
                 if (!string.IsNullOrWhiteSpace(fontName))
                 {
                     fontNames.Add(fontName);

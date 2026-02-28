@@ -256,7 +256,8 @@ public sealed class LongDocumentTranslationService
 
                     var translationSkipped = block.BlockType == SourceBlockType.Formula || block.IsFormulaLike
                         || IsFontBasedFormula(block.DetectedFontNames, options?.FormulaFontPattern)
-                        || IsCharacterBasedFormula(blockText, options?.FormulaCharPattern);
+                        || IsCharacterBasedFormula(blockText, options?.FormulaCharPattern)
+                        || IsSubscriptDenseFormula(block.FormulaCharacters);
 
                     irBlocks.Add(new DocumentBlockIr
                     {
@@ -466,6 +467,9 @@ public sealed class LongDocumentTranslationService
 
                 var translated = await _translateWithService(request, options.ServiceId, cancellationToken);
                 translatedText = ApplyGlossary(translated.TranslatedText, options.Glossary);
+                // Remove Unicode control characters that LLMs occasionally inject —
+                // aligned with pdf2zh translator.py:36 remove_control_characters()
+                translatedText = RemoveControlCharacters(translatedText);
                 var formulaProtection = options.EnableFormulaProtection
                     ? ProtectFormulaSpans(block.OriginalText)
                     : FormulaProtectionResult.Empty;
@@ -553,7 +557,16 @@ public sealed class LongDocumentTranslationService
         var pattern = !string.IsNullOrWhiteSpace(customPattern)
             ? new Regex(customPattern, RegexOptions.IgnoreCase)
             : MathFontRegex;
-        var mathFontCount = fontNames.Count(f => pattern.IsMatch(f));
+        var mathFontCount = fontNames.Count(f =>
+        {
+            // Strip PDF subset prefix (e.g. "ABCDE+CMSY10" → "CMSY10")
+            // Aligned with pdf2zh converter.py:196: font.split("+")[-1]
+            var name = f;
+            var plusIdx = name.IndexOf('+');
+            if (plusIdx >= 0 && plusIdx < name.Length - 1)
+                name = name[(plusIdx + 1)..];
+            return pattern.IsMatch(name);
+        });
         // Aligned with pdf2zh vflag(): any math font presence is a strong signal.
         // Lowered from 0.5 to 0.3 to catch blocks with mixed math/text fonts.
         return mathFontCount > fontNames.Count * 0.3;
@@ -581,6 +594,19 @@ public sealed class LongDocumentTranslationService
         // Lowered from 0.3 to 0.2 — pdf2zh flags individual math characters,
         // so a lower threshold catches more formula-heavy blocks.
         return text.Length > 0 && (double)mathCharCount / text.Length > 0.2;
+    }
+
+    // Level 4: Subscript/superscript density formula detection.
+    // If a block contains math font characters and >25% are subscripts/superscripts,
+    // it is likely a formula (e.g. "x_1, x_2, ..., x_n = f(y)").
+    // Aligned with pdf2zh converter.py:243 child.size < pstk[-1].size * 0.79
+    internal static bool IsSubscriptDenseFormula(BlockFormulaCharacters? formulaChars)
+    {
+        if (formulaChars?.Characters is not { Count: > 0 } chars) return false;
+        if (!formulaChars.HasMathFontCharacters) return false;
+
+        var scriptCount = chars.Count(c => c.IsSubscript || c.IsSuperscript);
+        return chars.Count >= 3 && (double)scriptCount / chars.Count > 0.25;
     }
 
     private enum FormulaTokenKind
@@ -742,5 +768,17 @@ public sealed class LongDocumentTranslationService
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Removes Unicode control characters (category C) from translated text,
+    /// preserving newline, carriage return, and tab.
+    /// Aligned with pdf2zh translator.py:36 remove_control_characters().
+    /// </summary>
+    internal static string RemoveControlCharacters(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        return new string(text.Where(c =>
+            !char.IsControl(c) || c == '\n' || c == '\r' || c == '\t').ToArray());
     }
 }

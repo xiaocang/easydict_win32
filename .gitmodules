@@ -3,4 +3,5 @@
 	url = https://github.com/PDFMathTranslate/PDFMathTranslate
 [submodule "lib/PdfPig"]
 	path = lib/PdfPig
-	url = https://github.com/UglyToad/PdfPig.git
+	url = https://github.com/xiaocang/PdfPig.git
+	branch = master

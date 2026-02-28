@@ -6,6 +6,7 @@ using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Operations;
 using UglyToad.PdfPig.PdfFonts;
+using PdfPigPage = UglyToad.PdfPig.Content.Page;
 
 namespace Easydict.WinUI.Services;
 
@@ -162,7 +163,7 @@ public static class ContentStreamInterpreter
     /// </summary>
     /// <param name="page">The PdfPig page to interpret.</param>
     /// <returns>A result containing graphics operations and character data.</returns>
-    public static ContentStreamResult Interpret(Page page)
+    public static ContentStreamResult Interpret(PdfPigPage page)
     {
         var operations = page.Operations;
         var letters = page.Letters;

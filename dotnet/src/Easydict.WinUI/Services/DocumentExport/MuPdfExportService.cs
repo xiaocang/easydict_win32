@@ -7,6 +7,7 @@ using System.Text;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
 using MuPDF.NET;
+using MuPdfPage = MuPDF.NET.Page;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using PdfPigPage = UglyToad.PdfPig.Content.Page;
 
@@ -88,7 +89,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         using var pdfPigDoc = PdfPigDocument.Open(sourceBytes);
 
         // Write-side: MuPDF.NET for content stream replacement
-        using var muDoc = new Document(sourceFilePath);
+        var muDoc = new Document(sourceFilePath);
 
         var pageCount = pdfPigDoc.NumberOfPages;
         var totalRendered = 0;
@@ -134,6 +135,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         }
 
         muDoc.Save(outputPath);
+        muDoc.Close();
 
         return new BackfillQualityMetrics
         {
@@ -153,7 +155,7 @@ public sealed class MuPdfExportService : IDocumentExportService
     /// </summary>
     private int RenderPageWithContentStreamReplacement(
         PdfPigPage pdfPigPage,
-        Page muPage,
+        MuPdfPage muPage,
         Document muDoc,
         List<TranslatedBlockData> blocks,
         FontPaths fontPaths)
@@ -327,7 +329,7 @@ public sealed class MuPdfExportService : IDocumentExportService
     /// <summary>
     /// Embeds required fonts into the MuPDF page.
     /// </summary>
-    private static EmbeddedFontInfo EmbedFonts(Page muPage, FontPaths fontPaths)
+    private static EmbeddedFontInfo EmbedFonts(MuPdfPage muPage, FontPaths fontPaths)
     {
         string? primaryFontId = null;
         string? notoFontId = null;
@@ -385,11 +387,10 @@ public sealed class MuPdfExportService : IDocumentExportService
     /// </summary>
     private static void GenerateBilingualPdf(string sourcePath, string translatedPath, string outputPath)
     {
+        var sourceDoc = new Document(sourcePath);
+        var translatedDoc = new Document(translatedPath);
         try
         {
-            using var sourceDoc = new Document(sourcePath);
-            using var translatedDoc = new Document(translatedPath);
-
             var originalPageCount = sourceDoc.PageCount;
 
             // Insert all translated pages after the source document
@@ -417,6 +418,11 @@ public sealed class MuPdfExportService : IDocumentExportService
             Debug.WriteLine($"[MuPdfExport] Bilingual PDF generation failed: {ex.Message}");
             // Fallback: copy the monolingual translated PDF
             File.Copy(translatedPath, outputPath, overwrite: true);
+        }
+        finally
+        {
+            sourceDoc.Close();
+            translatedDoc.Close();
         }
     }
 

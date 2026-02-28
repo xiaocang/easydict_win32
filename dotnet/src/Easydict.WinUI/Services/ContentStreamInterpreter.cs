@@ -29,10 +29,10 @@ public sealed record CharInfo
     public required IFont Font { get; init; }
 
     /// <summary>
-    /// The font resource name (e.g. "F1", "F2") as referenced in the content stream.
-    /// This corresponds to pdf2zh's fontid mapping.
+    /// The font's internal PostScript name (e.g. "TimesNewRoman", "CMMI10", "ABCDEF+Helvetica").
+    /// Used for math font detection and font identification.
     /// </summary>
-    public required string FontResourceName { get; init; }
+    public required string FontName { get; init; }
 
     /// <summary>Font size as specified in the Tf operator (unscaled).</summary>
     public required double FontSize { get; init; }
@@ -78,8 +78,8 @@ public sealed class ContentStreamResult
     public required IReadOnlyList<CharInfo> Characters { get; init; }
 
     /// <summary>
-    /// Font resource name → IFont mapping for all fonts referenced in this page.
-    /// Corresponds to pdf2zh's fontid dictionary.
+    /// Font internal name → IFont mapping for all fonts referenced in this page.
+    /// Keys are PostScript names (e.g. "TimesNewRoman"), not resource dictionary keys ("F1").
     /// </summary>
     public required IReadOnlyDictionary<string, IFont> FontMap { get; init; }
 
@@ -181,7 +181,7 @@ public static class ContentStreamInterpreter
         }
 
         // Build per-character data from letters (which PdfPig already extracted)
-        var characters = BuildCharacterList(letters, fontMap);
+        var characters = BuildCharacterList(letters);
 
         return new ContentStreamResult
         {
@@ -192,8 +192,9 @@ public static class ContentStreamInterpreter
     }
 
     /// <summary>
-    /// Builds a font resource name → IFont mapping from the page's letters.
-    /// Since Letter now exposes GetFont(), we can build the mapping directly.
+    /// Builds a font name → IFont mapping from the page's letters.
+    /// Keys are the font's internal PostScript name (e.g. "TimesNewRoman", "CMMI10"),
+    /// not the resource dictionary keys (e.g. "F1", "F2").
     /// </summary>
     private static Dictionary<string, IFont> BuildFontMap(IReadOnlyList<Letter> letters)
     {
@@ -219,8 +220,7 @@ public static class ContentStreamInterpreter
     /// We enrich this with CID (via IFont.GetCid) and position data.
     /// </summary>
     private static List<CharInfo> BuildCharacterList(
-        IReadOnlyList<Letter> letters,
-        IReadOnlyDictionary<string, IFont> fontMap)
+        IReadOnlyList<Letter> letters)
     {
         var characters = new List<CharInfo>(letters.Count);
 
@@ -229,7 +229,7 @@ public static class ContentStreamInterpreter
             var font = letter.GetFont();
             if (font is null) continue;
 
-            var fontResourceName = font.Name?.Data ?? "Unknown";
+            var fontName = font.Name?.Data ?? "Unknown";
             var characterCode = letter.CharacterCode;
             var cid = font.GetCid(characterCode);
 
@@ -239,7 +239,7 @@ public static class ContentStreamInterpreter
                 CharacterCode = characterCode,
                 Cid = cid,
                 Font = font,
-                FontResourceName = fontResourceName,
+                FontName = fontName,
                 FontSize = letter.FontSize,
                 PointSize = letter.PointSize,
                 TextMatrix = letter.TextMatrix,
@@ -258,7 +258,7 @@ public static class ContentStreamInterpreter
     /// Generates a PDF text operation string for a single character, matching pdf2zh's gen_op_txt().
     /// Format: "/{font} {size} Tf 1 0 0 1 {x} {y} Tm [&lt;{hexCid}&gt;] TJ "
     /// </summary>
-    /// <param name="fontResourceName">The font resource name (e.g. "F1").</param>
+    /// <param name="fontResourceName">The font name as registered in the page's resource dictionary (e.g. "F1", "helv").</param>
     /// <param name="fontSize">The font size.</param>
     /// <param name="x">X position.</param>
     /// <param name="y">Y position.</param>

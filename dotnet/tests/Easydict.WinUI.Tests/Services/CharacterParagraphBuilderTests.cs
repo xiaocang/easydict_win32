@@ -18,7 +18,7 @@ public class CharacterParagraphBuilderTests
             CharacterCode = charCode,
             Cid = charCode,
             Font = null!,  // Not used in paragraph builder logic
-            FontResourceName = fontName,
+            FontName = fontName,
             FontSize = pointSize,
             PointSize = pointSize,
             TextMatrix = TransformationMatrix.Identity,
@@ -211,7 +211,7 @@ public class CharacterParagraphBuilderTests
                 CharacterCode = 0x78,
                 Cid = 0x78,
                 Font = null!,
-                FontResourceName = "TimesNewRoman",
+                FontName = "TimesNewRoman",
                 FontSize = 12.0,
                 PointSize = 12.0,
                 TextMatrix = verticalMatrix,

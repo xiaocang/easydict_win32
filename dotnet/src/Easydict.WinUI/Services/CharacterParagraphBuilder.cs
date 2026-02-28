@@ -335,7 +335,7 @@ public static class CharacterParagraphBuilder
         }
 
         // Condition 3: Math font detection
-        var fontName = ch.FontResourceName;
+        var fontName = ch.FontName;
         var plusIdx = fontName.IndexOf('+');
         if (plusIdx >= 0 && plusIdx < fontName.Length - 1)
             fontName = fontName[(plusIdx + 1)..];

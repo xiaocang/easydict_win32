@@ -153,8 +153,8 @@
     <ItemGroup>
       <PackageReference Include="FlaUI.UIA3" Version="4.0.0" />
       <PackageReference Include="PdfSharpCore" Version="1.3.67" />
-      <!-- Custom PdfPig build from configured feed; required by current long-document pipeline. -->
-      <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+      <!-- PdfPig fork (submodule at lib/PdfPig) with CID/CTM/CharacterCode exposure for pdf2zh-aligned pipeline. -->
+      <ProjectReference Include="..\..\..\lib\PdfPig\src\UglyToad.PdfPig\UglyToad.PdfPig.csproj" />
       <!-- ONNX Runtime managed wrapper only (native binary downloaded on first use) -->
       <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0" />
       <!-- SQLite for persistent translation cache -->

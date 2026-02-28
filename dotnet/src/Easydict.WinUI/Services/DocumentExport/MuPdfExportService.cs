@@ -347,13 +347,19 @@ public sealed class MuPdfExportService : IDocumentExportService
             }
         }
 
-        // Fallback to built-in Helvetica if no custom font
-        primaryFontId ??= "helv";
-        try
+        // Fallback to built-in Helvetica if no custom font was embedded
+        if (primaryFontId is null)
         {
-            muPage.InsertFont("helv", "");
+            primaryFontId = "helv";
+            try
+            {
+                muPage.InsertFont("helv", "");
+            }
+            catch (Exception)
+            {
+                // Font may already be registered on this page
+            }
         }
-        catch { /* ignore if already registered */ }
 
         // Embed Noto font for non-CJK scripts
         if (fontPaths.NotoFontPath is not null && File.Exists(fontPaths.NotoFontPath))
@@ -384,11 +390,10 @@ public sealed class MuPdfExportService : IDocumentExportService
             using var sourceDoc = new Document(sourcePath);
             using var translatedDoc = new Document(translatedPath);
 
+            var originalPageCount = sourceDoc.PageCount;
+
             // Insert all translated pages after the source document
             sourceDoc.InsertFile(translatedDoc);
-
-            var originalPageCount = translatedDoc.PageCount;
-            var totalPages = sourceDoc.PageCount;
 
             // Interleave: move translated pages to be after each original page
             // After insert, pages are: [orig1, orig2, ..., origN, trans1, trans2, ..., transN]
@@ -405,7 +410,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             }
 
             sourceDoc.Save(outputPath);
-            Debug.WriteLine($"[MuPdfExport] Bilingual PDF saved: {outputPath} ({totalPages} pages)");
+            Debug.WriteLine($"[MuPdfExport] Bilingual PDF saved: {outputPath} ({sourceDoc.PageCount} pages)");
         }
         catch (Exception ex)
         {

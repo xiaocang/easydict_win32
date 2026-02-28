@@ -1,3 +1,6 @@
 [submodule "ref/PDFMathTranslate"]
 	path = ref/PDFMathTranslate
 	url = https://github.com/PDFMathTranslate/PDFMathTranslate
+[submodule "lib/PdfPig"]
+	path = lib/PdfPig
+	url = https://github.com/UglyToad/PdfPig.git

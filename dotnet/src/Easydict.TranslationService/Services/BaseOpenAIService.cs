@@ -58,20 +58,14 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     /// Instructs the model to correct grammar and explain changes using structured markers.
     /// </summary>
     internal const string GrammarCorrectionSystemPrompt = """
-        You are a grammar correction expert. Your task is to correct grammar, spelling, and punctuation errors in the given text. You must:
-        1. Keep the original meaning unchanged.
-        2. Only fix actual errors; do not rephrase or "polish" correct text.
-        3. Respond in the following structured format:
+        You are a grammar correction expert. Your task is to correct grammar, spelling, and punctuation errors in the text provided by the user.
 
-        [CORRECTED]
-        <the corrected text here>
-        [/CORRECTED]
-
-        [EXPLANATION]
-        <brief list of changes made and why, one per line>
-        [/EXPLANATION]
-
-        If the text has no errors, respond with the original text unchanged inside [CORRECTED] tags and "No grammar issues found." inside [EXPLANATION] tags.
+        Rules:
+        1. NEVER translate the text. The output must be in the exact same language as the input.
+        2. Keep the original meaning unchanged.
+        3. Only fix actual errors; do not rephrase, paraphrase, or "polish" correct text.
+        4. Output ONLY the corrected text with no additional commentary, labels, or formatting.
+        5. If the text has no errors, output it unchanged.
         """;
 
     /// <summary>
@@ -322,13 +316,9 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     /// </summary>
     protected virtual List<ChatMessage> BuildGrammarCorrectionMessages(GrammarCorrectionRequest request)
     {
-        var langHint = request.Language == Language.Auto
-            ? ""
-            : $" The text is in {request.Language.GetDisplayName()}.";
-
-        var userPrompt = request.IncludeExplanations
-            ? $"Correct the grammar in the following text.{langHint}\n\n\"\"\"{request.Text}\"\"\""
-            : $"Correct the grammar in the following text. Only output the corrected text inside [CORRECTED] tags, no explanations needed.{langHint}\n\n\"\"\"{request.Text}\"\"\"";
+        var userPrompt = request.Language == Language.Auto
+            ? $"Correct the grammar in the following text:\n\n{request.Text}"
+            : $"Correct the grammar in the following {request.Language.GetDisplayName()} text. The result MUST remain in {request.Language.GetDisplayName()}:\n\n{request.Text}";
 
         return new List<ChatMessage>
         {

@@ -233,13 +233,9 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
     {
         ValidateConfiguration();
 
-        var langHint = request.Language == Language.Auto
-            ? ""
-            : $" The text is in {request.Language.GetDisplayName()}.";
-
-        var userPrompt = request.IncludeExplanations
-            ? $"Correct the grammar in the following text.{langHint}\n\n\"\"\"{request.Text}\"\"\""
-            : $"Correct the grammar in the following text. Only output the corrected text inside [CORRECTED] tags, no explanations needed.{langHint}\n\n\"\"\"{request.Text}\"\"\"";
+        var userPrompt = request.Language == Language.Auto
+            ? $"Correct the grammar in the following text:\n\n{request.Text}"
+            : $"Correct the grammar in the following {request.Language.GetDisplayName()} text. The result MUST remain in {request.Language.GetDisplayName()}:\n\n{request.Text}";
 
         var requestBody = new
         {

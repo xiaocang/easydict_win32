@@ -417,6 +417,19 @@ namespace Easydict.WinUI.Views
                     ? _lastDetectedLanguage
                     : await Task.Run(() => _detectionService.DetectAsync(inputText, ct));
 
+                // Grammar mode: route to grammar correction instead of translation
+                if (_currentMode == QueryMode.GrammarCorrection)
+                {
+                    var grammarRequest = new GrammarCorrectionRequest
+                    {
+                        Text = inputText,
+                        Language = detectedLanguage,
+                        IncludeExplanations = true,
+                    };
+                    await ExecuteGrammarCorrectionForServiceAsync(serviceResult, grammarRequest, ct);
+                    return;
+                }
+
                 // Get target language
                 var targetLanguage = GetTargetLanguage();
 

@@ -554,7 +554,7 @@ public sealed partial class ServiceResultItem : UserControl
         _isHovering = true;
 
         if (_serviceResult?.IsExpanded == true &&
-            (_serviceResult.Result != null || _serviceResult.Error != null))
+            (_serviceResult.Result != null || _serviceResult.Error != null || _serviceResult.GrammarResult != null))
         {
             ActionButtons.Visibility = Visibility.Visible;
             ReplaceButton.Visibility = _serviceResult.Result != null && TextInsertionService.HasSourceWindow

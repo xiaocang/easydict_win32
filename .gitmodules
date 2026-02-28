@@ -1,0 +1,3 @@
+[submodule "ref/PDFMathTranslate"]
+	path = ref/PDFMathTranslate
+	url = https://github.com/PDFMathTranslate/PDFMathTranslate

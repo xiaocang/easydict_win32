@@ -30,7 +30,7 @@ public sealed class CharParagraph
 
     /// <summary>
     /// Text with formula spans replaced by {v0}, {v1}, ... placeholders.
-    /// Built after paragraph construction by calling BuildProtectedText().
+    /// Set during paragraph construction in Build().
     /// </summary>
     public string ProtectedText { get; set; } = "";
 
@@ -112,7 +112,7 @@ public sealed class CharParagraphResult
 /// 3. Unicode-based formula detection (math symbols, Greek letters)
 /// 4. Subscript detection (character size &lt; 0.79 × parent size)
 /// 5. Vertical text matrix detection (matrix[0]==0 &amp;&amp; matrix[3]==0)
-/// 6. Bracket tracking (preserves formula boundaries across parentheses)
+/// 6. Unicode replacement character detection (U+FFFD, unmapped CID)
 /// </summary>
 public static class CharacterParagraphBuilder
 {
@@ -208,17 +208,6 @@ public static class CharacterParagraphBuilder
             if (previousLayoutClass >= 0 && cls != previousLayoutClass && cls > 0 && previousLayoutClass > 0)
             {
                 isNewParagraph = true;
-            }
-
-            // Also detect paragraph break when X position jumps back (new line starting before previous end)
-            if (!isNewParagraph && i > 0 && currentParagraph.Characters.Count > 0)
-            {
-                var prevChar = characters[i - 1];
-                if (ch.X1 < prevChar.X0 && Math.Abs(ch.Y0 - prevChar.Y0) > ch.PointSize * 0.5)
-                {
-                    // Line break within same layout class — not a new paragraph, just continue
-                    // (pdf2zh handles this with brk=True flag within same paragraph)
-                }
             }
 
             if (isNewParagraph)
@@ -324,10 +313,11 @@ public static class CharacterParagraphBuilder
     /// Determines whether a character is formula-like, matching pdf2zh's vflag() logic.
     /// A character is classified as formula if any of these conditions is true:
     /// 1. It's in an excluded layout region (cls == 0)
-    /// 2. It's a subscript/superscript (size &lt; 0.79 × parent size, with some text context)
+    /// 2. It's a subscript/superscript (size &lt; 0.79 × parent size)
     /// 3. Its font matches the math font regex
     /// 4. Its text matches the math Unicode regex
     /// 5. Its text matrix indicates vertical text (matrix[0]==0 &amp;&amp; matrix[3]==0)
+    /// 6. Its text contains the Unicode replacement character (U+FFFD, unmapped CID)
     /// </summary>
     internal static bool IsFormulaCharacter(CharInfo ch, double parentFontSize, int layoutClass)
     {

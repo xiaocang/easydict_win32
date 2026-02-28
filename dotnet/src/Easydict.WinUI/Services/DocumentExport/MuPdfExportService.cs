@@ -272,7 +272,7 @@ public sealed class MuPdfExportService : IDocumentExportService
 
                     var hexCid = ((int)ch).ToString("X4");
                     sb.Append(ContentStreamInterpreter.GenerateTextOperator(
-                        charFontId, fontSize, startX + (pos > 0 ? 0 : 0), currentY, hexCid));
+                        charFontId, fontSize, startX, currentY, hexCid));
                     startX += avgCharWidth;
                 }
 

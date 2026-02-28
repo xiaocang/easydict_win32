@@ -2504,8 +2504,15 @@ public sealed class PdfExportService : IDocumentExportService
                     lineWidth = 0;
                 }
 
-                line.Append(token);
-                lineWidth += tokenWidth;
+                // Skip leading spaces at the start of wrapped lines —
+                // aligned with pdf2zh converter.py:488.
+                var t = line.Length == 0 ? token.TrimStart() : token;
+                if (t.Length > 0)
+                {
+                    var tw = line.Length == 0 && t != token ? gfx.MeasureString(t, font).Width : tokenWidth;
+                    line.Append(t);
+                    lineWidth += tw;
+                }
             }
 
             if (line.Length > 0)
@@ -2552,10 +2559,15 @@ public sealed class PdfExportService : IDocumentExportService
                     maxWidth = widths[Math.Min(lineIndex, widths.Length - 1)];
                 }
 
+                // Skip leading spaces at the start of wrapped lines —
+                // aligned with pdf2zh converter.py:488.
+                var t = line.Length == 0 ? token.TrimStart() : token;
+                var tw = line.Length == 0 && t != token ? gfx.MeasureString(t, font).Width : tokenWidth;
+
                 // If the token itself is too wide for an empty line, split it into characters.
-                if (line.Length == 0 && tokenWidth > maxWidth && token.Length > 1)
+                if (line.Length == 0 && tw > maxWidth && t.Length > 1)
                 {
-                    foreach (var piece in SplitTokenByWidth(gfx, token, font, () => widths[Math.Min(lineIndex, widths.Length - 1)], () => lineIndex++))
+                    foreach (var piece in SplitTokenByWidth(gfx, t, font, () => widths[Math.Min(lineIndex, widths.Length - 1)], () => lineIndex++))
                     {
                         yield return piece;
                     }
@@ -2564,8 +2576,11 @@ public sealed class PdfExportService : IDocumentExportService
                     continue;
                 }
 
-                line.Append(token);
-                lineWidth += tokenWidth;
+                if (t.Length > 0)
+                {
+                    line.Append(t);
+                    lineWidth += tw;
+                }
             }
 
             if (line.Length > 0)

@@ -456,4 +456,181 @@ public class FormulaDetectionTests
         // b2 should be marked as skipped
         result.Pages[0].Blocks[1].TranslationSkipped.Should().BeTrue();
     }
+
+    // --- Round 3: Expanded MathFontRegex ---
+
+    [Theory]
+    [InlineData("TeX-cmr10")]           // TeX- prefix
+    [InlineData("rsfs10")]              // Ralph Smith's Formal Script
+    [InlineData("txsy")]                // txfonts symbols
+    [InlineData("wasy10")]              // wasy symbols
+    [InlineData("stmary10")]            // St Mary's Road symbols
+    [InlineData("CustomSymFont")]       // *Sym* pattern
+    [InlineData("NewMathExtra")]        // *Math* pattern
+    [InlineData("EulerMathFont")]       // EU prefix + *Math* pattern
+    public void IsFontBasedFormula_ExpandedPatterns_ReturnsTrue(string fontName)
+    {
+        var fontNames = new List<string> { fontName };
+        LongDocumentTranslationService.IsFontBasedFormula(fontNames, null).Should().BeTrue(
+            because: $"'{fontName}' should match the expanded MathFontRegex");
+    }
+
+    [Theory]
+    [InlineData("JetBrainsMono")]       // Monospace code font — should NOT match
+    [InlineData("SourceCodePro")]       // Code font — should NOT match
+    [InlineData("CourierNew-Italic")]   // Italic courier — should NOT match
+    [InlineData("NotoSans-Regular")]    // Normal text font
+    public void IsFontBasedFormula_ExpandedPatterns_ExcludesNonMath(string fontName)
+    {
+        var fontNames = new List<string> { fontName };
+        LongDocumentTranslationService.IsFontBasedFormula(fontNames, null).Should().BeFalse(
+            because: $"'{fontName}' should NOT match the expanded MathFontRegex");
+    }
+
+    // --- Round 3: Trailing parenthesis grouping ---
+
+    [Fact]
+    public async Task ProtectFormulaSpans_TrailingParenGrouped_FormulaArguments()
+    {
+        var capturedRequest = string.Empty;
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            capturedRequest = request.Text;
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = request.Text,
+                ServiceName = "fake",
+                TargetLanguage = Language.English
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-paren",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "The function $f$(x, y) is defined."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        // The "(x, y)" should be grouped with the formula placeholder
+        var protectedText = result.Ir.Blocks.Single().ProtectedText;
+        protectedText.Should().NotContain("(x, y)",
+            because: "short formula-like parenthesized group should be merged into placeholder");
+    }
+
+    [Fact]
+    public async Task ProtectFormulaSpans_TrailingParenNotGrouped_NaturalLanguage()
+    {
+        var capturedRequest = string.Empty;
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            capturedRequest = request.Text;
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = request.Text,
+                ServiceName = "fake",
+                TargetLanguage = Language.English
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-paren2",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "The equation $E=mc^2$(which Einstein discovered) is famous."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        // The natural-language content should NOT be grouped into the placeholder
+        var protectedText = result.Ir.Blocks.Single().ProtectedText;
+        protectedText.Should().Contain("Einstein",
+            because: "parenthesized content with natural-language words should not be merged into placeholder");
+    }
+
+    // --- Round 3: Line-leading space trimming ---
+
+    [Fact]
+    public void TrimLeadingSpacesPerLine_TrimsEachLine()
+    {
+        var input = "  hello\n  world\n    indented";
+        var result = LongDocumentTranslationService.TrimLeadingSpacesPerLine(input);
+        result.Should().Be("hello\nworld\nindented");
+    }
+
+    [Fact]
+    public void TrimLeadingSpacesPerLine_PreservesEmptyLines()
+    {
+        var input = "line1\n\nline3";
+        var result = LongDocumentTranslationService.TrimLeadingSpacesPerLine(input);
+        result.Should().Be("line1\n\nline3");
+    }
+
+    [Fact]
+    public void TrimLeadingSpacesPerLine_EmptyAndNull()
+    {
+        LongDocumentTranslationService.TrimLeadingSpacesPerLine("").Should().Be("");
+        LongDocumentTranslationService.TrimLeadingSpacesPerLine(null!).Should().BeNull();
+    }
+
+    // --- Round 3: CID replacement character detection ---
+
+    [Fact]
+    public void IsCharacterBasedFormula_ReplacementCharacters_DetectedAsFormula()
+    {
+        // 5 out of 10 characters are replacement characters (50% > 20%)
+        var text = "a\uFFFDb\uFFFDc\uFFFDd\uFFFDe\uFFFD";
+        LongDocumentTranslationService.IsCharacterBasedFormula(text, null).Should().BeTrue(
+            because: "Unicode replacement characters (from unmapped CID glyphs) should count toward formula detection");
+    }
+
+    [Fact]
+    public void IsCharacterBasedFormula_FewReplacementChars_NotFormula()
+    {
+        // 1 out of 20 characters is replacement (5% < 20%)
+        var text = "This is normal text\uFFFD";
+        LongDocumentTranslationService.IsCharacterBasedFormula(text, null).Should().BeFalse(
+            because: "a single replacement character in a long text should not trigger formula detection");
+    }
 }

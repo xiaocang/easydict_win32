@@ -1183,7 +1183,11 @@ public sealed class LongDocumentTranslationService : IDisposable
     /// Duplicated from CoreLongDocumentTranslationService for use in extraction.
     /// </summary>
     private static readonly Regex MathFontRegex = new(
-        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX",
+        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX" +
+        @"|BL|RM|EU|LA|RS" +              // pdf2zh: common math font name abbreviations
+        @"|LINE|LCIRCLE" +                 // pdf2zh: LaTeX drawing fonts
+        @"|TeX-|rsfs|txsy|wasy|stmary" +   // pdf2zh: TeX symbol font packages
+        @"|\w+Sym\w*|\w+Math\w*",          // pdf2zh: generic *Sym* / *Math* patterns (safer than .*)
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>

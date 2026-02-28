@@ -470,6 +470,8 @@ public sealed class LongDocumentTranslationService
                 // Remove Unicode control characters that LLMs occasionally inject —
                 // aligned with pdf2zh translator.py:36 remove_control_characters()
                 translatedText = RemoveControlCharacters(translatedText);
+                // Trim leading spaces on each line — aligned with pdf2zh converter.py:488
+                translatedText = TrimLeadingSpacesPerLine(translatedText);
                 var formulaProtection = options.EnableFormulaProtection
                     ? ProtectFormulaSpans(block.OriginalText)
                     : FormulaProtectionResult.Empty;
@@ -548,7 +550,11 @@ public sealed class LongDocumentTranslationService
 
     // Level 2: Font-based formula detection
     private static readonly Regex MathFontRegex = new(
-        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX",
+        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX" +
+        @"|BL|RM|EU|LA|RS" +              // pdf2zh: common math font name abbreviations
+        @"|LINE|LCIRCLE" +                 // pdf2zh: LaTeX drawing fonts
+        @"|TeX-|rsfs|txsy|wasy|stmary" +   // pdf2zh: TeX symbol font packages
+        @"|\w+Sym\w*|\w+Math\w*",          // pdf2zh: generic *Sym* / *Math* patterns (safer than .*)
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     internal static bool IsFontBasedFormula(IReadOnlyList<string>? fontNames, string? customPattern)
@@ -591,6 +597,9 @@ public sealed class LongDocumentTranslationService
             ? new Regex(customPattern)
             : MathUnicodeRegex;
         var mathCharCount = pattern.Matches(text).Count;
+        // Count Unicode replacement characters (\uFFFD) — these often represent unmapped CID
+        // glyphs in formula fonts. Aligned with pdf2zh converter.py:197 CID detection.
+        mathCharCount += text.Count(c => c == '\uFFFD');
         // Lowered from 0.3 to 0.2 — pdf2zh flags individual math characters,
         // so a lower threshold catches more formula-heavy blocks.
         return text.Length > 0 && (double)mathCharCount / text.Length > 0.2;
@@ -625,6 +634,18 @@ public sealed class LongDocumentTranslationService
 
     private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
 
+    // Matches a formula placeholder followed by a parenthesized group, e.g. "{v0}(x, y)".
+    // Aligned with pdf2zh converter.py:248-255 bracket grouping.
+    private static readonly Regex TrailingParenRegex = new(
+        @"\{v(\d+)\}\s*\(([^()]*)\)",
+        RegexOptions.Compiled);
+
+    // Matches natural-language words (4+ letters) — used to decide if parenthesized
+    // content is formula arguments vs prose.
+    private static readonly Regex NaturalLanguageWordRegex = new(
+        @"\b[a-zA-Z]{4,}\b",
+        RegexOptions.Compiled);
+
     private static FormulaProtectionResult ProtectFormulaSpans(string text)
     {
         if (string.IsNullOrEmpty(text))
@@ -640,6 +661,21 @@ public sealed class LongDocumentTranslationService
             tokens.Add(new FormulaToken(match.Value, ClassifyFormulaToken(match.Value)));
             counter++;
             return token;
+        });
+
+        // Extend placeholders to include trailing parenthesized groups like "(x, y)" when
+        // the content looks like formula arguments (short, no natural-language words).
+        // Aligned with pdf2zh converter.py:248-255 bracket grouping.
+        protectedText = TrailingParenRegex.Replace(protectedText, match =>
+        {
+            var parenContent = match.Groups[2].Value;
+            if (parenContent.Length <= 30 && !NaturalLanguageWordRegex.IsMatch(parenContent))
+            {
+                var idx = int.Parse(match.Groups[1].Value);
+                tokens[idx] = tokens[idx] with { RawText = tokens[idx].RawText + "(" + parenContent + ")" };
+                return $"{{v{idx}}}";
+            }
+            return match.Value;
         });
 
         return new FormulaProtectionResult(protectedText, tokens);
@@ -780,5 +816,18 @@ public sealed class LongDocumentTranslationService
         if (string.IsNullOrEmpty(text)) return text;
         return new string(text.Where(c =>
             !char.IsControl(c) || c == '\n' || c == '\r' || c == '\t').ToArray());
+    }
+
+    /// <summary>
+    /// Trims leading whitespace on each line of the translated text.
+    /// Aligned with pdf2zh converter.py:488 which skips leading spaces after line breaks.
+    /// </summary>
+    internal static string TrimLeadingSpacesPerLine(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var lines = text.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+            lines[i] = lines[i].TrimStart();
+        return string.Join('\n', lines);
     }
 }

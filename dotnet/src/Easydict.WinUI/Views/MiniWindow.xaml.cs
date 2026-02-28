@@ -1079,6 +1079,10 @@ public sealed partial class MiniWindow : Window
                 detectedLang = await Task.Run(() => detectionService.DetectAsync(inputText, ct));
                 UpdateDetectedLanguageDisplay(detectedLang);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch
             {
                 DetectedLangText.Text = "";
@@ -1183,6 +1187,7 @@ public sealed partial class MiniWindow : Window
                 if (_isClosing) return;
                 serviceResult.IsLoading = false;
                 serviceResult.IsStreaming = false;
+                serviceResult.StreamingText = "";
                 serviceResult.ClearQueried();
             });
             return null;
@@ -1199,6 +1204,7 @@ public sealed partial class MiniWindow : Window
                 };
                 serviceResult.IsLoading = false;
                 serviceResult.IsStreaming = false;
+                serviceResult.StreamingText = "";
                 RequestResize();
             });
             return false;

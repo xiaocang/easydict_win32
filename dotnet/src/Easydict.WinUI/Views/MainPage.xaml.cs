@@ -333,15 +333,17 @@ namespace Easydict.WinUI.Views
             foreach (var serviceId in enabledServices)
             {
                 // Use service-provided DisplayName, fallback to serviceId if not found
-                if (!manager.Services.TryGetValue(serviceId, out var service))
-                    continue;
-                var displayName = service.DisplayName;
-
-                // In grammar mode, only show LLM services that implement IGrammarCorrectionService
-                if (_currentMode == QueryMode.GrammarCorrection &&
-                    service is not IGrammarCorrectionService)
+                var displayName = serviceId;
+                if (manager.Services.TryGetValue(serviceId, out var service))
                 {
-                    continue;
+                    displayName = service.DisplayName;
+
+                    // In grammar mode, only show LLM services that implement IGrammarCorrectionService
+                    if (_currentMode == QueryMode.GrammarCorrection &&
+                        service is not IGrammarCorrectionService)
+                    {
+                        continue;
+                    }
                 }
 
                 // Get EnabledQuery setting (default true if not found)
@@ -975,6 +977,10 @@ namespace Easydict.WinUI.Views
                     detectedLang = await Task.Run(() => detectionService.DetectAsync(inputText, ct));
                     UpdateDetectedLanguageDisplay(detectedLang);
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
                 catch
                 {
                     // Best-effort: continue without language hint
@@ -1099,6 +1105,7 @@ namespace Easydict.WinUI.Views
                     if (_isClosing) return;
                     serviceResult.IsLoading = false;
                     serviceResult.IsStreaming = false;
+                    serviceResult.StreamingText = "";
                     serviceResult.ClearQueried();
                 });
                 return null;
@@ -1115,6 +1122,7 @@ namespace Easydict.WinUI.Views
                     };
                     serviceResult.IsLoading = false;
                     serviceResult.IsStreaming = false;
+                    serviceResult.StreamingText = "";
                 });
                 return false;
             }

@@ -557,7 +557,8 @@ public sealed partial class ServiceResultItem : UserControl
             (_serviceResult.Result != null || _serviceResult.Error != null || _serviceResult.GrammarResult != null))
         {
             ActionButtons.Visibility = Visibility.Visible;
-            ReplaceButton.Visibility = _serviceResult.Result != null && TextInsertionService.HasSourceWindow
+            var hasResult = _serviceResult.Result != null || _serviceResult.GrammarResult != null;
+            ReplaceButton.Visibility = hasResult && TextInsertionService.HasSourceWindow
                 ? Visibility.Visible : Visibility.Collapsed;
             PlayButton.Visibility = _serviceResult.Result != null
                 ? Visibility.Visible : Visibility.Collapsed;

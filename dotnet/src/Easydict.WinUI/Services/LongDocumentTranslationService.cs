@@ -531,12 +531,18 @@ public sealed class LongDocumentTranslationService : IDisposable
         }
     }
 
-    private static IDocumentExportService ResolveExportService(string? sourceFilePath)
+    private static IDocumentExportService ResolveExportService(
+        string? sourceFilePath,
+        PdfExportMode pdfExportMode = PdfExportMode.Overlay)
     {
         var ext = Path.GetExtension(sourceFilePath)?.ToLowerInvariant();
         return ext switch
         {
-            ".pdf" => new PdfExportService(),
+            ".pdf" => pdfExportMode switch
+            {
+                PdfExportMode.ContentStreamReplacement => new MuPdfExportService(),
+                _ => new PdfExportService(),
+            },
             ".md" => new MarkdownExportService(),
             ".txt" => new PlainTextExportService(),
             _ => throw new NotSupportedException($"Unsupported file format: {ext}")
@@ -548,7 +554,8 @@ public sealed class LongDocumentTranslationService : IDisposable
         string outputPath,
         Action<string>? onProgress,
         LongDocumentQualityReport qualityReport,
-        DocumentOutputMode outputMode = DocumentOutputMode.Monolingual)
+        DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
+        PdfExportMode pdfExportMode = PdfExportMode.Overlay)
     {
         ValidateCheckpointOrThrow(checkpoint);
 
@@ -560,7 +567,7 @@ public sealed class LongDocumentTranslationService : IDisposable
 
         onProgress?.Invoke("Generating output document...");
 
-        var exportService = ResolveExportService(checkpoint.SourceFilePath);
+        var exportService = ResolveExportService(checkpoint.SourceFilePath, pdfExportMode);
         var exportResult = exportService.Export(checkpoint, checkpoint.SourceFilePath!, outputPath, outputMode);
 
         if (exportResult.BackfillMetrics != null)

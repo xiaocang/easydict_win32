@@ -607,18 +607,25 @@ Phase 5: 集成 + 替换现有 PdfSharpCore     约 1 周
 
 **总计：约 4 周核心开发**（比之前估算的 6 周减少 30%，因为 MuPDF.NET 消除了大量变通代码）
 
-### 8. 关键文件清单
+### 8. 关键文件清单（实现状态）
 
-| 文件 | 操作 | 说明 |
-|------|------|------|
-| `lib/PdfPig/src/UglyToad.PdfPig/Content/Letter.cs` | 修改 | 添加 CharacterCode/TextMatrix/CTM |
-| `lib/PdfPig/src/UglyToad.PdfPig/PdfFonts/IFont.cs` | 修改 | 添加 IsCidFont/GetCid() |
-| `lib/PdfPig/src/UglyToad.PdfPig/PdfFonts/Composite/Type0Font.cs` | 修改 | 实现 IsCidFont/GetCid() |
-| `lib/PdfPig/src/UglyToad.PdfPig/Graphics/ContentStreamProcessor.cs` | 修改 | 传递 code/matrices 到 Letter |
-| `lib/PdfPig/src/UglyToad.PdfPig/Content/IResourceStore.cs` | 修改 | 添加 GetFontMap() |
-| `dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj` | 修改 | NuGet→ProjectReference |
-| `dotnet/src/Easydict.TranslationService/` | 新增 | ContentStreamInterpreter.cs |
-| `dotnet/src/Easydict.WinUI/Services/DocumentExport/` | 新增 | MuPdfExportService.cs |
+| 文件 | 操作 | 说明 | 状态 |
+|------|------|------|------|
+| `lib/PdfPig/src/UglyToad.PdfPig/Content/Letter.cs` | 修改 | 添加 CharacterCode/TextMatrix/CTM | ✅ Phase 1 |
+| `lib/PdfPig/src/UglyToad.PdfPig/PdfFonts/IFont.cs` | 修改 | 添加 IsCidFont/GetCid() | ✅ Phase 1 |
+| `lib/PdfPig/src/UglyToad.PdfPig/PdfFonts/Composite/Type0Font.cs` | 修改 | 实现 IsCidFont/GetCid() | ✅ Phase 1 |
+| `lib/PdfPig/src/UglyToad.PdfPig/Graphics/ContentStreamProcessor.cs` | 修改 | 传递 code/matrices 到 Letter | ✅ Phase 1 |
+| `lib/PdfPig/src/UglyToad.PdfPig/Content/IResourceStore.cs` | 修改 | 添加 GetFontMap() | ✅ Phase 1 |
+| `lib/PdfPig/src/UglyToad.PdfPig/Content/ResourceStore.cs` | 修改 | 实现 GetFontMap() | ✅ Phase 1 |
+| `lib/PdfPig/src/UglyToad.PdfPig/Util/StackDictionary.cs` | 修改 | 添加 GetAllEntries() | ✅ Phase 1 |
+| `dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj` | 修改 | NuGet→ProjectReference + MuPDF.NET | ✅ Phase 1+4 |
+| `dotnet/src/Easydict.WinUI/Services/ContentStreamInterpreter.cs` | 新增 | 操作符过滤 + CharInfo + 工具方法 | ✅ Phase 2 |
+| `dotnet/src/Easydict.WinUI/Services/CharacterParagraphBuilder.cs` | 新增 | 字符级段落构建 + 公式检测 | ✅ Phase 3 |
+| `dotnet/src/Easydict.WinUI/Services/DocumentExport/MuPdfExportService.cs` | 新增 | MuPDF.NET 内容流替换输出 | ✅ Phase 4 |
+| `dotnet/src/Easydict.WinUI/Services/DocumentExport/IDocumentExportService.cs` | 修改 | 添加 PdfExportMode 枚举 | ✅ Phase 5 |
+| `dotnet/src/Easydict.WinUI/Services/LongDocumentTranslationService.cs` | 修改 | 集成 MuPdfExportService | ✅ Phase 5 |
+| `dotnet/tests/.../ContentStreamInterpreterTests.cs` | 新增 | 操作符过滤测试 | ✅ Phase 2 |
+| `dotnet/tests/.../CharacterParagraphBuilderTests.cs` | 新增 | 段落构建测试 | ✅ Phase 3 |
 
 ### 9. 验证方案
 

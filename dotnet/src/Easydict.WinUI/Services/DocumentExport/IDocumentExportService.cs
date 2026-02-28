@@ -3,6 +3,25 @@ using Easydict.TranslationService.LongDocument;
 namespace Easydict.WinUI.Services.DocumentExport;
 
 /// <summary>
+/// Controls the PDF rendering strategy for translated output.
+/// </summary>
+public enum PdfExportMode
+{
+    /// <summary>
+    /// Overlay mode (PdfSharpCore): draws white rectangles over source text, then draws translated text.
+    /// More compatible but lower quality for formula rendering. Default.
+    /// </summary>
+    Overlay,
+
+    /// <summary>
+    /// Content stream replacement mode (MuPDF.NET): replaces the page's content stream,
+    /// preserving graphics and embedding fonts. Higher quality, matches pdf2zh output.
+    /// Requires MuPDF.NET native binaries.
+    /// </summary>
+    ContentStreamReplacement,
+}
+
+/// <summary>
 /// Controls the output format for long document translation (cross-format).
 /// </summary>
 public enum DocumentOutputMode

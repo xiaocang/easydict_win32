@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
 using MuPDF.NET;
@@ -37,6 +38,19 @@ public sealed class MuPdfExportService : IDocumentExportService
         [Language.Japanese] = "SourceHanSerifJP",
         [Language.Korean] = "SourceHanSerifKR",
     };
+
+    /// <summary>
+    /// All font IDs that represent CJK fonts — both SourceHanSerif and Noto CJK fallbacks.
+    /// Used to decide whether to route ASCII through Helvetica (CJK fonts render ASCII full-width).
+    /// </summary>
+    private static readonly HashSet<string> CjkFontIds =
+        new(CjkFontNames.Values, StringComparer.Ordinal)
+        {
+            "NotoSansSC-Regular",
+            "NotoSansTC-Regular",
+            "NotoSansJP-Regular",
+            "NotoSansKR-Regular",
+        };
 
     /// <summary>
     /// Noto font name for non-CJK scripts (Latin, Arabic, Cyrillic, Devanagari, etc.)
@@ -191,7 +205,8 @@ public sealed class MuPdfExportService : IDocumentExportService
                 fontId,
                 fontSize,
                 bbox,
-                embeddedFonts);
+                embeddedFonts,
+                block.TextStyle);
 
             opsText.Append(blockOps);
             rendered++;
@@ -228,15 +243,20 @@ public sealed class MuPdfExportService : IDocumentExportService
 
     /// <summary>
     /// Generates PDF text operations for a translated block.
-    /// Handles line wrapping and font size adjustment.
+    /// Handles line wrapping, font size adjustment, color, and ASCII/CJK font routing.
     /// </summary>
     private static string GenerateBlockTextOperations(
         string translatedText,
         string fontId,
         double fontSize,
         BlockRect bbox,
-        EmbeddedFontInfo fonts)
+        EmbeddedFontInfo fonts,
+        BlockTextStyle? textStyle = null)
     {
+        // Simplify inline LaTeX formulas to plain text with ^ _ super/subscript signals
+        translatedText = SimplifyLatexMarkup(translatedText);
+        if (string.IsNullOrWhiteSpace(translatedText)) return string.Empty;
+
         var sb = new StringBuilder();
         var lineHeight = fontSize * 1.2;
 
@@ -248,6 +268,16 @@ public sealed class MuPdfExportService : IDocumentExportService
         var startY = bbox.Y + bbox.Height - fontSize;
         var maxWidth = bbox.Width;
         var maxHeight = bbox.Height;
+
+        // Apply non-black color before block characters
+        var hasColor = textStyle is not null && !textStyle.IsBlack;
+        if (hasColor)
+        {
+            var r = textStyle!.ColorR / 255.0;
+            var g = textStyle.ColorG / 255.0;
+            var b = textStyle.ColorB / 255.0;
+            sb.Append($"{r:F3} {g:F3} {b:F3} rg ");
+        }
 
         // Simple line wrapping: split by existing newlines, then wrap long lines
         var lines = translatedText.Split('\n');
@@ -269,22 +299,79 @@ public sealed class MuPdfExportService : IDocumentExportService
 
             // Wrap line if needed
             var pos = 0;
+            // Declared outside the wrap loop so super/subscript signals survive across
+            // segment boundaries (when the ^ or _ falls at the end of a wrapped segment).
+            var superNext = false;
+            var subNext = false;
             while (pos < line.Length)
             {
                 var remaining = line.Length - pos;
                 var count = Math.Min(remaining, charsPerLine);
                 var segment = line.Substring(pos, count);
 
-                // Generate PDF operators for this line segment
+                // Generate PDF operators for this line segment.
+                // ^ and _ are rendering signals left by SimplifyLatexMarkup:
+                // the character immediately following them is raised/lowered as super/subscript.
+
                 foreach (var ch in segment)
                 {
+                    // Consume ^ and _ as super/subscript signals (not rendered as characters)
+                    if (ch == '^') { superNext = true; subNext = false; continue; }
+                    if (ch == '_') { subNext = true; superNext = false; continue; }
+
+                    // Apply super/subscript sizing and Y offset for this character only
+                    var charFontSize = fontSize;
+                    var charY = currentY;
+                    if (superNext)
+                    {
+                        charFontSize = fontSize * 0.6;
+                        charY = currentY + fontSize * 0.4;
+                        superNext = false;
+                    }
+                    else if (subNext)
+                    {
+                        charFontSize = fontSize * 0.6;
+                        charY = currentY - fontSize * 0.3;
+                        subNext = false;
+                    }
+
+                    // Route basic ASCII when the primary font is CJK.
+                    // CJK fonts map ASCII to full-width glyphs; we want half-width rendering.
+                    if (fonts.PrimaryFontIsCjk && ch >= 0x20 && ch <= 0x7E)
+                    {
+                        if (ch == ' ')
+                        {
+                            // Emit no glyph — just advance by a proper space width.
+                            // 0.55 × fontSize (old advance) was nearly 2× too wide; 0.3 is closer to Helvetica's 0.278 em.
+                            startX += charFontSize * 0.3;
+                            superNext = false;
+                            subNext = false;
+                            continue;
+                        }
+
+                        // Prefer the primary CJK font's half-width Latin glyph (visually matches CJK stroke weight).
+                        // PrimaryGlyphMap covers the full BMP including ASCII, so this succeeds for NotoSansSC / SourceHanSerif.
+                        if (fonts.PrimaryGlyphMap?.TryGetValue(ch, out var asciiGid) == true && asciiGid != 0)
+                        {
+                            sb.Append(ContentStreamInterpreter.GenerateTextOperator(
+                                fontId, charFontSize, startX, charY, asciiGid.ToString("X4")));
+                        }
+                        else
+                        {
+                            // Helv fallback: use 1-byte encoding (X2), not 4-byte (X4).
+                            // Built-in Helvetica is a 1-byte-encoded Type1 font; <0041> is 2 bytes (0x00 + 'A').
+                            sb.Append(ContentStreamInterpreter.GenerateTextOperator(
+                                "helv", charFontSize, startX, charY, ((int)ch).ToString("X2")));
+                        }
+                        startX += charFontSize * 0.55;
+                        continue;
+                    }
+
                     var charFontId = fontId;
 
                     // Check if character needs the Noto font (non-Latin, non-CJK)
                     if (fonts.NotoFontId is not null && NeedsNotoFont(ch))
-                    {
                         charFontId = fonts.NotoFontId;
-                    }
 
                     // Encode the character for the content stream.
                     // MuPDF embeds fonts with Identity-H encoding: the char code in
@@ -310,8 +397,10 @@ public sealed class MuPdfExportService : IDocumentExportService
                     }
 
                     sb.Append(ContentStreamInterpreter.GenerateTextOperator(
-                        charFontId, fontSize, startX, currentY, hexCid));
-                    startX += avgCharWidth;
+                        charFontId, charFontSize, startX, charY, hexCid));
+                    // CJK characters are full-width (≈ 1 em); others are roughly half-width.
+                    // Using a blended avgCharWidth underestimates CJK advance on mixed lines → drift/overlap.
+                    startX += IsCjkCharacter(ch) ? charFontSize : charFontSize * 0.6;
                 }
 
                 startX = bbox.X; // Reset X for next line
@@ -321,7 +410,64 @@ public sealed class MuPdfExportService : IDocumentExportService
             }
         }
 
+        // Reset color to black after block
+        if (hasColor)
+            sb.Append("0 0 0 rg ");
+
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Simplifies LaTeX formula markup to plain text for PDF rendering.
+    /// Preserves ^ and _ as rendering signals for super/subscript positioning.
+    /// Unlike the old StripLatexMarkup, content between delimiters is kept (simplified),
+    /// so inline math like "$h_t$" renders as "h" with subscript "t" rather than as blank.
+    /// </summary>
+    private static string SimplifyLatexMarkup(string text)
+    {
+        // Display math: $$...$$ → simplified content (surrounded by spaces)
+        text = Regex.Replace(text, @"\$\$([\s\S]*?)\$\$",
+            m => " " + SimplifyMathContent(m.Groups[1].Value) + " ");
+        // Display math: \[...\] → simplified content
+        text = Regex.Replace(text, @"\\\[([\s\S]*?)\\\]",
+            m => " " + SimplifyMathContent(m.Groups[1].Value) + " ");
+        // Inline math: $...$ → simplified content
+        text = Regex.Replace(text, @"\$([^$\n]+)\$",
+            m => SimplifyMathContent(m.Groups[1].Value));
+        // Inline math: \(...\) → simplified content
+        text = Regex.Replace(text, @"\\\(([\s\S]*?)\\\)",
+            m => SimplifyMathContent(m.Groups[1].Value));
+        // Residual \cmd{content} outside math → keep content
+        text = Regex.Replace(text, @"\\[a-zA-Z]+\{([^}]*)\}", "$1");
+        // Residual standalone \cmd → remove
+        text = Regex.Replace(text, @"\\[a-zA-Z]+", string.Empty);
+        // Remove lone $ \ { }; keep ^ _ as super/subscript rendering signals
+        text = Regex.Replace(text, @"[\$\\{}]", string.Empty);
+        // Collapse extra whitespace
+        return Regex.Replace(text, @"[ \t]{2,}", " ").Trim();
+    }
+
+    /// <summary>
+    /// Simplifies LaTeX math content to an ASCII approximation.
+    /// Handles common constructs: \frac, \sqrt, \text, \mathrm, etc.
+    /// Preserves ^ and _ for super/subscript rendering signals.
+    /// </summary>
+    private static string SimplifyMathContent(string latex)
+    {
+        // \frac{a}{b} → a/b
+        latex = Regex.Replace(latex, @"\\frac\{([^}]*)\}\{([^}]*)\}", "$1/$2");
+        // \sqrt{x} → √x
+        latex = Regex.Replace(latex, @"\\sqrt\{([^}]*)\}", "√$1");
+        // \text{word} / \mathrm{word} / \mathbf{word} → word
+        latex = Regex.Replace(latex, @"\\(?:text|mathrm|mathbf|mathit|operatorname)\{([^}]*)\}", "$1");
+        // Other \cmd{content} → content
+        latex = Regex.Replace(latex, @"\\[a-zA-Z]+\{([^}]*)\}", "$1");
+        // Remove standalone \cmd (e.g. \alpha, \beta, \sum, \cdot)
+        latex = Regex.Replace(latex, @"\\[a-zA-Z]+", string.Empty);
+        // Remove { } braces; keep ^ _ = + - * / spaces and alphanumerics
+        latex = Regex.Replace(latex, @"[{}]", string.Empty);
+        // Collapse whitespace
+        return Regex.Replace(latex, @"\s+", " ").Trim();
     }
 
     /// <summary>
@@ -343,8 +489,9 @@ public sealed class MuPdfExportService : IDocumentExportService
         if (totalCount == 0) return fontSize * 0.5;
 
         var cjkRatio = (double)cjkCount / totalCount;
-        // CJK characters are roughly full-width, Latin roughly half-width
-        return fontSize * (0.5 + cjkRatio * 0.5);
+        // Corrected formula: ASCII runs use ~0.55 em, CJK use ~1.0 em.
+        // Weighted average = 0.55 + 0.45 × cjkRatio  (was 0.5 + 0.5 × cjkRatio)
+        return fontSize * (0.55 + cjkRatio * 0.45);
     }
 
     /// <summary>
@@ -363,6 +510,17 @@ public sealed class MuPdfExportService : IDocumentExportService
     }
 
     /// <summary>
+    /// Returns true for CJK-range characters that occupy a full em width.
+    /// </summary>
+    private static bool IsCjkCharacter(char ch) =>
+        (ch >= '\u4E00' && ch <= '\u9FFF') ||  // CJK Unified Ideographs
+        (ch >= '\u3400' && ch <= '\u4DBF') ||  // CJK Extension A
+        (ch >= '\u3040' && ch <= '\u30FF') ||  // Hiragana + Katakana
+        (ch >= '\uAC00' && ch <= '\uD7AF') ||  // Hangul Syllables
+        (ch >= '\u2E80' && ch <= '\u2FFF') ||  // CJK Radicals, Symbols & Punctuation
+        (ch >= '\uF900' && ch <= '\uFAFF');    // CJK Compatibility Ideographs
+
+    /// <summary>
     /// Embeds required fonts into the MuPDF page.
     /// </summary>
     private static EmbeddedFontInfo EmbedFonts(MuPdfPage muPage, FontPaths fontPaths)
@@ -371,6 +529,11 @@ public sealed class MuPdfExportService : IDocumentExportService
         string? notoFontId = null;
         IReadOnlyDictionary<char, ushort>? primaryGlyphMap = null;
         IReadOnlyDictionary<char, ushort>? notoGlyphMap = null;
+
+        // Always embed Helvetica so it's available for ASCII characters
+        // even when a CJK font is the primary (CJK fonts map ASCII to full-width glyphs)
+        try { muPage.InsertFont("helv", ""); }
+        catch (Exception) { /* Font may already be registered on this page */ }
 
         // Embed primary font (CJK or Latin)
         if (fontPaths.PrimaryFontPath is not null && File.Exists(fontPaths.PrimaryFontPath))
@@ -393,17 +556,7 @@ public sealed class MuPdfExportService : IDocumentExportService
 
         // Fallback to built-in Helvetica if no custom font was embedded
         if (primaryFontId is null)
-        {
             primaryFontId = "helv";
-            try
-            {
-                muPage.InsertFont("helv", "");
-            }
-            catch (Exception)
-            {
-                // Font may already be registered on this page
-            }
-        }
 
         // Embed Noto font for non-CJK scripts
         if (fontPaths.NotoFontPath is not null && File.Exists(fontPaths.NotoFontPath))
@@ -423,7 +576,9 @@ public sealed class MuPdfExportService : IDocumentExportService
                 notoGlyphMap = TrueTypeCmapParser.LoadGlyphMap(fontPaths.NotoFontPath);
         }
 
-        return new EmbeddedFontInfo(primaryFontId, notoFontId, primaryGlyphMap, notoGlyphMap);
+        var primaryFontIsCjk = CjkFontIds.Contains(primaryFontId);
+
+        return new EmbeddedFontInfo(primaryFontId, notoFontId, primaryGlyphMap, notoGlyphMap, primaryFontIsCjk);
     }
 
     /// <summary>
@@ -494,12 +649,16 @@ public sealed class MuPdfExportService : IDocumentExportService
             var isFormulaSkipped = metadata.SourceBlockType == SourceBlockType.Formula
                 || metadata.IsFormulaLike;
 
+            var rotationAngle = metadata.TextStyle?.RotationAngle ?? 0;
+            var isVertical = Math.Abs(rotationAngle) > 15.0;
+
             var block = new TranslatedBlockData
             {
                 TranslatedText = translated,
                 BoundingBox = metadata.BoundingBox,
                 FontSize = metadata.TextStyle?.FontSize ?? 10.0,
-                TranslationSkipped = isFormulaSkipped,
+                TranslationSkipped = isFormulaSkipped || isVertical,
+                TextStyle = metadata.TextStyle,
             };
 
             if (!result.TryGetValue(metadata.PageNumber, out var list))
@@ -588,13 +747,15 @@ public sealed class MuPdfExportService : IDocumentExportService
         public BlockRect? BoundingBox { get; init; }
         public double FontSize { get; init; }
         public bool TranslationSkipped { get; init; }
+        public BlockTextStyle? TextStyle { get; init; }
     }
 
     private sealed record EmbeddedFontInfo(
         string PrimaryFontId,
         string? NotoFontId,
         IReadOnlyDictionary<char, ushort>? PrimaryGlyphMap,
-        IReadOnlyDictionary<char, ushort>? NotoGlyphMap);
+        IReadOnlyDictionary<char, ushort>? NotoGlyphMap,
+        bool PrimaryFontIsCjk);
 
     private sealed record FontPaths(string PrimaryFontName, string? PrimaryFontPath, string? NotoFontPath);
 }

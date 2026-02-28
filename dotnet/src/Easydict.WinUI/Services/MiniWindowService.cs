@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Easydict.TranslationService.Models;
 using Easydict.WinUI.Views;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -49,9 +50,29 @@ public sealed class MiniWindowService : IDisposable
     }
 
     /// <summary>
+    /// Gets the current query mode of the mini window.
+    /// </summary>
+    public QueryMode CurrentQueryMode { get; private set; } = QueryMode.Translation;
+
+    /// <summary>
+    /// Fired when the mini window's query mode changes.
+    /// </summary>
+    public event Action<QueryMode>? QueryModeChanged;
+
+    /// <summary>
     /// Gets whether the mini window is currently visible.
     /// </summary>
     public bool IsVisible => _miniWindow?.IsVisible ?? false;
+
+    /// <summary>
+    /// Called by MiniWindow when the user switches query modes.
+    /// Updates CurrentQueryMode and fires QueryModeChanged.
+    /// </summary>
+    internal void NotifyQueryModeChanged(QueryMode mode)
+    {
+        CurrentQueryMode = mode;
+        QueryModeChanged?.Invoke(mode);
+    }
 
     /// <summary>
     /// Toggle mini window visibility (show if hidden, hide if visible).

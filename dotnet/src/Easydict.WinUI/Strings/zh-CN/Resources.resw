@@ -860,6 +860,9 @@
   <data name="QueryMode_GrammarCorrection" xml:space="preserve">
     <value>语法纠错</value>
   </data>
+  <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
+    <value>{0}（点击切换为{1}）</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>输入文本以检查语法...</value>
   </data>

@@ -150,8 +150,8 @@ public sealed partial class MiniWindow : Window
             _suppressTargetLanguageSelectionChanged = false;
         }
 
-        // Query mode combo
-        PopulateQueryModeCombo(QueryModeCombo, loc);
+        // Update query mode button emoji and tooltip
+        UpdateQueryModeButton();
 
         // Placeholders
         InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
@@ -165,38 +165,34 @@ public sealed partial class MiniWindow : Window
         ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
     }
 
-    private static void PopulateQueryModeCombo(ComboBox combo, LocalizationService loc)
+    private void UpdateQueryModeButton()
     {
-        combo.Items.Clear();
-        combo.Items.Add(new ComboBoxItem
-        {
-            Content = loc.GetString("QueryMode_Translation") ?? "Translate",
-            Tag = "Translation"
-        });
-        combo.Items.Add(new ComboBoxItem
-        {
-            Content = loc.GetString("QueryMode_GrammarCorrection") ?? "Grammar Check",
-            Tag = "GrammarCorrection"
-        });
-        combo.SelectedIndex = 0;
+        bool isGrammar = _currentMode == QueryMode.GrammarCorrection;
+        QueryModeEmoji.Text = isGrammar ? "✏️" : "🌐";
+
+        var loc = LocalizationService.Instance;
+        var currentName = loc.GetString(isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
+            ?? (isGrammar ? "Grammar Check" : "Translate");
+        var otherName = loc.GetString(!isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
+            ?? (!isGrammar ? "Grammar Check" : "Translate");
+        var fmt = loc.GetString("QueryModeButton_SwitchTooltip") ?? "{0} — click to switch to {1}";
+        ToolTipService.SetToolTip(QueryModeButton, string.Format(fmt, currentName, otherName));
     }
 
-    private void OnQueryModeChanged(object sender, SelectionChangedEventArgs e)
+    private void OnQueryModeButtonClick(object sender, RoutedEventArgs e)
     {
         if (!_isLoaded) return;
 
-        var combo = sender as ComboBox;
-        var newMode = combo?.SelectedIndex == 1
-            ? QueryMode.GrammarCorrection
-            : QueryMode.Translation;
+        _currentMode = _currentMode == QueryMode.GrammarCorrection
+            ? QueryMode.Translation
+            : QueryMode.GrammarCorrection;
 
-        if (newMode == _currentMode) return;
-        _currentMode = newMode;
+        UpdateQueryModeButton();
+        MiniWindowService.Instance.NotifyQueryModeChanged(_currentMode);
 
         var loc = LocalizationService.Instance;
         if (_currentMode == QueryMode.GrammarCorrection)
         {
-            // Hide translation-specific controls
             TargetLangCombo.Visibility = Visibility.Collapsed;
             SwapButton.Visibility = Visibility.Collapsed;
 
@@ -207,7 +203,6 @@ public sealed partial class MiniWindow : Window
         }
         else
         {
-            // Restore translation-mode controls
             TargetLangCombo.Visibility = Visibility.Visible;
             SwapButton.Visibility = Visibility.Visible;
 
@@ -215,7 +210,6 @@ public sealed partial class MiniWindow : Window
             ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
         }
 
-        // Rebuild service results list (grammar mode only shows LLM services)
         InitializeServiceResults();
     }
 

@@ -284,6 +284,9 @@
   <data name="QueryMode_GrammarCorrection" xml:space="preserve">
     <value>Grammar Check</value>
   </data>
+  <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
+    <value>{0} — {1} पर स्विच करने के लिए क्लिक करें</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>Enter text to check grammar...</value>
   </data>

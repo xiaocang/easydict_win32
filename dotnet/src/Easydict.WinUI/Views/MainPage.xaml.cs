@@ -78,9 +78,6 @@ namespace Easydict.WinUI.Views
             };
             TargetLangCombo.SelectionChanged += (s, e) => SyncComboSelection(TargetLangCombo, TargetLangComboNarrow);
             TargetLangComboNarrow.SelectionChanged += (s, e) => SyncComboSelection(TargetLangComboNarrow, TargetLangCombo);
-            QueryModeCombo.SelectionChanged += (s, e) => SyncComboSelection(QueryModeCombo, QueryModeComboNarrow);
-            QueryModeComboNarrow.SelectionChanged += (s, e) => SyncComboSelection(QueryModeComboNarrow, QueryModeCombo);
-
             // Subscribe to clipboard events from App
             App.ClipboardTextReceived += OnClipboardTextReceived;
         }
@@ -178,9 +175,8 @@ namespace Easydict.WinUI.Views
                 _suppressTargetLanguageSelectionChanged = false;
             }
 
-            // Populate query mode combos
-            PopulateQueryModeCombo(QueryModeCombo, loc);
-            PopulateQueryModeCombo(QueryModeComboNarrow, loc);
+            // Update query mode button emoji and tooltip
+            UpdateQueryModeButton();
 
             // Input placeholder
             InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
@@ -204,38 +200,37 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(InputHelpIcon, loc.GetString("InputHelpTip"));
         }
 
-        private static void PopulateQueryModeCombo(ComboBox combo, LocalizationService loc)
+        private void UpdateQueryModeButton()
         {
-            combo.Items.Clear();
-            combo.Items.Add(new ComboBoxItem
-            {
-                Content = loc.GetString("QueryMode_Translation") ?? "Translate",
-                Tag = "Translation"
-            });
-            combo.Items.Add(new ComboBoxItem
-            {
-                Content = loc.GetString("QueryMode_GrammarCorrection") ?? "Grammar Check",
-                Tag = "GrammarCorrection"
-            });
-            combo.SelectedIndex = 0;
+            bool isGrammar = _currentMode == QueryMode.GrammarCorrection;
+            var emoji = isGrammar ? "✏️" : "🌐";
+            QueryModeEmoji.Text = emoji;
+            QueryModeEmojiNarrow.Text = emoji;
+
+            var loc = LocalizationService.Instance;
+            var currentName = loc.GetString(isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
+                ?? (isGrammar ? "Grammar Check" : "Translate");
+            var otherName = loc.GetString(!isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
+                ?? (!isGrammar ? "Grammar Check" : "Translate");
+            var fmt = loc.GetString("QueryModeButton_SwitchTooltip") ?? "{0} — click to switch to {1}";
+            var tooltip = string.Format(fmt, currentName, otherName);
+            ToolTipService.SetToolTip(QueryModeButton, tooltip);
+            ToolTipService.SetToolTip(QueryModeButtonNarrow, tooltip);
         }
 
-        private void OnQueryModeChanged(object sender, SelectionChangedEventArgs e)
+        private void OnQueryModeButtonClick(object sender, RoutedEventArgs e)
         {
             if (!_isLoaded) return;
 
-            var combo = sender as ComboBox;
-            var newMode = combo?.SelectedIndex == 1
-                ? QueryMode.GrammarCorrection
-                : QueryMode.Translation;
+            _currentMode = _currentMode == QueryMode.GrammarCorrection
+                ? QueryMode.Translation
+                : QueryMode.GrammarCorrection;
 
-            if (newMode == _currentMode) return;
-            _currentMode = newMode;
+            UpdateQueryModeButton();
 
             var loc = LocalizationService.Instance;
             if (_currentMode == QueryMode.GrammarCorrection)
             {
-                // Hide translation-specific controls
                 TargetLangCombo.Visibility = Visibility.Collapsed;
                 SwapLanguageButton.Visibility = Visibility.Collapsed;
                 LangHelpIcon.Visibility = Visibility.Collapsed;
@@ -256,7 +251,6 @@ namespace Easydict.WinUI.Views
             }
             else
             {
-                // Restore translation-mode controls
                 TargetLangCombo.Visibility = Visibility.Visible;
                 SwapLanguageButton.Visibility = Visibility.Visible;
                 LangHelpIcon.Visibility = Visibility.Visible;
@@ -272,7 +266,6 @@ namespace Easydict.WinUI.Views
                 ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
             }
 
-            // Rebuild service results list (grammar mode only shows LLM services)
             InitializeServiceResults();
         }
 

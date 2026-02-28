@@ -857,6 +857,9 @@
   <data name="QueryMode_GrammarCorrection" xml:space="preserve">
     <value>Grammatikprüfung</value>
   </data>
+  <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
+    <value>{0} — klicken um zu {1} zu wechseln</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>Text zur Grammatikprüfung eingeben...</value>
   </data>

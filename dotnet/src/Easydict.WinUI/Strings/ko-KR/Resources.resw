@@ -857,6 +857,9 @@
   <data name="QueryMode_GrammarCorrection" xml:space="preserve">
     <value>문법 검사</value>
   </data>
+  <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
+    <value>{0} — 클릭하여 {1}으로 전환</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>문법을 검사할 텍스트를 입력하세요...</value>
   </data>

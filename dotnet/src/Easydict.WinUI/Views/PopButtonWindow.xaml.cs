@@ -1,9 +1,12 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Easydict.TranslationService.Models;
+using Easydict.WinUI.Services;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using WinRT.Interop;
@@ -224,6 +227,26 @@ public sealed partial class PopButtonWindow : Window
         if (this.Content is FrameworkElement root)
         {
             root.RequestedTheme = theme;
+        }
+    }
+
+    /// <summary>
+    /// Update the pop button icon and tooltip to reflect the current query mode.
+    /// </summary>
+    public void UpdateMode(QueryMode mode)
+    {
+        var loc = LocalizationService.Instance;
+        if (mode == QueryMode.GrammarCorrection)
+        {
+            ModeIcon.Glyph = "\uE70F";   // Edit/Pencil — represents correction
+            ToolTipService.SetToolTip(TranslateButton,
+                loc.GetString("TranslateButton_Grammar_Tooltip") ?? "Check Grammar");
+        }
+        else
+        {
+            ModeIcon.Glyph = "\uE8C1";   // Characters/Translate — original icon
+            ToolTipService.SetToolTip(TranslateButton,
+                loc.GetString("TranslateTooltip") ?? "Translate");
         }
     }
 

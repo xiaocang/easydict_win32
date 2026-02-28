@@ -93,15 +93,17 @@
             </Grid.ColumnDefinitions>
 
             <!-- Query Mode Toggle -->
-            <ComboBox
-                x:Name="QueryModeCombo"
-                Grid.Column="0"
-                MinWidth="80"
-                VerticalAlignment="Center"
-                SelectionChanged="OnQueryModeChanged"
-                Margin="0,0,4,0">
-                <!-- Items populated in code-behind for localization -->
-            </ComboBox>
+            <Button x:Name="QueryModeButton"
+                    Grid.Column="0"
+                    Width="32" Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Click="OnQueryModeButtonClick"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Margin="0,0,4,0">
+                <TextBlock x:Name="QueryModeEmoji" FontSize="18" />
+            </Button>
 
             <ComboBox
                 x:Name="SourceLangCombo"

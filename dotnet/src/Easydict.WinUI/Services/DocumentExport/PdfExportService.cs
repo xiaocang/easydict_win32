@@ -602,6 +602,23 @@ public sealed class PdfExportService : IDocumentExportService
                         ? WrapTextByWidths(gfx, block.TranslatedText, font, block.RenderLineRects.Select(r => r.Width).ToList()).ToList()
                         : WrapTextByWidth(gfx, block.TranslatedText, font, rect.Width).ToList();
 
+                    // Dynamic line height reduction — aligned with pdf2zh converter.py:512-515:
+                    //   while (lidx+1)*size*lh > height and lh >= 1: lh -= 0.05
+                    // When wrapped lines exceed available height, progressively shrink line spacing
+                    // before falling back to truncation.
+                    if (block.RenderLineRects is not { Count: > 0 })
+                    {
+                        var totalTextHeight = wrappedLines.Count * effectiveLineHeight;
+                        while (totalTextHeight > rect.Height && effectiveLineHeight > font.Size)
+                        {
+                            effectiveLineHeight -= 0.05 * font.Size;
+                            totalTextHeight = wrappedLines.Count * effectiveLineHeight;
+                        }
+
+                        // Ensure minimum line height of 1.0× font size
+                        effectiveLineHeight = Math.Max(effectiveLineHeight, font.Size);
+                    }
+
                     var maxVisibleLines = block.RenderLineRects is { Count: > 0 }
                         ? block.RenderLineRects.Count
                         : Math.Max(1, (int)Math.Floor(rect.Height / effectiveLineHeight));
@@ -2380,10 +2397,13 @@ public sealed class PdfExportService : IDocumentExportService
         }
     }
 
+    /// <summary>Minimum font size for font shrinking — lowered from 8 to 6 to give more room before truncation.</summary>
+    private const double MinFontSize = 6;
+
     internal static XFont FitFontToRect(XGraphics gfx, string text, XFont baseFont, double width, double height, double lineHeight = 14d)
     {
         var size = baseFont.Size;
-        while (size >= 8)
+        while (size >= MinFontSize)
         {
             var candidate = new XFont(baseFont.Name, size, baseFont.Style);
             var lines = WrapTextByWidth(gfx, text, candidate, width).ToList();
@@ -2396,7 +2416,7 @@ public sealed class PdfExportService : IDocumentExportService
             size -= 0.5;
         }
 
-        return new XFont(baseFont.Name, 8, baseFont.Style);
+        return new XFont(baseFont.Name, MinFontSize, baseFont.Style);
     }
 
     /// <summary>
@@ -2412,7 +2432,7 @@ public sealed class PdfExportService : IDocumentExportService
         var minHeight = Math.Max(8, lineRects.Min(r => Math.Max(1, r.Height)));
 
         var size = baseFont.Size;
-        while (size >= 8)
+        while (size >= MinFontSize)
         {
             var candidate = new XFont(baseFont.Name, size, baseFont.Style);
             if (candidate.Size > minHeight * 0.98)
@@ -2428,7 +2448,7 @@ public sealed class PdfExportService : IDocumentExportService
             size -= 0.5;
         }
 
-        return new XFont(baseFont.Name, 8, baseFont.Style);
+        return new XFont(baseFont.Name, MinFontSize, baseFont.Style);
     }
 
     internal static IEnumerable<string> WrapText(string text, int maxChars)

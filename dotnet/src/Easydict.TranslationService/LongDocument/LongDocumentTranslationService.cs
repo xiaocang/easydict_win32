@@ -9,7 +9,22 @@ namespace Easydict.TranslationService.LongDocument;
 
 public sealed class LongDocumentTranslationService
 {
-    private static readonly Regex FormulaRegex = new(@"(\$[^$]+\$|\\\([^\)]+\\\)|\\\[[^\]]+\\\]|[A-Za-z]\s*=\s*[^\s]+)", RegexOptions.Compiled);
+    // Formula detection regex — aligned with pdf2zh converter.py formula patterns.
+    // Matches: $$..$$, $..$ (inline), \(..\), \[..\], \begin{..}..\end{..}, common LaTeX commands,
+    // subscript/superscript (x_{i}, x^{2}, x_i, x^2), and simple equations (x = ...).
+    private static readonly Regex FormulaRegex = new(
+        @"(\$\$[^$]+\$\$" +                           // display math $$...$$
+        @"|\$[^$]+\$" +                                // inline math $...$
+        @"|\\\([^\)]+\\\)" +                           // inline math \(...\)
+        @"|\\\[[^\]]+\\\]" +                           // display math \[...\]
+        @"|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}" +  // LaTeX environments
+        @"|\\(?:alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|sum|prod|int|infty|partial|nabla|forall|exists|subset|supset|cup|cap|times|cdot|leq|geq|neq|approx|equiv|sim|pm|mp|sqrt|frac|binom|log|ln|sin|cos|tan|lim|max|min)\b" + // LaTeX commands
+        @"|[A-Za-z]_\{[^}]+\}" +                       // subscript with braces: x_{i+1}
+        @"|[A-Za-z]\^\{[^}]+\}" +                      // superscript with braces: x^{2n}
+        @"|[A-Za-z]_[A-Za-z0-9]" +                     // simple subscript: x_i
+        @"|[A-Za-z]\^[A-Za-z0-9]" +                    // simple superscript: x^2
+        @"|[A-Za-z]\s*=\s*[^\s,;.]+)",                 // simple equation: x = ...
+        RegexOptions.Compiled);
 
     private readonly Func<TranslationRequest, string, CancellationToken, Task<TranslationResult>> _translateWithService;
     private readonly Func<SourceDocumentPage, CancellationToken, Task<string?>> _ocrExtractor;
@@ -429,12 +444,24 @@ public sealed class LongDocumentTranslationService
         {
             try
             {
+                // If the block contains formula placeholders {v0}, {v1}, ..., inject
+                // a prompt instructing the LLM to preserve them — aligned with
+                // pdf2zh translator.py: "Keep the formula notation {v*} unchanged."
+                var customPrompt = options.CustomPrompt;
+                if (options.EnableFormulaProtection && NumericPlaceholderRegex.IsMatch(block.ProtectedText))
+                {
+                    const string formulaPrompt = "Keep all {v0}, {v1}, ... formula placeholders exactly as-is. Do not translate, remove, or modify them.";
+                    customPrompt = string.IsNullOrWhiteSpace(customPrompt)
+                        ? formulaPrompt
+                        : $"{customPrompt}\n{formulaPrompt}";
+                }
+
                 var request = new TranslationRequest
                 {
                     Text = block.ProtectedText,
                     FromLanguage = options.FromLanguage,
                     ToLanguage = options.ToLanguage,
-                    CustomPrompt = options.CustomPrompt
+                    CustomPrompt = customPrompt
                 };
 
                 var translated = await _translateWithService(request, options.ServiceId, cancellationToken);
@@ -527,12 +554,21 @@ public sealed class LongDocumentTranslationService
             ? new Regex(customPattern, RegexOptions.IgnoreCase)
             : MathFontRegex;
         var mathFontCount = fontNames.Count(f => pattern.IsMatch(f));
-        return mathFontCount > fontNames.Count * 0.5;
+        // Aligned with pdf2zh vflag(): any math font presence is a strong signal.
+        // Lowered from 0.5 to 0.3 to catch blocks with mixed math/text fonts.
+        return mathFontCount > fontNames.Count * 0.3;
     }
 
     // Level 3: Character-based formula detection
+    // Expanded to match pdf2zh vflag() Unicode categories:
+    // Sm (Math symbols), Lm (Modifier letters), Mn (Non-spacing marks), Sk (Modifier symbols),
+    // Greek (0370-03FF), superscripts/subscripts, letterlike symbols, misc math
     private static readonly Regex MathUnicodeRegex = new(
-        @"[\u2200-\u22FF\u2100-\u214F\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9\u2150-\u218F\u27C0-\u27EF\u2980-\u29FF]",
+        @"[\u2200-\u22FF\u2100-\u214F\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9\u2150-\u218F\u27C0-\u27EF\u2980-\u29FF" +
+        @"\u02B0-\u02FF" +  // Modifier letters (Lm) — pdf2zh vflag
+        @"\u0300-\u036F" +  // Combining diacritical marks (Mn) — pdf2zh vflag
+        @"\u02C6-\u02CF" +  // Modifier symbols (Sk subset) — pdf2zh vflag
+        @"\u2000-\u200B]",  // General punctuation / spaces (Zs) — pdf2zh vflag
         RegexOptions.Compiled);
 
     internal static bool IsCharacterBasedFormula(string text, string? customPattern)
@@ -542,7 +578,9 @@ public sealed class LongDocumentTranslationService
             ? new Regex(customPattern)
             : MathUnicodeRegex;
         var mathCharCount = pattern.Matches(text).Count;
-        return text.Length > 0 && (double)mathCharCount / text.Length > 0.3;
+        // Lowered from 0.3 to 0.2 — pdf2zh flags individual math characters,
+        // so a lower threshold catches more formula-heavy blocks.
+        return text.Length > 0 && (double)mathCharCount / text.Length > 0.2;
     }
 
     private enum FormulaTokenKind

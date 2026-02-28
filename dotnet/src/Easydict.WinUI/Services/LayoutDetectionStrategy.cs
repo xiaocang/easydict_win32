@@ -300,11 +300,43 @@ internal sealed class LayoutDetectionStrategy
     // -----------------------------------------------------------------------
 
     /// <summary>
+    /// Region types that should exclude words from translation.
+    /// Aligned with pdf2zh high_level.py vcls = ["abandon", "figure", "table", "isolate_formula", "formula_caption"].
+    /// </summary>
+    private static readonly HashSet<LayoutRegionType> ExcludeRegionTypes =
+    [
+        LayoutRegionType.Figure,
+        LayoutRegionType.Formula,
+        LayoutRegionType.IsolatedFormula
+    ];
+
+    /// <summary>
+    /// Region types that contain translatable text.
+    /// </summary>
+    private static readonly HashSet<LayoutRegionType> TranslatableRegionTypes =
+    [
+        LayoutRegionType.Body,
+        LayoutRegionType.Header,
+        LayoutRegionType.Footer,
+        LayoutRegionType.Title,
+        LayoutRegionType.Caption,
+        LayoutRegionType.LeftColumn,
+        LayoutRegionType.RightColumn,
+        LayoutRegionType.Table,
+        LayoutRegionType.TableLike
+    ];
+
+    /// <summary>Minimum ML detection confidence to accept a region (pdf2zh uses 0.25; we use 0.3 slightly more conservative).</summary>
+    private const float MinDetectionConfidence = 0.3f;
+
+    /// <summary>
     /// Assign every horizontal word on the page to the smallest ML-detected region
-    /// that contains its centre point.  Words with no enclosing region are grouped
-    /// heuristically as orphans.  Each region's words are then turned into
-    /// <see cref="SourceDocumentBlock"/>s via
-    /// <see cref="LongDocumentTranslationService.GroupWordsIntoBlocks"/>.
+    /// that contains its centre point, using a two-pass strategy aligned with
+    /// pdf2zh high_level.py (line 128-157):
+    ///   Pass 1: assign words to translatable regions.
+    ///   Pass 2: remove words that fall inside exclude regions (Figure/Formula/IsolatedFormula).
+    /// This ensures exclude regions always take priority over translatable ones.
+    /// Words with no enclosing region are grouped heuristically as orphans.
     /// </summary>
     private static IReadOnlyList<EnhancedSourceBlock> ExtractBlocksByMlRegions(
         PdfPigPage page,
@@ -314,9 +346,16 @@ internal sealed class LayoutDetectionStrategy
         var pageWidthPdf = (double)page.Width;
         var pageHeightPdf = (double)page.Height;
 
+        // Filter out low-confidence detections (aligned with pdf2zh confidence threshold).
+        var filteredDetections = mlDetections
+            .Where(d => d.Confidence >= MinDetectionConfidence)
+            .ToList();
+
+        Debug.WriteLine($"[LayoutStrategy] Confidence filter: {mlDetections.Count} → {filteredDetections.Count} detections (threshold={MinDetectionConfidence})");
+
         // Convert every ML detection box from rendered-image pixels (top-left origin)
         // to PDF point coordinates (bottom-left origin) for comparison with PdfPig words.
-        var pdfRegions = mlDetections
+        var pdfRegions = filteredDetections
             .Select(det =>
             {
                 var (rx, ry, rw, rh) = DetectionToPdfCoords(det, pageWidthPdf, pageHeightPdf);
@@ -330,7 +369,9 @@ internal sealed class LayoutDetectionStrategy
                      && w.TextOrientation == TextOrientation.Horizontal)
             .ToList();
 
-        // Assign each word to the smallest enclosing ML region.
+        // ---- Two-pass word assignment (aligned with pdf2zh high_level.py) ----
+
+        // Pass 1: Assign words to translatable regions only.
         var wordsByRegion = new List<Word>[pdfRegions.Count];
         for (var i = 0; i < pdfRegions.Count; i++)
             wordsByRegion[i] = [];
@@ -349,6 +390,10 @@ internal sealed class LayoutDetectionStrategy
             for (var i = 0; i < pdfRegions.Count; i++)
             {
                 var r = pdfRegions[i];
+                // Only consider translatable regions in Pass 1
+                if (!TranslatableRegionTypes.Contains(r.Det.RegionType))
+                    continue;
+
                 if (cx >= r.PdfX && cx <= r.PdfX + r.PdfW &&
                     cy >= r.PdfY && cy <= r.PdfY + r.PdfH)
                 {
@@ -367,6 +412,44 @@ internal sealed class LayoutDetectionStrategy
                 orphanWords.Add(word);
         }
 
+        // Pass 2: Remove words that fall inside exclude regions (Figure/Formula/IsolatedFormula).
+        // These regions take priority — words inside them should NOT be translated.
+        var excludedWordCount = 0;
+        foreach (var word in allWords)
+        {
+            var box = word.BoundingBox;
+            var cx = (box.Left + box.Right) / 2.0;
+            var cy = (box.Bottom + box.Top) / 2.0;
+
+            for (var i = 0; i < pdfRegions.Count; i++)
+            {
+                var r = pdfRegions[i];
+                if (!ExcludeRegionTypes.Contains(r.Det.RegionType))
+                    continue;
+
+                if (cx >= r.PdfX && cx <= r.PdfX + r.PdfW &&
+                    cy >= r.PdfY && cy <= r.PdfY + r.PdfH)
+                {
+                    // Remove this word from whichever translatable region it was assigned to
+                    for (var j = 0; j < wordsByRegion.Length; j++)
+                    {
+                        if (wordsByRegion[j].Remove(word))
+                        {
+                            excludedWordCount++;
+                            break;
+                        }
+                    }
+
+                    // Also remove from orphans
+                    orphanWords.Remove(word);
+                    break;
+                }
+            }
+        }
+
+        if (excludedWordCount > 0)
+            Debug.WriteLine($"[LayoutStrategy] Pass 2: excluded {excludedWordCount} words in Figure/Formula regions");
+
         var results = new List<EnhancedSourceBlock>();
         var blockIndex = 0;
 
@@ -382,12 +465,17 @@ internal sealed class LayoutDetectionStrategy
                 continue;
 
             var (det, _, _, _, _) = pdfRegions[i];
+
+            // Figure regions: skip entirely — do not generate blocks.
+            // Aligned with pdf2zh which skips figure regions from translation output.
+            if (det.RegionType is LayoutRegionType.Figure)
+                continue;
+
             var regionTag = RegionTypeToTag(det.RegionType);
 
-            // Figure, isolated formula and abandon regions: mark blocks as formula-like
+            // Formula and isolated formula regions: mark blocks as formula-like
             // so the translation pipeline skips them.
             var skipTranslation = det.RegionType is
-                LayoutRegionType.Figure or
                 LayoutRegionType.Formula or
                 LayoutRegionType.IsolatedFormula;
 
@@ -412,7 +500,7 @@ internal sealed class LayoutDetectionStrategy
             }
         }
 
-        Debug.WriteLine($"[LayoutStrategy] ML-driven extraction: {results.Count} blocks from {pdfRegions.Count} regions + {orphanWords.Count} orphan words on page {page.Number}");
+        Debug.WriteLine($"[LayoutStrategy] ML-driven extraction: {results.Count} blocks from {filteredDetections.Count} regions + {orphanWords.Count} orphan words on page {page.Number}");
         return results;
     }
 

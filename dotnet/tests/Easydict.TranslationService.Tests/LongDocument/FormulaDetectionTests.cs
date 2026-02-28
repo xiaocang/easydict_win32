@@ -35,15 +35,23 @@ public class FormulaDetectionTests
     [Fact]
     public void IsFontBasedFormula_MixedFonts_MajorityMath_ReturnsTrue()
     {
-        // 3 out of 4 are math fonts (75% > 50%)
+        // 3 out of 4 are math fonts (75% > 30% threshold)
         var fontNames = new List<string> { "CMSY10", "CMMI12", "Symbol", "Arial" };
+        LongDocumentTranslationService.IsFontBasedFormula(fontNames, null).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsFontBasedFormula_MixedFonts_AboveThreshold_ReturnsTrue()
+    {
+        // 2 out of 5 are math fonts (40% > 30% threshold, was false with old 50% threshold)
+        var fontNames = new List<string> { "Arial", "Helvetica", "TimesNewRoman", "CMSY10", "CMMI12" };
         LongDocumentTranslationService.IsFontBasedFormula(fontNames, null).Should().BeTrue();
     }
 
     [Fact]
     public void IsFontBasedFormula_MixedFonts_MinorityMath_ReturnsFalse()
     {
-        // 1 out of 4 are math fonts (25% < 50%)
+        // 1 out of 4 are math fonts (25% < 30% threshold)
         var fontNames = new List<string> { "Arial", "Helvetica", "TimesNewRoman", "CMSY10" };
         LongDocumentTranslationService.IsFontBasedFormula(fontNames, null).Should().BeFalse();
     }
@@ -105,6 +113,164 @@ public class FormulaDetectionTests
 
         // Custom pattern matching '#'
         LongDocumentTranslationService.IsCharacterBasedFormula(text, "#").Should().BeTrue();
+    }
+
+    // --- Expanded FormulaRegex tests (via full pipeline) ---
+
+    [Theory]
+    [InlineData("Consider $$x^2 + y^2 = r^2$$ as shown.", "$$x^2 + y^2 = r^2$$")]       // Display math $$...$$
+    [InlineData("We have $\\alpha + \\beta = \\gamma$ here.", "$\\alpha + \\beta = \\gamma$")] // Inline math $...$
+    [InlineData("The \\begin{equation}E=mc^2\\end{equation} relation.", "\\begin{equation}E=mc^2\\end{equation}")] // LaTeX env
+    [InlineData("Greek \\alpha is first.", "\\alpha")]                                       // LaTeX command
+    [InlineData("Sum \\sum over all.", "\\sum")]                                             // LaTeX math operator
+    [InlineData("The variable x_{i+1} is next.", "x_{i+1}")]                                // Subscript with braces
+    [InlineData("Power x^{2n} is large.", "x^{2n}")]                                        // Superscript with braces
+    [InlineData("Index x_i appears.", "x_i")]                                                 // Simple subscript
+    [InlineData("Squared x^2 here.", "x^2")]                                                  // Simple superscript
+    public async Task TranslateAsync_ExpandedFormulaRegex_ProtectsNewPatterns(string inputText, string expectedProtected)
+    {
+        var capturedRequest = string.Empty;
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            capturedRequest = request.Text;
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = request.Text,
+                ServiceName = "fake",
+                TargetLanguage = Language.English
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-regex",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = inputText
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        var protectedText = result.Ir.Blocks.Single().ProtectedText;
+        // The protected pattern should have been replaced with {v0}, {v1}, etc.
+        protectedText.Should().NotContain(expectedProtected,
+            because: $"'{expectedProtected}' should have been replaced with a {{v*}} placeholder");
+        protectedText.Should().Contain("{v0}");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_FormulaPrompt_InjectedWhenPlaceholdersPresent()
+    {
+        var capturedPrompt = string.Empty;
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            capturedPrompt = request.CustomPrompt ?? "";
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = request.Text,
+                ServiceName = "fake",
+                TargetLanguage = Language.English
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-prompt",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "The equation $E=mc^2$ is famous."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        capturedPrompt.Should().Contain("formula placeholders",
+            because: "when {v*} placeholders exist, the LLM should be instructed to preserve them");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_FormulaPrompt_NotInjectedWhenNoFormulas()
+    {
+        var capturedPrompt = string.Empty;
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            capturedPrompt = request.CustomPrompt ?? "";
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = request.Text,
+                ServiceName = "fake",
+                TargetLanguage = Language.English
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-no-formula",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "This is a plain text sentence without formulas."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        capturedPrompt.Should().BeEmpty(
+            because: "when no {v*} placeholders are generated, no formula prompt should be injected");
     }
 
     [Fact]

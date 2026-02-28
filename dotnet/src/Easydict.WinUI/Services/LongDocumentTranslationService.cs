@@ -929,7 +929,9 @@ public sealed class LongDocumentTranslationService : IDisposable
             : 10d;
 
         var sameLineThreshold = Math.Max(2.5, medianWordHeight * 0.35);
-        var paragraphGapThreshold = Math.Max(8, medianWordHeight * 1.8);
+        // Lowered from 1.8 to 1.3 — more aggressive paragraph splitting reduces
+        // long merged paragraphs that overflow their bounding boxes in PDF output.
+        var paragraphGapThreshold = Math.Max(8, medianWordHeight * 1.3);
 
         var lines = new List<PdfTextLine>();
         foreach (var word in words)
@@ -1112,7 +1114,9 @@ public sealed class LongDocumentTranslationService : IDisposable
             .FirstOrDefault(defaultValue: 10d);
 
         var sameLineThreshold = Math.Max(2.5, medianWordHeight * 0.35);
-        var paragraphGapThreshold = Math.Max(8, medianWordHeight * 1.8);
+        // Lowered from 1.8 to 1.3 — more aggressive paragraph splitting reduces
+        // long merged paragraphs that overflow their bounding boxes in PDF output.
+        var paragraphGapThreshold = Math.Max(8, medianWordHeight * 1.3);
 
         // Sort top-to-bottom, left-to-right
         var sorted = regionWords

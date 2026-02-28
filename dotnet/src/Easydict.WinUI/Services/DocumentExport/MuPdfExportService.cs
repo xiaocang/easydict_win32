@@ -324,13 +324,13 @@ public sealed class MuPdfExportService : IDocumentExportService
                     var charY = currentY;
                     if (superNext)
                     {
-                        charFontSize = fontSize * 0.6;
+                        charFontSize = fontSize * 0.7;
                         charY = currentY + fontSize * 0.4;
                         superNext = false;
                     }
                     else if (subNext)
                     {
-                        charFontSize = fontSize * 0.6;
+                        charFontSize = fontSize * 0.7;
                         charY = currentY - fontSize * 0.3;
                         subNext = false;
                     }
@@ -355,6 +355,8 @@ public sealed class MuPdfExportService : IDocumentExportService
                         {
                             sb.Append(ContentStreamInterpreter.GenerateTextOperator(
                                 fontId, charFontSize, startX, charY, asciiGid.ToString("X4")));
+                            startX += charFontSize * GetGlyphAdvanceEm(
+                                asciiGid, fonts.PrimaryAdvanceWidths, fonts.PrimaryUnitsPerEm, fallbackEm: 0.55);
                         }
                         else
                         {
@@ -362,8 +364,8 @@ public sealed class MuPdfExportService : IDocumentExportService
                             // Built-in Helvetica is a 1-byte-encoded Type1 font; <0041> is 2 bytes (0x00 + 'A').
                             sb.Append(ContentStreamInterpreter.GenerateTextOperator(
                                 "helv", charFontSize, startX, charY, ((int)ch).ToString("X2")));
+                            startX += charFontSize * 0.55; // helv metrics not loaded; 0.55 is a reasonable avg
                         }
-                        startX += charFontSize * 0.55;
                         continue;
                     }
 
@@ -378,17 +380,18 @@ public sealed class MuPdfExportService : IDocumentExportService
                     // [<XXXX>] TJ must be the GID (glyph index), not the Unicode code point.
                     // This matches pdf2zh's raw_string() for the SourceHanSerif/Noto path.
                     string hexCid;
+                    ushort resolvedGid = 0;
                     if (charFontId == fontId && fonts.PrimaryGlyphMap is not null)
                     {
-                        if (!fonts.PrimaryGlyphMap.TryGetValue(ch, out var gid) || gid == 0)
+                        if (!fonts.PrimaryGlyphMap.TryGetValue(ch, out resolvedGid) || resolvedGid == 0)
                             continue; // character not in font — skip (matches pdf2zh behavior)
-                        hexCid = gid.ToString("X4");
+                        hexCid = resolvedGid.ToString("X4");
                     }
                     else if (charFontId == fonts.NotoFontId && fonts.NotoGlyphMap is not null)
                     {
-                        if (!fonts.NotoGlyphMap.TryGetValue(ch, out var gid) || gid == 0)
+                        if (!fonts.NotoGlyphMap.TryGetValue(ch, out resolvedGid) || resolvedGid == 0)
                             continue; // character not in font — skip
-                        hexCid = gid.ToString("X4");
+                        hexCid = resolvedGid.ToString("X4");
                     }
                     else
                     {
@@ -398,9 +401,19 @@ public sealed class MuPdfExportService : IDocumentExportService
 
                     sb.Append(ContentStreamInterpreter.GenerateTextOperator(
                         charFontId, charFontSize, startX, charY, hexCid));
-                    // CJK characters are full-width (≈ 1 em); others are roughly half-width.
-                    // Using a blended avgCharWidth underestimates CJK advance on mixed lines → drift/overlap.
-                    startX += IsCjkCharacter(ch) ? charFontSize : charFontSize * 0.6;
+                    // CJK characters are always full-width (1 em).
+                    // For Latin/other scripts, use per-glyph advance from hmtx when available
+                    // to avoid letter-spacing of narrow glyphs (l, i, ., etc.).
+                    if (IsCjkCharacter(ch))
+                        startX += charFontSize;
+                    else if (charFontId == fontId && resolvedGid != 0)
+                        startX += charFontSize * GetGlyphAdvanceEm(
+                            resolvedGid, fonts.PrimaryAdvanceWidths, fonts.PrimaryUnitsPerEm, fallbackEm: 0.6);
+                    else if (charFontId == fonts.NotoFontId && resolvedGid != 0)
+                        startX += charFontSize * GetGlyphAdvanceEm(
+                            resolvedGid, fonts.NotoAdvanceWidths, fonts.NotoUnitsPerEm, fallbackEm: 0.6);
+                    else
+                        startX += charFontSize * 0.6;
                 }
 
                 startX = bbox.X; // Reset X for next line
@@ -441,6 +454,14 @@ public sealed class MuPdfExportService : IDocumentExportService
         text = Regex.Replace(text, @"\\[a-zA-Z]+\{([^}]*)\}", "$1");
         // Residual standalone \cmd → remove
         text = Regex.Replace(text, @"\\[a-zA-Z]+", string.Empty);
+        // Expand _{abc} → _a_b_c  and  ^{abc} → ^a^b^c so that every character
+        // inside a sub/superscript group gets its own rendering signal.
+        // This handles multi-character subscripts produced by PdfTextLine.Normalize()
+        // (e.g. h_{t-1} → h_t_-_1) so the renderer correctly positions each char.
+        text = Regex.Replace(text, @"_\{([^}]*)\}",
+            m => string.Concat(m.Groups[1].Value.Select(c => "_" + c)));
+        text = Regex.Replace(text, @"\^\{([^}]*)\}",
+            m => string.Concat(m.Groups[1].Value.Select(c => "^" + c)));
         // Remove lone $ \ { }; keep ^ _ as super/subscript rendering signals
         text = Regex.Replace(text, @"[\$\\{}]", string.Empty);
         // Collapse extra whitespace
@@ -464,6 +485,11 @@ public sealed class MuPdfExportService : IDocumentExportService
         latex = Regex.Replace(latex, @"\\[a-zA-Z]+\{([^}]*)\}", "$1");
         // Remove standalone \cmd (e.g. \alpha, \beta, \sum, \cdot)
         latex = Regex.Replace(latex, @"\\[a-zA-Z]+", string.Empty);
+        // Expand _{abc} → _a_b_c and ^{abc} → ^a^b^c (per-character signals)
+        latex = Regex.Replace(latex, @"_\{([^}]*)\}",
+            m => string.Concat(m.Groups[1].Value.Select(c => "_" + c)));
+        latex = Regex.Replace(latex, @"\^\{([^}]*)\}",
+            m => string.Concat(m.Groups[1].Value.Select(c => "^" + c)));
         // Remove { } braces; keep ^ _ = + - * / spaces and alphanumerics
         latex = Regex.Replace(latex, @"[{}]", string.Empty);
         // Collapse whitespace
@@ -510,6 +536,25 @@ public sealed class MuPdfExportService : IDocumentExportService
     }
 
     /// <summary>
+    /// Returns the advance width (in em fractions) for a glyph, falling back to
+    /// <paramref name="fallbackEm"/> when the font's hmtx data is unavailable.
+    /// </summary>
+    private static double GetGlyphAdvanceEm(
+        ushort gid,
+        IReadOnlyDictionary<ushort, ushort>? advanceWidths,
+        ushort unitsPerEm,
+        double fallbackEm)
+    {
+        if (advanceWidths is not null
+            && advanceWidths.TryGetValue(gid, out var adv)
+            && adv > 0
+            && unitsPerEm > 0)
+            return (double)adv / unitsPerEm;
+
+        return fallbackEm;
+    }
+
+    /// <summary>
     /// Returns true for CJK-range characters that occupy a full em width.
     /// </summary>
     private static bool IsCjkCharacter(char ch) =>
@@ -529,6 +574,10 @@ public sealed class MuPdfExportService : IDocumentExportService
         string? notoFontId = null;
         IReadOnlyDictionary<char, ushort>? primaryGlyphMap = null;
         IReadOnlyDictionary<char, ushort>? notoGlyphMap = null;
+        IReadOnlyDictionary<ushort, ushort>? primaryAdvanceWidths = null;
+        ushort primaryUnitsPerEm = 1000;
+        IReadOnlyDictionary<ushort, ushort>? notoAdvanceWidths = null;
+        ushort notoUnitsPerEm = 1000;
 
         // Always embed Helvetica so it's available for ASCII characters
         // even when a CJK font is the primary (CJK fonts map ASCII to full-width glyphs)
@@ -549,9 +598,14 @@ public sealed class MuPdfExportService : IDocumentExportService
                 Debug.WriteLine($"[MuPdfExport] Failed to embed primary font: {ex.Message}");
             }
 
-            // Load GID map for Identity-H encoding — only when the font was embedded from file
+            // Load GID map + advance widths for Identity-H encoding — only when embedded from file
             if (primaryFontId is not null)
-                primaryGlyphMap = TrueTypeCmapParser.LoadGlyphMap(fontPaths.PrimaryFontPath);
+            {
+                var metrics = TrueTypeCmapParser.LoadFontMetrics(fontPaths.PrimaryFontPath);
+                primaryGlyphMap = metrics?.GlyphMap;
+                primaryAdvanceWidths = metrics?.AdvanceWidths;
+                primaryUnitsPerEm = metrics?.UnitsPerEm ?? 1000;
+            }
         }
 
         // Fallback to built-in Helvetica if no custom font was embedded
@@ -573,12 +627,22 @@ public sealed class MuPdfExportService : IDocumentExportService
             }
 
             if (notoFontId is not null)
-                notoGlyphMap = TrueTypeCmapParser.LoadGlyphMap(fontPaths.NotoFontPath);
+            {
+                var metrics = TrueTypeCmapParser.LoadFontMetrics(fontPaths.NotoFontPath);
+                notoGlyphMap = metrics?.GlyphMap;
+                notoAdvanceWidths = metrics?.AdvanceWidths;
+                notoUnitsPerEm = metrics?.UnitsPerEm ?? 1000;
+            }
         }
 
         var primaryFontIsCjk = CjkFontIds.Contains(primaryFontId);
 
-        return new EmbeddedFontInfo(primaryFontId, notoFontId, primaryGlyphMap, notoGlyphMap, primaryFontIsCjk);
+        return new EmbeddedFontInfo(
+            primaryFontId, notoFontId,
+            primaryGlyphMap, notoGlyphMap,
+            primaryFontIsCjk,
+            primaryAdvanceWidths, primaryUnitsPerEm,
+            notoAdvanceWidths, notoUnitsPerEm);
     }
 
     /// <summary>
@@ -755,7 +819,11 @@ public sealed class MuPdfExportService : IDocumentExportService
         string? NotoFontId,
         IReadOnlyDictionary<char, ushort>? PrimaryGlyphMap,
         IReadOnlyDictionary<char, ushort>? NotoGlyphMap,
-        bool PrimaryFontIsCjk);
+        bool PrimaryFontIsCjk,
+        IReadOnlyDictionary<ushort, ushort>? PrimaryAdvanceWidths = null,
+        ushort PrimaryUnitsPerEm = 1000,
+        IReadOnlyDictionary<ushort, ushort>? NotoAdvanceWidths = null,
+        ushort NotoUnitsPerEm = 1000);
 
     private sealed record FontPaths(string PrimaryFontName, string? PrimaryFontPath, string? NotoFontPath);
 }

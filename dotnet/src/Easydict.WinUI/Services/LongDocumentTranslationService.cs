@@ -1961,8 +1961,106 @@ public sealed class LongDocumentTranslationService : IDisposable
             Left = sorted.Min(w => w.BoundingBox.Left);
             Right = sorted.Max(w => w.BoundingBox.Right);
             Bottom = sorted.Min(w => w.BoundingBox.Bottom);
-            Text = string.Join(" ", sorted.Select(w => w.Text));
+            Text = BuildAnnotatedText(sorted);
             return this;
+        }
+
+        /// <summary>
+        /// Builds the line text, inserting _ or ^ signals before words that appear to be
+        /// subscripts or superscripts relative to the line's median baseline.
+        /// Consecutive sub/superscript words are grouped into _{group} / ^{group} notation,
+        /// which both formula protection and SimplifyLatexMarkup understand.
+        /// </summary>
+        private static string BuildAnnotatedText(List<Word> sorted)
+        {
+            if (sorted.Count <= 1)
+                return sorted.Count == 1 ? sorted[0].Text : string.Empty;
+
+            // Compute the median word bottom (baseline proxy) and median word height.
+            // These let us detect words at distinctly lower/higher positions (sub/super).
+            var wordHeights = sorted.Select(w => w.BoundingBox.Height).OrderBy(h => h).ToList();
+            var wordBottoms = sorted.Select(w => w.BoundingBox.Bottom).OrderBy(b => b).ToList();
+            var medianHeight = wordHeights[wordHeights.Count / 2];
+            var medianBottom = wordBottoms[wordBottoms.Count / 2];
+
+            // Need a meaningful height to distinguish sizes; bail out if degenerate.
+            if (medianHeight <= 0)
+                return string.Join(" ", sorted.Select(w => w.Text));
+
+            // A word is "small" if its bounding box height is noticeably less than the median.
+            // A small word below the median baseline is a subscript; above is a superscript.
+            var smallThreshold = medianHeight * 0.85;
+            var posThreshold   = Math.Max(0.5, medianHeight * 0.20); // min 0.5 pt shift
+
+            // Classify each word as normal, subscript, or superscript.
+            var tags = new bool[sorted.Count]; // true = sub, reuse for both
+            var sups = new bool[sorted.Count];
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                var h   = sorted[i].BoundingBox.Height;
+                var bot = sorted[i].BoundingBox.Bottom;
+                var isSmall = h < smallThreshold;
+                tags[i] = isSmall && bot < medianBottom - posThreshold; // isSub
+                sups[i] = isSmall && bot > medianBottom + posThreshold; // isSup
+            }
+
+            var sb = new System.Text.StringBuilder();
+            var idx = 0;
+            while (idx < sorted.Count)
+            {
+                if (idx == 0)
+                {
+                    // First word never gets a connector prefix.
+                    sb.Append(sorted[0].Text);
+                    idx++;
+                    continue;
+                }
+
+                if (!tags[idx] && !sups[idx])
+                {
+                    // Normal word — space-separated.
+                    sb.Append(' ');
+                    sb.Append(sorted[idx].Text);
+                    idx++;
+                    continue;
+                }
+
+                // Start of a sub/super run — collect consecutive words of the same type.
+                var isSub  = tags[idx];
+                var runEnd = idx;
+                while (runEnd + 1 < sorted.Count
+                    && ((isSub && tags[runEnd + 1]) || (!isSub && sups[runEnd + 1])))
+                {
+                    runEnd++;
+                }
+
+                // Concatenate all words in the run (no spaces between them).
+                var runText = string.Concat(
+                    Enumerable.Range(idx, runEnd - idx + 1).Select(k => sorted[k].Text));
+
+                // Only annotate as sub/super if the run text looks like a mathematical token:
+                // letters, digits, or basic operators (+, -, =, ., ,).
+                // Footnote markers (†, ‡, *, §, ¶, etc.) are NOT math tokens — skip annotation
+                // to avoid confusing the LLM with unparseable ^† signals that the formula
+                // protection regex won't protect.
+                if (!IsMathToken(runText))
+                {
+                    sb.Append(' ').Append(runText);
+                    idx = runEnd + 1;
+                    continue;
+                }
+
+                // Emit single-char shorthand or braced group for multi-char.
+                var signal = isSub ? '_' : '^';
+                if (runText.Length == 1)
+                    sb.Append(signal).Append(runText);
+                else
+                    sb.Append(signal).Append('{').Append(runText).Append('}');
+
+                idx = runEnd + 1;
+            }
+
+            return sb.ToString();
         }
     }
 

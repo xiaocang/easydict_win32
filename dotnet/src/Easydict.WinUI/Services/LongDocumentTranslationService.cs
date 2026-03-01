@@ -803,94 +803,97 @@ public sealed class LongDocumentTranslationService : IDisposable
 
         onProgress?.Invoke("Analyzing page layouts with ML model...");
 
-        using var document = PdfPigDocument.Open(input);
-        var pdfPages = document.GetPages().ToList();
-        var selectedPages = PageRangeParser.Parse(pageRange, pdfPages.Count);
-        var pages = new List<SourceDocumentPage>();
-
-        for (var i = 0; i < pdfPages.Count; i++)
+        return await Task.Run(async () =>
         {
-            var page = pdfPages[i];
+            using var document = PdfPigDocument.Open(input);
+            var pdfPages = document.GetPages().ToList();
+            var selectedPages = PageRangeParser.Parse(pageRange, pdfPages.Count);
+            var pages = new List<SourceDocumentPage>();
 
-            // Skip pages not in the selected range
-            if (selectedPages != null && !selectedPages.Contains(page.Number))
-                continue;
-            var pageText = page.Text;
-            var scanned = string.IsNullOrWhiteSpace(pageText);
-
-            if (scanned)
+            for (var i = 0; i < pdfPages.Count; i++)
             {
-                pages.Add(new SourceDocumentPage
-                {
-                    PageNumber = page.Number,
-                    IsScanned = true,
-                    Blocks = []
-                });
-                continue;
-            }
+                var page = pdfPages[i];
 
-            // First extract heuristic blocks (always needed for text content)
-            var heuristicBlocks = ExtractLayoutBlocksFromPage(page).ToList();
-            if (heuristicBlocks.Count == 0)
-            {
-                pages.Add(new SourceDocumentPage
-                {
-                    PageNumber = page.Number,
-                    IsScanned = true,
-                    Blocks = []
-                });
-                continue;
-            }
+                // Skip pages not in the selected range
+                if (selectedPages != null && !selectedPages.Contains(page.Number))
+                    continue;
+                var pageText = page.Text;
+                var scanned = string.IsNullOrWhiteSpace(pageText);
 
-            // Try ML-enhanced detection
-            try
-            {
-                var enhancedBlocks = await strategy.DetectAndExtractAsync(
-                    page, input, i, layoutDetection,
-                    visionEndpoint, visionApiKey, visionModel, ct).ConfigureAwait(false);
-
-                if (enhancedBlocks.Count > 0)
+                if (scanned)
                 {
-                    // ML-driven blocks already carry correct BlockIds and IsFormulaLike flags
-                    // (set by LayoutDetectionStrategy.ExtractBlocksByMlRegions → GroupWordsIntoBlocks).
                     pages.Add(new SourceDocumentPage
                     {
                         PageNumber = page.Number,
-                        IsScanned = false,
-                        Blocks = enhancedBlocks.Select(eb => eb.Block).ToList()
+                        IsScanned = true,
+                        Blocks = []
                     });
                     continue;
                 }
+
+                // First extract heuristic blocks (always needed for text content)
+                var heuristicBlocks = ExtractLayoutBlocksFromPage(page).ToList();
+                if (heuristicBlocks.Count == 0)
+                {
+                    pages.Add(new SourceDocumentPage
+                    {
+                        PageNumber = page.Number,
+                        IsScanned = true,
+                        Blocks = []
+                    });
+                    continue;
+                }
+
+                // Try ML-enhanced detection
+                try
+                {
+                    var enhancedBlocks = await strategy.DetectAndExtractAsync(
+                        page, input, i, layoutDetection,
+                        visionEndpoint, visionApiKey, visionModel, ct).ConfigureAwait(false);
+
+                    if (enhancedBlocks.Count > 0)
+                    {
+                        // ML-driven blocks already carry correct BlockIds and IsFormulaLike flags
+                        // (set by LayoutDetectionStrategy.ExtractBlocksByMlRegions → GroupWordsIntoBlocks).
+                        pages.Add(new SourceDocumentPage
+                        {
+                            PageNumber = page.Number,
+                            IsScanned = false,
+                            Blocks = enhancedBlocks.Select(eb => eb.Block).ToList()
+                        });
+                        continue;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[LongDoc] ML detection failed for page {page.Number}: {ex.Message}");
+                }
+
+                // Fallback: use heuristic blocks
+                pages.Add(new SourceDocumentPage
+                {
+                    PageNumber = page.Number,
+                    IsScanned = false,
+                    Blocks = heuristicBlocks
+                });
             }
-            catch (Exception ex)
+
+            if (pages.Count == 0)
             {
-                System.Diagnostics.Debug.WriteLine($"[LongDoc] ML detection failed for page {page.Number}: {ex.Message}");
+                pages.Add(new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    IsScanned = true,
+                    Blocks = []
+                });
             }
 
-            // Fallback: use heuristic blocks
-            pages.Add(new SourceDocumentPage
+            return new SourceDocument
             {
-                PageNumber = page.Number,
-                IsScanned = false,
-                Blocks = heuristicBlocks
-            });
-        }
-
-        if (pages.Count == 0)
-        {
-            pages.Add(new SourceDocumentPage
-            {
-                PageNumber = 1,
-                IsScanned = true,
-                Blocks = []
-            });
-        }
-
-        return new SourceDocument
-        {
-            DocumentId = Path.GetFileNameWithoutExtension(input),
-            Pages = pages
-        };
+                DocumentId = Path.GetFileNameWithoutExtension(input),
+                Pages = pages
+            };
+        }, ct).ConfigureAwait(false);
     }
 
     // --- PDF export methods removed; see PdfExportService ---

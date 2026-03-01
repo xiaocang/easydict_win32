@@ -87,7 +87,7 @@ public sealed class LongDocumentDeduplicationService : IDisposable
         }
     }
 
-    private static async Task<string> ComputeInputHashAsync(
+    private static Task<string> ComputeInputHashAsync(
         LongDocumentInputMode mode,
         string input,
         CancellationToken cancellationToken)
@@ -99,14 +99,13 @@ public sealed class LongDocumentDeduplicationService : IDisposable
                 throw new FileNotFoundException("PDF file not found.", input);
             }
 
-            await using var stream = File.OpenRead(input);
-            using var sha = SHA256.Create();
-            var hash = await sha.ComputeHashAsync(stream, cancellationToken);
-            return Convert.ToHexString(hash);
+            var info = new FileInfo(input);
+            var fingerprint = $"{info.Length}:{info.LastWriteTimeUtc.Ticks}";
+            return Task.FromResult(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint))));
         }
 
         var bytes = Encoding.UTF8.GetBytes(input.Trim());
-        return Convert.ToHexString(SHA256.HashData(bytes));
+        return Task.FromResult(Convert.ToHexString(SHA256.HashData(bytes)));
     }
 
     private async Task<Dictionary<string, DedupEntry>> ReadIndexCoreAsync(CancellationToken cancellationToken)

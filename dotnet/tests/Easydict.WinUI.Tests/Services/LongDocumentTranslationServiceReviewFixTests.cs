@@ -527,7 +527,7 @@ public class LongDocumentTranslationServiceReviewFixTests
         merged.Should().NotBeNull();
         merged!.BlockIssues.Should().NotBeNull();
         merged.BlockIssues!.Should().HaveCount(2);
-        merged.BlockIssues[0].Kind.Should().Be("skipped-rotated");
+        merged.BlockIssues![0].Kind.Should().Be("skipped-rotated");
         merged.BlockIssues[1].Kind.Should().Be("truncated");
     }
 
@@ -551,7 +551,7 @@ public class LongDocumentTranslationServiceReviewFixTests
         merged!.RetryMergeStrategy.Should().Be("core-only");
         merged.BlockIssues.Should().NotBeNull();
         merged.BlockIssues!.Should().HaveCount(1);
-        merged.BlockIssues[0].Kind.Should().Be("skipped-grid");
+        merged.BlockIssues![0].Kind.Should().Be("skipped-grid");
     }
 
     [Fact]
@@ -574,7 +574,7 @@ public class LongDocumentTranslationServiceReviewFixTests
         merged!.RetryMergeStrategy.Should().Be("checkpoint-only");
         merged.BlockIssues.Should().NotBeNull();
         merged.BlockIssues!.Should().HaveCount(1);
-        merged.BlockIssues[0].Kind.Should().Be("skipped-table-like");
+        merged.BlockIssues![0].Kind.Should().Be("skipped-table-like");
     }
 
     [Fact]

@@ -109,6 +109,10 @@ public sealed class ModelDownloadClient : IDisposable
                 Debug.WriteLine($"[ModelDownload] Probe {url}: {(ok ? "OK" : response.StatusCode)} in {sw.ElapsedMilliseconds}ms");
                 return (url, time: sw.ElapsedMilliseconds, ok);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw; // Outer token cancelled — propagate immediately
+            }
             catch (Exception ex)
             {
                 sw.Stop();

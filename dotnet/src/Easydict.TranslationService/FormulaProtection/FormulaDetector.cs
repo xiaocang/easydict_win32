@@ -21,7 +21,9 @@ public static class FormulaDetector
         @"|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}" +  // LaTeX environments
         @"|\\(?:alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|sum|prod|int|infty|partial|nabla|forall|exists|subset|supset|cup|cap|times|cdot|leq|geq|neq|approx|equiv|sim|pm|mp|sqrt|frac|binom|log|ln|sin|cos|tan|lim|max|min)\b" + // LaTeX commands
         @"|\b[\p{L}\p{N}]+(?:[_^](?:\{[^}]+\}|[\p{L}\p{N}](?!\p{L}|\p{N})))+" + // subscript/superscript (multi-char base, multi-level): h_{t-1}, W_Q, 1_c_i
-        @"|\b[\p{L}\p{N}]+\s*=\s*[^\s,;.]+)",          // simple equation: x = ...
+        @"|\b[a-zA-Z]\b\s*=\s*\(\s*[a-zA-Z]\d+\s*(?:,\s*(?:[a-zA-Z](?:\d+|[a-zA-Z])|\.{2,3}|\u2026|\\ldots|\\dots|\\cdots))+\s*\)" + // assignment with sequence RHS: z = (z1, ..., zn)
+        @"|\(\s*[a-zA-Z]\d+\s*(?:,\s*(?:[a-zA-Z](?:\d+|[a-zA-Z])|\.{2,3}|\u2026|\\ldots|\\dots|\\cdots))+\s*\)" + // implicit-subscript tuple: (x1, ..., xn)
+        @"|\b[\p{L}\p{N}]+\s*=\s*[^\s,;.(]+)",           // simple equation: x = ... (exclude '(' to avoid fusing "(z_1, ...)" into a broken token)
         RegexOptions.Compiled);
 
     // Matches natural-language words (4+ letters) — used to decide if parenthesized
@@ -91,6 +93,9 @@ public static class FormulaDetector
             return FormulaTokenType.MathSubscript;
         if (rawFormula.Contains('='))
             return FormulaTokenType.InlineEquation;
+        // Implicit-subscript tuple: (x1, ..., xn)
+        if (rawFormula.StartsWith("(", StringComparison.Ordinal))
+            return FormulaTokenType.MathSubscript;
 
         return FormulaTokenType.UnitFragment;
     }

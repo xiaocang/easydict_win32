@@ -114,4 +114,53 @@ public class FormulaDetectorTests
         var result = FormulaDetector.ExtendTrailingParens(text, rawTokens);
         result.Should().Contain("this is a very long");
     }
+
+    // --- Implicit-subscript sequence detection ---
+
+    [Theory]
+    [InlineData("(x1, ..., xn)", "(x1, ..., xn)")]        // Standard sequence with ASCII ellipsis
+    [InlineData("(z1, ..., zn)", "(z1, ..., zn)")]        // Different letter base
+    [InlineData("(x1, x2, x3)", "(x1, x2, x3)")]         // Finite sequence without ellipsis
+    [InlineData("(v1, v2, ..., vn)", "(v1, v2, ..., vn)")] // Multi-element with ellipsis
+    public void FormulaRegex_DetectsImplicitSubscriptTuple(string text, string expectedMatch)
+    {
+        var match = FormulaDetector.FormulaRegex.Match(text);
+        match.Success.Should().BeTrue(because: $"'{text}' should be detected as an implicit-subscript sequence");
+        match.Value.Should().Be(expectedMatch);
+    }
+
+    [Theory]
+    [InlineData("z = (z1, ..., zn)", "z = (z1, ..., zn)")]  // Single-letter LHS
+    [InlineData("x = (x1, x2, x3)", "x = (x1, x2, x3)")]   // Finite assignment
+    public void FormulaRegex_DetectsAssignmentWithTupleRhs(string text, string expectedMatch)
+    {
+        var match = FormulaDetector.FormulaRegex.Match(text);
+        match.Success.Should().BeTrue(because: $"'{text}' should be detected as assignment with sequence RHS");
+        match.Value.Should().Be(expectedMatch);
+    }
+
+    [Theory]
+    [InlineData("(apple, banana, cherry)")]  // Natural language words
+    [InlineData("(version1, version2)")]     // Multi-letter base — not a math variable
+    [InlineData("(mp4, mp3)")]               // Multi-letter base
+    public void FormulaRegex_DoesNotMatchNaturalLanguageTuples(string text)
+    {
+        // Our implicit-subscript tuple regex must NOT fire on these
+        var match = FormulaDetector.FormulaRegex.Match(text);
+        // If a match is found, it should NOT be the full tuple (e.g. could be a trailing letter)
+        if (match.Success)
+            match.Value.Should().NotBe(text, because: $"'{text}' is natural language and should not be fully captured");
+    }
+
+    [Fact]
+    public void Classify_ImplicitTuple_ReturnsMathSubscript()
+    {
+        FormulaDetector.Classify("(x1, ..., xn)").Should().Be(FormulaTokenType.MathSubscript);
+    }
+
+    [Fact]
+    public void Classify_AssignmentWithTuple_ReturnsInlineEquation()
+    {
+        FormulaDetector.Classify("z = (z1, ..., zn)").Should().Be(FormulaTokenType.InlineEquation);
+    }
 }

@@ -62,6 +62,9 @@ public static class LatexFormulaSimplifier
     private static readonly Regex GreekOrOperatorCmd = new(@"\\([a-zA-Z]+)", RegexOptions.Compiled);
     private static readonly Regex BraceGroup = new(@"[{}]", RegexOptions.Compiled);
     private static readonly Regex CollapseWhitespace = new(@"\s+", RegexOptions.Compiled);
+    // Normalises implicit subscripts produced by PDF extraction: x1 → x_{1}, z2 → z_{2}.
+    // Only matches single-letter base (prevents false positives on words like "mp4").
+    private static readonly Regex ImplicitSubscriptPattern = new(@"\b([a-zA-Z])(\d+)\b", RegexOptions.Compiled);
 
     /// <summary>
     /// Checks whether a character is a super/subscript script signal used by the PDF renderer.
@@ -140,6 +143,10 @@ public static class LatexFormulaSimplifier
             if (OperatorMap.TryGetValue(cmd, out var op)) return op;
             return string.Empty; // Strip unknown commands
         });
+
+        // Normalise implicit subscripts from PDF extraction before SubscriptGroup expansion.
+        // Single-letter base rule: only matches x1, z2 — never mp4 or version1.
+        latex = ImplicitSubscriptPattern.Replace(latex, "$1_{$2}");
 
         // Expand _{abc} → _a_b_c and ^{abc} → ^a^b^c (per-character signals)
         latex = SubscriptGroup.Replace(latex,

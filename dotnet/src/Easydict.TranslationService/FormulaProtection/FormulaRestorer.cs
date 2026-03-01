@@ -30,6 +30,18 @@ public sealed class FormulaRestorer
         if (string.IsNullOrWhiteSpace(text) || tokens.Count == 0)
             return text;
 
+        // Guard against the LLM silently dropping formula placeholders.
+        // If any expected {v0}..{v(n-1)} index is absent from the translated text,
+        // the LLM removed a formula — fall back to the original.
+        var presentIndices = new HashSet<int>();
+        foreach (Match m in NumericPlaceholderRegex.Matches(text))
+        {
+            if (int.TryParse(m.Groups[1].Value, out var idx) && idx >= 0 && idx < tokens.Count)
+                presentIndices.Add(idx);
+        }
+        if (presentIndices.Count < tokens.Count)
+            return originalText;
+
         var restored = NumericPlaceholderRegex.Replace(text, match =>
         {
             var indexStr = match.Groups[1].Value;

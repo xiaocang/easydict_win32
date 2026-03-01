@@ -14,6 +14,7 @@
 //   dotnet test tests/Easydict.WinUI.Tests --filter "PdfTranslationVisualTest"
 
 using Easydict.TranslationService.Models;
+using LayoutDetectionMode = Easydict.TranslationService.LongDocument.LayoutDetectionMode;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.DocumentExport;
@@ -51,6 +52,15 @@ public class PdfTranslationVisualTest
 
         // ── Invoke production pipeline (same as the actual app) ───────────────
         using var service = new LongDocumentTranslationService();
+
+        // Mirror what EnsureOnnxReadyAsync() does in the UI:
+        // use OnnxLocal if the model is already downloaded, else fall back to heuristic
+        var downloadSvc = service.GetLayoutModelDownloadService();
+        var layoutMode = downloadSvc.IsReady
+            ? LayoutDetectionMode.OnnxLocal
+            : LayoutDetectionMode.Heuristic;
+        System.Diagnostics.Debug.WriteLine($"[VisualTest] Layout detection: {layoutMode}");
+
         var result = await service.TranslateToPdfAsync(
             mode: LongDocumentInputMode.Pdf,
             input: pdfPath,
@@ -59,7 +69,8 @@ public class PdfTranslationVisualTest
             outputPath: outputPath,
             serviceId: "deepseek",
             onProgress: msg => System.Diagnostics.Debug.WriteLine($"[VisualTest] {msg}"),
-            pdfExportMode: PdfExportMode.ContentStreamReplacement);
+            pdfExportMode: PdfExportMode.ContentStreamReplacement,
+            layoutDetection: layoutMode);
 
         result.SucceededChunks.Should().BeGreaterThan(0, "at least some chunks should translate successfully");
         File.Exists(outputPath).Should().BeTrue();

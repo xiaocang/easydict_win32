@@ -2008,7 +2008,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             // A word is "small" if its bounding box height is noticeably less than the median.
             // A small word below the median baseline is a subscript; above is a superscript.
             var smallThreshold = medianHeight * 0.85;
-            var posThreshold = Math.Max(0.5, medianHeight * 0.20); // min 0.5 pt shift
+            var posThreshold = Math.Max(0.3, medianHeight * 0.15); // aligned with BuildAnnotatedTextFromLetters
 
             // Prefer PointSize over BoundingBox.Height for size discrimination when available.
             // PointSize is the actual font size in pt, so even 't' at 7pt (subscript) vs 'h'
@@ -2021,18 +2021,29 @@ public sealed class LongDocumentTranslationService : IDisposable
             var medianPointSize = validPtSizes.Count > 0 ? validPtSizes[validPtSizes.Count / 2] : 0.0;
 
             // Classify each word as normal, subscript, or superscript.
-            var tags = new bool[sorted.Count]; // true = sub, reuse for both
-            var sups = new bool[sorted.Count];
+            // hasVariation[i] = true when a word has mixed PointSizes (fused base+subscript,
+            // e.g. "x1" where 'x' is 10pt and '1' is 7pt). Such words are delegated to
+            // BuildAnnotatedTextFromLetters rather than tagged as a whole-word subscript.
+            var tags = new bool[sorted.Count]; // true = subscript
+            var sups = new bool[sorted.Count]; // true = superscript
+            var hasVariation = new bool[sorted.Count];
             for (var i = 0; i < sorted.Count; i++)
             {
+                if (sorted[i].Letters.Count > 1)
+                {
+                    var ptSizes = sorted[i].Letters.Select(l => l.PointSize).Where(p => p > 0).ToList();
+                    if (ptSizes.Count >= 2 && ptSizes.Max() / ptSizes.Min() >= 1.10)
+                        hasVariation[i] = true;
+                }
+
                 var h = sorted[i].BoundingBox.Height;
                 var bot = sorted[i].BoundingBox.Bottom;
                 // Use PointSize when available; fall back to BoundingBox.Height otherwise.
                 var isSmall = (medianPointSize > 0 && wordPointSizes[i] > 0)
                     ? wordPointSizes[i] < medianPointSize * 0.87
                     : h < smallThreshold;
-                tags[i] = isSmall && bot < medianBottom - posThreshold; // isSub
-                sups[i] = isSmall && bot > medianBottom + posThreshold; // isSup
+                tags[i] = !hasVariation[i] && isSmall && bot < medianBottom - posThreshold; // isSub
+                sups[i] = !hasVariation[i] && isSmall && bot > medianBottom + posThreshold; // isSup
             }
 
             var sb = new System.Text.StringBuilder();
@@ -2049,9 +2060,13 @@ public sealed class LongDocumentTranslationService : IDisposable
 
                 if (!tags[idx] && !sups[idx])
                 {
-                    // Normal word — space-separated.
                     sb.Append(' ');
-                    sb.Append(sorted[idx].Text);
+                    var w = sorted[idx];
+                    // Fused base+subscript word (e.g. "x1"): delegate to letter-level annotation.
+                    if (hasVariation[idx])
+                        sb.Append(BuildAnnotatedTextFromLetters(w.Letters));
+                    else
+                        sb.Append(w.Text);
                     idx++;
                     continue;
                 }

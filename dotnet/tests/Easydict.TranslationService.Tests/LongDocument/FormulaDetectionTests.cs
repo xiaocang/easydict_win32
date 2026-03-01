@@ -127,6 +127,10 @@ public class FormulaDetectionTests
     [InlineData("Power x^{2n} is large.", "x^{2n}")]                                        // Superscript with braces
     [InlineData("Index x_i appears.", "x_i")]                                                 // Simple subscript
     [InlineData("Squared x^2 here.", "x^2")]                                                  // Simple superscript
+    [InlineData("Attention weight W_Q is used.", "W_Q")]                                      // Multi-char base uppercase subscript
+    [InlineData("Hidden state h_{t-1} carries context.", "h_{t-1}")]                         // Single-char base, braced subscript with expression
+    [InlineData("The value 1_c_i is chained.", "1_c_i")]                                      // Digit base, chained subscripts
+    [InlineData("Matrix W_K and W_V are projections.", "W_K")]                               // Another multi-char uppercase subscript
     public async Task TranslateAsync_ExpandedFormulaRegex_ProtectsNewPatterns(string inputText, string expectedProtected)
     {
         var capturedRequest = string.Empty;

@@ -92,4 +92,32 @@ public class FormulaRestorerTests
         var result = _restorer.Restore("The {v0} letter.", tokens, "original");
         result.Should().Be("The \\alpha letter.");
     }
+
+    [Fact]
+    public void Restore_LlmDroppedPlaceholder_ReturnsFallback()
+    {
+        // Arrange: 2 tokens, but LLM output only contains {v0}, drops {v1}
+        var tokens = new[]
+        {
+            MakeToken("x_1", "x-1"),
+            MakeToken("x_n", "x-n"),
+        };
+        // Act
+        var result = _restorer.Restore("符号表示 {v0} 的序列", tokens, "ORIGINAL", useSimplified: false);
+        // Assert: missing {v1} → fall back
+        result.Should().Be("ORIGINAL");
+    }
+
+    [Fact]
+    public void Restore_AllPlaceholdersPresent_ReturnsRestored()
+    {
+        // Confirm normal path still works when LLM preserves all placeholders
+        var tokens = new[]
+        {
+            MakeToken("x_1", "x-1"),
+            MakeToken("x_n", "x-n"),
+        };
+        var result = _restorer.Restore("符号表示 {v0} 和 {v1}", tokens, "ORIGINAL", useSimplified: false);
+        result.Should().Be("符号表示 x_1 和 x_n");
+    }
 }

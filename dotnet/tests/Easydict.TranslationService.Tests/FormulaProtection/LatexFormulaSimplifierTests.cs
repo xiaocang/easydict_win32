@@ -191,4 +191,37 @@ public class LatexFormulaSimplifierTests
     {
         LatexFormulaSimplifier.IsScriptSignal(c).Should().Be(expected);
     }
+
+    // --- Implicit subscript normalisation ---
+
+    [Theory]
+    [InlineData("x1", "x_1")]                  // Single-letter base + digit → subscript signal
+    [InlineData("z2", "z_2")]                  // Different letter
+    [InlineData("v0", "v_0")]                  // Common ML variable
+    [InlineData("x12", "x_1_2")]              // Multi-digit → each digit gets its own signal
+    public void SimplifyMathContent_ImplicitSubscript_ProducesScriptSignal(string input, string expectedSubstring)
+    {
+        var result = LatexFormulaSimplifier.SimplifyMathContent(input);
+        result.Should().Contain(expectedSubstring, because: $"'{input}' should render with subscript signal");
+    }
+
+    [Theory]
+    [InlineData("mp4")]       // Multi-letter base — must NOT be treated as subscript
+    [InlineData("version1")] // Multi-letter base
+    [InlineData("w3c")]      // Multi-letter acronym
+    public void SimplifyMathContent_MultiLetterBase_NoSubscriptSignalInjected(string input)
+    {
+        var result = LatexFormulaSimplifier.SimplifyMathContent(input);
+        // The text should pass through unchanged (no _ injected)
+        result.Should().NotContain("_", because: $"'{input}' has multi-letter base and must not be treated as a math subscript");
+    }
+
+    [Fact]
+    public void SimplifyMathContent_ImplicitTupleSequence_RendersWithSubscripts()
+    {
+        var result = LatexFormulaSimplifier.SimplifyMathContent("(x1, ..., xn)");
+        // x1 should produce subscript signal; xn has no digit so stays as-is
+        result.Should().Contain("x_1");
+        result.Should().Contain("xn");
+    }
 }

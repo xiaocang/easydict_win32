@@ -535,10 +535,10 @@ public sealed class LongDocumentTranslationService
     // Level 2: Font-based formula detection
     private static readonly Regex MathFontRegex = new(
         @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX" +
-        @"|BL|RM|EU|LA|RS" +              // pdf2zh: common math font name abbreviations
-        @"|LINE|LCIRCLE" +                 // pdf2zh: LaTeX drawing fonts
-        @"|TeX-|rsfs|txsy|wasy|stmary" +   // pdf2zh: TeX symbol font packages
-        @"|\w+Sym\w*|\w+Math\w*",          // pdf2zh: generic *Sym* / *Math* patterns (safer than .*)
+        @"|\bBL|\bRM|\bEU|\bLA|\bRS" +     // pdf2zh: math font abbreviations (word-boundary anchored to avoid "la" in "Regular")
+        @"|LINE|LCIRCLE" +                  // pdf2zh: LaTeX drawing fonts
+        @"|TeX-|rsfs|txsy|wasy|stmary" +    // pdf2zh: TeX symbol font packages
+        @"|\w+Sym\w*|\b\w{1,5}Math\w*",    // generic *Sym* / *Math* (prefix ≤5 chars to avoid "MyCustomMathFont")
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     internal static bool IsFontBasedFormula(IReadOnlyList<string>? fontNames, string? customPattern)

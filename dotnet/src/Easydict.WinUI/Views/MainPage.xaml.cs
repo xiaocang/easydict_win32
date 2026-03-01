@@ -1822,14 +1822,25 @@ namespace Easydict.WinUI.Views
 
             SetLongDocTaskUiState(true);
 
-            // Check ONNX layout model availability (once before starting queue)
-            var layoutMode = await EnsureOnnxReadyAsync(mode, _longDocQueueCts.Token);
+            var targetLang = GetTargetLanguage();
 
-            // Check CJK font availability for PDF output (once before starting queue)
-            if (mode == LongDocumentInputMode.Pdf)
+            LayoutDetectionMode layoutMode;
+            try
             {
-                var targetLang = GetTargetLanguage();
-                await EnsureCjkFontReadyAsync(targetLang, _longDocQueueCts.Token);
+                // Check ONNX layout model availability (once before starting queue)
+                layoutMode = await EnsureOnnxReadyAsync(mode, _longDocQueueCts.Token);
+
+                // Check CJK font availability for PDF output (once before starting queue)
+                if (mode == LongDocumentInputMode.Pdf)
+                    await EnsureCjkFontReadyAsync(targetLang, _longDocQueueCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                LongDocStatusText.Text = "Queue canceled.";
+                SetLongDocTaskUiState(false);
+                _longDocQueueCts?.Dispose();
+                _longDocQueueCts = null;
+                return;
             }
 
             LongDocStatusText.Text = $"Queue started: {queueItems.Count} file(s).";

@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService.LongDocument;
+using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.Models;
 using MuPDF.NET;
 using MuPdfPage = MuPDF.NET.Page;
@@ -316,8 +317,12 @@ public sealed class MuPdfExportService : IDocumentExportService
                 foreach (var ch in segment)
                 {
                     // Consume ^ and _ as super/subscript signals (not rendered as characters)
-                    if (ch == '^') { superNext = true; subNext = false; continue; }
-                    if (ch == '_') { subNext = true; superNext = false; continue; }
+                    if (LatexFormulaSimplifier.IsScriptSignal(ch))
+                    {
+                        if (ch == '^') { superNext = true; subNext = false; }
+                        else { subNext = true; superNext = false; }
+                        continue;
+                    }
 
                     // Apply super/subscript sizing and Y offset for this character only
                     var charFontSize = fontSize;
@@ -433,68 +438,19 @@ public sealed class MuPdfExportService : IDocumentExportService
     /// <summary>
     /// Simplifies LaTeX formula markup to plain text for PDF rendering.
     /// Preserves ^ and _ as rendering signals for super/subscript positioning.
-    /// Unlike the old StripLatexMarkup, content between delimiters is kept (simplified),
-    /// so inline math like "$h_t$" renders as "h" with subscript "t" rather than as blank.
+    /// Delegates to <see cref="LatexFormulaSimplifier.Simplify"/> for Unicode symbol mapping.
     /// </summary>
-    private static string SimplifyLatexMarkup(string text)
-    {
-        // Display math: $$...$$ → simplified content (surrounded by spaces)
-        text = Regex.Replace(text, @"\$\$([\s\S]*?)\$\$",
-            m => " " + SimplifyMathContent(m.Groups[1].Value) + " ");
-        // Display math: \[...\] → simplified content
-        text = Regex.Replace(text, @"\\\[([\s\S]*?)\\\]",
-            m => " " + SimplifyMathContent(m.Groups[1].Value) + " ");
-        // Inline math: $...$ → simplified content
-        text = Regex.Replace(text, @"\$([^$\n]+)\$",
-            m => SimplifyMathContent(m.Groups[1].Value));
-        // Inline math: \(...\) → simplified content
-        text = Regex.Replace(text, @"\\\(([\s\S]*?)\\\)",
-            m => SimplifyMathContent(m.Groups[1].Value));
-        // Residual \cmd{content} outside math → keep content
-        text = Regex.Replace(text, @"\\[a-zA-Z]+\{([^}]*)\}", "$1");
-        // Residual standalone \cmd → remove
-        text = Regex.Replace(text, @"\\[a-zA-Z]+", string.Empty);
-        // Expand _{abc} → _a_b_c  and  ^{abc} → ^a^b^c so that every character
-        // inside a sub/superscript group gets its own rendering signal.
-        // This handles multi-character subscripts produced by PdfTextLine.Normalize()
-        // (e.g. h_{t-1} → h_t_-_1) so the renderer correctly positions each char.
-        text = Regex.Replace(text, @"_\{([^}]*)\}",
-            m => string.Concat(m.Groups[1].Value.Select(c => "_" + c)));
-        text = Regex.Replace(text, @"\^\{([^}]*)\}",
-            m => string.Concat(m.Groups[1].Value.Select(c => "^" + c)));
-        // Remove lone $ \ { }; keep ^ _ as super/subscript rendering signals
-        text = Regex.Replace(text, @"[\$\\{}]", string.Empty);
-        // Collapse extra whitespace
-        return Regex.Replace(text, @"[ \t]{2,}", " ").Trim();
-    }
+    private static string SimplifyLatexMarkup(string text) =>
+        LatexFormulaSimplifier.Simplify(text, preserveScriptSignals: true);
 
     /// <summary>
-    /// Simplifies LaTeX math content to an ASCII approximation.
-    /// Handles common constructs: \frac, \sqrt, \text, \mathrm, etc.
+    /// Simplifies LaTeX math content to a Unicode approximation.
+    /// Handles common constructs: \frac, \sqrt, Greek letters, math operators, etc.
     /// Preserves ^ and _ for super/subscript rendering signals.
+    /// Delegates to <see cref="LatexFormulaSimplifier.SimplifyMathContent"/>.
     /// </summary>
-    private static string SimplifyMathContent(string latex)
-    {
-        // \frac{a}{b} → a/b
-        latex = Regex.Replace(latex, @"\\frac\{([^}]*)\}\{([^}]*)\}", "$1/$2");
-        // \sqrt{x} → √x
-        latex = Regex.Replace(latex, @"\\sqrt\{([^}]*)\}", "√$1");
-        // \text{word} / \mathrm{word} / \mathbf{word} → word
-        latex = Regex.Replace(latex, @"\\(?:text|mathrm|mathbf|mathit|operatorname)\{([^}]*)\}", "$1");
-        // Other \cmd{content} → content
-        latex = Regex.Replace(latex, @"\\[a-zA-Z]+\{([^}]*)\}", "$1");
-        // Remove standalone \cmd (e.g. \alpha, \beta, \sum, \cdot)
-        latex = Regex.Replace(latex, @"\\[a-zA-Z]+", string.Empty);
-        // Expand _{abc} → _a_b_c and ^{abc} → ^a^b^c (per-character signals)
-        latex = Regex.Replace(latex, @"_\{([^}]*)\}",
-            m => string.Concat(m.Groups[1].Value.Select(c => "_" + c)));
-        latex = Regex.Replace(latex, @"\^\{([^}]*)\}",
-            m => string.Concat(m.Groups[1].Value.Select(c => "^" + c)));
-        // Remove { } braces; keep ^ _ = + - * / spaces and alphanumerics
-        latex = Regex.Replace(latex, @"[{}]", string.Empty);
-        // Collapse whitespace
-        return Regex.Replace(latex, @"\s+", " ").Trim();
-    }
+    private static string SimplifyMathContent(string latex) =>
+        LatexFormulaSimplifier.SimplifyMathContent(latex, preserveScriptSignals: true);
 
     /// <summary>
     /// Estimates average character width for line wrapping.

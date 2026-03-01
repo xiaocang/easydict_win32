@@ -3,29 +3,13 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.Models;
 
 namespace Easydict.TranslationService.LongDocument;
 
 public sealed class LongDocumentTranslationService
 {
-    // Formula detection regex — aligned with pdf2zh converter.py formula patterns.
-    // Matches: $$..$$, $..$ (inline), \(..\), \[..\], \begin{..}..\end{..}, common LaTeX commands,
-    // subscript/superscript (x_{i}, x^{2}, x_i, x^2), and simple equations (x = ...).
-    private static readonly Regex FormulaRegex = new(
-        @"(\$\$[^$]+\$\$" +                           // display math $$...$$
-        @"|\$[^$]+\$" +                                // inline math $...$
-        @"|\\\([^\)]+\\\)" +                           // inline math \(...\)
-        @"|\\\[[^\]]+\\\]" +                           // display math \[...\]
-        @"|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}" +  // LaTeX environments
-        @"|\\(?:alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|sum|prod|int|infty|partial|nabla|forall|exists|subset|supset|cup|cap|times|cdot|leq|geq|neq|approx|equiv|sim|pm|mp|sqrt|frac|binom|log|ln|sin|cos|tan|lim|max|min)\b" + // LaTeX commands
-        @"|[A-Za-z]_\{[^}]+\}" +                       // subscript with braces: x_{i+1}
-        @"|[A-Za-z]\^\{[^}]+\}" +                      // superscript with braces: x^{2n}
-        @"|[A-Za-z]_[A-Za-z0-9]" +                     // simple subscript: x_i
-        @"|[A-Za-z]\^[A-Za-z0-9]" +                    // simple superscript: x^2
-        @"|[A-Za-z]\s*=\s*[^\s,;.]+)",                 // simple equation: x = ...
-        RegexOptions.Compiled);
-
     private readonly Func<TranslationRequest, string, CancellationToken, Task<TranslationResult>> _translateWithService;
     private readonly Func<SourceDocumentPage, CancellationToken, Task<string?>> _ocrExtractor;
 
@@ -618,66 +602,16 @@ public sealed class LongDocumentTranslationService
         return chars.Count >= 3 && (double)scriptCount / chars.Count > 0.25;
     }
 
-    private enum FormulaTokenKind
-    {
-        InlineMath,
-        DisplayMath,
-        UnitFragment
-    }
-
-    private sealed record FormulaToken(string RawText, FormulaTokenKind Kind);
-
     private sealed record FormulaProtectionResult(string ProtectedText, IReadOnlyList<FormulaToken> TokenMap)
     {
-        public static FormulaProtectionResult Empty { get; } = new(string.Empty, new List<FormulaToken>());
+        public static FormulaProtectionResult Empty { get; } = new(string.Empty, Array.Empty<FormulaToken>());
     }
 
     private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
 
-    // Matches a formula placeholder followed by a parenthesized group, e.g. "{v0}(x, y)".
-    // Aligned with pdf2zh converter.py:248-255 bracket grouping.
-    private static readonly Regex TrailingParenRegex = new(
-        @"\{v(\d+)\}\s*\(([^()]*)\)",
-        RegexOptions.Compiled);
-
-    // Matches natural-language words (4+ letters) — used to decide if parenthesized
-    // content is formula arguments vs prose.
-    private static readonly Regex NaturalLanguageWordRegex = new(
-        @"\b[a-zA-Z]{4,}\b",
-        RegexOptions.Compiled);
-
     private static FormulaProtectionResult ProtectFormulaSpans(string text)
     {
-        if (string.IsNullOrEmpty(text))
-        {
-            return new FormulaProtectionResult(text, new List<FormulaToken>());
-        }
-
-        var tokens = new List<FormulaToken>();
-        var counter = 0;
-        var protectedText = FormulaRegex.Replace(text, match =>
-        {
-            var token = $"{{v{counter}}}";
-            tokens.Add(new FormulaToken(match.Value, ClassifyFormulaToken(match.Value)));
-            counter++;
-            return token;
-        });
-
-        // Extend placeholders to include trailing parenthesized groups like "(x, y)" when
-        // the content looks like formula arguments (short, no natural-language words).
-        // Aligned with pdf2zh converter.py:248-255 bracket grouping.
-        protectedText = TrailingParenRegex.Replace(protectedText, match =>
-        {
-            var parenContent = match.Groups[2].Value;
-            if (parenContent.Length <= 30 && !NaturalLanguageWordRegex.IsMatch(parenContent))
-            {
-                var idx = int.Parse(match.Groups[1].Value);
-                tokens[idx] = tokens[idx] with { RawText = tokens[idx].RawText + "(" + parenContent + ")" };
-                return $"{{v{idx}}}";
-            }
-            return match.Value;
-        });
-
+        var protectedText = new FormulaProtector().Protect(text, out var tokens);
         return new FormulaProtectionResult(protectedText, tokens);
     }
 
@@ -694,96 +628,7 @@ public sealed class LongDocumentTranslationService
 
     private static string RestoreFormulaSpans(string text, FormulaProtectionResult protection, string originalText)
     {
-        if (string.IsNullOrWhiteSpace(text) || protection.TokenMap.Count == 0)
-        {
-            return text;
-        }
-
-        var restored = NumericPlaceholderRegex.Replace(text, match =>
-        {
-            var indexStr = match.Groups[1].Value;
-            if (int.TryParse(indexStr, out var index) && index >= 0 && index < protection.TokenMap.Count)
-            {
-                return protection.TokenMap[index].RawText;
-            }
-            return match.Value;
-        });
-
-        if (NumericPlaceholderRegex.IsMatch(restored))
-        {
-            return originalText;
-        }
-
-        if (!AreFormulaDelimitersBalanced(restored))
-        {
-            return originalText;
-        }
-
-        return restored;
-    }
-
-    private static FormulaTokenKind ClassifyFormulaToken(string rawFormula)
-    {
-        if (rawFormula.StartsWith("\\[", StringComparison.Ordinal) || rawFormula.EndsWith("\\]", StringComparison.Ordinal))
-        {
-            return FormulaTokenKind.DisplayMath;
-        }
-
-        if (rawFormula.StartsWith("$", StringComparison.Ordinal) ||
-            rawFormula.StartsWith("\\(", StringComparison.Ordinal) ||
-            rawFormula.EndsWith("$", StringComparison.Ordinal) ||
-            rawFormula.EndsWith("\\)", StringComparison.Ordinal))
-        {
-            return FormulaTokenKind.InlineMath;
-        }
-
-        return FormulaTokenKind.UnitFragment;
-    }
-
-    private static bool AreFormulaDelimitersBalanced(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return true;
-        }
-
-        var stack = new Stack<char>();
-        var dollarCount = 0;
-
-        foreach (var c in text)
-        {
-            switch (c)
-            {
-                case '$':
-                    dollarCount++;
-                    break;
-                case '(':
-                case '[':
-                case '{':
-                    stack.Push(c);
-                    break;
-                case ')':
-                    if (stack.Count == 0 || stack.Pop() != '(')
-                    {
-                        return false;
-                    }
-                    break;
-                case ']':
-                    if (stack.Count == 0 || stack.Pop() != '[')
-                    {
-                        return false;
-                    }
-                    break;
-                case '}':
-                    if (stack.Count == 0 || stack.Pop() != '{')
-                    {
-                        return false;
-                    }
-                    break;
-            }
-        }
-
-        return stack.Count == 0 && dollarCount % 2 == 0;
+        return new FormulaRestorer().Restore(text, protection.TokenMap, originalText, useSimplified: false);
     }
 
     private static string ApplyGlossary(string text, IReadOnlyDictionary<string, string>? glossary)

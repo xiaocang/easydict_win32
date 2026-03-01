@@ -1943,6 +1943,18 @@ public sealed class LongDocumentTranslationService : IDisposable
         return splitIndices;
     }
 
+    /// <summary>
+    /// Returns true if <paramref name="token"/> looks like a mathematical subscript or
+    /// superscript token: letters, digits, or common operators (+, -, =, ., ,, (, ), /, *).
+    /// Footnote markers (\u2020, \u2021, \u00a7, \u00b6, etc.) return false.
+    /// </summary>
+    private static bool IsMathToken(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+            return false;
+        return token.All(c => char.IsLetterOrDigit(c) || c is '+' or '-' or '=' or '.' or ',' or '(' or ')' or '/' or '*');
+    }
+
     internal sealed class PdfTextLine(double top)
     {
         public double Top { get; } = top;
@@ -1973,8 +1985,14 @@ public sealed class LongDocumentTranslationService : IDisposable
         /// </summary>
         private static string BuildAnnotatedText(List<Word> sorted)
         {
-            if (sorted.Count <= 1)
-                return sorted.Count == 1 ? sorted[0].Text : string.Empty;
+            if (sorted.Count == 0)
+                return string.Empty;
+
+            // Single word: use letter-level PointSize analysis to detect intra-word
+            // subscripts/superscripts — e.g. $h_t$ is often extracted as one PdfPig
+            // Word with text "ht" where 't' has a smaller PointSize and lower baseline.
+            if (sorted.Count == 1)
+                return BuildAnnotatedTextFromLetters(sorted[0].Letters);
 
             // Compute the median word bottom (baseline proxy) and median word height.
             // These let us detect words at distinctly lower/higher positions (sub/super).
@@ -1990,16 +2008,29 @@ public sealed class LongDocumentTranslationService : IDisposable
             // A word is "small" if its bounding box height is noticeably less than the median.
             // A small word below the median baseline is a subscript; above is a superscript.
             var smallThreshold = medianHeight * 0.85;
-            var posThreshold   = Math.Max(0.5, medianHeight * 0.20); // min 0.5 pt shift
+            var posThreshold = Math.Max(0.5, medianHeight * 0.20); // min 0.5 pt shift
+
+            // Prefer PointSize over BoundingBox.Height for size discrimination when available.
+            // PointSize is the actual font size in pt, so even 't' at 7pt (subscript) vs 'h'
+            // at 10pt is correctly classified even when their glyph bounding box heights happen
+            // to be similar (both letters have ascenders).
+            var wordPointSizes = sorted
+                .Select(w => w.Letters.Count > 0 ? w.Letters.Average(l => l.PointSize) : 0.0)
+                .ToList();
+            var validPtSizes = wordPointSizes.Where(p => p > 0).OrderBy(p => p).ToList();
+            var medianPointSize = validPtSizes.Count > 0 ? validPtSizes[validPtSizes.Count / 2] : 0.0;
 
             // Classify each word as normal, subscript, or superscript.
             var tags = new bool[sorted.Count]; // true = sub, reuse for both
             var sups = new bool[sorted.Count];
             for (var i = 0; i < sorted.Count; i++)
             {
-                var h   = sorted[i].BoundingBox.Height;
+                var h = sorted[i].BoundingBox.Height;
                 var bot = sorted[i].BoundingBox.Bottom;
-                var isSmall = h < smallThreshold;
+                // Use PointSize when available; fall back to BoundingBox.Height otherwise.
+                var isSmall = (medianPointSize > 0 && wordPointSizes[i] > 0)
+                    ? wordPointSizes[i] < medianPointSize * 0.87
+                    : h < smallThreshold;
                 tags[i] = isSmall && bot < medianBottom - posThreshold; // isSub
                 sups[i] = isSmall && bot > medianBottom + posThreshold; // isSup
             }
@@ -2026,7 +2057,7 @@ public sealed class LongDocumentTranslationService : IDisposable
                 }
 
                 // Start of a sub/super run — collect consecutive words of the same type.
-                var isSub  = tags[idx];
+                var isSub = tags[idx];
                 var runEnd = idx;
                 while (runEnd + 1 < sorted.Count
                     && ((isSub && tags[runEnd + 1]) || (!isSub && sups[runEnd + 1])))
@@ -2056,6 +2087,84 @@ public sealed class LongDocumentTranslationService : IDisposable
                     sb.Append(signal).Append(runText);
                 else
                     sb.Append(signal).Append('{').Append(runText).Append('}');
+
+                idx = runEnd + 1;
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Detects sub/superscripts within a single PdfPig <see cref="Word"/> by comparing
+        /// per-letter <see cref="Letter.PointSize"/> and <see cref="Letter.StartBaseLine"/>.
+        /// This handles the common math-PDF case where the base letter and its subscript
+        /// (e.g. 'h' and 't' in $h_t$) are fused into one Word by PdfPig's word extractor.
+        /// </summary>
+        private static string BuildAnnotatedTextFromLetters(IReadOnlyList<Letter> letters)
+        {
+            if (letters.Count == 0)
+                return string.Empty;
+            if (letters.Count == 1)
+                return letters[0].Value;
+
+            var pointSizes = letters.Select(l => l.PointSize).ToList();
+            var validSizes = pointSizes.Where(s => s > 0).OrderBy(s => s).ToList();
+
+            // No meaningful font-size variation → plain word, return as-is.
+            if (validSizes.Count < 2 || validSizes[validSizes.Count - 1] / validSizes[0] < 1.10)
+                return string.Concat(letters.Select(l => l.Value));
+
+            var medianSize = validSizes[validSizes.Count / 2];
+            var medianBaseline = letters
+                .Select(l => l.StartBaseLine.Y)
+                .OrderBy(y => y)
+                .Skip(letters.Count / 2)
+                .First();
+            var posThreshold = Math.Max(0.5, medianSize * 0.15);
+
+            var letterSubs = new bool[letters.Count];
+            var letterSups = new bool[letters.Count];
+            for (var i = 0; i < letters.Count; i++)
+            {
+                var ps = pointSizes[i];
+                if (ps <= 0 || ps >= medianSize * 0.87)
+                    continue;
+                var baseline = letters[i].StartBaseLine.Y;
+                letterSubs[i] = baseline < medianBaseline - posThreshold;
+                letterSups[i] = baseline > medianBaseline + posThreshold;
+            }
+
+            var sb = new System.Text.StringBuilder();
+            var idx = 0;
+            while (idx < letters.Count)
+            {
+                if (idx == 0 || (!letterSubs[idx] && !letterSups[idx]))
+                {
+                    sb.Append(letters[idx].Value);
+                    idx++;
+                    continue;
+                }
+
+                var isSub = letterSubs[idx];
+                var runEnd = idx;
+                while (runEnd + 1 < letters.Count &&
+                    ((isSub && letterSubs[runEnd + 1]) || (!isSub && letterSups[runEnd + 1])))
+                    runEnd++;
+
+                var runText = string.Concat(
+                    Enumerable.Range(idx, runEnd - idx + 1).Select(k => letters[k].Value));
+
+                if (!IsMathToken(runText))
+                {
+                    sb.Append(runText);
+                }
+                else
+                {
+                    var signal = isSub ? '_' : '^';
+                    sb.Append(runText.Length == 1
+                        ? $"{signal}{runText}"
+                        : $"{signal}{{{runText}}}");
+                }
 
                 idx = runEnd + 1;
             }

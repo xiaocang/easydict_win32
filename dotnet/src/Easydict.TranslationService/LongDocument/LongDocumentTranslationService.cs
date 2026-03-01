@@ -238,7 +238,9 @@ public sealed class LongDocumentTranslationService
                     var irBlockId = $"ir-{page.PageNumber}-{block.BlockId}";
                     var sourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(blockText)));
 
-                    var translationSkipped = block.BlockType == SourceBlockType.Formula || block.IsFormulaLike
+                    var translationSkipped = block.BlockType == SourceBlockType.Formula
+                        || block.BlockType == SourceBlockType.TableCell
+                        || block.IsFormulaLike
                         || IsFontBasedFormula(block.DetectedFontNames, options?.FormulaFontPattern)
                         || IsCharacterBasedFormula(blockText, options?.FormulaCharPattern)
                         || IsSubscriptDenseFormula(block.FormulaCharacters);

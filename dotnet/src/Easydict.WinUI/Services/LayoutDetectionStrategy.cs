@@ -478,13 +478,14 @@ internal sealed class LayoutDetectionStrategy
             var skipTranslation = det.RegionType is
                 LayoutRegionType.Formula or
                 LayoutRegionType.IsolatedFormula;
+            var isTable = det.RegionType is LayoutRegionType.Table;
 
             foreach (var block in LongDocumentTranslationService.GroupWordsIntoBlocks(
                 wordsByRegion[i], page, page.Number, regionTag, ref blockIndex))
             {
-                var finalBlock = skipTranslation
-                    ? block with { IsFormulaLike = true }
-                    : block;
+                var finalBlock = skipTranslation ? block with { IsFormulaLike = true }
+                               : isTable ? block with { BlockType = SourceBlockType.TableCell }
+                               : block;
 
                 results.Add(new EnhancedSourceBlock(finalBlock, det.RegionType, det.Confidence, mlSource));
             }

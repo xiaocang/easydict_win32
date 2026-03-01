@@ -88,8 +88,8 @@ public class LongDocumentE2EBaselineTests
             "P1|p1-left-b1|ZH:ABSTRACT",
             "P1|p1-left-b2|ZH:Energy is represented by $E = mc^2$ in relativity.",
             "P1|p1-right-b1|ZH:The right column continues the discussion.",
-            "P2|p2-table-b1|ZH:Result A",
-            "P2|p2-table-b2|ZH:Result B");
+            "P2|p2-table-b1|Result A",
+            "P2|p2-table-b2|Result B");
 
         snapshot.Should().Be(expected);
         result.QualityReport.StageTimingsMs.Keys.Should().Contain(new[]

@@ -986,8 +986,10 @@ public sealed class LongDocumentTranslationService : IDisposable
             var top = linesInBlock.Max(l => l.Top);
             var bottom = linesInBlock.Min(l => l.Bottom);
 
-            var type = GuessBlockType(blockText);
             var regionType = InferRegionType(layoutProfile, left, right, top, bottom, blockText);
+            var type = regionType == LayoutRegionType.TableLike
+                ? SourceBlockType.TableCell
+                : GuessBlockType(blockText);
             var regionTag = regionType switch
             {
                 LayoutRegionType.Header => "header",

@@ -276,4 +276,36 @@
   <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
     <value>&#2346;&#2369;&#2359;&#2381;&#2335;&#2367; &#2325;&#2375; &#2354;&#2367;&#2319; Enter &#2351;&#2366; &#2337;&#2348;&#2354;-&#2325;&#2381;&#2354;&#2367;&#2325;  |  &#2347;&#2366;&#2311;&#2344;-&#2335;&#2381;&#2351;&#2370;&#2344; &#2325;&#2375; &#2354;&#2367;&#2319; &#2319;&#2352;&#2379; &#2325;&#2369;&#2306;&#2332;&#2368;  |  &#2347;&#2367;&#2352; &#2360;&#2375; &#2330;&#2369;&#2344;&#2344;&#2375; &#2325;&#2375; &#2354;&#2367;&#2319; &#2352;&#2366;&#2311;&#2335;-&#2325;&#2381;&#2354;&#2367;&#2325; &#2351;&#2366; Esc</value>
   </data>
+
+  <!-- Grammar Correction Mode -->
+  <data name="QueryMode_Translation" xml:space="preserve">
+    <value>Translate</value>
+  </data>
+  <data name="QueryMode_GrammarCorrection" xml:space="preserve">
+    <value>Grammar Check</value>
+  </data>
+  <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
+    <value>{0} — {1} पर स्विच करने के लिए क्लिक करें</value>
+  </data>
+  <data name="InputPlaceholder_Grammar" xml:space="preserve">
+    <value>Enter text to check grammar...</value>
+  </data>
+  <data name="ResultsTitle_Grammar" xml:space="preserve">
+    <value>Grammar Check Results</value>
+  </data>
+  <data name="GrammarPlaceholder" xml:space="preserve">
+    <value>Grammar check results will appear here...</value>
+  </data>
+  <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
+    <value>Check Grammar</value>
+  </data>
+  <data name="GrammarResult_Original" xml:space="preserve">
+    <value>Original:</value>
+  </data>
+  <data name="GrammarResult_Changes" xml:space="preserve">
+    <value>Changes:</value>
+  </data>
+  <data name="GrammarResult_NoIssues" xml:space="preserve">
+    <value>No grammar issues found.</value>
+  </data>
 </root>

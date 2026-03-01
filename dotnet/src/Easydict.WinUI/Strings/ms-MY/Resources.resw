@@ -276,4 +276,36 @@
   <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
     <value>Enter atau dwi-klik untuk sahkan  |  Kekunci anak panah untuk laras halus  |  Klik kanan atau Esc untuk pilih semula</value>
   </data>
+
+  <!-- Grammar Correction Mode -->
+  <data name="QueryMode_Translation" xml:space="preserve">
+    <value>Translate</value>
+  </data>
+  <data name="QueryMode_GrammarCorrection" xml:space="preserve">
+    <value>Grammar Check</value>
+  </data>
+  <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
+    <value>{0} — klik untuk beralih ke {1}</value>
+  </data>
+  <data name="InputPlaceholder_Grammar" xml:space="preserve">
+    <value>Enter text to check grammar...</value>
+  </data>
+  <data name="ResultsTitle_Grammar" xml:space="preserve">
+    <value>Grammar Check Results</value>
+  </data>
+  <data name="GrammarPlaceholder" xml:space="preserve">
+    <value>Grammar check results will appear here...</value>
+  </data>
+  <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
+    <value>Check Grammar</value>
+  </data>
+  <data name="GrammarResult_Original" xml:space="preserve">
+    <value>Original:</value>
+  </data>
+  <data name="GrammarResult_Changes" xml:space="preserve">
+    <value>Changes:</value>
+  </data>
+  <data name="GrammarResult_NoIssues" xml:space="preserve">
+    <value>No grammar issues found.</value>
+  </data>
 </root>

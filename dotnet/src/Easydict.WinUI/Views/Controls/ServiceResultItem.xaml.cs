@@ -186,8 +186,23 @@ public sealed partial class ServiceResultItem : UserControl
         // Pending query hint visibility
         PendingQueryText.Visibility = showPendingHint ? Visibility.Visible : Visibility.Collapsed;
 
+        // Branch based on mode
+        if (_serviceResult.IsGrammarMode)
+        {
+            UpdateGrammarUI();
+        }
+        else
+        {
+            UpdateTranslationUI();
+        }
+    }
+
+    private void UpdateTranslationUI()
+    {
+        GrammarResultPanel.Visibility = Visibility.Collapsed;
+
         // Result text - handle streaming state
-        if (_serviceResult.IsStreaming)
+        if (_serviceResult!.IsStreaming)
         {
             // Show streaming text or placeholder while waiting for first chunk
             ResultText.Text = string.IsNullOrEmpty(_serviceResult.StreamingText)
@@ -223,6 +238,76 @@ public sealed partial class ServiceResultItem : UserControl
             ResultText.Visibility = Visibility.Collapsed;
             ErrorText.Visibility = Visibility.Collapsed;
             PhoneticPanel.Visibility = Visibility.Collapsed;
+            ActionButtons.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void UpdateGrammarUI()
+    {
+        // Hide translation-specific elements
+        ResultText.Visibility = Visibility.Collapsed;
+        PhoneticPanel.Visibility = Visibility.Collapsed;
+
+        // Localize labels
+        var loc = LocalizationService.Instance;
+        OriginalLabel.Text = loc.GetString("GrammarResult_Original") ?? "Original:";
+        ChangesLabel.Text = loc.GetString("GrammarResult_Changes") ?? "Changes:";
+        NoCorrectionsText.Text = loc.GetString("GrammarResult_NoIssues") ?? "No grammar issues found.";
+
+        if (_serviceResult!.IsStreaming)
+        {
+            GrammarResultPanel.Visibility = Visibility.Visible;
+            CorrectedText.Text = string.IsNullOrEmpty(_serviceResult.StreamingText)
+                ? "Waiting for response..." : _serviceResult.StreamingText;
+            OriginalText.Text = "";
+            ExplanationPanel.Visibility = Visibility.Collapsed;
+            NoCorrectionsText.Visibility = Visibility.Collapsed;
+            ActionButtons.Visibility = Visibility.Collapsed;
+        }
+        else if (_serviceResult.GrammarResult != null)
+        {
+            var gr = _serviceResult.GrammarResult;
+            GrammarResultPanel.Visibility = Visibility.Visible;
+            ErrorText.Visibility = Visibility.Collapsed;
+            CorrectedText.Text = gr.CorrectedText;
+            OriginalText.Text = gr.OriginalText;
+
+            if (gr.HasCorrections)
+            {
+                NoCorrectionsText.Visibility = Visibility.Collapsed;
+                if (!string.IsNullOrEmpty(gr.Explanation))
+                {
+                    ExplanationPanel.Visibility = Visibility.Visible;
+                    ExplanationText.Text = gr.Explanation;
+                }
+                else
+                {
+                    ExplanationPanel.Visibility = Visibility.Collapsed;
+                }
+            }
+            else
+            {
+                NoCorrectionsText.Visibility = Visibility.Visible;
+                ExplanationPanel.Visibility = Visibility.Collapsed;
+            }
+
+            ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+            ReplaceButton.Visibility = TextInsertionService.HasSourceWindow
+                ? Visibility.Visible : Visibility.Collapsed;
+        }
+        else if (_serviceResult.Error != null)
+        {
+            GrammarResultPanel.Visibility = Visibility.Collapsed;
+            ErrorText.Text = GetErrorDisplayText(_serviceResult);
+            ErrorText.Visibility = Visibility.Visible;
+            ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+            ReplaceButton.Visibility = Visibility.Collapsed;
+            PlayButton.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            GrammarResultPanel.Visibility = Visibility.Collapsed;
+            ErrorText.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = Visibility.Collapsed;
         }
     }
@@ -469,10 +554,11 @@ public sealed partial class ServiceResultItem : UserControl
         _isHovering = true;
 
         if (_serviceResult?.IsExpanded == true &&
-            (_serviceResult.Result != null || _serviceResult.Error != null))
+            (_serviceResult.Result != null || _serviceResult.Error != null || _serviceResult.GrammarResult != null))
         {
             ActionButtons.Visibility = Visibility.Visible;
-            ReplaceButton.Visibility = _serviceResult.Result != null && TextInsertionService.HasSourceWindow
+            var hasResult = _serviceResult.Result != null || _serviceResult.GrammarResult != null;
+            ReplaceButton.Visibility = hasResult && TextInsertionService.HasSourceWindow
                 ? Visibility.Visible : Visibility.Collapsed;
             PlayButton.Visibility = _serviceResult.Result != null
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -528,7 +614,9 @@ public sealed partial class ServiceResultItem : UserControl
 
     private async void OnReplaceClicked(object sender, RoutedEventArgs e)
     {
-        var text = _serviceResult?.Result?.TranslatedText;
+        var text = _serviceResult?.IsGrammarMode == true
+            ? _serviceResult.GrammarResult?.CorrectedText
+            : _serviceResult?.Result?.TranslatedText;
         if (string.IsNullOrEmpty(text))
             return;
 
@@ -621,8 +709,9 @@ public sealed partial class ServiceResultItem : UserControl
 
     private void OnCopyClicked(object sender, RoutedEventArgs e)
     {
-        var text = _serviceResult?.Result?.TranslatedText
-                ?? _serviceResult?.Error?.Message;
+        var text = _serviceResult?.IsGrammarMode == true
+            ? _serviceResult.GrammarResult?.CorrectedText ?? _serviceResult?.Error?.Message
+            : _serviceResult?.Result?.TranslatedText ?? _serviceResult?.Error?.Message;
         if (string.IsNullOrEmpty(text))
         {
             return;

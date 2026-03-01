@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Easydict.TranslationService.Models;
 using Easydict.WinUI.Views;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -57,6 +58,8 @@ public sealed class PopButtonService : IDisposable
     {
         _dispatcherQueue = dispatcherQueue;
         _mouseHookService = mouseHookService;
+
+        MiniWindowService.Instance.QueryModeChanged += OnMiniWindowModeChanged;
     }
 
     /// <summary>
@@ -160,6 +163,14 @@ public sealed class PopButtonService : IDisposable
         });
     }
 
+    private void OnMiniWindowModeChanged(QueryMode mode)
+    {
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            _popWindow?.UpdateMode(mode);
+        });
+    }
+
     private void EnsureWindowCreated()
     {
         if (_popWindow != null) return;
@@ -181,6 +192,9 @@ public sealed class PopButtonService : IDisposable
             _ => ElementTheme.Default
         };
         _popWindow.ApplyTheme(theme);
+
+        // Sync to the current mode (in case user already switched before first pop button show)
+        _popWindow.UpdateMode(MiniWindowService.Instance.CurrentQueryMode);
 
         Debug.WriteLine("[PopButtonService] PopButtonWindow created");
     }
@@ -231,6 +245,8 @@ public sealed class PopButtonService : IDisposable
     {
         if (_isDisposed) return;
         _isDisposed = true;
+
+        MiniWindowService.Instance.QueryModeChanged -= OnMiniWindowModeChanged;
 
         _selectionCts?.Cancel();
         _selectionCts?.Dispose();

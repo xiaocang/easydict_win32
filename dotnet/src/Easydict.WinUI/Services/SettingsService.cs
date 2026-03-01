@@ -282,6 +282,11 @@ public sealed class SettingsService
     public bool EnableDpiAwareness { get; set; } = true;
 
     /// <summary>
+    /// Whether grammar correction results should include explanations of changes.
+    /// </summary>
+    public bool GrammarIncludeExplanations { get; set; } = true;
+
+    /// <summary>
     /// Window width stored in DIPs (Device-Independent Pixels).
     /// Ensures consistent sizing across different DPI monitors.
     /// </summary>
@@ -497,6 +502,7 @@ public sealed class SettingsService
         ProxyEnabled = GetValue(nameof(ProxyEnabled), false);
         ProxyUri = GetValue(nameof(ProxyUri), "");
         ProxyBypassLocal = GetValue(nameof(ProxyBypassLocal), true);
+        GrammarIncludeExplanations = GetValue(nameof(GrammarIncludeExplanations), true);
     }
 
     public void Save()
@@ -622,6 +628,7 @@ public sealed class SettingsService
         _settings[nameof(ProxyEnabled)] = ProxyEnabled;
         _settings[nameof(ProxyUri)] = ProxyUri;
         _settings[nameof(ProxyBypassLocal)] = ProxyBypassLocal;
+        _settings[nameof(GrammarIncludeExplanations)] = GrammarIncludeExplanations;
 
         try
         {

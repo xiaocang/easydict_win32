@@ -105,6 +105,7 @@
         <!-- Wide Layout: Language + Button in one row -->
         <Grid x:Name="ActionBarWide" Grid.Row="2" Margin="0,4,0,4" Visibility="Visible">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />  <!-- Mode Toggle -->
                 <ColumnDefinition Width="Auto" />  <!-- Source Language -->
                 <ColumnDefinition Width="Auto" />  <!-- Swap Button -->
                 <ColumnDefinition Width="Auto" />  <!-- Target Language -->
@@ -112,10 +113,23 @@
                 <ColumnDefinition Width="*" />     <!-- Translate Button (Right-aligned) -->
             </Grid.ColumnDefinitions>
 
+            <!-- Query Mode Toggle -->
+            <Button x:Name="QueryModeButton"
+                    Grid.Column="0"
+                    Width="36" Height="36"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Click="OnQueryModeButtonClick"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Margin="0,0,8,0">
+                <TextBlock x:Name="QueryModeEmoji" FontSize="20" />
+            </Button>
+
             <!-- Source Language -->
             <ComboBox
                 x:Name="SourceLangCombo"
-                Grid.Column="0"
+                Grid.Column="1"
                 MinWidth="130"
                 SelectionChanged="OnSourceLanguageChanged"
                 VerticalAlignment="Center"
@@ -126,7 +140,7 @@
             <!-- Swap Languages Button -->
             <Button
                 x:Name="SwapLanguageButton"
-                Grid.Column="1"
+                Grid.Column="2"
                 Click="OnSwapLanguagesClicked"
                 Width="36" Height="36"
                 Padding="0"
@@ -142,7 +156,7 @@
             <!-- Target Language -->
             <ComboBox
                 x:Name="TargetLangCombo"
-                Grid.Column="2"
+                Grid.Column="3"
                 MinWidth="130"
                 SelectionChanged="OnTargetLanguageChanged"
                 VerticalAlignment="Center"
@@ -153,7 +167,7 @@
             <!-- Language Help Icon -->
             <FontIcon
                 x:Name="LangHelpIcon"
-                Grid.Column="3"
+                Grid.Column="4"
                 Glyph="&#xE897;"
                 FontSize="14"
                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
@@ -163,7 +177,7 @@
             <!-- Translate Button (Right) -->
             <Button
                 x:Name="TranslateButton"
-                Grid.Column="4"
+                Grid.Column="5"
                 Click="OnTranslateClicked"
                 Width="40"
                 Height="40"
@@ -191,6 +205,17 @@
 
         <!-- Narrow Layout: Stacked controls -->
         <StackPanel x:Name="ActionBarNarrow" Grid.Row="2" Spacing="4" Margin="0,4,0,4" Visibility="Collapsed">
+            <!-- Mode row -->
+            <Button x:Name="QueryModeButtonNarrow"
+                    HorizontalAlignment="Left"
+                    Width="36" Height="36"
+                    Padding="0"
+                    Click="OnQueryModeButtonClick"
+                    Background="Transparent"
+                    BorderThickness="0">
+                <TextBlock x:Name="QueryModeEmojiNarrow" FontSize="20" />
+            </Button>
+
             <!-- Language row -->
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -361,6 +386,7 @@
 
                 <!-- Title row -->
                 <TextBlock
+                    x:Name="ResultsTitleText"
                     Grid.Row="0"
                     Text="Translation Results"
                     FontSize="13"

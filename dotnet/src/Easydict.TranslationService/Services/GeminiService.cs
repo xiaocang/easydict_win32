@@ -9,7 +9,7 @@ namespace Easydict.TranslationService.Services;
 /// Google Gemini translation service.
 /// Uses the Gemini API with different protocol than OpenAI-compatible services.
 /// </summary>
-public sealed class GeminiService : BaseTranslationService, IStreamTranslationService
+public sealed class GeminiService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
 {
     private const string DefaultModel = "gemini-2.5-flash";
     private const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta";
@@ -220,6 +220,82 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
             if (!string.IsNullOrEmpty(text))
             {
                 yield return text;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Stream grammar correction output using Gemini API.
+    /// </summary>
+    public async IAsyncEnumerable<string> CorrectGrammarStreamAsync(
+        GrammarCorrectionRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ValidateConfiguration();
+
+        var userPrompt = request.Language == Language.Auto
+            ? $"Correct the grammar in the following text:\n\n{request.Text}"
+            : $"Correct the grammar in the following {request.Language.GetDisplayName()} text. The result MUST remain in {request.Language.GetDisplayName()}:\n\n{request.Text}";
+
+        var requestBody = new
+        {
+            contents = new[]
+            {
+                new
+                {
+                    role = "user",
+                    parts = new[] { new { text = userPrompt } }
+                }
+            },
+            systemInstruction = new
+            {
+                parts = new[] { new { text = request.IncludeExplanations
+                    ? BaseOpenAIService.GrammarCorrectionSystemPromptWithExplanation
+                    : BaseOpenAIService.GrammarCorrectionSystemPrompt } }
+            },
+            generationConfig = new
+            {
+                temperature = _temperature
+            }
+        };
+
+        var endpoint = $"{BaseUrl}/models/{_model}:streamGenerateContent?alt=sse&key={_apiKey}";
+
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(requestBody),
+            Encoding.UTF8,
+            "application/json");
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await HttpClient.SendAsync(
+                httpRequest,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new TranslationException($"Network error: {ex.Message}", ex)
+            {
+                ErrorCode = TranslationErrorCode.NetworkError,
+                ServiceId = ServiceId
+            };
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                throw CreateErrorFromResponse(response.StatusCode, errorBody);
+            }
+
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await foreach (var chunk in ParseGeminiStreamAsync(stream, cancellationToken).ConfigureAwait(false))
+            {
+                yield return chunk;
             }
         }
     }

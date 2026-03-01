@@ -406,6 +406,124 @@ public class ServiceQueryResultTests
 
     #endregion
 
+    #region Grammar Mode Tests
+
+    private static GrammarCorrectionResult CreateGrammarResult(
+        string original = "I goes to school.",
+        string corrected = "I go to school.") =>
+        new()
+        {
+            OriginalText = original,
+            CorrectedText = corrected,
+            ServiceName = "Test Grammar Service",
+            TimingMs = 150,
+        };
+
+    // --- HasResult (mirrors the OnControlPointerEntered visibility condition) ---
+
+    [Fact]
+    public void HasResult_WhenOnlyGrammarResultSet_ReturnsTrue()
+    {
+        // Arrange — Result and Error are null, only GrammarResult present
+        var sqr = new ServiceQueryResult
+        {
+            CurrentMode = QueryMode.GrammarCorrection,
+            GrammarResult = CreateGrammarResult()
+        };
+
+        // Assert
+        sqr.HasResult.Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasResult_WhenNothingSet_ReturnsFalse()
+    {
+        var sqr = new ServiceQueryResult();
+        sqr.HasResult.Should().BeFalse();
+    }
+
+    // --- IsGrammarMode ---
+
+    [Fact]
+    public void IsGrammarMode_WhenModeIsGrammarCorrection_ReturnsTrue()
+    {
+        var sqr = new ServiceQueryResult { CurrentMode = QueryMode.GrammarCorrection };
+        sqr.IsGrammarMode.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsGrammarMode_WhenModeIsTranslation_ReturnsFalse()
+    {
+        var sqr = new ServiceQueryResult { CurrentMode = QueryMode.Translation };
+        sqr.IsGrammarMode.Should().BeFalse();
+    }
+
+    // --- DisplayText in grammar mode ---
+
+    [Fact]
+    public void DisplayText_InGrammarMode_ReturnsCorrectedText()
+    {
+        var sqr = new ServiceQueryResult
+        {
+            CurrentMode = QueryMode.GrammarCorrection,
+            GrammarResult = CreateGrammarResult(corrected: "I go to school.")
+        };
+
+        sqr.DisplayText.Should().Be("I go to school.");
+    }
+
+    [Fact]
+    public void DisplayText_InGrammarMode_WithNoGrammarResult_ReturnsEmpty()
+    {
+        var sqr = new ServiceQueryResult { CurrentMode = QueryMode.GrammarCorrection };
+        sqr.DisplayText.Should().BeEmpty();
+    }
+
+    // --- PropertyChanged notifications when GrammarResult is set ---
+
+    [Fact]
+    public void GrammarResult_WhenSet_RaisesPropertyChangedForHasResult()
+    {
+        var sqr = new ServiceQueryResult { CurrentMode = QueryMode.GrammarCorrection };
+        var changed = new List<string?>();
+        sqr.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        sqr.GrammarResult = CreateGrammarResult();
+
+        changed.Should().Contain(nameof(ServiceQueryResult.HasResult));
+    }
+
+    [Fact]
+    public void GrammarResult_WhenSet_RaisesPropertyChangedForDisplayText()
+    {
+        var sqr = new ServiceQueryResult { CurrentMode = QueryMode.GrammarCorrection };
+        var changed = new List<string?>();
+        sqr.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        sqr.GrammarResult = CreateGrammarResult();
+
+        changed.Should().Contain(nameof(ServiceQueryResult.DisplayText));
+    }
+
+    // --- Reset clears GrammarResult ---
+
+    [Fact]
+    public void Reset_ClearsGrammarResult()
+    {
+        var sqr = new ServiceQueryResult
+        {
+            CurrentMode = QueryMode.GrammarCorrection,
+            GrammarResult = CreateGrammarResult()
+        };
+
+        sqr.Reset();
+
+        sqr.GrammarResult.Should().BeNull();
+        sqr.HasResult.Should().BeFalse();
+    }
+
+    #endregion
+
     #region Toggle Behavior Tests
 
     [Fact]

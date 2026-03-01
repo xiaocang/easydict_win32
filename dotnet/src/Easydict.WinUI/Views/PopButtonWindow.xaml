@@ -24,7 +24,6 @@
                 Background="Transparent"
                 BorderThickness="0"
                 CornerRadius="6"
-                ToolTipService.ToolTip="Translate selection"
                 Click="OnTranslateButtonClick"
                 PointerEntered="OnTranslateButtonPointerEntered"
                 PointerExited="OnTranslateButtonPointerExited"
@@ -32,7 +31,8 @@
                 PointerReleased="OnTranslateButtonPointerReleased"
                 PointerCanceled="OnTranslateButtonPointerCanceled"
                 PointerCaptureLost="OnTranslateButtonPointerCaptureLost">
-            <FontIcon Glyph="&#xE8C1;"
+            <FontIcon x:Name="ModeIcon"
+                      Glyph="&#xE8C1;"
                       FontSize="14"
                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
         </Button>

@@ -12,7 +12,7 @@ namespace Easydict.TranslationService.Services;
 /// Base class for OpenAI-compatible streaming translation services.
 /// Mirrors macOS BaseOpenAIService pattern with SSE streaming support.
 /// </summary>
-public abstract class BaseOpenAIService : BaseTranslationService, IStreamTranslationService
+public abstract class BaseOpenAIService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
 {
     /// <summary>
     /// Common set of languages supported by most LLM services.
@@ -52,6 +52,36 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         Language.Tamil,
         Language.Persian
     };
+
+    /// <summary>
+    /// System prompt for grammar correction mode (no explanation).
+    /// Instructs the model to output only the corrected text.
+    /// </summary>
+    internal const string GrammarCorrectionSystemPrompt = """
+        You are a grammar correction expert. Your task is to correct grammar, spelling, and punctuation errors in the text provided by the user.
+
+        Rules:
+        1. NEVER translate the text. The output must be in the exact same language as the input.
+        2. Keep the original meaning unchanged.
+        3. Only fix actual errors; do not rephrase, paraphrase, or "polish" correct text.
+        4. Output ONLY the corrected text with no additional commentary, labels, or formatting.
+        5. If the text has no errors, output it unchanged.
+        """;
+
+    /// <summary>
+    /// System prompt for grammar correction mode with explanations.
+    /// Instructs the model to output the corrected text followed by a list of changes.
+    /// </summary>
+    internal const string GrammarCorrectionSystemPromptWithExplanation = """
+        You are a grammar correction expert. Your task is to correct grammar, spelling, and punctuation errors in the text provided by the user.
+
+        Rules:
+        1. NEVER translate the text. The output must be in the exact same language as the input.
+        2. Keep the original meaning unchanged.
+        3. Only fix actual errors; do not rephrase, paraphrase, or "polish" correct text.
+        4. First output the fully corrected text, then on a new line output "---", then briefly list the key corrections you made.
+        5. If the text has no errors, output it unchanged followed by "---" and "No errors found."
+        """;
 
     /// <summary>
     /// System prompt from macOS StreamService.translationSystemPrompt.
@@ -234,6 +264,86 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
                 ServiceId = ServiceId
             };
         }
+    }
+
+    /// <summary>
+    /// Stream grammar correction output using OpenAI-compatible API.
+    /// Reuses the same SSE streaming infrastructure as translation.
+    /// </summary>
+    public virtual async IAsyncEnumerable<string> CorrectGrammarStreamAsync(
+        GrammarCorrectionRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ValidateConfiguration();
+
+        var messages = BuildGrammarCorrectionMessages(request);
+        var requestBody = BuildRequestBody(messages);
+
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(requestBody),
+            Encoding.UTF8,
+            "application/json");
+
+        if (!string.IsNullOrEmpty(ApiKey))
+        {
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
+        }
+
+        ConfigureHttpRequest(httpRequest);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await HttpClient.SendAsync(
+                httpRequest,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new TranslationException($"Network error: {ex.Message}", ex)
+            {
+                ErrorCode = TranslationErrorCode.NetworkError,
+                ServiceId = ServiceId
+            };
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                throw CreateErrorFromResponse(response.StatusCode, errorBody);
+            }
+
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await foreach (var chunk in SseParser.ParseStreamAsync(stream, cancellationToken).ConfigureAwait(false))
+            {
+                yield return chunk;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Build chat messages for grammar correction request.
+    /// Override to customize prompts.
+    /// </summary>
+    protected virtual List<ChatMessage> BuildGrammarCorrectionMessages(GrammarCorrectionRequest request)
+    {
+        var userPrompt = request.Language == Language.Auto
+            ? $"Correct the grammar in the following text:\n\n{request.Text}"
+            : $"Correct the grammar in the following {request.Language.GetDisplayName()} text. The result MUST remain in {request.Language.GetDisplayName()}:\n\n{request.Text}";
+
+        var systemPrompt = request.IncludeExplanations
+            ? GrammarCorrectionSystemPromptWithExplanation
+            : GrammarCorrectionSystemPrompt;
+
+        return new List<ChatMessage>
+        {
+            new(ChatRole.System, systemPrompt),
+            new(ChatRole.User, userPrompt)
+        };
     }
 
 }

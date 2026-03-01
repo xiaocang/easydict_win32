@@ -849,4 +849,36 @@
   <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
     <value>Enter/ダブルクリックで確定  |  矢印キーで微調整  |  右クリック/Esc でやり直し</value>
   </data>
+
+  <!-- Grammar Correction Mode -->
+  <data name="QueryMode_Translation" xml:space="preserve">
+    <value>翻訳</value>
+  </data>
+  <data name="QueryMode_GrammarCorrection" xml:space="preserve">
+    <value>文法チェック</value>
+  </data>
+  <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
+    <value>{0}（クリックして{1}に切り替え）</value>
+  </data>
+  <data name="InputPlaceholder_Grammar" xml:space="preserve">
+    <value>文法をチェックするテキストを入力...</value>
+  </data>
+  <data name="ResultsTitle_Grammar" xml:space="preserve">
+    <value>文法チェック結果</value>
+  </data>
+  <data name="GrammarPlaceholder" xml:space="preserve">
+    <value>文法チェック結果がここに表示されます...</value>
+  </data>
+  <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
+    <value>文法チェック</value>
+  </data>
+  <data name="GrammarResult_Original" xml:space="preserve">
+    <value>原文：</value>
+  </data>
+  <data name="GrammarResult_Changes" xml:space="preserve">
+    <value>変更点：</value>
+  </data>
+  <data name="GrammarResult_NoIssues" xml:space="preserve">
+    <value>文法の問題は見つかりませんでした。</value>
+  </data>
 </root>

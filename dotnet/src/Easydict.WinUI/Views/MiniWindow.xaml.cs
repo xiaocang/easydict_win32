@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI;
@@ -60,6 +62,7 @@ public sealed partial class MiniWindow : Window
     private bool _isQuerying;
     private bool _suppressTargetLanguageSelectionChanged;
     private bool _suppressSourceLanguageSelectionChanged;
+    private QueryMode _currentMode = QueryMode.Translation;
     private TitleBarDragRegionHelper? _titleBarHelper;
     private DateTime _lastShowTime = DateTime.MinValue;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _resizeThrottleTimer;
@@ -147,6 +150,9 @@ public sealed partial class MiniWindow : Window
             _suppressTargetLanguageSelectionChanged = false;
         }
 
+        // Update query mode button emoji and tooltip
+        UpdateQueryModeButton();
+
         // Placeholders
         InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
 
@@ -157,6 +163,54 @@ public sealed partial class MiniWindow : Window
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
         ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
         ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
+    }
+
+    private void UpdateQueryModeButton()
+    {
+        bool isGrammar = _currentMode == QueryMode.GrammarCorrection;
+        QueryModeEmoji.Text = isGrammar ? "✏️" : "🌐";
+
+        var loc = LocalizationService.Instance;
+        var currentName = loc.GetString(isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
+            ?? (isGrammar ? "Grammar Check" : "Translate");
+        var otherName = loc.GetString(!isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
+            ?? (!isGrammar ? "Grammar Check" : "Translate");
+        var fmt = loc.GetString("QueryModeButton_SwitchTooltip") ?? "{0} — click to switch to {1}";
+        ToolTipService.SetToolTip(QueryModeButton, string.Format(fmt, currentName, otherName));
+    }
+
+    private void OnQueryModeButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (!_isLoaded) return;
+
+        _currentMode = _currentMode == QueryMode.GrammarCorrection
+            ? QueryMode.Translation
+            : QueryMode.GrammarCorrection;
+
+        UpdateQueryModeButton();
+        MiniWindowService.Instance.NotifyQueryModeChanged(_currentMode);
+
+        var loc = LocalizationService.Instance;
+        if (_currentMode == QueryMode.GrammarCorrection)
+        {
+            TargetLangCombo.Visibility = Visibility.Collapsed;
+            SwapButton.Visibility = Visibility.Collapsed;
+
+            InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder_Grammar")
+                ?? "Enter text to check grammar...";
+            ToolTipService.SetToolTip(TranslateButton,
+                loc.GetString("TranslateButton_Grammar_Tooltip") ?? "Check Grammar");
+        }
+        else
+        {
+            TargetLangCombo.Visibility = Visibility.Visible;
+            SwapButton.Visibility = Visibility.Visible;
+
+            InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
+            ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
+        }
+
+        InitializeServiceResults();
     }
 
     /// <summary>
@@ -326,6 +380,11 @@ public sealed partial class MiniWindow : Window
                 ? service.DisplayName
                 : serviceId;
 
+            // In grammar mode, only show LLM services that implement IGrammarCorrectionService
+            if (_currentMode == QueryMode.GrammarCorrection &&
+                service is not IGrammarCorrectionService)
+                continue;
+
             // Get EnabledQuery setting (default true if not found)
             var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
 
@@ -334,7 +393,8 @@ public sealed partial class MiniWindow : Window
                 ServiceId = serviceId,
                 ServiceDisplayName = displayName,
                 EnabledQuery = enabledQuery,
-                IsExpanded = enabledQuery // Manual-query services start collapsed
+                IsExpanded = enabledQuery, // Manual-query services start collapsed
+                CurrentMode = _currentMode
             };
 
             var control = new ServiceResultItem
@@ -394,6 +454,19 @@ public sealed partial class MiniWindow : Window
             var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
                 ? _lastDetectedLanguage
                 : await Task.Run(() => _detectionService.DetectAsync(inputText, ct));
+
+            // Grammar mode: route to grammar correction instead of translation
+            if (_currentMode == QueryMode.GrammarCorrection)
+            {
+                var grammarRequest = new GrammarCorrectionRequest
+                {
+                    Text = inputText,
+                    Language = detectedLanguage,
+                    IncludeExplanations = _settings.GrammarIncludeExplanations,
+                };
+                await ExecuteGrammarCorrectionForServiceAsync(serviceResult, grammarRequest, ct);
+                return;
+            }
 
             // Get target language
             var targetLanguage = GetTargetLanguage();
@@ -787,6 +860,13 @@ public sealed partial class MiniWindow : Window
                 }
             }
 
+            // Route based on mode
+            if (_currentMode == QueryMode.GrammarCorrection)
+            {
+                await StartGrammarCorrectionInternalAsync(inputText, detectionService, ct);
+                return;
+            }
+
             // Detect language (only when source = Auto)
             // Run detection on thread pool to avoid blocking UI thread
             var sourceLanguage = GetSourceLanguage();
@@ -973,6 +1053,161 @@ public sealed partial class MiniWindow : Window
             serviceResult.IsLoading = false;
             serviceResult.IsStreaming = false;
             serviceResult.StreamingText = "";
+        }
+    }
+
+    /// <summary>
+    /// Execute grammar correction for all enabled LLM services in parallel.
+    /// Bypasses the translation pipeline entirely.
+    /// </summary>
+    private async Task StartGrammarCorrectionInternalAsync(
+        string inputText,
+        LanguageDetectionService detectionService,
+        CancellationToken ct)
+    {
+        // Optional: detect language for prompt hint only
+        var detectedLang = TranslationLanguage.Auto;
+        var sourceLanguage = GetSourceLanguage();
+        if (sourceLanguage != TranslationLanguage.Auto)
+        {
+            detectedLang = sourceLanguage;
+        }
+        else
+        {
+            try
+            {
+                detectedLang = await Task.Run(() => detectionService.DetectAsync(inputText, ct));
+                UpdateDetectedLanguageDisplay(detectedLang);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                DetectedLangText.Text = "";
+                DetectedLangText.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        var request = new GrammarCorrectionRequest
+        {
+            Text = inputText,
+            Language = detectedLang,
+            IncludeExplanations = _settings.GrammarIncludeExplanations,
+        };
+
+        var tasks = _serviceResults
+            .Where(sr => sr.EnabledQuery)
+            .Select(sr => ExecuteGrammarCorrectionForServiceAsync(sr, request, ct))
+            .ToArray();
+
+        var taskResults = await Task.WhenAll(tasks);
+
+        var successCount = taskResults.Count(r => r == true);
+        var errorCount = taskResults.Count(r => r == false);
+
+        var loc = LocalizationService.Instance;
+        StatusText.Text = successCount > 0
+            ? string.Format(loc.GetString("ServiceResultsComplete") ?? "{0} service(s) completed", successCount)
+            : errorCount > 0 ? (loc.GetString("TranslationFailed") ?? "Check failed") : "";
+    }
+
+    /// <summary>
+    /// Execute grammar correction for a single service with streaming.
+    /// Returns true on success, false on error, null on cancelled/skipped.
+    /// </summary>
+    private async Task<bool?> ExecuteGrammarCorrectionForServiceAsync(
+        ServiceQueryResult serviceResult,
+        GrammarCorrectionRequest request,
+        CancellationToken ct)
+    {
+        serviceResult.MarkQueried();
+
+        try
+        {
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            if (!handle.Manager.Services.TryGetValue(serviceResult.ServiceId, out var service)
+                || service is not IGrammarCorrectionService grammarService)
+                return null;
+
+            var stopwatch = Stopwatch.StartNew();
+            var sb = new StringBuilder();
+            var lastUpdateTime = DateTime.UtcNow;
+            const int throttleMs = 50;
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = true;
+                serviceResult.StreamingText = "";
+            });
+
+            await foreach (var chunk in grammarService
+                .CorrectGrammarStreamAsync(request, ct).ConfigureAwait(false))
+            {
+                sb.Append(chunk);
+
+                var now = DateTime.UtcNow;
+                if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
+                {
+                    var currentText = sb.ToString();
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        serviceResult.StreamingText = currentText;
+                        RequestResize();
+                    });
+                    lastUpdateTime = now;
+                }
+            }
+
+            stopwatch.Stop();
+            var rawOutput = sb.ToString();
+            var grammarResult = GrammarCorrectionParser.Parse(
+                rawOutput, request.Text, serviceResult.ServiceDisplayName,
+                stopwatch.ElapsedMilliseconds);
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                serviceResult.IsStreaming = false;
+                serviceResult.StreamingText = "";
+                serviceResult.GrammarResult = grammarResult;
+                RequestResize();
+            });
+
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = false;
+                serviceResult.StreamingText = "";
+                serviceResult.ClearQueried();
+            });
+            return null;
+        }
+        catch (Exception ex)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                serviceResult.Error = new TranslationException(ex.Message, ex)
+                {
+                    ErrorCode = TranslationErrorCode.Unknown,
+                    ServiceId = serviceResult.ServiceId
+                };
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = false;
+                serviceResult.StreamingText = "";
+                RequestResize();
+            });
+            return false;
         }
     }
 

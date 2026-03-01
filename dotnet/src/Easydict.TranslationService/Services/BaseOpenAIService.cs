@@ -54,8 +54,8 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     };
 
     /// <summary>
-    /// System prompt for grammar correction mode.
-    /// Instructs the model to correct grammar and explain changes using structured markers.
+    /// System prompt for grammar correction mode (no explanation).
+    /// Instructs the model to output only the corrected text.
     /// </summary>
     internal const string GrammarCorrectionSystemPrompt = """
         You are a grammar correction expert. Your task is to correct grammar, spelling, and punctuation errors in the text provided by the user.
@@ -66,6 +66,21 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         3. Only fix actual errors; do not rephrase, paraphrase, or "polish" correct text.
         4. Output ONLY the corrected text with no additional commentary, labels, or formatting.
         5. If the text has no errors, output it unchanged.
+        """;
+
+    /// <summary>
+    /// System prompt for grammar correction mode with explanations.
+    /// Instructs the model to output the corrected text followed by a list of changes.
+    /// </summary>
+    internal const string GrammarCorrectionSystemPromptWithExplanation = """
+        You are a grammar correction expert. Your task is to correct grammar, spelling, and punctuation errors in the text provided by the user.
+
+        Rules:
+        1. NEVER translate the text. The output must be in the exact same language as the input.
+        2. Keep the original meaning unchanged.
+        3. Only fix actual errors; do not rephrase, paraphrase, or "polish" correct text.
+        4. First output the fully corrected text, then on a new line output "---", then briefly list the key corrections you made.
+        5. If the text has no errors, output it unchanged followed by "---" and "No errors found."
         """;
 
     /// <summary>
@@ -320,9 +335,13 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             ? $"Correct the grammar in the following text:\n\n{request.Text}"
             : $"Correct the grammar in the following {request.Language.GetDisplayName()} text. The result MUST remain in {request.Language.GetDisplayName()}:\n\n{request.Text}";
 
+        var systemPrompt = request.IncludeExplanations
+            ? GrammarCorrectionSystemPromptWithExplanation
+            : GrammarCorrectionSystemPrompt;
+
         return new List<ChatMessage>
         {
-            new(ChatRole.System, GrammarCorrectionSystemPrompt),
+            new(ChatRole.System, systemPrompt),
             new(ChatRole.User, userPrompt)
         };
     }

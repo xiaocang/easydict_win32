@@ -462,7 +462,7 @@ public sealed partial class MiniWindow : Window
                 {
                     Text = inputText,
                     Language = detectedLanguage,
-                    IncludeExplanations = true,
+                    IncludeExplanations = _settings.GrammarIncludeExplanations,
                 };
                 await ExecuteGrammarCorrectionForServiceAsync(serviceResult, grammarRequest, ct);
                 return;
@@ -1094,7 +1094,7 @@ public sealed partial class MiniWindow : Window
         {
             Text = inputText,
             Language = detectedLang,
-            IncludeExplanations = true,
+            IncludeExplanations = _settings.GrammarIncludeExplanations,
         };
 
         var tasks = _serviceResults

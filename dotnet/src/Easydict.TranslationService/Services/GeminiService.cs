@@ -249,7 +249,9 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
             },
             systemInstruction = new
             {
-                parts = new[] { new { text = BaseOpenAIService.GrammarCorrectionSystemPrompt } }
+                parts = new[] { new { text = request.IncludeExplanations
+                    ? BaseOpenAIService.GrammarCorrectionSystemPromptWithExplanation
+                    : BaseOpenAIService.GrammarCorrectionSystemPrompt } }
             },
             generationConfig = new
             {

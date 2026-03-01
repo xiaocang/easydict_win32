@@ -502,6 +502,7 @@ public sealed class SettingsService
         ProxyEnabled = GetValue(nameof(ProxyEnabled), false);
         ProxyUri = GetValue(nameof(ProxyUri), "");
         ProxyBypassLocal = GetValue(nameof(ProxyBypassLocal), true);
+        GrammarIncludeExplanations = GetValue(nameof(GrammarIncludeExplanations), true);
     }
 
     public void Save()
@@ -627,6 +628,7 @@ public sealed class SettingsService
         _settings[nameof(ProxyEnabled)] = ProxyEnabled;
         _settings[nameof(ProxyUri)] = ProxyUri;
         _settings[nameof(ProxyBypassLocal)] = ProxyBypassLocal;
+        _settings[nameof(GrammarIncludeExplanations)] = GrammarIncludeExplanations;
 
         try
         {

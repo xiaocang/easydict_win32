@@ -426,7 +426,7 @@ namespace Easydict.WinUI.Views
                     {
                         Text = inputText,
                         Language = detectedLanguage,
-                        IncludeExplanations = true,
+                        IncludeExplanations = _settings.GrammarIncludeExplanations,
                     };
                     await ExecuteGrammarCorrectionForServiceAsync(serviceResult, grammarRequest, ct);
                     return;
@@ -992,7 +992,7 @@ namespace Easydict.WinUI.Views
             {
                 Text = inputText,
                 Language = detectedLang,
-                IncludeExplanations = true,
+                IncludeExplanations = _settings.GrammarIncludeExplanations,
             };
 
             // Parallel-execute all grammar-capable services

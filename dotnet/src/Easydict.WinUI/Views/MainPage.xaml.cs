@@ -1837,6 +1837,7 @@ namespace Easydict.WinUI.Views
             catch (OperationCanceledException)
             {
                 LongDocStatusText.Text = "Queue canceled.";
+                SetLongDocButtonState(false);
                 SetLongDocTaskUiState(false);
                 _longDocQueueCts?.Dispose();
                 _longDocQueueCts = null;
@@ -1862,6 +1863,7 @@ namespace Easydict.WinUI.Views
                         LongDocStatusText.Text = $"Queue failed: {task.Exception?.GetBaseException().Message}";
                     }
 
+                    SetLongDocButtonState(false);
                     SetLongDocTaskUiState(false);
                     _longDocQueueTask = null;
                     _longDocQueueCts?.Dispose();
@@ -2240,6 +2242,7 @@ namespace Easydict.WinUI.Views
             finally
             {
                 CompleteLongDocSingleTask();
+                SetLongDocButtonState(false);
                 SetLongDocTaskUiState(false);
             }
         }
@@ -2357,6 +2360,7 @@ namespace Easydict.WinUI.Views
             finally
             {
                 CompleteLongDocSingleTask();
+                SetLongDocButtonState(false);
                 SetLongDocTaskUiState(false);
             }
         }

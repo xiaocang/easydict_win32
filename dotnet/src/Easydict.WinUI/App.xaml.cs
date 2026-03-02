@@ -38,40 +38,9 @@ namespace Easydict.WinUI
 
         public App()
         {
-#if DEBUG
-            // Log FIRST THING to see if constructor runs
-            try
-            {
-                var tempLog = Path.Combine(Path.GetTempPath(), "Easydict-constructor.log");
-                File.AppendAllText(tempLog, $"[{DateTime.UtcNow:O}] App constructor started\n");
-            }
-            catch { }
-#endif
-
             // NOTE: Language is managed by LocalizationService using ResourceContext.
             // No early initialization needed - ResourceContext can be updated at runtime.
-#if DEBUG
-            try
-            {
-                File.AppendAllText(Path.Combine(Path.GetTempPath(), "Easydict-constructor.log"),
-                    $"[{DateTime.UtcNow:O}] Calling InitializeComponent\n");
-                this.InitializeComponent();
-                File.AppendAllText(Path.Combine(Path.GetTempPath(), "Easydict-constructor.log"),
-                    $"[{DateTime.UtcNow:O}] InitializeComponent completed\n");
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    File.AppendAllText(Path.Combine(Path.GetTempPath(), "Easydict-constructor.log"),
-                        $"[{DateTime.UtcNow:O}] InitializeComponent FAILED: {ex}\n");
-                }
-                catch { }
-                throw;
-            }
-#else
             this.InitializeComponent();
-#endif
 
             this.UnhandledException += OnUnhandledException;
         }
@@ -442,10 +411,6 @@ namespace Easydict.WinUI
             // Apply saved theme setting
             ApplyTheme(settings.AppTheme);
 
-#if DEBUG
-            // Debug mode: automatically open mini window on startup
-            MiniWindowService.Instance.Show();
-#endif
         }
 
         private void OnShowWindowHotkey()

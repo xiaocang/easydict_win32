@@ -860,6 +860,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0}（點擊切換為{1}）</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>長文檔翻譯</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>輸入文字以檢查語法...</value>
   </data>

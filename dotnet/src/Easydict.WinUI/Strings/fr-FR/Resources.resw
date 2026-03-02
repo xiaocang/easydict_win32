@@ -860,6 +860,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0} — cliquer pour passer à {1}</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>Document long</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>Saisissez le texte à vérifier...</value>
   </data>

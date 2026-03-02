@@ -863,6 +863,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0}（点击切换为{1}）</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>长文档翻译</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>输入文本以检查语法...</value>
   </data>

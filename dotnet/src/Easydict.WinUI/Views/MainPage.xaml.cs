@@ -206,8 +206,8 @@ namespace Easydict.WinUI.Views
                 _suppressTargetLanguageSelectionChanged = false;
             }
 
-            // Update query mode button emoji and tooltip
-            UpdateQueryModeButton();
+            // Apply mode state (emoji, subtitle, menu item texts)
+            ApplyModeState();
 
             // Input placeholder
             InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
@@ -244,35 +244,43 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(LongDocPageRangeHint, loc.GetString("LongDoc_PageRangeHelpTip"));
         }
 
-        private void UpdateQueryModeButton()
+        /// <summary>
+        /// Apply all UI state for the current mode (emoji, subtitle, content visibility, grammar-specific controls).
+        /// </summary>
+        private void ApplyModeState()
         {
-            bool isGrammar = _currentMode == QueryMode.GrammarCorrection;
-            var emoji = isGrammar ? "✏️" : "🌐";
-            QueryModeEmoji.Text = emoji;
-            QueryModeEmojiNarrow.Text = emoji;
-
             var loc = LocalizationService.Instance;
-            var currentName = loc.GetString(isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
-                ?? (isGrammar ? "Grammar Check" : "Translate");
-            var otherName = loc.GetString(!isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
-                ?? (!isGrammar ? "Grammar Check" : "Translate");
-            var fmt = loc.GetString("QueryModeButton_SwitchTooltip") ?? "{0} — click to switch to {1}";
-            var tooltip = string.Format(fmt, currentName, otherName);
-            ToolTipService.SetToolTip(QueryModeButton, tooltip);
-            ToolTipService.SetToolTip(QueryModeButtonNarrow, tooltip);
-        }
 
-        private void OnQueryModeButtonClick(object sender, RoutedEventArgs e)
-        {
-            if (!_isLoaded) return;
+            // Update header emoji
+            ModeEmojiIcon.Text = _currentMode switch
+            {
+                QueryMode.GrammarCorrection => "✏️",
+                QueryMode.LongDocument => "📄",
+                _ => "🌐"
+            };
 
-            _currentMode = _currentMode == QueryMode.GrammarCorrection
-                ? QueryMode.Translation
-                : QueryMode.GrammarCorrection;
+            // Update subtitle
+            switch (_currentMode)
+            {
+                case QueryMode.GrammarCorrection:
+                    ModeSubtitle.Text = loc.GetString("QueryMode_GrammarCorrection") ?? "Grammar Correction";
+                    ModeSubtitle.Visibility = Visibility.Visible;
+                    break;
+                case QueryMode.LongDocument:
+                    ModeSubtitle.Text = loc.GetString("Mode_LongDocument") ?? "Long Document";
+                    ModeSubtitle.Visibility = Visibility.Visible;
+                    break;
+                default:
+                    ModeSubtitle.Visibility = Visibility.Collapsed;
+                    break;
+            }
 
-            UpdateQueryModeButton();
+            // Toggle main content areas
+            var isLongDoc = _currentMode == QueryMode.LongDocument;
+            QuickTranslateContent.Visibility = isLongDoc ? Visibility.Collapsed : Visibility.Visible;
+            LongDocContent.Visibility = isLongDoc ? Visibility.Visible : Visibility.Collapsed;
 
-            var loc = LocalizationService.Instance;
+            // Grammar-specific UI (only relevant when not in LongDoc mode)
             if (_currentMode == QueryMode.GrammarCorrection)
             {
                 TargetLangCombo.Visibility = Visibility.Collapsed;
@@ -293,7 +301,7 @@ namespace Easydict.WinUI.Views
                 ToolTipService.SetToolTip(TranslateButtonNarrow,
                     loc.GetString("TranslateButton_Grammar_Tooltip") ?? "Check Grammar");
             }
-            else
+            else if (_currentMode == QueryMode.Translation)
             {
                 TargetLangCombo.Visibility = Visibility.Visible;
                 SwapLanguageButton.Visibility = Visibility.Visible;
@@ -310,7 +318,16 @@ namespace Easydict.WinUI.Views
                 ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
             }
 
-            InitializeServiceResults();
+            // Localize menu item texts
+            ModeTranslationItem.Text = "🌐  " + (loc.GetString("QueryMode_Translation") ?? "Quick Translation");
+            ModeGrammarItem.Text = "✏️  " + (loc.GetString("QueryMode_GrammarCorrection") ?? "Grammar Correction");
+            ModeLongDocItem.Text = "📄  " + (loc.GetString("Mode_LongDocument") ?? "Long Document");
+
+            // Re-initialize service results (grammar mode filters to grammar-capable services)
+            if (!isLongDoc)
+            {
+                InitializeServiceResults();
+            }
         }
 
         private void OnClipboardTextReceived(string text)
@@ -327,6 +344,15 @@ namespace Easydict.WinUI.Views
                 {
                     return;
                 }
+
+                // Switch out of Long Document mode for quick translate
+                if (_currentMode == QueryMode.LongDocument)
+                {
+                    _currentMode = QueryMode.Translation;
+                    ModeTranslationItem.IsChecked = true;
+                    ApplyModeState();
+                }
+
                 InputTextBox.Text = text;
                 await StartQueryTrackedAsync();
             });
@@ -2367,15 +2393,21 @@ namespace Easydict.WinUI.Views
 
         private void OnModeMenuItemClick(object sender, RoutedEventArgs e)
         {
-            if (QuickTranslateContent is null) return;
+            if (!_isLoaded) return;
 
-            var isLongDoc = ReferenceEquals(sender, LongDocMenuItem);
-            QuickTranslateMenuItem.IsChecked = !isLongDoc;
-            LongDocMenuItem.IsChecked = isLongDoc;
+            QueryMode newMode;
+            if (ReferenceEquals(sender, ModeTranslationItem))
+                newMode = QueryMode.Translation;
+            else if (ReferenceEquals(sender, ModeGrammarItem))
+                newMode = QueryMode.GrammarCorrection;
+            else if (ReferenceEquals(sender, ModeLongDocItem))
+                newMode = QueryMode.LongDocument;
+            else
+                return;
 
-            QuickTranslateContent.Visibility = isLongDoc ? Visibility.Collapsed : Visibility.Visible;
-            LongDocContent.Visibility = isLongDoc ? Visibility.Visible : Visibility.Collapsed;
-            ModeSubtitle.Visibility = isLongDoc ? Visibility.Visible : Visibility.Collapsed;
+            if (newMode == _currentMode) return;
+            _currentMode = newMode;
+            ApplyModeState();
         }
 
         private void OnSettingsClicked(object sender, RoutedEventArgs e)
@@ -2388,6 +2420,13 @@ namespace Easydict.WinUI.Views
         /// </summary>
         public void SetTextAndTranslate(string text)
         {
+            // Switch out of Long Document mode for quick translate
+            if (_currentMode == QueryMode.LongDocument)
+            {
+                _currentMode = QueryMode.Translation;
+                ModeTranslationItem.IsChecked = true;
+                ApplyModeState();
+            }
             _targetLanguageSelector.Reset();
             InputTextBox.Text = text;
             _ = StartQueryTrackedAsync();

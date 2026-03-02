@@ -689,6 +689,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0} — klik untuk beralih ke {1}</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>Dokumen Panjang</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>Enter text to check grammar...</value>
   </data>

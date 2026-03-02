@@ -171,11 +171,11 @@
                         Visibility="Visible">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"
-                                MinWidth="45"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Query Mode Toggle -->
@@ -198,7 +198,7 @@
                         x:Name="SourceLangCombo"
                         Grid.Column="1"
                         MinWidth="130"
-                        MaxWidth="160"
+                        MaxWidth="200"
                         SelectionChanged="OnSourceLanguageChanged"
                         VerticalAlignment="Center"
                         ToolTipService.ToolTip="Source Language"/>
@@ -226,7 +226,7 @@
                         x:Name="TargetLangCombo"
                         Grid.Column="3"
                         MinWidth="130"
-                        MaxWidth="160"
+                        MaxWidth="200"
                         SelectionChanged="OnTargetLanguageChanged"
                         VerticalAlignment="Center"
                         ToolTipService.ToolTip="Target Language"/>
@@ -244,13 +244,12 @@
                     <!-- Translate Button (Right) -->
                     <Button
                         x:Name="TranslateButton"
-                        Grid.Column="4"
+                        Grid.Column="5"
                         Click="OnTranslateClicked"
                         Width="40"
                         Height="40"
                         Padding="0"
                         CornerRadius="20"
-                        HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Background="{ThemeResource AccentBrush}"
                         ToolTipService.ToolTip="Translate">
@@ -277,6 +276,18 @@
                         Spacing="4"
                         Margin="0,4,0,4"
                         Visibility="Collapsed">
+                    <!-- Mode row -->
+                    <Button x:Name="QueryModeButtonNarrow"
+                            HorizontalAlignment="Left"
+                            Width="36" Height="36"
+                            Padding="0"
+                            Click="OnQueryModeButtonClick"
+                            Background="Transparent"
+                            BorderThickness="0">
+                        <TextBlock x:Name="QueryModeEmojiNarrow" FontSize="20" />
+                    </Button>
+
+                    <!-- Language row -->
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>

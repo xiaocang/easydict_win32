@@ -1,9 +1,6 @@
-using System;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Microsoft.Extensions.Caching.Memory;

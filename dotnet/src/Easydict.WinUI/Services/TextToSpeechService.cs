@@ -1,8 +1,8 @@
 using System.Diagnostics;
+using Easydict.TranslationService.Models;
 using Windows.Media.SpeechSynthesis;
 using Windows.Media.Playback;
 using Windows.Media.Core;
-using Easydict.TranslationService.Models;
 
 namespace Easydict.WinUI.Services;
 

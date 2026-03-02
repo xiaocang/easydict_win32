@@ -860,6 +860,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0}（クリックして{1}に切り替え）</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>長文翻訳</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>文法をチェックするテキストを入力...</value>
   </data>
@@ -880,5 +883,143 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>文法の問題は見つかりませんでした。</value>
+  </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>ドキュメント出力モード</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>出力形式を選択します。バイリンガルモードは原文と翻訳を交互に配置します。</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>単言語（デフォルト）</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>バイリンガル（交互配置）</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>両方</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>バイリンガルPDF：交互ページ。Markdown/テキスト：原文+翻訳ブロック。</value>
+  </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>翻訳同時実行数</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>長文ドキュメント翻訳の最大並列リクエスト数。値を大きくすると翻訳速度が向上しますが、APIレート制限に達する可能性があります。</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>推奨：LLMサービスは4、厳格なレート制限のある無料APIは1-2。</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK フォント</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>PDF出力で中国語・日本語・韓国語のテキストを正しくレンダリングするためにCJKフォントをダウンロードします。</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>CJKフォントをダウンロード</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>削除</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Noto Sans CJKをダウンロード（言語あたり約16MB）。PDFオーバーレイレンダリングに必要です。</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>数式検出</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>高度な数式検出はフォント名とUnicode数学文字を使用して数式を翻訳から保護します。</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>フォントパターン（正規表現）</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>文字パターン（正規表現）</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>空欄にすると組み込みパターンを使用します。フォントパターンはPDFフォント名に一致（Level 2）。文字パターンはUnicode範囲に一致（Level 3）。</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>翻訳キャッシュ</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>翻訳済みセグメントをローカルにキャッシュして、繰り返しの翻訳を高速化しAPI費用を節約します。</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>キャッシュをクリア</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>キャッシュされた翻訳はローカルのSQLiteに保存されます。翻訳が古くなった場合はクリアしてください。</value>
+  </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>ページ範囲</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>翻訳するページを指定します。空欄の場合はすべてのページを翻訳します。</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>形式："1-5"（範囲）、"3"（単一ページ）、"1-3,5,7-10"（混合）。空欄または "all" = 全ページ翻訳。</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>カスタム翻訳プロンプト</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>LLMベースの翻訳サービス（OpenAI、DeepSeek、Gemini等）にカスタム指示を追加します。</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>これらの指示はLLMサービスのシステムプロンプトに追加されます。非LLMサービス（Google、DeepL等）には影響しません。</value>
+  </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>参照...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>参照...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>ファイルが選択されていません</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0} 個のファイルを選択</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>出力: {filename}_translated.pdf</value>
+  </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>設定でサービスを構成</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>レイアウトモデルをダウンロード</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>レイアウト検出モデル（約75MB）はドキュメント構造の認識を改善します。ダウンロードしますか？</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>レイアウトモデルのダウンロードに失敗しました。基本レイアウト検出で翻訳を続行します。</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>入力形式を選択：テキスト（プレーンテキスト）、Markdown、または PDF。PDF モードは ML レイアウト検出をサポートし、精度が向上します。</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>モノ：ターゲット言語のみ。バイリンガル：ソースとターゲットを並列表示。両方：モノとバイリンガルの両方を生成します。</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>同時に翻訳するページ数。値が大きいほど高速ですが、API クォータの消費が増えます。推奨：2-4。</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>翻訳するページを指定（PDF のみ）。例：1-3, 5, 7-10。空欄の場合はすべてのページを翻訳します。</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>CJKフォントをダウンロード</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>PDFで{0}を正しく表示するにはCJKフォント（約16MB）が必要です。ダウンロードしますか？</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>ダウンロード</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>スキップ</value>
   </data>
 </root>

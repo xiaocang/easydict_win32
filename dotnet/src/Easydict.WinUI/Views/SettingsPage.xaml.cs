@@ -9,8 +9,6 @@ using Easydict.TranslationService.Services;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
 namespace Easydict.WinUI.Views;
@@ -170,6 +168,45 @@ public sealed partial class SettingsPage : Page
         if (FreeServicesDescriptionText != null)
             FreeServicesDescriptionText.Text = loc.GetString("FreeServicesDescription");
 
+        // CJK Font section
+        if (CjkFontHeaderText != null)
+            CjkFontHeaderText.Text = loc.GetString("CjkFont_Title");
+        if (CjkFontDescriptionText != null)
+            CjkFontDescriptionText.Text = loc.GetString("CjkFont_Description");
+        CjkFontDownloadButton.Content = loc.GetString("CjkFont_Download");
+        CjkFontDeleteButton.Content = loc.GetString("CjkFont_Delete");
+        if (CjkFontNoteText != null)
+            CjkFontNoteText.Text = loc.GetString("CjkFont_Note");
+
+        // Formula Detection section
+        if (FormulaDetectionHeaderText != null)
+            FormulaDetectionHeaderText.Text = loc.GetString("FormulaDetection_Title");
+        if (FormulaDetectionDescriptionText != null)
+            FormulaDetectionDescriptionText.Text = loc.GetString("FormulaDetection_Description");
+        FormulaFontPatternBox.Header = loc.GetString("FormulaDetection_FontPattern");
+        FormulaCharPatternBox.Header = loc.GetString("FormulaDetection_CharPattern");
+        if (FormulaDetectionNoteText != null)
+            FormulaDetectionNoteText.Text = loc.GetString("FormulaDetection_Note");
+
+        // Translation Cache section
+        if (TranslationCacheHeaderText != null)
+            TranslationCacheHeaderText.Text = loc.GetString("TranslationCache_Title");
+        if (TranslationCacheDescriptionText != null)
+            TranslationCacheDescriptionText.Text = loc.GetString("TranslationCache_Description");
+        TranslationCacheToggle.Header = loc.GetString("TranslationCache_Title");
+        ClearCacheButton.Content = loc.GetString("TranslationCache_Clear");
+        if (TranslationCacheNoteText != null)
+            TranslationCacheNoteText.Text = loc.GetString("TranslationCache_Note");
+
+        // Custom Prompt section
+        if (CustomPromptHeaderText != null)
+            CustomPromptHeaderText.Text = loc.GetString("CustomPrompt_Title");
+        if (CustomPromptDescriptionText != null)
+            CustomPromptDescriptionText.Text = loc.GetString("CustomPrompt_Description");
+        CustomPromptBox.Header = loc.GetString("CustomPrompt_Title");
+        if (CustomPromptNoteText != null)
+            CustomPromptNoteText.Text = loc.GetString("CustomPrompt_Note");
+
         // HTTP Proxy section
         if (HttpProxyHeaderText != null)
             HttpProxyHeaderText.Text = loc.GetString("HttpProxy");
@@ -189,6 +226,8 @@ public sealed partial class SettingsPage : Page
         ProxyEnabledToggle.OffContent = toggleOff;
         ProxyBypassLocalToggle.OnContent = toggleOn;
         ProxyBypassLocalToggle.OffContent = toggleOff;
+        TranslationCacheToggle.OnContent = toggleOn;
+        TranslationCacheToggle.OffContent = toggleOff;
         MinimizeToTrayToggle.OnContent = toggleOn;
         MinimizeToTrayToggle.OffContent = toggleOff;
         MinimizeToTrayOnStartupToggle.OnContent = toggleOn;
@@ -341,6 +380,10 @@ public sealed partial class SettingsPage : Page
         YoudaoAppSecretBox.PasswordChanged += OnSettingChanged;
         YoudaoUseOfficialApiToggle.Toggled += OnSettingChanged;
 
+        // Layout detection changes
+        LayoutDetectionModeCombo.SelectionChanged += OnLayoutDetectionModeChanged;
+        VisionLayoutServiceCombo.SelectionChanged += OnSettingChanged;
+
         // CheckBox changes
         DeepLFreeCheck.Checked += OnSettingChanged;
         DeepLFreeCheck.Unchecked += OnSettingChanged;
@@ -458,6 +501,22 @@ public sealed partial class SettingsPage : Page
         ProxyEnabledToggle.IsOn = _settings.ProxyEnabled;
         ProxyUriBox.Text = _settings.ProxyUri;
         ProxyBypassLocalToggle.IsOn = _settings.ProxyBypassLocal;
+
+        // Layout Detection settings
+        SelectComboByTag(LayoutDetectionModeCombo, _settings.LayoutDetectionMode);
+        SelectComboByTag(VisionLayoutServiceCombo, _settings.VisionLayoutServiceId);
+        UpdateLayoutDetectionUI();
+
+        // Formula Detection
+        FormulaFontPatternBox.Text = _settings.FormulaFontPattern;
+        FormulaCharPatternBox.Text = _settings.FormulaCharPattern;
+
+        // Translation Cache
+        TranslationCacheToggle.IsOn = _settings.EnableTranslationCache;
+        _ = UpdateCacheStatusAsync();
+
+        // Custom Prompt
+        CustomPromptBox.Text = _settings.LongDocCustomPrompt;
 
         // Behavior
         // App Theme - select based on current setting
@@ -889,6 +948,20 @@ public sealed partial class SettingsPage : Page
         _settings.MiniWindowEnabledServices = GetEnabledServicesFromCollection(_miniWindowServices);
         _settings.FixedWindowEnabledServices = GetEnabledServicesFromCollection(_fixedWindowServices);
 
+        // Layout Detection settings
+        _settings.LayoutDetectionMode = GetSelectedTag(LayoutDetectionModeCombo) ?? "Auto";
+        _settings.VisionLayoutServiceId = GetSelectedTag(VisionLayoutServiceCombo) ?? "gemini";
+
+        // Formula Detection
+        _settings.FormulaFontPattern = FormulaFontPatternBox.Text?.Trim() ?? "";
+        _settings.FormulaCharPattern = FormulaCharPatternBox.Text?.Trim() ?? "";
+
+        // Translation Cache
+        _settings.EnableTranslationCache = TranslationCacheToggle.IsOn;
+
+        // Custom Prompt
+        _settings.LongDocCustomPrompt = CustomPromptBox.Text?.Trim() ?? "";
+
         // Save EnabledQuery settings for each window
         _settings.MainWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_mainWindowServices);
         _settings.MiniWindowServiceEnabledQuery = GetEnabledQueryFromCollection(_miniWindowServices);
@@ -1054,6 +1127,11 @@ public sealed partial class SettingsPage : Page
             new NavSection("LanguagePreferencesSection", "Language Preferences", "\uE774", LanguagePreferencesSection), // Globe
             new NavSection("EnabledServicesSection", "Enabled Services", "\uE73E", EnabledServicesSection),           // Checkmark
             new NavSection("ServiceConfigurationSection", "Service Configuration", "\uE90F", ServiceConfigurationSection), // Key
+            new NavSection("LayoutDetectionSection", "Layout Detection", "\uE8A1", LayoutDetectionSection),  // Page
+            new NavSection("CjkFontSection", "CJK Font", "\uE8D2", CjkFontSection),  // Font
+            new NavSection("FormulaDetectionSection", "Formula Detection", "\uE8EF", FormulaDetectionSection),  // Calculator
+            new NavSection("TranslationCacheSection", "Translation Cache", "\uE74E", TranslationCacheSection),  // Save
+            new NavSection("CustomPromptSection", "Custom Prompt", "\uE8BD", CustomPromptSection),  // Comment
             new NavSection("HttpProxySection", "HTTP Proxy", "\uE968", HttpProxySection),      // Network
             new NavSection("BehaviorSection", "Behavior", "\uE771", BehaviorSection),          // Touch
             new NavSection("HotkeysSection", "Hotkeys", "\uE765", HotkeysSection),             // Keyboard
@@ -1701,6 +1779,245 @@ public sealed partial class SettingsPage : Page
             }
         }, TestNiuTransButton, NiuTransStatusText);
     }
+
+    #region Layout Detection
+
+    private void OnLayoutDetectionModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        OnSettingChanged(sender, e);
+        UpdateLayoutDetectionUI();
+    }
+
+    private void UpdateLayoutDetectionUI()
+    {
+        var mode = GetSelectedTag(LayoutDetectionModeCombo) ?? "Auto";
+
+        // Show/hide ONNX model panel for Auto and OnnxLocal modes
+        var showOnnx = mode is "Auto" or "OnnxLocal";
+        OnnxModelPanel.Visibility = showOnnx ? Visibility.Visible : Visibility.Collapsed;
+
+        // Show/hide Vision LLM panel for VisionLLM mode
+        VisionLLMPanel.Visibility = mode == "VisionLLM" ? Visibility.Visible : Visibility.Collapsed;
+
+        // Update ONNX model status
+        UpdateOnnxModelStatus();
+    }
+
+    private void UpdateOnnxModelStatus()
+    {
+        using var downloadService = new LayoutModelDownloadService();
+        var loc = LocalizationService.Instance;
+
+        if (downloadService.IsReady)
+        {
+            OnnxModelStatusText.Text = loc.GetString("LayoutDetection_Downloaded");
+            OnnxModelStatusIcon.Visibility = Visibility.Visible;
+            DownloadOnnxModelButton.Visibility = Visibility.Collapsed;
+            DeleteOnnxModelButton.Visibility = Visibility.Visible;
+            _settings.OnnxModelDownloaded = true;
+        }
+        else
+        {
+            OnnxModelStatusText.Text = loc.GetString("LayoutDetection_NotDownloaded");
+            OnnxModelStatusIcon.Visibility = Visibility.Collapsed;
+            DownloadOnnxModelButton.Visibility = Visibility.Visible;
+            DeleteOnnxModelButton.Visibility = Visibility.Collapsed;
+            _settings.OnnxModelDownloaded = false;
+        }
+    }
+
+    private async void OnDownloadOnnxModelClick(object sender, RoutedEventArgs e)
+    {
+        DownloadOnnxModelButton.IsEnabled = false;
+        OnnxDownloadProgress.Visibility = Visibility.Visible;
+        OnnxDownloadProgressText.Visibility = Visibility.Visible;
+
+        try
+        {
+            using var downloadService = new LayoutModelDownloadService();
+            var progress = new Progress<ModelDownloadProgress>(p =>
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (p.Percentage >= 0)
+                    {
+                        OnnxDownloadProgress.IsIndeterminate = false;
+                        OnnxDownloadProgress.Value = p.Percentage;
+                    }
+                    else
+                    {
+                        OnnxDownloadProgress.IsIndeterminate = true;
+                    }
+
+                    var stageName = p.Stage == "runtime" ? "ONNX Runtime" : "Model";
+                    var mb = p.BytesDownloaded / (1024.0 * 1024.0);
+                    var totalMb = p.TotalBytes > 0 ? p.TotalBytes / (1024.0 * 1024.0) : 0;
+                    OnnxDownloadProgressText.Text = totalMb > 0
+                        ? $"{stageName}: {mb:F1} / {totalMb:F1} MB"
+                        : $"{stageName}: {mb:F1} MB";
+                });
+            });
+
+            await downloadService.EnsureAvailableAsync(progress);
+
+            _settings.OnnxModelDownloaded = true;
+            _settings.Save();
+            UpdateOnnxModelStatus();
+        }
+        catch (Exception ex)
+        {
+            var loc = LocalizationService.Instance;
+            var dialog = new ContentDialog
+            {
+                Title = loc.GetString("LayoutDetection_DownloadFailed"),
+                Content = ex.Message,
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(dialog);
+        }
+        finally
+        {
+            DownloadOnnxModelButton.IsEnabled = true;
+            OnnxDownloadProgress.Visibility = Visibility.Collapsed;
+            OnnxDownloadProgressText.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void OnDeleteOnnxModelClick(object sender, RoutedEventArgs e)
+    {
+        using var downloadService = new LayoutModelDownloadService();
+        downloadService.DeleteAll();
+        _settings.OnnxModelDownloaded = false;
+        _settings.Save();
+        UpdateOnnxModelStatus();
+    }
+
+    #endregion
+
+    #region Formula Detection
+
+    private void OnFormulaPatternChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        OnSettingChanged(sender, new RoutedEventArgs());
+    }
+
+    #endregion
+
+    #region Translation Cache
+
+    private void OnTranslationCacheToggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading) return;
+        OnSettingChanged(sender, new RoutedEventArgs());
+    }
+
+    private async void OnClearCacheClick(object sender, RoutedEventArgs e)
+    {
+        ClearCacheButton.IsEnabled = false;
+        try
+        {
+            using var cacheService = new TranslationCacheService();
+            await cacheService.ClearAsync();
+            CacheStatusText.Text = "Cache cleared.";
+        }
+        catch (Exception ex)
+        {
+            CacheStatusText.Text = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            ClearCacheButton.IsEnabled = true;
+        }
+    }
+
+    private async Task UpdateCacheStatusAsync()
+    {
+        try
+        {
+            using var cacheService = new TranslationCacheService();
+            var count = await cacheService.GetEntryCountAsync();
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                CacheStatusText.Text = $"{count} cached entries";
+            });
+        }
+        catch
+        {
+            // Ignore if cache DB doesn't exist yet
+        }
+    }
+
+    #endregion
+
+    #region Custom Prompt
+
+    private void OnCustomPromptChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        OnSettingChanged(sender, new RoutedEventArgs());
+    }
+
+    #endregion
+
+    #region CJK Font
+
+    private async void OnCjkFontDownloadClick(object sender, RoutedEventArgs e)
+    {
+        CjkFontDownloadButton.IsEnabled = false;
+        CjkFontProgressBar.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+        CjkFontProgressBar.Value = 0;
+        CjkFontStatusText.Text = "Downloading...";
+
+        try
+        {
+            using var fontService = new FontDownloadService();
+            var progress = new Progress<ModelDownloadProgress>(p =>
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    CjkFontProgressBar.Value = p.Percentage;
+                    CjkFontStatusText.Text = $"Downloading {p.Stage}... {p.Percentage:F0}%";
+                });
+            });
+
+            // Download fonts for all CJK languages
+            var languages = new[]
+            {
+                Easydict.TranslationService.Models.Language.SimplifiedChinese,
+                Easydict.TranslationService.Models.Language.TraditionalChinese,
+                Easydict.TranslationService.Models.Language.Japanese,
+                Easydict.TranslationService.Models.Language.Korean,
+            };
+
+            foreach (var lang in languages)
+            {
+                await fontService.EnsureFontAsync(lang, progress);
+            }
+
+            CjkFontStatusText.Text = $"CJK fonts downloaded ({fontService.GetTotalFontSizeBytes() / 1024 / 1024}MB).";
+        }
+        catch (Exception ex)
+        {
+            CjkFontStatusText.Text = $"Download failed: {ex.Message}";
+        }
+        finally
+        {
+            CjkFontDownloadButton.IsEnabled = true;
+            CjkFontProgressBar.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+        }
+    }
+
+    private void OnCjkFontDeleteClick(object sender, RoutedEventArgs e)
+    {
+        using var fontService = new FontDownloadService();
+        fontService.DeleteAllFonts();
+        CjkFontStatusText.Text = "CJK fonts deleted.";
+    }
+
+    #endregion
 
     /// <summary>
     /// Shows a ContentDialog, hiding any currently-open dialog first.

@@ -152,6 +152,71 @@ public sealed class SettingsService
     /// </summary>
     public string OcrLanguage { get; set; } = "auto";
 
+    // Layout detection settings (long document translation)
+
+    /// <summary>
+    /// Layout detection mode for long document translation.
+    /// Values: "Auto", "OnnxLocal", "VisionLLM", "Heuristic".
+    /// Auto = prefer local ONNX → fallback to heuristic.
+    /// </summary>
+    public string LayoutDetectionMode { get; set; } = "Auto";
+
+    /// <summary>
+    /// Service ID for vision LLM layout detection (e.g., "openai", "gemini").
+    /// </summary>
+    public string VisionLayoutServiceId { get; set; } = "gemini";
+
+    /// <summary>
+    /// Whether the ONNX model has been downloaded.
+    /// </summary>
+    public bool OnnxModelDownloaded { get; set; }
+
+    /// <summary>
+    /// Document output mode for long document translation.
+    /// Values: "Monolingual", "Bilingual", "Both".
+    /// Monolingual = translated-only (default).
+    /// Bilingual = original + translated interleaved.
+    /// Both = generates both monolingual and bilingual outputs.
+    /// </summary>
+    public string DocumentOutputMode { get; set; } = "Monolingual";
+
+    /// <summary>
+    /// Maximum concurrent translation requests for long document translation.
+    /// Range: 1-16. Default: 4.
+    /// </summary>
+    public int LongDocMaxConcurrency { get; set; } = 4;
+
+    /// <summary>
+    /// Custom regex pattern for font-based formula detection (Level 2).
+    /// Empty uses the built-in math font regex.
+    /// </summary>
+    public string FormulaFontPattern { get; set; } = "";
+
+    /// <summary>
+    /// Custom regex pattern for character-based formula detection (Level 3).
+    /// Empty uses the built-in Unicode math character regex.
+    /// </summary>
+    public string FormulaCharPattern { get; set; } = "";
+
+    /// <summary>
+    /// Enable persistent translation cache for long document translation.
+    /// Caches translated segments in a local SQLite database for reuse.
+    /// </summary>
+    public bool EnableTranslationCache { get; set; } = true;
+
+    /// <summary>
+    /// Page range for long document translation. Empty = all pages.
+    /// Supports formats: "1-3,5,7-10", "1-5", "3".
+    /// Not persisted - starts empty each session so default is translating all pages.
+    /// </summary>
+    public string LongDocPageRange { get; set; } = "";
+
+    /// <summary>
+    /// Custom LLM prompt for long document translation.
+    /// Appended to the system prompt for LLM-based translation services.
+    /// </summary>
+    public string LongDocCustomPrompt { get; set; } = "";
+
     // UI settings
     public bool AlwaysOnTop { get; set; } = false;
 
@@ -503,6 +568,23 @@ public sealed class SettingsService
         ProxyUri = GetValue(nameof(ProxyUri), "");
         ProxyBypassLocal = GetValue(nameof(ProxyBypassLocal), true);
         GrammarIncludeExplanations = GetValue(nameof(GrammarIncludeExplanations), true);
+
+        // Formula detection patterns
+        FormulaFontPattern = GetValue(nameof(FormulaFontPattern), "");
+        FormulaCharPattern = GetValue(nameof(FormulaCharPattern), "");
+
+        // Translation cache
+        EnableTranslationCache = GetValue(nameof(EnableTranslationCache), true);
+
+        // Custom prompt (page range is intentionally not persisted - starts empty each session)
+        LongDocCustomPrompt = GetValue(nameof(LongDocCustomPrompt), "");
+
+        // Layout detection settings
+        LayoutDetectionMode = GetValue(nameof(LayoutDetectionMode), "Auto");
+        VisionLayoutServiceId = GetValue(nameof(VisionLayoutServiceId), "gemini");
+        OnnxModelDownloaded = GetValue(nameof(OnnxModelDownloaded), false);
+        DocumentOutputMode = GetValue(nameof(DocumentOutputMode), "Monolingual");
+        LongDocMaxConcurrency = GetValue(nameof(LongDocMaxConcurrency), 4);
     }
 
     public void Save()
@@ -629,6 +711,23 @@ public sealed class SettingsService
         _settings[nameof(ProxyUri)] = ProxyUri;
         _settings[nameof(ProxyBypassLocal)] = ProxyBypassLocal;
         _settings[nameof(GrammarIncludeExplanations)] = GrammarIncludeExplanations;
+
+        // Formula detection patterns
+        _settings[nameof(FormulaFontPattern)] = FormulaFontPattern;
+        _settings[nameof(FormulaCharPattern)] = FormulaCharPattern;
+
+        // Translation cache
+        _settings[nameof(EnableTranslationCache)] = EnableTranslationCache;
+
+        // Custom prompt (page range is intentionally not persisted - starts empty each session)
+        _settings[nameof(LongDocCustomPrompt)] = LongDocCustomPrompt;
+
+        // Layout detection settings
+        _settings[nameof(LayoutDetectionMode)] = LayoutDetectionMode;
+        _settings[nameof(VisionLayoutServiceId)] = VisionLayoutServiceId;
+        _settings[nameof(OnnxModelDownloaded)] = OnnxModelDownloaded;
+        _settings[nameof(DocumentOutputMode)] = DocumentOutputMode;
+        _settings[nameof(LongDocMaxConcurrency)] = LongDocMaxConcurrency;
 
         try
         {

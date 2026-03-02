@@ -215,9 +215,15 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             : request.FromLanguage.GetDisplayName();
         var targetLangName = request.ToLanguage.GetDisplayName();
 
+        var systemPrompt = TranslationSystemPrompt;
+        if (!string.IsNullOrWhiteSpace(request.CustomPrompt))
+        {
+            systemPrompt += $"\n\nAdditional instructions: {request.CustomPrompt}";
+        }
+
         return new List<ChatMessage>
         {
-            new(ChatRole.System, TranslationSystemPrompt),
+            new(ChatRole.System, systemPrompt),
             new(ChatRole.User, $"Translate the following {sourceLangName} text into {targetLangName} text: \"\"\"{request.Text}\"\"\"")
         };
     }

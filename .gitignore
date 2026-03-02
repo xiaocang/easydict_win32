@@ -90,3 +90,20 @@ test-release-bin.ps1
 CLAUDE.md
 
 .fake
+global.json
+
+# Reference/test artifacts
+ref/
+
+# Local docs/analysis
+doc/
+docs/
+
+# Debug files
+dotnet/debug-*.txt
+dotnet/check-debug-*.md
+dotnet/scripts/check-*.ps1
+dotnet/scripts/inspect-*.ps1
+dotnet/scripts/install-bundle.ps1
+dotnet/scripts/package-and-install-fixed.ps1
+null

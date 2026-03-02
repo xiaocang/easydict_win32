@@ -863,6 +863,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0} — click to switch to {1}</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>Long Document</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>Enter text to check grammar...</value>
   </data>
@@ -883,5 +886,181 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
+  </data>
+
+  <!-- Layout Detection -->
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
+  </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Document Output Mode</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Choose output format. Bilingual mode interleaves original and translated content.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Monolingual (Default)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Bilingual (Interleaved)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Both</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>Bilingual PDF: interleaved pages. Markdown/Text: original + translation blocks.</value>
+  </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Translation Concurrency</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Maximum number of parallel translation requests for long document translation. Higher values speed up translation but may hit API rate limits.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Recommended: 4 for LLM services, 1-2 for free API tiers with strict rate limits.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK Font</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Download CJK fonts for proper Chinese, Japanese, and Korean text rendering in PDF output.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Download CJK Font</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Downloads Noto Sans CJK (~16MB per language). Required for CJK text in PDF overlay rendering.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Formula Detection</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Advanced formula detection uses font names and Unicode math characters to protect formulas from translation.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Font Pattern (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Character Pattern (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Leave empty to use built-in patterns. Font pattern matches PDF font names (Level 2). Character pattern matches Unicode ranges (Level 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Translation Cache</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Cache translated segments locally to speed up repeated translations and save API costs.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Clear Cache</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Cached translations are stored locally in SQLite. Clear cache if translations become stale.</value>
+  </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>Page Range</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>Specify which pages to translate. Leave empty to translate all pages.</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>Formats: "1-5" (range), "3" (single page), "1-3,5,7-10" (mixed). Empty or "all" = translate all pages.</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>Custom Translation Prompt</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>Add custom instructions for LLM-based translation services (OpenAI, DeepSeek, Gemini, etc.).</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>These instructions are appended to the system prompt for LLM services. Has no effect on non-LLM services (Google, DeepL, etc.).</value>
+  </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>Browse...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>Browse...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>No file selected</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0} files selected</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>Output: {filename}_translated.pdf</value>
+  </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>Configure services in Settings</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>Download Layout Model</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>Layout detection model (~75MB) improves document structure recognition. Download now?</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Layout model download failed. Continuing with basic layout detection.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Choose input format: Text (plain text), Markdown, or PDF. PDF mode supports ML layout detection for better accuracy.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Mono: target language only. Bilingual: source and target side by side. Both: generates both mono and bilingual outputs.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Number of pages to translate simultaneously. Higher values are faster but use more API quota. Recommended: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Specify pages to translate (PDF only). Examples: 1-3, 5, 7-10. Leave empty to translate all pages.</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>Download CJK Font</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>CJK font (~16MB) is needed for proper {0} rendering in PDF. Download now?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>Skip</value>
   </data>
 </root>

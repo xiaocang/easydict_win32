@@ -6,8 +6,6 @@ using Easydict.WinUI.Views.Controls;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using Windows.System;
@@ -579,7 +577,7 @@ public sealed partial class FixedWindow : Window
         LoadingRing.IsActive = false;
         LoadingRing.Visibility = Visibility.Collapsed;
     }
-    
+
     private async Task StartQueryAsync()
     {
         if (_isClosing)

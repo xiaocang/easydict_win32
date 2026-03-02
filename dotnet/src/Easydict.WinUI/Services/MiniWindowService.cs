@@ -2,7 +2,6 @@ using System.Diagnostics;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Views;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Services;
 

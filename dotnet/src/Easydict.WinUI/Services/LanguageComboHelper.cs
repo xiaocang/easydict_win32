@@ -1,5 +1,4 @@
 using Easydict.TranslationService.Models;
-using Microsoft.UI.Xaml.Controls;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 
 namespace Easydict.WinUI.Services;

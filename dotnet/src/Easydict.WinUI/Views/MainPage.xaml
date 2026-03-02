@@ -5,91 +5,115 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:Easydict.WinUI"
+    xmlns:views="using:Easydict.WinUI.Views"
+    xmlns:controls="using:Easydict.WinUI.Views.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-        <Grid Padding="4">
-        <VisualStateManager.VisualStateGroups>
-            <VisualStateGroup x:Name="LayoutStates">
-                <!-- Wide layout: all controls in one row -->
-                <VisualState x:Name="WideLayout">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="500" />
-                    </VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="ActionBarWide.Visibility" Value="Visible" />
-                        <Setter Target="ActionBarNarrow.Visibility" Value="Collapsed" />
-                    </VisualState.Setters>
-                </VisualState>
-                <!-- Narrow layout: stacked controls -->
-                <VisualState x:Name="NarrowLayout">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="0" />
-                    </VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="ActionBarWide.Visibility" Value="Collapsed" />
-                        <Setter Target="ActionBarNarrow.Visibility" Value="Visible" />
-                    </VisualState.Setters>
-                </VisualState>
-            </VisualStateGroup>
-        </VisualStateManager.VisualStateGroups>
+    <Page.Resources>
+        <views:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </Page.Resources>
 
+    <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" MinHeight="40" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" MinHeight="40" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <Grid Grid.Row="0" Margin="0,0,0,4">
+        <!-- Shared Header (Row 0) -->
+        <Grid Grid.Row="0"
+              Margin="8,4,8,4">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE774;" FontSize="28" Foreground="{ThemeResource BlueAccentBrush}" />
-                <TextBlock
-                    Text="Easydict"
-                    FontSize="22"
-                    FontWeight="SemiBold"
-                    VerticalAlignment="Center" />
+            <StackPanel Grid.Column="0"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Center">
+                <TextBlock x:Name="ModeEmojiIcon"
+                           Text="🌐"
+                           FontSize="26"
+                           VerticalAlignment="Center"/>
+                <StackPanel VerticalAlignment="Center">
+                    <Button Background="Transparent"
+                            BorderThickness="0"
+                            Padding="4,2"
+                            MinHeight="0"
+                            MinWidth="0"
+                            VerticalAlignment="Center">
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <RadioMenuFlyoutItem x:Name="ModeTranslationItem"
+                                                     Text="🌐  Quick Translation"
+                                                     GroupName="AppMode"
+                                                     IsChecked="True"
+                                                     Click="OnModeMenuItemClick"/>
+                                <RadioMenuFlyoutItem x:Name="ModeGrammarItem"
+                                                     Text="✏️  Grammar Correction"
+                                                     GroupName="AppMode"
+                                                     Click="OnModeMenuItemClick"/>
+                                <RadioMenuFlyoutItem x:Name="ModeLongDocItem"
+                                                     Text="📄  Long Document"
+                                                     GroupName="AppMode"
+                                                     Click="OnModeMenuItemClick"/>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="4">
+                            <TextBlock Text="Easydict"
+                                       FontSize="22"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                            <FontIcon Glyph="&#xE70D;"
+                                      FontSize="10"
+                                      VerticalAlignment="Center"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+                    </Button>
+                    <TextBlock x:Name="ModeSubtitle"
+                               Text="Long Doc"
+                               FontSize="11"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Visibility="Collapsed"
+                               Margin="4,0,0,0"/>
+                </StackPanel>
             </StackPanel>
 
             <!-- Status Indicator -->
             <Border
                 x:Name="StatusIndicator"
-                Grid.Column="1"
+                Grid.Column="2"
                 Background="{ThemeResource StatusDisconnectedBrush}"
                 CornerRadius="12"
                 Padding="12,6"
                 VerticalAlignment="Center"
                 Margin="0,0,8,0">
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <StackPanel Orientation="Horizontal"
+                            Spacing="6">
                     <Ellipse
                         x:Name="StatusDot"
-                        Width="8" Height="8"
+                        Width="8"
+                        Height="8"
                         Fill="White"
-                        VerticalAlignment="Center" />
+                        VerticalAlignment="Center"/>
                     <TextBlock
                         x:Name="StatusText"
                         Text="Disconnected"
                         FontSize="12"
                         Foreground="White"
-                        VerticalAlignment="Center" />
+                        VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
 
             <!-- Settings Button -->
             <Button
                 x:Name="SettingsButton"
-                Grid.Column="2"
+                Grid.Column="3"
                 Click="OnSettingsClicked"
                 ToolTipService.ToolTip="Settings"
                 Background="Transparent"
@@ -98,342 +122,843 @@
                 Height="36"
                 Padding="0"
                 VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE713;" FontSize="18" />
+                <FontIcon Glyph="&#xE713;"
+                          FontSize="18"/>
             </Button>
         </Grid>
 
-        <!-- Wide Layout: Language + Button in one row -->
-        <Grid x:Name="ActionBarWide" Grid.Row="2" Margin="0,4,0,4" Visibility="Visible">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />  <!-- Mode Toggle -->
-                <ColumnDefinition Width="Auto" />  <!-- Source Language -->
-                <ColumnDefinition Width="Auto" />  <!-- Swap Button -->
-                <ColumnDefinition Width="Auto" />  <!-- Target Language -->
-                <ColumnDefinition Width="Auto" />  <!-- Help Icon -->
-                <ColumnDefinition Width="*" />     <!-- Translate Button (Right-aligned) -->
-            </Grid.ColumnDefinitions>
+        <!-- Quick Translate Content -->
+        <ScrollViewer x:Name="QuickTranslateContent"
+                      Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <Grid Padding="4">
+                <VisualStateManager.VisualStateGroups>
+                    <VisualStateGroup x:Name="LayoutStates">
+                        <!-- Wide layout: all controls in one row -->
+                        <VisualState x:Name="WideLayout">
+                            <VisualState.StateTriggers>
+                                <AdaptiveTrigger MinWindowWidth="500"/>
+                            </VisualState.StateTriggers>
+                            <VisualState.Setters>
+                                <Setter Target="ActionBarWide.Visibility"
+                                        Value="Visible"/>
+                                <Setter Target="ActionBarNarrow.Visibility"
+                                        Value="Collapsed"/>
+                            </VisualState.Setters>
+                        </VisualState>
+                        <!-- Narrow layout: stacked controls -->
+                        <VisualState x:Name="NarrowLayout">
+                            <VisualState.StateTriggers>
+                                <AdaptiveTrigger MinWindowWidth="0"/>
+                            </VisualState.StateTriggers>
+                            <VisualState.Setters>
+                                <Setter Target="ActionBarWide.Visibility"
+                                        Value="Collapsed"/>
+                                <Setter Target="ActionBarNarrow.Visibility"
+                                        Value="Visible"/>
+                            </VisualState.Setters>
+                        </VisualState>
+                    </VisualStateGroup>
+                </VisualStateManager.VisualStateGroups>
 
-            <!-- Query Mode Toggle -->
-            <Button x:Name="QueryModeButton"
-                    Grid.Column="0"
-                    Width="36" Height="36"
-                    Padding="0"
-                    VerticalAlignment="Center"
-                    Click="OnQueryModeButtonClick"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Margin="0,0,8,0">
-                <TextBlock x:Name="QueryModeEmoji" FontSize="20" />
-            </Button>
-
-            <!-- Source Language -->
-            <ComboBox
-                x:Name="SourceLangCombo"
-                Grid.Column="1"
-                MinWidth="130"
-                SelectionChanged="OnSourceLanguageChanged"
-                VerticalAlignment="Center"
-                ToolTipService.ToolTip="Source Language">
-                <!-- Populated dynamically in code-behind -->
-            </ComboBox>
-
-            <!-- Swap Languages Button -->
-            <Button
-                x:Name="SwapLanguageButton"
-                Grid.Column="2"
-                Click="OnSwapLanguagesClicked"
-                Width="36" Height="36"
-                Padding="0"
-                CornerRadius="8"
-                Background="Transparent"
-                BorderThickness="0"
-                ToolTipService.ToolTip="Swap source and target languages"
-                Margin="8,0"
-                VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE8AB;" FontSize="16" />
-            </Button>
-
-            <!-- Target Language -->
-            <ComboBox
-                x:Name="TargetLangCombo"
-                Grid.Column="3"
-                MinWidth="130"
-                SelectionChanged="OnTargetLanguageChanged"
-                VerticalAlignment="Center"
-                ToolTipService.ToolTip="Target Language">
-                <!-- Populated dynamically in code-behind -->
-            </ComboBox>
-
-            <!-- Language Help Icon -->
-            <FontIcon
-                x:Name="LangHelpIcon"
-                Grid.Column="4"
-                Glyph="&#xE897;"
-                FontSize="14"
-                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                VerticalAlignment="Center"
-                Margin="6,0,0,0" />
-
-            <!-- Translate Button (Right) -->
-            <Button
-                x:Name="TranslateButton"
-                Grid.Column="5"
-                Click="OnTranslateClicked"
-                Width="40"
-                Height="40"
-                Padding="0"
-                CornerRadius="20"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Center"
-                Background="{ThemeResource AccentBrush}"
-                ToolTipService.ToolTip="Translate">
-                <Grid>
-                    <ProgressRing
-                        x:Name="LoadingRing"
-                        IsActive="False"
-                        Width="16" Height="16"
-                        Foreground="White"
-                        Visibility="Collapsed" />
-                    <FontIcon
-                        x:Name="TranslateIcon"
-                        Glyph="&#xE8C1;"
-                        FontSize="16"
-                        Foreground="White" />
-                </Grid>
-            </Button>
-        </Grid>
-
-        <!-- Narrow Layout: Stacked controls -->
-        <StackPanel x:Name="ActionBarNarrow" Grid.Row="2" Spacing="4" Margin="0,4,0,4" Visibility="Collapsed">
-            <!-- Mode row -->
-            <Button x:Name="QueryModeButtonNarrow"
-                    HorizontalAlignment="Left"
-                    Width="36" Height="36"
-                    Padding="0"
-                    Click="OnQueryModeButtonClick"
-                    Background="Transparent"
-                    BorderThickness="0">
-                <TextBlock x:Name="QueryModeEmojiNarrow" FontSize="20" />
-            </Button>
-
-            <!-- Language row -->
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <ComboBox
-                    x:Name="SourceLangComboNarrow"
-                    Grid.Column="0"
-                    HorizontalAlignment="Stretch"
-                    SelectionChanged="OnSourceLanguageChanged"
-                    ToolTipService.ToolTip="Source Language">
-                    <!-- Populated dynamically in code-behind -->
-                </ComboBox>
-
-                <!-- Swap Button (Narrow) -->
-                <Button
-                    x:Name="SwapLanguageButtonNarrow"
-                    Grid.Column="1"
-                    Click="OnSwapLanguagesClicked"
-                    Width="36" Height="36"
-                    Padding="0"
-                    CornerRadius="8"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    ToolTipService.ToolTip="Swap source and target languages"
-                    VerticalAlignment="Center"
-                    Margin="4,0">
-                    <FontIcon Glyph="&#xE8AB;" FontSize="16" />
-                </Button>
-
-                <ComboBox
-                    x:Name="TargetLangComboNarrow"
-                    Grid.Column="2"
-                    HorizontalAlignment="Stretch"
-                    SelectionChanged="OnTargetLanguageChanged"
-                    ToolTipService.ToolTip="Target Language">
-                    <!-- Populated dynamically in code-behind -->
-                </ComboBox>
-
-                <!-- Language Help Icon (Narrow) -->
-                <FontIcon
-                    x:Name="LangHelpIconNarrow"
-                    Grid.Column="3"
-                    Glyph="&#xE897;"
-                    FontSize="14"
-                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                    VerticalAlignment="Center"
-                    Margin="4,0,0,0" />
-            </Grid>
-
-            <!-- Translate button row -->
-            <Button
-                x:Name="TranslateButtonNarrow"
-                Click="OnTranslateClicked"
-                Width="40"
-                Height="40"
-                Padding="0"
-                CornerRadius="20"
-                HorizontalAlignment="Center"
-                Background="{ThemeResource AccentBrush}"
-                ToolTipService.ToolTip="Translate">
-                <Grid>
-                    <ProgressRing
-                        x:Name="LoadingRingNarrow"
-                        IsActive="False"
-                        Width="16" Height="16"
-                        Foreground="White"
-                        Visibility="Collapsed" />
-                    <FontIcon
-                        x:Name="TranslateIconNarrow"
-                        Glyph="&#xE8C1;"
-                        FontSize="16"
-                        Foreground="White" />
-                </Grid>
-            </Button>
-        </StackPanel>
-
-        <!-- Input Card -->
-        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,0,0,2">
-            <Grid Margin="4">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="15" />
-                    <RowDefinition Height="*" />
+                    <RowDefinition Height="*"
+                                   MinHeight="40"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"
+                                   MinHeight="40"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Title row with consistent height -->
-                <Grid Grid.Row="0">
+                <!-- Wide Layout: Language + Button in one row -->
+                <Grid x:Name="ActionBarWide"
+                      Grid.Row="1"
+                      Margin="0,4,0,4"
+                      Visibility="Visible">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock
+                    <!-- Source Language -->
+                    <ComboBox
+                        x:Name="SourceLangCombo"
                         Grid.Column="0"
-                        Text="Source Text"
-                        FontSize="13"
-                        FontWeight="SemiBold"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        VerticalAlignment="Center" />
-
-                    <!-- Input Help Icon -->
-                    <FontIcon
-                        x:Name="InputHelpIcon"
-                        Grid.Column="1"
-                        Glyph="&#xE897;"
-                        FontSize="12"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        MinWidth="130"
+                        MaxWidth="200"
+                        SelectionChanged="OnSourceLanguageChanged"
                         VerticalAlignment="Center"
-                        Margin="4,0,0,0" />
+                        ToolTipService.ToolTip="Source Language"/>
 
-                    <!-- TTS Play Button for source text -->
+                    <!-- Swap Languages Button -->
                     <Button
-                        x:Name="SourcePlayButton"
-                        Grid.Column="2"
-                        Click="OnSourcePlayClicked"
-                        ToolTipService.ToolTip="Play source text"
+                        x:Name="SwapLanguageButton"
+                        Grid.Column="1"
+                        Click="OnSwapLanguagesClicked"
+                        Width="36"
+                        Height="36"
+                        Padding="0"
+                        CornerRadius="8"
                         Background="Transparent"
                         BorderThickness="0"
-                        Width="24"
-                        Height="24"
-                        Padding="0"
-                        HorizontalAlignment="Right"
+                        ToolTipService.ToolTip="Swap source and target languages"
+                        Margin="8,0"
                         VerticalAlignment="Center">
-                        <FontIcon x:Name="SourcePlayIcon" Glyph="&#xE768;" FontSize="12" />
+                        <FontIcon Glyph="&#xE8AB;"
+                                  FontSize="16"/>
+                    </Button>
+
+                    <!-- Target Language -->
+                    <ComboBox
+                        x:Name="TargetLangCombo"
+                        Grid.Column="2"
+                        MinWidth="130"
+                        MaxWidth="200"
+                        SelectionChanged="OnTargetLanguageChanged"
+                        VerticalAlignment="Center"
+                        ToolTipService.ToolTip="Target Language"/>
+
+                    <!-- Language Help Icon -->
+                    <FontIcon
+                        x:Name="LangHelpIcon"
+                        Grid.Column="3"
+                        Glyph="&#xE897;"
+                        FontSize="14"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        VerticalAlignment="Center"
+                        Margin="6,0,0,0"/>
+
+                    <!-- Translate Button (Right) -->
+                    <Button
+                        x:Name="TranslateButton"
+                        Grid.Column="4"
+                        Click="OnTranslateClicked"
+                        Width="40"
+                        Height="40"
+                        Padding="0"
+                        CornerRadius="20"
+                        VerticalAlignment="Center"
+                        Background="{ThemeResource AccentBrush}"
+                        ToolTipService.ToolTip="Translate">
+                        <Grid>
+                            <ProgressRing
+                                x:Name="LoadingRing"
+                                IsActive="False"
+                                Width="16"
+                                Height="16"
+                                Foreground="White"
+                                Visibility="Collapsed"/>
+                            <FontIcon
+                                x:Name="TranslateIcon"
+                                Glyph="&#xE8C1;"
+                                FontSize="16"
+                                Foreground="White"/>
+                        </Grid>
                     </Button>
                 </Grid>
 
-                <!-- Detected Language Label -->
-                <TextBlock
-                    x:Name="DetectedLanguageText"
-                    Grid.Row="1"
-                    Text=""
-                    FontSize="11"
-                    Foreground="{ThemeResource BlueAccentBrush}"
-                    Margin="4,0,0,0"
-                    VerticalAlignment="Top"
-                    Visibility="Collapsed" />
+                <!-- Narrow Layout: Stacked controls -->
+                <StackPanel x:Name="ActionBarNarrow"
+                            Grid.Row="1"
+                            Spacing="4"
+                            Margin="0,4,0,4"
+                            Visibility="Collapsed">
+                    <!-- Language row -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                <TextBox
-                    x:Name="InputTextBox"
-                    Grid.Row="1"
-                    PlaceholderText="Enter or paste text to translate..."
-                    Style="{StaticResource TranslationTextBoxStyle}"
-                    BorderThickness="0"
-                    Background="Transparent"
-                    Margin="0,4,0,0"
-                    AcceptsReturn="True"
-                    TextWrapping="Wrap"
-                    ScrollViewer.VerticalScrollBarVisibility="Auto"
-                    VerticalAlignment="Stretch"
-                    HorizontalAlignment="Stretch"
-                    PreviewKeyDown="OnInputTextBoxKeyDown" />
+                        <ComboBox
+                            x:Name="SourceLangComboNarrow"
+                            Grid.Column="0"
+                            HorizontalAlignment="Stretch"
+                            SelectionChanged="OnSourceLanguageChanged"
+                            ToolTipService.ToolTip="Source Language"/>
+
+                        <Button
+                            x:Name="SwapLanguageButtonNarrow"
+                            Grid.Column="1"
+                            Click="OnSwapLanguagesClicked"
+                            Width="36"
+                            Height="36"
+                            Padding="0"
+                            CornerRadius="8"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            ToolTipService.ToolTip="Swap source and target languages"
+                            VerticalAlignment="Center"
+                            Margin="4,0">
+                            <FontIcon Glyph="&#xE8AB;"
+                                      FontSize="16"/>
+                        </Button>
+
+                        <ComboBox
+                            x:Name="TargetLangComboNarrow"
+                            Grid.Column="2"
+                            HorizontalAlignment="Stretch"
+                            SelectionChanged="OnTargetLanguageChanged"
+                            ToolTipService.ToolTip="Target Language"/>
+
+                        <FontIcon
+                            x:Name="LangHelpIconNarrow"
+                            Grid.Column="3"
+                            Glyph="&#xE897;"
+                            FontSize="14"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            VerticalAlignment="Center"
+                            Margin="4,0,0,0"/>
+                    </Grid>
+
+                    <Button
+                        x:Name="TranslateButtonNarrow"
+                        Click="OnTranslateClicked"
+                        Width="40"
+                        Height="40"
+                        Padding="0"
+                        CornerRadius="20"
+                        HorizontalAlignment="Center"
+                        Background="{ThemeResource AccentBrush}"
+                        ToolTipService.ToolTip="Translate">
+                        <Grid>
+                            <ProgressRing
+                                x:Name="LoadingRingNarrow"
+                                IsActive="False"
+                                Width="16"
+                                Height="16"
+                                Foreground="White"
+                                Visibility="Collapsed"/>
+                            <FontIcon
+                                x:Name="TranslateIconNarrow"
+                                Glyph="&#xE8C1;"
+                                FontSize="16"
+                                Foreground="White"/>
+                        </Grid>
+                    </Button>
+                </StackPanel>
+
+                <!-- Input Card -->
+                <Border Grid.Row="0"
+                        Style="{StaticResource CardStyle}"
+                        Margin="0,0,0,2">
+                    <Grid Margin="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="15"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock
+                                Grid.Column="0"
+                                Text="Source Text"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                VerticalAlignment="Center"/>
+
+                            <FontIcon
+                                x:Name="InputHelpIcon"
+                                Grid.Column="1"
+                                Glyph="&#xE897;"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                VerticalAlignment="Center"
+                                Margin="4,0,0,0"/>
+
+                            <Button
+                                x:Name="SourcePlayButton"
+                                Grid.Column="2"
+                                Click="OnSourcePlayClicked"
+                                ToolTipService.ToolTip="Play source text"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Width="24"
+                                Height="24"
+                                Padding="0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                                <FontIcon x:Name="SourcePlayIcon"
+                                          Glyph="&#xE768;"
+                                          FontSize="12"/>
+                            </Button>
+                        </Grid>
+
+                        <TextBlock
+                            x:Name="DetectedLanguageText"
+                            Grid.Row="1"
+                            Text=""
+                            FontSize="11"
+                            Foreground="{ThemeResource BlueAccentBrush}"
+                            Margin="4,0,0,0"
+                            VerticalAlignment="Top"
+                            Visibility="Collapsed"/>
+
+                        <TextBox
+                            x:Name="InputTextBox"
+                            Grid.Row="1"
+                            PlaceholderText="Enter or paste text to translate..."
+                            Style="{StaticResource TranslationTextBoxStyle}"
+                            BorderThickness="0"
+                            Background="Transparent"
+                            Margin="0,4,0,0"
+                            AcceptsReturn="True"
+                            TextWrapping="Wrap"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            VerticalAlignment="Stretch"
+                            HorizontalAlignment="Stretch"
+                            PreviewKeyDown="OnInputTextBoxKeyDown"/>
+                    </Grid>
+                </Border>
+
+                <!-- Output Area: Multiple Service Results -->
+                <Border Grid.Row="2"
+                        Style="{StaticResource CardStyle}"
+                        Margin="0,2,0,0">
+                    <Grid Margin="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock
+                            x:Name="ResultsTitleText"
+                            Grid.Row="0"
+                            Text="Translation Results"
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Margin="4,0,0,4"/>
+
+                        <ItemsControl
+                            x:Name="ResultsPanel"
+                            Grid.Row="1"
+                            VerticalAlignment="Stretch">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Vertical"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+
+                        <TextBlock
+                            x:Name="PlaceholderText"
+                            Grid.Row="1"
+                            Text="Translation will appear here..."
+                            FontSize="13"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Margin="8,8,0,0"
+                            Visibility="Visible"/>
+                    </Grid>
+                </Border>
+
+                <!-- Footer -->
+                <Grid Grid.Row="3"
+                      Margin="0,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock
+                        x:Name="StatusSummaryText"
+                        Grid.Column="0"
+                        Text=""
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"/>
+                </Grid>
             </Grid>
-        </Border>
+        </ScrollViewer>
 
-        <!-- Output Area: Multiple Service Results -->
-        <Border Grid.Row="3" Style="{StaticResource CardStyle}" Margin="0,2,0,0">
-            <Grid Margin="4">
+        <!-- Long Document Content -->
+        <ScrollViewer x:Name="LongDocContent"
+                      Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Visibility="Collapsed">
+            <Grid Padding="4">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
+                    <RowDefinition Height="*"
+                                   MinHeight="80"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"
+                                   MinHeight="80"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Title row -->
-                <TextBlock
-                    x:Name="ResultsTitleText"
-                    Grid.Row="0"
-                    Text="Translation Results"
-                    FontSize="13"
-                    FontWeight="SemiBold"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Margin="4,0,0,4" />
+                <!-- Row 0: Input Card -->
+                <Border Grid.Row="0"
+                        Style="{StaticResource CardStyle}"
+                        Margin="0,0,0,2">
+                    <Grid Margin="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
-                <!-- Service Results ItemsControl -->
-                <ItemsControl
-                    x:Name="ResultsPanel"
-                    Grid.Row="1"
-                    VerticalAlignment="Stretch">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Vertical" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
+                        <TextBlock
+                            x:Name="LongDocInputTitle"
+                            Grid.Row="0"
+                            Text="Source Text"
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Margin="0,0,0,4"/>
 
-                <!-- Placeholder when no results -->
+                        <!-- File input panel (file picker + file list) -->
+                        <StackPanel x:Name="LongDocFilePanel"
+                                    Grid.Row="1"
+                                    VerticalAlignment="Top"
+                                    Spacing="8">
+
+                            <!-- Browse button + selected file display -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="LongDocFilePathDisplay"
+                                           Grid.Column="0"
+                                           Text="No file selected"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <Button x:Name="LongDocBrowseButton"
+                                        Grid.Column="1"
+                                        Content="Browse..."
+                                        Click="OnLongDocBrowseClicked"
+                                        Margin="8,0,0,0"/>
+                            </Grid>
+
+                            <!-- Selected file list with inline progress bars -->
+                            <ItemsControl x:Name="LongDocFileItemsControl"
+                                          MaxHeight="200"
+                                          Padding="0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,4,0,0"
+                                                Padding="8,6"
+                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                CornerRadius="6"
+                                                BorderThickness="1"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- Filename -->
+                                                <TextBlock Grid.Row="0"
+                                                           Grid.Column="0"
+                                                           Text="{Binding FileName}"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center">
+                                                    <ToolTipService.ToolTip>
+                                                        <ToolTip Content="{Binding FilePath}"/>
+                                                    </ToolTipService.ToolTip>
+                                                </TextBlock>
+
+                                                <!-- Remove button -->
+                                                <Button Grid.Row="0"
+                                                        Grid.Column="1"
+                                                        Click="OnLongDocRemoveFileClicked"
+                                                        Tag="{Binding}"
+                                                        IsEnabled="{Binding CanRemove}"
+                                                        Padding="4,2"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Margin="4,0,0,0">
+                                                    <FontIcon Glyph="&#xE711;"
+                                                              FontSize="10"
+                                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                </Button>
+
+                                                <!-- Progress bar (visible when in progress) -->
+                                                <ProgressBar Grid.Row="1"
+                                                             Grid.Column="0"
+                                                             Grid.ColumnSpan="2"
+                                                             Height="3"
+                                                             Margin="0,4,0,0"
+                                                             Minimum="0"
+                                                             Maximum="100"
+                                                             Value="{Binding ProgressPercentage}"
+                                                             Visibility="{Binding IsInProgress, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                                <!-- Progress detail / status text -->
+                                                <TextBlock Grid.Row="1"
+                                                           Grid.Column="0"
+                                                           Grid.ColumnSpan="2"
+                                                           Margin="0,6,0,0"
+                                                           FontSize="11"
+                                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}">
+                                                    <Run Text="{Binding ProgressDetail}"/>
+                                                    <Run Text="{Binding TimeAgo}"/>
+                                                </TextBlock>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Row 1: Control bar — single unified Grid with headers above controls -->
+                <Grid Grid.Row="1"
+                      Margin="0,4,0,4"
+                      ColumnSpacing="8"
+                      RowSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Row 0, Col 0: Source Language -->
+                    <ComboBox x:Name="LongDocSourceLangCombo"
+                              Grid.Row="0"
+                              Grid.Column="0"
+                              Header="&#x1F310; Source"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Source Language"/>
+
+                    <!-- Row 0, Col 1: Target Language -->
+                    <ComboBox x:Name="LongDocTargetLangCombo"
+                              Grid.Row="0"
+                              Grid.Column="1"
+                              Header="&#x1F3AF; Target"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Target Language"/>
+
+                    <!-- Row 0, Cols 2-3: Service (spans 2 columns for extra width) -->
+                    <ComboBox x:Name="LongDocServiceCombo"
+                              Grid.Row="0"
+                              Grid.Column="2"
+                              Grid.ColumnSpan="2"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Translation Service">
+                        <ComboBox.Header>
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="4">
+                                <TextBlock Text="&#x1F916;"
+                                           FontSize="13"/>
+                                <TextBlock Text="Service"
+                                           FontSize="12"/>
+                                <FontIcon x:Name="LongDocServiceHint"
+                                          Glyph="&#xE897;"
+                                          FontSize="11"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                            </StackPanel>
+                        </ComboBox.Header>
+                    </ComboBox>
+
+                    <!-- Row 2, Col 3: Translate button (right-aligned, own row) -->
+                    <Button x:Name="LongDocTranslateButton"
+                            Grid.Row="2"
+                            Grid.Column="3"
+                            Click="OnLongDocTranslateClicked"
+                            Width="40"
+                            Height="40"
+                            Padding="0"
+                            CornerRadius="20"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource AccentBrush}"
+                            ToolTipService.ToolTip="Translate">
+                        <FontIcon x:Name="LongDocTranslateIcon"
+                                  Glyph="&#xE8C1;"
+                                  FontSize="16"
+                                  Foreground="White"/>
+                    </Button>
+
+                    <!-- Row 1, Col 0: Input Mode -->
+                    <ComboBox x:Name="LongDocInputModeCombo"
+                              Grid.Row="1"
+                              Grid.Column="0"
+                              SelectedIndex="2"
+                              SelectionChanged="OnLongDocInputModeChanged"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Input Mode">
+                        <ComboBox.Header>
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="4">
+                                <TextBlock Text="&#x1F4C4;"
+                                           FontSize="13"/>
+                                <TextBlock Text="Input"
+                                           FontSize="12"/>
+                                <FontIcon x:Name="LongDocInputModeHint"
+                                          Glyph="&#xE897;"
+                                          FontSize="11"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                            </StackPanel>
+                        </ComboBox.Header>
+                        <ComboBoxItem Content="Text"
+                                      Tag="plaintext"/>
+                        <ComboBoxItem Content="Markdown"
+                                      Tag="markdown"/>
+                        <ComboBoxItem Content="PDF"
+                                      Tag="pdf"/>
+                    </ComboBox>
+
+                    <!-- Row 1, Col 1: Output Mode -->
+                    <ComboBox x:Name="LongDocOutputModeCombo"
+                              Grid.Row="1"
+                              Grid.Column="1"
+                              SelectedIndex="0"
+                              SelectionChanged="OnLongDocOutputModeChanged"
+                              HorizontalAlignment="Stretch"
+                              ToolTipService.ToolTip="Output Format">
+                        <ComboBox.Header>
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="4">
+                                <TextBlock Text="&#x1F4DD;"
+                                           FontSize="13"/>
+                                <TextBlock Text="Output"
+                                           FontSize="12"/>
+                                <FontIcon x:Name="LongDocOutputModeHint"
+                                          Glyph="&#xE897;"
+                                          FontSize="11"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                            </StackPanel>
+                        </ComboBox.Header>
+                        <ComboBoxItem Content="Mono"
+                                      Tag="Monolingual"/>
+                        <ComboBoxItem Content="Bilingual"
+                                      Tag="Bilingual"/>
+                        <ComboBoxItem Content="Both"
+                                      Tag="Both"/>
+                    </ComboBox>
+
+                    <!-- Row 1, Col 2: Concurrency -->
+                    <NumberBox x:Name="LongDocConcurrencyBox"
+                               Grid.Row="1"
+                               Grid.Column="2"
+                               Minimum="1"
+                               Maximum="16"
+                               SmallChange="1"
+                               LargeChange="4"
+                               Value="4"
+                               SpinButtonPlacementMode="Compact"
+                               HorizontalAlignment="Stretch"
+                               ToolTipService.ToolTip="Max Concurrent Requests"
+                               ValueChanged="OnLongDocConcurrencyChanged">
+                        <NumberBox.Header>
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="4">
+                                <TextBlock Text="&#x26A1;"
+                                           FontSize="13"/>
+                                <TextBlock Text="Threads"
+                                           FontSize="12"/>
+                                <FontIcon x:Name="LongDocConcurrencyHint"
+                                          Glyph="&#xE897;"
+                                          FontSize="11"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                            </StackPanel>
+                        </NumberBox.Header>
+                    </NumberBox>
+
+                    <!-- Row 1, Col 3: Page Range -->
+                    <TextBox x:Name="LongDocPageRangeBox"
+                             Grid.Row="1"
+                             Grid.Column="3"
+                             PlaceholderText="1-3,5,7-10"
+                             MinWidth="110"
+                             ToolTipService.ToolTip="Page range (leave empty for all)"
+                             TextChanged="OnLongDocPageRangeChanged">
+                        <TextBox.Header>
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="4">
+                                <TextBlock Text="&#x1F4D1;"
+                                           FontSize="13"/>
+                                <TextBlock Text="Pages"
+                                           FontSize="12"/>
+                                <FontIcon x:Name="LongDocPageRangeHint"
+                                          Glyph="&#xE897;"
+                                          FontSize="11"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                            </StackPanel>
+                        </TextBox.Header>
+                    </TextBox>
+                </Grid>
+
+                <!-- Row 2: Output Card -->
+                <Border Grid.Row="2"
+                        Style="{StaticResource CardStyle}"
+                        Margin="0,2,0,0">
+                    <Grid Margin="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0"
+                              Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock
+                                x:Name="LongDocOutputTitle"
+                                Grid.Column="0"
+                                Text="Translation Result"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                            <Button x:Name="LongDocRetryButton"
+                                    Grid.Column="1"
+                                    Content="Retry Failed"
+                                    Click="OnLongDocRetryClicked"
+                                    IsEnabled="False"
+                                    Padding="8,4"
+                                    FontSize="12"/>
+                        </Grid>
+
+                        <!-- Output fields -->
+                        <StackPanel x:Name="LongDocOutputFieldsPanel"
+                                    Grid.Row="1"
+                                    Spacing="8"
+                                    VerticalAlignment="Top">
+                            <TextBlock x:Name="LongDocOutputFolderLabel"
+                                       Text="Output Folder"
+                                       FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="LongDocOutputFolderDisplay"
+                                           Grid.Column="0"
+                                           Text="(same as input file folder)"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <Button x:Name="LongDocOutputBrowseButton"
+                                        Grid.Column="1"
+                                        Content="Browse..."
+                                        Click="OnLongDocOutputBrowseClicked"
+                                        Margin="8,0,0,0"/>
+                            </Grid>
+                            <TextBlock x:Name="LongDocOutputNamingHint"
+                                       Text="Output: {filename}_translated.pdf"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                       FontStyle="Italic"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Row 3: Status text -->
                 <TextBlock
-                    x:Name="PlaceholderText"
-                    Grid.Row="1"
-                    Text="Translation will appear here..."
-                    FontSize="13"
+                    x:Name="LongDocStatusText"
+                    Grid.Row="3"
+                    Text="Idle"
+                    FontSize="12"
                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                    Margin="8,8,0,0"
-                    Visibility="Visible" />
+                    TextWrapping="Wrap"
+                    Margin="0,4,0,0"/>
+
+                <!-- Row 4: History Panel -->
+                <Expander
+                    x:Name="LongDocHistoryExpander"
+                    Grid.Row="4"
+                    Margin="0,8,0,0"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="History"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"/>
+                            <Button
+                                x:Name="LongDocClearHistoryButton"
+                                Grid.Column="1"
+                                Content="Clear"
+                                Click="OnLongDocClearHistoryClicked"
+                                FontSize="12"
+                                Padding="8,4"
+                                Margin="8,0,0,0"/>
+                        </Grid>
+                    </Expander.Header>
+                    <ListView
+                        x:Name="LongDocHistoryListView"
+                        MaxHeight="200"
+                        SelectionMode="None"
+                        Padding="0"
+                        BorderThickness="0">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4"
+                                      Padding="8,6"
+                                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                      CornerRadius="6">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Row="0"
+                                               Grid.Column="0"
+                                               Text="{Binding SourceFileName}"
+                                               FontWeight="SemiBold"
+                                               FontSize="12"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Row="0"
+                                               Grid.Column="1"
+                                               Text="{Binding TimeAgo}"
+                                               FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                    <TextBlock Grid.Row="1"
+                                               Grid.Column="0"
+                                               Text="{Binding DisplayText}"
+                                               FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Expander>
             </Grid>
-        </Border>
-
-        <!-- Footer -->
-        <Grid Grid.Row="4" Margin="0,4,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-
-            <TextBlock
-                x:Name="StatusSummaryText"
-                Grid.Column="0"
-                Text=""
-                FontSize="12"
-                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Center" />
-        </Grid>
-        </Grid>
-    </ScrollViewer>
+        </ScrollViewer>
+    </Grid>
 </Page>

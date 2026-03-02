@@ -743,6 +743,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0} — nhấp để chuyển sang {1}</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>Tài liệu dài</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>Enter text to check grammar...</value>
   </data>
@@ -763,5 +766,143 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
+  </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Chế độ xuất tài liệu</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Chọn định dạng xuất. Chế độ song ngữ xen kẽ nội dung gốc và bản dịch.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Đơn ngữ (Mặc định)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Song ngữ (Xen kẽ)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Cả hai</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF song ngữ: các trang xen kẽ. Markdown/Văn bản: khối gốc+bản dịch.</value>
+  </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Đồng thời dịch</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Số lượng yêu cầu dịch song song tối đa cho tài liệu dài. Giá trị cao hơn tăng tốc dịch nhưng có thể đạt giới hạn tốc độ API.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Khuyến nghị: 4 cho dịch vụ LLM, 1-2 cho API miễn phí có giới hạn tốc độ nghiêm ngặt.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>Phông CJK</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Tải phông CJK để hiển thị chính xác văn bản tiếng Trung, Nhật và Hàn trong đầu ra PDF.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Tải Phông CJK</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Xóa</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Tải Noto Sans CJK (~16MB mỗi ngôn ngữ). Cần thiết cho văn bản CJK trong kết xuất phủ PDF.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Phát hiện công thức</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Phát hiện công thức nâng cao sử dụng tên phông chữ và ký tự toán học Unicode để bảo vệ công thức khỏi bị dịch.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Mẫu phông chữ (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Mẫu ký tự (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Để trống để sử dụng mẫu tích hợp. Mẫu phông chữ khớp tên phông PDF (Level 2). Mẫu ký tự khớp phạm vi Unicode (Level 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Bộ nhớ đệm dịch thuật</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Lưu trữ các phân đoạn đã dịch cục bộ để tăng tốc dịch lặp lại và tiết kiệm chi phí API.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Xóa bộ nhớ đệm</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Bản dịch được lưu trong SQLite cục bộ. Xóa bộ nhớ đệm nếu bản dịch đã lỗi thời.</value>
+  </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>Phạm vi trang</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>Chỉ định các trang cần dịch. Để trống để dịch tất cả các trang.</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>Định dạng: "1-5" (phạm vi), "3" (trang đơn), "1-3,5,7-10" (hỗn hợp). Trống hoặc "all" = dịch tất cả các trang.</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>Prompt dịch tùy chỉnh</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>Thêm hướng dẫn tùy chỉnh cho các dịch vụ dịch dựa trên LLM (OpenAI, DeepSeek, Gemini, v.v.).</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>Các hướng dẫn này được thêm vào prompt hệ thống cho các dịch vụ LLM. Không ảnh hưởng đến các dịch vụ không phải LLM (Google, DeepL, v.v.).</value>
+  </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>Duyệt...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>Duyệt...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>Chưa chọn tệp</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>Đã chọn {0} tệp</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>Đầu ra: {filename}_translated.pdf</value>
+  </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>Cấu hình dịch vụ trong Cài đặt</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>Tải xuống mô hình bố cục</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>Mô hình phát hiện bố cục (~75MB) cải thiện nhận dạng cấu trúc tài liệu. Tải xuống ngay?</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Tải mô hình bố cục thất bại. Tiếp tục dịch với phát hiện bố cục cơ bản.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Chọn định dạng đầu vào: Văn bản (văn bản thuần), Markdown hoặc PDF. Chế độ PDF hỗ trợ phát hiện bố cục ML để tăng độ chính xác.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Đơn ngữ: chỉ ngôn ngữ đích. Song ngữ: ngôn ngữ nguồn và đích cạnh nhau. Cả hai: tạo cả đầu ra đơn ngữ và song ngữ.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Số trang dịch đồng thời. Giá trị cao hơn nhanh hơn nhưng sử dụng nhiều hạn mức API hơn. Khuyến nghị: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Chỉ định các trang cần dịch (chỉ PDF). Ví dụ: 1-3, 5, 7-10. Để trống để dịch tất cả các trang.</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>Tải xuống phông chữ CJK</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>Phông chữ CJK (~16MB) cần thiết để hiển thị {0} chính xác trong PDF. Tải xuống ngay?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>Tải xuống</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>Bỏ qua</value>
   </data>
 </root>

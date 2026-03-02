@@ -287,6 +287,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0} — klik for at skifte til {1}</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>Langt dokument</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>Enter text to check grammar...</value>
   </data>
@@ -307,5 +310,143 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
+  </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Dokumentoutputtilstand</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Vælg outputformat. Tosproget tilstand skifter mellem originalt og oversat indhold.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Ensproget (Standard)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Tosproget (Alternerende)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Begge</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>Tosproget PDF: alternerende sider. Markdown/Tekst: original+oversættelsesblokke.</value>
+  </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Oversættelsessamtidighed</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Maksimalt antal parallelle oversættelsesanmodninger for lange dokumenter. Højere værdier fremskynder oversættelsen, men kan ramme API-hastighedsgrænser.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Anbefalet: 4 for LLM-tjenester, 1-2 for gratis API-niveauer med strenge hastighedsgrænser.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK-skrifttype</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Download CJK-skrifttyper for korrekt gengivelse af kinesisk, japansk og koreansk tekst i PDF-output.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Download CJK-skrifttype</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Slet</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Downloader Noto Sans CJK (~16 MB pr. sprog). Kræves til CJK-tekst i PDF-overlay-gengivelse.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Formelgenkendelse</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Avanceret formelgenkendelse bruger skriftnavne og Unicode-matematiktegn til at beskytte formler mod oversættelse.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Skriftmønster (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Tegnmønster (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Lad stå tomt for at bruge indbyggede mønstre. Skriftmønster matcher PDF-skriftnavne (Niveau 2). Tegnmønster matcher Unicode-intervaller (Niveau 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Oversættelsescache</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Cache oversatte segmenter lokalt for at fremskynde gentagne oversættelser og spare API-omkostninger.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Ryd cache</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Cachede oversættelser gemmes lokalt i SQLite. Ryd cachen, hvis oversættelser bliver forældede.</value>
+  </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>Sideområde</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>Angiv hvilke sider der skal oversættes. Lad feltet stå tomt for at oversætte alle sider.</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>Formater: "1-5" (område), "3" (enkelt side), "1-3,5,7-10" (blandet). Tom eller "all" = oversæt alle sider.</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>Brugerdefineret oversættelsesprompt</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>Tilføj brugerdefinerede instruktioner til LLM-baserede oversættelsestjenester (OpenAI, DeepSeek, Gemini osv.).</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>Disse instruktioner tilføjes til systemprompt for LLM-tjenester. Ingen effekt på ikke-LLM-tjenester (Google, DeepL osv.).</value>
+  </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>Gennemse...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>Gennemse...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>Ingen fil valgt</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0} filer valgt</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>Output: {filename}_translated.pdf</value>
+  </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>Konfigurer tjenester i Indstillinger</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>Download layoutmodel</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>Layoutgenkendelsesmodel (~75 MB) forbedrer genkendelsen af dokumentstruktur. Download nu?</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Download af layoutmodel mislykkedes. Fortsætter oversættelse med grundlæggende layoutgenkendelse.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Vælg inputformat: Tekst (almindelig tekst), Markdown eller PDF. PDF-tilstand understøtter ML-layoutgenkendelse for bedre nøjagtighed.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Mono: kun målsprog. Tosproget: kilde og mål side om side. Begge: genererer både ensproget og tosproget output.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Antal sider der oversættes samtidigt. Højere værdier er hurtigere men bruger mere API-kvote. Anbefalet: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Angiv sider der skal oversættes (kun PDF). Eksempler: 1-3, 5, 7-10. Lad feltet stå tomt for at oversætte alle sider.</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>Download CJK-skrifttype</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>CJK-skrifttype (~16 MB) er nødvendig for korrekt gengivelse af {0} i PDF. Download nu?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>Spring over</value>
   </data>
 </root>

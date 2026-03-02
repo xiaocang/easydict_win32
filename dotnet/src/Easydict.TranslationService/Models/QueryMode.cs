@@ -10,4 +10,7 @@ public enum QueryMode
 
     /// <summary>Same-language grammar correction with diff and explanations.</summary>
     GrammarCorrection,
+
+    /// <summary>Long document translation (PDF/Text/Markdown).</summary>
+    LongDocument,
 }

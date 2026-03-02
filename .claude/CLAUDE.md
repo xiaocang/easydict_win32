@@ -17,7 +17,11 @@ easydict_win32/
 │   │   ├── Easydict.WinUI/              # Main WinUI 3 application
 │   │   │   ├── Views/                   # UI views and pages
 │   │   │   ├── Services/                # Application services
-│   │   │   │   └── ScreenCapture/       # Screen capture UI (GDI+ Win32)
+│   │   │   │   ├── ScreenCapture/       # Screen capture UI (GDI+ Win32)
+│   │   │   │   ├── DocumentExport/      # Long doc export (PDF/MD/TXT)
+│   │   │   │   ├── LongDocument/        # Long doc orchestration
+│   │   │   │   ├── LayoutDetection/     # ML layout detection services
+│   │   │   │   └── FontDownload/        # CJK font download service
 │   │   │   ├── Models/                  # View models and data models
 │   │   │   ├── Strings/                 # Localization resources
 │   │   │   └── Themes/                  # Theme resources
@@ -25,6 +29,10 @@ easydict_win32/
 │   │   │   ├── Services/                # Translation service implementations
 │   │   │   ├── Models/                  # Translation models
 │   │   │   ├── Streaming/               # LLM streaming support
+│   │   │   ├── LongDocument/            # Long doc core library
+│   │   │   │   ├── Models/              # Long doc data models
+│   │   │   │   ├── LayoutDetection/     # Layout detection strategies
+│   │   │   │   └── FormulaProtection/   # Formula detection & restoration
 │   │   │   ├── Security/                # Encryption/security utilities
 │   │   │   └── Resources/               # Service resources
 │   │   ├── Easydict.NativeBridge/       # Browser extension native messaging host
@@ -35,6 +43,7 @@ easydict_win32/
 │   │   │   ├── Services/                # Translation service tests
 │   │   │   ├── Streaming/               # Streaming tests
 │   │   │   ├── Models/                  # Model tests
+│   │   │   ├── LongDocument/            # Long doc tests
 │   │   │   └── Mocks/                   # Mock implementations
 │   │   └── Easydict.WinUI.Tests/
 │   │       └── Services/                # WinUI service tests
@@ -107,6 +116,9 @@ make test
 make test-translation
 make test-winui
 
+# Run long document tests
+make test-translation --filter "FullyQualifiedName~LongDocument"
+
 # Publish (x64)
 make publish-x64
 
@@ -122,6 +134,7 @@ make run
 - **Translation Services**: 15+ services including Google, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Caiyun, NiuTrans, Linguee, Ollama, and custom OpenAI-compatible services
 - **LLM Streaming Translation**: Real-time display of translation results
 - **Multiple Window Modes**: Main, Mini, Fixed windows
+- **Long Document Translation**: PDF/Text/Markdown translation with ML layout detection, formula protection, parallel processing, bilingual output, and translation cache
 - **OCR Screenshot Translate**: Snipaste-style screen capture with Windows OCR API, supports 26+ languages, configurable recognition language
 - **Global Hotkeys**:
   - `Ctrl+Alt+T` - Show/hide main window
@@ -266,6 +279,18 @@ OcrTextMerger                            # CJK-aware text line merging (pure log
 4. `WindowsOcrService.RecognizeAsync()` → `OcrTextMerger` post-processes → `OcrResult`
 5. Result sent to `MiniWindowService.ShowWithText()` for translation (or copied to clipboard for silent mode)
 
+### Long Document Translation
+
+Sophisticated document processing pipeline for PDF, plain text, and Markdown with ML-based layout detection, formula protection, parallel translation, and bilingual export. See [LONG_DOCUMENT_TRANSLATION.md](LONG_DOCUMENT_TRANSLATION.md) for complete architecture and implementation details.
+
+**Quick Links:**
+- Service architecture and components
+- ML layout detection (ONNX/Vision/Heuristic)
+- Formula protection system (three-tier detection)
+- Document export pipeline (PDF/MD/TXT)
+- Translation cache system
+- Settings reference and testing
+
 ### IPC Architecture
 - `Easydict.SidecarClient` provides communication with external sidecar processes
 - `Easydict.NativeBridge` provides native messaging host for browser extension communication (stdin/stdout JSON + 4-byte length prefix)
@@ -276,6 +301,7 @@ OcrTextMerger                            # CJK-aware text line merging (pure log
 - Unit tests using xUnit + FluentAssertions
 - Mock implementations for HTTP clients and external services
 - Separate test projects for each major component
+- Long Document Translation: `tests/Easydict.TranslationService.Tests/LongDocument/` with comprehensive coverage of formula protection, parallel translation, layout detection, and export functionality
 
 ### Windows Store (`.winstore/`)
 - App is published on Microsoft Store: https://apps.microsoft.com/detail/9p7nqvxf9dzj

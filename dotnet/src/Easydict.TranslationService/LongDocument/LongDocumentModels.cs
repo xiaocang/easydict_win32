@@ -1,0 +1,353 @@
+using Easydict.TranslationService.Models;
+
+namespace Easydict.TranslationService.LongDocument;
+
+public enum SourceBlockType
+{
+    Paragraph,
+    Heading,
+    Caption,
+    TableCell,
+    Formula,
+    Unknown
+}
+
+public enum BlockType
+{
+    Paragraph,
+    Heading,
+    Caption,
+    Table,
+    Formula,
+    Unknown
+}
+
+public readonly record struct BlockRect(double X, double Y, double Width, double Height);
+
+/// <summary>
+/// Text alignment detected from source PDF line positions.
+/// </summary>
+public enum TextAlignment
+{
+    Left,
+    Center,
+    Right
+}
+
+/// <summary>
+/// Text styling extracted from source PDF letters within a block.
+/// Values are aggregated (median font size, majority vote for bold/italic, average color).
+/// </summary>
+public sealed record BlockTextStyle
+{
+    /// <summary>Median font size in points from source PDF letters.</summary>
+    public double FontSize { get; init; }
+
+    /// <summary>Whether the majority of letters use a bold font.</summary>
+    public bool IsBold { get; init; }
+
+    /// <summary>Whether the majority of letters use an italic font.</summary>
+    public bool IsItalic { get; init; }
+
+    /// <summary>Average red component (0–255) of source text color.</summary>
+    public byte ColorR { get; init; }
+
+    /// <summary>Average green component (0–255) of source text color.</summary>
+    public byte ColorG { get; init; }
+
+    /// <summary>Average blue component (0–255) of source text color.</summary>
+    public byte ColorB { get; init; }
+
+    /// <summary>Text alignment detected from line positions within the block.</summary>
+    public TextAlignment Alignment { get; init; }
+
+    /// <summary>Median baseline-to-baseline distance between lines (0 if single-line block).</summary>
+    public double LineSpacing { get; init; }
+
+    /// <summary>Per-line baseline coordinates from the source PDF (PDF coordinate space).</summary>
+    public IReadOnlyList<BlockLinePosition>? LinePositions { get; init; }
+
+    /// <summary>Rotation angle in degrees. 0 = normal horizontal text, -90 = vertical sidebar text (read bottom-to-top).</summary>
+    public double RotationAngle { get; init; }
+
+    /// <summary>True if the color is effectively black (all components ≤ 30).</summary>
+    public bool IsBlack => ColorR <= 30 && ColorG <= 30 && ColorB <= 30;
+}
+
+/// <summary>
+/// Baseline position of a single text line within a block, in PDF coordinate space.
+/// </summary>
+public readonly record struct BlockLinePosition(double BaselineY, double Left, double Right);
+
+/// <summary>
+/// Per-character font/position data extracted from a PDF letter within a formula block.
+/// Used for multi-font rendering and subscript/superscript detection in PDF export.
+/// </summary>
+public readonly record struct FormulaCharacterInfo(
+    string Value,
+    string FontName,
+    double PointSize,
+    double GlyphLeft,
+    double GlyphBottom,
+    double GlyphWidth,
+    double GlyphHeight,
+    bool IsMathFont,
+    bool IsSubscript,
+    bool IsSuperscript);
+
+/// <summary>
+/// Aggregated formula character data for a block, including per-character info
+/// and block-level statistics for rendering decisions.
+/// </summary>
+public sealed record BlockFormulaCharacters
+{
+    public required IReadOnlyList<FormulaCharacterInfo> Characters { get; init; }
+    public double MedianTextFontSize { get; init; }
+    public double MedianBaselineY { get; init; }
+    public bool HasMathFontCharacters { get; init; }
+}
+
+public sealed record SourceDocumentBlock
+{
+    public required string BlockId { get; init; }
+    public required SourceBlockType BlockType { get; init; }
+    public required string Text { get; init; }
+    public BlockRect? BoundingBox { get; init; }
+    public string? ParentBlockId { get; init; }
+    public bool IsFormulaLike { get; init; }
+    public IReadOnlyList<string>? DetectedFontNames { get; init; }
+    public BlockTextStyle? TextStyle { get; init; }
+    public BlockFormulaCharacters? FormulaCharacters { get; init; }
+}
+
+public sealed record SourceDocumentPage
+{
+    public required int PageNumber { get; init; }
+    public required IReadOnlyList<SourceDocumentBlock> Blocks { get; init; }
+    public bool IsScanned { get; init; }
+}
+
+public sealed record SourceDocument
+{
+    public required string DocumentId { get; init; }
+    public required IReadOnlyList<SourceDocumentPage> Pages { get; init; }
+}
+
+public sealed record DocumentBlockIr
+{
+    public required string IrBlockId { get; init; }
+    public required int PageNumber { get; init; }
+    public required string SourceBlockId { get; init; }
+    public required BlockType BlockType { get; init; }
+    public required string OriginalText { get; init; }
+    public required string ProtectedText { get; init; }
+    public required string SourceHash { get; init; }
+    public BlockRect? BoundingBox { get; init; }
+    public string? ParentIrBlockId { get; init; }
+    public bool TranslationSkipped { get; init; }
+    public BlockTextStyle? TextStyle { get; init; }
+    public BlockFormulaCharacters? FormulaCharacters { get; init; }
+}
+
+public sealed record DocumentIr
+{
+    public required string DocumentId { get; init; }
+    public required IReadOnlyList<DocumentBlockIr> Blocks { get; init; }
+}
+
+public sealed record TranslatedDocumentPage
+{
+    public required int PageNumber { get; init; }
+    public required IReadOnlyList<TranslatedDocumentBlock> Blocks { get; init; }
+}
+
+public sealed record TranslatedDocumentBlock
+{
+    public required string IrBlockId { get; init; }
+    public required string SourceBlockId { get; init; }
+    public required BlockType BlockType { get; init; }
+    public required string OriginalText { get; init; }
+    public required string ProtectedText { get; init; }
+    public required string TranslatedText { get; init; }
+    public required string SourceHash { get; init; }
+    public BlockRect? BoundingBox { get; init; }
+    public bool TranslationSkipped { get; init; }
+    public int RetryCount { get; init; }
+    public string? LastError { get; init; }
+    public BlockTextStyle? TextStyle { get; init; }
+    public BlockFormulaCharacters? FormulaCharacters { get; init; }
+}
+
+public sealed record LongDocumentTranslationOptions
+{
+    public string ServiceId { get; init; } = "google";
+    public Language FromLanguage { get; init; } = Language.Auto;
+    public required Language ToLanguage { get; init; }
+    public bool EnableFormulaProtection { get; init; } = true;
+    public bool EnableOcrFallback { get; init; } = true;
+    public int MaxRetriesPerBlock { get; init; } = 1;
+    public IReadOnlyDictionary<string, string>? Glossary { get; init; }
+    public LayoutDetectionMode LayoutDetection { get; init; } = LayoutDetectionMode.Auto;
+    public int MaxConcurrency { get; init; } = 1;
+    public string? FormulaFontPattern { get; init; }
+    public string? FormulaCharPattern { get; init; }
+    public string? PageRange { get; init; }
+    public string? CustomPrompt { get; init; }
+    public System.IProgress<LongDocumentTranslationProgress>? Progress { get; init; }
+}
+
+/// <summary>
+/// Parses page range strings into a set of 1-based page numbers.
+/// Supports formats: "1-3,5,7-10", "1-5", "3", "all", null/empty (= all pages).
+/// </summary>
+public static class PageRangeParser
+{
+    public static HashSet<int>? Parse(string? pageRange, int totalPages)
+    {
+        if (string.IsNullOrWhiteSpace(pageRange))
+            return null;
+
+        var trimmed = pageRange.Trim();
+        if (trimmed.Equals("all", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var result = new HashSet<int>();
+        var parts = trimmed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            var dashIndex = part.IndexOf('-');
+            if (dashIndex > 0 && dashIndex < part.Length - 1)
+            {
+                if (int.TryParse(part.AsSpan(0, dashIndex), out var start) &&
+                    int.TryParse(part.AsSpan(dashIndex + 1), out var end))
+                {
+                    start = Math.Max(1, start);
+                    end = Math.Min(totalPages, end);
+                    for (var i = start; i <= end; i++)
+                        result.Add(i);
+                }
+            }
+            else if (int.TryParse(part, out var page))
+            {
+                if (page >= 1 && page <= totalPages)
+                    result.Add(page);
+            }
+        }
+
+        return result.Count > 0 ? result : null;
+    }
+}
+
+public sealed record FailedBlockInfo
+{
+    public required string IrBlockId { get; init; }
+    public required string SourceBlockId { get; init; }
+    public required int PageNumber { get; init; }
+    public required int RetryCount { get; init; }
+    public required string Error { get; init; }
+}
+
+public sealed record BackfillPageMetrics
+{
+    public required long CandidateBlocks { get; init; }
+    public required long RenderedBlocks { get; init; }
+    public required long MissingBoundingBoxBlocks { get; init; }
+    public required long ShrinkFontBlocks { get; init; }
+    public required long TruncatedBlocks { get; init; }
+    public required long ObjectReplaceBlocks { get; init; }
+    public required long OverlayModeBlocks { get; init; }
+    public required long StructuredFallbackBlocks { get; init; }
+}
+
+public sealed record BackfillQualityMetrics
+{
+    public required long CandidateBlocks { get; init; }
+    public required long RenderedBlocks { get; init; }
+    public required long MissingBoundingBoxBlocks { get; init; }
+    public required long ShrinkFontBlocks { get; init; }
+    public required long TruncatedBlocks { get; init; }
+    public required long ObjectReplaceBlocks { get; init; }
+    public required long OverlayModeBlocks { get; init; }
+    public required long StructuredFallbackBlocks { get; init; }
+    public IReadOnlyDictionary<int, BackfillPageMetrics>? PageMetrics { get; init; }
+    public string? RetryMergeStrategy { get; init; }
+
+    /// <summary>
+    /// Optional per-block issues encountered during PDF coordinate backfill (e.g., skipped grid blocks, truncation).
+    /// Kept optional to avoid bloating reports in normal cases.
+    /// </summary>
+    public IReadOnlyList<BackfillBlockIssue>? BlockIssues { get; init; }
+}
+
+/// <summary>
+/// Per-block rendering/backfill issue for diagnostics.
+/// </summary>
+public sealed record BackfillBlockIssue
+{
+    public required int ChunkIndex { get; init; }
+    public required string SourceBlockId { get; init; }
+    public required int PageNumber { get; init; }
+
+    /// <summary>
+    /// Short machine-readable kind, e.g. "skipped-rotated", "skipped-grid", "skipped-table-like", "truncated".
+    /// </summary>
+    public required string Kind { get; init; }
+
+    /// <summary>
+    /// Optional human-readable detail.
+    /// </summary>
+    public string? Detail { get; init; }
+}
+
+public sealed record LongDocumentQualityReport
+{
+    public required IReadOnlyDictionary<string, long> StageTimingsMs { get; init; }
+    public BackfillQualityMetrics? BackfillMetrics { get; init; }
+    public required int TotalBlocks { get; init; }
+    public required int TranslatedBlocks { get; init; }
+    public required int SkippedBlocks { get; init; }
+    public required IReadOnlyList<FailedBlockInfo> FailedBlocks { get; init; }
+}
+
+public sealed record LongDocumentTranslationResult
+{
+    public required DocumentIr Ir { get; init; }
+    public required IReadOnlyList<TranslatedDocumentPage> Pages { get; init; }
+    public required LongDocumentQualityReport QualityReport { get; init; }
+}
+
+/// <summary>
+/// Progress stage for long document translation.
+/// </summary>
+public enum LongDocumentTranslationStage
+{
+    Parsing,
+    BuildingIr,
+    FormulaProtection,
+    Translating,
+    Exporting
+}
+
+/// <summary>
+/// Progress information for long document translation.
+/// </summary>
+public sealed record LongDocumentTranslationProgress
+{
+    public required LongDocumentTranslationStage Stage { get; init; }
+    public int CurrentBlock { get; init; }
+    public int TotalBlocks { get; init; }
+    public int CurrentPage { get; init; }
+    public int TotalPages { get; init; }
+    public double Percentage { get; init; }
+    public string? CurrentBlockPreview { get; init; }
+
+    public string GetStageDisplayName() => Stage switch
+    {
+        LongDocumentTranslationStage.Parsing => "Parsing document",
+        LongDocumentTranslationStage.BuildingIr => "Building intermediate representation",
+        LongDocumentTranslationStage.FormulaProtection => "Applying formula protection",
+        LongDocumentTranslationStage.Translating => "Translating blocks",
+        LongDocumentTranslationStage.Exporting => "Exporting document",
+        _ => "Processing"
+    };
+}

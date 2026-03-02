@@ -287,6 +287,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0} — klik untuk beralih ke {1}</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>Dokumen Panjang</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>Enter text to check grammar...</value>
   </data>
@@ -307,5 +310,143 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
+  </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>Mod Output Dokumen</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>Pilih format output. Mod dwibahasa menyelang-selikan kandungan asal dan terjemahan.</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>Satu bahasa (Lalai)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>Dwibahasa (Berselang-seli)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>Kedua-dua</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF dwibahasa: halaman berselang-seli. Markdown/Teks: blok asal+terjemahan.</value>
+  </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>Keserentakan Terjemahan</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>Bilangan maksimum permintaan terjemahan selari untuk dokumen panjang. Nilai lebih tinggi mempercepatkan terjemahan tetapi mungkin mencapai had kadar API.</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>Disyorkan: 4 untuk perkhidmatan LLM, 1-2 untuk API percuma dengan had kadar ketat.</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>Fon CJK</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>Muat turun fon CJK untuk pemaparan teks Cina, Jepun dan Korea yang betul dalam output PDF.</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>Muat Turun Fon CJK</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>Padam</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Memuat turun Noto Sans CJK (~16MB setiap bahasa). Diperlukan untuk teks CJK dalam pemaparan tindanan PDF.</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>Pengesanan Formula</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>Pengesanan formula lanjutan menggunakan nama fon dan aksara matematik Unicode untuk melindungi formula daripada terjemahan.</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>Corak Fon (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>Corak Aksara (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>Biarkan kosong untuk menggunakan corak terbina dalam. Corak fon memadankan nama fon PDF (Tahap 2). Corak aksara memadankan julat Unicode (Tahap 3).</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>Cache Terjemahan</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>Cache segmen yang diterjemahkan secara tempatan untuk mempercepatkan terjemahan berulang dan menjimatkan kos API.</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>Kosongkan Cache</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>Terjemahan yang dicache disimpan secara tempatan dalam SQLite. Kosongkan cache jika terjemahan sudah lapuk.</value>
+  </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>Julat Halaman</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>Tentukan halaman yang hendak diterjemahkan. Biarkan kosong untuk menterjemahkan semua halaman.</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>Format: "1-5" (julat), "3" (halaman tunggal), "1-3,5,7-10" (campuran). Kosong atau "all" = terjemahkan semua halaman.</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>Prompt Terjemahan Tersuai</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>Tambah arahan tersuai untuk perkhidmatan terjemahan berasaskan LLM (OpenAI, DeepSeek, Gemini, dll.).</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>Arahan ini ditambahkan pada prompt sistem untuk perkhidmatan LLM. Tiada kesan pada perkhidmatan bukan LLM (Google, DeepL, dll.).</value>
+  </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>Semak imbas...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>Semak imbas...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>Tiada fail dipilih</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0} fail dipilih</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>Output: {filename}_translated.pdf</value>
+  </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>Konfigurasikan perkhidmatan dalam Tetapan</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>Muat Turun Model Susun Atur</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>Model pengesanan susun atur (~75MB) meningkatkan pengecaman struktur dokumen. Muat turun sekarang?</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>Muat turun model susun atur gagal. Meneruskan terjemahan dengan pengesanan susun atur asas.</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>Pilih format input: Teks (teks biasa), Markdown atau PDF. Mod PDF menyokong pengesanan susun atur ML untuk ketepatan yang lebih baik.</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>Mono: bahasa sasaran sahaja. Dwibahasa: sumber dan sasaran sebelah menyebelah. Kedua-dua: menghasilkan output mono dan dwibahasa.</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>Bilangan halaman untuk diterjemah secara serentak. Nilai lebih tinggi lebih pantas tetapi menggunakan lebih banyak kuota API. Disyorkan: 2-4.</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>Tentukan halaman untuk diterjemah (PDF sahaja). Contoh: 1-3, 5, 7-10. Biarkan kosong untuk menterjemah semua halaman.</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>Muat Turun Fon CJK</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>Fon CJK (~16MB) diperlukan untuk pemaparan {0} yang betul dalam PDF. Muat turun sekarang?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>Muat Turun</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>Langkau</value>
   </data>
 </root>

@@ -863,6 +863,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0}（点击切换为{1}）</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>长文档翻译</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>输入文本以检查语法...</value>
   </data>
@@ -883,5 +886,181 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>未发现语法问题。</value>
+  </data>
+
+  <!-- Layout Detection -->
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>布局检测</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>基于 ML 的长文档布局检测，提升学术论文中图表、表格和公式的识别准确度。</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>自动（推荐）</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>本地 ONNX 模型</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>视觉大模型</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>仅启发式</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>下载模型（约 75MB）</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX 模型：已就绪</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX 模型：未下载</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>下载失败</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>检测模式</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>视觉服务</value>
+  </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>文档输出模式</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>选择输出格式。双语模式将原文和译文交替排列。</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>单语（默认）</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>双语（交替排列）</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>同时生成</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF 双语：交替页面。Markdown/文本：原文+译文段落。</value>
+  </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>翻译并发数</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>长文档翻译的最大并行请求数。数值越高翻译速度越快，但可能触发 API 速率限制。</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>建议：LLM 服务设为 4，有严格速率限制的免费 API 设为 1-2。</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK 字体</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>下载 CJK 字体以在 PDF 输出中正确渲染中日韩文字。</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>下载 CJK 字体</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>下载 Noto Sans CJK（每种语言约 16MB）。PDF 叠层渲染中日韩文字时必需。</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>公式检测</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>高级公式检测使用字体名称和 Unicode 数学字符来保护公式不被翻译。</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>字体模式（正则）</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>字符模式（正则）</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>留空使用内置模式。字体模式匹配 PDF 字体名（Level 2）。字符模式匹配 Unicode 范围（Level 3）。</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>翻译缓存</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>将已翻译的段落缓存到本地，加速重复翻译并节省 API 费用。</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>清除缓存</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>缓存的翻译存储在本地 SQLite 数据库中。如果翻译过时，请清除缓存。</value>
+  </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>页面范围</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>指定要翻译的页面。留空则翻译所有页面。</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>格式："1-5"（范围）、"3"（单页）、"1-3,5,7-10"（混合）。留空或 "all" = 翻译所有页面。</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>自定义翻译提示词</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>为基于 LLM 的翻译服务（OpenAI、DeepSeek、Gemini 等）添加自定义指令。</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>这些指令会追加到 LLM 服务的系统提示词中。对非 LLM 服务（Google、DeepL 等）无效。</value>
+  </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>浏览文件...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>浏览目录...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>未选择文件</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>已选择 {0} 个文件</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>输出：{filename}_translated.pdf</value>
+  </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>在设置中配置服务</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>下载版面检测模型</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>版面检测模型（约75MB）可提升文档结构识别效果。是否下载？</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>版面检测模型下载失败，将使用基础版面检测继续翻译。</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>选择输入格式：文本（纯文本）、Markdown 或 PDF。PDF 模式支持 ML 版面检测以提高准确性。</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>单语：仅目标语言。双语：源语言和目标语言并排显示。两者：同时生成单语和双语输出。</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>同时翻译的页面数。值越大速度越快，但消耗更多 API 配额。推荐：2-4。</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>指定要翻译的页面（仅 PDF）。示例：1-3, 5, 7-10。留空则翻译所有页面。</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>下载 CJK 字体</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>需要 CJK 字体（约16MB）才能正确渲染 PDF 中的{0}文字。是否下载？</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>下载</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>跳过</value>
   </data>
 </root>

@@ -1,14 +1,18 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using Easydict.TranslationService;
+using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.DocumentExport;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
-using Windows.UI.Core;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 
 namespace Easydict.WinUI.Views
@@ -39,11 +43,31 @@ namespace Easydict.WinUI.Views
         private bool _suppressTargetLanguageSelectionChanged;
         private bool _suppressSourceLanguageSelectionChanged;
         private QueryMode _currentMode = QueryMode.Translation;
+        private readonly Services.LongDocumentTranslationService _longDocumentService = new();
+        private readonly LongDocumentDeduplicationService _longDocDedupService = new();
+        private LongDocumentTranslationCheckpoint? _longDocCheckpoint;
+        private TranslationLanguage _longDocLastFrom = TranslationLanguage.Auto;
+        private TranslationLanguage _longDocLastTo = TranslationLanguage.English;
+        private string _longDocLastServiceId = string.Empty;
+        private string _longDocLastDedupKey = string.Empty;
+        private CancellationTokenSource? _longDocSingleTaskCts;
+        private CancellationTokenSource? _longDocQueueCts;
+        private Task? _longDocQueueTask;
+        private readonly ObservableCollection<LongDocFileItem> _longDocFileItems = new();
+        private readonly ObservableCollection<LongDocHistoryItem> _longDocHistoryItems = new();
+        private string _longDocOutputFolder = "";
+        private bool _isLongDocTranslating;
+        private ContentDialog? _currentDialog;
 
         /// <summary>
         /// Maximum time to wait for in-flight query to complete during cleanup.
         /// </summary>
         private const int QueryShutdownTimeoutSeconds = 2;
+
+        /// <summary>
+        /// Maximum history items to keep.
+        /// </summary>
+        private const int MaxHistoryItems = 50;
 
         public MainPage()
         {
@@ -107,6 +131,9 @@ namespace Easydict.WinUI.Views
 
             // Initialize service result controls based on enabled services
             InitializeServiceResults();
+            InitializeLongDocServices();
+            InitializeLongDocOutputDefaults();
+            OnLongDocInputModeChanged(LongDocInputModeCombo, null!);
         }
 
         private async void OnPageUnloaded(object sender, RoutedEventArgs e)
@@ -168,6 +195,10 @@ namespace Easydict.WinUI.Views
                 LanguageComboHelper.PopulateSourceCombo(SourceLangComboNarrow, loc);
                 LanguageComboHelper.PopulateTargetCombo(TargetLangCombo, loc);
                 LanguageComboHelper.PopulateTargetCombo(TargetLangComboNarrow, loc);
+
+                // Long Doc language combos — default source to Auto, target to user's FirstLanguage
+                LanguageComboHelper.PopulateSourceCombo(LongDocSourceLangCombo, loc);
+                LanguageComboHelper.PopulateTargetCombo(LongDocTargetLangCombo, loc, _settings.FirstLanguage);
             }
             finally
             {
@@ -175,8 +206,8 @@ namespace Easydict.WinUI.Views
                 _suppressTargetLanguageSelectionChanged = false;
             }
 
-            // Update query mode button emoji and tooltip
-            UpdateQueryModeButton();
+            // Apply mode state (emoji, subtitle, menu item texts)
+            ApplyModeState();
 
             // Input placeholder
             InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
@@ -198,37 +229,58 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(LangHelpIcon, loc.GetString("LanguagePickerHelpTip"));
             ToolTipService.SetToolTip(LangHelpIconNarrow, loc.GetString("LanguagePickerHelpTip"));
             ToolTipService.SetToolTip(InputHelpIcon, loc.GetString("InputHelpTip"));
+
+            // Long doc language combo tooltips
+            ToolTipService.SetToolTip(LongDocSourceLangCombo, loc.GetString("SourceLanguageTooltip"));
+            ToolTipService.SetToolTip(LongDocTargetLangCombo, loc.GetString("TargetLanguageTooltip"));
+
+            // Long doc service hint (shown as tooltip on 🤖? icon next to service combo)
+            ToolTipService.SetToolTip(LongDocServiceHint, loc.GetString("LongDoc_ServiceHint"));
+
+            // Long doc control help icons
+            ToolTipService.SetToolTip(LongDocInputModeHint, loc.GetString("LongDoc_InputModeHelpTip"));
+            ToolTipService.SetToolTip(LongDocOutputModeHint, loc.GetString("LongDoc_OutputModeHelpTip"));
+            ToolTipService.SetToolTip(LongDocConcurrencyHint, loc.GetString("LongDoc_ConcurrencyHelpTip"));
+            ToolTipService.SetToolTip(LongDocPageRangeHint, loc.GetString("LongDoc_PageRangeHelpTip"));
         }
 
-        private void UpdateQueryModeButton()
+        /// <summary>
+        /// Apply all UI state for the current mode (emoji, subtitle, content visibility, grammar-specific controls).
+        /// </summary>
+        private void ApplyModeState()
         {
-            bool isGrammar = _currentMode == QueryMode.GrammarCorrection;
-            var emoji = isGrammar ? "✏️" : "🌐";
-            QueryModeEmoji.Text = emoji;
-            QueryModeEmojiNarrow.Text = emoji;
-
             var loc = LocalizationService.Instance;
-            var currentName = loc.GetString(isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
-                ?? (isGrammar ? "Grammar Check" : "Translate");
-            var otherName = loc.GetString(!isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
-                ?? (!isGrammar ? "Grammar Check" : "Translate");
-            var fmt = loc.GetString("QueryModeButton_SwitchTooltip") ?? "{0} — click to switch to {1}";
-            var tooltip = string.Format(fmt, currentName, otherName);
-            ToolTipService.SetToolTip(QueryModeButton, tooltip);
-            ToolTipService.SetToolTip(QueryModeButtonNarrow, tooltip);
-        }
 
-        private void OnQueryModeButtonClick(object sender, RoutedEventArgs e)
-        {
-            if (!_isLoaded) return;
+            // Update header emoji
+            ModeEmojiIcon.Text = _currentMode switch
+            {
+                QueryMode.GrammarCorrection => "✏️",
+                QueryMode.LongDocument => "📄",
+                _ => "🌐"
+            };
 
-            _currentMode = _currentMode == QueryMode.GrammarCorrection
-                ? QueryMode.Translation
-                : QueryMode.GrammarCorrection;
+            // Update subtitle
+            switch (_currentMode)
+            {
+                case QueryMode.GrammarCorrection:
+                    ModeSubtitle.Text = loc.GetString("QueryMode_GrammarCorrection") ?? "Grammar Correction";
+                    ModeSubtitle.Visibility = Visibility.Visible;
+                    break;
+                case QueryMode.LongDocument:
+                    ModeSubtitle.Text = loc.GetString("Mode_LongDocument") ?? "Long Document";
+                    ModeSubtitle.Visibility = Visibility.Visible;
+                    break;
+                default:
+                    ModeSubtitle.Visibility = Visibility.Collapsed;
+                    break;
+            }
 
-            UpdateQueryModeButton();
+            // Toggle main content areas
+            var isLongDoc = _currentMode == QueryMode.LongDocument;
+            QuickTranslateContent.Visibility = isLongDoc ? Visibility.Collapsed : Visibility.Visible;
+            LongDocContent.Visibility = isLongDoc ? Visibility.Visible : Visibility.Collapsed;
 
-            var loc = LocalizationService.Instance;
+            // Grammar-specific UI (only relevant when not in LongDoc mode)
             if (_currentMode == QueryMode.GrammarCorrection)
             {
                 TargetLangCombo.Visibility = Visibility.Collapsed;
@@ -249,7 +301,7 @@ namespace Easydict.WinUI.Views
                 ToolTipService.SetToolTip(TranslateButtonNarrow,
                     loc.GetString("TranslateButton_Grammar_Tooltip") ?? "Check Grammar");
             }
-            else
+            else if (_currentMode == QueryMode.Translation)
             {
                 TargetLangCombo.Visibility = Visibility.Visible;
                 SwapLanguageButton.Visibility = Visibility.Visible;
@@ -266,7 +318,16 @@ namespace Easydict.WinUI.Views
                 ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
             }
 
-            InitializeServiceResults();
+            // Localize menu item texts
+            ModeTranslationItem.Text = "🌐  " + (loc.GetString("QueryMode_Translation") ?? "Quick Translation");
+            ModeGrammarItem.Text = "✏️  " + (loc.GetString("QueryMode_GrammarCorrection") ?? "Grammar Correction");
+            ModeLongDocItem.Text = "📄  " + (loc.GetString("Mode_LongDocument") ?? "Long Document");
+
+            // Re-initialize service results (grammar mode filters to grammar-capable services)
+            if (!isLongDoc)
+            {
+                InitializeServiceResults();
+            }
         }
 
         private void OnClipboardTextReceived(string text)
@@ -283,6 +344,15 @@ namespace Easydict.WinUI.Views
                 {
                     return;
                 }
+
+                // Switch out of Long Document mode for quick translate
+                if (_currentMode == QueryMode.LongDocument)
+                {
+                    _currentMode = QueryMode.Translation;
+                    ModeTranslationItem.IsChecked = true;
+                    ApplyModeState();
+                }
+
                 InputTextBox.Text = text;
                 await StartQueryTrackedAsync();
             });
@@ -497,6 +567,16 @@ namespace Easydict.WinUI.Views
         private async Task CleanupResourcesAsync()
         {
             CancelCurrentQuery();
+
+            _longDocumentService.Dispose();
+
+            var singleTaskCts = Interlocked.Exchange(ref _longDocSingleTaskCts, null);
+            try { singleTaskCts?.Cancel(); } catch (ObjectDisposedException) { }
+            singleTaskCts?.Dispose();
+
+            var queueCts = Interlocked.Exchange(ref _longDocQueueCts, null);
+            try { queueCts?.Cancel(); } catch (ObjectDisposedException) { }
+            queueCts?.Dispose();
 
             // Cancel any in-flight manual queries
             // Don't dispose - let the owning OnServiceQueryRequested's finally block dispose it
@@ -1242,6 +1322,16 @@ namespace Easydict.WinUI.Views
             return LanguageComboHelper.GetSelectedLanguage(TargetLangCombo);
         }
 
+        private TranslationLanguage GetLongDocSourceLanguage()
+        {
+            return LanguageComboHelper.GetSelectedLanguage(LongDocSourceLangCombo);
+        }
+
+        private TranslationLanguage GetLongDocTargetLanguage()
+        {
+            return LanguageComboHelper.GetSelectedLanguage(LongDocTargetLangCombo);
+        }
+
         /// <summary>
         /// Update detected language display label.
         /// </summary>
@@ -1416,6 +1506,910 @@ namespace Easydict.WinUI.Views
             }
         }
 
+
+        private void InitializeLongDocServices()
+        {
+            LongDocServiceCombo.Items.Clear();
+
+            var manager = TranslationManagerService.Instance.Manager;
+            foreach (var service in manager.Services.Values.Where(IsLongDocSupportedService).OrderBy(s => s.DisplayName))
+            {
+                var isReady = service.IsConfigured
+                    && _settings.ServiceTestStatus.TryGetValue(service.ServiceId, out var passed)
+                    && passed;
+
+                var item = new ComboBoxItem
+                {
+                    Content = service.DisplayName,
+                    Tag = service.ServiceId,
+                    FontStyle = isReady ? Windows.UI.Text.FontStyle.Normal : Windows.UI.Text.FontStyle.Italic,
+                    Foreground = isReady ? null
+                        : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray)
+                };
+                LongDocServiceCombo.Items.Add(item);
+            }
+
+            // Prefer first ready (configured + tested) service
+            var firstReady = LongDocServiceCombo.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(i => i.FontStyle == Windows.UI.Text.FontStyle.Normal);
+            LongDocServiceCombo.SelectedItem = firstReady ?? LongDocServiceCombo.Items.FirstOrDefault();
+
+            LongDocHistoryListView.ItemsSource = _longDocHistoryItems;
+        }
+
+        private static bool IsLongDocSupportedService(ITranslationService service)
+        {
+            // Built-in AI uses free proxy and is not stable enough for long document translation.
+            if (string.Equals(service.ServiceId, "builtin", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            // Long-document mode focuses on AI/LLM services similar to PDFMathTranslate style pipelines.
+            return service is IStreamTranslationService;
+        }
+
+        private bool TryGetSelectedLongDocServiceId(out string serviceId)
+        {
+            serviceId = (LongDocServiceCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(serviceId);
+        }
+
+
+        private void InitializeLongDocOutputDefaults()
+        {
+            // Initialize output folder
+            if (string.IsNullOrWhiteSpace(_longDocOutputFolder))
+            {
+                _longDocOutputFolder = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "Easydict",
+                    "LongDocOutputs");
+                LongDocOutputFolderDisplay.Text = _longDocOutputFolder;
+            }
+
+            // Initialize settings controls from SettingsService
+            InitializeLongDocSettingsControls();
+        }
+
+        private void InitializeLongDocSettingsControls()
+        {
+            // Initialize Output Mode combo
+            var outputMode = _settings.DocumentOutputMode ?? "Monolingual";
+            SelectComboByTag(LongDocOutputModeCombo, outputMode);
+
+            // Initialize Concurrency NumberBox
+            LongDocConcurrencyBox.Value = Math.Clamp(_settings.LongDocMaxConcurrency, 1, 16);
+
+            // Initialize Page Range TextBox
+            LongDocPageRangeBox.Text = _settings.LongDocPageRange ?? "";
+        }
+
+        private static void SelectComboByTag(ComboBox combo, string? tag)
+        {
+            if (combo is null) return;
+            for (int i = 0; i < combo.Items.Count; i++)
+            {
+                if (combo.Items[i] is ComboBoxItem item && item.Tag?.ToString() == tag)
+                {
+                    combo.SelectedIndex = i;
+                    return;
+                }
+            }
+            // Default to first item if not found
+            if (combo.Items.Count > 0)
+            {
+                combo.SelectedIndex = 0;
+            }
+        }
+
+        private bool TryValidateLongDocOutputFolder(out string errorMessage)
+        {
+            errorMessage = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(_longDocOutputFolder))
+            {
+                errorMessage = "Output folder is required. Click Browse to select a folder.";
+                return false;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(_longDocOutputFolder);
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Cannot create output folder: {ex.Message}";
+                return false;
+            }
+
+            return true;
+        }
+
+        private string BuildOutputPath(string sourceFilePath)
+        {
+            var folder = !string.IsNullOrWhiteSpace(_longDocOutputFolder)
+                ? _longDocOutputFolder
+                : Path.GetDirectoryName(sourceFilePath)
+                  ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var name = Path.GetFileNameWithoutExtension(sourceFilePath);
+            if (string.IsNullOrWhiteSpace(name)) name = "translated";
+            var ext = GetOutputExtension();
+            return Path.Combine(folder, $"{name}_translated{ext}");
+        }
+
+        private string GetOutputExtension()
+        {
+            var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pdf";
+            return modeTag switch
+            {
+                "plaintext" => ".txt",
+                "markdown" => ".md",
+                _ => ".pdf"
+            };
+        }
+
+        private static DocumentOutputMode GetDocumentOutputModeFromSettings()
+        {
+            var setting = SettingsService.Instance.DocumentOutputMode;
+            return setting switch
+            {
+                "Bilingual" => DocumentOutputMode.Bilingual,
+                "Both" => DocumentOutputMode.Both,
+                _ => DocumentOutputMode.Monolingual
+            };
+        }
+
+        private List<string> GetSelectedFilesList()
+        {
+            return _longDocFileItems
+                .Select(item => item.FilePath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private bool IsLongDocTaskRunning()
+        {
+            return _longDocSingleTaskCts is not null
+                   || _longDocQueueCts is not null
+                   || _longDocQueueTask is { IsCompleted: false };
+        }
+
+        private CancellationToken PrepareLongDocSingleTaskCancellationToken()
+        {
+            var previous = Interlocked.Exchange(ref _longDocSingleTaskCts, null);
+            try { previous?.Cancel(); } catch (ObjectDisposedException) { }
+            previous?.Dispose();
+
+            _longDocSingleTaskCts = new CancellationTokenSource();
+            return _longDocSingleTaskCts.Token;
+        }
+
+        private void CompleteLongDocSingleTask()
+        {
+            _longDocSingleTaskCts?.Dispose();
+            _longDocSingleTaskCts = null;
+        }
+
+        private void SetLongDocTaskUiState(bool running)
+        {
+            LongDocTranslateButton.IsEnabled = !running || _isLongDocTranslating; // Allow if in cancel mode
+            LongDocSourceLangCombo.IsEnabled = !running;
+            LongDocTargetLangCombo.IsEnabled = !running;
+            LongDocServiceCombo.IsEnabled = !running;
+            LongDocInputModeCombo.IsEnabled = !running;
+            LongDocBrowseButton.IsEnabled = !running;
+            LongDocOutputBrowseButton.IsEnabled = !running;
+            LongDocRetryButton.IsEnabled = !running;
+
+            if (running)
+            {
+                LongDocStatusText.Text = "Task running, settings are locked. Changes will apply to the next task.";
+            }
+            // When !running, the caller has already set the appropriate status
+            // (Completed/Partial success/Failed/Canceled), so don't overwrite it.
+        }
+
+        private string BuildQueueOutputPath(string outputFolder, string sourceFilePath, int queueIndex)
+        {
+            var safeName = Path.GetFileNameWithoutExtension(sourceFilePath);
+            if (string.IsNullOrWhiteSpace(safeName))
+            {
+                safeName = $"file-{queueIndex:000}";
+            }
+
+            var ext = GetOutputExtension();
+            var outputName = $"{safeName}_translated{ext}";
+            return Path.Combine(outputFolder, outputName);
+        }
+
+        private async Task ProcessLongDocQueueAsync(List<string> filePaths, string serviceId, string outputFolder, LongDocumentInputMode mode, LayoutDetectionMode layoutDetection, CancellationToken cancellationToken)
+        {
+            var from = GetLongDocSourceLanguage();
+            var to = GetLongDocTargetLanguage();
+
+            var completed = 0;
+            var skipped = 0;
+            var failed = 0;
+
+            for (var i = 0; i < filePaths.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var filePath = filePaths[i];
+                if (!File.Exists(filePath))
+                {
+                    failed++;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        LongDocStatusText.Text = $"Queue {i + 1}/{filePaths.Count} failed (file not found): {filePath}";
+                    });
+                    continue;
+                }
+
+                var dedupKey = await _longDocDedupService.CreateDedupKeyAsync(
+                    mode,
+                    filePath,
+                    serviceId,
+                    from,
+                    to,
+                    cancellationToken);
+
+                var existingPath = await _longDocDedupService.TryGetExistingOutputPathAsync(dedupKey, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(existingPath))
+                {
+                    skipped++;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        LongDocStatusText.Text = $"Queue {i + 1}/{filePaths.Count} skipped duplicate: {existingPath}";
+                    });
+                    continue;
+                }
+
+                var outputPath = BuildQueueOutputPath(outputFolder, filePath, i + 1);
+
+                var queueOutputMode = GetDocumentOutputModeFromSettings();
+                var result = await _longDocumentService.TranslateToPdfAsync(
+                    mode,
+                    filePath,
+                    from,
+                    to,
+                    outputPath,
+                    serviceId,
+                    progress => DispatcherQueue.TryEnqueue(() =>
+                    {
+                        LongDocStatusText.Text = $"Queue {i + 1}/{filePaths.Count}: {progress}";
+                    }),
+                    cancellationToken,
+                    layoutDetection: layoutDetection,
+                    outputMode: queueOutputMode);
+
+                if (result.State == LongDocumentJobState.Completed)
+                {
+                    await _longDocDedupService.RegisterOutputAsync(dedupKey, result.OutputPath, cancellationToken);
+                    completed++;
+
+                    var fileItem = new LongDocFileItem { FilePath = filePath };
+                    fileItem.MarkCompleted(result.OutputPath);
+                    var svcName = (LongDocServiceCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? serviceId;
+                    var tgtName = (LongDocTargetLangCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Unknown";
+                    DispatcherQueue.TryEnqueue(() => AddToHistory(fileItem, svcName, tgtName));
+                }
+                else
+                {
+                    failed++;
+                }
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                LongDocStatusText.Text = $"Queue finished. Completed: {completed}, Skipped: {skipped}, Failed/Partial: {failed}.";
+            });
+        }
+
+        private async void OnLongDocStartQueueClicked(object sender, RoutedEventArgs e)
+        {
+            if (IsLongDocTaskRunning())
+            {
+                LongDocStatusText.Text = "A task is already running. Please wait or cancel current task.";
+                return;
+            }
+
+            if (!TryGetSelectedLongDocServiceId(out var serviceId))
+            {
+                LongDocStatusText.Text = "Please select one translation service.";
+                return;
+            }
+
+            if (!TryValidateLongDocOutputFolder(out var outputError))
+            {
+                LongDocStatusText.Text = outputError;
+                return;
+            }
+
+            var outputFolder = _longDocOutputFolder;
+            var queueItems = GetSelectedFilesList();
+            if (queueItems.Count == 0)
+            {
+                LongDocStatusText.Text = "No files selected. Click Browse to select files.";
+                return;
+            }
+
+            var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pdf";
+            var mode = modeTag switch
+            {
+                "plaintext" => LongDocumentInputMode.PlainText,
+                "markdown" => LongDocumentInputMode.Markdown,
+                _ => LongDocumentInputMode.Pdf
+            };
+
+            _longDocQueueCts?.Cancel();
+            _longDocQueueCts?.Dispose();
+            _longDocQueueCts = new CancellationTokenSource();
+
+            SetLongDocTaskUiState(true);
+
+            var targetLang = GetTargetLanguage();
+
+            LayoutDetectionMode layoutMode;
+            try
+            {
+                // Check ONNX layout model availability (once before starting queue)
+                layoutMode = await EnsureOnnxReadyAsync(mode, _longDocQueueCts.Token);
+
+                // Check CJK font availability for PDF output (once before starting queue)
+                if (mode == LongDocumentInputMode.Pdf)
+                    await EnsureCjkFontReadyAsync(targetLang, _longDocQueueCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                LongDocStatusText.Text = "Queue canceled.";
+                SetLongDocButtonState(false);
+                SetLongDocTaskUiState(false);
+                _longDocQueueCts?.Dispose();
+                _longDocQueueCts = null;
+                return;
+            }
+
+            LongDocStatusText.Text = $"Queue started: {queueItems.Count} file(s).";
+
+            _longDocQueueTask = ProcessLongDocQueueAsync(queueItems, serviceId, outputFolder, mode, layoutMode, _longDocQueueCts.Token);
+
+            // Always run queue in background with continuation
+            _ = _longDocQueueTask.ContinueWith(task =>
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (task.IsCanceled)
+                    {
+                        LongDocStatusText.Text = "Queue canceled.";
+                    }
+                    else if (task.IsFaulted)
+                    {
+                        Debug.WriteLine($"[LongDoc] Queue failed: {task.Exception}");
+                        LongDocStatusText.Text = $"Queue failed: {task.Exception?.GetBaseException().Message}";
+                    }
+
+                    SetLongDocButtonState(false);
+                    SetLongDocTaskUiState(false);
+                    _longDocQueueTask = null;
+                    _longDocQueueCts?.Dispose();
+                    _longDocQueueCts = null;
+                });
+            }, TaskScheduler.Default);
+        }
+
+        private void OnLongDocCancelQueueClicked(object sender, RoutedEventArgs e)
+        {
+            _longDocSingleTaskCts?.Cancel();
+            _longDocQueueCts?.Cancel();
+            LongDocStatusText.Text = "Canceling current task...";
+        }
+
+        private void OnLongDocCancelClicked(object sender, RoutedEventArgs e)
+        {
+            _longDocSingleTaskCts?.Cancel();
+            LongDocStatusText.Text = "Canceling translation...";
+        }
+
+        private void OnLongDocInputModeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (LongDocFilePanel is null || LongDocOutputTitle is null) return; // Fired during InitializeComponent before controls exist
+
+            var selected = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+
+            // Title updates
+            LongDocInputTitle.Text = selected switch
+            {
+                "plaintext" => "Text Input",
+                "markdown" => "Markdown Input",
+                _ => "PDF Input"
+            };
+            LongDocOutputTitle.Text = "Translation Output";
+
+            // Clear file selection when mode changes
+            _longDocFileItems.Clear();
+            UpdateLongDocFileDisplay();
+
+            // Update output naming hint
+            var ext = GetOutputExtension();
+            LongDocOutputNamingHint.Text = $"Output: {{filename}}_translated{ext}";
+        }
+
+        private void OnLongDocOutputModeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (LongDocOutputModeCombo is null) return;
+
+            var selectedTag = (LongDocOutputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+            if (selectedTag != null)
+            {
+                _settings.DocumentOutputMode = selectedTag;
+            }
+        }
+
+        private void OnLongDocConcurrencyChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+        {
+            if (double.IsNaN(args.NewValue))
+            {
+                sender.Value = 4; // Reset to default if cleared
+            }
+            _settings.LongDocMaxConcurrency = (int)Math.Clamp(sender.Value, 1, 16);
+        }
+
+        private void OnLongDocPageRangeChanged(object sender, TextChangedEventArgs e)
+        {
+            if (LongDocPageRangeBox is null) return;
+            _settings.LongDocPageRange = LongDocPageRangeBox.Text?.Trim() ?? "";
+        }
+
+        private void OnLongDocClearHistoryClicked(object sender, RoutedEventArgs e)
+        {
+            _longDocHistoryItems.Clear();
+        }
+
+        private void SetLongDocButtonState(bool isTranslating)
+        {
+            _isLongDocTranslating = isTranslating;
+            var glyph = isTranslating ? "\uE711" : "\uE8C1"; // X or document
+            LongDocTranslateIcon.Glyph = glyph;
+            ToolTipService.SetToolTip(LongDocTranslateButton, isTranslating ? "Cancel" : "Translate");
+        }
+
+        private void AddToHistory(LongDocFileItem fileItem, string serviceName, string targetLanguage)
+        {
+            var historyItem = LongDocHistoryItem.FromFileItem(fileItem, serviceName, targetLanguage);
+            _longDocHistoryItems.Insert(0, historyItem);
+
+            // Enforce max history size (FIFO)
+            while (_longDocHistoryItems.Count > MaxHistoryItems)
+            {
+                _longDocHistoryItems.RemoveAt(_longDocHistoryItems.Count - 1);
+            }
+        }
+
+        private async void OnLongDocBrowseClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+
+                // WinUI 3 requires HWND initialization
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                // Set file filter based on current mode
+                var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pdf";
+                switch (modeTag)
+                {
+                    case "plaintext":
+                        picker.FileTypeFilter.Add(".txt");
+                        break;
+                    case "markdown":
+                        picker.FileTypeFilter.Add(".md");
+                        break;
+                    default:
+                        picker.FileTypeFilter.Add(".pdf");
+                        break;
+                }
+
+                var files = await picker.PickMultipleFilesAsync();
+                if (files == null || files.Count == 0) return;
+
+                _longDocFileItems.Clear();
+                foreach (var file in files)
+                {
+                    _longDocFileItems.Add(new LongDocFileItem
+                    {
+                        FilePath = file.Path,
+                        Status = LongDocItemStatus.Pending
+                    });
+                }
+
+                UpdateLongDocFileDisplay();
+                UpdateLongDocOutputFolder();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainPage] File picker error: {ex.Message}");
+            }
+        }
+
+        private void UpdateLongDocFileDisplay()
+        {
+            if (_longDocFileItems.Count == 0)
+            {
+                LongDocFilePathDisplay.Text = "No file selected";
+            }
+            else if (_longDocFileItems.Count == 1)
+            {
+                LongDocFilePathDisplay.Text = _longDocFileItems[0].FileName;
+            }
+            else
+            {
+                LongDocFilePathDisplay.Text = $"{_longDocFileItems.Count} files selected";
+            }
+
+            LongDocFileItemsControl.ItemsSource = _longDocFileItems;
+            LongDocFileItemsControl.Visibility = _longDocFileItems.Count >= 2
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private void UpdateLongDocOutputFolder()
+        {
+            if (_longDocFileItems.Count > 0)
+            {
+                var dir = Path.GetDirectoryName(_longDocFileItems[0].FilePath);
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    _longDocOutputFolder = dir;
+                    LongDocOutputFolderDisplay.Text = dir;
+                }
+            }
+        }
+
+        private void OnLongDocRemoveFileClicked(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is LongDocFileItem item)
+            {
+                _longDocFileItems.Remove(item);
+                UpdateLongDocFileDisplay();
+            }
+        }
+
+        private async void OnLongDocOutputBrowseClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FolderPicker();
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                picker.FileTypeFilter.Add("*");
+
+                var folder = await picker.PickSingleFolderAsync();
+                if (folder == null) return;
+
+                _longDocOutputFolder = folder.Path;
+                LongDocOutputFolderDisplay.Text = folder.Path;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainPage] Folder picker error: {ex.Message}");
+            }
+        }
+
+        private async void OnLongDocTranslateClicked(object sender, RoutedEventArgs e)
+        {
+            // Handle toggle button behavior
+            if (_isLongDocTranslating)
+            {
+                // Cancel operation
+                _longDocSingleTaskCts?.Cancel();
+                _longDocQueueCts?.Cancel();
+                LongDocStatusText.Text = "Canceling translation...";
+                SetLongDocButtonState(false);
+                return;
+            }
+
+            if (_longDocFileItems.Count == 0)
+            {
+                LongDocStatusText.Text = "No file selected. Click Browse to select files.";
+                return;
+            }
+
+            SetLongDocButtonState(true);
+
+            // Multiple files: auto-redirect to queue processing
+            if (_longDocFileItems.Count > 1)
+            {
+                OnLongDocStartQueueClicked(sender, e);
+                return;
+            }
+
+            var cancellationToken = PrepareLongDocSingleTaskCancellationToken();
+
+            // Create progress tracker with throttled UI updates (max 4 per second, 1% increments)
+            var lastUpdateTime = DateTime.MinValue;
+            var lastReportedPercentage = -1.0;
+            var progress = new Progress<LongDocumentTranslationProgress>(p =>
+            {
+                var now = DateTime.UtcNow;
+                var timeElapsed = (now - lastUpdateTime).TotalMilliseconds;
+
+                // Only update if at least 250ms elapsed OR percentage changed by at least 1%
+                var percentageChanged = Math.Abs(p.Percentage - lastReportedPercentage) >= 1.0;
+                if (timeElapsed >= 250 || percentageChanged)
+                {
+                    lastUpdateTime = now;
+                    lastReportedPercentage = p.Percentage;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+
+                        // Update status text with progress
+                        var stageText = p.GetStageDisplayName();
+                        var detailText = p.TotalBlocks > 0
+                            ? $"{stageText}: {p.CurrentBlock}/{p.TotalBlocks} blocks (page {p.CurrentPage}/{p.TotalPages})"
+                            : stageText;
+                        LongDocStatusText.Text = detailText;
+
+                        // Update file item progress if we have a single file
+                        if (_longDocFileItems.Count == 1)
+                        {
+                            var fileItem = _longDocFileItems[0];
+                            fileItem.UpdateProgress((int)p.Percentage, detailText);
+                        }
+                    });
+                }
+            });
+
+            try
+            {
+                SetLongDocTaskUiState(true);
+                LongDocStatusText.Text = "Preparing...";
+
+                if (!TryGetSelectedLongDocServiceId(out var serviceId))
+                {
+                    LongDocStatusText.Text = "Please select one translation service.";
+                    return;
+                }
+
+                var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pdf";
+                var mode = modeTag switch
+                {
+                    "plaintext" => LongDocumentInputMode.PlainText,
+                    "markdown" => LongDocumentInputMode.Markdown,
+                    _ => LongDocumentInputMode.Pdf
+                };
+
+                var input = _longDocFileItems[0].FilePath;
+
+                if (!TryValidateLongDocOutputFolder(out var outputError))
+                {
+                    LongDocStatusText.Text = outputError;
+                    return;
+                }
+
+                var outputPath = BuildOutputPath(input);
+
+                _longDocLastFrom = GetLongDocSourceLanguage();
+                _longDocLastTo = GetLongDocTargetLanguage();
+                _longDocLastServiceId = serviceId;
+                _longDocLastDedupKey = await _longDocDedupService.CreateDedupKeyAsync(
+                    mode,
+                    input,
+                    serviceId,
+                    _longDocLastFrom,
+                    _longDocLastTo,
+                    cancellationToken);
+
+                var existingOutputPath = await _longDocDedupService.TryGetExistingOutputPathAsync(_longDocLastDedupKey, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(existingOutputPath))
+                {
+                    LongDocStatusText.Text = $"Skipped duplicate file. Existing translation: {existingOutputPath}";
+                    return;
+                }
+
+                // Check ONNX layout model availability (prompt download if needed)
+                var layoutMode = await EnsureOnnxReadyAsync(mode, cancellationToken);
+
+                // Check CJK font availability for PDF output
+                var outputMode = GetDocumentOutputModeFromSettings();
+                if (mode == LongDocumentInputMode.Pdf)
+                {
+                    await EnsureCjkFontReadyAsync(_longDocLastTo, cancellationToken);
+                }
+
+                LongDocStatusText.Text = "Preparing...";
+                var result = await _longDocumentService.TranslateToPdfAsync(
+                    mode,
+                    input,
+                    _longDocLastFrom,
+                    _longDocLastTo,
+                    outputPath,
+                    serviceId,
+                    progressMsg => DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        LongDocStatusText.Text = progressMsg;
+                    }),
+                    cancellationToken,
+                    layoutDetection: layoutMode,
+                    outputMode: outputMode,
+                    progress: progress);
+
+                _longDocCheckpoint = result.Checkpoint;
+                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
+                LongDocStatusText.Text = result.State == LongDocumentJobState.Completed
+                    ? $"Completed: {result.OutputPath}"
+                    : $"Partial success: {result.SucceededChunks}/{result.TotalChunks} chunks succeeded, failed chunks: {string.Join(",", result.FailedChunkIndexes.Select(i => i + 1))}.";
+
+                if (result.State == LongDocumentJobState.Completed)
+                {
+                    await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
+
+                    if (_longDocFileItems.Count > 0)
+                    {
+                        _longDocFileItems[0].MarkCompleted(result.OutputPath);
+                        var serviceName = (LongDocServiceCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? serviceId;
+                        var targetName = (LongDocTargetLangCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Unknown";
+                        AddToHistory(_longDocFileItems[0], serviceName, targetName);
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                LongDocStatusText.Text = "Task canceled.";
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[LongDoc] Translation failed: {ex}");
+                LongDocStatusText.Text = $"Failed: {ex.Message}";
+            }
+            finally
+            {
+                CompleteLongDocSingleTask();
+                SetLongDocButtonState(false);
+                SetLongDocTaskUiState(false);
+            }
+        }
+
+        private async void OnLongDocRetryClicked(object sender, RoutedEventArgs e)
+        {
+            if (_longDocCheckpoint is null)
+            {
+                LongDocStatusText.Text = "No partial task to retry.";
+                return;
+            }
+
+            if (IsLongDocTaskRunning())
+            {
+                LongDocStatusText.Text = "A task is already running. Please wait or cancel current task.";
+                return;
+            }
+
+            var cancellationToken = PrepareLongDocSingleTaskCancellationToken();
+
+            // Create progress tracker with throttled UI updates (max 4 per second, 1% increments)
+            var lastUpdateTime = DateTime.MinValue;
+            var lastReportedPercentage = -1.0;
+            var progress = new Progress<LongDocumentTranslationProgress>(p =>
+            {
+                var now = DateTime.UtcNow;
+                var timeElapsed = (now - lastUpdateTime).TotalMilliseconds;
+
+                // Only update if at least 250ms elapsed OR percentage changed by at least 1%
+                var percentageChanged = Math.Abs(p.Percentage - lastReportedPercentage) >= 1.0;
+                if (timeElapsed >= 250 || percentageChanged)
+                {
+                    lastUpdateTime = now;
+                    lastReportedPercentage = p.Percentage;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+
+                        // Update status text with progress
+                        var stageText = p.GetStageDisplayName();
+                        var detailText = p.TotalBlocks > 0
+                            ? $"{stageText}: {p.CurrentBlock}/{p.TotalBlocks} blocks (page {p.CurrentPage}/{p.TotalPages})"
+                            : stageText;
+                        LongDocStatusText.Text = detailText;
+
+                        // Update file item progress if we have a single file
+                        if (_longDocFileItems.Count == 1)
+                        {
+                            var fileItem = _longDocFileItems[0];
+                            fileItem.UpdateProgress((int)p.Percentage, detailText);
+                        }
+                    });
+                }
+            });
+
+            try
+            {
+                SetLongDocTaskUiState(true);
+                LongDocRetryButton.IsEnabled = false;
+
+                if (!TryValidateLongDocOutputFolder(out var outputError))
+                {
+                    LongDocStatusText.Text = outputError;
+                    return;
+                }
+
+                var retrySourcePath = _longDocCheckpoint.SourceFilePath ?? "retry";
+                var outputPath = BuildOutputPath(retrySourcePath);
+
+                var retryOutputMode = GetDocumentOutputModeFromSettings();
+                var result = await _longDocumentService.RetryFailedChunksAsync(
+                    _longDocCheckpoint,
+                    _longDocLastFrom,
+                    _longDocLastTo,
+                    outputPath,
+                    _longDocLastServiceId,
+                    progressMsg => DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        LongDocStatusText.Text = progressMsg;
+                    }),
+                    cancellationToken,
+                    outputMode: retryOutputMode,
+                    progress: progress);
+
+                _longDocCheckpoint = result.Checkpoint;
+                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
+                LongDocStatusText.Text = result.State == LongDocumentJobState.Completed
+                    ? $"Retry completed: {result.OutputPath}"
+                    : $"Still partial: {result.SucceededChunks}/{result.TotalChunks} chunks succeeded, remaining failed chunks: {string.Join(",", result.FailedChunkIndexes.Select(i => i + 1))}.";
+
+                if (result.State == LongDocumentJobState.Completed && !string.IsNullOrWhiteSpace(_longDocLastDedupKey))
+                {
+                    await _longDocDedupService.RegisterOutputAsync(_longDocLastDedupKey, result.OutputPath, cancellationToken);
+                }
+
+                if (result.State == LongDocumentJobState.Completed && _longDocFileItems.Count > 0)
+                {
+                    _longDocFileItems[0].MarkCompleted(result.OutputPath);
+                    var serviceName = (LongDocServiceCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? _longDocLastServiceId;
+                    var targetName = (LongDocTargetLangCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Unknown";
+                    AddToHistory(_longDocFileItems[0], serviceName, targetName);
+                }
+
+            }
+            catch (OperationCanceledException)
+            {
+                LongDocStatusText.Text = "Task canceled.";
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[LongDoc] Retry failed: {ex}");
+                LongDocStatusText.Text = $"Retry failed: {ex.Message}";
+            }
+            finally
+            {
+                CompleteLongDocSingleTask();
+                SetLongDocButtonState(false);
+                SetLongDocTaskUiState(false);
+            }
+        }
+
+        private void OnModeMenuItemClick(object sender, RoutedEventArgs e)
+        {
+            if (!_isLoaded) return;
+
+            QueryMode newMode;
+            if (ReferenceEquals(sender, ModeTranslationItem))
+                newMode = QueryMode.Translation;
+            else if (ReferenceEquals(sender, ModeGrammarItem))
+                newMode = QueryMode.GrammarCorrection;
+            else if (ReferenceEquals(sender, ModeLongDocItem))
+                newMode = QueryMode.LongDocument;
+            else
+                return;
+
+            if (newMode == _currentMode) return;
+            _currentMode = newMode;
+            ApplyModeState();
+        }
+
         private void OnSettingsClicked(object sender, RoutedEventArgs e)
         {
             Frame.Navigate(typeof(SettingsPage));
@@ -1426,6 +2420,13 @@ namespace Easydict.WinUI.Views
         /// </summary>
         public void SetTextAndTranslate(string text)
         {
+            // Switch out of Long Document mode for quick translate
+            if (_currentMode == QueryMode.LongDocument)
+            {
+                _currentMode = QueryMode.Translation;
+                ModeTranslationItem.IsChecked = true;
+                ApplyModeState();
+            }
             _targetLanguageSelector.Reset();
             InputTextBox.Text = text;
             _ = StartQueryTrackedAsync();
@@ -1474,6 +2475,135 @@ namespace Easydict.WinUI.Views
                 {
                     shownPhonetics.Add(key);
                 }
+            }
+        }
+
+        // ═══════════════════════════════════════════════
+        //  ContentDialog helpers
+        // ═══════════════════════════════════════════════
+
+        /// <summary>
+        /// Shows a ContentDialog, hiding any currently-open dialog first.
+        /// WinUI 3 allows only one ContentDialog open at a time per XamlRoot.
+        /// </summary>
+        private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
+        {
+            try { _currentDialog?.Hide(); } catch (COMException) { }
+            _currentDialog = dialog;
+
+            try
+            {
+                return await dialog.ShowAsync();
+            }
+            finally
+            {
+                if (_currentDialog == dialog)
+                {
+                    _currentDialog = null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks whether the ONNX layout model is downloaded. If not, prompts the user
+        /// to download it. Returns the layout detection mode to use.
+        /// Only prompts for PDF mode; non-PDF modes always use heuristic.
+        /// If download fails, falls back to heuristic instead of failing the translation.
+        /// </summary>
+        private async Task<LayoutDetectionMode> EnsureOnnxReadyAsync(
+            LongDocumentInputMode inputMode, CancellationToken ct)
+        {
+            // ONNX layout detection only applies to PDF input
+            if (inputMode is not LongDocumentInputMode.Pdf)
+                return LayoutDetectionMode.Heuristic;
+
+            var downloadService = _longDocumentService.GetLayoutModelDownloadService();
+            if (downloadService.IsReady)
+                return LayoutDetectionMode.OnnxLocal;
+
+            var loc = LocalizationService.Instance;
+            var dialog = new ContentDialog
+            {
+                Title = loc.GetString("LongDoc_OnnxDownloadTitle"),
+                Content = loc.GetString("LongDoc_OnnxDownloadMessage"),
+                PrimaryButtonText = loc.GetString("LongDoc_Download"),
+                CloseButtonText = loc.GetString("LongDoc_Skip"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot
+            };
+
+            var result = await ShowDialogAsync(dialog);
+            if (result == ContentDialogResult.Primary)
+            {
+                LongDocStatusText.Text = loc.GetString("LongDoc_OnnxDownloadTitle") + "...";
+                var progress = new Progress<ModelDownloadProgress>(p =>
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        var pct = p.TotalBytes > 0 ? (int)(p.BytesDownloaded * 100 / p.TotalBytes) : 0;
+                        LongDocStatusText.Text = $"{loc.GetString("LongDoc_OnnxDownloadTitle")}: {pct}%";
+                    });
+                });
+
+                try
+                {
+                    await downloadService.EnsureAvailableAsync(progress, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw; // User cancellation should abort the entire operation
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MainPage] ONNX download failed, falling back to heuristic: {ex.Message}");
+                    LongDocStatusText.Text = loc.GetString("LongDoc_OnnxDownloadFailed_Fallback");
+                }
+            }
+
+            return downloadService.IsReady ? LayoutDetectionMode.OnnxLocal : LayoutDetectionMode.Heuristic;
+        }
+
+        /// <summary>
+        /// Checks whether a CJK font is needed for the target language and output is PDF.
+        /// If the font is not downloaded, prompts the user to download it.
+        /// </summary>
+        private async Task EnsureCjkFontReadyAsync(TranslationLanguage targetLang, CancellationToken ct)
+        {
+            if (!FontDownloadService.RequiresCjkFont(targetLang))
+                return;
+
+            using var fontService = new FontDownloadService();
+            if (fontService.IsFontDownloaded(targetLang))
+                return;
+
+            var loc = LocalizationService.Instance;
+            var langEntry = LanguageComboHelper.AllLanguages.FirstOrDefault(l => l.Language == targetLang);
+            var langName = langEntry.LocalizationKey != null ? loc.GetString(langEntry.LocalizationKey) : targetLang.ToString();
+            var dialog = new ContentDialog
+            {
+                Title = loc.GetString("LongDoc_CjkFontTitle"),
+                Content = string.Format(loc.GetString("LongDoc_CjkFontMessage"), langName),
+                PrimaryButtonText = loc.GetString("LongDoc_Download"),
+                CloseButtonText = loc.GetString("LongDoc_Skip"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot
+            };
+
+            var result = await ShowDialogAsync(dialog);
+            if (result == ContentDialogResult.Primary)
+            {
+                LongDocStatusText.Text = loc.GetString("LongDoc_CjkFontTitle") + "...";
+                var progress = new Progress<ModelDownloadProgress>(p =>
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_isClosing) return;
+                        var pct = p.TotalBytes > 0 ? (int)(p.BytesDownloaded * 100 / p.TotalBytes) : 0;
+                        LongDocStatusText.Text = $"{loc.GetString("LongDoc_CjkFontTitle")}: {pct}%";
+                    });
+                });
+                await fontService.EnsureFontAsync(targetLang, progress, ct);
             }
         }
     }

@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using Microsoft.UI.Xaml;
 using WinRT.Interop;
 
 namespace Easydict.WinUI.Services;

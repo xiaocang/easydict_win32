@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -29,7 +31,11 @@ jobs:
 
       - name: Run tests
         working-directory: dotnet
-        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 --filter "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance"
+        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 --filter "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance&Category!=UIFreeze"
+
+      - name: Run long-document regression gate
+        working-directory: dotnet
+        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" -p:Platform=x64 --filter "FullyQualifiedName~LongDocument&Category!=UIFreeze"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

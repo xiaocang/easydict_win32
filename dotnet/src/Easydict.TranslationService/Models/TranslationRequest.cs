@@ -29,5 +29,11 @@ public sealed class TranslationRequest
     /// Whether to skip cache and force a fresh translation.
     /// </summary>
     public bool BypassCache { get; init; } = false;
+
+    /// <summary>
+    /// Optional custom prompt to append to the system message for LLM-based translation services.
+    /// Has no effect on non-LLM services (Google, DeepL, etc.).
+    /// </summary>
+    public string? CustomPrompt { get; init; }
 }
 

@@ -108,7 +108,15 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
             },
             systemInstruction = new
             {
-                parts = new[] { new { text = BaseOpenAIService.TranslationSystemPrompt } }
+                parts = new[]
+                {
+                    new
+                    {
+                        text = string.IsNullOrWhiteSpace(request.CustomPrompt)
+                            ? BaseOpenAIService.TranslationSystemPrompt
+                            : $"{BaseOpenAIService.TranslationSystemPrompt}\n\nAdditional instructions: {request.CustomPrompt}"
+                    }
+                }
             },
             generationConfig = new
             {

@@ -697,6 +697,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0} — คลิกเพื่อสลับไปยัง {1}</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>เอกสารยาว</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>Enter text to check grammar...</value>
   </data>
@@ -717,5 +720,143 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
+  </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>โหมดเอาต์พุตเอกสาร</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>เลือกรูปแบบเอาต์พุต โหมดสองภาษาจะสลับเนื้อหาต้นฉบับและแปลสลับกัน</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>ภาษาเดียว (ค่าเริ่มต้น)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>สองภาษา (สลับกัน)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>ทั้งสอง</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>PDF สองภาษา: หน้าสลับกัน Markdown/ข้อความ: บล็อกต้นฉบับ+แปล</value>
+  </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>การแปลพร้อมกัน</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>จำนวนคำขอแปลพร้อมกันสูงสุดสำหรับเอกสารยาว ค่าที่สูงขึ้นจะเร่งการแปลแต่อาจถึงขีดจำกัดอัตรา API</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>แนะนำ: 4 สำหรับบริการ LLM, 1-2 สำหรับ API ฟรีที่มีขีดจำกัดอัตราเข้มงวด</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>ฟอนต์ CJK</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>ดาวน์โหลดฟอนต์ CJK เพื่อแสดงผลข้อความจีน ญี่ปุ่น และเกาหลีอย่างถูกต้องในเอาต์พุต PDF</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>ดาวน์โหลดฟอนต์ CJK</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>ลบ</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>ดาวน์โหลด Noto Sans CJK (~16MB ต่อภาษา) จำเป็นสำหรับข้อความ CJK ในการแสดงผลซ้อนทับ PDF</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>การตรวจจับสูตร</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>การตรวจจับสูตรขั้นสูงใช้ชื่อฟอนต์และอักขระคณิตศาสตร์ Unicode เพื่อป้องกันสูตรจากการแปล</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>รูปแบบฟอนต์ (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>รูปแบบอักขระ (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>เว้นว่างเพื่อใช้รูปแบบในตัว รูปแบบฟอนต์ตรงกับชื่อฟอนต์ PDF (Level 2) รูปแบบอักขระตรงกับช่วง Unicode (Level 3)</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>แคชการแปล</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>แคชส่วนที่แปลแล้วในเครื่องเพื่อเพิ่มความเร็วการแปลซ้ำและประหยัดค่า API</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>ล้างแคช</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>การแปลที่แคชจะถูกเก็บไว้ใน SQLite ในเครื่อง ล้างแคชหากการแปลล้าสมัย</value>
+  </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>ช่วงหน้า</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>ระบุหน้าที่ต้องการแปล เว้นว่างเพื่อแปลทุกหน้า</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>รูปแบบ: "1-5" (ช่วง), "3" (หน้าเดียว), "1-3,5,7-10" (ผสม) เว้นว่างหรือ "all" = แปลทุกหน้า</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>พรอมต์การแปลที่กำหนดเอง</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>เพิ่มคำสั่งที่กำหนดเองสำหรับบริการแปลที่ใช้ LLM (OpenAI, DeepSeek, Gemini เป็นต้น)</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>คำสั่งเหล่านี้จะถูกเพิ่มไปยังพรอมต์ระบบสำหรับบริการ LLM ไม่มีผลต่อบริการที่ไม่ใช่ LLM (Google, DeepL เป็นต้น)</value>
+  </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>เรียกดู...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>เรียกดู...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>ไม่ได้เลือกไฟล์</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>เลือก {0} ไฟล์แล้ว</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>เอาต์พุต: {filename}_translated.pdf</value>
+  </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>กำหนดค่าบริการในการตั้งค่า</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>ดาวน์โหลดโมเดลเลย์เอาต์</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>โมเดลตรวจจับเลย์เอาต์ (~75MB) ช่วยปรับปรุงการจดจำโครงสร้างเอกสาร ดาวน์โหลดตอนนี้หรือไม่?</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>ดาวน์โหลดโมเดลเลย์เอาต์ล้มเหลว จะใช้การตรวจจับเลย์เอาต์พื้นฐานในการแปลต่อไป</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>เลือกรูปแบบอินพุต: ข้อความ (ข้อความธรรมดา), Markdown หรือ PDF โหมด PDF รองรับการตรวจจับเลย์เอาต์ ML เพื่อความแม่นยำที่ดีขึ้น</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>ภาษาเดียว: เฉพาะภาษาเป้าหมาย สองภาษา: ต้นทางและเป้าหมายเคียงข้างกัน ทั้งสอง: สร้างเอาต์พุตทั้งภาษาเดียวและสองภาษา</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>จำนวนหน้าที่แปลพร้อมกัน ค่าที่สูงขึ้นเร็วกว่าแต่ใช้โควต้า API มากขึ้น แนะนำ: 2-4</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>ระบุหน้าที่จะแปล (เฉพาะ PDF) ตัวอย่าง: 1-3, 5, 7-10 เว้นว่างเพื่อแปลทุกหน้า</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>ดาวน์โหลดฟอนต์ CJK</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>จำเป็นต้องใช้ฟอนต์ CJK (~16MB) สำหรับการแสดงผล{0}อย่างถูกต้องใน PDF ดาวน์โหลดตอนนี้หรือไม่?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>ดาวน์โหลด</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>ข้าม</value>
   </data>
 </root>

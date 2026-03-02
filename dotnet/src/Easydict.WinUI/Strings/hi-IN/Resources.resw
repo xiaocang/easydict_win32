@@ -287,6 +287,9 @@
   <data name="QueryModeButton_SwitchTooltip" xml:space="preserve">
     <value>{0} — {1} पर स्विच करने के लिए क्लिक करें</value>
   </data>
+  <data name="Mode_LongDocument" xml:space="preserve">
+    <value>लंबा दस्तावेज़</value>
+  </data>
   <data name="InputPlaceholder_Grammar" xml:space="preserve">
     <value>Enter text to check grammar...</value>
   </data>
@@ -307,5 +310,143 @@
   </data>
   <data name="GrammarResult_NoIssues" xml:space="preserve">
     <value>No grammar issues found.</value>
+  </data>
+  <data name="DocumentOutputMode_Title" xml:space="preserve">
+    <value>दस्तावेज़ आउटपुट मोड</value>
+  </data>
+  <data name="DocumentOutputMode_Description" xml:space="preserve">
+    <value>आउटपुट प्रारूप चुनें। द्विभाषी मोड मूल और अनुवादित सामग्री को बारी-बारी से दिखाता है।</value>
+  </data>
+  <data name="DocumentOutputMode_Monolingual" xml:space="preserve">
+    <value>एकभाषी (डिफ़ॉल्ट)</value>
+  </data>
+  <data name="DocumentOutputMode_Bilingual" xml:space="preserve">
+    <value>द्विभाषी (बारी-बारी से)</value>
+  </data>
+  <data name="DocumentOutputMode_Both" xml:space="preserve">
+    <value>दोनों</value>
+  </data>
+  <data name="DocumentOutputMode_Note" xml:space="preserve">
+    <value>द्विभाषी PDF: बारी-बारी पृष्ठ। Markdown/टेक्स्ट: मूल+अनुवाद ब्लॉक।</value>
+  </data>
+  <data name="TranslationConcurrency_Title" xml:space="preserve">
+    <value>अनुवाद समवर्तिता</value>
+  </data>
+  <data name="TranslationConcurrency_Description" xml:space="preserve">
+    <value>लंबे दस्तावेज़ अनुवाद के लिए अधिकतम समानांतर अनुवाद अनुरोध। उच्च मान अनुवाद को तेज करते हैं लेकिन API दर सीमा तक पहुंच सकते हैं।</value>
+  </data>
+  <data name="TranslationConcurrency_Note" xml:space="preserve">
+    <value>अनुशंसित: LLM सेवाओं के लिए 4, सख्त दर सीमाओं वाले मुफ्त API के लिए 1-2।</value>
+  </data>
+  <data name="CjkFont_Title" xml:space="preserve">
+    <value>CJK फ़ॉन्ट</value>
+  </data>
+  <data name="CjkFont_Description" xml:space="preserve">
+    <value>PDF आउटपुट में चीनी, जापानी और कोरियाई पाठ को सही ढंग से प्रस्तुत करने के लिए CJK फ़ॉन्ट डाउनलोड करें।</value>
+  </data>
+  <data name="CjkFont_Download" xml:space="preserve">
+    <value>CJK फ़ॉन्ट डाउनलोड करें</value>
+  </data>
+  <data name="CjkFont_Delete" xml:space="preserve">
+    <value>हटाएं</value>
+  </data>
+  <data name="CjkFont_Note" xml:space="preserve">
+    <value>Noto Sans CJK डाउनलोड करता है (~16MB प्रति भाषा)। PDF ओवरले रेंडरिंग के लिए आवश्यक।</value>
+  </data>
+  <data name="FormulaDetection_Title" xml:space="preserve">
+    <value>सूत्र पहचान</value>
+  </data>
+  <data name="FormulaDetection_Description" xml:space="preserve">
+    <value>उन्नत सूत्र पहचान फ़ॉन्ट नामों और यूनिकोड गणित वर्णों का उपयोग करके सूत्रों को अनुवाद से सुरक्षित करती है।</value>
+  </data>
+  <data name="FormulaDetection_FontPattern" xml:space="preserve">
+    <value>फ़ॉन्ट पैटर्न (Regex)</value>
+  </data>
+  <data name="FormulaDetection_CharPattern" xml:space="preserve">
+    <value>वर्ण पैटर्न (Regex)</value>
+  </data>
+  <data name="FormulaDetection_Note" xml:space="preserve">
+    <value>अंतर्निहित पैटर्न उपयोग करने के लिए खाली छोड़ें। फ़ॉन्ट पैटर्न PDF फ़ॉन्ट नामों से मिलाता है (स्तर 2)। वर्ण पैटर्न यूनिकोड श्रेणियों से मिलाता है (स्तर 3)।</value>
+  </data>
+  <data name="TranslationCache_Title" xml:space="preserve">
+    <value>अनुवाद कैश</value>
+  </data>
+  <data name="TranslationCache_Description" xml:space="preserve">
+    <value>अनुवादित खंडों को स्थानीय रूप से कैश करें ताकि दोहराए गए अनुवाद तेज हों और API लागत बचे।</value>
+  </data>
+  <data name="TranslationCache_Clear" xml:space="preserve">
+    <value>कैश साफ़ करें</value>
+  </data>
+  <data name="TranslationCache_Note" xml:space="preserve">
+    <value>कैश किए गए अनुवाद स्थानीय SQLite में संग्रहीत हैं। अगर अनुवाद पुराने हो जाएं तो कैश साफ़ करें।</value>
+  </data>
+  <data name="PageRange_Title" xml:space="preserve">
+    <value>पृष्ठ सीमा</value>
+  </data>
+  <data name="PageRange_Description" xml:space="preserve">
+    <value>अनुवाद करने के लिए पृष्ठ निर्दिष्ट करें। सभी पृष्ठों का अनुवाद करने के लिए खाली छोड़ दें।</value>
+  </data>
+  <data name="PageRange_Note" xml:space="preserve">
+    <value>प्रारूप: "1-5" (सीमा), "3" (एकल पृष्ठ), "1-3,5,7-10" (मिश्रित)। खाली या "all" = सभी पृष्ठों का अनुवाद।</value>
+  </data>
+  <data name="CustomPrompt_Title" xml:space="preserve">
+    <value>कस्टम अनुवाद प्रॉम्प्ट</value>
+  </data>
+  <data name="CustomPrompt_Description" xml:space="preserve">
+    <value>LLM-आधारित अनुवाद सेवाओं (OpenAI, DeepSeek, Gemini, आदि) के लिए कस्टम निर्देश जोड़ें।</value>
+  </data>
+  <data name="CustomPrompt_Note" xml:space="preserve">
+    <value>ये निर्देश LLM सेवाओं के सिस्टम प्रॉम्प्ट में जोड़े जाते हैं। गैर-LLM सेवाओं (Google, DeepL, आदि) पर कोई प्रभाव नहीं।</value>
+  </data>
+  <data name="LongDoc_BrowseFiles" xml:space="preserve">
+    <value>ब्राउज़...</value>
+  </data>
+  <data name="LongDoc_BrowseOutputFolder" xml:space="preserve">
+    <value>ब्राउज़...</value>
+  </data>
+  <data name="LongDoc_NoFileSelected" xml:space="preserve">
+    <value>कोई फ़ाइल चयनित नहीं</value>
+  </data>
+  <data name="LongDoc_FilesSelected" xml:space="preserve">
+    <value>{0} फ़ाइलें चयनित</value>
+  </data>
+  <data name="LongDoc_OutputNamingHint" xml:space="preserve">
+    <value>आउटपुट: {filename}_translated.pdf</value>
+  </data>
+  <data name="LongDoc_ServiceHint" xml:space="preserve">
+    <value>सेटिंग्स में सेवाएँ कॉन्फ़िगर करें</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadTitle" xml:space="preserve">
+    <value>लेआउट मॉडल डाउनलोड करें</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadMessage" xml:space="preserve">
+    <value>लेआउट डिटेक्शन मॉडल (~75MB) दस्तावेज़ संरचना पहचान को बेहतर बनाता है। अभी डाउनलोड करें?</value>
+  </data>
+  <data name="LongDoc_OnnxDownloadFailed_Fallback" xml:space="preserve">
+    <value>लेआउट मॉडल डाउनलोड विफल। बुनियादी लेआउट डिटेक्शन के साथ अनुवाद जारी रहेगा।</value>
+  </data>
+  <data name="LongDoc_InputModeHelpTip" xml:space="preserve">
+    <value>इनपुट प्रारूप चुनें: टेक्स्ट (सादा टेक्स्ट), Markdown, या PDF। PDF मोड बेहतर सटीकता के लिए ML लेआउट पहचान का समर्थन करता है।</value>
+  </data>
+  <data name="LongDoc_OutputModeHelpTip" xml:space="preserve">
+    <value>मोनो: केवल लक्ष्य भाषा। द्विभाषी: स्रोत और लक्ष्य साथ-साथ। दोनों: मोनो और द्विभाषी दोनों आउटपुट उत्पन्न करता है।</value>
+  </data>
+  <data name="LongDoc_ConcurrencyHelpTip" xml:space="preserve">
+    <value>एक साथ अनुवाद करने के लिए पृष्ठों की संख्या। अधिक मान तेज़ हैं लेकिन अधिक API कोटा का उपयोग करते हैं। अनुशंसित: 2-4।</value>
+  </data>
+  <data name="LongDoc_PageRangeHelpTip" xml:space="preserve">
+    <value>अनुवाद करने के लिए पृष्ठ निर्दिष्ट करें (केवल PDF)। उदाहरण: 1-3, 5, 7-10। सभी पृष्ठों का अनुवाद करने के लिए खाली छोड़ें।</value>
+  </data>
+  <data name="LongDoc_CjkFontTitle" xml:space="preserve">
+    <value>CJK फ़ॉन्ट डाउनलोड करें</value>
+  </data>
+  <data name="LongDoc_CjkFontMessage" xml:space="preserve">
+    <value>PDF में {0} को सही ढंग से प्रदर्शित करने के लिए CJK फ़ॉन्ट (~16MB) आवश्यक है। अभी डाउनलोड करें?</value>
+  </data>
+  <data name="LongDoc_Download" xml:space="preserve">
+    <value>डाउनलोड</value>
+  </data>
+  <data name="LongDoc_Skip" xml:space="preserve">
+    <value>छोड़ें</value>
   </data>
 </root>

@@ -311,12 +311,12 @@ public class LongDocTranslationTests : IDisposable
 
     private void SwitchToLongDocTab(Window window)
     {
-        ClickModeMenuItem(window, "LongDocMenuItem");
+        ClickModeMenuItem(window, "ModeLongDocItem");
     }
 
     private void SwitchToQuickTranslateMode(Window window)
     {
-        ClickModeMenuItem(window, "QuickTranslateMenuItem");
+        ClickModeMenuItem(window, "ModeTranslationItem");
     }
 
     /// <summary>

@@ -86,6 +86,16 @@ public sealed class ScreenCaptureWindow : IDisposable
     private int _virtualLeft;
     private int _virtualTop;
 
+    // Back buffer for flicker-free painting (double-buffering)
+    private nint _backBufferDcHandle;
+    private nint _backBufferBitmapHandle;
+    private nint _oldBackBufferBitmapHandle;
+
+    // Pre-composited dimmed desktop (desktop + dark overlay, computed once)
+    private nint _dimmedDcHandle;
+    private nint _dimmedBitmapHandle;
+    private nint _oldDimmedBitmapHandle;
+
     private readonly WindowDetector _windowDetector = new();
     private WndProcDelegate? _wndProc; // prevent GC
 
@@ -221,6 +231,39 @@ public sealed class ScreenCaptureWindow : IDisposable
 
         BitBlt(_desktopDcHandle, 0, 0, _desktopWidth, _desktopHeight,
                screenDc, _virtualLeft, _virtualTop, SRCCOPY);
+
+        // Create pre-composited dimmed desktop (desktop + dark overlay, done once)
+        _dimmedDcHandle = CreateCompatibleDC(screenDc);
+        _dimmedBitmapHandle = CreateCompatibleBitmap(screenDc, _desktopWidth, _desktopHeight);
+        _oldDimmedBitmapHandle = SelectObject(_dimmedDcHandle, _dimmedBitmapHandle);
+        BitBlt(_dimmedDcHandle, 0, 0, _desktopWidth, _desktopHeight,
+               _desktopDcHandle, 0, 0, SRCCOPY);
+
+        // Apply dark overlay once onto the dimmed desktop
+        var overlayDc = CreateCompatibleDC(screenDc);
+        var overlayBmp = CreateCompatibleBitmap(screenDc, 1, 1);
+        var oldOverlay = SelectObject(overlayDc, overlayBmp);
+        var blackBrush = GetStockObject(4); // BLACK_BRUSH
+        var rc = new RECT { Left = 0, Top = 0, Right = 1, Bottom = 1 };
+        FillRect(overlayDc, ref rc, blackBrush);
+        var blend = new BLENDFUNCTION
+        {
+            BlendOp = 0,              // AC_SRC_OVER
+            BlendFlags = 0,
+            SourceConstantAlpha = MaskAlpha,
+            AlphaFormat = 0
+        };
+        AlphaBlend(_dimmedDcHandle, 0, 0, _desktopWidth, _desktopHeight,
+                   overlayDc, 0, 0, 1, 1, blend);
+        SelectObject(overlayDc, oldOverlay);
+        DeleteObject(overlayBmp);
+        DeleteDC(overlayDc);
+
+        // Create back buffer for double-buffered painting
+        _backBufferDcHandle = CreateCompatibleDC(screenDc);
+        _backBufferBitmapHandle = CreateCompatibleBitmap(screenDc, _desktopWidth, _desktopHeight);
+        _oldBackBufferBitmapHandle = SelectObject(_backBufferDcHandle, _backBufferBitmapHandle);
+
         ReleaseDC(IntPtr.Zero, screenDc);
 
         Debug.WriteLine($"[ScreenCapture] Desktop captured: {_desktopWidth}×{_desktopHeight} at ({_virtualLeft},{_virtualTop})");
@@ -373,69 +416,46 @@ public sealed class ScreenCaptureWindow : IDisposable
         var ps = new PAINTSTRUCT();
         var hdc = BeginPaint(hwnd, ref ps);
 
-        // 1. Draw frozen desktop as background
-        BitBlt(hdc, 0, 0, _desktopWidth, _desktopHeight, _desktopDcHandle, 0, 0, SRCCOPY);
+        // All drawing targets the back buffer, then a single BitBlt to screen (double-buffering)
+        var buf = _backBufferDcHandle;
 
-        // 2. Draw semi-transparent dark overlay (using GDI alpha blend)
-        DrawDarkOverlay(hdc);
+        // 1. Start from pre-composited dimmed desktop (replaces desktop BitBlt + AlphaBlend)
+        BitBlt(buf, 0, 0, _desktopWidth, _desktopHeight, _dimmedDcHandle, 0, 0, SRCCOPY);
 
-        // 3. Draw selection region (clear area + border)
+        // 2. Draw selection region (clear area + border)
         if (_phase == SelectionPhase.Detecting && _detectedRegion.HasValue)
         {
-            DrawSelectionRegion(hdc, _detectedRegion.Value);
+            DrawSelectionRegion(buf, _detectedRegion.Value);
         }
         else if (_phase is SelectionPhase.Selecting or SelectionPhase.Adjusting)
         {
             var sel = NormalizeRect(_selection);
-            DrawSelectionRegion(hdc, sel);
+            DrawSelectionRegion(buf, sel);
 
             if (_phase == SelectionPhase.Adjusting)
             {
-                DrawResizeHandles(hdc, sel);
+                DrawResizeHandles(buf, sel);
             }
 
-            DrawSizeLabel(hdc, sel);
+            DrawSizeLabel(buf, sel);
         }
 
-        // 4. Draw magnifier (always visible when detecting or selecting)
+        // 3. Draw magnifier (always visible when detecting or selecting)
         if (_phase is SelectionPhase.Detecting or SelectionPhase.Selecting)
         {
             GetCursorPos(out var cursorPos);
             var localX = cursorPos.X - _virtualLeft;
             var localY = cursorPos.Y - _virtualTop;
-            DrawMagnifier(hdc, localX, localY);
+            DrawMagnifier(buf, localX, localY);
         }
 
-        // 5. Draw operation tips overlay (always on top of everything)
-        DrawTips(hdc);
+        // 4. Draw operation tips overlay (always on top of everything)
+        DrawTips(buf);
+
+        // 5. Present: single BitBlt from back buffer to screen
+        BitBlt(hdc, 0, 0, _desktopWidth, _desktopHeight, buf, 0, 0, SRCCOPY);
 
         EndPaint(hwnd, ref ps);
-    }
-
-    private void DrawDarkOverlay(nint hdc)
-    {
-        // Create a temporary DC with a 1×1 black bitmap, then AlphaBlend it
-        var memDc = CreateCompatibleDC(hdc);
-        var bmp = CreateCompatibleBitmap(hdc, 1, 1);
-        var old = SelectObject(memDc, bmp);
-
-        // Fill with black
-        var blackBrush = GetStockObject(4); // BLACK_BRUSH
-        var rc = new RECT { Left = 0, Top = 0, Right = 1, Bottom = 1 };
-        FillRect(memDc, ref rc, blackBrush);
-
-        var blend = new BLENDFUNCTION
-        {
-            BlendOp = 0,              // AC_SRC_OVER
-            BlendFlags = 0,
-            SourceConstantAlpha = MaskAlpha,
-            AlphaFormat = 0
-        };
-        AlphaBlend(hdc, 0, 0, _desktopWidth, _desktopHeight, memDc, 0, 0, 1, 1, blend);
-
-        SelectObject(memDc, old);
-        DeleteObject(bmp);
-        DeleteDC(memDc);
     }
 
     private void DrawSelectionRegion(nint hdc, RECT sel)
@@ -1195,6 +1215,40 @@ public sealed class ScreenCaptureWindow : IDisposable
         {
             DeleteObject(_tipsBitmap);
             _tipsBitmap = IntPtr.Zero;
+        }
+
+        // Release back buffer DC/bitmap
+        if (_backBufferDcHandle != IntPtr.Zero && _oldBackBufferBitmapHandle != IntPtr.Zero)
+        {
+            SelectObject(_backBufferDcHandle, _oldBackBufferBitmapHandle);
+            _oldBackBufferBitmapHandle = IntPtr.Zero;
+        }
+        if (_backBufferDcHandle != IntPtr.Zero)
+        {
+            DeleteDC(_backBufferDcHandle);
+            _backBufferDcHandle = IntPtr.Zero;
+        }
+        if (_backBufferBitmapHandle != IntPtr.Zero)
+        {
+            DeleteObject(_backBufferBitmapHandle);
+            _backBufferBitmapHandle = IntPtr.Zero;
+        }
+
+        // Release dimmed desktop DC/bitmap
+        if (_dimmedDcHandle != IntPtr.Zero && _oldDimmedBitmapHandle != IntPtr.Zero)
+        {
+            SelectObject(_dimmedDcHandle, _oldDimmedBitmapHandle);
+            _oldDimmedBitmapHandle = IntPtr.Zero;
+        }
+        if (_dimmedDcHandle != IntPtr.Zero)
+        {
+            DeleteDC(_dimmedDcHandle);
+            _dimmedDcHandle = IntPtr.Zero;
+        }
+        if (_dimmedBitmapHandle != IntPtr.Zero)
+        {
+            DeleteObject(_dimmedBitmapHandle);
+            _dimmedBitmapHandle = IntPtr.Zero;
         }
 
         // Restore the original bitmap before deleting the DC and our bitmap.

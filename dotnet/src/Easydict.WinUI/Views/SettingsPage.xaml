@@ -7,6 +7,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:local="using:Easydict.WinUI.Views"
     mc:Ignorable="d"
+    NavigationCacheMode="Enabled"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <Page.Resources>
@@ -22,7 +23,16 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <ScrollViewer x:Name="MainScrollViewer" Grid.Column="1" Padding="24" ViewChanged="OnScrollViewChanged">
+        <!-- Loading overlay (visible initially, hidden after init) -->
+        <StackPanel x:Name="LoadingOverlay"
+                    Grid.ColumnSpan="2"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="12">
+            <ProgressRing IsActive="True" Width="32" Height="32" />
+        </StackPanel>
+
+        <ScrollViewer x:Name="MainScrollViewer" Grid.Column="1" Padding="24" ViewChanged="OnScrollViewChanged" Visibility="Collapsed">
             <StackPanel Spacing="24" MaxWidth="800">
             <!-- Header -->
             <Grid x:Name="HeaderSection">
@@ -851,7 +861,8 @@
             CornerRadius="12"
             Padding="6,10"
             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-            Opacity="0.9">
+            Opacity="0.9"
+            Visibility="Collapsed">
         <Border.Shadow>
             <ThemeShadow />
         </Border.Shadow>

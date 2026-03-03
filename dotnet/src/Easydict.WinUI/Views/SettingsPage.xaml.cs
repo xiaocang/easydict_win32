@@ -26,6 +26,7 @@ public sealed partial class SettingsPage : Page
     private readonly SettingsService _settings = SettingsService.Instance;
     private bool _isLoading = true; // Prevent change detection during initial load
     private bool _handlersRegistered; // Guard to prevent duplicate event handler registration
+    private bool _initialLoadDone; // True after first full initialization completes
     private bool _hasUnsavedChanges; // Track whether any settings have been modified since last save
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
 
@@ -288,6 +289,30 @@ public sealed partial class SettingsPage : Page
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
     {
+        if (_initialLoadDone)
+        {
+            // Cached page re-navigation — lightweight refresh
+            _isLoading = true;
+            _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
+            LoadSettings();
+            _isLoading = false;
+            _hasUnsavedChanges = false;
+            SaveButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        // First load: show loading overlay, defer heavy work
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            InitializeSettingsContent);
+    }
+
+    /// <summary>
+    /// Performs all heavy initialization work on first load, then reveals content.
+    /// Dispatched at Low priority so the loading overlay renders first.
+    /// </summary>
+    private void InitializeSettingsContent()
+    {
         _isLoading = true;
 
         // Bind ItemsControls to collections
@@ -318,6 +343,21 @@ public sealed partial class SettingsPage : Page
             _handlersRegistered = true;
         }
         _isLoading = false;
+        _initialLoadDone = true;
+
+        // Reveal content, hide loading overlay
+        LoadingOverlay.Visibility = Visibility.Collapsed;
+        MainScrollViewer.Visibility = Visibility.Visible;
+        NavSidebar.Visibility = Visibility.Visible;
+
+        // Defer disk I/O (ONNX model check, SQLite cache) to after content is visible
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () =>
+            {
+                UpdateOnnxModelStatus();
+                _ = UpdateCacheStatusAsync();
+            });
     }
 
     /// <summary>
@@ -513,7 +553,6 @@ public sealed partial class SettingsPage : Page
 
         // Translation Cache
         TranslationCacheToggle.IsOn = _settings.EnableTranslationCache;
-        _ = UpdateCacheStatusAsync();
 
         // Custom Prompt
         CustomPromptBox.Text = _settings.LongDocCustomPrompt;
@@ -542,9 +581,14 @@ public sealed partial class SettingsPage : Page
         SilentOcrHotkeyBox.Text = _settings.SilentOcrHotkey;
 
         // Enabled services for each window (populate from TranslationManager.Services)
-        PopulateServiceCollection(_mainWindowServices, _settings.MainWindowEnabledServices, _settings.MainWindowServiceEnabledQuery);
-        PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices, _settings.MiniWindowServiceEnabledQuery);
-        PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices, _settings.FixedWindowServiceEnabledQuery);
+        // Acquire handle once for all three collections to avoid repeated handle acquisition
+        using (var handle = TranslationManagerService.Instance.AcquireHandle())
+        {
+            var manager = handle.Manager;
+            PopulateServiceCollection(_mainWindowServices, _settings.MainWindowEnabledServices, _settings.MainWindowServiceEnabledQuery, manager);
+            PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices, _settings.MiniWindowServiceEnabledQuery, manager);
+            PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices, _settings.FixedWindowServiceEnabledQuery, manager);
+        }
 
         // Set version from assembly metadata
         var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
@@ -591,34 +635,42 @@ public sealed partial class SettingsPage : Page
     private static void PopulateServiceCollection(
         ObservableCollection<ServiceCheckItem> collection,
         List<string> enabledServices,
-        Dictionary<string, bool> enabledQuerySettings)
+        Dictionary<string, bool> enabledQuerySettings,
+        TranslationManager? sharedManager = null)
     {
         collection.Clear();
 
         var settings = SettingsService.Instance;
         var internationalEnabled = settings.EnableInternationalServices;
 
-        using var handle = TranslationManagerService.Instance.AcquireHandle();
-        var manager = handle.Manager;
+        var handle = sharedManager == null ? TranslationManagerService.Instance.AcquireHandle() : null;
+        var manager = sharedManager ?? handle!.Manager;
 
-        foreach (var (serviceId, service) in manager.Services)
+        try
         {
-            // Default EnabledQuery is true (auto-query); use stored setting if available
-            var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var stored) ? stored : true;
-
-            var isInternationalOnly = SettingsService.InternationalOnlyServices.Contains(serviceId);
-            var isAvailable = internationalEnabled || !isInternationalOnly;
-
-            var item = new ServiceCheckItem
+            foreach (var (serviceId, service) in manager.Services)
             {
-                ServiceId = serviceId,
-                DisplayName = service.DisplayName,
-                IsChecked = isAvailable && enabledServices.Contains(serviceId),
-                EnabledQuery = enabledQuery,
-                IsAvailable = isAvailable
-            };
+                // Default EnabledQuery is true (auto-query); use stored setting if available
+                var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var stored) ? stored : true;
 
-            collection.Add(item);
+                var isInternationalOnly = SettingsService.InternationalOnlyServices.Contains(serviceId);
+                var isAvailable = internationalEnabled || !isInternationalOnly;
+
+                var item = new ServiceCheckItem
+                {
+                    ServiceId = serviceId,
+                    DisplayName = service.DisplayName,
+                    IsChecked = isAvailable && enabledServices.Contains(serviceId),
+                    EnabledQuery = enabledQuery,
+                    IsAvailable = isAvailable
+                };
+
+                collection.Add(item);
+            }
+        }
+        finally
+        {
+            handle?.Dispose();
         }
     }
 
@@ -1787,6 +1839,7 @@ public sealed partial class SettingsPage : Page
         if (_isLoading) return;
         OnSettingChanged(sender, e);
         UpdateLayoutDetectionUI();
+        UpdateOnnxModelStatus();
     }
 
     private void UpdateLayoutDetectionUI()
@@ -1799,9 +1852,6 @@ public sealed partial class SettingsPage : Page
 
         // Show/hide Vision LLM panel for VisionLLM mode
         VisionLLMPanel.Visibility = mode == "VisionLLM" ? Visibility.Visible : Visibility.Collapsed;
-
-        // Update ONNX model status
-        UpdateOnnxModelStatus();
     }
 
     private void UpdateOnnxModelStatus()
@@ -2090,9 +2140,14 @@ public sealed partial class SettingsPage : Page
     /// <summary>
     /// Creates a DataTemplate for language checkbox items using XamlReader.
     /// Uses Binding (not x:Bind) since the model type is private.
+    /// Cached to avoid repeated XamlReader.Load() calls.
     /// </summary>
+    private static Microsoft.UI.Xaml.DataTemplate? _cachedLanguageCheckboxTemplate;
     private static Microsoft.UI.Xaml.DataTemplate CreateLanguageCheckboxTemplate()
     {
+        if (_cachedLanguageCheckboxTemplate != null)
+            return _cachedLanguageCheckboxTemplate;
+
         var xaml = """
             <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
                 <CheckBox Content="{Binding DisplayText}"
@@ -2101,7 +2156,8 @@ public sealed partial class SettingsPage : Page
                           MinWidth="160" Padding="4,0" />
             </DataTemplate>
             """;
-        return (Microsoft.UI.Xaml.DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
+        _cachedLanguageCheckboxTemplate = (Microsoft.UI.Xaml.DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
+        return _cachedLanguageCheckboxTemplate;
     }
 
     /// <summary>

@@ -378,11 +378,15 @@ public sealed partial class ServiceResultItem : UserControl
     {
         var definitions = result.WordResult?.Definitions;
         var examples = result.WordResult?.Examples;
+        var wordForms = result.WordResult?.WordForms;
+        var synonyms = result.WordResult?.Synonyms;
 
         var hasDefinitions = definitions != null && definitions.Count > 0;
         var hasExamples = examples != null && examples.Count > 0;
+        var hasWordForms = wordForms != null && wordForms.Count > 0;
+        var hasSynonyms = synonyms != null && synonyms.Count > 0;
 
-        if (!hasDefinitions && !hasExamples)
+        if (!hasDefinitions && !hasExamples && !hasWordForms && !hasSynonyms)
         {
             DictionaryPanel.Visibility = Visibility.Collapsed;
             return false;
@@ -399,6 +403,21 @@ public sealed partial class ServiceResultItem : UserControl
             }
         }
 
+        // Render word forms (e.g., "过去式 ran · 复数 runs · 现在分词 running")
+        if (hasWordForms)
+        {
+            DictionaryPanel.Children.Add(CreateWordFormsRow(wordForms!));
+        }
+
+        // Render synonyms (one row per POS group)
+        if (hasSynonyms)
+        {
+            foreach (var synonym in synonyms!)
+            {
+                DictionaryPanel.Children.Add(CreateSynonymRow(synonym));
+            }
+        }
+
         // Render example sentences (limit to 3 for compactness)
         if (hasExamples)
         {
@@ -407,7 +426,7 @@ public sealed partial class ServiceResultItem : UserControl
                 DictionaryPanel.Children.Add(new TextBlock
                 {
                     Text = $"\u201C{example}\u201D",
-                    FontSize = 12,
+                    FontSize = 13,
                     FontStyle = Windows.UI.Text.FontStyle.Italic,
                     TextWrapping = TextWrapping.Wrap,
                     Foreground = FindThemeBrush("ExampleTextBrush")
@@ -423,15 +442,134 @@ public sealed partial class ServiceResultItem : UserControl
     }
 
     /// <summary>
-    /// Creates a single definition row: [POS tag] meaning1; meaning2
+    /// Creates a compact word forms row: "过去式 ran · 复数 runs · 现在分词 running"
     /// </summary>
-    private StackPanel CreateDefinitionRow(Definition definition)
+    private TextBlock CreateWordFormsRow(IReadOnlyList<WordForm> wordForms)
     {
-        var row = new StackPanel
+        var mutedBrush = FindThemeBrush("ExampleTextBrush")
+            ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);
+        var normalBrush = FindThemeBrush("QueryTextBrush")
+            ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
+
+        var block = new TextBlock
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            IsTextSelectionEnabled = true,
+            Margin = new Thickness(0, 2, 0, 0)
         };
+
+        for (int i = 0; i < wordForms.Count; i++)
+        {
+            var wf = wordForms[i];
+            if (string.IsNullOrEmpty(wf.Value)) continue;
+
+            if (block.Inlines.Count > 0)
+            {
+                block.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+                {
+                    Text = " · ",
+                    Foreground = mutedBrush
+                });
+            }
+
+            if (!string.IsNullOrEmpty(wf.Name))
+            {
+                block.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+                {
+                    Text = wf.Name + " ",
+                    Foreground = mutedBrush
+                });
+            }
+
+            block.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+            {
+                Text = wf.Value,
+                Foreground = normalBrush
+            });
+        }
+
+        return block;
+    }
+
+    /// <summary>
+    /// Creates a synonym row: "同义词 [n.] 问候: greeting, salutation"
+    /// </summary>
+    private Grid CreateSynonymRow(Synonym synonym)
+    {
+        var mutedBrush = FindThemeBrush("ExampleTextBrush")
+            ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);
+        var normalBrush = FindThemeBrush("QueryTextBrush")
+            ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
+
+        var row = new Grid { ColumnSpacing = 6 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        // Label: "同义词"
+        var label = new TextBlock
+        {
+            Text = "同义词",
+            FontSize = 12,
+            Foreground = mutedBrush,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(label, 0);
+        row.Children.Add(label);
+
+        // Content: "[n.] 问候: greeting, salutation"
+        var contentBlock = new TextBlock
+        {
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            IsTextSelectionEnabled = true,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        if (!string.IsNullOrEmpty(synonym.PartOfSpeech))
+        {
+            contentBlock.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+            {
+                Text = $"[{synonym.PartOfSpeech}] ",
+                Foreground = mutedBrush
+            });
+        }
+
+        if (!string.IsNullOrEmpty(synonym.Meaning))
+        {
+            contentBlock.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+            {
+                Text = synonym.Meaning + ": ",
+                Foreground = mutedBrush
+            });
+        }
+
+        if (synonym.Words?.Count > 0)
+        {
+            contentBlock.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+            {
+                Text = string.Join(", ", synonym.Words),
+                Foreground = normalBrush
+            });
+        }
+
+        Grid.SetColumn(contentBlock, 1);
+        row.Children.Add(contentBlock);
+
+        return row;
+    }
+
+    /// <summary>
+    /// Creates a single definition row: [POS tag] meaning1; meaning2
+    /// Uses Grid layout (Auto + Star columns) so meanings text wraps correctly.
+    /// </summary>
+    private Grid CreateDefinitionRow(Definition definition)
+    {
+        var row = new Grid { ColumnSpacing = 6 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        int column = 0;
 
         // POS tag (e.g., "n.", "v.", "interjection")
         if (!string.IsNullOrEmpty(definition.PartOfSpeech))
@@ -455,14 +593,16 @@ public sealed partial class ServiceResultItem : UserControl
                 VerticalAlignment = VerticalAlignment.Center
             };
 
+            Grid.SetColumn(posTag, 0);
             row.Children.Add(posTag);
+            column = 1;
         }
 
         // Meanings text
         var meanings = definition.Meanings;
         if (meanings != null && meanings.Count > 0)
         {
-            row.Children.Add(new TextBlock
+            var meaningsBlock = new TextBlock
             {
                 Text = string.Join("; ", meanings),
                 FontSize = 13,
@@ -471,7 +611,10 @@ public sealed partial class ServiceResultItem : UserControl
                     ?? new SolidColorBrush(Microsoft.UI.Colors.Black),
                 IsTextSelectionEnabled = true,
                 VerticalAlignment = VerticalAlignment.Center
-            });
+            };
+
+            Grid.SetColumn(meaningsBlock, column);
+            row.Children.Add(meaningsBlock);
         }
 
         return row;

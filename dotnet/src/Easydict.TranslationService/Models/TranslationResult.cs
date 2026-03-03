@@ -71,6 +71,16 @@ public sealed class WordResult
     /// Example sentences.
     /// </summary>
     public IReadOnlyList<string>? Examples { get; init; }
+
+    /// <summary>
+    /// Word forms/inflections (e.g., past tense, plural).
+    /// </summary>
+    public IReadOnlyList<WordForm>? WordForms { get; init; }
+
+    /// <summary>
+    /// Synonym groups by part of speech.
+    /// </summary>
+    public IReadOnlyList<Synonym>? Synonyms { get; init; }
 }
 
 /// <summary>
@@ -108,5 +118,42 @@ public sealed class Definition
     /// Meanings for this part of speech.
     /// </summary>
     public IReadOnlyList<string>? Meanings { get; init; }
+}
+
+/// <summary>
+/// Word form/inflection (e.g., past tense: "ran", plural: "runs").
+/// </summary>
+public sealed class WordForm
+{
+    /// <summary>
+    /// Form name (e.g., "过去式", "复数", "比较级").
+    /// </summary>
+    public string? Name { get; init; }
+
+    /// <summary>
+    /// Form value (e.g., "ran", "runs", "bigger").
+    /// </summary>
+    public string? Value { get; init; }
+}
+
+/// <summary>
+/// Synonym group for a part of speech.
+/// </summary>
+public sealed class Synonym
+{
+    /// <summary>
+    /// Part of speech (e.g., "n.").
+    /// </summary>
+    public string? PartOfSpeech { get; init; }
+
+    /// <summary>
+    /// Meaning description (e.g., "问候").
+    /// </summary>
+    public string? Meaning { get; init; }
+
+    /// <summary>
+    /// Synonym words (e.g., ["greeting", "salutation"]).
+    /// </summary>
+    public IReadOnlyList<string>? Words { get; init; }
 }
 

@@ -103,6 +103,7 @@ public sealed class YoudaoService : BaseTranslationService
                 // Check if dictionary returned a meaningful result (has definitions or translated text differs from original)
                 var hasDefinitions = dictResult.WordResult?.Definitions?.Count > 0;
                 var hasTranslation = dictResult.TranslatedText != request.Text;
+                System.Diagnostics.Debug.WriteLine($"[Youdao] Web dict result: hasDefinitions={hasDefinitions}, hasTranslation={hasTranslation}, translatedText='{dictResult.TranslatedText}'");
 
                 if (hasDefinitions || hasTranslation)
                 {
@@ -234,6 +235,7 @@ public sealed class YoudaoService : BaseTranslationService
         }
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        System.Diagnostics.Debug.WriteLine($"[Youdao] Web dict response status={response.StatusCode}, body={json[..Math.Min(json.Length, 500)]}");
         return ParseWebDictResponse(json, request);
     }
 
@@ -585,6 +587,93 @@ public sealed class YoudaoService : BaseTranslationService
             }
         }
 
+        // Extract word forms from ec.word.wfs
+        List<WordForm>? wordForms = null;
+        if (root.TryGetProperty("ec", out var ecForWfs) &&
+            ecForWfs.TryGetProperty("word", out var ecWordForWfs))
+        {
+            var ecWfsObj = ecWordForWfs.ValueKind == JsonValueKind.Array && ecWordForWfs.GetArrayLength() > 0
+                ? ecWordForWfs[0]
+                : ecWordForWfs;
+
+            if (ecWfsObj.TryGetProperty("wfs", out var wfs) &&
+                wfs.ValueKind == JsonValueKind.Array)
+            {
+                wordForms = [];
+                foreach (var wfItem in wfs.EnumerateArray())
+                {
+                    if (wfItem.TryGetProperty("wf", out var wf))
+                    {
+                        var name = wf.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
+                        var value = wf.TryGetProperty("value", out var valueProp) ? valueProp.GetString() : null;
+
+                        if (!string.IsNullOrEmpty(value))
+                        {
+                            // Split by "或" (Chinese "or") — API may return "ran或run"
+                            var values = value.Split("或", StringSplitOptions.RemoveEmptyEntries);
+                            foreach (var v in values)
+                            {
+                                wordForms.Add(new WordForm { Name = name, Value = v.Trim() });
+                            }
+                        }
+                    }
+                }
+
+                if (wordForms.Count == 0) wordForms = null;
+            }
+        }
+
+        // Extract synonyms from syno.synos
+        List<Synonym>? synonyms = null;
+        if (root.TryGetProperty("syno", out var syno) &&
+            syno.TryGetProperty("synos", out var synos) &&
+            synos.ValueKind == JsonValueKind.Array)
+        {
+            synonyms = [];
+            foreach (var synoItem in synos.EnumerateArray())
+            {
+                var pos = synoItem.TryGetProperty("pos", out var posProp) ? posProp.GetString() : null;
+                var tran = synoItem.TryGetProperty("tran", out var tranProp) ? tranProp.GetString() : null;
+
+                List<string>? words = null;
+                if (synoItem.TryGetProperty("ws", out var ws) &&
+                    ws.ValueKind == JsonValueKind.Array)
+                {
+                    words = [];
+                    foreach (var wItem in ws.EnumerateArray())
+                    {
+                        // Handle both V4 flat string array ["greeting", "salutation"]
+                        // and legacy object array [{"w": "greeting"}]
+                        string? w = wItem.ValueKind switch
+                        {
+                            JsonValueKind.String => wItem.GetString(),
+                            JsonValueKind.Object when wItem.TryGetProperty("w", out var wProp)
+                                => wProp.GetString(),
+                            _ => null
+                        };
+                        if (!string.IsNullOrEmpty(w))
+                        {
+                            words.Add(w);
+                        }
+                    }
+
+                    if (words.Count == 0) words = null;
+                }
+
+                if (words?.Count > 0)
+                {
+                    synonyms.Add(new Synonym
+                    {
+                        PartOfSpeech = pos,
+                        Meaning = tran,
+                        Words = words
+                    });
+                }
+            }
+
+            if (synonyms.Count == 0) synonyms = null;
+        }
+
         // Build translated text from definitions
         var translatedText = request.Text;
         if (definitions?.Count > 0)
@@ -599,13 +688,17 @@ public sealed class YoudaoService : BaseTranslationService
             translatedText = sb.ToString().TrimEnd();
         }
 
+        System.Diagnostics.Debug.WriteLine($"[Youdao] Parsed: phonetics={phonetics?.Count ?? 0}, definitions={definitions?.Count ?? 0}, wordForms={wordForms?.Count ?? 0}, synonyms={synonyms?.Count ?? 0}");
+
         WordResult? wordResult = null;
-        if (phonetics?.Count > 0 || definitions?.Count > 0)
+        if (phonetics?.Count > 0 || definitions?.Count > 0 || wordForms != null || synonyms != null)
         {
             wordResult = new WordResult
             {
                 Phonetics = phonetics?.Count > 0 ? phonetics : null,
-                Definitions = definitions?.Count > 0 ? definitions : null
+                Definitions = definitions?.Count > 0 ? definitions : null,
+                WordForms = wordForms,
+                Synonyms = synonyms
             };
         }
 

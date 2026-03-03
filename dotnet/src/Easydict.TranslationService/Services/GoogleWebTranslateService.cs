@@ -34,7 +34,7 @@ public sealed class GoogleWebTranslateService : BaseTranslationService
     }
 
     public override string ServiceId => "google_web";
-    public override string DisplayName => "Google Dict";
+    public override string DisplayName => "📖 Google Dict";
     public override bool RequiresApiKey => false;
     public override bool IsConfigured => true;
     public override IReadOnlyList<Language> SupportedLanguages => _googleLanguages;

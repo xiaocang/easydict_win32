@@ -208,16 +208,30 @@ public sealed partial class ServiceResultItem : UserControl
             ResultText.Visibility = Visibility.Visible;
             ErrorText.Visibility = Visibility.Collapsed;
             PhoneticPanel.Visibility = Visibility.Collapsed;
+            DictionaryPanel.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = Visibility.Collapsed; // Don't show buttons during streaming
         }
         else if (_serviceResult.Result != null)
         {
-            ResultText.Text = _serviceResult.Result.TranslatedText;
-            ResultText.Visibility = Visibility.Visible;
+            UpdatePhonetics(_serviceResult.Result);
+            var hasDefinitions = UpdateDictionary(_serviceResult.Result);
+
+            // Hide TranslatedText when definitions are shown and TranslatedText is
+            // a flattened version of definitions (redundant). Youdao builds TranslatedText
+            // from definitions; GoogleWeb has independent plain translation.
+            if (hasDefinitions && DictionaryDisplayHelper.IsTranslatedTextRedundantWithDefinitions(_serviceResult.Result))
+            {
+                ResultText.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                ResultText.Text = _serviceResult.Result.TranslatedText;
+                ResultText.Visibility = Visibility.Visible;
+            }
+
             ErrorText.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
             ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
-            UpdatePhonetics(_serviceResult.Result);
         }
         else if (_serviceResult.Error != null)
         {
@@ -225,6 +239,7 @@ public sealed partial class ServiceResultItem : UserControl
             ErrorText.Visibility = Visibility.Visible;
             ResultText.Visibility = Visibility.Collapsed;
             PhoneticPanel.Visibility = Visibility.Collapsed;
+            DictionaryPanel.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
             ReplaceButton.Visibility = Visibility.Collapsed;
             PlayButton.Visibility = Visibility.Collapsed;
@@ -235,6 +250,7 @@ public sealed partial class ServiceResultItem : UserControl
             ResultText.Visibility = Visibility.Collapsed;
             ErrorText.Visibility = Visibility.Collapsed;
             PhoneticPanel.Visibility = Visibility.Collapsed;
+            DictionaryPanel.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = Visibility.Collapsed;
         }
     }
@@ -244,6 +260,7 @@ public sealed partial class ServiceResultItem : UserControl
         // Hide translation-specific elements
         ResultText.Visibility = Visibility.Collapsed;
         PhoneticPanel.Visibility = Visibility.Collapsed;
+        DictionaryPanel.Visibility = Visibility.Collapsed;
 
         // Localize labels
         var loc = LocalizationService.Instance;
@@ -350,6 +367,114 @@ public sealed partial class ServiceResultItem : UserControl
         PhoneticPanel.Visibility = PhoneticPanel.Children.Count > 0
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Populates the dictionary panel from WordResult definitions and examples.
+    /// Each definition shows a POS tag followed by meanings. Examples are shown below.
+    /// Returns true if definitions were rendered.
+    /// </summary>
+    private bool UpdateDictionary(TranslationResult result)
+    {
+        var definitions = result.WordResult?.Definitions;
+        var examples = result.WordResult?.Examples;
+
+        var hasDefinitions = definitions != null && definitions.Count > 0;
+        var hasExamples = examples != null && examples.Count > 0;
+
+        if (!hasDefinitions && !hasExamples)
+        {
+            DictionaryPanel.Visibility = Visibility.Collapsed;
+            return false;
+        }
+
+        DictionaryPanel.Children.Clear();
+
+        // Render definitions grouped by part of speech
+        if (hasDefinitions)
+        {
+            foreach (var definition in definitions!)
+            {
+                DictionaryPanel.Children.Add(CreateDefinitionRow(definition));
+            }
+        }
+
+        // Render example sentences (limit to 3 for compactness)
+        if (hasExamples)
+        {
+            foreach (var example in examples!.Take(3))
+            {
+                DictionaryPanel.Children.Add(new TextBlock
+                {
+                    Text = $"\u201C{example}\u201D",
+                    FontSize = 12,
+                    FontStyle = Windows.UI.Text.FontStyle.Italic,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = FindThemeBrush("ExampleTextBrush")
+                        ?? new SolidColorBrush(Microsoft.UI.Colors.Gray),
+                    IsTextSelectionEnabled = true,
+                    Margin = new Thickness(0, 1, 0, 1)
+                });
+            }
+        }
+
+        DictionaryPanel.Visibility = Visibility.Visible;
+        return hasDefinitions;
+    }
+
+    /// <summary>
+    /// Creates a single definition row: [POS tag] meaning1; meaning2
+    /// </summary>
+    private StackPanel CreateDefinitionRow(Definition definition)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6
+        };
+
+        // POS tag (e.g., "n.", "v.", "interjection")
+        if (!string.IsNullOrEmpty(definition.PartOfSpeech))
+        {
+            var posTag = new Border
+            {
+                Background = FindThemeBrush("PosTagBackgroundBrush")
+                    ?? new SolidColorBrush(Microsoft.UI.Colors.LightBlue),
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(5, 1, 5, 1),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            posTag.Child = new TextBlock
+            {
+                Text = definition.PartOfSpeech,
+                FontSize = 11,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = FindThemeBrush("PosTagTextBrush")
+                    ?? new SolidColorBrush(Microsoft.UI.Colors.DarkBlue),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            row.Children.Add(posTag);
+        }
+
+        // Meanings text
+        var meanings = definition.Meanings;
+        if (meanings != null && meanings.Count > 0)
+        {
+            row.Children.Add(new TextBlock
+            {
+                Text = string.Join("; ", meanings),
+                FontSize = 13,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = FindThemeBrush("QueryTextBrush")
+                    ?? new SolidColorBrush(Microsoft.UI.Colors.Black),
+                IsTextSelectionEnabled = true,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+        }
+
+        return row;
     }
 
     /// <summary>

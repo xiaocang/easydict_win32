@@ -32,7 +32,7 @@ public class YoudaoServiceTests
     [Fact]
     public void DisplayName_IsYoudao()
     {
-        _service.DisplayName.Should().Be("Youdao");
+        _service.DisplayName.Should().Be("📖 Youdao");
     }
 
     [Fact]
@@ -347,7 +347,7 @@ public class YoudaoServiceTests
         // Assert
         result.TranslatedText.Should().Be("这是一个测试句子。");
         result.OriginalText.Should().Be("This is a test sentence.");
-        result.ServiceName.Should().Be("Youdao");
+        result.ServiceName.Should().Be("📖 Youdao");
         result.WordResult.Should().BeNull();
     }
 

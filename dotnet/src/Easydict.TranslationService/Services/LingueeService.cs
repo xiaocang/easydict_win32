@@ -42,7 +42,7 @@ public sealed class LingueeService : BaseTranslationService
     public LingueeService(HttpClient httpClient) : base(httpClient) { }
 
     public override string ServiceId => "linguee";
-    public override string DisplayName => "Linguee Dictionary";
+    public override string DisplayName => "📖 Linguee Dictionary";
     public override bool RequiresApiKey => false; // Public proxy, no API key needed
     public override bool IsConfigured => true;
     public override IReadOnlyList<Language> SupportedLanguages => _lingueeLanguages;

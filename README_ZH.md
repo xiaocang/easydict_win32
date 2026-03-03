@@ -17,7 +17,7 @@
   <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="从 Microsoft 获取" width="200" />
 </a>
 &nbsp;&nbsp;
-<a href="https://github.com/microsoft/winget-pkgs/tree/master/manifests/x/xiaocang/EasydictforWindows">
+<a href="#通过-winget-安装">
   <img src="screenshot/winget-install-dark.svg" alt="winget install" width="280" />
 </a>
 

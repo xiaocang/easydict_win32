@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -45,9 +46,27 @@ public sealed partial class SettingsPage : Page
     private List<NavSection> _navSections = [];
     private int _currentSectionIndex = -1;
 
+
+#if DEBUG
+    private readonly Stopwatch _perfWatch = new();
+
+    [Conditional("DEBUG")]
+    private void PerfLog(string event_)
+    {
+        Debug.WriteLine($"[SettingsPage] {_perfWatch.ElapsedMilliseconds,5}ms | {event_}");
+    }
+#endif
+
     public SettingsPage()
     {
+#if DEBUG
+        _perfWatch.Start();
+        PerfLog("ctor: begin InitializeComponent");
+#endif
         this.InitializeComponent();
+#if DEBUG
+        PerfLog("ctor: end InitializeComponent");
+#endif
         this.Loaded += OnPageLoaded;
     }
 
@@ -291,6 +310,9 @@ public sealed partial class SettingsPage : Page
     {
         if (_initialLoadDone)
         {
+#if DEBUG
+            PerfLog("OnPageLoaded: cached re-navigation begin");
+#endif
             // Cached page re-navigation — lightweight refresh
             _isLoading = true;
             _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
@@ -298,9 +320,15 @@ public sealed partial class SettingsPage : Page
             _isLoading = false;
             _hasUnsavedChanges = false;
             SaveButton.Visibility = Visibility.Collapsed;
+#if DEBUG
+            PerfLog("OnPageLoaded: cached re-navigation end");
+#endif
             return;
         }
 
+#if DEBUG
+        PerfLog("OnPageLoaded: first load, dispatching deferred init");
+#endif
         // First load: show loading overlay, defer heavy work
         DispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
@@ -313,6 +341,9 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private void InitializeSettingsContent()
     {
+#if DEBUG
+        PerfLog("InitializeSettingsContent: begin");
+#endif
         _isLoading = true;
 
         // Bind ItemsControls to collections
@@ -323,24 +354,50 @@ public sealed partial class SettingsPage : Page
         // Snapshot original SelectedLanguages for discard/restore
         _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
 
+#if DEBUG
+        PerfLog("PopulateLanguageCheckboxGrid: begin");
+#endif
         // Populate available languages checkbox grid
         PopulateLanguageCheckboxGrid();
+#if DEBUG
+        PerfLog("PopulateLanguageCheckboxGrid: end");
+#endif
 
         // Populate First/Second Language combos dynamically
         var loc = LocalizationService.Instance;
         PopulateSettingsLanguageCombo(FirstLanguageCombo, loc);
         PopulateSettingsLanguageCombo(SecondLanguageCombo, loc);
 
+#if DEBUG
+        PerfLog("LoadSettings: begin");
+#endif
         LoadSettings();
+#if DEBUG
+        PerfLog("LoadSettings: end");
+        PerfLog("InitializeNavigation: begin");
+#endif
         InitializeNavigation();
+#if DEBUG
+        PerfLog("InitializeNavigation: end");
+        PerfLog("ApplyLocalization: begin");
+#endif
 
         // Apply localization to all UI elements
         ApplyLocalization();
+#if DEBUG
+        PerfLog("ApplyLocalization: end");
+#endif
 
         if (!_handlersRegistered)
         {
+#if DEBUG
+            PerfLog("RegisterChangeHandlers: begin");
+#endif
             RegisterChangeHandlers();
             _handlersRegistered = true;
+#if DEBUG
+            PerfLog("RegisterChangeHandlers: end");
+#endif
         }
         _isLoading = false;
         _initialLoadDone = true;
@@ -349,14 +406,27 @@ public sealed partial class SettingsPage : Page
         LoadingOverlay.Visibility = Visibility.Collapsed;
         MainScrollViewer.Visibility = Visibility.Visible;
         NavSidebar.Visibility = Visibility.Visible;
+#if DEBUG
+        PerfLog("Content revealed");
+#endif
 
         // Defer disk I/O (ONNX model check, SQLite cache) to after content is visible
         DispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
             () =>
             {
+#if DEBUG
+                PerfLog("Deferred I/O: begin UpdateOnnxModelStatus");
+#endif
                 UpdateOnnxModelStatus();
+#if DEBUG
+                PerfLog("Deferred I/O: end UpdateOnnxModelStatus");
+                PerfLog("Deferred I/O: begin UpdateCacheStatusAsync");
+#endif
                 _ = UpdateCacheStatusAsync();
+#if DEBUG
+                PerfLog("Deferred I/O: end (UpdateCacheStatusAsync dispatched)");
+#endif
             });
     }
 

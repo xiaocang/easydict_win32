@@ -16,7 +16,7 @@
 <a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
   <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200" />
 </a>
-&nbsp;&nbsp;
+<br>
 <a href="#install-via-winget">
   <img src="screenshot/winget-install-dark.svg" alt="winget install" width="280" />
 </a>

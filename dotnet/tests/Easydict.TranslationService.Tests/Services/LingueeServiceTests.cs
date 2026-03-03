@@ -91,7 +91,7 @@ public class LingueeServiceTests
         // Assert
         result.TranslatedText.Should().Be("bonjour");
         result.OriginalText.Should().Be("hello");
-        result.ServiceName.Should().Be("Linguee Dictionary");
+        result.ServiceName.Should().Be("📖 Linguee Dictionary");
     }
 
     [Fact]

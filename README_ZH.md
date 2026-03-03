@@ -16,7 +16,7 @@
 <a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
   <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="从 Microsoft 获取" width="200" />
 </a>
-&nbsp;&nbsp;
+<br>
 <a href="#通过-winget-安装">
   <img src="screenshot/winget-install-dark.svg" alt="winget install" width="280" />
 </a>

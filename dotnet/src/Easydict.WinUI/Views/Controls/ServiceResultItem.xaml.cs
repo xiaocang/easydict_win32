@@ -260,6 +260,7 @@ public sealed partial class ServiceResultItem : UserControl
         // Hide translation-specific elements
         ResultText.Visibility = Visibility.Collapsed;
         PhoneticPanel.Visibility = Visibility.Collapsed;
+        DictionaryPanel.Visibility = Visibility.Collapsed;
 
         // Localize labels
         var loc = LocalizationService.Instance;

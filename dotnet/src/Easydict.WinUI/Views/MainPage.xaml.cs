@@ -1523,9 +1523,11 @@ namespace Easydict.WinUI.Views
                     Content = service.DisplayName,
                     Tag = service.ServiceId,
                     FontStyle = isReady ? Windows.UI.Text.FontStyle.Normal : Windows.UI.Text.FontStyle.Italic,
-                    Foreground = isReady ? null
-                        : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray)
                 };
+                if (!isReady)
+                {
+                    item.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+                }
                 LongDocServiceCombo.Items.Add(item);
             }
 

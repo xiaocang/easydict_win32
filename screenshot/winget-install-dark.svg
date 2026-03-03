@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="380" height="44" viewBox="0 0 380 44">
+  <rect width="380" height="44" rx="6" ry="6" fill="#202020"/>
+  <text x="16" y="28" font-family="Consolas,'Courier New',monospace" font-size="14" fill="#999">
+    <tspan fill="#6cb6ff">&#x276f;_</tspan>
+  </text>
+  <text x="46" y="28" font-family="Consolas,'Courier New',monospace" font-size="14" fill="#cccccc">
+    winget install
+    <tspan fill="#ffffff" font-weight="bold">xiaocang.EasydictforWindows</tspan>
+  </text>
+</svg>

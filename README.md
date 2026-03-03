@@ -59,6 +59,16 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 *Light & Dark Mode — Mini Window (Quick Translate)*
 
+| Grammar Correction | Dictionary Mode | Long Document Translation |
+|---|---|---|
+| ![Grammar Correction](screenshot/grammar-correction.png) | ![Dictionary Mode](screenshot/dictionary.png) | ![Long Document Translation](screenshot/long-document.png) |
+| AI-powered grammar correction | Word definitions, phonetics, and examples | PDF/Text/Markdown translation with progress |
+
+| OCR Screenshot Translate | Mouse Selection Translate |
+|---|---|
+| ![OCR Screenshot Translate](screenshot/ocr-screenshot.png) | ![Mouse Selection Translate](screenshot/mouse-selection.png) |
+| Capture screen region → OCR → translate | Select text in any app → click to translate |
+
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
 ## Features

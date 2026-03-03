@@ -59,6 +59,16 @@
 
 *浅色与深色模式 — 迷你窗口（快速翻译）*
 
+| 语法纠错 | 词典模式 | 长文档翻译 |
+|---|---|---|
+| ![语法纠错](screenshot/grammar-correction.png) | ![词典模式](screenshot/dictionary.png) | ![长文档翻译](screenshot/long-document.png) |
+| AI 智能语法纠错 | 单词释义、音标和例句 | PDF/文本/Markdown 翻译及进度显示 |
+
+| OCR 截图翻译 | 划词翻译 |
+|---|---|
+| ![OCR 截图翻译](screenshot/ocr-screenshot.png) | ![划词翻译](screenshot/mouse-selection.png) |
+| 截取屏幕区域 → OCR 识别 → 翻译 | 在任意应用中选中文本 → 点击翻译 |
+
 <p align="right"><a href="#目录">回到顶部</a></p>
 
 ## 功能

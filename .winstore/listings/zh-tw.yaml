@@ -13,6 +13,9 @@ description: |-
 
   - 18 種翻譯服務：Google 翻譯、Google 詞典、Bing 翻譯、DeepL、OpenAI、Gemini、DeepSeek、Groq、智譜 AI、GitHub Models、豆包、火山翻譯、彩雲小譯、小牛翻譯、Linguee、Ollama 等
   - AI 串流翻譯：即時觀看 LLM 翻譯結果逐字生成
+  - 文法校正：AI 智慧文法校正，詳細說明錯誤原因
+  - 長文件翻譯：支援 PDF、純文字和 Markdown 檔案翻譯，具備 ML 版面偵測、公式保護、並行翻譯和雙語匯出功能
+  - 詞典模式：透過 Google Dict 查詢單詞音標、釋義、詞性和例句
   - 多種視窗模式：完整主視窗、精巧迷你視窗或常駐固定視窗
   - 劃詞翻譯：在任意位置選取文字，點擊浮動翻譯按鈕即可翻譯
   - OCR 截圖翻譯：類似 Snipaste 的截圖體驗 — 選取螢幕區域，OCR 辨識文字並即時翻譯，使用 Windows OCR API
@@ -28,6 +31,9 @@ description: |-
 features:
 - 18 種翻譯服務，包括 Google、Bing、DeepL、OpenAI、Gemini、DeepSeek 和火山翻譯
 - AI 服務即時串流翻譯
+- AI 智慧文法校正，偵測並說明文法錯誤
+- 長文件翻譯，支援 PDF、文字和 Markdown 雙語匯出
+- 詞典模式，查詢音標、釋義和例句
 - 多種視窗模式：主視窗、迷你視窗和固定視窗
 - 劃詞翻譯，選取文字點擊浮動按鈕即可翻譯
 - OCR 截圖翻譯，類似 Snipaste 的截圖辨識翻譯
@@ -69,3 +75,18 @@ images:
   light-dark-mode:
     fileName: ../../screenshot/light-dark-mode.png
     description: 淺色與深色模式迷你視窗（快速翻譯）
+  grammar-correction:
+    fileName: ../../screenshot/grammar-correction.png
+    description: AI 智慧文法校正，詳細說明錯誤
+  dictionary:
+    fileName: ../../screenshot/dictionary.png
+    description: 詞典模式：音標、釋義和例句
+  long-document:
+    fileName: ../../screenshot/long-document.png
+    description: 長文件翻譯進度
+  ocr-screenshot:
+    fileName: ../../screenshot/ocr-screenshot.png
+    description: OCR 截圖翻譯 — 截取、辨識、翻譯
+  mouse-selection:
+    fileName: ../../screenshot/mouse-selection.png
+    description: 劃詞翻譯 — 在任意應用程式中選取文字翻譯

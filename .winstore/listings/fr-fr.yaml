@@ -13,6 +13,9 @@ description: |-
 
   - 18 services de traduction : Google Traduction, Google Dictionnaire, Bing Traduction, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama et plus encore
   - Traduction IA en streaming : regardez les traductions LLM apparaître en temps réel
+  - Correction grammaticale : correction grammaticale par IA avec explications détaillées des erreurs
+  - Traduction de longs documents : traduction de fichiers PDF, texte et Markdown avec détection de mise en page ML, protection des formules, traitement parallèle et export bilingue
+  - Mode dictionnaire : recherchez la phonétique, les définitions, les parties du discours et les exemples via Google Dict
   - Modes de fenêtre multiples : fenêtre principale complète, mini-fenêtre compacte ou fenêtre fixe persistante
   - Traduction par sélection : sélectionnez du texte n'importe où et cliquez sur le bouton flottant pour traduire instantanément
   - Traduction OCR par capture d'écran : capture d'écran style Snipaste — sélectionnez une zone de l'écran, reconnaissez le texte par OCR et traduisez instantanément avec l'API Windows OCR
@@ -28,6 +31,9 @@ description: |-
 features:
 - 18 services de traduction dont Google, Bing, DeepL, OpenAI, Gemini, DeepSeek et Volcano Engine
 - Traduction en streaming en temps réel avec les services IA
+- Correction grammaticale par IA avec détection et explication des erreurs
+- Traduction de longs documents PDF, texte et Markdown avec export bilingue
+- Mode dictionnaire avec phonétique, définitions et exemples
 - 'Modes de fenêtre multiples : principale, mini et fixe'
 - Traduction par sélection avec bouton flottant
 - Traduction OCR par capture d'écran style Snipaste
@@ -69,3 +75,18 @@ images:
   light-dark-mode:
     fileName: ../../screenshot/light-dark-mode.png
     description: Mini-fenêtre en mode clair et sombre (traduction rapide)
+  grammar-correction:
+    fileName: ../../screenshot/grammar-correction.png
+    description: Correction grammaticale par IA avec explications détaillées
+  dictionary:
+    fileName: ../../screenshot/dictionary.png
+    description: 'Mode dictionnaire : phonétique, définitions et exemples'
+  long-document:
+    fileName: ../../screenshot/long-document.png
+    description: Traduction de longs documents avec suivi de progression
+  ocr-screenshot:
+    fileName: ../../screenshot/ocr-screenshot.png
+    description: Traduction OCR par capture d'écran — capturer, reconnaître, traduire
+  mouse-selection:
+    fileName: ../../screenshot/mouse-selection.png
+    description: Traduction par sélection — sélectionnez du texte dans toute application

@@ -13,6 +13,9 @@ description: |-
 
   - 18 の翻訳サービス：Google 翻訳、Google 辞書、Bing 翻訳、DeepL、OpenAI、Gemini、DeepSeek、Groq、智譜 AI、GitHub Models、豆包、火山翻訳、彩雲小訳、小牛翻訳、Linguee、Ollama など
   - AI ストリーミング翻訳：LLM の翻訳結果がリアルタイムで表示
+  - 文法校正：AI による文法校正、エラーの詳細な説明付き
+  - 長文ドキュメント翻訳：PDF、プレーンテキスト、Markdown ファイルの翻訳に対応。ML レイアウト検出、数式保護、並列処理、バイリンガル出力をサポート
+  - 辞書モード：Google Dict で発音記号、定義、品詞、例文を検索
   - 複数のウィンドウモード：フルメインウィンドウ、コンパクトミニウィンドウ、常駐固定ウィンドウ
   - マウス選択翻訳：テキストを選択してフローティングボタンをクリックするだけで即座に翻訳
   - OCR スクリーンショット翻訳：Snipaste 風のスクリーンキャプチャ — 画面領域を選択し、OCR でテキストを認識して即座に翻訳。Windows OCR API を使用
@@ -28,6 +31,9 @@ description: |-
 features:
 - Google、Bing、DeepL、OpenAI、Gemini、DeepSeek、火山翻訳を含む 18 の翻訳サービス
 - AI サービスによるリアルタイムストリーミング翻訳
+- AI による文法校正、エラー検出と解説
+- PDF、テキスト、Markdown の長文ドキュメント翻訳、バイリンガル出力対応
+- 辞書モード、発音記号・定義・例文の検索
 - 複数のウィンドウモード：メイン、ミニ、固定ウィンドウ
 - マウス選択翻訳：テキスト選択でフローティングボタンから即座に翻訳
 - OCR スクリーンショット翻訳：Snipaste 風のキャプチャで画面のテキストを認識・翻訳
@@ -69,3 +75,18 @@ images:
   light-dark-mode:
     fileName: ../../screenshot/light-dark-mode.png
     description: ライト・ダークモードのミニウィンドウ（クイック翻訳）
+  grammar-correction:
+    fileName: ../../screenshot/grammar-correction.png
+    description: AI による文法校正、エラーの詳細な説明
+  dictionary:
+    fileName: ../../screenshot/dictionary.png
+    description: 辞書モード：発音記号、定義、例文
+  long-document:
+    fileName: ../../screenshot/long-document.png
+    description: 長文ドキュメント翻訳の進捗表示
+  ocr-screenshot:
+    fileName: ../../screenshot/ocr-screenshot.png
+    description: OCR スクリーンショット翻訳 — キャプチャ、認識、翻訳
+  mouse-selection:
+    fileName: ../../screenshot/mouse-selection.png
+    description: マウス選択翻訳 — 任意のアプリでテキストを選択して翻訳

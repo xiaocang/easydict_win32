@@ -13,6 +13,9 @@ description: |-
 
   - 18 Übersetzungsdienste: Google Übersetzer, Google Wörterbuch, Bing Übersetzer, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama und mehr
   - KI-Streaming-Übersetzung: LLM-Übersetzungen erscheinen in Echtzeit
+  - Grammatikkorrektur: KI-gestützte Grammatikkorrektur mit detaillierten Fehlererklärungen
+  - Langdokument-Übersetzung: Übersetzung von PDF-, Text- und Markdown-Dateien mit ML-Layouterkennung, Formelschutz, paralleler Verarbeitung und zweisprachigem Export
+  - Wörterbuchmodus: Phonetik, Definitionen, Wortarten und Beispielsätze über Google Dict nachschlagen
   - Mehrere Fenstermodi: Vollständiges Hauptfenster, kompaktes Minifenster oder dauerhaftes festes Fenster
   - Mausauswahl-Übersetzung: Text markieren und auf die schwebende Schaltfläche klicken, um sofort zu übersetzen
   - OCR-Screenshot-Übersetzung: Snipaste-ähnliche Bildschirmaufnahme — Bildschirmbereich auswählen, Text per OCR erkennen und sofort übersetzen mit der Windows OCR API
@@ -28,6 +31,9 @@ description: |-
 features:
 - 18 Übersetzungsdienste einschließlich Google, Bing, DeepL, OpenAI, Gemini, DeepSeek und Volcano Engine
 - Echtzeit-Streaming-Übersetzung mit KI-Diensten
+- KI-gestützte Grammatikkorrektur mit Fehlererkennung und Erklärung
+- Langdokument-Übersetzung für PDF, Text und Markdown mit zweisprachigem Export
+- Wörterbuchmodus mit Phonetik, Definitionen und Beispielsätzen
 - 'Mehrere Fenstermodi: Haupt-, Mini- und festes Fenster'
 - Mausauswahl-Übersetzung mit schwebendem Übersetzungsbutton
 - OCR-Screenshot-Übersetzung mit Snipaste-ähnlicher Bildschirmaufnahme
@@ -69,3 +75,18 @@ images:
   light-dark-mode:
     fileName: ../../screenshot/light-dark-mode.png
     description: Minifenster im hellen und dunklen Modus (Schnellübersetzung)
+  grammar-correction:
+    fileName: ../../screenshot/grammar-correction.png
+    description: KI-gestützte Grammatikkorrektur mit detaillierten Erklärungen
+  dictionary:
+    fileName: ../../screenshot/dictionary.png
+    description: 'Wörterbuchmodus: Phonetik, Definitionen und Beispiele'
+  long-document:
+    fileName: ../../screenshot/long-document.png
+    description: Langdokument-Übersetzung mit Fortschrittsanzeige
+  ocr-screenshot:
+    fileName: ../../screenshot/ocr-screenshot.png
+    description: OCR-Screenshot-Übersetzung — Aufnehmen, Erkennen, Übersetzen
+  mouse-selection:
+    fileName: ../../screenshot/mouse-selection.png
+    description: Mausauswahl-Übersetzung — Text in jeder App markieren und übersetzen

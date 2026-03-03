@@ -13,6 +13,9 @@ description: |-
 
   - 18 种翻译服务：Google 翻译、Google 词典、必应翻译、DeepL、OpenAI、Gemini、DeepSeek、Groq、智谱 AI、GitHub Models、豆包、火山翻译、彩云小译、小牛翻译、Linguee、Ollama 等
   - AI 流式翻译：实时观看 LLM 翻译结果逐字生成
+  - 语法纠错：AI 智能语法纠错，详细解释错误原因
+  - 长文档翻译：支持 PDF、纯文本和 Markdown 文件翻译，具备 ML 版面检测、公式保护、并行翻译和双语导出功能
+  - 词典模式：通过 Google Dict 查询单词音标、释义、词性和例句
   - 多种窗口模式：完整主窗口、紧凑迷你窗口或常驻固定窗口
   - 划词翻译：在任意位置选中文本，点击浮动翻译按钮即可翻译
   - OCR 截图翻译：类似 Snipaste 的截图体验 — 选择屏幕区域，OCR 识别文字并即时翻译，使用 Windows OCR API
@@ -30,6 +33,9 @@ description: |-
 features:
 - 18 种翻译服务，包括 Google、必应、DeepL、OpenAI、Gemini、DeepSeek 和火山翻译
 - AI 服务实时流式翻译
+- AI 智能语法纠错，检测并解释语法错误
+- 长文档翻译，支持 PDF、文本和 Markdown 双语导出
+- 词典模式，查询音标、释义和例句
 - 多种窗口模式：主窗口、迷你窗口和固定窗口
 - 划词翻译，选中文本点击浮动按钮即可翻译
 - OCR 截图翻译，类似 Snipaste 的截图识别翻译
@@ -71,3 +77,18 @@ images:
   light-dark-mode:
     fileName: ../../screenshot/light-dark-mode.png
     description: 浅色与深色模式迷你窗口（快速翻译）
+  grammar-correction:
+    fileName: ../../screenshot/grammar-correction.png
+    description: AI 智能语法纠错，详细解释错误
+  dictionary:
+    fileName: ../../screenshot/dictionary.png
+    description: 词典模式：音标、释义和例句
+  long-document:
+    fileName: ../../screenshot/long-document.png
+    description: 长文档翻译进度
+  ocr-screenshot:
+    fileName: ../../screenshot/ocr-screenshot.png
+    description: OCR 截图翻译 — 截取、识别、翻译
+  mouse-selection:
+    fileName: ../../screenshot/mouse-selection.png
+    description: 划词翻译 — 在任意应用中选中文本翻译

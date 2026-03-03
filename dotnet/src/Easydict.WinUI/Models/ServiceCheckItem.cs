@@ -24,6 +24,12 @@ public class ServiceCheckItem : INotifyPropertyChanged
     public string DisplayName { get; init; } = string.Empty;
 
     /// <summary>
+    /// Whether this service requires configuration but is not yet configured.
+    /// When true, the service name is displayed in italic.
+    /// </summary>
+    public bool IsUnconfigured { get; init; }
+
+    /// <summary>
     /// Whether this service is enabled/checked.
     /// </summary>
     public bool IsChecked

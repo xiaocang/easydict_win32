@@ -317,6 +317,10 @@ public sealed partial class SettingsPage : Page
             _isLoading = true;
             _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
             LoadSettings();
+            // Re-register PropertyChanged on new service items (LoadSettings clears & repopulates)
+            RegisterServiceCollectionHandlers(_mainWindowServices);
+            RegisterServiceCollectionHandlers(_miniWindowServices);
+            RegisterServiceCollectionHandlers(_fixedWindowServices);
             _isLoading = false;
             _hasUnsavedChanges = false;
             SaveButton.Visibility = Visibility.Collapsed;
@@ -732,7 +736,8 @@ public sealed partial class SettingsPage : Page
                     DisplayName = service.DisplayName,
                     IsChecked = isAvailable && enabledServices.Contains(serviceId),
                     EnabledQuery = enabledQuery,
-                    IsAvailable = isAvailable
+                    IsAvailable = isAvailable,
+                    IsUnconfigured = service.RequiresApiKey && !service.IsConfigured
                 };
 
                 collection.Add(item);
@@ -2421,6 +2426,19 @@ public class BoolToCompactFontSizeConverter : Microsoft.UI.Xaml.Data.IValueConve
 {
     public object Convert(object value, Type targetType, object parameter, string language)
         => value is true ? 14.0 : 12.0;
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+        => throw new NotImplementedException();
+}
+
+/// <summary>
+/// Converts a boolean (IsUnconfigured) to FontStyle.
+/// True = Italic (needs configuration), False = Normal.
+/// </summary>
+public class BoolToItalicFontStyleConverter : Microsoft.UI.Xaml.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+        => value is true ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal;
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new NotImplementedException();

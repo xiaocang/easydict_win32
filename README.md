@@ -16,12 +16,17 @@
 <a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
   <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200" />
 </a>
+&nbsp;&nbsp;
+<a href="https://github.com/microsoft/winget-pkgs/tree/master/manifests/x/xiaocang/EasydictforWindows">
+  <img src="screenshot/winget-install-dark.svg" alt="winget install" width="280" />
+</a>
 
 </div>
 
 ## Table of Contents
 
 - [Introduction](#introduction)
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Installation](#installation)
 - [Tech Stack](#tech-stack)
@@ -39,15 +44,86 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
+## Screenshots
+
+![Overview](screenshot/overview.png)
+
+*Main Window with Mini Window (Quick Translate)*
+
+| Main Window | All Windows | Settings |
+|-------------|-------------|----------|
+| ![Main Window](screenshot/main-window.png) | ![All Windows](screenshot/all-windows.png) | ![Settings](screenshot/settings.png) |
+| Full translation interface | Main + Mini + Fixed windows with hotkey settings | Service configuration |
+
+![Light & Dark Mode](screenshot/light-dark-mode.png)
+
+*Light & Dark Mode — Mini Window (Quick Translate)*
+
+| Grammar Correction | Dictionary Mode | Long Document Translation |
+|---|---|---|
+| ![Grammar Correction](screenshot/grammar-correction.png) | ![Dictionary Mode](screenshot/dictionary.png) | ![Long Document Translation](screenshot/long-document.png) |
+| AI-powered grammar correction | Word definitions, phonetics, and examples | PDF/Text/Markdown translation with progress |
+
+| OCR Screenshot Translate | Mouse Selection Translate |
+|---|---|
+| ![OCR Screenshot Translate](screenshot/ocr-screenshot.png) | ![Mouse Selection Translate](screenshot/mouse-selection.png) |
+| Capture screen region → OCR → translate | Select text in any app → click to translate |
+
+<p align="right"><a href="#table-of-contents">Back to Top</a></p>
+
 ## Features
 
-### Implemented
+- **OCR Screenshot Translate** - Snipaste-style screen capture: press `Ctrl+Alt+S` to capture a screen region, auto-detect windows or drag to select, then OCR the text and translate. Uses Windows OCR API with configurable recognition language. Also supports silent OCR (`Ctrl+Alt+Shift+S`) that copies recognized text to clipboard without translating.
 
-- **Multiple Translation Services**
+- **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window
+
+- **Grammar Correction Mode** - AI-powered grammar correction that highlights errors and provides corrected text with explanations
+
+- **Long Document Translation** - Translate PDF, plain text, and Markdown documents with ML-based layout detection, formula protection, parallel processing, bilingual output, and translation cache
+
+- **Dictionary Mode** - Word definitions, phonetics, and example sentences powered by Google Dict and Linguee
+
+- **Global Hotkeys**
+  - `Ctrl+Alt+T` - Show/hide main window
+  - `Ctrl+Alt+D` - Translate clipboard content
+  - `Ctrl+Alt+M` - Show mini window (copies selection and translates when available)
+  - `Ctrl+Alt+F` - Show fixed window
+  - `Ctrl+Alt+S` - OCR screenshot translate
+  - `Ctrl+Alt+Shift+S` - Silent OCR (copy recognized text to clipboard)
+  - `Ctrl+Alt+Shift+M` - Toggle mini window visibility
+  - `Ctrl+Alt+Shift+F` - Toggle fixed window visibility
+
+- **Multiple Window Modes**
+  - Main Window - Full translation interface
+  - Mini Window - Compact floating window
+  - Fixed Window - Persistent translation window
+
+- **LLM Streaming Translation** - Real-time display of translation results
+
+- **System Tray** - Minimize to tray, run in background
+
+- **Clipboard Monitoring** - Auto-translate copied text
+
+- **Shell Context Menu** - Right-click any file or desktop background → "OCR Translate" to instantly capture and translate text on screen
+
+- **Dark/Light Theme** - Follows system theme
+
+- **TTS (Text-to-Speech)** - Play source and translated text using Windows Speech Synthesis
+
+- **Multi-language UI** - Localized interface in 15 languages including English, Chinese (Simplified/Traditional), Japanese, Korean, French, German, Spanish, Portuguese, Italian, Russian, Arabic, Thai, Vietnamese, and Indonesian
+
+- **40+ Languages** - Customizable language selection in Settings — choose which languages appear in source/target pickers from 40+ options spanning East Asian, European, Middle Eastern, South Asian, and Southeast Asian languages
+
+- **HTTP Proxy Support** - Configure proxy server
+
+- **High DPI Support** - Per-Monitor V2 DPI awareness
+
+- **Multiple Translation Services** (19 services)
   - Google Translate (free, no API key required)
   - Google Dict (rich dictionary: phonetics, definitions, examples)
   - Bing Translate (free, no API key required)
   - DeepL (supports Free/Pro API, Traditional Chinese supported)
+  - Youdao (Web + OpenAPI)
   - OpenAI (GPT-4o, GPT-4o-mini, etc.)
   - Gemini (Google AI, including Gemini 2.5 models)
   - DeepSeek
@@ -62,58 +138,6 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Ollama (local LLM, default: llama3.2)
   - BuiltIn AI (free, powered by Groq)
   - Custom OpenAI-compatible services
-
-- **LLM Streaming Translation** - Real-time display of translation results
-
-- **Multiple Window Modes**
-  - Main Window - Full translation interface
-  - Mini Window - Compact floating window
-  - Fixed Window - Persistent translation window
-
-- **Global Hotkeys**
-  - `Ctrl+Alt+T` - Show/hide main window
-  - `Ctrl+Alt+D` - Translate clipboard content
-  - `Ctrl+Alt+M` - Show mini window (copies selection and translates when available)
-  - `Ctrl+Alt+F` - Show fixed window
-  - `Ctrl+Alt+S` - OCR screenshot translate
-  - `Ctrl+Alt+Shift+S` - Silent OCR (copy recognized text to clipboard)
-  - `Ctrl+Alt+Shift+M` - Toggle mini window visibility
-  - `Ctrl+Alt+Shift+F` - Toggle fixed window visibility
-
-- **System Tray** - Minimize to tray, run in background
-
-- **Clipboard Monitoring** - Auto-translate copied text
-
-- **HTTP Proxy Support** - Configure proxy server
-
-- **High DPI Support** - Per-Monitor V2 DPI awareness
-
-- **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window
-
-- **OCR Screenshot Translate** - Snipaste-style screen capture: press `Ctrl+Alt+S` to capture a screen region, auto-detect windows or drag to select, then OCR the text and translate. Uses Windows OCR API with configurable recognition language. Also supports silent OCR (`Ctrl+Alt+Shift+S`) that copies recognized text to clipboard without translating.
-
-- **Shell Context Menu** - Right-click any file or desktop background → "OCR Translate" to instantly capture and translate text on screen
-
-- **Dark/Light Theme** - Follows system theme
-
-- **TTS (Text-to-Speech)** - Play source and translated text using Windows Speech Synthesis
-
-- **40+ Languages** - Customizable language selection in Settings — choose which languages appear in source/target pickers from 40+ options spanning East Asian, European, Middle Eastern, South Asian, and Southeast Asian languages
-
-### Screenshots
-
-![Overview](screenshot/overview.png)
-
-*Main Window with Mini Window (Quick Translate)*
-
-| Main Window | All Windows | Settings |
-|-------------|-------------|----------|
-| ![Main Window](screenshot/main-window.png) | ![All Windows](screenshot/all-windows.png) | ![Settings](screenshot/settings.png) |
-| Full translation interface | Main + Mini + Fixed windows with hotkey settings | Service configuration |
-
-![Light & Dark Mode](screenshot/light-dark-mode.png)
-
-*Light & Dark Mode — Mini Window (Quick Translate)*
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
@@ -242,9 +266,9 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ### Low Priority
 
-- [ ] **Dictionary Mode** - Word definitions, pronunciation
+- [x] ~~**Dictionary Mode**~~ - Word definitions, pronunciation ✅ **Implemented**
 - [ ] **Smart Query** - Auto-select translation mode based on text type
-- [ ] **Multi-language UI** - UI localization
+- [x] ~~**Multi-language UI**~~ - UI localization (15 languages) ✅ **Implemented**
 - [ ] **Auto Update** - Check and install updates
 
 ### Distribution
@@ -258,10 +282,13 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | Feature | macOS | Windows |
 |---------|-------|---------|
-| Translation Services | 25+ | 18 |
+| Translation Services | 25+ | 19 |
 | OCR Screenshot Translation | Yes | Yes |
 | TTS | Yes | Yes |
 | Selection Translation | Yes | Yes |
+| Grammar Correction | No | Yes |
+| Long Document Translation | No | Yes |
+| Dictionary Mode | Yes | Yes |
 | Window Types | 3 | 3 |
 | Global Hotkeys | 10+ | 8 |
 | LLM Streaming | Yes | Yes |

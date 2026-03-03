@@ -16,12 +16,17 @@
 <a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
   <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="从 Microsoft 获取" width="200" />
 </a>
+&nbsp;&nbsp;
+<a href="https://github.com/microsoft/winget-pkgs/tree/master/manifests/x/xiaocang/EasydictforWindows">
+  <img src="screenshot/winget-install-dark.svg" alt="winget install" width="280" />
+</a>
 
 </div>
 
 ## 目录
 
 - [简介](#简介)
+- [截图](#截图)
 - [功能](#功能)
 - [安装](#安装)
 - [技术栈](#技术栈)
@@ -39,15 +44,86 @@
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 
+## 截图
+
+![总览](screenshot/overview.png)
+
+*主窗口与迷你窗口（快速翻译）*
+
+| 主窗口 | 所有窗口 | 设置 |
+|--------|---------|------|
+| ![主窗口](screenshot/main-window.png) | ![所有窗口](screenshot/all-windows.png) | ![设置](screenshot/settings.png) |
+| 完整翻译界面 | 主窗口 + 迷你窗口 + 固定窗口及快捷键设置 | 服务配置 |
+
+![浅色与深色模式](screenshot/light-dark-mode.png)
+
+*浅色与深色模式 — 迷你窗口（快速翻译）*
+
+| 语法纠错 | 词典模式 | 长文档翻译 |
+|---|---|---|
+| ![语法纠错](screenshot/grammar-correction.png) | ![词典模式](screenshot/dictionary.png) | ![长文档翻译](screenshot/long-document.png) |
+| AI 智能语法纠错 | 单词释义、音标和例句 | PDF/文本/Markdown 翻译及进度显示 |
+
+| OCR 截图翻译 | 划词翻译 |
+|---|---|
+| ![OCR 截图翻译](screenshot/ocr-screenshot.png) | ![划词翻译](screenshot/mouse-selection.png) |
+| 截取屏幕区域 → OCR 识别 → 翻译 | 在任意应用中选中文本 → 点击翻译 |
+
+<p align="right"><a href="#目录">回到顶部</a></p>
+
 ## 功能
 
-### 已实现
+- **OCR 截图翻译** - 类似 Snipaste 的截图体验：按 `Ctrl+Alt+S` 截取屏幕区域，自动检测窗口或拖拽选择区域，然后 OCR 识别文字并翻译。使用 Windows OCR API，支持配置识别语言。还支持静默 OCR（`Ctrl+Alt+Shift+S`），将识别文字复制到剪贴板而不翻译。
 
-- **多种翻译服务**
+- **划词翻译** - 在任意应用中选中文本（拖拽、双击或三击），点击浮动翻译按钮即可在迷你窗口中翻译
+
+- **语法纠错模式** - AI 驱动的语法纠错，高亮错误并提供修正文本及解释说明
+
+- **长文档翻译** - 支持 PDF、纯文本和 Markdown 文档翻译，具备 ML 版面检测、公式保护、并行处理、双语输出和翻译缓存功能
+
+- **词典模式** - 单词释义、音标和例句，由 Google 词典和 Linguee 提供
+
+- **全局快捷键**
+  - `Ctrl+Alt+T` - 显示/隐藏主窗口
+  - `Ctrl+Alt+D` - 翻译剪贴板内容
+  - `Ctrl+Alt+M` - 显示迷你窗口（自动复制选中文本并翻译）
+  - `Ctrl+Alt+F` - 显示固定窗口
+  - `Ctrl+Alt+S` - OCR 截图翻译
+  - `Ctrl+Alt+Shift+S` - 静默 OCR（复制识别文字到剪贴板）
+  - `Ctrl+Alt+Shift+M` - 切换迷你窗口可见性
+  - `Ctrl+Alt+Shift+F` - 切换固定窗口可见性
+
+- **多种窗口模式**
+  - 主窗口 - 完整翻译界面
+  - 迷你窗口 - 紧凑浮动窗口
+  - 固定窗口 - 常驻翻译窗口
+
+- **LLM 流式翻译** - 实时显示翻译结果
+
+- **系统托盘** - 最小化到托盘，后台运行
+
+- **剪贴板监听** - 自动翻译复制的文本
+
+- **右键菜单 OCR** - 右键点击任意文件或桌面空白处 → 选择"OCR Translate"即可截图识别翻译
+
+- **深色/浅色主题** - 跟随系统主题
+
+- **TTS（文字转语音）** - 使用 Windows Speech Synthesis 朗读原文和译文
+
+- **多语言界面** - 支持 15 种语言的本地化界面，包括英语、中文（简体/繁体）、日语、韩语、法语、德语、西班牙语、葡萄牙语、意大利语、俄语、阿拉伯语、泰语、越南语和印尼语
+
+- **40+ 语种支持** - 在设置中自定义可用语种，从 40 多种语言中选择显示在源语言/目标语言选择器中的语种，涵盖东亚、欧洲、中东、南亚和东南亚语言
+
+- **HTTP 代理支持** - 配置代理服务器
+
+- **高 DPI 支持** - Per-Monitor V2 DPI 感知
+
+- **多种翻译服务**（19 种服务）
   - Google 翻译（免费，无需 API Key）
   - Google 词典（丰富词典：音标、释义、例句）
   - 必应翻译（免费，无需 API Key）
   - DeepL（支持 Free/Pro API，支持繁体中文）
+  - 有道翻译（Web + OpenAPI）
   - OpenAI（GPT-4o、GPT-4o-mini 等）
   - Gemini（Google AI，包括 Gemini 2.5 模型）
   - DeepSeek（深度求索）
@@ -62,58 +138,6 @@
   - Ollama（本地 LLM，默认：llama3.2）
   - 内置 AI（免费，由 Groq 提供）
   - 自定义 OpenAI 兼容服务
-
-- **LLM 流式翻译** - 实时显示翻译结果
-
-- **多种窗口模式**
-  - 主窗口 - 完整翻译界面
-  - 迷你窗口 - 紧凑浮动窗口
-  - 固定窗口 - 常驻翻译窗口
-
-- **全局快捷键**
-  - `Ctrl+Alt+T` - 显示/隐藏主窗口
-  - `Ctrl+Alt+D` - 翻译剪贴板内容
-  - `Ctrl+Alt+M` - 显示迷你窗口（自动复制选中文本并翻译）
-  - `Ctrl+Alt+F` - 显示固定窗口
-  - `Ctrl+Alt+S` - OCR 截图翻译
-  - `Ctrl+Alt+Shift+S` - 静默 OCR（复制识别文字到剪贴板）
-  - `Ctrl+Alt+Shift+M` - 切换迷你窗口可见性
-  - `Ctrl+Alt+Shift+F` - 切换固定窗口可见性
-
-- **系统托盘** - 最小化到托盘，后台运行
-
-- **剪贴板监听** - 自动翻译复制的文本
-
-- **HTTP 代理支持** - 配置代理服务器
-
-- **高 DPI 支持** - Per-Monitor V2 DPI 感知
-
-- **划词翻译** - 在任意应用中选中文本（拖拽、双击或三击），点击浮动翻译按钮即可在迷你窗口中翻译
-
-- **OCR 截图翻译** - 类似 Snipaste 的截图体验：按 `Ctrl+Alt+S` 截取屏幕区域，自动检测窗口或拖拽选择区域，然后 OCR 识别文字并翻译。使用 Windows OCR API，支持配置识别语言。还支持静默 OCR（`Ctrl+Alt+Shift+S`），将识别文字复制到剪贴板而不翻译。
-
-- **右键菜单 OCR** - 右键点击任意文件或桌面空白处 → 选择"OCR Translate"即可截图识别翻译
-
-- **深色/浅色主题** - 跟随系统主题
-
-- **TTS（文字转语音）** - 使用 Windows Speech Synthesis 朗读原文和译文
-
-- **40+ 语种支持** - 在设置中自定义可用语种，从 40 多种语言中选择显示在源语言/目标语言选择器中的语种，涵盖东亚、欧洲、中东、南亚和东南亚语言
-
-### 截图
-
-![总览](screenshot/overview.png)
-
-*主窗口与迷你窗口（快速翻译）*
-
-| 主窗口 | 所有窗口 | 设置 |
-|--------|---------|------|
-| ![主窗口](screenshot/main-window.png) | ![所有窗口](screenshot/all-windows.png) | ![设置](screenshot/settings.png) |
-| 完整翻译界面 | 主窗口 + 迷你窗口 + 固定窗口及快捷键设置 | 服务配置 |
-
-![浅色与深色模式](screenshot/light-dark-mode.png)
-
-*浅色与深色模式 — 迷你窗口（快速翻译）*
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 
@@ -242,9 +266,9 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ### 低优先级
 
-- [ ] **词典模式** - 单词释义、发音
+- [x] ~~**词典模式**~~ - 单词释义、发音 ✅ **已实现**
 - [ ] **智能查询** - 根据文本类型自动选择翻译模式
-- [ ] **多语言界面** - UI 本地化
+- [x] ~~**多语言界面**~~ - UI 本地化（15 种语言）✅ **已实现**
 - [ ] **自动更新** - 检查并安装更新
 
 ### 分发
@@ -258,10 +282,13 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | 功能 | macOS | Windows |
 |------|-------|---------|
-| 翻译服务 | 25+ | 18 |
+| 翻译服务 | 25+ | 19 |
 | OCR 截图翻译 | 支持 | 支持 |
 | TTS | 支持 | 支持 |
 | 划词翻译 | 支持 | 支持 |
+| 语法纠错 | 不支持 | 支持 |
+| 长文档翻译 | 不支持 | 支持 |
+| 词典模式 | 支持 | 支持 |
 | 窗口类型 | 3 | 3 |
 | 全局快捷键 | 10+ | 8 |
 | LLM 流式翻译 | 支持 | 支持 |

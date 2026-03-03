@@ -583,6 +583,269 @@ public class YoudaoServiceTests
         targetPhonetics.Should().Contain(p => p.Accent == "UK");
     }
 
+    [Fact]
+    public async Task TranslateAsync_WebDict_ParsesWordForms()
+    {
+        // Arrange - Youdao web dict response with word forms (wfs)
+        var response = """
+            {
+                "simple": {
+                    "word": {
+                        "usphone": "rʌn"
+                    }
+                },
+                "ec": {
+                    "word": {
+                        "trs": [
+                            {
+                                "pos": "v.",
+                                "tran": "跑；奔跑"
+                            }
+                        ],
+                        "wfs": [
+                            { "wf": { "name": "过去式", "value": "ran" } },
+                            { "wf": { "name": "过去分词", "value": "run" } },
+                            { "wf": { "name": "现在分词", "value": "running" } }
+                        ]
+                    }
+                }
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(response);
+
+        var request = new TranslationRequest
+        {
+            Text = "run",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.WordForms.Should().NotBeNull();
+        result.WordResult.WordForms.Should().HaveCount(3);
+
+        result.WordResult.WordForms![0].Name.Should().Be("过去式");
+        result.WordResult.WordForms[0].Value.Should().Be("ran");
+        result.WordResult.WordForms[1].Name.Should().Be("过去分词");
+        result.WordResult.WordForms[1].Value.Should().Be("run");
+        result.WordResult.WordForms[2].Name.Should().Be("现在分词");
+        result.WordResult.WordForms[2].Value.Should().Be("running");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_WebDict_ParsesSynonyms()
+    {
+        // Arrange - Youdao web dict response with synonyms (syno)
+        var response = """
+            {
+                "simple": {
+                    "word": {
+                        "usphone": "həˈloʊ"
+                    }
+                },
+                "ec": {
+                    "word": {
+                        "trs": [
+                            {
+                                "pos": "int.",
+                                "tran": "喂；你好"
+                            }
+                        ]
+                    }
+                },
+                "syno": {
+                    "synos": [
+                        {
+                            "pos": "n.",
+                            "tran": "问候",
+                            "ws": ["greeting", "salutation"]
+                        },
+                        {
+                            "pos": "v.",
+                            "tran": "打招呼",
+                            "ws": ["greet", "welcome"]
+                        }
+                    ]
+                }
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(response);
+
+        var request = new TranslationRequest
+        {
+            Text = "hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.Synonyms.Should().NotBeNull();
+        result.WordResult.Synonyms.Should().HaveCount(2);
+
+        result.WordResult.Synonyms![0].PartOfSpeech.Should().Be("n.");
+        result.WordResult.Synonyms[0].Meaning.Should().Be("问候");
+        result.WordResult.Synonyms[0].Words.Should().BeEquivalentTo(["greeting", "salutation"]);
+
+        result.WordResult.Synonyms[1].PartOfSpeech.Should().Be("v.");
+        result.WordResult.Synonyms[1].Meaning.Should().Be("打招呼");
+        result.WordResult.Synonyms[1].Words.Should().BeEquivalentTo(["greet", "welcome"]);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_WebDict_WordFormsAndSynonymsCanBeNull()
+    {
+        // Arrange - Youdao web dict response without wfs or syno
+        var response = """
+            {
+                "simple": {
+                    "word": {
+                        "usphone": "həˈloʊ"
+                    }
+                },
+                "ec": {
+                    "word": {
+                        "trs": [
+                            {
+                                "pos": "int.",
+                                "tran": "喂；你好"
+                            }
+                        ]
+                    }
+                }
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(response);
+
+        var request = new TranslationRequest
+        {
+            Text = "hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.WordForms.Should().BeNull();
+        result.WordResult.Synonyms.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TranslateAsync_WebDict_ParsesSynonyms_ObjectFormat()
+    {
+        // Arrange - Legacy object format: ws is [{w: "greeting"}, ...]
+        var response = """
+            {
+                "simple": {
+                    "word": {
+                        "usphone": "həˈloʊ"
+                    }
+                },
+                "ec": {
+                    "word": {
+                        "trs": [
+                            {
+                                "pos": "int.",
+                                "tran": "喂；你好"
+                            }
+                        ]
+                    }
+                },
+                "syno": {
+                    "synos": [
+                        {
+                            "pos": "n.",
+                            "tran": "问候",
+                            "ws": [
+                                { "w": "greeting" },
+                                { "w": "salutation" }
+                            ]
+                        }
+                    ]
+                }
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(response);
+
+        var request = new TranslationRequest
+        {
+            Text = "hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert - Object format should also parse correctly
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.Synonyms.Should().NotBeNull();
+        result.WordResult.Synonyms.Should().HaveCount(1);
+        result.WordResult.Synonyms![0].Words.Should().BeEquivalentTo(["greeting", "salutation"]);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_WebDict_WordForms_SplitsOrSeparator()
+    {
+        // Arrange - Word form value contains "或" (Chinese "or") separator
+        var response = """
+            {
+                "simple": {
+                    "word": {
+                        "usphone": "ˈhæpi"
+                    }
+                },
+                "ec": {
+                    "word": {
+                        "trs": [
+                            {
+                                "pos": "adj.",
+                                "tran": "快乐的"
+                            }
+                        ],
+                        "wfs": [
+                            { "wf": { "name": "比较级", "value": "happier或able to be happy" } },
+                            { "wf": { "name": "最高级", "value": "happiest" } }
+                        ]
+                    }
+                }
+            }
+            """;
+        _mockHandler.EnqueueJsonResponse(response);
+
+        var request = new TranslationRequest
+        {
+            Text = "happy",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        var result = await _service.TranslateAsync(request);
+
+        // Assert - "happier或able to be happy" should be split into 2 WordForms
+        result.WordResult.Should().NotBeNull();
+        result.WordResult!.WordForms.Should().NotBeNull();
+        result.WordResult.WordForms.Should().HaveCount(3); // 2 from split + 1 normal
+
+        result.WordResult.WordForms![0].Name.Should().Be("比较级");
+        result.WordResult.WordForms[0].Value.Should().Be("happier");
+        result.WordResult.WordForms[1].Name.Should().Be("比较级");
+        result.WordResult.WordForms[1].Value.Should().Be("able to be happy");
+        result.WordResult.WordForms[2].Name.Should().Be("最高级");
+        result.WordResult.WordForms[2].Value.Should().Be("happiest");
+    }
+
     [Theory]
     [InlineData("hello", true)]
     [InlineData("hello world", true)]  // Short phrase is allowed

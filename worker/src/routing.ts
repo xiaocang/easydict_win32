@@ -18,6 +18,7 @@ const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 /**
  * Model → provider mapping.
  * Must stay in sync with BuiltInAIService.ModelProviderMap on the client.
+ * Exact match only (no wildcard/prefix matching).
  */
 const MODEL_PROVIDER: Record<string, "glm" | "groq"> = {
   "glm-4-flash": "glm",

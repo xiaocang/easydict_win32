@@ -43,12 +43,14 @@ public sealed class BuiltInAIService : BaseOpenAIService
 
     /// <summary>
     /// Models allowed through the free proxy (Cloudflare worker).
-    /// Groq is not available in proxy mode. Direct connection (user API key) has no restriction.
+    /// Direct connection (user API key) has no model restriction.
     /// </summary>
     internal static readonly HashSet<string> AllowedProxyModels = new(StringComparer.Ordinal)
     {
         "glm-4-flash",
         "glm-4-flash-250414",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
     };
 
     /// <summary>

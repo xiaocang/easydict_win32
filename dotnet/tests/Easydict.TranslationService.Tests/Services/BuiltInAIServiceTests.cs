@@ -272,7 +272,13 @@ public class BuiltInAIServiceTests
     public void AllowedProxyModels_ContainsExactExpectedModels()
     {
         BuiltInAIService.AllowedProxyModels.Should().BeEquivalentTo(
-            new[] { "glm-4-flash", "glm-4-flash-250414" });
+            new[]
+            {
+                "glm-4-flash",
+                "glm-4-flash-250414",
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant"
+            });
     }
 
     [Fact]
@@ -320,9 +326,12 @@ public class BuiltInAIServiceTests
     [Theory]
     [InlineData("llama-3.3-70b-versatile")]
     [InlineData("llama-3.1-8b-instant")]
-    public async Task ProxyMode_GroqModel_ThrowsInvalidModel(string model)
+    public async Task ProxyMode_GroqModel_DoesNotThrowInvalidModel(string model)
     {
         _service.Configure(model); // No API key = proxy mode
+
+        var sseChunk = """{"choices":[{"delta":{"content":"Hello"}}]}""";
+        _mockHandler.EnqueueStreamingResponse([sseChunk]);
 
         var request = new TranslationRequest
         {
@@ -331,9 +340,15 @@ public class BuiltInAIServiceTests
             ToLanguage = Language.English
         };
 
-        Func<Task> act = () => _service.TranslateAsync(request);
-        var ex = await act.Should().ThrowAsync<TranslationException>();
-        ex.Which.ErrorCode.Should().Be(TranslationErrorCode.InvalidModel);
+        try
+        {
+            await _service.TranslateAsync(request);
+            // If no exception, the model is allowed — pass
+        }
+        catch (TranslationException ex)
+        {
+            ex.ErrorCode.Should().NotBe(TranslationErrorCode.InvalidModel);
+        }
     }
 
     [Fact]

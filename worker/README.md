@@ -14,11 +14,20 @@ Client (Easydict Win32)
   Cloudflare Worker
   ├── Auth check (optional)
   ├── Rate limit (per-device + per-IP, KV-backed)
-  └── Route by model name
+  └── Route by exact model name
         │
-        ├── glm-4-flash* ──────► Zhipu GLM API
-        └── llama-3.* ─────────► Groq API
+        ├── glm-4-flash / glm-4-flash-250414 ──────► Zhipu GLM API
+        └── llama-3.3-70b-versatile / llama-3.1-8b-instant ─────────► Groq API
 ```
+
+## Supported Models (Exact Match)
+
+Routing is allowlist-based by exact string match (no wildcard or prefix matching).
+
+- `glm-4-flash` → GLM
+- `glm-4-flash-250414` → GLM
+- `llama-3.3-70b-versatile` → Groq
+- `llama-3.1-8b-instant` → Groq
 
 ## Setup
 

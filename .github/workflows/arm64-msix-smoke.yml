@@ -46,6 +46,15 @@ jobs:
         run: |
           dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-arm64
 
+      - name: Clean publish output directory (arm64)
+        shell: pwsh
+        run: |
+          $publishDir = "dotnet/publish-msix/arm64"
+          if (Test-Path $publishDir) {
+            Remove-Item -Path $publishDir -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
+
       - name: Publish WinUI App for MSIX (arm64)
         working-directory: dotnet
         shell: pwsh
@@ -58,6 +67,7 @@ jobs:
             --output ./publish-msix/arm64 `
             -p:Platform=arm64 `
             -p:PublishTrimmed=false `
+            -p:PublishReadyToRun=false `
             -p:WindowsAppSDKSelfContained=false
 
       - name: Publish NativeBridge (arm64)

@@ -19,6 +19,10 @@ A powerful Windows translation & dictionary app, ported from the popular macOS a
 
 - **OCR Screenshot Translate** — Snipaste-style screen capture (`Ctrl+Alt+S`) supports auto window detection or drag-to-select OCR translation, and now also supports browser right-click translation (requires installing the browser extension).
 
+- **Grammar Correction Mode** — AI-powered grammar correction that highlights errors and provides corrected text with explanations.
+
+- **Long Document Translation** — Translate PDF, plain text, and Markdown documents with ML-based layout detection, formula protection, parallel processing, bilingual output, and translation cache.
+
 - **Multiple Window Modes** — Main window, compact mini window, and persistent fixed window to suit your workflow.
 
 - **Global Hotkeys** — Quick access with customizable shortcuts like `Ctrl+Alt+T`, `Ctrl+Alt+D`, `Ctrl+Alt+M`, and more.

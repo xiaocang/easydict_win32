@@ -36,6 +36,64 @@ MemoryDiagnostics.LogDelta("After operation", baseline);
 #endif
 ```
 
+## SettingsPage Repro Loop (Memory Retention)
+
+Use this exact loop when validating SettingsPage memory behavior:
+
+1. Launch app in Debug.
+2. Stay on MainPage and take baseline snapshot.
+3. Open Settings, wait for content to reveal, then go back to MainPage.
+4. Repeat step 3 at least 5 times.
+5. Compare memory after each iteration.
+
+What to compare:
+
+- Managed heap (`GC Heap`): should stay roughly flat and not increase linearly per visit.
+- Working set (`WorkingSet`): may spike on first visits, but should flatten instead of growing every loop.
+- Object retention in profiler snapshots: check `SettingsPage`, `ServiceCheckItem`, and `PropertyChangedEventHandler` counts.
+
+Expected healthy pattern:
+
+- `GC Heap` remains near a steady-state band across loops.
+- `SettingsPage` instance count does not rise linearly.
+- Working set growth slows significantly after first one or two visits.
+
+### UIAutomation A/B Switch (MainPage cache impact)
+
+You can run the same Settings loop in two runtime modes without editing source files:
+
+- `EASYDICT_UIA_MEMORY_AB_MODE=A` (default): MainPage cache enabled, lightweight unload.
+- `EASYDICT_UIA_MEMORY_AB_MODE=B`: MainPage cache disabled at runtime, unload cleanup enabled.
+
+Extra controls:
+
+- `EASYDICT_UIA_MEMORY_LOOP_ITERATIONS`: number of open/back loops (default `5`).
+- `EASYDICT_EXE_PATH`: explicit app exe path for UIAutomation launch.
+
+Example (PowerShell):
+
+```powershell
+$env:EASYDICT_EXE_PATH = "C:\path\to\Easydict.WinUI.exe"
+$env:EASYDICT_UIA_ALLOW_EXE_FALLBACK = "1"
+
+# A mode (baseline)
+$env:EASYDICT_UIA_MEMORY_AB_MODE = "A"
+$env:EASYDICT_UIA_MEMORY_LOOP_ITERATIONS = "10"
+dotnet test dotnet/tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
+  --filter "FullyQualifiedName~SettingsPage_OpenBackLoop_ShouldSupportMemoryMarkerCollection" `
+  --logger "console;verbosity=detailed"
+
+# B mode (compare)
+$env:EASYDICT_UIA_MEMORY_AB_MODE = "B"
+dotnet test dotnet/tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
+  --filter "FullyQualifiedName~SettingsPage_OpenBackLoop_ShouldSupportMemoryMarkerCollection" `
+  --logger "console;verbosity=detailed"
+```
+
+The test output includes per-iteration process markers like:
+
+`[MemoryLoop][A_iter_5_after_back] ...` or `[MemoryLoop][B_iter_5_after_back] ...`
+
 ## Visual Studio Memory Profiler
 
 ### Heap Snapshots (Recommended for leak detection)

@@ -26,10 +26,13 @@ public sealed partial class SettingsPage : Page
 {
     private readonly SettingsService _settings = SettingsService.Instance;
     private bool _isLoading = true; // Prevent change detection during initial load
-    private bool _handlersRegistered; // Guard to prevent duplicate event handler registration
-    private bool _initialLoadDone; // True after first full initialization completes
+    private bool _isInitialized;
+    private bool _isUnloaded;
+    private bool _isTornDown;
+    private bool _changeHandlersRegistered;
     private bool _hasUnsavedChanges; // Track whether any settings have been modified since last save
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
+    private readonly CancellationTokenSource _lifetimeCts = new();
 
     // Service selection collections for each window (populated from TranslationManager.Services)
     private readonly ObservableCollection<ServiceCheckItem> _mainWindowServices = [];
@@ -309,46 +312,43 @@ public sealed partial class SettingsPage : Page
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
     {
-#if DEBUG
-        MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageLoaded");
-#endif
-        if (_initialLoadDone)
+        if (_isUnloaded || _isInitialized)
         {
-#if DEBUG
-            PerfLog("OnPageLoaded: cached re-navigation begin");
-#endif
-            // Cached page re-navigation — lightweight refresh
-            _isLoading = true;
-            _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
-            LoadSettings();
-            // Re-register PropertyChanged on new service items (LoadSettings clears & repopulates)
-            RegisterServiceCollectionHandlers(_mainWindowServices);
-            RegisterServiceCollectionHandlers(_miniWindowServices);
-            RegisterServiceCollectionHandlers(_fixedWindowServices);
-            _isLoading = false;
-            _hasUnsavedChanges = false;
-            SaveButton.Visibility = Visibility.Collapsed;
-#if DEBUG
-            PerfLog("OnPageLoaded: cached re-navigation end");
-#endif
             return;
         }
 
 #if DEBUG
+        MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageLoaded");
+#endif
+#if DEBUG
         PerfLog("OnPageLoaded: first load, dispatching deferred init");
 #endif
+        var token = _lifetimeCts.Token;
         // First load: show loading overlay, defer heavy work
         DispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-            InitializeSettingsContent);
+            () =>
+            {
+                if (_isUnloaded || _isInitialized || token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                InitializeSettingsContent(token);
+            });
     }
 
     /// <summary>
     /// Performs all heavy initialization work on first load, then reveals content.
     /// Dispatched at Low priority so the loading overlay renders first.
     /// </summary>
-    private void InitializeSettingsContent()
+    private void InitializeSettingsContent(CancellationToken cancellationToken)
     {
+        if (_isUnloaded || _isInitialized || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
 #if DEBUG
         PerfLog("InitializeSettingsContent: begin");
 #endif
@@ -396,19 +396,15 @@ public sealed partial class SettingsPage : Page
         PerfLog("ApplyLocalization: end");
 #endif
 
-        if (!_handlersRegistered)
-        {
 #if DEBUG
-            PerfLog("RegisterChangeHandlers: begin");
+        PerfLog("RegisterChangeHandlers: begin");
 #endif
-            RegisterChangeHandlers();
-            _handlersRegistered = true;
+        RegisterChangeHandlers();
 #if DEBUG
-            PerfLog("RegisterChangeHandlers: end");
+        PerfLog("RegisterChangeHandlers: end");
 #endif
-        }
         _isLoading = false;
-        _initialLoadDone = true;
+        _isInitialized = true;
 
         // Reveal content, hide loading overlay
         LoadingOverlay.Visibility = Visibility.Collapsed;
@@ -424,6 +420,11 @@ public sealed partial class SettingsPage : Page
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
             () =>
             {
+                if (_isUnloaded || cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
 #if DEBUG
                 PerfLog("Deferred I/O: begin UpdateOnnxModelStatus");
 #endif
@@ -432,23 +433,71 @@ public sealed partial class SettingsPage : Page
                 PerfLog("Deferred I/O: end UpdateOnnxModelStatus");
                 PerfLog("Deferred I/O: begin UpdateCacheStatusAsync");
 #endif
-                _ = UpdateCacheStatusAsync();
+                _ = UpdateCacheStatusAsync(cancellationToken);
 #if DEBUG
                 PerfLog("Deferred I/O: end (UpdateCacheStatusAsync dispatched)");
 #endif
             });
     }
 
-    /// <summary>
-    /// Cleanup handler when navigating away from Settings page.
-    /// Unregisters service collection PropertyChanged handlers to prevent memory leaks
-    /// from accumulated lambda closures on cached re-navigation.
-    /// </summary>
     private void OnPageUnloaded(object sender, RoutedEventArgs e)
     {
-        UnregisterServiceCollectionHandlers(_mainWindowServices);
-        UnregisterServiceCollectionHandlers(_miniWindowServices);
-        UnregisterServiceCollectionHandlers(_fixedWindowServices);
+#if DEBUG
+        MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded (before teardown)");
+        var baseline = GC.GetTotalMemory(forceFullCollection: true);
+#endif
+        TeardownOnUnload();
+#if DEBUG
+        MemoryDiagnostics.LogDelta("SettingsPage.OnPageUnloaded retained after full GC", baseline);
+        MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded (after teardown)");
+#endif
+    }
+
+    private void TeardownOnUnload()
+    {
+        if (_isTornDown)
+        {
+            return;
+        }
+
+        _isTornDown = true;
+        _isUnloaded = true;
+        _isLoading = true;
+
+        try
+        {
+            _lifetimeCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Ignore if already disposed by shutdown path.
+        }
+        _lifetimeCts.Dispose();
+
+        // Disconnect lifecycle handlers to avoid retaining the page.
+        this.Loaded -= OnPageLoaded;
+        this.Unloaded -= OnPageUnloaded;
+
+        UnregisterChangeHandlers();
+        UnregisterLanguageCheckboxHandlers();
+
+        try { _currentDialog?.Hide(); } catch (COMException) { }
+        _currentDialog = null;
+
+        MainWindowServicesPanel.ItemsSource = null;
+        MiniWindowServicesPanel.ItemsSource = null;
+        FixedWindowServicesPanel.ItemsSource = null;
+        LanguageCheckboxGrid.ItemsSource = null;
+
+        NavIndicators.Children.Clear();
+        _navSections.Clear();
+
+        _mainWindowServices.Clear();
+        _miniWindowServices.Clear();
+        _fixedWindowServices.Clear();
+        _languageItems.Clear();
+
+        _isInitialized = false;
     }
 
     /// <summary>
@@ -456,6 +505,11 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private void RegisterChangeHandlers()
     {
+        if (_changeHandlersRegistered)
+        {
+            return;
+        }
+
         // ComboBox changes
         FirstLanguageCombo.SelectionChanged += OnSettingChanged;
         SecondLanguageCombo.SelectionChanged += OnSettingChanged;
@@ -523,6 +577,78 @@ public sealed partial class SettingsPage : Page
         RegisterServiceCollectionHandlers(_mainWindowServices);
         RegisterServiceCollectionHandlers(_miniWindowServices);
         RegisterServiceCollectionHandlers(_fixedWindowServices);
+        _changeHandlersRegistered = true;
+    }
+
+    private void UnregisterChangeHandlers()
+    {
+        if (!_changeHandlersRegistered)
+        {
+            return;
+        }
+
+        FirstLanguageCombo.SelectionChanged -= OnSettingChanged;
+        SecondLanguageCombo.SelectionChanged -= OnSettingChanged;
+        OpenAIModelCombo.SelectionChanged -= OnSettingChanged;
+        OllamaModelCombo.SelectionChanged -= OnSettingChanged;
+        BuiltInModelCombo.SelectionChanged -= OnSettingChanged;
+        DeepSeekModelCombo.SelectionChanged -= OnSettingChanged;
+        GroqModelCombo.SelectionChanged -= OnSettingChanged;
+        ZhipuModelCombo.SelectionChanged -= OnSettingChanged;
+        GitHubModelsModelCombo.SelectionChanged -= OnSettingChanged;
+        GeminiModelCombo.SelectionChanged -= OnSettingChanged;
+
+        AutoSelectTargetToggle.Toggled -= OnSettingChanged;
+        MinimizeToTrayToggle.Toggled -= OnSettingChanged;
+        MinimizeToTrayOnStartupToggle.Toggled -= OnSettingChanged;
+        ClipboardMonitorToggle.Toggled -= OnSettingChanged;
+        MouseSelectionTranslateToggle.Toggled -= OnSettingChanged;
+        AlwaysOnTopToggle.Toggled -= OnSettingChanged;
+        LaunchAtStartupToggle.Toggled -= OnSettingChanged;
+        ProxyEnabledToggle.Toggled -= OnSettingChanged;
+        ProxyBypassLocalToggle.Toggled -= OnSettingChanged;
+
+        DeepLKeyBox.PasswordChanged -= OnSettingChanged;
+        OpenAIKeyBox.PasswordChanged -= OnSettingChanged;
+        OpenAIEndpointBox.TextChanged -= OnSettingChanged;
+        OllamaEndpointBox.TextChanged -= OnSettingChanged;
+        ProxyUriBox.TextChanged -= OnSettingChanged;
+        ShowHotkeyBox.TextChanged -= OnSettingChanged;
+        TranslateHotkeyBox.TextChanged -= OnSettingChanged;
+        ShowMiniHotkeyBox.TextChanged -= OnSettingChanged;
+        ShowFixedHotkeyBox.TextChanged -= OnSettingChanged;
+        OcrTranslateHotkeyBox.TextChanged -= OnSettingChanged;
+        SilentOcrHotkeyBox.TextChanged -= OnSettingChanged;
+
+        DeepSeekKeyBox.PasswordChanged -= OnSettingChanged;
+        GroqKeyBox.PasswordChanged -= OnSettingChanged;
+        ZhipuKeyBox.PasswordChanged -= OnSettingChanged;
+        GitHubModelsTokenBox.PasswordChanged -= OnSettingChanged;
+        GeminiKeyBox.PasswordChanged -= OnSettingChanged;
+        CustomOpenAIEndpointBox.TextChanged -= OnSettingChanged;
+        CustomOpenAIKeyBox.PasswordChanged -= OnSettingChanged;
+        CustomOpenAIModelBox.TextChanged -= OnSettingChanged;
+        BuiltInApiKeyBox.PasswordChanged -= OnSettingChanged;
+        DoubaoKeyBox.PasswordChanged -= OnSettingChanged;
+        DoubaoEndpointBox.TextChanged -= OnSettingChanged;
+        DoubaoModelBox.TextChanged -= OnSettingChanged;
+        CaiyunKeyBox.PasswordChanged -= OnSettingChanged;
+        NiuTransKeyBox.PasswordChanged -= OnSettingChanged;
+        YoudaoAppKeyBox.PasswordChanged -= OnSettingChanged;
+        YoudaoAppSecretBox.PasswordChanged -= OnSettingChanged;
+        YoudaoUseOfficialApiToggle.Toggled -= OnSettingChanged;
+
+        LayoutDetectionModeCombo.SelectionChanged -= OnLayoutDetectionModeChanged;
+        VisionLayoutServiceCombo.SelectionChanged -= OnSettingChanged;
+
+        DeepLFreeCheck.Checked -= OnSettingChanged;
+        DeepLFreeCheck.Unchecked -= OnSettingChanged;
+
+        UnregisterServiceCollectionHandlers(_mainWindowServices);
+        UnregisterServiceCollectionHandlers(_miniWindowServices);
+        UnregisterServiceCollectionHandlers(_fixedWindowServices);
+
+        _changeHandlersRegistered = false;
     }
 
     /// <summary>
@@ -534,10 +660,6 @@ public sealed partial class SettingsPage : Page
         OnSettingChanged(sender!, e);
     }
 
-    /// <summary>
-    /// Register PropertyChanged handlers for service check items in a collection.
-    /// Uses -= before += to prevent duplicate registration on cached re-navigation.
-    /// </summary>
     private void RegisterServiceCollectionHandlers(ObservableCollection<ServiceCheckItem> collection)
     {
         foreach (var item in collection)
@@ -547,9 +669,6 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    /// <summary>
-    /// Unregister PropertyChanged handlers for service check items in a collection.
-    /// </summary>
     private void UnregisterServiceCollectionHandlers(ObservableCollection<ServiceCheckItem> collection)
     {
         foreach (var item in collection)
@@ -695,12 +814,21 @@ public sealed partial class SettingsPage : Page
 
         // Enabled services for each window (populate from TranslationManager.Services)
         // Acquire handle once for all three collections to avoid repeated handle acquisition
+        UnregisterServiceCollectionHandlers(_mainWindowServices);
+        UnregisterServiceCollectionHandlers(_miniWindowServices);
+        UnregisterServiceCollectionHandlers(_fixedWindowServices);
         using (var handle = TranslationManagerService.Instance.AcquireHandle())
         {
             var manager = handle.Manager;
             PopulateServiceCollection(_mainWindowServices, _settings.MainWindowEnabledServices, _settings.MainWindowServiceEnabledQuery, manager);
             PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices, _settings.MiniWindowServiceEnabledQuery, manager);
             PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices, _settings.FixedWindowServiceEnabledQuery, manager);
+        }
+        if (_changeHandlersRegistered)
+        {
+            RegisterServiceCollectionHandlers(_mainWindowServices);
+            RegisterServiceCollectionHandlers(_miniWindowServices);
+            RegisterServiceCollectionHandlers(_fixedWindowServices);
         }
 
         // Set version from assembly metadata
@@ -2097,16 +2225,35 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async Task UpdateCacheStatusAsync()
+    private async Task UpdateCacheStatusAsync(CancellationToken cancellationToken = default)
     {
+        if (_isUnloaded || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
         try
         {
             using var cacheService = new TranslationCacheService();
             var count = await cacheService.GetEntryCountAsync();
+            if (_isUnloaded || cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
             DispatcherQueue.TryEnqueue(() =>
             {
+                if (_isUnloaded || cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
                 CacheStatusText.Text = $"{count} cached entries";
             });
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignore when teardown has canceled background work.
         }
         catch
         {
@@ -2189,6 +2336,11 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
     {
+        if (_isUnloaded || _lifetimeCts.IsCancellationRequested)
+        {
+            return ContentDialogResult.None;
+        }
+
         try { _currentDialog?.Hide(); } catch (COMException) { }
         _currentDialog = dialog;
 
@@ -2215,6 +2367,8 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private void PopulateLanguageCheckboxGrid()
     {
+        UnregisterLanguageCheckboxHandlers();
+
         var loc = LocalizationService.Instance;
         var selectedSet = new HashSet<string>(_settings.SelectedLanguages, StringComparer.OrdinalIgnoreCase);
 
@@ -2249,6 +2403,14 @@ public sealed partial class SettingsPage : Page
         // Set up the ItemTemplate programmatically since LanguageCheckboxItem is a private inner class
         LanguageCheckboxGrid.ItemTemplate = CreateLanguageCheckboxTemplate();
         LanguageCheckboxGrid.ItemsSource = _languageItems;
+    }
+
+    private void UnregisterLanguageCheckboxHandlers()
+    {
+        foreach (var item in _languageItems)
+        {
+            item.PropertyChanged -= OnLanguageCheckboxChanged;
+        }
     }
 
     /// <summary>

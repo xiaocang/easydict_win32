@@ -116,6 +116,9 @@ namespace Easydict.WinUI.Views
 
         private void OnPageLoaded(object sender, RoutedEventArgs e)
         {
+#if DEBUG
+            Services.MemoryDiagnostics.LogSnapshot("MainPage.OnPageLoaded");
+#endif
             _isClosing = false;
             _isLoaded = true;
             InitializeTranslationServices();

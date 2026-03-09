@@ -68,6 +68,7 @@ public sealed partial class SettingsPage : Page
         PerfLog("ctor: end InitializeComponent");
 #endif
         this.Loaded += OnPageLoaded;
+        this.Unloaded += OnPageUnloaded;
     }
 
     /// <summary>
@@ -308,6 +309,9 @@ public sealed partial class SettingsPage : Page
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
     {
+#if DEBUG
+        MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageLoaded");
+#endif
         if (_initialLoadDone)
         {
 #if DEBUG
@@ -412,6 +416,7 @@ public sealed partial class SettingsPage : Page
         NavSidebar.Visibility = Visibility.Visible;
 #if DEBUG
         PerfLog("Content revealed");
+        MemoryDiagnostics.LogSnapshot("SettingsPage.InitializeSettingsContent complete");
 #endif
 
         // Defer disk I/O (ONNX model check, SQLite cache) to after content is visible
@@ -432,6 +437,18 @@ public sealed partial class SettingsPage : Page
                 PerfLog("Deferred I/O: end (UpdateCacheStatusAsync dispatched)");
 #endif
             });
+    }
+
+    /// <summary>
+    /// Cleanup handler when navigating away from Settings page.
+    /// Unregisters service collection PropertyChanged handlers to prevent memory leaks
+    /// from accumulated lambda closures on cached re-navigation.
+    /// </summary>
+    private void OnPageUnloaded(object sender, RoutedEventArgs e)
+    {
+        UnregisterServiceCollectionHandlers(_mainWindowServices);
+        UnregisterServiceCollectionHandlers(_miniWindowServices);
+        UnregisterServiceCollectionHandlers(_fixedWindowServices);
     }
 
     /// <summary>
@@ -509,13 +526,35 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
+    /// Named handler for ServiceCheckItem.PropertyChanged, replacing the lambda
+    /// so it can be properly unregistered to prevent memory leaks.
+    /// </summary>
+    private void OnServiceItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        OnSettingChanged(null!, null!);
+    }
+
+    /// <summary>
     /// Register PropertyChanged handlers for service check items in a collection.
+    /// Uses -= before += to prevent duplicate registration on cached re-navigation.
     /// </summary>
     private void RegisterServiceCollectionHandlers(ObservableCollection<ServiceCheckItem> collection)
     {
         foreach (var item in collection)
         {
-            item.PropertyChanged += (_, _) => OnSettingChanged(null!, null!);
+            item.PropertyChanged -= OnServiceItemPropertyChanged;
+            item.PropertyChanged += OnServiceItemPropertyChanged;
+        }
+    }
+
+    /// <summary>
+    /// Unregister PropertyChanged handlers for service check items in a collection.
+    /// </summary>
+    private void UnregisterServiceCollectionHandlers(ObservableCollection<ServiceCheckItem> collection)
+    {
+        foreach (var item in collection)
+        {
+            item.PropertyChanged -= OnServiceItemPropertyChanged;
         }
     }
 

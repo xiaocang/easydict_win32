@@ -10,8 +10,9 @@ namespace Easydict.TranslationService.Tests;
 /// Each test measures the GC heap delta of a specific operation and asserts
 /// an upper-bound budget to catch memory regressions.
 ///
-/// These tests are excluded from automatic CI runs.
-/// Trigger manually with:
+/// These tests are excluded from the main CI workflow but run automatically
+/// in the benchmark workflow (benchmark.yml) when relevant files change.
+/// To run manually:
 ///   dotnet test tests/Easydict.TranslationService.Tests --filter "Category=Performance" -v n
 /// </summary>
 [Trait("Category", "Performance")]

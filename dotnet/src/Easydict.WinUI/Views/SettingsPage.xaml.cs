@@ -531,7 +531,7 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private void OnServiceItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        OnSettingChanged(null!, null!);
+        OnSettingChanged(sender!, e);
     }
 
     /// <summary>

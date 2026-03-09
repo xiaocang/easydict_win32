@@ -15,6 +15,7 @@ namespace Easydict.TranslationService.Tests;
 ///   dotnet test tests/Easydict.TranslationService.Tests --filter "Category=Performance" -v n
 /// </summary>
 [Trait("Category", "Performance")]
+[Collection("Performance")] // Disable xUnit parallel execution — GC measurements require isolation
 public class MemoryBudgetTests : IDisposable
 {
     private readonly ITestOutputHelper _output;
@@ -45,7 +46,7 @@ public class MemoryBudgetTests : IDisposable
         // Access Services to ensure lazy initialization (if any) completes
         _ = manager.Services.Count;
 
-        var afterCreate = GC.GetTotalMemory(forceFullCollection: false);
+        var afterCreate = GC.GetTotalMemory(forceFullCollection: true);
         var delta = afterCreate - baseline;
 
         _output.WriteLine("=== TranslationManager Heap Delta ===");
@@ -111,7 +112,7 @@ public class MemoryBudgetTests : IDisposable
         using var manager = new TranslationManager();
 
         // Measure just the cache infrastructure (empty caches)
-        var afterCreate = GC.GetTotalMemory(forceFullCollection: false);
+        var afterCreate = GC.GetTotalMemory(forceFullCollection: true);
         var delta = afterCreate - baseline;
 
         _output.WriteLine("=== MemoryCache Infrastructure ===");

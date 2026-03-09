@@ -24,7 +24,7 @@ internal static class MemoryDiagnostics
     {
         var gcMemory = GC.GetTotalMemory(forceFullCollection: false);
         var gcInfo = GC.GetGCMemoryInfo();
-        var process = Process.GetCurrentProcess();
+        using var process = Process.GetCurrentProcess();
 
         Debug.WriteLine($"[Memory] {label}");
         Debug.WriteLine($"  GC Heap   : {gcMemory / 1024.0 / 1024.0:F1} MB");

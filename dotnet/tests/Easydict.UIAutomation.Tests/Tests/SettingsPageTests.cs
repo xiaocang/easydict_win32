@@ -111,8 +111,11 @@ public class SettingsPageTests : IDisposable
         var baseline = CaptureAppProcessMemory($"{_abMode}_baseline");
 
         var iterations = ResolveLoopIterations();
+        var idleDelayMsAfterBack = ResolveIdleDelayMsAfterBack();
         _output.WriteLine($"[MemoryLoop] Iterations={iterations}");
-        var afterBackSamples = new List<MemorySample>();
+        _output.WriteLine($"[MemoryLoop] IdleAfterBackMs={idleDelayMsAfterBack}");
+        var immediateBackSamples = new List<MemorySample>();
+        var settledBackSamples = new List<MemorySample>();
         for (var i = 1; i <= iterations; i++)
         {
             var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
@@ -135,13 +138,27 @@ public class SettingsPageTests : IDisposable
             var backSample = CaptureAppProcessMemory($"{_abMode}_iter_{i}_after_back");
             if (backSample.HasValue)
             {
-                afterBackSamples.Add(backSample.Value);
+                immediateBackSamples.Add(backSample.Value);
+            }
+
+            if (idleDelayMsAfterBack > 0)
+            {
+                Thread.Sleep(idleDelayMsAfterBack);
+                var settledSample = CaptureAppProcessMemory($"{_abMode}_iter_{i}_after_back_idle");
+                if (settledSample.HasValue)
+                {
+                    settledBackSamples.Add(settledSample.Value);
+                }
             }
 
             _output.WriteLine($"[MemoryLoop] Iteration {i}: navigated back to Main page.");
         }
 
-        EmitMemorySummary(baseline, afterBackSamples);
+        EmitMemorySummary("ImmediateBack", baseline, immediateBackSamples);
+        if (settledBackSamples.Count > 0)
+        {
+            EmitMemorySummary("SettledBack", baseline, settledBackSamples);
+        }
     }
 
     private AutomationElement? WaitForSettingsButton(Window window, TimeSpan timeout)
@@ -252,11 +269,11 @@ public class SettingsPageTests : IDisposable
         }
     }
 
-    private void EmitMemorySummary(MemorySample? baseline, IReadOnlyList<MemorySample> afterBackSamples)
+    private void EmitMemorySummary(string phase, MemorySample? baseline, IReadOnlyList<MemorySample> afterBackSamples)
     {
         if (!baseline.HasValue || afterBackSamples.Count == 0)
         {
-            _output.WriteLine($"[MemoryLoop][{_abMode}] Summary unavailable (missing baseline or back samples).");
+            _output.WriteLine($"[MemoryLoop][{_abMode}][{phase}] Summary unavailable (missing baseline or back samples).");
             return;
         }
 
@@ -277,9 +294,9 @@ public class SettingsPageTests : IDisposable
         }
 
         _output.WriteLine(
-            $"[MemoryLoop][{_abMode}] Summary: BaselineWS={baseline.Value.WorkingSetMb:F1}MB FirstBackWS={firstBack.WorkingSetMb:F1}MB LastBackWS={lastBack.WorkingSetMb:F1}MB PeakBackWS={peakBack:F1}MB");
+            $"[MemoryLoop][{_abMode}][{phase}] Summary: BaselineWS={baseline.Value.WorkingSetMb:F1}MB FirstBackWS={firstBack.WorkingSetMb:F1}MB LastBackWS={lastBack.WorkingSetMb:F1}MB PeakBackWS={peakBack:F1}MB");
         _output.WriteLine(
-            $"[MemoryLoop][{_abMode}] Delta: WS={deltaWs:+0.0;-0.0;0.0}MB Private={deltaPrivate:+0.0;-0.0;0.0}MB Paged={deltaPaged:+0.0;-0.0;0.0}MB TailSlopeWS={tailSlope:+0.00;-0.00;0.00}MB/iter");
+            $"[MemoryLoop][{_abMode}][{phase}] Delta: WS={deltaWs:+0.0;-0.0;0.0}MB Private={deltaPrivate:+0.0;-0.0;0.0}MB Paged={deltaPaged:+0.0;-0.0;0.0}MB TailSlopeWS={tailSlope:+0.00;-0.00;0.00}MB/iter");
     }
 
     private static double ToMb(long bytes) => bytes / 1024d / 1024d;
@@ -293,6 +310,17 @@ public class SettingsPageTests : IDisposable
         }
 
         return Math.Clamp(iterations, 1, 50);
+    }
+
+    private static int ResolveIdleDelayMsAfterBack()
+    {
+        var value = Environment.GetEnvironmentVariable("EASYDICT_UIA_MEMORY_IDLE_MS_AFTER_BACK");
+        if (!int.TryParse(value, out var delayMs))
+        {
+            return 1500;
+        }
+
+        return Math.Clamp(delayMs, 0, 10000);
     }
 
     private static string ResolveAbMode()

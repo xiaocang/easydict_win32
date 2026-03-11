@@ -68,6 +68,7 @@ You can run the same Settings loop in two runtime modes without editing source f
 Extra controls:
 
 - `EASYDICT_UIA_MEMORY_LOOP_ITERATIONS`: number of open/back loops (default `5`).
+- `EASYDICT_UIA_MEMORY_IDLE_MS_AFTER_BACK`: extra idle delay after each Back before settled sample (default `1500`).
 - `EASYDICT_EXE_PATH`: explicit app exe path for UIAutomation launch.
 
 Example (PowerShell):
@@ -79,6 +80,7 @@ $env:EASYDICT_UIA_ALLOW_EXE_FALLBACK = "1"
 # A mode (baseline)
 $env:EASYDICT_UIA_MEMORY_AB_MODE = "A"
 $env:EASYDICT_UIA_MEMORY_LOOP_ITERATIONS = "10"
+$env:EASYDICT_UIA_MEMORY_IDLE_MS_AFTER_BACK = "1500"
 dotnet test dotnet/tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
   --filter "FullyQualifiedName~SettingsPage_OpenBackLoop_ShouldSupportMemoryMarkerCollection" `
   --logger "console;verbosity=detailed"
@@ -93,6 +95,11 @@ dotnet test dotnet/tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests
 The test output includes per-iteration process markers like:
 
 `[MemoryLoop][A_iter_5_after_back] ...` or `[MemoryLoop][B_iter_5_after_back] ...`
+
+It also prints aggregated summaries for two phases:
+
+- `ImmediateBack`: sample taken right after Back navigation.
+- `SettledBack`: sample taken after `EASYDICT_UIA_MEMORY_IDLE_MS_AFTER_BACK` delay.
 
 ## Visual Studio Memory Profiler
 

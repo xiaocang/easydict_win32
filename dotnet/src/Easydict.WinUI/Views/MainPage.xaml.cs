@@ -11,6 +11,7 @@ using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.DocumentExport;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI.Input;
+using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
@@ -58,20 +59,18 @@ namespace Easydict.WinUI.Views
         private string _longDocOutputFolder = "";
         private bool _isLongDocTranslating;
         private ContentDialog? _currentDialog;
-
-        /// <summary>
-        /// Maximum time to wait for in-flight query to complete during cleanup.
-        /// </summary>
-        private const int QueryShutdownTimeoutSeconds = 2;
+        private readonly bool _useMemoryAbVariantB;
 
         /// <summary>
         /// Maximum history items to keep.
         /// </summary>
         private const int MaxHistoryItems = 50;
+        private const int QueryShutdownTimeoutSeconds = 2;
 
         public MainPage()
         {
             _targetLanguageSelector = new TargetLanguageSelector(_settings);
+            _useMemoryAbVariantB = IsMemoryAbVariantB();
 
             try
             {
@@ -84,6 +83,17 @@ namespace Easydict.WinUI.Views
                 System.Diagnostics.Debug.WriteLine($"[MainPage] InitializeComponent FAILED: {ex}");
                 throw;
             }
+
+            if (_useMemoryAbVariantB)
+            {
+                NavigationCacheMode = NavigationCacheMode.Disabled;
+                System.Diagnostics.Debug.WriteLine("[MainPage] Memory A/B mode = B (cache disabled, unload cleanup enabled)");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[MainPage] Memory A/B mode = A (cached MainPage lifecycle)");
+            }
+
             this.Loaded += OnPageLoaded;
             this.Unloaded += OnPageUnloaded;
 
@@ -116,6 +126,9 @@ namespace Easydict.WinUI.Views
 
         private void OnPageLoaded(object sender, RoutedEventArgs e)
         {
+#if DEBUG
+            MemoryDiagnostics.LogSnapshot("MainPage.OnPageLoaded");
+#endif
             _isClosing = false;
             _isLoaded = true;
             InitializeTranslationServices();
@@ -138,16 +151,93 @@ namespace Easydict.WinUI.Views
 
         private async void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
+            _isLoaded = false;
+
+            if (_useMemoryAbVariantB)
+            {
+                try
+                {
+                    _isClosing = true;
+                    App.ClipboardTextReceived -= OnClipboardTextReceived;
+                    await CleanupResourcesAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MainPage] OnPageUnloaded cleanup error: {ex}");
+                }
+                return;
+            }
+
+            // With NavigationCacheMode="Enabled", this page instance persists and
+            // is reused on GoBack. Don't dispose resources or unsubscribe events —
+            // the constructor only runs once.
+        }
+
+        private static bool IsMemoryAbVariantB()
+        {
+            var mode = Environment.GetEnvironmentVariable("EASYDICT_UIA_MEMORY_AB_MODE");
+            return string.Equals(mode, "B", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task CleanupResourcesAsync()
+        {
+            CancelCurrentQuery();
+            _longDocumentService.Dispose();
+
+            var singleTaskCts = Interlocked.Exchange(ref _longDocSingleTaskCts, null);
+            try { singleTaskCts?.Cancel(); } catch (ObjectDisposedException) { }
+            singleTaskCts?.Dispose();
+
+            var queueCts = Interlocked.Exchange(ref _longDocQueueCts, null);
+            try { queueCts?.Cancel(); } catch (ObjectDisposedException) { }
+            queueCts?.Dispose();
+
+            // Cancel any in-flight manual queries.
+            // Disposal is still owned by OnServiceQueryRequested finally.
+            var manualCts = Interlocked.Exchange(ref _manualQueryCts, null);
+            try { manualCts?.Cancel(); } catch (ObjectDisposedException) { }
+
+            var task = _currentQueryTask;
+            var detectionService = _detectionService;
+
+            _currentQueryTask = null;
+            _detectionService = null;
+
+            if (task == null || task.IsCompleted)
+            {
+                detectionService?.Dispose();
+                return;
+            }
+
+            var waitSucceeded = true;
             try
             {
-                _isLoaded = false;
-                _isClosing = true;
-                App.ClipboardTextReceived -= OnClipboardTextReceived;
-                await CleanupResourcesAsync();
+                await task.WaitAsync(TimeSpan.FromSeconds(QueryShutdownTimeoutSeconds));
             }
-            catch (Exception ex)
+            catch (OperationCanceledException)
             {
-                System.Diagnostics.Debug.WriteLine($"[MainPage] OnPageUnloaded error: {ex}");
+                // Expected when query is cancelled.
+            }
+            catch (TimeoutException)
+            {
+                waitSucceeded = false;
+            }
+            catch
+            {
+                // Faulted query should not block disposal path.
+            }
+
+            if (waitSucceeded)
+            {
+                detectionService?.Dispose();
+            }
+            else
+            {
+                _ = task.ContinueWith(
+                    _ => detectionService?.Dispose(),
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
             }
         }
 
@@ -562,71 +652,6 @@ namespace Easydict.WinUI.Views
                 Interlocked.CompareExchange(ref _manualQueryCts, null, cts);
                 cts.Dispose();
             }
-        }
-
-        private async Task CleanupResourcesAsync()
-        {
-            CancelCurrentQuery();
-
-            _longDocumentService.Dispose();
-
-            var singleTaskCts = Interlocked.Exchange(ref _longDocSingleTaskCts, null);
-            try { singleTaskCts?.Cancel(); } catch (ObjectDisposedException) { }
-            singleTaskCts?.Dispose();
-
-            var queueCts = Interlocked.Exchange(ref _longDocQueueCts, null);
-            try { queueCts?.Cancel(); } catch (ObjectDisposedException) { }
-            queueCts?.Dispose();
-
-            // Cancel any in-flight manual queries
-            // Don't dispose - let the owning OnServiceQueryRequested's finally block dispose it
-            var manualCts = Interlocked.Exchange(ref _manualQueryCts, null);
-            try { manualCts?.Cancel(); } catch (ObjectDisposedException) { }
-
-            var task = _currentQueryTask;
-            var detectionService = _detectionService;  // Capture before nulling
-
-            _currentQueryTask = null;
-            _detectionService = null;  // Clear immediately to prevent re-use
-
-            if (task == null || task.IsCompleted)
-            {
-                detectionService?.Dispose();
-                return;
-            }
-
-            bool waitSucceeded = true;
-            try
-            {
-                await task.WaitAsync(TimeSpan.FromSeconds(QueryShutdownTimeoutSeconds));
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected - task completed via cancellation
-            }
-            catch (TimeoutException)
-            {
-                waitSucceeded = false;
-            }
-            catch (Exception)
-            {
-                // Task faulted - treat as completed
-            }
-
-            if (waitSucceeded)
-            {
-                detectionService?.Dispose();
-            }
-            else
-            {
-                // Schedule deferred disposal when task eventually completes
-                _ = task.ContinueWith(
-                    _ => detectionService?.Dispose(),
-                    CancellationToken.None,
-                    TaskContinuationOptions.ExecuteSynchronously,
-                    TaskScheduler.Default);
-            }
-            // Do NOT dispose shared TranslationManager - it's managed by TranslationManagerService
         }
 
         private void UpdateStatus(bool? connected, string text)

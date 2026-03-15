@@ -56,7 +56,8 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
         }
 
         var entry = _dict.Lookup(query);
-        if (entry == null || string.IsNullOrWhiteSpace(entry.Definition))
+        var definition = entry.Definition;
+        if (string.IsNullOrWhiteSpace(definition))
         {
             throw new TranslationException($"No result found in dictionary: {query}")
             {
@@ -65,7 +66,7 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
             };
         }
 
-        var plainText = ToReadableText(entry.Definition);
+        var plainText = ToReadableText(definition);
         var wordResult = new WordResult
         {
             Definitions =

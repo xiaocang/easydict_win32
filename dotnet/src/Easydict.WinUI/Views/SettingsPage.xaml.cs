@@ -3,6 +3,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
@@ -24,6 +26,7 @@ internal sealed record NavSection(string Name, string Tooltip, string IconGlyph,
 /// </summary>
 public sealed partial class SettingsPage : Page
 {
+    private static readonly Regex NonServiceIdCharRegex = new("[^a-z0-9-]", RegexOptions.Compiled);
     private readonly SettingsService _settings = SettingsService.Instance;
     private bool _isLoading = true; // Prevent change detection during initial load
     private bool _isInitialized;
@@ -868,6 +871,18 @@ public sealed partial class SettingsPage : Page
                 indicator.Visibility = Visibility.Visible;
             }
         }
+
+        UpdateImportedMdxSummary();
+    }
+
+    private void UpdateImportedMdxSummary()
+    {
+        ImportedMdxSummaryText.Text = _settings.ImportedMdxDictionaries.Count switch
+        {
+            0 => "No MDX dictionaries imported",
+            1 => "1 MDX dictionary imported",
+            var c => $"{c} MDX dictionaries imported"
+        };
     }
 
     /// <summary>
@@ -914,6 +929,79 @@ public sealed partial class SettingsPage : Page
         {
             handle?.Dispose();
         }
+    }
+
+    private async void OnImportMdxDictionaryClicked(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker();
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+            picker.FileTypeFilter.Add(".mdx");
+
+            var file = await picker.PickSingleFileAsync();
+            if (file == null || string.IsNullOrWhiteSpace(file.Path))
+            {
+                return;
+            }
+
+            var displayName = Path.GetFileNameWithoutExtension(file.Path);
+            var serviceId = BuildMdxServiceId(displayName, file.Path);
+
+            var imported = new SettingsService.ImportedMdxDictionary
+            {
+                ServiceId = serviceId,
+                DisplayName = $"📚 {displayName}",
+                FilePath = file.Path
+            };
+
+            if (!TranslationManagerService.Instance.TryRegisterMdxDictionary(imported, out var error))
+            {
+                await ShowSimpleDialogAsync("Import failed", $"Unable to load MDX dictionary: {error}");
+                return;
+            }
+
+            _settings.ImportedMdxDictionaries.RemoveAll(d => string.Equals(d.FilePath, file.Path, StringComparison.OrdinalIgnoreCase));
+            _settings.ImportedMdxDictionaries.Add(imported);
+
+            // Enable imported service by default in all windows.
+            if (!_settings.MainWindowEnabledServices.Contains(serviceId)) _settings.MainWindowEnabledServices.Add(serviceId);
+            if (!_settings.MiniWindowEnabledServices.Contains(serviceId)) _settings.MiniWindowEnabledServices.Add(serviceId);
+            if (!_settings.FixedWindowEnabledServices.Contains(serviceId)) _settings.FixedWindowEnabledServices.Add(serviceId);
+
+            _settings.Save();
+            LoadSettings();
+        }
+        catch (Exception ex)
+        {
+            await ShowSimpleDialogAsync("Import failed", ex.Message);
+        }
+    }
+
+    internal static string BuildMdxServiceId(string displayName, string filePath)
+    {
+        var stableHash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(filePath))).ToLowerInvariant()[..8];
+        var normalizedName = displayName.Trim().ToLowerInvariant().Replace(' ', '-');
+        normalizedName = NonServiceIdCharRegex.Replace(normalizedName, "-");
+        normalizedName = Regex.Replace(normalizedName, "-+", "-").Trim('-');
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            normalizedName = "dictionary";
+        }
+        return $"mdx::{normalizedName}-{stableHash}";
+    }
+
+    private async Task ShowSimpleDialogAsync(string title, string message)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = this.XamlRoot,
+            Title = title,
+            Content = message,
+            CloseButtonText = "OK"
+        };
+        await ShowDialogAsync(dialog);
     }
 
     private static void SelectComboByTag(ComboBox combo, string tag)

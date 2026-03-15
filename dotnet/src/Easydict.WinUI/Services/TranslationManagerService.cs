@@ -314,7 +314,33 @@ public sealed class TranslationManagerService : IDisposable
 
         // Linguee doesn't need configuration (no API key)
 
+        RegisterImportedMdxServices();
+
         Debug.WriteLine("[TranslationManagerService] Services configured");
+    }
+
+    private void RegisterImportedMdxServices()
+    {
+        foreach (var dictionary in _settings.ImportedMdxDictionaries)
+        {
+            if (string.IsNullOrWhiteSpace(dictionary.ServiceId) || string.IsNullOrWhiteSpace(dictionary.FilePath))
+            {
+                continue;
+            }
+
+            try
+            {
+                var service = new MdxDictionaryTranslationService(
+                    dictionary.ServiceId,
+                    dictionary.DisplayName,
+                    dictionary.FilePath);
+                _translationManager.RegisterService(service);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[TranslationManagerService] Failed to load MDX dictionary '{dictionary.FilePath}': {ex.Message}");
+            }
+        }
     }
 
     /// <summary>
@@ -325,6 +351,25 @@ public sealed class TranslationManagerService : IDisposable
         lock (_lock)
         {
             ConfigureServices();
+        }
+    }
+
+    public bool TryRegisterMdxDictionary(SettingsService.ImportedMdxDictionary dictionary, out string? error)
+    {
+        error = null;
+        try
+        {
+            var service = new MdxDictionaryTranslationService(dictionary.ServiceId, dictionary.DisplayName, dictionary.FilePath);
+            lock (_lock)
+            {
+                _translationManager.RegisterService(service);
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
         }
     }
 

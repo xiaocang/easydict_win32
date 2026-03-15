@@ -115,6 +115,17 @@
                 <TextBlock x:Name="EnabledServicesDescriptionText" Text="Select which translation services to display in each window. Multiple services will run in parallel."
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="ImportMdxDictionaryButton"
+                            Content="Import MDX Dictionary"
+                            Click="OnImportMdxDictionaryClicked"
+                            Padding="10,4" />
+                    <TextBlock x:Name="ImportedMdxSummaryText"
+                               Text="No MDX dictionaries imported"
+                               VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+
                 <!-- International Services Toggle -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="12,8">
                     <StackPanel Spacing="4">
@@ -913,4 +924,3 @@
     </Button>
 </Grid>
 </Page>
-

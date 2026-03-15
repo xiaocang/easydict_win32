@@ -107,6 +107,7 @@
     </ItemGroup>
 
     <Target Name="GenerateAppIconIco"
+            Condition="$([MSBuild]::IsOSPlatform('Windows'))"
             BeforeTargets="BeforeBuild"
             Inputs="$(ProjectDir)Assets\macos\white-black-icon.appiconset\icon_512x512@2x.png"
             Outputs="&quot;$(IntermediateOutputPath)AppIcon.ico&quot;">
@@ -114,7 +115,9 @@
             Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\\..\\scripts\\generate-app-icon-ico.ps1&quot; -SourcePng &quot;$(ProjectDir)Assets\\macos\\white-black-icon.appiconset\\icon_512x512@2x.png&quot; -OutputIco &quot;$(IntermediateOutputPath)AppIcon.ico&quot; -OutputTrayPng &quot;$(IntermediateOutputPath)TrayIcon.png&quot;" />
     </Target>
 
-    <Target Name="CopyAppIconToOutput" AfterTargets="Build">
+    <Target Name="CopyAppIconToOutput"
+            Condition="Exists('$(IntermediateOutputPath)AppIcon.ico') and Exists('$(IntermediateOutputPath)TrayIcon.png')"
+            AfterTargets="Build">
         <Copy
             SourceFiles="$(IntermediateOutputPath)AppIcon.ico"
             DestinationFiles="$(OutDir)AppIcon.ico"
@@ -125,7 +128,9 @@
             SkipUnchangedFiles="true" />
     </Target>
 
-    <Target Name="CopyAppIconToPublish" AfterTargets="Publish">
+    <Target Name="CopyAppIconToPublish"
+            Condition="Exists('$(IntermediateOutputPath)AppIcon.ico') and Exists('$(IntermediateOutputPath)TrayIcon.png')"
+            AfterTargets="Publish">
         <Copy
             SourceFiles="$(IntermediateOutputPath)AppIcon.ico"
             DestinationFiles="$(PublishDir)AppIcon.ico"
@@ -159,6 +164,7 @@
       <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0" />
       <!-- SQLite for persistent translation cache -->
       <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
+      <PackageReference Include="MDict.Csharp" Version="0.1.2" />
       <!-- MuPDF.NET: Official C# bindings for MuPDF — content stream replacement, font embedding,
            XRef manipulation, dual PDF output. Used by MuPdfExportService for pdf2zh-aligned pipeline. -->
       <PackageReference Include="MuPDF.NET" Version="3.2.12" />

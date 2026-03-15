@@ -10,6 +10,13 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class SettingsService
 {
+    public sealed class ImportedMdxDictionary
+    {
+        public string ServiceId { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string FilePath { get; set; } = string.Empty;
+    }
+
     private static readonly Lazy<SettingsService> _instance = new(() => new SettingsService());
     public static SettingsService Instance => _instance.Value;
 
@@ -255,6 +262,11 @@ public sealed class SettingsService
     /// Each service result is displayed in a collapsible panel.
     /// </summary>
     public List<string> MainWindowEnabledServices { get; set; } = ["google"];
+
+    /// <summary>
+    /// Imported MDX dictionaries. Each entry is exposed as a selectable translation service.
+    /// </summary>
+    public List<ImportedMdxDictionary> ImportedMdxDictionaries { get; set; } = [];
 
     // Fixed window settings
     public string ShowFixedWindowHotkey { get; set; } = "Ctrl+Alt+F";
@@ -530,6 +542,7 @@ public sealed class SettingsService
         MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
         MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), ["google"]);
         MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), ["google"]);
+        ImportedMdxDictionaries = GetImportedMdxDictionaries();
 
         // Fixed window settings
         ShowFixedWindowHotkey = GetValue(nameof(ShowFixedWindowHotkey), "Ctrl+Alt+F");
@@ -685,6 +698,7 @@ public sealed class SettingsService
         _settings[nameof(MiniWindowIsPinned)] = MiniWindowIsPinned;
         _settings[nameof(MiniWindowEnabledServices)] = MiniWindowEnabledServices;
         _settings[nameof(MainWindowEnabledServices)] = MainWindowEnabledServices;
+        _settings[nameof(ImportedMdxDictionaries)] = ImportedMdxDictionaries;
 
         // Fixed window settings
         _settings[nameof(ShowFixedWindowHotkey)] = ShowFixedWindowHotkey;
@@ -1060,6 +1074,52 @@ public sealed class SettingsService
         return new Dictionary<string, bool>();
     }
 
+    private List<ImportedMdxDictionary> GetImportedMdxDictionaries()
+    {
+        if (_settings.TryGetValue(nameof(ImportedMdxDictionaries), out var value) && value != null)
+        {
+            try
+            {
+                if (value is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Array)
+                {
+                    var list = new List<ImportedMdxDictionary>();
+                    foreach (var item in jsonElement.EnumerateArray())
+                    {
+                        var serviceId = item.TryGetProperty(nameof(ImportedMdxDictionary.ServiceId), out var sid)
+                            ? sid.GetString() ?? string.Empty
+                            : string.Empty;
+                        var displayName = item.TryGetProperty(nameof(ImportedMdxDictionary.DisplayName), out var dn)
+                            ? dn.GetString() ?? string.Empty
+                            : string.Empty;
+                        var filePath = item.TryGetProperty(nameof(ImportedMdxDictionary.FilePath), out var fp)
+                            ? fp.GetString() ?? string.Empty
+                            : string.Empty;
+
+                        if (!string.IsNullOrWhiteSpace(serviceId) && !string.IsNullOrWhiteSpace(filePath))
+                        {
+                            list.Add(new ImportedMdxDictionary
+                            {
+                                ServiceId = serviceId,
+                                DisplayName = string.IsNullOrWhiteSpace(displayName) ? serviceId : displayName,
+                                FilePath = filePath
+                            });
+                        }
+                    }
+
+                    return list;
+                }
+
+                if (value is List<ImportedMdxDictionary> typed)
+                {
+                    return typed;
+                }
+            }
+            catch { }
+        }
+
+        return [];
+    }
+
     /// <summary>
     /// Clears the test passed status for a service when translation fails.
     /// This ensures the success indicator is removed if the service stops working.
@@ -1073,4 +1133,3 @@ public sealed class SettingsService
         }
     }
 }
-

@@ -15,6 +15,21 @@ public sealed class SettingsService
         public string ServiceId { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
         public string FilePath { get; set; } = string.Empty;
+
+        /// <summary>
+        /// True if the MDX file uses type-2 encryption and requires credentials.
+        /// </summary>
+        public bool IsEncrypted { get; set; }
+
+        /// <summary>
+        /// Base64-encoded registration code for encrypted MDX dictionaries (Encrypted="2").
+        /// </summary>
+        public string? Regcode { get; set; }
+
+        /// <summary>
+        /// Email address or device ID for encrypted MDX dictionaries (RegisterBy="EMail" or "DeviceID").
+        /// </summary>
+        public string? Email { get; set; }
     }
 
     private static readonly Lazy<SettingsService> _instance = new(() => new SettingsService());
@@ -1094,6 +1109,14 @@ public sealed class SettingsService
                         var filePath = item.TryGetProperty(nameof(ImportedMdxDictionary.FilePath), out var fp)
                             ? fp.GetString() ?? string.Empty
                             : string.Empty;
+                        var isEncrypted = item.TryGetProperty(nameof(ImportedMdxDictionary.IsEncrypted), out var enc)
+                            && enc.ValueKind == JsonValueKind.True;
+                        var regcode = item.TryGetProperty(nameof(ImportedMdxDictionary.Regcode), out var rc)
+                            ? rc.GetString()
+                            : null;
+                        var email = item.TryGetProperty(nameof(ImportedMdxDictionary.Email), out var em)
+                            ? em.GetString()
+                            : null;
 
                         if (!string.IsNullOrWhiteSpace(serviceId) && !string.IsNullOrWhiteSpace(filePath))
                         {
@@ -1101,7 +1124,10 @@ public sealed class SettingsService
                             {
                                 ServiceId = serviceId,
                                 DisplayName = string.IsNullOrWhiteSpace(displayName) ? serviceId : displayName,
-                                FilePath = filePath
+                                FilePath = filePath,
+                                IsEncrypted = isEncrypted,
+                                Regcode = regcode,
+                                Email = email
                             });
                         }
                     }
@@ -1133,3 +1159,4 @@ public sealed class SettingsService
         }
     }
 }
+

@@ -582,6 +582,9 @@
                     </StackPanel>
                 </Expander>
 
+                <!-- Imported MDX Dictionaries (dynamically populated) -->
+                <StackPanel x:Name="ImportedMdxConfigPanel" Spacing="8" />
+
                 <!-- Google Translate & Linguee (No configuration needed) -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">

@@ -905,4 +905,31 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Bỏ qua</value>
   </data>
+  <data name="MdxDictionaryReady" xml:space="preserve">
+    <value>This dictionary is ready to use. No configuration needed.</value>
+  </data>
+  <data name="MdxDeleteDictionary" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxRedetectEncryption" xml:space="preserve">
+    <value>Phát hiện lại mã hóa</value>
+  </data>
+  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
+  </data>
+  <data name="MdxFilePath" xml:space="preserve">
+    <value>File Path</value>
+  </data>
+  <data name="MdxRegistrationCode" xml:space="preserve">
+    <value>Registration Code</value>
+  </data>
+  <data name="MdxEncryptedHelpText" xml:space="preserve">
+    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
+  </data>
+  <data name="MdxEmailPlaceholder" xml:space="preserve">
+    <value>Email address used for registration</value>
+  </data>
 </root>

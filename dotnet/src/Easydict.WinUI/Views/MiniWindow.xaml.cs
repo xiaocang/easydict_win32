@@ -906,7 +906,7 @@ public sealed partial class MiniWindow : Window
                 // Skip manual-query services (EnabledQuery=false)
                 if (!serviceResult.EnabledQuery)
                 {
-                    return;
+                    return QueryExecutionOutcome.Cancelled;
                 }
 
                 // Mark as queried for auto-query services
@@ -917,6 +917,7 @@ public sealed partial class MiniWindow : Window
                     // Acquire handle once per service to ensure consistent manager instance
                     using var handle = TranslationManagerService.Instance.AcquireHandle();
                     var manager = handle.Manager;
+                    QueryExecutionOutcome outcome;
 
                     // Check if service supports streaming
                     if (manager.IsStreamingService(serviceResult.ServiceId))
@@ -924,6 +925,7 @@ public sealed partial class MiniWindow : Window
                         // Streaming path for LLM services (pass manager to avoid re-acquiring)
                         await ExecuteStreamingTranslationForServiceAsync(
                             manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                        outcome = QueryExecutionOutcome.Success;
                     }
                     else
                     {
@@ -943,7 +945,13 @@ public sealed partial class MiniWindow : Window
                             // Coalesced resize so ServiceResultItem.UpdateUI() completes first
                             RequestResize();
                         });
+
+                        outcome = result.ResultKind == TranslationResultKind.Success
+                            ? QueryExecutionOutcome.Success
+                            : QueryExecutionOutcome.Neutral;
                     }
+
+                    return outcome;
                 }
                 catch (OperationCanceledException)
                 {
@@ -954,6 +962,7 @@ public sealed partial class MiniWindow : Window
                         serviceResult.IsStreaming = false;
                         serviceResult.ClearQueried();
                     });
+                    return QueryExecutionOutcome.Cancelled;
                 }
                 catch (TranslationException ex)
                 {
@@ -967,6 +976,7 @@ public sealed partial class MiniWindow : Window
                         RequestResize();
                     });
                     SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
+                    return QueryExecutionOutcome.Error;
                 }
                 catch (Exception ex)
                 {
@@ -984,18 +994,18 @@ public sealed partial class MiniWindow : Window
                         RequestResize();
                     });
                     SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
+                    return QueryExecutionOutcome.Error;
                 }
             });
 
-            await Task.WhenAll(tasks);
+            var taskResults = await Task.WhenAll(tasks);
+            var summary = QueryOutcomeSummary.From(taskResults);
 
             // Update status with completed count
             var loc = LocalizationService.Instance;
-            var successCount = _serviceResults.Count(r => r.Result != null);
-            var errorCount = _serviceResults.Count(r => r.HasError);
-            StatusText.Text = successCount > 0
-                ? string.Format(loc.GetString("ServiceResultsComplete"), successCount)
-                : errorCount > 0 ? loc.GetString("TranslationFailed") : "";
+            StatusText.Text = summary.SuccessCount > 0
+                ? string.Format(loc.GetString("ServiceResultsComplete"), summary.SuccessCount)
+                : summary.ErrorCount > 0 ? loc.GetString("TranslationFailed") : "";
         }
         catch (OperationCanceledException)
         {

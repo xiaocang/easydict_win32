@@ -159,6 +159,11 @@ public sealed class TranslationManager : IDisposable
     }
 
     /// <summary>
+    /// Unregister a translation service by its ID.
+    /// </summary>
+    public bool UnregisterService(string serviceId) => _services.Remove(serviceId);
+
+    /// <summary>
     /// Configure a service (e.g., set API key).
     /// </summary>
     public void ConfigureService(string serviceId, Action<ITranslationService> configure)

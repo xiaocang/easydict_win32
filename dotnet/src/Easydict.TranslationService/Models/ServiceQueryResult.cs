@@ -215,6 +215,16 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     public bool HasResult => Result != null || Error != null || GrammarResult != null;
 
     /// <summary>
+    /// Whether the current result is a neutral informational outcome rather than a successful translation payload.
+    /// </summary>
+    public bool IsInfoResult => Result?.ResultKind == TranslationResultKind.NoResult;
+
+    /// <summary>
+    /// Whether there is a successful translation result available.
+    /// </summary>
+    public bool HasSuccessfulResult => Result?.ResultKind == TranslationResultKind.Success || GrammarResult != null;
+
+    /// <summary>
     /// Whether the result is an error.
     /// </summary>
     public bool HasError => Error != null;
@@ -248,6 +258,9 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
             if (IsGrammarMode && GrammarResult != null)
                 return GrammarResult.CorrectedText;
 
+            if (Result?.ResultKind == TranslationResultKind.NoResult)
+                return Result.InfoMessage ?? "";
+
             return Result?.TranslatedText ?? Error?.Message ?? "";
         }
     }
@@ -273,6 +286,7 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
             if (IsStreaming) return "Streaming...";
             if (IsLoading) return IsGrammarMode ? "Checking..." : "Translating...";
             if (Error != null) return "Error";
+            if (Result?.ResultKind == TranslationResultKind.NoResult) return "No result";
             if (IsGrammarMode && GrammarResult != null)
                 return $"{GrammarResult.TimingMs}ms";
             if (Result != null)

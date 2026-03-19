@@ -333,13 +333,26 @@ public sealed class TranslationManagerService : IDisposable
                 var service = new MdxDictionaryTranslationService(
                     dictionary.ServiceId,
                     dictionary.DisplayName,
-                    dictionary.FilePath);
+                    dictionary.FilePath,
+                    dictionary.Regcode,
+                    dictionary.Email);
                 _translationManager.RegisterService(service);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[TranslationManagerService] Failed to load MDX dictionary '{dictionary.FilePath}': {ex.Message}");
             }
+        }
+    }
+
+    /// <summary>
+    /// Unregister an MDX dictionary service by its ID.
+    /// </summary>
+    public void UnregisterMdxDictionary(string serviceId)
+    {
+        lock (_lock)
+        {
+            _translationManager.UnregisterService(serviceId);
         }
     }
 
@@ -359,7 +372,9 @@ public sealed class TranslationManagerService : IDisposable
         error = null;
         try
         {
-            var service = new MdxDictionaryTranslationService(dictionary.ServiceId, dictionary.DisplayName, dictionary.FilePath);
+            var service = new MdxDictionaryTranslationService(
+                dictionary.ServiceId, dictionary.DisplayName, dictionary.FilePath,
+                dictionary.Regcode, dictionary.Email);
             lock (_lock)
             {
                 _translationManager.RegisterService(service);

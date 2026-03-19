@@ -197,6 +197,10 @@ public sealed partial class ServiceResultItem : UserControl
     private void UpdateTranslationUI()
     {
         GrammarResultPanel.Visibility = Visibility.Collapsed;
+        var resultTextBrush = FindThemeBrush("QueryTextBrush")
+            ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
+        var infoTextBrush = FindThemeBrush("TextFillColorSecondaryBrush")
+            ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);
 
         // Result text - handle streaming state
         if (_serviceResult!.IsStreaming)
@@ -205,6 +209,7 @@ public sealed partial class ServiceResultItem : UserControl
             ResultText.Text = string.IsNullOrEmpty(_serviceResult.StreamingText)
                 ? "Waiting for response..."
                 : _serviceResult.StreamingText;
+            ResultText.Foreground = resultTextBrush;
             ResultText.Visibility = Visibility.Visible;
             ErrorText.Visibility = Visibility.Collapsed;
             PhoneticPanel.Visibility = Visibility.Collapsed;
@@ -213,25 +218,43 @@ public sealed partial class ServiceResultItem : UserControl
         }
         else if (_serviceResult.Result != null)
         {
-            UpdatePhonetics(_serviceResult.Result);
-            var hasDefinitions = UpdateDictionary(_serviceResult.Result);
-
-            // Hide TranslatedText when definitions are shown and TranslatedText is
-            // a flattened version of definitions (redundant). Youdao builds TranslatedText
-            // from definitions; GoogleWeb has independent plain translation.
-            if (hasDefinitions && DictionaryDisplayHelper.IsTranslatedTextRedundantWithDefinitions(_serviceResult.Result))
+            if (_serviceResult.Result.ResultKind == TranslationResultKind.NoResult)
             {
-                ResultText.Visibility = Visibility.Collapsed;
+                ResultText.Text = _serviceResult.Result.InfoMessage ?? string.Empty;
+                ResultText.Foreground = infoTextBrush;
+                ResultText.Visibility = string.IsNullOrWhiteSpace(ResultText.Text)
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+                ErrorText.Visibility = Visibility.Collapsed;
+                PhoneticPanel.Visibility = Visibility.Collapsed;
+                DictionaryPanel.Visibility = Visibility.Collapsed;
+                ActionButtons.Visibility = Visibility.Collapsed;
+                ReplaceButton.Visibility = Visibility.Collapsed;
+                PlayButton.Visibility = Visibility.Collapsed;
             }
             else
             {
-                ResultText.Text = _serviceResult.Result.TranslatedText;
-                ResultText.Visibility = Visibility.Visible;
-            }
+                UpdatePhonetics(_serviceResult.Result);
+                var hasDefinitions = UpdateDictionary(_serviceResult.Result);
 
-            ErrorText.Visibility = Visibility.Collapsed;
-            ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
-            ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
+                // Hide TranslatedText when definitions are shown and TranslatedText is
+                // a flattened version of definitions (redundant). Youdao builds TranslatedText
+                // from definitions; GoogleWeb has independent plain translation.
+                if (hasDefinitions && DictionaryDisplayHelper.IsTranslatedTextRedundantWithDefinitions(_serviceResult.Result))
+                {
+                    ResultText.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    ResultText.Text = _serviceResult.Result.TranslatedText;
+                    ResultText.Foreground = resultTextBrush;
+                    ResultText.Visibility = Visibility.Visible;
+                }
+
+                ErrorText.Visibility = Visibility.Collapsed;
+                ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+                ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
         else if (_serviceResult.Error != null)
         {
@@ -821,11 +844,13 @@ public sealed partial class ServiceResultItem : UserControl
         if (_serviceResult?.IsExpanded == true &&
             (_serviceResult.Result != null || _serviceResult.Error != null || _serviceResult.GrammarResult != null))
         {
-            ActionButtons.Visibility = Visibility.Visible;
-            var hasResult = _serviceResult.Result != null || _serviceResult.GrammarResult != null;
+            var hasResult = (_serviceResult.Result?.ResultKind == TranslationResultKind.Success) || _serviceResult.GrammarResult != null;
+            ActionButtons.Visibility = hasResult || _serviceResult.Error != null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             ReplaceButton.Visibility = hasResult && TextInsertionService.HasSourceWindow
                 ? Visibility.Visible : Visibility.Collapsed;
-            PlayButton.Visibility = _serviceResult.Result != null
+            PlayButton.Visibility = _serviceResult.Result?.ResultKind == TranslationResultKind.Success
                 ? Visibility.Visible : Visibility.Collapsed;
         }
     }

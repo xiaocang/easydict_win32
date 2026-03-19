@@ -53,6 +53,8 @@
 
         <!-- Localization -->
         <DefaultLanguage>en-US</DefaultLanguage>
+        <!-- Limit the local PdfPig source-project dependency graph to the target the app actually consumes. -->
+        <PdfPigTargetFrameworksOverride>net8.0</PdfPigTargetFrameworksOverride>
 
         <!--
             Ensure PRI resources are generated for BOTH packaged and unpackaged modes.
@@ -164,7 +166,8 @@
       <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0" />
       <!-- SQLite for persistent translation cache -->
       <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
-      <PackageReference Include="MDict.Csharp" Version="0.1.2" />
+      <!-- MDict.CSharp: forked from Jack251970/MDict.CSharp with type-2 encryption support (Salsa20/8) -->
+      <ProjectReference Include="..\..\lib\MDict.CSharp\MDict.Csharp\MDict.Csharp.csproj" />
       <!-- MuPDF.NET: Official C# bindings for MuPDF — content stream replacement, font embedding,
            XRef manipulation, dual PDF output. Used by MuPdfExportService for pdf2zh-aligned pipeline. -->
       <PackageReference Include="MuPDF.NET" Version="3.2.12" />

@@ -1,6 +1,15 @@
 namespace Easydict.TranslationService.Models;
 
 /// <summary>
+/// Describes whether a translation request produced a successful payload or a neutral informational outcome.
+/// </summary>
+public enum TranslationResultKind
+{
+    Success,
+    NoResult
+}
+
+/// <summary>
 /// Result of a translation request.
 /// Using record for immutable data with 'with' expression support.
 /// </summary>
@@ -30,6 +39,16 @@ public sealed record TranslationResult
     /// The translation service that produced this result.
     /// </summary>
     public required string ServiceName { get; init; }
+
+    /// <summary>
+    /// Whether this request produced a normal translation payload or a neutral informational result.
+    /// </summary>
+    public TranslationResultKind ResultKind { get; init; } = TranslationResultKind.Success;
+
+    /// <summary>
+    /// Optional informational message for neutral outcomes such as dictionary misses.
+    /// </summary>
+    public string? InfoMessage { get; init; }
 
     /// <summary>
     /// Time taken for the translation in milliseconds.

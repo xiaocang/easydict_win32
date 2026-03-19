@@ -20,6 +20,16 @@ public class ServiceQueryResultTests
             TimingMs = timingMs
         };
 
+    private static TranslationResult CreateNoResult(string message = "No result found in dictionary: hello") =>
+        new()
+        {
+            TranslatedText = "",
+            OriginalText = "hello",
+            ServiceName = "Test Service",
+            ResultKind = TranslationResultKind.NoResult,
+            InfoMessage = message
+        };
+
     private static TranslationException CreateWarningError(TranslationErrorCode code) =>
         new("Warning error") { ErrorCode = code, ServiceId = "test" };
 
@@ -70,6 +80,17 @@ public class ServiceQueryResultTests
     }
 
     [Fact]
+    public void DisplayText_WhenNoResult_ReturnsInfoMessage()
+    {
+        var result = new ServiceQueryResult
+        {
+            Result = CreateNoResult()
+        };
+
+        result.DisplayText.Should().Be("No result found in dictionary: hello");
+    }
+
+    [Fact]
     public void DisplayText_WhenNoResultOrError_ReturnsEmpty()
     {
         // Arrange
@@ -114,6 +135,17 @@ public class ServiceQueryResultTests
 
         // Act & Assert
         result.StatusText.Should().Be("Error");
+    }
+
+    [Fact]
+    public void StatusText_WhenNoResult_ReturnsNeutralMessage()
+    {
+        var result = new ServiceQueryResult
+        {
+            Result = CreateNoResult()
+        };
+
+        result.StatusText.Should().Be("No result");
     }
 
     [Fact]
@@ -350,6 +382,19 @@ public class ServiceQueryResultTests
 
         // Assert
         result.IsExpanded.Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasError_WhenNoResult_ReturnsFalse()
+    {
+        var result = new ServiceQueryResult
+        {
+            Result = CreateNoResult()
+        };
+
+        result.HasError.Should().BeFalse();
+        result.IsInfoResult.Should().BeTrue();
+        result.HasSuccessfulResult.Should().BeFalse();
     }
 
     [Fact]

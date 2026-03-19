@@ -161,6 +161,23 @@ public sealed class SettingsService
     public bool MouseSelectionTranslate { get; set; } = true;
 
     /// <summary>
+    /// Process names excluded from mouse selection translate.
+    /// When the foreground app matches any name in this list, the pop button is suppressed.
+    /// </summary>
+    public List<string> MouseSelectionExcludedApps { get; set; } = ["code"];
+
+    /// <summary>
+    /// Checks if a process name is in the mouse selection excluded apps list.
+    /// </summary>
+    public bool IsMouseSelectionExcluded(string? processName)
+    {
+        if (string.IsNullOrEmpty(processName) || MouseSelectionExcludedApps.Count == 0)
+            return false;
+        return MouseSelectionExcludedApps.Exists(
+            app => string.Equals(app.Trim(), processName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Register "OCR 截图翻译" in the Windows Shell context menu (File Explorer / Desktop).
     /// The entry launches --ocr-translate which signals the running app via a named event.
     /// </summary>
@@ -537,6 +554,7 @@ public sealed class SettingsService
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
+        MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
         ShowWindowHotkey = GetValue(nameof(ShowWindowHotkey), "Ctrl+Alt+T");
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");
@@ -695,6 +713,7 @@ public sealed class SettingsService
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
+        _settings[nameof(MouseSelectionExcludedApps)] = MouseSelectionExcludedApps;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;

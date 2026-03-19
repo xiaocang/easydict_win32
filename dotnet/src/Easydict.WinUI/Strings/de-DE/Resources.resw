@@ -1022,4 +1022,13 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Überspringen</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>Ausgeschlossene Apps</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>Prozessnamen, die von der Mausauswahl-Übersetzung ausgeschlossen werden sollen, durch Kommas getrennt. Beispiel: "code" für VS Code.</value>
+  </data>
 </root>

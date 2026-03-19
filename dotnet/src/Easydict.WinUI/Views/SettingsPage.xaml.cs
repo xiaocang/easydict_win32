@@ -534,6 +534,8 @@ public sealed partial class SettingsPage : Page
         MinimizeToTrayOnStartupToggle.Toggled += OnSettingChanged;
         ClipboardMonitorToggle.Toggled += OnSettingChanged;
         MouseSelectionTranslateToggle.Toggled += OnSettingChanged;
+        MouseSelectionTranslateToggle.Toggled += OnMouseSelectionTranslateToggled;
+        MouseSelectionExcludedAppsBox.TextChanged += OnSettingChanged;
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
         LaunchAtStartupToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
@@ -609,6 +611,8 @@ public sealed partial class SettingsPage : Page
         MinimizeToTrayOnStartupToggle.Toggled -= OnSettingChanged;
         ClipboardMonitorToggle.Toggled -= OnSettingChanged;
         MouseSelectionTranslateToggle.Toggled -= OnSettingChanged;
+        MouseSelectionTranslateToggle.Toggled -= OnMouseSelectionTranslateToggled;
+        MouseSelectionExcludedAppsBox.TextChanged -= OnSettingChanged;
         AlwaysOnTopToggle.Toggled -= OnSettingChanged;
         LaunchAtStartupToggle.Toggled -= OnSettingChanged;
         ProxyEnabledToggle.Toggled -= OnSettingChanged;
@@ -807,6 +811,9 @@ public sealed partial class SettingsPage : Page
         MinimizeToTrayOnStartupToggle.IsOn = _settings.MinimizeToTrayOnStartup;
         ClipboardMonitorToggle.IsOn = _settings.ClipboardMonitoring;
         MouseSelectionTranslateToggle.IsOn = _settings.MouseSelectionTranslate;
+        MouseSelectionExcludedAppsBox.Text = string.Join(", ", _settings.MouseSelectionExcludedApps);
+        MouseSelectionExcludedAppsPanel.Visibility = _settings.MouseSelectionTranslate
+            ? Visibility.Visible : Visibility.Collapsed;
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
         LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
 
@@ -1819,6 +1826,10 @@ public sealed partial class SettingsPage : Page
         _settings.MinimizeToTrayOnStartup = MinimizeToTrayOnStartupToggle.IsOn;
         _settings.ClipboardMonitoring = ClipboardMonitorToggle.IsOn;
         _settings.MouseSelectionTranslate = MouseSelectionTranslateToggle.IsOn;
+        _settings.MouseSelectionExcludedApps = MouseSelectionExcludedAppsBox.Text
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(s => s.Length > 0)
+            .ToList();
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
         _settings.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
 
@@ -1899,6 +1910,12 @@ public sealed partial class SettingsPage : Page
         SaveButton.Visibility = Visibility.Collapsed;
 
         return true;
+    }
+
+    private void OnMouseSelectionTranslateToggled(object sender, RoutedEventArgs e)
+    {
+        MouseSelectionExcludedAppsPanel.Visibility = MouseSelectionTranslateToggle.IsOn
+            ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>

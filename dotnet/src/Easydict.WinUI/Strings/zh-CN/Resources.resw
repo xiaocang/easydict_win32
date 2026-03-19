@@ -1105,4 +1105,13 @@
   <data name="MddAssociatedFiles" xml:space="preserve">
     <value>资源文件</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>排除应用</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>排除划词翻译的进程名称，用逗号分隔。示例："code" 代表 VS Code。</value>
+  </data>
 </root>

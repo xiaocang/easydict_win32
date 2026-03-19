@@ -1064,4 +1064,13 @@
   <data name="MddAssociatedFiles" xml:space="preserve">
     <value>リソースファイル</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>除外アプリ</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>マウス選択翻訳から除外するプロセス名をカンマ区切りで入力。例：VS Code は "code"。</value>
+  </data>
 </root>

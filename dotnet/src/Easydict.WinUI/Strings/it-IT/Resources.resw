@@ -897,4 +897,13 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Salta</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>App escluse</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>Nomi dei processi da escludere dalla traduzione con selezione mouse, separati da virgole. Esempio: "code" per VS Code.</value>
+  </data>
 </root>

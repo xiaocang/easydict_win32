@@ -799,6 +799,22 @@
                         <ToggleSwitch x:Name="MinimizeToTrayOnStartupToggle" x:Uid="MinimizeToTrayOnStartupToggle" Header="Start minimized to tray" />
                         <ToggleSwitch x:Name="ClipboardMonitorToggle" x:Uid="ClipboardMonitorToggle" Header="Monitor clipboard for text" />
                         <ToggleSwitch x:Name="MouseSelectionTranslateToggle" x:Uid="MouseSelectionTranslateToggle" Header="Mouse selection translate" />
+                        <StackPanel x:Name="MouseSelectionExcludedAppsPanel" Spacing="4" Margin="44,0,0,0"
+                                    Visibility="Collapsed">
+                            <TextBox x:Name="MouseSelectionExcludedAppsBox"
+                                     x:Uid="MouseSelectionExcludedAppsBox"
+                                     Header="Excluded apps"
+                                     PlaceholderText="code, slack, discord"
+                                     Width="350"
+                                     HorizontalAlignment="Left" />
+                            <TextBlock x:Uid="MouseSelectionExcludedAppsDescription"
+                                       Text="Process names to exclude, separated by commas."
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="350"
+                                       HorizontalAlignment="Left" />
+                        </StackPanel>
                         <ToggleSwitch x:Name="AlwaysOnTopToggle" x:Uid="AlwaysOnTopToggle" Header="Always on top" />
                         <ToggleSwitch x:Name="LaunchAtStartupToggle" x:Uid="LaunchAtStartupToggle" Header="Launch at Windows startup" />
                     </StackPanel>

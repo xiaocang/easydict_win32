@@ -905,4 +905,13 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>تخطي</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>التطبيقات المستثناة</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>أسماء العمليات المراد استثناؤها من ترجمة تحديد الماوس، مفصولة بفواصل. مثال: "code" لـ VS Code.</value>
+  </data>
 </root>

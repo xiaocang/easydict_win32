@@ -1064,4 +1064,13 @@
   <data name="MddAssociatedFiles" xml:space="preserve">
     <value>資源檔案</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>排除應用</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>排除劃詞翻譯的程序名稱，用逗號分隔。範例："code" 代表 VS Code。</value>
+  </data>
 </root>

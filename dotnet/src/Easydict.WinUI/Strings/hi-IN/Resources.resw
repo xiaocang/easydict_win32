@@ -449,4 +449,13 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>छोड़ें</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>बहिष्कृत ऐप्स</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>माउस चयन अनुवाद से बाहर रखने के लिए प्रक्रिया नाम, अल्पविराम से अलग करें। उदाहरण: VS Code के लिए "code"।</value>
+  </data>
 </root>

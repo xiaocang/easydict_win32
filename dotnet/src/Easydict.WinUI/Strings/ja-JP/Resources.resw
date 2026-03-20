@@ -1023,30 +1023,45 @@
     <value>スキップ</value>
   </data>
   <data name="MdxDictionaryReady" xml:space="preserve">
-    <value>This dictionary is ready to use. No configuration needed.</value>
+    <value>この辞書は使用可能です。設定は不要です。</value>
   </data>
   <data name="MdxDeleteDictionary" xml:space="preserve">
-    <value>Delete Dictionary</value>
+    <value>辞書を削除</value>
   </data>
   <data name="MdxRedetectEncryption" xml:space="preserve">
     <value>暗号化を再検出</value>
   </data>
   <data name="MdxDeleteConfirmTitle" xml:space="preserve">
-    <value>Delete Dictionary</value>
+    <value>辞書の削除</value>
   </data>
   <data name="MdxDeleteConfirmMessage" xml:space="preserve">
-    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
+    <value>{0} を削除してもよろしいですか？ディスク上の辞書ファイルは削除されません。</value>
   </data>
   <data name="MdxFilePath" xml:space="preserve">
-    <value>File Path</value>
+    <value>ファイルパス</value>
   </data>
   <data name="MdxRegistrationCode" xml:space="preserve">
-    <value>Registration Code</value>
+    <value>登録コード</value>
   </data>
   <data name="MdxEncryptedHelpText" xml:space="preserve">
-    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
+    <value>この辞書は暗号化されています。購入時に使用したメールアドレスと登録コードを入力してください。</value>
   </data>
   <data name="MdxEmailPlaceholder" xml:space="preserve">
-    <value>Email address used for registration</value>
+    <value>登録に使用したメールアドレス</value>
+  </data>
+  <data name="MddFilesDetected" xml:space="preserve">
+    <value>'{0}' をインポートしました。{1} 個の関連リソースファイルが見つかりました。</value>
+  </data>
+  <data name="MddNoFilesDetected" xml:space="preserve">
+    <value>'{0}' をインポートしました。関連する MDD リソースファイルは見つかりませんでした。</value>
+  </data>
+  <data name="MddAddFile" xml:space="preserve">
+    <value>MDD ファイルを追加...</value>
+  </data>
+  <data name="MddRescanFiles" xml:space="preserve">
+    <value>MDD ファイルを再スキャン</value>
+  </data>
+  <data name="MddAssociatedFiles" xml:space="preserve">
+    <value>リソースファイル</value>
   </data>
 </root>

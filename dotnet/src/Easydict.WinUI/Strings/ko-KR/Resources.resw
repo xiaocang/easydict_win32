@@ -1023,30 +1023,45 @@
     <value>건너뛰기</value>
   </data>
   <data name="MdxDictionaryReady" xml:space="preserve">
-    <value>This dictionary is ready to use. No configuration needed.</value>
+    <value>이 사전은 사용할 준비가 되었습니다. 설정이 필요하지 않습니다.</value>
   </data>
   <data name="MdxDeleteDictionary" xml:space="preserve">
-    <value>Delete Dictionary</value>
+    <value>사전 삭제</value>
   </data>
   <data name="MdxRedetectEncryption" xml:space="preserve">
     <value>암호화 재감지</value>
   </data>
   <data name="MdxDeleteConfirmTitle" xml:space="preserve">
-    <value>Delete Dictionary</value>
+    <value>사전 삭제</value>
   </data>
   <data name="MdxDeleteConfirmMessage" xml:space="preserve">
-    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
+    <value>{0}을(를) 삭제하시겠습니까? 디스크의 사전 파일은 삭제되지 않습니다.</value>
   </data>
   <data name="MdxFilePath" xml:space="preserve">
-    <value>File Path</value>
+    <value>파일 경로</value>
   </data>
   <data name="MdxRegistrationCode" xml:space="preserve">
-    <value>Registration Code</value>
+    <value>등록 코드</value>
   </data>
   <data name="MdxEncryptedHelpText" xml:space="preserve">
-    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
+    <value>이 사전은 암호화되어 있습니다. 구매 시 사용한 이메일과 등록 코드를 입력하세요.</value>
   </data>
   <data name="MdxEmailPlaceholder" xml:space="preserve">
-    <value>Email address used for registration</value>
+    <value>등록에 사용한 이메일 주소</value>
+  </data>
+  <data name="MddFilesDetected" xml:space="preserve">
+    <value>'{0}'을(를) 가져왔습니다. {1}개의 관련 리소스 파일이 있습니다.</value>
+  </data>
+  <data name="MddNoFilesDetected" xml:space="preserve">
+    <value>'{0}'을(를) 가져왔습니다. 관련 MDD 리소스 파일이 없습니다.</value>
+  </data>
+  <data name="MddAddFile" xml:space="preserve">
+    <value>MDD 파일 추가...</value>
+  </data>
+  <data name="MddRescanFiles" xml:space="preserve">
+    <value>MDD 파일 다시 검색</value>
+  </data>
+  <data name="MddAssociatedFiles" xml:space="preserve">
+    <value>리소스 파일</value>
   </data>
 </root>

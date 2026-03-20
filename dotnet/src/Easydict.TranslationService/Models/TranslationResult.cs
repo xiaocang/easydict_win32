@@ -69,6 +69,12 @@ public sealed record TranslationResult
     /// Word definitions/dictionary data if available.
     /// </summary>
     public WordResult? WordResult { get; init; }
+
+    /// <summary>
+    /// Raw HTML definition from dictionary services (e.g., MDX).
+    /// When present, UI should render via WebView2 instead of plain text.
+    /// </summary>
+    public string? RawHtml { get; init; }
 }
 
 /// <summary>

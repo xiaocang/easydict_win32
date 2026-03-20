@@ -336,6 +336,24 @@ public sealed class TranslationManagerService : IDisposable
                     dictionary.FilePath,
                     dictionary.Regcode,
                     dictionary.Email);
+
+                // Load MDD resource files (from stored paths, or re-discover for migration)
+                var mddPaths = dictionary.MddFilePaths;
+                if (mddPaths.Count == 0)
+                {
+                    mddPaths = MdxDictionaryTranslationService.DiscoverMddFiles(dictionary.FilePath);
+                    if (mddPaths.Count > 0)
+                    {
+                        dictionary.MddFilePaths = mddPaths;
+                        Debug.WriteLine($"[TranslationManagerService] Auto-discovered {mddPaths.Count} MDD file(s) for '{dictionary.FilePath}'");
+                    }
+                }
+
+                if (mddPaths.Count > 0)
+                {
+                    service.LoadMddFiles(mddPaths);
+                }
+
                 _translationManager.RegisterService(service);
             }
             catch (Exception ex)

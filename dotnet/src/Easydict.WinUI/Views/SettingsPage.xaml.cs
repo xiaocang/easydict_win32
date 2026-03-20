@@ -925,7 +925,7 @@ public sealed partial class SettingsPage : Page
             var expander = new Expander
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalContentAlignment
+                HorizontalContentAlignment = HorizontalAlignment.Stretch
             };
 
             // Header with name (icon varies by encryption status) and status indicator
@@ -1029,6 +1029,113 @@ public sealed partial class SettingsPage : Page
                 };
                 contentPanel.Children.Add(readyText);
             }
+
+            // MDD Resource Files section
+            var mddLabel = new TextBlock
+            {
+                Text = loc.GetString("MddAssociatedFiles") ?? "Resource Files",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 13,
+                Margin = new Thickness(0, 4, 0, 2)
+            };
+            contentPanel.Children.Add(mddLabel);
+
+            if (dict.MddFilePaths.Count > 0)
+            {
+                foreach (var mddPath in dict.MddFilePaths)
+                {
+                    var mddFileText = new TextBlock
+                    {
+                        Text = Path.GetFileName(mddPath),
+                        FontSize = 12,
+                        Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                        Margin = new Thickness(8, 0, 0, 0)
+                    };
+                    contentPanel.Children.Add(mddFileText);
+                }
+            }
+            else
+            {
+                var noMddText = new TextBlock
+                {
+                    Text = loc.GetString("MddNoFilesDetected") != null
+                        ? string.Format(loc.GetString("MddNoFilesDetected")!, string.Empty).Trim()
+                        : "No companion MDD resource files found.",
+                    FontSize = 12,
+                    Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                    Margin = new Thickness(8, 0, 0, 0)
+                };
+                contentPanel.Children.Add(noMddText);
+            }
+
+            // MDD button row: Add MDD + Re-scan
+            var mddButtonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Margin = new Thickness(0, 4, 0, 4)
+            };
+
+            var capturedDictForMdd = dict;
+            var addMddButton = new Button
+            {
+                Content = loc.GetString("MddAddFile") ?? "Add MDD File...",
+                Padding = new Thickness(8, 4, 8, 4)
+            };
+            addMddButton.Click += async (s, args) =>
+            {
+                try
+                {
+                    var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                    picker.FileTypeFilter.Add(".mdd");
+
+                    var file = await picker.PickSingleFileAsync();
+                    if (file == null || string.IsNullOrWhiteSpace(file.Path))
+                        return;
+
+                    if (!capturedDictForMdd.MddFilePaths.Contains(file.Path, StringComparer.OrdinalIgnoreCase))
+                    {
+                        capturedDictForMdd.MddFilePaths.Add(file.Path);
+                        _settings.Save();
+
+                        // Load into live service
+                        using var h = TranslationManagerService.Instance.AcquireHandle();
+                        if (h.Manager.Services.TryGetValue(capturedDictForMdd.ServiceId, out var svc)
+                            && svc is MdxDictionaryTranslationService mdxSvc)
+                        {
+                            mdxSvc.LoadMddFiles([file.Path]);
+                        }
+
+                        BuildImportedMdxConfigUI();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[SettingsPage] Failed to add MDD file: {ex.Message}");
+                }
+            };
+            mddButtonPanel.Children.Add(addMddButton);
+
+            var rescanMddButton = new Button
+            {
+                Content = loc.GetString("MddRescanFiles") ?? "Re-scan MDD Files",
+                Padding = new Thickness(8, 4, 8, 4)
+            };
+            var capturedDictForRescan = dict;
+            rescanMddButton.Click += (s, args) =>
+            {
+                var discovered = MdxDictionaryTranslationService.DiscoverMddFiles(capturedDictForRescan.FilePath ?? string.Empty);
+                capturedDictForRescan.MddFilePaths = discovered;
+                _settings.Save();
+
+                // Reconfigure services to reload MDD files
+                TranslationManagerService.Instance.ReconfigureServices();
+                BuildImportedMdxConfigUI();
+            };
+            mddButtonPanel.Children.Add(rescanMddButton);
+            contentPanel.Children.Add(mddButtonPanel);
 
             // Button row: re-detect encryption + delete
             var buttonPanel = new StackPanel
@@ -1311,11 +1418,15 @@ public sealed partial class SettingsPage : Page
             var displayName = Path.GetFileNameWithoutExtension(file.Path);
             var serviceId = BuildMdxServiceId(displayName, file.Path);
 
+            // Discover companion MDD resource files
+            var mddFiles = MdxDictionaryTranslationService.DiscoverMddFiles(file.Path);
+
             var imported = new SettingsService.ImportedMdxDictionary
             {
                 ServiceId = serviceId,
                 DisplayName = $"📚 {displayName}",
-                FilePath = file.Path
+                FilePath = file.Path,
+                MddFilePaths = mddFiles
             };
 
             if (!TranslationManagerService.Instance.TryRegisterMdxDictionary(imported, out var error))
@@ -1324,12 +1435,16 @@ public sealed partial class SettingsPage : Page
                 return;
             }
 
-            // Check if the service was registered in encrypted-but-unconfigured state
+            // Load MDD files into the registered service
             using var handle = TranslationManagerService.Instance.AcquireHandle();
             if (handle.Manager.Services.TryGetValue(serviceId, out var service) &&
-                service is MdxDictionaryTranslationService mdxService && mdxService.IsEncrypted)
+                service is MdxDictionaryTranslationService mdxService)
             {
-                imported.IsEncrypted = true;
+                if (mdxService.IsEncrypted)
+                    imported.IsEncrypted = true;
+
+                if (mddFiles.Count > 0)
+                    mdxService.LoadMddFiles(mddFiles);
             }
 
             _settings.ImportedMdxDictionaries.RemoveAll(d => string.Equals(d.FilePath, file.Path, StringComparison.OrdinalIgnoreCase));
@@ -1343,11 +1458,24 @@ public sealed partial class SettingsPage : Page
             _settings.Save();
             LoadSettings();
 
+            var loc = LocalizationService.Instance;
             if (imported.IsEncrypted)
             {
                 await ShowSimpleDialogAsync("Encrypted Dictionary",
                     "This dictionary is encrypted. Please configure your credentials (Email and Registration Code) " +
                     "in the Service Configuration section below.");
+            }
+            else if (mddFiles.Count > 0)
+            {
+                var msg = string.Format(loc.GetString("MddFilesDetected") ?? "Imported '{0}' with {1} companion resource file(s).",
+                    displayName, mddFiles.Count);
+                await ShowSimpleDialogAsync("Import Successful", msg);
+            }
+            else
+            {
+                var msg = string.Format(loc.GetString("MddNoFilesDetected") ?? "Imported '{0}'. No companion MDD resource files found.",
+                    displayName);
+                await ShowSimpleDialogAsync("Import Successful", msg);
             }
         }
         catch (Exception ex)

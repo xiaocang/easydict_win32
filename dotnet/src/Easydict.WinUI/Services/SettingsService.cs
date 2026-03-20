@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Easydict.TranslationService;
@@ -30,6 +31,11 @@ public sealed class SettingsService
         /// Email address or device ID for encrypted MDX dictionaries (RegisterBy="EMail" or "DeviceID").
         /// </summary>
         public string? Email { get; set; }
+
+        /// <summary>
+        /// Paths to companion MDD resource files (CSS, images, audio, JS).
+        /// </summary>
+        public List<string> MddFilePaths { get; set; } = [];
     }
 
     private static readonly Lazy<SettingsService> _instance = new(() => new SettingsService());
@@ -1084,7 +1090,7 @@ public sealed class SettingsService
                     return boolDict;
                 }
             }
-            catch { }
+            catch (Exception ex) { Debug.WriteLine($"[SettingsService] Failed to deserialize service test status: {ex.Message}"); }
         }
         return new Dictionary<string, bool>();
     }
@@ -1117,6 +1123,17 @@ public sealed class SettingsService
                         var email = item.TryGetProperty(nameof(ImportedMdxDictionary.Email), out var em)
                             ? em.GetString()
                             : null;
+                        var mddFilePaths = new List<string>();
+                        if (item.TryGetProperty(nameof(ImportedMdxDictionary.MddFilePaths), out var mddArr)
+                            && mddArr.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var mddItem in mddArr.EnumerateArray())
+                            {
+                                var path = mddItem.GetString();
+                                if (!string.IsNullOrWhiteSpace(path))
+                                    mddFilePaths.Add(path);
+                            }
+                        }
 
                         if (!string.IsNullOrWhiteSpace(serviceId) && !string.IsNullOrWhiteSpace(filePath))
                         {
@@ -1127,7 +1144,8 @@ public sealed class SettingsService
                                 FilePath = filePath,
                                 IsEncrypted = isEncrypted,
                                 Regcode = regcode,
-                                Email = email
+                                Email = email,
+                                MddFilePaths = mddFilePaths
                             });
                         }
                     }
@@ -1140,7 +1158,7 @@ public sealed class SettingsService
                     return typed;
                 }
             }
-            catch { }
+            catch (Exception ex) { Debug.WriteLine($"[SettingsService] Failed to deserialize MDX dictionaries: {ex.Message}"); }
         }
 
         return [];

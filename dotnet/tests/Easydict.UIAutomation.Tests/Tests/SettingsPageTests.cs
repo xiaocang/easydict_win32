@@ -74,7 +74,7 @@ public class SettingsPageTests : IDisposable
             Thread.Sleep(2000);
 
             // Try to scroll down to see service configuration
-            var scrollViewer = window.FindFirstDescendant(cf => cf.ByName("MainScrollViewer"));
+            var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
             if (scrollViewer != null)
             {
                 // Scroll down to show more settings

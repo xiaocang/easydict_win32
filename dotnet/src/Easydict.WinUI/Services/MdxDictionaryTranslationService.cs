@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService;
@@ -12,9 +13,11 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class MdxDictionaryTranslationService : ITranslationService
 {
-    private static readonly Regex ScriptStyleRegex = new("<(script|style)[^>]*>[\\s\\S]*?</\\1>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ScriptStyleRegex = new("<(script|style)[^>]*>[\\s\\S]*?</\\1>", RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
     private static readonly Regex TagRegex = new("<[^>]+>", RegexOptions.Compiled);
+    private static readonly Regex LinkRedirectRegex = new(@"^@@@LINK=(.+)", RegexOptions.Compiled);
     private Func<string, (string KeyText, string? Definition)>? _lookup;
+    private readonly List<MddDict> _mddDicts = [];
 
     /// <summary>
     /// Creates a service for an MDX dictionary file.
@@ -108,6 +111,106 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
     public bool SupportsLanguagePair(Language from, Language to) => true;
 
     /// <summary>
+    /// Whether any MDD resource files are loaded.
+    /// </summary>
+    public bool HasMddResources => _mddDicts.Count > 0;
+
+    /// <summary>
+    /// Directory containing the MDX file (used for virtual host mapping of loose resources).
+    /// </summary>
+    public string DictionaryDirectory => Path.GetDirectoryName(FilePath) ?? string.Empty;
+
+    /// <summary>
+    /// Discovers companion MDD files for an MDX dictionary.
+    /// Scans same directory for {baseName}.mdd, {baseName}.1.mdd, {baseName}.2.mdd, etc.
+    /// </summary>
+    internal static List<string> DiscoverMddFiles(string mdxFilePath)
+    {
+        var result = new List<string>();
+        var dir = Path.GetDirectoryName(mdxFilePath);
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+            return result;
+
+        var baseName = Path.GetFileNameWithoutExtension(mdxFilePath);
+
+        // Check unnumbered: {baseName}.mdd
+        var unnumbered = Path.Combine(dir, $"{baseName}.mdd");
+        if (File.Exists(unnumbered))
+            result.Add(unnumbered);
+
+        // Check numbered: {baseName}.1.mdd, {baseName}.2.mdd, ...
+        for (int i = 1; i <= 99; i++)
+        {
+            var numbered = Path.Combine(dir, $"{baseName}.{i}.mdd");
+            if (File.Exists(numbered))
+                result.Add(numbered);
+            else
+                break;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Loads MDD resource files. Tolerates individual load failures.
+    /// </summary>
+    public void LoadMddFiles(IReadOnlyList<string> mddPaths)
+    {
+        foreach (var path in mddPaths)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    _mddDicts.Add(new MddDict(path));
+                    Debug.WriteLine($"[MdxDictionary] Loaded MDD: {path}");
+                }
+                else
+                {
+                    Debug.WriteLine($"[MdxDictionary] MDD file not found: {path}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MdxDictionary] Failed to load MDD '{path}': {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Looks up a resource (CSS, image, audio, etc.) across all loaded MDD files.
+    /// Returns raw bytes or null if not found.
+    /// </summary>
+    public byte[]? LookupResource(string resourceKey)
+    {
+        if (_mddDicts.Count == 0 || string.IsNullOrEmpty(resourceKey))
+            return null;
+
+        // Normalize: MDD keys typically use backslash prefix
+        var normalizedKey = resourceKey.Replace('/', '\\');
+        if (!normalizedKey.StartsWith('\\'))
+            normalizedKey = '\\' + normalizedKey;
+
+        foreach (var mdd in _mddDicts)
+        {
+            try
+            {
+                var result = mdd.Locate(normalizedKey);
+                if (result.Definition != null)
+                {
+                    return Convert.FromBase64String(result.Definition);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MdxDictionary] MDD lookup error for '{normalizedKey}': {ex.Message}");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Re-initialize the dictionary with new credentials.
     /// Called after user enters email + regcode in settings.
     /// </summary>
@@ -121,13 +224,13 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
         _lookup = dict.Lookup;
     }
 
-    public Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default)
+    public async Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!IsConfigured)
         {
-            return Task.FromResult(new TranslationResult
+            return new TranslationResult
             {
                 OriginalText = request.Text,
                 TranslatedText = string.Empty,
@@ -136,7 +239,7 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
                 ServiceName = DisplayName,
                 ResultKind = TranslationResultKind.NoResult,
                 InfoMessage = "🔒 This dictionary is encrypted. Please configure credentials in Settings → Service Configuration."
-            });
+            };
         }
 
         var query = request.Text.Trim();
@@ -149,48 +252,78 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
             };
         }
 
-        var entry = _lookup!(query);
-        var definition = entry.Definition;
-        if (string.IsNullOrWhiteSpace(definition))
+        return await Task.Run(() =>
         {
-            return Task.FromResult(new TranslationResult
+            var definition = ResolveDefinition(query);
+            if (string.IsNullOrWhiteSpace(definition))
+            {
+                return new TranslationResult
+                {
+                    OriginalText = request.Text,
+                    TranslatedText = string.Empty,
+                    TargetLanguage = request.ToLanguage,
+                    DetectedLanguage = request.FromLanguage,
+                    ServiceName = DisplayName,
+                    ResultKind = TranslationResultKind.NoResult,
+                    InfoMessage = $"No result found in dictionary: {query}"
+                };
+            }
+
+            var plainText = ToReadableText(definition);
+            var wordResult = new WordResult
+            {
+                Definitions =
+                [
+                    new Definition
+                    {
+                        PartOfSpeech = "dictionary",
+                        Meanings = [plainText]
+                    }
+                ]
+            };
+
+            return new TranslationResult
             {
                 OriginalText = request.Text,
-                TranslatedText = string.Empty,
+                TranslatedText = plainText,
                 TargetLanguage = request.ToLanguage,
                 DetectedLanguage = request.FromLanguage,
                 ServiceName = DisplayName,
-                ResultKind = TranslationResultKind.NoResult,
-                InfoMessage = $"No result found in dictionary: {query}"
-            });
-        }
-
-        var plainText = ToReadableText(definition);
-        var wordResult = new WordResult
-        {
-            Definitions =
-            [
-                new Definition
-                {
-                    PartOfSpeech = "dictionary",
-                    Meanings = [plainText]
-                }
-            ]
-        };
-
-        return Task.FromResult(new TranslationResult
-        {
-            OriginalText = request.Text,
-            TranslatedText = plainText,
-            TargetLanguage = request.ToLanguage,
-            DetectedLanguage = request.FromLanguage,
-            ServiceName = DisplayName,
-            WordResult = wordResult
-        });
+                WordResult = wordResult,
+                RawHtml = HasMddResources ? definition : null
+            };
+        }, cancellationToken);
     }
 
     public Task<Language> DetectLanguageAsync(string text, CancellationToken cancellationToken = default)
         => Task.FromResult(Language.Auto);
+
+    /// <summary>
+    /// Resolves the definition for a query, following @@@LINK= redirections (up to 5 hops).
+    /// </summary>
+    private string? ResolveDefinition(string query, int maxHops = 5)
+    {
+        var current = query;
+        for (int i = 0; i < maxHops; i++)
+        {
+            var entry = _lookup!(current);
+            var definition = entry.Definition;
+            if (string.IsNullOrWhiteSpace(definition))
+                return null;
+
+            var match = LinkRedirectRegex.Match(definition.Trim());
+            if (match.Success)
+            {
+                current = match.Groups[1].Value.Trim();
+                continue;
+            }
+
+            return definition;
+        }
+
+        Debug.WriteLine($"[MdxDictionary] Too many @@@LINK redirections for '{query}'");
+        return null;
+    }
 
     internal static string ToReadableText(string html)
     {
@@ -205,6 +338,7 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
 
         normalized = TagRegex.Replace(normalized, string.Empty);
         normalized = WebUtility.HtmlDecode(normalized);
+        normalized = normalized.Replace('\u00A0', ' ');
 
         var lines = normalized
             .Split('\n')

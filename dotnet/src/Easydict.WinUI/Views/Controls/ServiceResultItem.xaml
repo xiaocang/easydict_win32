@@ -170,6 +170,13 @@
                         FontSize="13"
                         />
 
+                    <!-- Dictionary HTML Rendering (WebView2, for MDX with MDD resources) -->
+                    <WebView2
+                        x:Name="DictWebView"
+                        Grid.Row="3"
+                        DefaultBackgroundColor="Transparent"
+                        Visibility="Collapsed" />
+
                     <!-- Error Message -->
                     <TextBlock
                         x:Name="ErrorText"

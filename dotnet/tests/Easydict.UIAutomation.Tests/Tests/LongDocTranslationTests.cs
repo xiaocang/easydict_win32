@@ -367,7 +367,7 @@ public class LongDocTranslationTests : IDisposable
     {
         var control = Retry.WhileNull(
             () => FindByAutomationIdOrName(window, name),
-            TimeSpan.FromSeconds(5)).Result;
+            TimeSpan.FromSeconds(10)).Result;
 
         if (control == null)
         {

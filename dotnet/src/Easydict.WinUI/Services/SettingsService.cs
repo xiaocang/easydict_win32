@@ -428,8 +428,9 @@ public sealed class SettingsService
                 _settings = JsonSerializer.Deserialize<Dictionary<string, object?>>(json) ?? new();
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"[SettingsService] Failed to load settings: {ex.Message}");
             _settings = new();
         }
 

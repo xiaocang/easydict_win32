@@ -338,8 +338,6 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
 
         normalized = TagRegex.Replace(normalized, string.Empty);
         normalized = WebUtility.HtmlDecode(normalized);
-        normalized = normalized.Replace('\u00A0', ' ');
-
         var lines = normalized
             .Split('\n')
             .Select(line => line.Trim())

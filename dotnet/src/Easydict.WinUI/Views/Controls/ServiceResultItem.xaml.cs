@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
@@ -6,7 +8,9 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.Web.WebView2.Core;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Storage.Streams;
 
 namespace Easydict.WinUI.Views.Controls;
 
@@ -21,6 +25,8 @@ public sealed partial class ServiceResultItem : UserControl
     private string? _cachedServiceId;
     private BitmapImage? _cachedIcon;
     private HashSet<string>? _alreadyShownPhonetics;
+    private bool _webViewInitialized;
+    private MdxDictionaryTranslationService? _currentMdxService;
 
     /// <summary>
     /// Event raised when the expand/collapse state is toggled.
@@ -197,6 +203,10 @@ public sealed partial class ServiceResultItem : UserControl
     private void UpdateTranslationUI()
     {
         GrammarResultPanel.Visibility = Visibility.Collapsed;
+        var resultTextBrush = FindThemeBrush("QueryTextBrush")
+            ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
+        var infoTextBrush = FindThemeBrush("TextFillColorSecondaryBrush")
+            ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);
 
         // Result text - handle streaming state
         if (_serviceResult!.IsStreaming)
@@ -205,33 +215,68 @@ public sealed partial class ServiceResultItem : UserControl
             ResultText.Text = string.IsNullOrEmpty(_serviceResult.StreamingText)
                 ? "Waiting for response..."
                 : _serviceResult.StreamingText;
+            ResultText.Foreground = resultTextBrush;
             ResultText.Visibility = Visibility.Visible;
             ErrorText.Visibility = Visibility.Collapsed;
             PhoneticPanel.Visibility = Visibility.Collapsed;
             DictionaryPanel.Visibility = Visibility.Collapsed;
+            DictWebView.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = Visibility.Collapsed; // Don't show buttons during streaming
         }
         else if (_serviceResult.Result != null)
         {
-            UpdatePhonetics(_serviceResult.Result);
-            var hasDefinitions = UpdateDictionary(_serviceResult.Result);
-
-            // Hide TranslatedText when definitions are shown and TranslatedText is
-            // a flattened version of definitions (redundant). Youdao builds TranslatedText
-            // from definitions; GoogleWeb has independent plain translation.
-            if (hasDefinitions && DictionaryDisplayHelper.IsTranslatedTextRedundantWithDefinitions(_serviceResult.Result))
+            if (_serviceResult.Result.ResultKind == TranslationResultKind.NoResult)
             {
+                ResultText.Text = _serviceResult.Result.InfoMessage ?? string.Empty;
+                ResultText.Foreground = infoTextBrush;
+                ResultText.Visibility = string.IsNullOrWhiteSpace(ResultText.Text)
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+                ErrorText.Visibility = Visibility.Collapsed;
+                PhoneticPanel.Visibility = Visibility.Collapsed;
+                DictionaryPanel.Visibility = Visibility.Collapsed;
+                DictWebView.Visibility = Visibility.Collapsed;
+                ActionButtons.Visibility = Visibility.Collapsed;
+                ReplaceButton.Visibility = Visibility.Collapsed;
+                PlayButton.Visibility = Visibility.Collapsed;
+            }
+            else if (!string.IsNullOrEmpty(_serviceResult.Result.RawHtml))
+            {
+                // Rich HTML from MDX dictionary with MDD resources — render in WebView2
                 ResultText.Visibility = Visibility.Collapsed;
+                PhoneticPanel.Visibility = Visibility.Collapsed;
+                DictionaryPanel.Visibility = Visibility.Collapsed;
+                ErrorText.Visibility = Visibility.Collapsed;
+                _ = RenderHtmlDefinitionAsync(_serviceResult.Result.RawHtml, _serviceResult.ServiceId);
+                ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+                ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
             }
             else
             {
-                ResultText.Text = _serviceResult.Result.TranslatedText;
-                ResultText.Visibility = Visibility.Visible;
-            }
+                // Hide WebView2 for non-HTML results
+                DictWebView.Visibility = Visibility.Collapsed;
 
-            ErrorText.Visibility = Visibility.Collapsed;
-            ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
-            ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
+                UpdatePhonetics(_serviceResult.Result);
+                var hasDefinitions = UpdateDictionary(_serviceResult.Result);
+
+                // Hide TranslatedText when definitions are shown and TranslatedText is
+                // a flattened version of definitions (redundant). Youdao builds TranslatedText
+                // from definitions; GoogleWeb has independent plain translation.
+                if (hasDefinitions && DictionaryDisplayHelper.IsTranslatedTextRedundantWithDefinitions(_serviceResult.Result))
+                {
+                    ResultText.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    ResultText.Text = _serviceResult.Result.TranslatedText;
+                    ResultText.Foreground = resultTextBrush;
+                    ResultText.Visibility = Visibility.Visible;
+                }
+
+                ErrorText.Visibility = Visibility.Collapsed;
+                ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
+                ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
         else if (_serviceResult.Error != null)
         {
@@ -240,6 +285,7 @@ public sealed partial class ServiceResultItem : UserControl
             ResultText.Visibility = Visibility.Collapsed;
             PhoneticPanel.Visibility = Visibility.Collapsed;
             DictionaryPanel.Visibility = Visibility.Collapsed;
+            DictWebView.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
             ReplaceButton.Visibility = Visibility.Collapsed;
             PlayButton.Visibility = Visibility.Collapsed;
@@ -251,6 +297,7 @@ public sealed partial class ServiceResultItem : UserControl
             ErrorText.Visibility = Visibility.Collapsed;
             PhoneticPanel.Visibility = Visibility.Collapsed;
             DictionaryPanel.Visibility = Visibility.Collapsed;
+            DictWebView.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = Visibility.Collapsed;
         }
     }
@@ -821,11 +868,13 @@ public sealed partial class ServiceResultItem : UserControl
         if (_serviceResult?.IsExpanded == true &&
             (_serviceResult.Result != null || _serviceResult.Error != null || _serviceResult.GrammarResult != null))
         {
-            ActionButtons.Visibility = Visibility.Visible;
-            var hasResult = _serviceResult.Result != null || _serviceResult.GrammarResult != null;
+            var hasResult = (_serviceResult.Result?.ResultKind == TranslationResultKind.Success) || _serviceResult.GrammarResult != null;
+            ActionButtons.Visibility = hasResult || _serviceResult.Error != null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             ReplaceButton.Visibility = hasResult && TextInsertionService.HasSourceWindow
                 ? Visibility.Visible : Visibility.Collapsed;
-            PlayButton.Visibility = _serviceResult.Result != null
+            PlayButton.Visibility = _serviceResult.Result?.ResultKind == TranslationResultKind.Success
                 ? Visibility.Visible : Visibility.Collapsed;
         }
     }
@@ -993,5 +1042,181 @@ public sealed partial class ServiceResultItem : UserControl
             await Task.Delay(1500);
             CopyIcon.Glyph = "\uE8C8"; // Copy icon
         });
+    }
+
+    /// <summary>
+    /// Renders raw HTML dictionary definition in the WebView2 control.
+    /// Sets up virtual host mapping for loose files and MDD resource interception.
+    /// </summary>
+    private async Task RenderHtmlDefinitionAsync(string rawHtml, string serviceId)
+    {
+        try
+        {
+            DictWebView.Visibility = Visibility.Visible;
+
+            if (!_webViewInitialized)
+            {
+                await DictWebView.EnsureCoreWebView2Async();
+                _webViewInitialized = true;
+
+                DictWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                DictWebView.CoreWebView2.Settings.IsScriptEnabled = true;
+                DictWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+
+                // Register resource request filter for MDD resources
+                DictWebView.CoreWebView2.AddWebResourceRequestedFilter("https://dictassets/*", CoreWebView2WebResourceContext.All);
+                DictWebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
+                DictWebView.NavigationCompleted += OnDictWebViewNavigationCompleted;
+            }
+
+            // Resolve the MDX service for resource lookups
+            _currentMdxService = null;
+            try
+            {
+                using var handle = TranslationManagerService.Instance.AcquireHandle();
+                if (handle.Manager.Services.TryGetValue(serviceId, out var svc)
+                    && svc is MdxDictionaryTranslationService mdxSvc)
+                {
+                    _currentMdxService = mdxSvc;
+
+                    // Map dictionary directory for loose file access (images, CSS on disk)
+                    if (!string.IsNullOrEmpty(mdxSvc.DictionaryDirectory) && Directory.Exists(mdxSvc.DictionaryDirectory))
+                    {
+                        DictWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                            "dictassets", mdxSvc.DictionaryDirectory,
+                            CoreWebView2HostResourceAccessKind.Allow);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ServiceResultItem] Failed to resolve MDX service: {ex.Message}");
+            }
+
+            // Determine theme
+            var isDark = ActualTheme == ElementTheme.Dark;
+            var bgColor = isDark ? "#1e1e1e" : "#ffffff";
+            var textColor = isDark ? "#d4d4d4" : "#1e1e1e";
+
+            // Rewrite relative resource paths to use virtual host
+            var processedHtml = RewriteResourcePaths(rawHtml);
+
+            var html = $$"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <meta charset="utf-8">
+                <style>
+                    body {
+                        margin: 4px 0;
+                        padding: 0;
+                        font-family: -apple-system, 'Segoe UI', sans-serif;
+                        font-size: 13px;
+                        color: {{textColor}};
+                        background-color: {{bgColor}};
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                    }
+                    img { max-width: 100%; height: auto; }
+                    a { color: {{(isDark ? "#569cd6" : "#0066cc")}}; }
+                </style>
+                </head>
+                <body>{{processedHtml}}</body>
+                </html>
+                """;
+
+            DictWebView.NavigateToString(html);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[ServiceResultItem] WebView2 rendering failed: {ex.Message}");
+            // Fallback to plain text
+            DictWebView.Visibility = Visibility.Collapsed;
+            ResultText.Visibility = Visibility.Visible;
+        }
+    }
+
+    /// <summary>
+    /// Rewrites relative resource paths in HTML to use the dictassets virtual host.
+    /// Handles src="...", href="...", and url(...) patterns.
+    /// </summary>
+    private static string RewriteResourcePaths(string html)
+    {
+        // Rewrite src="..." and href="..." (skip absolute URLs and data: URIs)
+        html = Regex.Replace(html, """((?:src|href)\s*=\s*["'])(?!https?://|data:|javascript:)([^"']+)(["'])""",
+            "$1https://dictassets/$2$3", RegexOptions.IgnoreCase);
+
+        // Rewrite url(...) in CSS (skip absolute URLs and data: URIs)
+        html = Regex.Replace(html, """url\(\s*["']?(?!https?://|data:)([^"')]+)["']?\s*\)""",
+            "url('https://dictassets/$1')", RegexOptions.IgnoreCase);
+
+        return html;
+    }
+
+    private void OnWebResourceRequested(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
+    {
+        if (_currentMdxService == null)
+            return;
+
+        var uri = new Uri(args.Request.Uri);
+        var resourceKey = Uri.UnescapeDataString(uri.AbsolutePath);
+
+        // Try MDD lookup
+        var bytes = _currentMdxService.LookupResource(resourceKey);
+        if (bytes != null)
+        {
+            var mimeType = GetMimeType(resourceKey);
+            var stream = new InMemoryRandomAccessStream();
+            var writer = new DataWriter(stream);
+            writer.WriteBytes(bytes);
+            writer.StoreAsync().AsTask().GetAwaiter().GetResult();
+            writer.DetachStream();
+            stream.Seek(0);
+
+            args.Response = sender.Environment.CreateWebResourceResponse(
+                stream, 200, "OK", $"Content-Type: {mimeType}");
+        }
+    }
+
+    private async void OnDictWebViewNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    {
+        if (!args.IsSuccess) return;
+
+        try
+        {
+            // Get content height and resize WebView2 to fit
+            var heightStr = await sender.CoreWebView2.ExecuteScriptAsync("document.body.scrollHeight.toString()");
+            if (int.TryParse(heightStr.Trim('"'), out var height) && height > 0)
+            {
+                sender.Height = Math.Min(height + 8, 800); // Cap at 800px
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[ServiceResultItem] Failed to auto-size WebView2: {ex.Message}");
+        }
+    }
+
+    private static string GetMimeType(string path)
+    {
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        return ext switch
+        {
+            ".css" => "text/css",
+            ".js" => "application/javascript",
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".svg" => "image/svg+xml",
+            ".mp3" => "audio/mpeg",
+            ".wav" => "audio/wav",
+            ".ogg" => "audio/ogg",
+            ".woff" => "font/woff",
+            ".woff2" => "font/woff2",
+            ".ttf" => "font/ttf",
+            ".eot" => "application/vnd.ms-fontobject",
+            ".htm" or ".html" => "text/html",
+            _ => "application/octet-stream"
+        };
     }
 }

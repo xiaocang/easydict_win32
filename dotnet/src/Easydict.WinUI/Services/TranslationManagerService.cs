@@ -314,7 +314,64 @@ public sealed class TranslationManagerService : IDisposable
 
         // Linguee doesn't need configuration (no API key)
 
+        RegisterImportedMdxServices();
+
         Debug.WriteLine("[TranslationManagerService] Services configured");
+    }
+
+    private void RegisterImportedMdxServices()
+    {
+        foreach (var dictionary in _settings.ImportedMdxDictionaries)
+        {
+            if (string.IsNullOrWhiteSpace(dictionary.ServiceId) || string.IsNullOrWhiteSpace(dictionary.FilePath))
+            {
+                continue;
+            }
+
+            try
+            {
+                var service = new MdxDictionaryTranslationService(
+                    dictionary.ServiceId,
+                    dictionary.DisplayName,
+                    dictionary.FilePath,
+                    dictionary.Regcode,
+                    dictionary.Email);
+
+                // Load MDD resource files (from stored paths, or re-discover for migration)
+                var mddPaths = dictionary.MddFilePaths;
+                if (mddPaths.Count == 0)
+                {
+                    mddPaths = MdxDictionaryTranslationService.DiscoverMddFiles(dictionary.FilePath);
+                    if (mddPaths.Count > 0)
+                    {
+                        dictionary.MddFilePaths = mddPaths;
+                        Debug.WriteLine($"[TranslationManagerService] Auto-discovered {mddPaths.Count} MDD file(s) for '{dictionary.FilePath}'");
+                    }
+                }
+
+                if (mddPaths.Count > 0)
+                {
+                    service.LoadMddFiles(mddPaths);
+                }
+
+                _translationManager.RegisterService(service);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[TranslationManagerService] Failed to load MDX dictionary '{dictionary.FilePath}': {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Unregister an MDX dictionary service by its ID.
+    /// </summary>
+    public void UnregisterMdxDictionary(string serviceId)
+    {
+        lock (_lock)
+        {
+            _translationManager.UnregisterService(serviceId);
+        }
     }
 
     /// <summary>
@@ -325,6 +382,27 @@ public sealed class TranslationManagerService : IDisposable
         lock (_lock)
         {
             ConfigureServices();
+        }
+    }
+
+    public bool TryRegisterMdxDictionary(SettingsService.ImportedMdxDictionary dictionary, out string? error)
+    {
+        error = null;
+        try
+        {
+            var service = new MdxDictionaryTranslationService(
+                dictionary.ServiceId, dictionary.DisplayName, dictionary.FilePath,
+                dictionary.Regcode, dictionary.Email);
+            lock (_lock)
+            {
+                _translationManager.RegisterService(service);
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
         }
     }
 

@@ -876,14 +876,15 @@ namespace Easydict.WinUI.Views
                     ToLanguage = targetLanguage
                 };
 
-                // Task returns: true = success, false = error, null = cancelled/skipped
+                // Task returns an execution outcome so neutral info results (for example MDX misses)
+                // do not count as failures or successful translations.
                 // Only auto-query services with EnabledQuery=true
                 var tasks = _serviceResults.Select(async serviceResult =>
                 {
                     // Skip manual-query services (EnabledQuery=false)
                     if (!serviceResult.EnabledQuery)
                     {
-                        return (bool?)null; // Skipped, don't count
+                        return QueryExecutionOutcome.Cancelled;
                     }
 
                     // Mark as queried for auto-query services
@@ -894,6 +895,7 @@ namespace Easydict.WinUI.Views
                         // Acquire handle once per service to ensure consistent manager instance
                         using var handle = TranslationManagerService.Instance.AcquireHandle();
                         var manager = handle.Manager;
+                        QueryExecutionOutcome outcome;
 
                         // Check if service supports streaming
                         if (manager.IsStreamingService(serviceResult.ServiceId))
@@ -901,6 +903,7 @@ namespace Easydict.WinUI.Views
                             // Streaming path for LLM services
                             await ExecuteStreamingTranslationForServiceAsync(
                                 manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                            outcome = QueryExecutionOutcome.Success;
                         }
                         else
                         {
@@ -918,9 +921,13 @@ namespace Easydict.WinUI.Views
                                 serviceResult.ApplyAutoCollapseLogic();
                                 UpdatePhoneticDeduplication();
                             });
+
+                            outcome = result.ResultKind == TranslationResultKind.Success
+                                ? QueryExecutionOutcome.Success
+                                : QueryExecutionOutcome.Neutral;
                         }
 
-                        return (bool?)true; // Success
+                        return outcome;
                     }
                     catch (OperationCanceledException)
                     {
@@ -932,7 +939,7 @@ namespace Easydict.WinUI.Views
                             serviceResult.IsStreaming = false;
                             serviceResult.ClearQueried();
                         });
-                        return (bool?)null; // Cancelled, don't count
+                        return QueryExecutionOutcome.Cancelled;
                     }
                     catch (TranslationException ex)
                     {
@@ -945,7 +952,7 @@ namespace Easydict.WinUI.Views
                             serviceResult.ApplyAutoCollapseLogic();
                         });
                         SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
-                        return (bool?)false; // Error
+                        return QueryExecutionOutcome.Error;
                     }
                     catch (Exception ex)
                     {
@@ -962,15 +969,12 @@ namespace Easydict.WinUI.Views
                             serviceResult.ApplyAutoCollapseLogic();
                         });
                         SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
-                        return (bool?)false; // Error
+                        return QueryExecutionOutcome.Error;
                     }
                 });
 
                 var taskResults = await Task.WhenAll(tasks);
-
-                // Compute counts from task return values (accurate regardless of DispatcherQueue timing)
-                var successCount = taskResults.Count(r => r == true);
-                var errorCount = taskResults.Count(r => r == false);
+                var summary = QueryOutcomeSummary.From(taskResults);
 
                 // Update status on UI thread
                 DispatcherQueue.TryEnqueue(() =>
@@ -979,12 +983,12 @@ namespace Easydict.WinUI.Views
 
                     var loc = LocalizationService.Instance;
                     // Set status based on aggregated outcomes
-                    if (successCount > 0)
+                    if (summary.SuccessCount > 0)
                     {
-                        StatusSummaryText.Text = string.Format(loc.GetString("ServiceResultsComplete"), successCount);
+                        StatusSummaryText.Text = string.Format(loc.GetString("ServiceResultsComplete"), summary.SuccessCount);
                         UpdateStatus(true, loc.GetString("StatusReady"));
                     }
-                    else if (errorCount > 0)
+                    else if (summary.ErrorCount > 0)
                     {
                         StatusSummaryText.Text = loc.GetString("TranslationFailed");
                         UpdateStatus(false, loc.GetString("StatusError"));

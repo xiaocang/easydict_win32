@@ -5,3 +5,7 @@
 	path = lib/PdfPig
 	url = https://github.com/xiaocang/PdfPig.git
 	branch = master
+[submodule "dotnet/lib/MDict.CSharp"]
+	path = dotnet/lib/MDict.CSharp
+	url = https://github.com/xiaocang/MDict.Csharp.git
+	branch = plus

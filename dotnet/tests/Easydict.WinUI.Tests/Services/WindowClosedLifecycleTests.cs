@@ -4,6 +4,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using WinRT.Interop;
 using Xunit;
+using System.Runtime.InteropServices;
 
 namespace Easydict.WinUI.Tests.Services;
 
@@ -191,8 +192,16 @@ public class WindowClosedLifecycleTests : IDisposable
 
     private Window CreateTrackedWindow()
     {
-        var window = new Window();
-        _createdWindows.Add(window);
-        return window;
+        try
+        {
+            var window = new Window();
+            _createdWindows.Add(window);
+            return window;
+        }
+        catch (COMException)
+        {
+            Skip.If(true, WinUITestHelper.SkipReason);
+            throw;
+        }
     }
 }

@@ -1022,4 +1022,46 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>略過</value>
   </data>
+  <data name="MdxDictionaryReady" xml:space="preserve">
+    <value>此詞典已準備就緒，無需配置。</value>
+  </data>
+  <data name="MdxDeleteDictionary" xml:space="preserve">
+    <value>刪除詞典</value>
+  </data>
+  <data name="MdxRedetectEncryption" xml:space="preserve">
+    <value>重新偵測加密</value>
+  </data>
+  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
+    <value>刪除詞典</value>
+  </data>
+  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
+    <value>確定要移除 {0} 嗎？磁碟上的詞典檔案不會被刪除。</value>
+  </data>
+  <data name="MdxFilePath" xml:space="preserve">
+    <value>檔案路徑</value>
+  </data>
+  <data name="MdxRegistrationCode" xml:space="preserve">
+    <value>註冊碼</value>
+  </data>
+  <data name="MdxEncryptedHelpText" xml:space="preserve">
+    <value>此詞典已加密。請輸入購買此詞典時使用的電子郵件和註冊碼。</value>
+  </data>
+  <data name="MdxEmailPlaceholder" xml:space="preserve">
+    <value>用於註冊的電子郵件地址</value>
+  </data>
+  <data name="MddFilesDetected" xml:space="preserve">
+    <value>已匯入 '{0}'，發現 {1} 個配套資源檔案。</value>
+  </data>
+  <data name="MddNoFilesDetected" xml:space="preserve">
+    <value>已匯入 '{0}'。未找到配套 MDD 資源檔案。</value>
+  </data>
+  <data name="MddAddFile" xml:space="preserve">
+    <value>新增 MDD 檔案...</value>
+  </data>
+  <data name="MddRescanFiles" xml:space="preserve">
+    <value>重新掃描 MDD 檔案</value>
+  </data>
+  <data name="MddAssociatedFiles" xml:space="preserve">
+    <value>資源檔案</value>
+  </data>
 </root>

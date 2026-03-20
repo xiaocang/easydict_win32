@@ -3,6 +3,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
@@ -24,6 +26,7 @@ internal sealed record NavSection(string Name, string Tooltip, string IconGlyph,
 /// </summary>
 public sealed partial class SettingsPage : Page
 {
+    private static readonly Regex NonServiceIdCharRegex = new("[^a-z0-9-]", RegexOptions.Compiled);
     private readonly SettingsService _settings = SettingsService.Instance;
     private bool _isLoading = true; // Prevent change detection during initial load
     private bool _isInitialized;
@@ -44,6 +47,9 @@ public sealed partial class SettingsPage : Page
 
     // Snapshot of SelectedLanguages at page load, restored on discard
     private List<string> _originalSelectedLanguages = [];
+
+    // Dynamic UI references for encrypted MDX dictionary credential fields
+    private readonly Dictionary<string, (TextBox EmailBox, PasswordBox RegcodeBox)> _mdxCredentialFields = new();
 
     // Navigation sections for the floating sidebar
     private List<NavSection> _navSections = [];
@@ -868,6 +874,484 @@ public sealed partial class SettingsPage : Page
                 indicator.Visibility = Visibility.Visible;
             }
         }
+
+        UpdateImportedMdxSummary();
+        BuildImportedMdxConfigUI();
+    }
+
+    private void UpdateImportedMdxSummary()
+    {
+        ImportedMdxSummaryText.Text = _settings.ImportedMdxDictionaries.Count switch
+        {
+            0 => "No MDX dictionaries imported",
+            1 => "1 MDX dictionary imported",
+            var c => $"{c} MDX dictionaries imported"
+        };
+    }
+
+    /// <summary>
+    /// Dynamically builds Expander config UI for each imported MDX dictionary.
+    /// Encrypted dictionaries show email/regcode fields + test button.
+    /// Non-encrypted dictionaries show a "ready to use" status.
+    /// All dictionaries show file path and a delete button.
+    /// </summary>
+    private void BuildImportedMdxConfigUI()
+    {
+        ImportedMdxConfigPanel.Children.Clear();
+        _mdxCredentialFields.Clear();
+
+        var allDicts = _settings.ImportedMdxDictionaries;
+        if (allDicts.Count == 0) return;
+
+        // Sync IsEncrypted from live services (handles stale settings data)
+        using var handle = TranslationManagerService.Instance.AcquireHandle();
+        bool settingsChanged = false;
+        foreach (var d in allDicts)
+        {
+            if (handle.Manager.Services.TryGetValue(d.ServiceId, out var svc)
+                && svc is MdxDictionaryTranslationService mdx
+                && mdx.IsEncrypted != d.IsEncrypted)
+            {
+                d.IsEncrypted = mdx.IsEncrypted;
+                settingsChanged = true;
+            }
+        }
+        if (settingsChanged) _settings.Save();
+
+        var loc = LocalizationService.Instance;
+
+        foreach (var dict in allDicts)
+        {
+            var expander = new Expander
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch
+            };
+
+            // Header with name (icon varies by encryption status) and status indicator
+            var headerGrid = new Grid();
+            // Strip any existing emoji prefix from DisplayName (import hardcodes 📚)
+            var rawName = dict.DisplayName;
+            if (rawName.StartsWith("\U0001f4da ")) rawName = rawName["\U0001f4da ".Length..];
+            if (rawName.StartsWith("\U0001f512 ")) rawName = rawName["\U0001f512 ".Length..];
+            var icon = dict.IsEncrypted ? "\U0001f512" : "\U0001f4da";
+            var nameText = new TextBlock
+            {
+                Text = $"{icon} {rawName}",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            var statusText = new TextBlock
+            {
+                Text = "\u2705",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.Green),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 0, 8, 0),
+                Visibility = _settings.ServiceTestStatus.TryGetValue(dict.ServiceId, out var passed) && passed
+                    ? Visibility.Visible : Visibility.Collapsed
+            };
+            headerGrid.Children.Add(nameText);
+            headerGrid.Children.Add(statusText);
+            expander.Header = headerGrid;
+
+            // Content panel
+            var contentPanel = new StackPanel { Spacing = 12, Padding = new Thickness(0, 8, 0, 0) };
+
+            // File path (read-only, selectable)
+            var filePathBox = new TextBox
+            {
+                Header = loc.GetString("MdxFilePath"),
+                Text = dict.FilePath ?? string.Empty,
+                IsReadOnly = true,
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            contentPanel.Children.Add(filePathBox);
+
+            if (dict.IsEncrypted)
+            {
+                // Encrypted: email + regcode + help text + test button
+                var emailBox = new TextBox
+                {
+                    Header = "Email",
+                    Width = 350,
+                    PlaceholderText = loc.GetString("MdxEmailPlaceholder"),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Text = dict.Email ?? string.Empty
+                };
+                contentPanel.Children.Add(emailBox);
+
+                var regcodeBox = new PasswordBox
+                {
+                    Header = loc.GetString("MdxRegistrationCode"),
+                    Width = 350,
+                    PlaceholderText = loc.GetString("MdxRegistrationCode"),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Password = dict.Regcode ?? string.Empty
+                };
+                contentPanel.Children.Add(regcodeBox);
+
+                var helpText = new TextBlock
+                {
+                    Text = loc.GetString("MdxEncryptedHelpText"),
+                    FontSize = 12,
+                    Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                    TextWrapping = TextWrapping.Wrap
+                };
+                contentPanel.Children.Add(helpText);
+
+                var testButton = new Button { Content = loc.GetString("Test"), Padding = new Thickness(8, 4, 8, 4) };
+
+                // Capture variables for the closure
+                var capturedDict = dict;
+                var capturedEmailBox = emailBox;
+                var capturedRegcodeBox = regcodeBox;
+                var capturedStatusText = statusText;
+
+                testButton.Click += async (s, args) =>
+                {
+                    await TestEncryptedMdxAsync(capturedDict, capturedEmailBox, capturedRegcodeBox, (Button)s!, capturedStatusText);
+                };
+                contentPanel.Children.Add(testButton);
+
+                // Register for Save button credential persistence
+                _mdxCredentialFields[dict.ServiceId] = (emailBox, regcodeBox);
+            }
+            else
+            {
+                // Non-encrypted: ready to use info
+                var readyText = new TextBlock
+                {
+                    Text = loc.GetString("MdxDictionaryReady"),
+                    FontSize = 12,
+                    Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                    TextWrapping = TextWrapping.Wrap
+                };
+                contentPanel.Children.Add(readyText);
+            }
+
+            // MDD Resource Files section
+            var mddLabel = new TextBlock
+            {
+                Text = loc.GetString("MddAssociatedFiles") ?? "Resource Files",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 13,
+                Margin = new Thickness(0, 4, 0, 2)
+            };
+            contentPanel.Children.Add(mddLabel);
+
+            if (dict.MddFilePaths.Count > 0)
+            {
+                foreach (var mddPath in dict.MddFilePaths)
+                {
+                    var mddFileText = new TextBlock
+                    {
+                        Text = Path.GetFileName(mddPath),
+                        FontSize = 12,
+                        Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                        Margin = new Thickness(8, 0, 0, 0)
+                    };
+                    contentPanel.Children.Add(mddFileText);
+                }
+            }
+            else
+            {
+                var noMddText = new TextBlock
+                {
+                    Text = loc.GetString("MddNoFilesDetected") != null
+                        ? string.Format(loc.GetString("MddNoFilesDetected")!, string.Empty).Trim()
+                        : "No companion MDD resource files found.",
+                    FontSize = 12,
+                    Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                    Margin = new Thickness(8, 0, 0, 0)
+                };
+                contentPanel.Children.Add(noMddText);
+            }
+
+            // MDD button row: Add MDD + Re-scan
+            var mddButtonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Margin = new Thickness(0, 4, 0, 4)
+            };
+
+            var capturedDictForMdd = dict;
+            var addMddButton = new Button
+            {
+                Content = loc.GetString("MddAddFile") ?? "Add MDD File...",
+                Padding = new Thickness(8, 4, 8, 4)
+            };
+            addMddButton.Click += async (s, args) =>
+            {
+                try
+                {
+                    var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                    picker.FileTypeFilter.Add(".mdd");
+
+                    var file = await picker.PickSingleFileAsync();
+                    if (file == null || string.IsNullOrWhiteSpace(file.Path))
+                        return;
+
+                    if (!capturedDictForMdd.MddFilePaths.Contains(file.Path, StringComparer.OrdinalIgnoreCase))
+                    {
+                        capturedDictForMdd.MddFilePaths.Add(file.Path);
+                        _settings.Save();
+
+                        // Load into live service
+                        using var h = TranslationManagerService.Instance.AcquireHandle();
+                        if (h.Manager.Services.TryGetValue(capturedDictForMdd.ServiceId, out var svc)
+                            && svc is MdxDictionaryTranslationService mdxSvc)
+                        {
+                            mdxSvc.LoadMddFiles([file.Path]);
+                        }
+
+                        BuildImportedMdxConfigUI();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[SettingsPage] Failed to add MDD file: {ex.Message}");
+                }
+            };
+            mddButtonPanel.Children.Add(addMddButton);
+
+            var rescanMddButton = new Button
+            {
+                Content = loc.GetString("MddRescanFiles") ?? "Re-scan MDD Files",
+                Padding = new Thickness(8, 4, 8, 4)
+            };
+            var capturedDictForRescan = dict;
+            rescanMddButton.Click += (s, args) =>
+            {
+                var discovered = MdxDictionaryTranslationService.DiscoverMddFiles(capturedDictForRescan.FilePath ?? string.Empty);
+                capturedDictForRescan.MddFilePaths = discovered;
+                _settings.Save();
+
+                // Reconfigure services to reload MDD files
+                TranslationManagerService.Instance.ReconfigureServices();
+                BuildImportedMdxConfigUI();
+            };
+            mddButtonPanel.Children.Add(rescanMddButton);
+            contentPanel.Children.Add(mddButtonPanel);
+
+            // Button row: re-detect encryption + delete
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+
+            var redetectButton = new Button
+            {
+                Content = loc.GetString("MdxRedetectEncryption"),
+                Padding = new Thickness(8, 4, 8, 4)
+            };
+            var capturedDictForRedetect = dict;
+            redetectButton.Click += (s, args) =>
+            {
+                var btn = (Button)s!;
+                btn.IsEnabled = false;
+                try
+                {
+                    // Reconfigure services to re-detect encryption via constructor
+                    TranslationManagerService.Instance.ReconfigureServices();
+
+                    // Sync IsEncrypted from live services back to settings
+                    foreach (var d in _settings.ImportedMdxDictionaries)
+                    {
+                        if (TranslationManagerService.Instance.Manager.Services.TryGetValue(d.ServiceId, out var svc)
+                            && svc is MdxDictionaryTranslationService mdxSvc)
+                        {
+                            d.IsEncrypted = mdxSvc.IsEncrypted;
+                        }
+                    }
+                    _settings.Save();
+
+                    // Rebuild UI
+                    BuildImportedMdxConfigUI();
+                }
+                finally
+                {
+                    btn.IsEnabled = true;
+                }
+            };
+            buttonPanel.Children.Add(redetectButton);
+
+            var capturedDictForDelete = dict;
+            var deleteButton = new Button
+            {
+                Content = loc.GetString("MdxDeleteDictionary"),
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red),
+                Padding = new Thickness(8, 4, 8, 4)
+            };
+            deleteButton.Click += async (s, args) =>
+            {
+                await DeleteMdxDictionaryAsync(capturedDictForDelete);
+            };
+            buttonPanel.Children.Add(deleteButton);
+
+            contentPanel.Children.Add(buttonPanel);
+
+            expander.Content = contentPanel;
+            ImportedMdxConfigPanel.Children.Add(expander);
+        }
+    }
+
+    /// <summary>
+    /// Deletes an imported MDX dictionary after user confirmation.
+    /// Removes from settings, service lists, test status, and TranslationManager.
+    /// </summary>
+    private async Task DeleteMdxDictionaryAsync(SettingsService.ImportedMdxDictionary dict)
+    {
+        var loc = LocalizationService.Instance;
+
+        var confirmDialog = new ContentDialog
+        {
+            Title = loc.GetString("MdxDeleteConfirmTitle"),
+            Content = string.Format(loc.GetString("MdxDeleteConfirmMessage"), dict.DisplayName),
+            PrimaryButtonText = loc.GetString("MdxDeleteDictionary"),
+            CloseButtonText = loc.GetString("Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = this.XamlRoot
+        };
+
+        var result = await ShowDialogAsync(confirmDialog);
+        if (result != ContentDialogResult.Primary) return;
+
+        var serviceId = dict.ServiceId;
+
+        // Remove from imported dictionaries list
+        _settings.ImportedMdxDictionaries.Remove(dict);
+
+        // Remove from enabled services lists
+        _settings.MainWindowEnabledServices.Remove(serviceId);
+        _settings.MiniWindowEnabledServices.Remove(serviceId);
+        _settings.FixedWindowEnabledServices.Remove(serviceId);
+
+        // Remove from test status
+        _settings.ServiceTestStatus.Remove(serviceId);
+
+        // Remove from credential fields cache
+        _mdxCredentialFields.Remove(serviceId);
+
+        _settings.Save();
+
+        // Unregister from TranslationManager
+        TranslationManagerService.Instance.UnregisterMdxDictionary(serviceId);
+
+        // Rebuild UI
+        LoadSettings();
+    }
+
+    /// <summary>
+    /// Persists encrypted MDX credential values from the dynamic UI into settings.
+    /// Called by SaveSettingsAsync when the user clicks Save.
+    /// </summary>
+    private void SaveEncryptedMdxCredentials()
+    {
+        foreach (var dict in _settings.ImportedMdxDictionaries.Where(d => d.IsEncrypted))
+        {
+            if (_mdxCredentialFields.TryGetValue(dict.ServiceId, out var fields))
+            {
+                var email = fields.EmailBox.Text?.Trim();
+                var regcode = fields.RegcodeBox.Password?.Trim();
+                dict.Email = string.IsNullOrEmpty(email) ? null : email;
+                dict.Regcode = string.IsNullOrEmpty(regcode) ? null : regcode;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tests encrypted MDX dictionary credentials by attempting to open the dictionary
+    /// with the provided email and registration code.
+    /// </summary>
+    private async Task TestEncryptedMdxAsync(
+        SettingsService.ImportedMdxDictionary dict,
+        TextBox emailBox,
+        PasswordBox regcodeBox,
+        Button testButton,
+        TextBlock statusIndicator)
+    {
+        var loc = LocalizationService.Instance;
+        var originalContent = testButton.Content;
+        testButton.IsEnabled = false;
+        testButton.Content = loc.GetString("Testing");
+
+        try
+        {
+            var email = emailBox.Text?.Trim();
+            var regcode = regcodeBox.Password?.Trim();
+
+            if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(regcode))
+            {
+                await ShowSimpleDialogAsync(loc.GetString("TestFailedTitle"),
+                    "Please enter both email and registration code.");
+                return;
+            }
+
+            // Try to open the dictionary with the provided credentials
+            var testService = new MdxDictionaryTranslationService(
+                dict.ServiceId, dict.DisplayName, dict.FilePath,
+                regcode, email);
+
+            if (!testService.IsConfigured)
+            {
+                throw new TranslationException("Invalid credentials — dictionary could not be decrypted.");
+            }
+
+            // Test a lookup to verify the dictionary is readable
+            var request = new TranslationRequest
+            {
+                Text = "test",
+                FromLanguage = TranslationLanguage.English,
+                ToLanguage = TranslationLanguage.SimplifiedChinese
+            };
+            await testService.TranslateAsync(request);
+
+            // Success — save credentials and reconfigure the live service
+            dict.Regcode = regcode;
+            dict.Email = email;
+            _settings.ServiceTestStatus[dict.ServiceId] = true;
+            _settings.Save();
+
+            statusIndicator.Visibility = Visibility.Visible;
+
+            // Reconfigure the live service in TranslationManager
+            TranslationManagerService.Instance.ReconfigureServices();
+
+            var successDialog = new ContentDialog
+            {
+                Title = loc.GetString("TestSuccessTitle"),
+                Content = "Dictionary credentials verified successfully. The dictionary is now ready to use.",
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(successDialog);
+        }
+        catch (Exception ex)
+        {
+            _settings.ServiceTestStatus.Remove(dict.ServiceId);
+            _settings.Save();
+            statusIndicator.Visibility = Visibility.Collapsed;
+
+            var errorDialog = new ContentDialog
+            {
+                Title = loc.GetString("TestFailedTitle"),
+                Content = $"Credential verification failed: {ex.Message}",
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(errorDialog);
+        }
+        finally
+        {
+            testButton.Content = originalContent;
+            testButton.IsEnabled = true;
+        }
     }
 
     /// <summary>
@@ -914,6 +1398,115 @@ public sealed partial class SettingsPage : Page
         {
             handle?.Dispose();
         }
+    }
+
+    private async void OnImportMdxDictionaryClicked(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker();
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+            picker.FileTypeFilter.Add(".mdx");
+
+            var file = await picker.PickSingleFileAsync();
+            if (file == null || string.IsNullOrWhiteSpace(file.Path))
+            {
+                return;
+            }
+
+            var displayName = Path.GetFileNameWithoutExtension(file.Path);
+            var serviceId = BuildMdxServiceId(displayName, file.Path);
+
+            // Discover companion MDD resource files
+            var mddFiles = MdxDictionaryTranslationService.DiscoverMddFiles(file.Path);
+
+            var imported = new SettingsService.ImportedMdxDictionary
+            {
+                ServiceId = serviceId,
+                DisplayName = $"📚 {displayName}",
+                FilePath = file.Path,
+                MddFilePaths = mddFiles
+            };
+
+            if (!TranslationManagerService.Instance.TryRegisterMdxDictionary(imported, out var error))
+            {
+                await ShowSimpleDialogAsync("Import failed", $"Unable to load MDX dictionary: {error}");
+                return;
+            }
+
+            // Load MDD files into the registered service
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            if (handle.Manager.Services.TryGetValue(serviceId, out var service) &&
+                service is MdxDictionaryTranslationService mdxService)
+            {
+                if (mdxService.IsEncrypted)
+                    imported.IsEncrypted = true;
+
+                if (mddFiles.Count > 0)
+                    mdxService.LoadMddFiles(mddFiles);
+            }
+
+            _settings.ImportedMdxDictionaries.RemoveAll(d => string.Equals(d.FilePath, file.Path, StringComparison.OrdinalIgnoreCase));
+            _settings.ImportedMdxDictionaries.Add(imported);
+
+            // Enable imported service by default in all windows.
+            if (!_settings.MainWindowEnabledServices.Contains(serviceId)) _settings.MainWindowEnabledServices.Add(serviceId);
+            if (!_settings.MiniWindowEnabledServices.Contains(serviceId)) _settings.MiniWindowEnabledServices.Add(serviceId);
+            if (!_settings.FixedWindowEnabledServices.Contains(serviceId)) _settings.FixedWindowEnabledServices.Add(serviceId);
+
+            _settings.Save();
+            LoadSettings();
+
+            var loc = LocalizationService.Instance;
+            if (imported.IsEncrypted)
+            {
+                await ShowSimpleDialogAsync("Encrypted Dictionary",
+                    "This dictionary is encrypted. Please configure your credentials (Email and Registration Code) " +
+                    "in the Service Configuration section below.");
+            }
+            else if (mddFiles.Count > 0)
+            {
+                var msg = string.Format(loc.GetString("MddFilesDetected") ?? "Imported '{0}' with {1} companion resource file(s).",
+                    displayName, mddFiles.Count);
+                await ShowSimpleDialogAsync("Import Successful", msg);
+            }
+            else
+            {
+                var msg = string.Format(loc.GetString("MddNoFilesDetected") ?? "Imported '{0}'. No companion MDD resource files found.",
+                    displayName);
+                await ShowSimpleDialogAsync("Import Successful", msg);
+            }
+        }
+        catch (Exception ex)
+        {
+            await ShowSimpleDialogAsync("Import failed", ex.Message);
+        }
+    }
+
+    internal static string BuildMdxServiceId(string displayName, string filePath)
+    {
+        var stableHash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(filePath))).ToLowerInvariant()[..8];
+        var normalizedName = displayName.Trim().ToLowerInvariant().Replace(' ', '-');
+        normalizedName = NonServiceIdCharRegex.Replace(normalizedName, "-");
+        normalizedName = Regex.Replace(normalizedName, "-+", "-").Trim('-');
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            normalizedName = "dictionary";
+        }
+        return $"mdx::{normalizedName}-{stableHash}";
+    }
+
+    private async Task ShowSimpleDialogAsync(string title, string message)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = this.XamlRoot,
+            Title = title,
+            Content = message,
+            CloseButtonText = "OK"
+        };
+        await ShowDialogAsync(dialog);
     }
 
     private static void SelectComboByTag(ComboBox combo, string tag)
@@ -1212,6 +1805,9 @@ public sealed partial class SettingsPage : Page
         var youdaoAppSecret = YoudaoAppSecretBox.Password;
         _settings.YoudaoAppSecret = string.IsNullOrWhiteSpace(youdaoAppSecret) ? null : youdaoAppSecret;
         _settings.YoudaoUseOfficialApi = YoudaoUseOfficialApiToggle.IsOn;
+
+        // Save encrypted MDX dictionary credentials from dynamic UI
+        SaveEncryptedMdxCredentials();
 
         // Save HTTP Proxy settings (already validated above)
         _settings.ProxyEnabled = ProxyEnabledToggle.IsOn;

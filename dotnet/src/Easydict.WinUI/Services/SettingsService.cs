@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Easydict.TranslationService;
@@ -10,6 +11,33 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class SettingsService
 {
+    public sealed class ImportedMdxDictionary
+    {
+        public string ServiceId { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string FilePath { get; set; } = string.Empty;
+
+        /// <summary>
+        /// True if the MDX file uses type-2 encryption and requires credentials.
+        /// </summary>
+        public bool IsEncrypted { get; set; }
+
+        /// <summary>
+        /// Base64-encoded registration code for encrypted MDX dictionaries (Encrypted="2").
+        /// </summary>
+        public string? Regcode { get; set; }
+
+        /// <summary>
+        /// Email address or device ID for encrypted MDX dictionaries (RegisterBy="EMail" or "DeviceID").
+        /// </summary>
+        public string? Email { get; set; }
+
+        /// <summary>
+        /// Paths to companion MDD resource files (CSS, images, audio, JS).
+        /// </summary>
+        public List<string> MddFilePaths { get; set; } = [];
+    }
+
     private static readonly Lazy<SettingsService> _instance = new(() => new SettingsService());
     public static SettingsService Instance => _instance.Value;
 
@@ -256,6 +284,11 @@ public sealed class SettingsService
     /// </summary>
     public List<string> MainWindowEnabledServices { get; set; } = ["google"];
 
+    /// <summary>
+    /// Imported MDX dictionaries. Each entry is exposed as a selectable translation service.
+    /// </summary>
+    public List<ImportedMdxDictionary> ImportedMdxDictionaries { get; set; } = [];
+
     // Fixed window settings
     public string ShowFixedWindowHotkey { get; set; } = "Ctrl+Alt+F";
     public double FixedWindowXDips { get; set; } = 0;
@@ -395,8 +428,9 @@ public sealed class SettingsService
                 _settings = JsonSerializer.Deserialize<Dictionary<string, object?>>(json) ?? new();
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"[SettingsService] Failed to load settings: {ex.Message}");
             _settings = new();
         }
 
@@ -530,6 +564,7 @@ public sealed class SettingsService
         MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
         MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), ["google"]);
         MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), ["google"]);
+        ImportedMdxDictionaries = GetImportedMdxDictionaries();
 
         // Fixed window settings
         ShowFixedWindowHotkey = GetValue(nameof(ShowFixedWindowHotkey), "Ctrl+Alt+F");
@@ -685,6 +720,7 @@ public sealed class SettingsService
         _settings[nameof(MiniWindowIsPinned)] = MiniWindowIsPinned;
         _settings[nameof(MiniWindowEnabledServices)] = MiniWindowEnabledServices;
         _settings[nameof(MainWindowEnabledServices)] = MainWindowEnabledServices;
+        _settings[nameof(ImportedMdxDictionaries)] = ImportedMdxDictionaries;
 
         // Fixed window settings
         _settings[nameof(ShowFixedWindowHotkey)] = ShowFixedWindowHotkey;
@@ -1055,9 +1091,78 @@ public sealed class SettingsService
                     return boolDict;
                 }
             }
-            catch { }
+            catch (Exception ex) { Debug.WriteLine($"[SettingsService] Failed to deserialize service test status: {ex.Message}"); }
         }
         return new Dictionary<string, bool>();
+    }
+
+    private List<ImportedMdxDictionary> GetImportedMdxDictionaries()
+    {
+        if (_settings.TryGetValue(nameof(ImportedMdxDictionaries), out var value) && value != null)
+        {
+            try
+            {
+                if (value is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Array)
+                {
+                    var list = new List<ImportedMdxDictionary>();
+                    foreach (var item in jsonElement.EnumerateArray())
+                    {
+                        var serviceId = item.TryGetProperty(nameof(ImportedMdxDictionary.ServiceId), out var sid)
+                            ? sid.GetString() ?? string.Empty
+                            : string.Empty;
+                        var displayName = item.TryGetProperty(nameof(ImportedMdxDictionary.DisplayName), out var dn)
+                            ? dn.GetString() ?? string.Empty
+                            : string.Empty;
+                        var filePath = item.TryGetProperty(nameof(ImportedMdxDictionary.FilePath), out var fp)
+                            ? fp.GetString() ?? string.Empty
+                            : string.Empty;
+                        var isEncrypted = item.TryGetProperty(nameof(ImportedMdxDictionary.IsEncrypted), out var enc)
+                            && enc.ValueKind == JsonValueKind.True;
+                        var regcode = item.TryGetProperty(nameof(ImportedMdxDictionary.Regcode), out var rc)
+                            ? rc.GetString()
+                            : null;
+                        var email = item.TryGetProperty(nameof(ImportedMdxDictionary.Email), out var em)
+                            ? em.GetString()
+                            : null;
+                        var mddFilePaths = new List<string>();
+                        if (item.TryGetProperty(nameof(ImportedMdxDictionary.MddFilePaths), out var mddArr)
+                            && mddArr.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var mddItem in mddArr.EnumerateArray())
+                            {
+                                var path = mddItem.GetString();
+                                if (!string.IsNullOrWhiteSpace(path))
+                                    mddFilePaths.Add(path);
+                            }
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(serviceId) && !string.IsNullOrWhiteSpace(filePath))
+                        {
+                            list.Add(new ImportedMdxDictionary
+                            {
+                                ServiceId = serviceId,
+                                DisplayName = string.IsNullOrWhiteSpace(displayName) ? serviceId : displayName,
+                                FilePath = filePath,
+                                IsEncrypted = isEncrypted,
+                                Regcode = regcode,
+                                Email = email,
+                                MddFilePaths = mddFilePaths
+                            });
+                        }
+                    }
+
+                    return list;
+                }
+
+                if (value is List<ImportedMdxDictionary> typed)
+                {
+                    return typed;
+                }
+            }
+            catch (Exception ex) { Debug.WriteLine($"[SettingsService] Failed to deserialize MDX dictionaries: {ex.Message}"); }
+        }
+
+        return [];
     }
 
     /// <summary>

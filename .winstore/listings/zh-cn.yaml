@@ -5,17 +5,18 @@ sortTitle: Easydict
 voiceTitle: 易词典
 shortDescription: 轻松查词翻译
 description: |-
-  Easydict Windows 版是一款免费开源的翻译和词典工具，提供 18 种翻译服务的即时访问。完整源代码已在 GitHub 上以 GPL-3.0 许可证开放。无论您需要快速查词、全文翻译，还是支持实时流式输出的 AI 翻译，Easydict 都能满足您的需求。
+  Easydict Windows 版是一款免费开源的翻译和词典工具，提供 19 种翻译服务的即时访问。完整源代码已在 GitHub 上以 GPL-3.0 许可证开放。无论您需要快速查词、全文翻译，还是支持实时流式输出的 AI 翻译，Easydict 都能满足您的需求。
 
   本应用是热门 macOS Easydict 应用的 Windows 移植版，采用现代 .NET 和 WinUI 3 技术构建，提供原生 Windows 体验。
 
   核心亮点：
 
-  - 18 种翻译服务：Google 翻译、Google 词典、必应翻译、DeepL、OpenAI、Gemini、DeepSeek、Groq、智谱 AI、GitHub Models、豆包、火山翻译、彩云小译、小牛翻译、Linguee、Ollama 等
+  - 19 种翻译服务：Google 翻译、Google 词典、必应翻译、DeepL、OpenAI、Gemini、DeepSeek、Groq、智谱 AI、GitHub Models、豆包、火山翻译、彩云小译、小牛翻译、Linguee、Ollama 等
   - AI 流式翻译：实时观看 LLM 翻译结果逐字生成
   - 语法纠错：AI 智能语法纠错，详细解释错误原因
   - 长文档翻译：支持 PDF、纯文本和 Markdown 文件翻译，具备 ML 版面检测、公式保护、并行翻译和双语导出功能
   - 词典模式：通过 Google Dict 查询单词音标、释义、词性和例句
+  - MDX 词典：导入 MDict (.mdx) 词典文件，支持离线查词和丰富的 HTML 渲染
   - 多种窗口模式：完整主窗口、紧凑迷你窗口或常驻固定窗口
   - 划词翻译：在任意位置选中文本，点击浮动翻译按钮即可翻译
   - OCR 截图翻译：类似 Snipaste 的截图体验 — 选择屏幕区域，OCR 识别文字并即时翻译，使用 Windows OCR API
@@ -31,11 +32,12 @@ description: |-
 
   注意：部分翻译服务可能因区域限制、网络环境或需要 API 密钥等原因无法使用。
 features:
-- 18 种翻译服务，包括 Google、必应、DeepL、OpenAI、Gemini、DeepSeek 和火山翻译
+- 19 种翻译服务，包括 Google、必应、DeepL、OpenAI、Gemini、DeepSeek 和火山翻译
 - AI 服务实时流式翻译
 - AI 智能语法纠错，检测并解释语法错误
 - 长文档翻译，支持 PDF、文本和 Markdown 双语导出
 - 词典模式，查询音标、释义和例句
+- MDX (MDict) 词典导入，支持离线查词
 - 多种窗口模式：主窗口、迷你窗口和固定窗口
 - 划词翻译，选中文本点击浮动按钮即可翻译
 - OCR 截图翻译，类似 Snipaste 的截图识别翻译

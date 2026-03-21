@@ -83,6 +83,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **Dictionary Mode** - Word definitions, phonetics, and example sentences powered by Google Dict and Linguee
 
+- **MDX Dictionary** - Import MDict (.mdx) dictionary files for offline word lookups with rich HTML rendering
+
 - **Global Hotkeys**
   - `Ctrl+Alt+T` - Show/hide main window
   - `Ctrl+Alt+D` - Translate clipboard content

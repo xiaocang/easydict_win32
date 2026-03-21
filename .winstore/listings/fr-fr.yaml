@@ -5,17 +5,18 @@ sortTitle: Easydict
 voiceTitle: Easy Dict
 shortDescription: Recherchez facilement des mots ou traduisez du texte
 description: |-
-  Easydict pour Windows est un outil de traduction et de dictionnaire gratuit et open source, offrant un accès instantané à 18 services de traduction. Le code source complet est disponible sur GitHub sous licence GPL-3.0. Que vous ayez besoin de rechercher rapidement un mot, de traduire un texte intégral ou d'utiliser des traductions alimentées par l'IA avec streaming en temps réel, Easydict répond à tous vos besoins.
+  Easydict pour Windows est un outil de traduction et de dictionnaire gratuit et open source, offrant un accès instantané à 19 services de traduction. Le code source complet est disponible sur GitHub sous licence GPL-3.0. Que vous ayez besoin de rechercher rapidement un mot, de traduire un texte intégral ou d'utiliser des traductions alimentées par l'IA avec streaming en temps réel, Easydict répond à tous vos besoins.
 
   Version Windows de la populaire application macOS Easydict, construite avec les technologies modernes .NET et WinUI 3 pour une expérience Windows native.
 
   Points forts :
 
-  - 18 services de traduction : Google Traduction, Google Dictionnaire, Bing Traduction, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama et plus encore
+  - 19 services de traduction : Google Traduction, Google Dictionnaire, Bing Traduction, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama et plus encore
   - Traduction IA en streaming : regardez les traductions LLM apparaître en temps réel
   - Correction grammaticale : correction grammaticale par IA avec explications détaillées des erreurs
   - Traduction de longs documents : traduction de fichiers PDF, texte et Markdown avec détection de mise en page ML, protection des formules, traitement parallèle et export bilingue
   - Mode dictionnaire : recherchez la phonétique, les définitions, les parties du discours et les exemples via Google Dict
+  - Dictionnaire MDX : importez des fichiers dictionnaire MDict (.mdx) pour la recherche de mots hors ligne avec rendu HTML riche
   - Modes de fenêtre multiples : fenêtre principale complète, mini-fenêtre compacte ou fenêtre fixe persistante
   - Traduction par sélection : sélectionnez du texte n'importe où et cliquez sur le bouton flottant pour traduire instantanément
   - Traduction OCR par capture d'écran : capture d'écran style Snipaste — sélectionnez une zone de l'écran, reconnaissez le texte par OCR et traduisez instantanément avec l'API Windows OCR
@@ -29,11 +30,12 @@ description: |-
 
   Parfait pour les étudiants, les professionnels, les traducteurs et tous ceux qui ont besoin de traductions rapides et fiables dans plusieurs langues.
 features:
-- 18 services de traduction dont Google, Bing, DeepL, OpenAI, Gemini, DeepSeek et Volcano Engine
+- 19 services de traduction dont Google, Bing, DeepL, OpenAI, Gemini, DeepSeek et Volcano Engine
 - Traduction en streaming en temps réel avec les services IA
 - Correction grammaticale par IA avec détection et explication des erreurs
 - Traduction de longs documents PDF, texte et Markdown avec export bilingue
 - Mode dictionnaire avec phonétique, définitions et exemples
+- Import de dictionnaires MDX (MDict) pour la recherche de mots hors ligne
 - 'Modes de fenêtre multiples : principale, mini et fixe'
 - Traduction par sélection avec bouton flottant
 - Traduction OCR par capture d'écran style Snipaste

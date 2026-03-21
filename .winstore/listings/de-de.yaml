@@ -5,17 +5,18 @@ sortTitle: Easydict
 voiceTitle: Easy Dict
 shortDescription: Einfach Wörter nachschlagen oder Texte übersetzen
 description: |-
-  Easydict für Windows ist ein kostenloses Open-Source-Übersetzungs- und Wörterbuchtool mit sofortigem Zugriff auf 18 Übersetzungsdienste. Der vollständige Quellcode ist auf GitHub unter der GPL-3.0-Lizenz verfügbar. Ob Sie schnell ein Wort nachschlagen, einen vollständigen Text übersetzen oder KI-gestützte Übersetzungen mit Echtzeit-Streaming nutzen möchten – Easydict deckt alles ab.
+  Easydict für Windows ist ein kostenloses Open-Source-Übersetzungs- und Wörterbuchtool mit sofortigem Zugriff auf 19 Übersetzungsdienste. Der vollständige Quellcode ist auf GitHub unter der GPL-3.0-Lizenz verfügbar. Ob Sie schnell ein Wort nachschlagen, einen vollständigen Text übersetzen oder KI-gestützte Übersetzungen mit Echtzeit-Streaming nutzen möchten – Easydict deckt alles ab.
 
   Eine Windows-Portierung der beliebten macOS-App Easydict, entwickelt mit modernen .NET- und WinUI 3-Technologien für ein natives Windows-Erlebnis.
 
   Wichtigste Funktionen:
 
-  - 18 Übersetzungsdienste: Google Übersetzer, Google Wörterbuch, Bing Übersetzer, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama und mehr
+  - 19 Übersetzungsdienste: Google Übersetzer, Google Wörterbuch, Bing Übersetzer, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama und mehr
   - KI-Streaming-Übersetzung: LLM-Übersetzungen erscheinen in Echtzeit
   - Grammatikkorrektur: KI-gestützte Grammatikkorrektur mit detaillierten Fehlererklärungen
   - Langdokument-Übersetzung: Übersetzung von PDF-, Text- und Markdown-Dateien mit ML-Layouterkennung, Formelschutz, paralleler Verarbeitung und zweisprachigem Export
   - Wörterbuchmodus: Phonetik, Definitionen, Wortarten und Beispielsätze über Google Dict nachschlagen
+  - MDX-Wörterbuch: MDict (.mdx) Wörterbuchdateien importieren für Offline-Wortsuche mit reichhaltiger HTML-Darstellung
   - Mehrere Fenstermodi: Vollständiges Hauptfenster, kompaktes Minifenster oder dauerhaftes festes Fenster
   - Mausauswahl-Übersetzung: Text markieren und auf die schwebende Schaltfläche klicken, um sofort zu übersetzen
   - OCR-Screenshot-Übersetzung: Snipaste-ähnliche Bildschirmaufnahme — Bildschirmbereich auswählen, Text per OCR erkennen und sofort übersetzen mit der Windows OCR API
@@ -29,11 +30,12 @@ description: |-
 
   Perfekt für Studenten, Berufstätige, Übersetzer und alle, die schnelle, zuverlässige Übersetzungen in mehreren Sprachen benötigen.
 features:
-- 18 Übersetzungsdienste einschließlich Google, Bing, DeepL, OpenAI, Gemini, DeepSeek und Volcano Engine
+- 19 Übersetzungsdienste einschließlich Google, Bing, DeepL, OpenAI, Gemini, DeepSeek und Volcano Engine
 - Echtzeit-Streaming-Übersetzung mit KI-Diensten
 - KI-gestützte Grammatikkorrektur mit Fehlererkennung und Erklärung
 - Langdokument-Übersetzung für PDF, Text und Markdown mit zweisprachigem Export
 - Wörterbuchmodus mit Phonetik, Definitionen und Beispielsätzen
+- MDX (MDict) Wörterbuch-Import für Offline-Wortsuche
 - 'Mehrere Fenstermodi: Haupt-, Mini- und festes Fenster'
 - Mausauswahl-Übersetzung mit schwebendem Übersetzungsbutton
 - OCR-Screenshot-Übersetzung mit Snipaste-ähnlicher Bildschirmaufnahme

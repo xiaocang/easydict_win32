@@ -5,17 +5,18 @@ sortTitle: Easydict
 voiceTitle: Easy Dict
 shortDescription: Easy to look up words or translate text
 description: |-
-  Easydict for Windows is a free and open-source translation and dictionary tool that provides instant access to 18 translation services. The full source code is available on GitHub under the GPL-3.0 license. Whether you need quick word lookups, full-text translation, or AI-powered translations with real-time streaming, Easydict has you covered.
+  Easydict for Windows is a free and open-source translation and dictionary tool that provides instant access to 19 translation services. The full source code is available on GitHub under the GPL-3.0 license. Whether you need quick word lookups, full-text translation, or AI-powered translations with real-time streaming, Easydict has you covered.
 
   A Windows port of the popular macOS Easydict app, built with modern .NET and WinUI 3 technologies for a native Windows experience.
 
   Key Highlights:
 
-  - 18 Translation Services: Google Translate, Google Dict, Bing Translate, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama, and more
+  - 19 Translation Services: Google Translate, Google Dict, Bing Translate, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama, and more
   - AI-Powered Streaming: Watch LLM translations appear in real-time as they're generated
   - Grammar Correction: AI-powered grammar correction with detailed explanations of errors
   - Long Document Translation: Translate PDF, plain text, and Markdown files with ML-based layout detection, formula protection, parallel processing, and bilingual export
   - Dictionary Mode: Look up words with phonetics, definitions, parts of speech, and example sentences via Google Dict
+  - MDX Dictionary: Import MDict (.mdx) dictionary files for offline word lookups with rich HTML rendering
   - Multiple Window Modes: Full main window, compact mini window, or persistent fixed window
   - Mouse Selection Translation: Select text anywhere and click the floating pop button to translate instantly
   - OCR Screenshot Translation: Snipaste-style screen capture — select a region, OCR the text, and translate instantly using Windows OCR API
@@ -29,11 +30,12 @@ description: |-
 
   Perfect for students, professionals, translators, and anyone who needs quick, reliable translations across multiple languages.
 features:
-- 18 translation services including Google, Bing, DeepL, OpenAI, Gemini, DeepSeek, and Volcano Engine
+- 19 translation services including Google, Bing, DeepL, OpenAI, Gemini, DeepSeek, and Volcano Engine
 - Real-time LLM streaming translation with AI services
 - Grammar correction with AI-powered error detection and explanation
 - Long document translation for PDF, text, and Markdown with bilingual export
 - Dictionary mode with phonetics, definitions, and example sentences
+- MDX (MDict) dictionary import for offline word lookups
 - 'Multiple window modes: Main, Mini, and Fixed windows'
 - Mouse selection translation with floating pop button
 - OCR screenshot translation with Snipaste-style screen capture

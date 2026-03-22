@@ -23,6 +23,8 @@ A powerful Windows translation & dictionary app, ported from the popular macOS a
 
 - **Long Document Translation** — Translate PDF, plain text, and Markdown documents with ML-based layout detection, formula protection, parallel processing, bilingual output, and translation cache.
 
+- **MDX Dictionary Support** — Load and look up MDict (.mdx) dictionaries offline, with rich HTML rendering and built-in resource (.mdd) support.
+
 - **Multiple Window Modes** — Main window, compact mini window, and persistent fixed window to suit your workflow.
 
 - **Global Hotkeys** — Quick access with customizable shortcuts like `Ctrl+Alt+T`, `Ctrl+Alt+D`, `Ctrl+Alt+M`, and more.

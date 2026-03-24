@@ -17,6 +17,12 @@ public sealed class ClipboardService : IDisposable
     public event Action<string>? OnClipboardTextChanged;
 
     /// <summary>
+    /// Optional callback to check if clipboard changes should be ignored
+    /// (e.g., foreground app is excluded from mouse selection translate).
+    /// </summary>
+    public Func<bool>? ShouldSkipClipboardChange { get; set; }
+
+    /// <summary>
     /// Gets or sets whether clipboard monitoring is enabled.
     /// </summary>
     public bool IsMonitoringEnabled
@@ -41,6 +47,7 @@ public sealed class ClipboardService : IDisposable
     private async void OnClipboardContentChanged(object? sender, object e)
     {
         if (!_isMonitoring) return;
+        if (ShouldSkipClipboardChange?.Invoke() == true) return;
 
         try
         {

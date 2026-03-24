@@ -370,6 +370,11 @@ namespace Easydict.WinUI
             try
             {
                 _clipboardService = new ClipboardService();
+                _clipboardService.ShouldSkipClipboardChange = () =>
+                {
+                    var processName = PopButtonService.GetForegroundProcessName();
+                    return SettingsService.Instance.IsMouseSelectionExcluded(processName);
+                };
                 _clipboardService.OnClipboardTextChanged += OnClipboardTextChanged;
                 _clipboardService.IsMonitoringEnabled = settings.ClipboardMonitoring;
             }

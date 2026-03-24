@@ -151,10 +151,13 @@ public sealed class PopButtonService : IDisposable
         CancelAutoDismissTimer();
         _pendingText = null;
 
-        _dispatcherQueue.TryEnqueue(() =>
+        if (_popWindow?.IsPopupVisible == true)
         {
-            _popWindow?.HidePopup();
-        });
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                _popWindow?.HidePopup();
+            });
+        }
     }
 
     /// <summary>

@@ -421,6 +421,19 @@ namespace Easydict.WinUI
             // Apply saved theme setting
             ApplyTheme(settings.AppTheme);
 
+            // Pre-warm TTS service to avoid first-use delay
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    TextToSpeechService.Instance.WarmUp();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] TTS pre-warm failed: {ex.Message}");
+                }
+            });
+
         }
 
         private void OnShowWindowHotkey()

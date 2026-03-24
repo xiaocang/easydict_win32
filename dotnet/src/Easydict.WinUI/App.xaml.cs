@@ -384,6 +384,11 @@ namespace Easydict.WinUI
                 _mouseHookService = new MouseHookService();
                 _popButtonService = new PopButtonService(_window.DispatcherQueue, _mouseHookService);
 
+                _mouseHookService.IsCurrentAppExcluded = () =>
+                {
+                    var processName = PopButtonService.GetForegroundProcessName();
+                    return SettingsService.Instance.IsMouseSelectionExcluded(processName);
+                };
                 _mouseHookService.OnDragSelectionEnd += _popButtonService.OnDragSelectionEnd;
                 _mouseHookService.OnMouseDown += () => _popButtonService.Dismiss("MouseDown");
                 _mouseHookService.OnMouseScroll += () => _popButtonService.Dismiss("MouseScroll");
@@ -697,6 +702,13 @@ namespace Easydict.WinUI
 
         private void OnClipboardTextChanged(string text)
         {
+            var processName = PopButtonService.GetForegroundProcessName();
+            if (SettingsService.Instance.IsMouseSelectionExcluded(processName))
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] Clipboard from excluded app '{processName}', skipping");
+                return;
+            }
+
             ClipboardTextReceived?.Invoke(text);
         }
 

@@ -255,7 +255,7 @@ public sealed class PopButtonService : IDisposable
         _popWindow?.ApplyTheme(theme);
     }
 
-    private static string? GetForegroundProcessName()
+    internal static string? GetForegroundProcessName()
     {
         try
         {

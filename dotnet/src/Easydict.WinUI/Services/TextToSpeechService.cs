@@ -19,6 +19,7 @@ public sealed class TextToSpeechService : IDisposable
 
     private readonly SpeechSynthesizer _synthesizer;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private static IReadOnlyList<VoiceInformation>? _cachedVoices;
     private MediaPlayer? _mediaPlayer;
     private SpeechSynthesisStream? _currentStream;
     private bool _isDisposed;
@@ -36,6 +37,17 @@ public sealed class TextToSpeechService : IDisposable
     private TextToSpeechService()
     {
         _synthesizer = new SpeechSynthesizer();
+    }
+
+    /// <summary>
+    /// Pre-warms the TTS engine by forcing voice enumeration.
+    /// Call from a background thread at app startup to avoid first-use delay.
+    /// </summary>
+    public void WarmUp()
+    {
+        Debug.WriteLine("[TTS] Pre-warming: enumerating voices...");
+        _cachedVoices = SpeechSynthesizer.AllVoices;
+        Debug.WriteLine($"[TTS] Pre-warm complete: {_cachedVoices.Count} voices found");
     }
 
     /// <summary>
@@ -74,10 +86,11 @@ public sealed class TextToSpeechService : IDisposable
             _currentStream = stream;
             _mediaPlayer = new MediaPlayer
             {
-                Source = MediaSource.CreateFromStream(stream, stream.ContentType),
-                AutoPlay = true
+                AutoPlay = false
             };
+            _mediaPlayer.MediaOpened += OnMediaOpened;
             _mediaPlayer.MediaEnded += OnMediaEnded;
+            _mediaPlayer.Source = MediaSource.CreateFromStream(stream, stream.ContentType);
         }
         catch (OperationCanceledException)
         {
@@ -105,6 +118,12 @@ public sealed class TextToSpeechService : IDisposable
         }
     }
 
+    private void OnMediaOpened(MediaPlayer sender, object args)
+    {
+        Debug.WriteLine("[TTS] Media opened, starting playback");
+        sender.Play();
+    }
+
     private void OnMediaEnded(MediaPlayer sender, object args)
     {
         PlaybackEnded?.Invoke();
@@ -114,6 +133,7 @@ public sealed class TextToSpeechService : IDisposable
     {
         if (_mediaPlayer != null)
         {
+            _mediaPlayer.MediaOpened -= OnMediaOpened;
             _mediaPlayer.MediaEnded -= OnMediaEnded;
             _mediaPlayer.Dispose();
             _mediaPlayer = null;
@@ -128,7 +148,7 @@ public sealed class TextToSpeechService : IDisposable
         var bcp47 = language.ToBcp47();
 
         // Try exact match first, then prefix match
-        var voices = SpeechSynthesizer.AllVoices;
+        var voices = _cachedVoices ?? SpeechSynthesizer.AllVoices;
 
         var exactMatch = voices.FirstOrDefault(v =>
             v.Language.Equals(bcp47, StringComparison.OrdinalIgnoreCase));

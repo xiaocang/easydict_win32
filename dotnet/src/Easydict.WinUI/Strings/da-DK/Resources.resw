@@ -449,4 +449,13 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Spring over</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>Ekskluderede apps</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>Procesnavne der skal ekskluderes fra musemarkerings-oversættelse, adskilt med kommaer. Eksempel: "code" for VS Code.</value>
+  </data>
 </root>

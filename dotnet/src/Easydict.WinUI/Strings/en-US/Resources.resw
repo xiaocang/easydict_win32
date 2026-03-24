@@ -1105,4 +1105,13 @@
   <data name="MddAssociatedFiles" xml:space="preserve">
     <value>Resource Files</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>Excluded apps</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>Process names to exclude from mouse selection translate, separated by commas. Example: "code" for VS Code.</value>
+  </data>
 </root>

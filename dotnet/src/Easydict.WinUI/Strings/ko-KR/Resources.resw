@@ -1064,4 +1064,13 @@
   <data name="MddAssociatedFiles" xml:space="preserve">
     <value>리소스 파일</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>제외 앱</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>마우스 선택 번역에서 제외할 프로세스 이름을 쉼표로 구분하여 입력. 예: VS Code는 "code".</value>
+  </data>
 </root>

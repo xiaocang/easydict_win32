@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Views;
 using Microsoft.UI.Dispatching;
@@ -12,6 +13,12 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class PopButtonService : IDisposable
 {
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
     /// <summary>
     /// Delay after mouse-up before querying selected text.
     /// Allows the source application to finalize selection state.
@@ -68,6 +75,14 @@ public sealed class PopButtonService : IDisposable
     public async void OnDragSelectionEnd(MouseHookService.POINT mouseScreenPoint)
     {
         if (!_isEnabled || _isDisposed) return;
+
+        // Check if the foreground app is excluded BEFORE any delay or clipboard access
+        var processName = GetForegroundProcessName();
+        if (SettingsService.Instance.IsMouseSelectionExcluded(processName))
+        {
+            Debug.WriteLine($"[PopButtonService] Excluded app '{processName}', skipping pop button");
+            return;
+        }
 
         // Cancel any previous pending selection detection.
         // Swap field first so previous operation sees cancellation via its own token,
@@ -136,10 +151,13 @@ public sealed class PopButtonService : IDisposable
         CancelAutoDismissTimer();
         _pendingText = null;
 
-        _dispatcherQueue.TryEnqueue(() =>
+        if (_popWindow?.IsPopupVisible == true)
         {
-            _popWindow?.HidePopup();
-        });
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                _popWindow?.HidePopup();
+            });
+        }
     }
 
     /// <summary>
@@ -238,6 +256,22 @@ public sealed class PopButtonService : IDisposable
     public void ApplyTheme(ElementTheme theme)
     {
         _popWindow?.ApplyTheme(theme);
+    }
+
+    internal static string? GetForegroundProcessName()
+    {
+        try
+        {
+            var hWnd = GetForegroundWindow();
+            if (hWnd == IntPtr.Zero) return null;
+            if (GetWindowThreadProcessId(hWnd, out uint processId) == 0) return null;
+            using var process = Process.GetProcessById((int)processId);
+            return process.ProcessName;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public void Dispose()

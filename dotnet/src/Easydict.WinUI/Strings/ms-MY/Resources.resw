@@ -449,4 +449,13 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Langkau</value>
   </data>
+  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
+    <value>Aplikasi dikecualikan</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
+    <value>code, slack, discord</value>
+  </data>
+  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
+    <value>Nama proses untuk dikecualikan daripada terjemahan pilihan tetikus, dipisahkan dengan koma. Contoh: "code" untuk VS Code.</value>
+  </data>
 </root>

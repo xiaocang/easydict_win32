@@ -126,6 +126,12 @@ public sealed partial class MouseHookService : IDisposable
     }
 
     /// <summary>
+    /// Optional callback to check if the current foreground app is excluded.
+    /// When set and returns true, drag/multi-click selection events are suppressed.
+    /// </summary>
+    public Func<bool>? IsCurrentAppExcluded { get; set; }
+
+    /// <summary>
     /// Fired when a drag-select gesture ends (mouse up after dragging).
     /// Parameter is the screen coordinate of the mouse release point.
     /// </summary>
@@ -290,8 +296,11 @@ public sealed partial class MouseHookService : IDisposable
                     // Drag selection — cancel any pending multi-click
                     ClickDetector.Reset();
                     CancelMultiClickTimer();
-                    Debug.WriteLine($"[MouseHook] Drag selection detected at ({pt.x}, {pt.y})");
-                    OnDragSelectionEnd?.Invoke(pt);
+                    if (IsCurrentAppExcluded?.Invoke() != true)
+                    {
+                        Debug.WriteLine($"[MouseHook] Drag selection detected at ({pt.x}, {pt.y})");
+                        OnDragSelectionEnd?.Invoke(pt);
+                    }
                 }
                 else
                 {
@@ -300,7 +309,7 @@ public sealed partial class MouseHookService : IDisposable
                     // (e.g. unit tests calling ProcessMouseMessage directly).
                     var dct = _cachedDoubleClickTime != 0 ? _cachedDoubleClickTime : GetDoubleClickTime();
                     var clickResult = ClickDetector.OnClick(pt, Environment.TickCount64, dct);
-                    if (clickResult.ClickCount >= 2)
+                    if (clickResult.ClickCount >= 2 && IsCurrentAppExcluded?.Invoke() != true)
                     {
                         // Start/restart a short timer to allow for additional clicks
                         // (e.g. triple-click after double-click)

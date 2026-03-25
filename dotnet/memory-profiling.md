@@ -18,6 +18,16 @@ Build in **Debug** configuration and run. The `[Memory]` markers in the VS **Out
   ...
 ```
 
+`SettingsPage` now also emits two DEBUG-only helper streams during open/back loops:
+
+- `[SettingsPage][Lifetime]`: instance ID, currently-live `SettingsPage` weak references, and survivor count after the most recent tracked full GC.
+- `[SettingsPage][Objects]`: counts for service collections, language items, nav icons, MDX panel children, credential field cache entries, and frame back stack depth.
+
+Use them together:
+
+- `liveInstances` or `survivorsAfterLastFullGC` keeps rising -> page retention is real.
+- Object counts stay flat but working set climbs then plateaus -> more likely WinUI/native cache warm-up than a managed event-chain leak.
+
 These are emitted by `MemoryDiagnostics.LogSnapshot()` (see `Services/MemoryDiagnostics.cs`). To add more checkpoints:
 
 ```csharp
@@ -51,6 +61,7 @@ What to compare:
 - Managed heap (`GC Heap`): should stay roughly flat and not increase linearly per visit.
 - Working set (`WorkingSet`): may spike on first visits, but should flatten instead of growing every loop.
 - Object retention in profiler snapshots: check `SettingsPage`, `ServiceCheckItem`, and `PropertyChangedEventHandler` counts.
+- DEBUG helper output: `survivorsAfterLastFullGC`, service collection counts, language item count, nav icon count, and back stack depth should stop trending upward after the page is closed.
 
 Expected healthy pattern:
 

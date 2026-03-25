@@ -70,6 +70,38 @@ public class SettingsPageLifecycleLeakTests
     }
 
     [Fact]
+    public void SettingsPage_ClearsDynamicMdxUiOnUnload()
+    {
+        var content = File.ReadAllText(SettingsPagePath);
+        content.Should().Contain("ImportedMdxConfigPanel.Children.Clear();",
+            "Imported MDX expanders should be detached during teardown");
+        content.Should().Contain("_mdxCredentialFields.Clear();",
+            "Credential field caches should release TextBox and PasswordBox references during teardown");
+    }
+
+    [Fact]
+    public void SettingsPage_UsesNamedNavigationPointerHandlers()
+    {
+        var content = File.ReadAllText(SettingsPagePath);
+        content.Should().Contain("DetachNavigationIconHandlers();",
+            "Navigation icon handlers should be detached before clearing icon visuals");
+        content.Should().Contain("icon.PointerEntered += OnNavIconPointerEntered;",
+            "PointerEntered should use a named handler so teardown and heap analysis stay auditable");
+        content.Should().Contain("icon.PointerExited += OnNavIconPointerExited;",
+            "PointerExited should use a named handler so teardown and heap analysis stay auditable");
+    }
+
+    [Fact]
+    public void SettingsPage_TracksInstancesWithWeakReferencesForDebugSessions()
+    {
+        var content = File.ReadAllText(SettingsPagePath);
+        content.Should().Contain("List<WeakReference<SettingsPage>>",
+            "DEBUG sessions should weakly track SettingsPage instances to distinguish retention from process cache growth");
+        content.Should().Contain("RegisterDebugInstance(this);",
+            "each SettingsPage instance should register itself with the weak-reference tracker");
+    }
+
+    [Fact]
     public void SettingsPage_UsesPageLifetimeCancellationForDeferredWork()
     {
         var content = File.ReadAllText(SettingsPagePath);

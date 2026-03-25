@@ -57,12 +57,108 @@ public sealed partial class SettingsPage : Page
 
 
 #if DEBUG
+    private static readonly object DebugInstanceTrackerGate = new();
+    private static readonly List<WeakReference<SettingsPage>> DebugTrackedInstances = [];
+    private static int s_nextDebugInstanceId;
+    private static int s_lastFullGcSurvivorCount;
+    private static int s_lastTrackedGen2CollectionCount = GC.CollectionCount(2);
+
     private readonly Stopwatch _perfWatch = new();
+    private readonly int _debugInstanceId;
+
+    private static int RegisterDebugInstance(SettingsPage page)
+    {
+        lock (DebugInstanceTrackerGate)
+        {
+            PruneDeadTrackedInstancesUnsafe();
+            DebugTrackedInstances.Add(new WeakReference<SettingsPage>(page));
+            return ++s_nextDebugInstanceId;
+        }
+    }
+
+    private static int PruneDeadTrackedInstancesUnsafe()
+    {
+        for (int i = DebugTrackedInstances.Count - 1; i >= 0; i--)
+        {
+            if (!DebugTrackedInstances[i].TryGetTarget(out _))
+            {
+                DebugTrackedInstances.RemoveAt(i);
+            }
+        }
+
+        return DebugTrackedInstances.Count;
+    }
+
+    private static void ForceTrackedFullCollection()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+    }
+
+    private static (int LiveInstances, int SurvivingAfterFullGc, int LastTrackedGen2Count) GetTrackedInstanceCounts(
+        bool forceFullCollection)
+    {
+        if (forceFullCollection)
+        {
+            ForceTrackedFullCollection();
+        }
+
+        lock (DebugInstanceTrackerGate)
+        {
+            var liveInstances = PruneDeadTrackedInstancesUnsafe();
+            if (forceFullCollection)
+            {
+                s_lastFullGcSurvivorCount = liveInstances;
+                s_lastTrackedGen2CollectionCount = GC.CollectionCount(2);
+            }
+
+            return (liveInstances, s_lastFullGcSurvivorCount, s_lastTrackedGen2CollectionCount);
+        }
+    }
 
     [Conditional("DEBUG")]
     private void PerfLog(string event_)
     {
         Debug.WriteLine($"[SettingsPage] {_perfWatch.ElapsedMilliseconds,5}ms | {event_}");
+    }
+
+    [Conditional("DEBUG")]
+    private void LogLifetimeState(string label, bool forceFullCollection = false)
+    {
+        var (liveInstances, survivingAfterFullGc, lastTrackedGen2Count) = GetTrackedInstanceCounts(forceFullCollection);
+        Debug.WriteLine(
+            $"[SettingsPage][Lifetime] #{_debugInstanceId} {label} | liveInstances={liveInstances} | survivorsAfterLastFullGC={survivingAfterFullGc} | lastTrackedGen2={lastTrackedGen2Count}");
+    }
+
+    [Conditional("DEBUG")]
+    private void LogObjectState(string label)
+    {
+        var navIconCount = NavIndicators?.Children.Count ?? -1;
+        var mdxPanelCount = ImportedMdxConfigPanel?.Children.Count ?? -1;
+        var backStackDepth = Frame?.BackStackDepth ?? -1;
+        Debug.WriteLine(
+            $"[SettingsPage][Objects] #{_debugInstanceId} {label} | services={_mainWindowServices.Count}/{_miniWindowServices.Count}/{_fixedWindowServices.Count} | languages={_languageItems.Count} | navIcons={navIconCount} | mdxPanels={mdxPanelCount} | mdxCredentialFields={_mdxCredentialFields.Count} | backStack={backStackDepth}");
+    }
+
+    [Conditional("DEBUG")]
+    private void LogDebugState(string label, bool forceFullCollection = false)
+    {
+        LogLifetimeState(label, forceFullCollection);
+        LogObjectState(label);
+    }
+
+    [Conditional("DEBUG")]
+    private void ScheduleDelayedLifetimeCheck(string label, int delayMs = 250)
+    {
+        var instanceId = _debugInstanceId;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(delayMs).ConfigureAwait(false);
+            var (liveInstances, survivingAfterFullGc, lastTrackedGen2Count) = GetTrackedInstanceCounts(forceFullCollection: true);
+            Debug.WriteLine(
+                $"[SettingsPage][Lifetime] #{instanceId} {label} | liveInstances={liveInstances} | survivorsAfterDelayedFullGC={survivingAfterFullGc} | lastTrackedGen2={lastTrackedGen2Count}");
+        });
     }
 #endif
 
@@ -70,11 +166,15 @@ public sealed partial class SettingsPage : Page
     {
 #if DEBUG
         _perfWatch.Start();
+        _debugInstanceId = RegisterDebugInstance(this);
+        LogLifetimeState("ctor registered");
         PerfLog("ctor: begin InitializeComponent");
 #endif
         this.InitializeComponent();
 #if DEBUG
         PerfLog("ctor: end InitializeComponent");
+        MemoryDiagnostics.LogSnapshot("SettingsPage.ctor after InitializeComponent");
+        LogObjectState("ctor after InitializeComponent");
 #endif
         this.Loaded += OnPageLoaded;
         this.Unloaded += OnPageUnloaded;
@@ -324,6 +424,7 @@ public sealed partial class SettingsPage : Page
         }
 
 #if DEBUG
+        LogDebugState("OnPageLoaded");
         MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageLoaded");
 #endif
 #if DEBUG
@@ -357,6 +458,9 @@ public sealed partial class SettingsPage : Page
 
 #if DEBUG
         PerfLog("InitializeSettingsContent: begin");
+        var initializeBaseline = GC.GetTotalMemory(forceFullCollection: true);
+        MemoryDiagnostics.LogSnapshot("SettingsPage.InitializeSettingsContent begin");
+        LogObjectState("InitializeSettingsContent begin");
 #endif
         _isLoading = true;
 
@@ -375,6 +479,8 @@ public sealed partial class SettingsPage : Page
         PopulateLanguageCheckboxGrid();
 #if DEBUG
         PerfLog("PopulateLanguageCheckboxGrid: end");
+        MemoryDiagnostics.LogSnapshot("SettingsPage.PopulateLanguageCheckboxGrid complete");
+        LogObjectState("PopulateLanguageCheckboxGrid complete");
 #endif
 
         // Populate First/Second Language combos dynamically
@@ -388,11 +494,15 @@ public sealed partial class SettingsPage : Page
         LoadSettings();
 #if DEBUG
         PerfLog("LoadSettings: end");
+        MemoryDiagnostics.LogSnapshot("SettingsPage.LoadSettings complete");
+        LogObjectState("LoadSettings complete");
         PerfLog("InitializeNavigation: begin");
 #endif
         InitializeNavigation();
 #if DEBUG
         PerfLog("InitializeNavigation: end");
+        MemoryDiagnostics.LogSnapshot("SettingsPage.InitializeNavigation complete");
+        LogObjectState("InitializeNavigation complete");
         PerfLog("ApplyLocalization: begin");
 #endif
 
@@ -418,7 +528,9 @@ public sealed partial class SettingsPage : Page
         NavSidebar.Visibility = Visibility.Visible;
 #if DEBUG
         PerfLog("Content revealed");
+        MemoryDiagnostics.LogDelta("SettingsPage.InitializeSettingsContent retained after init", initializeBaseline);
         MemoryDiagnostics.LogSnapshot("SettingsPage.InitializeSettingsContent complete");
+        LogDebugState("InitializeSettingsContent complete");
 #endif
 
         // Defer disk I/O (ONNX model check, SQLite cache) to after content is visible
@@ -449,6 +561,7 @@ public sealed partial class SettingsPage : Page
     private void OnPageUnloaded(object sender, RoutedEventArgs e)
     {
 #if DEBUG
+        LogDebugState("OnPageUnloaded before teardown");
         MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded (before teardown)");
         var baseline = GC.GetTotalMemory(forceFullCollection: true);
 #endif
@@ -456,6 +569,8 @@ public sealed partial class SettingsPage : Page
 #if DEBUG
         MemoryDiagnostics.LogDelta("SettingsPage.OnPageUnloaded retained after full GC", baseline);
         MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded (after teardown)");
+        LogDebugState("OnPageUnloaded after teardown", forceFullCollection: true);
+        ScheduleDelayedLifetimeCheck("OnPageUnloaded delayed full GC");
 #endif
     }
 
@@ -495,8 +610,13 @@ public sealed partial class SettingsPage : Page
         FixedWindowServicesPanel.ItemsSource = null;
         LanguageCheckboxGrid.ItemsSource = null;
 
+        ImportedMdxConfigPanel.Children.Clear();
+        _mdxCredentialFields.Clear();
+
+        DetachNavigationIconHandlers();
         NavIndicators.Children.Clear();
         _navSections.Clear();
+        _currentSectionIndex = -1;
 
         _mainWindowServices.Clear();
         _miniWindowServices.Clear();
@@ -504,6 +624,10 @@ public sealed partial class SettingsPage : Page
         _languageItems.Clear();
 
         _isInitialized = false;
+
+#if DEBUG
+        LogObjectState("TeardownOnUnload complete");
+#endif
     }
 
     /// <summary>
@@ -908,7 +1032,13 @@ public sealed partial class SettingsPage : Page
         _mdxCredentialFields.Clear();
 
         var allDicts = _settings.ImportedMdxDictionaries;
-        if (allDicts.Count == 0) return;
+        if (allDicts.Count == 0)
+        {
+#if DEBUG
+            LogObjectState("BuildImportedMdxConfigUI empty");
+#endif
+            return;
+        }
 
         // Sync IsEncrypted from live services (handles stale settings data)
         using var handle = TranslationManagerService.Instance.AcquireHandle();
@@ -1206,6 +1336,10 @@ public sealed partial class SettingsPage : Page
             expander.Content = contentPanel;
             ImportedMdxConfigPanel.Children.Add(expander);
         }
+
+#if DEBUG
+        LogObjectState($"BuildImportedMdxConfigUI complete (dicts={allDicts.Count})");
+#endif
     }
 
     /// <summary>
@@ -2046,6 +2180,7 @@ public sealed partial class SettingsPage : Page
         ];
 
         // Clear existing icons and create new ones
+        DetachNavigationIconHandlers();
         NavIndicators.Children.Clear();
 
         for (int i = 0; i < _navSections.Count; i++)
@@ -2064,14 +2199,45 @@ public sealed partial class SettingsPage : Page
 
             // Add click handler
             icon.PointerPressed += OnNavIconClick;
-            icon.PointerEntered += (s, e) => { if (s is FontIcon fi) fi.Opacity = 0.7; };
-            icon.PointerExited += (s, e) => { if (s is FontIcon fi) fi.Opacity = 1.0; };
+            icon.PointerEntered += OnNavIconPointerEntered;
+            icon.PointerExited += OnNavIconPointerExited;
 
             NavIndicators.Children.Add(icon);
         }
 
         // Set initial active icon
         UpdateActiveNavIcon(0);
+    }
+
+    private void DetachNavigationIconHandlers()
+    {
+        foreach (var child in NavIndicators.Children)
+        {
+            if (child is not FontIcon icon)
+            {
+                continue;
+            }
+
+            icon.PointerPressed -= OnNavIconClick;
+            icon.PointerEntered -= OnNavIconPointerEntered;
+            icon.PointerExited -= OnNavIconPointerExited;
+        }
+    }
+
+    private static void OnNavIconPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is FontIcon icon)
+        {
+            icon.Opacity = 0.7;
+        }
+    }
+
+    private static void OnNavIconPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is FontIcon icon)
+        {
+            icon.Opacity = 1.0;
+        }
     }
 
     /// <summary>
@@ -2711,6 +2877,9 @@ public sealed partial class SettingsPage : Page
 
     private void UpdateOnnxModelStatus()
     {
+#if DEBUG
+        MemoryDiagnostics.LogSnapshot("SettingsPage.UpdateOnnxModelStatus begin");
+#endif
         using var downloadService = new LayoutModelDownloadService();
         var loc = LocalizationService.Instance;
 
@@ -2730,6 +2899,11 @@ public sealed partial class SettingsPage : Page
             DeleteOnnxModelButton.Visibility = Visibility.Collapsed;
             _settings.OnnxModelDownloaded = false;
         }
+
+#if DEBUG
+        MemoryDiagnostics.LogSnapshot("SettingsPage.UpdateOnnxModelStatus complete");
+        LogObjectState("UpdateOnnxModelStatus complete");
+#endif
     }
 
     private async void OnDownloadOnnxModelClick(object sender, RoutedEventArgs e)
@@ -2845,6 +3019,9 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
+#if DEBUG
+        MemoryDiagnostics.LogSnapshot("SettingsPage.UpdateCacheStatusAsync begin");
+#endif
         try
         {
             using var cacheService = new TranslationCacheService();
@@ -2863,6 +3040,11 @@ public sealed partial class SettingsPage : Page
 
                 CacheStatusText.Text = $"{count} cached entries";
             });
+
+#if DEBUG
+            MemoryDiagnostics.LogSnapshot("SettingsPage.UpdateCacheStatusAsync complete");
+            LogObjectState("UpdateCacheStatusAsync complete");
+#endif
         }
         catch (OperationCanceledException)
         {
@@ -2982,6 +3164,10 @@ public sealed partial class SettingsPage : Page
     {
         UnregisterLanguageCheckboxHandlers();
 
+#if DEBUG
+        MemoryDiagnostics.LogSnapshot("SettingsPage.PopulateLanguageCheckboxGrid begin");
+#endif
+
         var loc = LocalizationService.Instance;
         var selectedSet = new HashSet<string>(_settings.SelectedLanguages, StringComparer.OrdinalIgnoreCase);
 
@@ -3016,6 +3202,10 @@ public sealed partial class SettingsPage : Page
         // Set up the ItemTemplate programmatically since LanguageCheckboxItem is a private inner class
         LanguageCheckboxGrid.ItemTemplate = CreateLanguageCheckboxTemplate();
         LanguageCheckboxGrid.ItemsSource = _languageItems;
+
+#if DEBUG
+        MemoryDiagnostics.LogSnapshot("SettingsPage.PopulateLanguageCheckboxGrid end");
+#endif
     }
 
     private void UnregisterLanguageCheckboxHandlers()

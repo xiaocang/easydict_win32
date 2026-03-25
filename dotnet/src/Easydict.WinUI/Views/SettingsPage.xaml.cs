@@ -65,6 +65,7 @@ public sealed partial class SettingsPage : Page
 
     private readonly Stopwatch _perfWatch = new();
     private readonly int _debugInstanceId;
+    private string _debugDeferredIoState = "idle";
 
     private static int RegisterDebugInstance(SettingsPage page)
     {
@@ -128,7 +129,7 @@ public sealed partial class SettingsPage : Page
     {
         var (liveInstances, survivingAfterFullGc, lastTrackedGen2Count) = GetTrackedInstanceCounts(forceFullCollection);
         Debug.WriteLine(
-            $"[SettingsPage][Lifetime] #{_debugInstanceId} {label} | liveInstances={liveInstances} | survivorsAfterLastFullGC={survivingAfterFullGc} | lastTrackedGen2={lastTrackedGen2Count}");
+            $"[SettingsPage][Lifetime] #{_debugInstanceId} {label} | liveInstances={liveInstances} | globalLiveInstances={liveInstances} | survivorsAfterLastFullGC={survivingAfterFullGc} | globalSurvivorsAfterLastTrackedFullGC={survivingAfterFullGc} | lastTrackedGen2={lastTrackedGen2Count}");
     }
 
     [Conditional("DEBUG")]
@@ -138,7 +139,7 @@ public sealed partial class SettingsPage : Page
         var mdxPanelCount = ImportedMdxConfigPanel?.Children.Count ?? -1;
         var backStackDepth = Frame?.BackStackDepth ?? -1;
         Debug.WriteLine(
-            $"[SettingsPage][Objects] #{_debugInstanceId} {label} | services={_mainWindowServices.Count}/{_miniWindowServices.Count}/{_fixedWindowServices.Count} | languages={_languageItems.Count} | navIcons={navIconCount} | mdxPanels={mdxPanelCount} | mdxCredentialFields={_mdxCredentialFields.Count} | backStack={backStackDepth}");
+            $"[SettingsPage][Objects] #{_debugInstanceId} {label} | services={_mainWindowServices.Count}/{_miniWindowServices.Count}/{_fixedWindowServices.Count} | languages={_languageItems.Count} | navIcons={navIconCount} | mdxPanels={mdxPanelCount} | mdxCredentialFields={_mdxCredentialFields.Count} | backStack={backStackDepth} | deferredIo={_debugDeferredIoState}");
     }
 
     [Conditional("DEBUG")]
@@ -149,15 +150,24 @@ public sealed partial class SettingsPage : Page
     }
 
     [Conditional("DEBUG")]
+    private void UpdateDeferredIoState(string state)
+    {
+        _debugDeferredIoState = state;
+        Debug.WriteLine($"[SettingsPage][DeferredIO] #{_debugInstanceId} state={state}");
+    }
+
+    [Conditional("DEBUG")]
     private void ScheduleDelayedLifetimeCheck(string label, int delayMs = 250)
     {
         var instanceId = _debugInstanceId;
+        var pageReference = new WeakReference<SettingsPage>(this);
         _ = Task.Run(async () =>
         {
             await Task.Delay(delayMs).ConfigureAwait(false);
             var (liveInstances, survivingAfterFullGc, lastTrackedGen2Count) = GetTrackedInstanceCounts(forceFullCollection: true);
+            var trackedInstanceAliveAfterDelayedFullGC = pageReference.TryGetTarget(out _);
             Debug.WriteLine(
-                $"[SettingsPage][Lifetime] #{instanceId} {label} | liveInstances={liveInstances} | survivorsAfterDelayedFullGC={survivingAfterFullGc} | lastTrackedGen2={lastTrackedGen2Count}");
+                $"[SettingsPage][Lifetime] #{instanceId} {label} | trackedInstanceAliveAfterDelayedFullGC={trackedInstanceAliveAfterDelayedFullGC} | liveInstances={liveInstances} | globalLiveInstances={liveInstances} | survivorsAfterDelayedFullGC={survivingAfterFullGc} | globalSurvivorsAfterDelayedFullGC={survivingAfterFullGc} | lastTrackedGen2={lastTrackedGen2Count}");
         });
     }
 #endif
@@ -178,6 +188,34 @@ public sealed partial class SettingsPage : Page
 #endif
         this.Loaded += OnPageLoaded;
         this.Unloaded += OnPageUnloaded;
+    }
+
+    private static bool IsDeferredIoDisabledForDebug()
+    {
+#if DEBUG
+        var value = Environment.GetEnvironmentVariable("EASYDICT_DEBUG_DISABLE_SETTINGS_DEFERRED_IO");
+        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+#else
+        return false;
+#endif
+    }
+
+    private static bool TryGetLivePage(WeakReference<SettingsPage> pageReference, out SettingsPage? page)
+    {
+        if (pageReference.TryGetTarget(out page) && !page._isUnloaded)
+        {
+            return true;
+        }
+
+        page = null;
+        return false;
+    }
+
+    private static async Task<long> GetCacheEntryCountAsync()
+    {
+        using var cacheService = new TranslationCacheService();
+        return await cacheService.GetEntryCountAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -429,6 +467,7 @@ public sealed partial class SettingsPage : Page
 #endif
 #if DEBUG
         PerfLog("OnPageLoaded: first load, dispatching deferred init");
+        UpdateDeferredIoState("queued");
 #endif
         var token = _lifetimeCts.Token;
         // First load: show loading overlay, defer heavy work
@@ -540,18 +579,35 @@ public sealed partial class SettingsPage : Page
             {
                 if (_isUnloaded || cancellationToken.IsCancellationRequested)
                 {
+#if DEBUG
+                    UpdateDeferredIoState("canceled-before-start");
+#endif
+                    return;
+                }
+
+                if (IsDeferredIoDisabledForDebug())
+                {
+#if DEBUG
+                    UpdateDeferredIoState("skipped");
+                    PerfLog("Deferred I/O: skipped by EASYDICT_DEBUG_DISABLE_SETTINGS_DEFERRED_IO");
+                    MemoryDiagnostics.LogSnapshot("SettingsPage.Deferred I/O skipped");
+                    LogObjectState("Deferred I/O skipped");
+#endif
                     return;
                 }
 
 #if DEBUG
+                UpdateDeferredIoState("onnx-running");
                 PerfLog("Deferred I/O: begin UpdateOnnxModelStatus");
 #endif
                 UpdateOnnxModelStatus();
 #if DEBUG
+                UpdateDeferredIoState("onnx-complete");
                 PerfLog("Deferred I/O: end UpdateOnnxModelStatus");
+                UpdateDeferredIoState("cache-dispatched");
                 PerfLog("Deferred I/O: begin UpdateCacheStatusAsync");
 #endif
-                _ = UpdateCacheStatusAsync(cancellationToken);
+                _ = UpdateCacheStatusAsync(new WeakReference<SettingsPage>(this), DispatcherQueue, cancellationToken);
 #if DEBUG
                 PerfLog("Deferred I/O: end (UpdateCacheStatusAsync dispatched)");
 #endif
@@ -570,7 +626,8 @@ public sealed partial class SettingsPage : Page
         MemoryDiagnostics.LogDelta("SettingsPage.OnPageUnloaded retained after full GC", baseline);
         MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded (after teardown)");
         LogDebugState("OnPageUnloaded after teardown", forceFullCollection: true);
-        ScheduleDelayedLifetimeCheck("OnPageUnloaded delayed full GC");
+        ScheduleDelayedLifetimeCheck("OnPageUnloaded delayed full GC (250ms)", 250);
+        ScheduleDelayedLifetimeCheck("OnPageUnloaded delayed full GC (1000ms)", 1000);
 #endif
     }
 
@@ -584,6 +641,9 @@ public sealed partial class SettingsPage : Page
         _isTornDown = true;
         _isUnloaded = true;
         _isLoading = true;
+#if DEBUG
+        UpdateDeferredIoState("teardown");
+#endif
 
         try
         {
@@ -3012,46 +3072,74 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async Task UpdateCacheStatusAsync(CancellationToken cancellationToken = default)
+    private static async Task UpdateCacheStatusAsync(
+        WeakReference<SettingsPage> pageReference,
+        Microsoft.UI.Dispatching.DispatcherQueue dispatcherQueue,
+        CancellationToken cancellationToken = default)
     {
-        if (_isUnloaded || cancellationToken.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested || !TryGetLivePage(pageReference, out var page))
         {
             return;
         }
 
 #if DEBUG
+        page.UpdateDeferredIoState("cache-running");
         MemoryDiagnostics.LogSnapshot("SettingsPage.UpdateCacheStatusAsync begin");
 #endif
         try
         {
-            using var cacheService = new TranslationCacheService();
-            var count = await cacheService.GetEntryCountAsync();
-            if (_isUnloaded || cancellationToken.IsCancellationRequested)
+            var count = await GetCacheEntryCountAsync();
+            if (cancellationToken.IsCancellationRequested)
             {
+#if DEBUG
+                if (pageReference.TryGetTarget(out var canceledPage))
+                {
+                    canceledPage.UpdateDeferredIoState("cache-canceled");
+                }
+#endif
                 return;
             }
 
-            DispatcherQueue.TryEnqueue(() =>
+            dispatcherQueue.TryEnqueue(() =>
             {
-                if (_isUnloaded || cancellationToken.IsCancellationRequested)
+                if (cancellationToken.IsCancellationRequested || !TryGetLivePage(pageReference, out var activePage))
                 {
+#if DEBUG
+                    if (pageReference.TryGetTarget(out var canceledPage))
+                    {
+                        canceledPage.UpdateDeferredIoState("cache-canceled");
+                    }
+#endif
                     return;
                 }
 
-                CacheStatusText.Text = $"{count} cached entries";
-            });
+                activePage.CacheStatusText.Text = $"{count} cached entries";
 
 #if DEBUG
-            MemoryDiagnostics.LogSnapshot("SettingsPage.UpdateCacheStatusAsync complete");
-            LogObjectState("UpdateCacheStatusAsync complete");
+                activePage.UpdateDeferredIoState("cache-complete");
+                MemoryDiagnostics.LogSnapshot("SettingsPage.UpdateCacheStatusAsync complete");
+                activePage.LogObjectState("UpdateCacheStatusAsync complete");
 #endif
+            });
         }
         catch (OperationCanceledException)
         {
+#if DEBUG
+            if (pageReference.TryGetTarget(out var canceledPage))
+            {
+                canceledPage.UpdateDeferredIoState("cache-canceled");
+            }
+#endif
             // Ignore when teardown has canceled background work.
         }
         catch
         {
+#if DEBUG
+            if (pageReference.TryGetTarget(out var faultedPage))
+            {
+                faultedPage.UpdateDeferredIoState("cache-faulted");
+            }
+#endif
             // Ignore if cache DB doesn't exist yet
         }
     }

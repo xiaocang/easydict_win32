@@ -116,6 +116,32 @@ namespace Easydict.WinUI.Views
             App.ClipboardTextReceived += OnClipboardTextReceived;
         }
 
+        private static bool IsDebugEnvFlagEnabled(string name)
+        {
+#if DEBUG
+            var value = Environment.GetEnvironmentVariable(name);
+            return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+#else
+            return false;
+#endif
+        }
+
+        private static bool IsMainPageResultRebuildDisabledForDebug()
+            => IsDebugEnvFlagEnabled("EASYDICT_DEBUG_DISABLE_MAINPAGE_RESULT_REBUILD");
+
+#if DEBUG
+        [Conditional("DEBUG")]
+        private void LogObjectState(string label)
+        {
+            var resultsPanelCount = ResultsPanel?.Items.Count ?? -1;
+            var longDocComboCount = LongDocServiceCombo?.Items.Count ?? -1;
+            var historyListSourceBound = LongDocHistoryListView?.ItemsSource != null;
+            Debug.WriteLine(
+                $"[MainPage][Objects] {label} | serviceResults={_serviceResults.Count} | resultControls={_resultControls.Count} | resultsPanel={resultsPanelCount} | longDocCombo={longDocComboCount} | longDocFiles={_longDocFileItems.Count} | longDocHistory={_longDocHistoryItems.Count} | mode={_currentMode} | abMode={(_useMemoryAbVariantB ? "B" : "A")} | cacheMode={NavigationCacheMode} | resultRebuildDisabled={IsMainPageResultRebuildDisabledForDebug()} | historyBound={historyListSourceBound}");
+        }
+#endif
+
         private static void SyncComboSelection(ComboBox source, ComboBox target)
         {
             if (target.SelectedIndex != source.SelectedIndex)
@@ -127,7 +153,9 @@ namespace Easydict.WinUI.Views
         private void OnPageLoaded(object sender, RoutedEventArgs e)
         {
 #if DEBUG
+            var loadBaseline = GC.GetTotalMemory(forceFullCollection: true);
             MemoryDiagnostics.LogSnapshot("MainPage.OnPageLoaded");
+            LogObjectState("OnPageLoaded begin");
 #endif
             _isClosing = false;
             _isLoaded = true;
@@ -139,18 +167,27 @@ namespace Easydict.WinUI.Views
             SetLoading(false);
 
             // Apply localization first (populates combos), then settings (selects saved language)
-            ApplyLocalization();
+            ApplyLocalization(reinitializeServiceResults: false);
             ApplySettings();
 
             // Initialize service result controls based on enabled services
-            InitializeServiceResults();
+            InitializeServiceResults(skipRebuildWhenDebugFlagSet: true, reason: "OnPageLoaded");
             InitializeLongDocServices();
             InitializeLongDocOutputDefaults();
             OnLongDocInputModeChanged(LongDocInputModeCombo, null!);
+#if DEBUG
+            MemoryDiagnostics.LogDelta("MainPage.OnPageLoaded retained after init", loadBaseline);
+            MemoryDiagnostics.LogSnapshot("MainPage.OnPageLoaded complete");
+            LogObjectState("OnPageLoaded complete");
+#endif
         }
 
         private async void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
+#if DEBUG
+            MemoryDiagnostics.LogSnapshot("MainPage.OnPageUnloaded begin");
+            LogObjectState("OnPageUnloaded begin");
+#endif
             _isLoaded = false;
 
             if (_useMemoryAbVariantB)
@@ -165,12 +202,23 @@ namespace Easydict.WinUI.Views
                 {
                     System.Diagnostics.Debug.WriteLine($"[MainPage] OnPageUnloaded cleanup error: {ex}");
                 }
+#if DEBUG
+                finally
+                {
+                    MemoryDiagnostics.LogSnapshot("MainPage.OnPageUnloaded complete (B)");
+                    LogObjectState("OnPageUnloaded complete (B)");
+                }
+#endif
                 return;
             }
 
             // With NavigationCacheMode="Enabled", this page instance persists and
             // is reused on GoBack. Don't dispose resources or unsubscribe events —
             // the constructor only runs once.
+#if DEBUG
+            MemoryDiagnostics.LogSnapshot("MainPage.OnPageUnloaded complete (A cached)");
+            LogObjectState("OnPageUnloaded complete (A cached)");
+#endif
         }
 
         private static bool IsMemoryAbVariantB()
@@ -181,7 +229,12 @@ namespace Easydict.WinUI.Views
 
         private async Task CleanupResourcesAsync()
         {
+#if DEBUG
+            MemoryDiagnostics.LogSnapshot("MainPage.CleanupResourcesAsync begin");
+            LogObjectState("CleanupResourcesAsync begin");
+#endif
             CancelCurrentQuery();
+            ReleaseServiceResultControls();
             _longDocumentService.Dispose();
 
             var singleTaskCts = Interlocked.Exchange(ref _longDocSingleTaskCts, null);
@@ -206,6 +259,10 @@ namespace Easydict.WinUI.Views
             if (task == null || task.IsCompleted)
             {
                 detectionService?.Dispose();
+#if DEBUG
+                MemoryDiagnostics.LogSnapshot("MainPage.CleanupResourcesAsync complete");
+                LogObjectState("CleanupResourcesAsync complete");
+#endif
                 return;
             }
 
@@ -239,10 +296,20 @@ namespace Easydict.WinUI.Views
                     TaskContinuationOptions.ExecuteSynchronously,
                     TaskScheduler.Default);
             }
+
+#if DEBUG
+            MemoryDiagnostics.LogSnapshot("MainPage.CleanupResourcesAsync complete");
+            LogObjectState("CleanupResourcesAsync complete");
+#endif
         }
 
         private void ApplySettings()
         {
+#if DEBUG
+            var applySettingsBaseline = GC.GetTotalMemory(forceFullCollection: true);
+            MemoryDiagnostics.LogSnapshot("MainPage.ApplySettings begin");
+            LogObjectState("ApplySettings begin");
+#endif
             // Apply target language from settings (using FirstLanguage)
             var targetLang = LanguageExtensions.FromCode(_settings.FirstLanguage);
 
@@ -266,13 +333,19 @@ namespace Easydict.WinUI.Views
             {
                 _suppressTargetLanguageSelectionChanged = false;
             }
+
+#if DEBUG
+            MemoryDiagnostics.LogDelta("MainPage.ApplySettings retained after apply", applySettingsBaseline);
+            MemoryDiagnostics.LogSnapshot("MainPage.ApplySettings complete");
+            LogObjectState("ApplySettings complete");
+#endif
         }
 
         /// <summary>
         /// Apply localization to all UI elements using LocalizationService.
         /// Also dynamically populates language combo boxes from user's selected languages.
         /// </summary>
-        private void ApplyLocalization()
+        private void ApplyLocalization(bool reinitializeServiceResults = true)
         {
             var loc = LocalizationService.Instance;
 
@@ -297,7 +370,7 @@ namespace Easydict.WinUI.Views
             }
 
             // Apply mode state (emoji, subtitle, menu item texts)
-            ApplyModeState();
+            ApplyModeState(reinitializeServiceResults: reinitializeServiceResults);
 
             // Input placeholder
             InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
@@ -337,7 +410,7 @@ namespace Easydict.WinUI.Views
         /// <summary>
         /// Apply all UI state for the current mode (emoji, subtitle, content visibility, grammar-specific controls).
         /// </summary>
-        private void ApplyModeState()
+        private void ApplyModeState(bool reinitializeServiceResults = true)
         {
             var loc = LocalizationService.Instance;
 
@@ -413,10 +486,10 @@ namespace Easydict.WinUI.Views
             ModeGrammarItem.Text = "✏️  " + (loc.GetString("QueryMode_GrammarCorrection") ?? "Grammar Correction");
             ModeLongDocItem.Text = "📄  " + (loc.GetString("Mode_LongDocument") ?? "Long Document");
 
-            // Re-initialize service results (grammar mode filters to grammar-capable services)
-            if (!isLongDoc)
+            // Re-initialize service results only for explicit mode-state transitions.
+            if (reinitializeServiceResults && !isLongDoc)
             {
-                InitializeServiceResults();
+                InitializeServiceResults(reason: "ApplyModeState");
             }
         }
 
@@ -469,11 +542,28 @@ namespace Easydict.WinUI.Views
         /// <summary>
         /// Initialize service result controls based on enabled services.
         /// </summary>
-        private void InitializeServiceResults()
+        private void InitializeServiceResults(bool skipRebuildWhenDebugFlagSet = false, string reason = "Unspecified")
         {
-            _serviceResults.Clear();
-            _resultControls.Clear();
-            ResultsPanel.Items.Clear();
+#if DEBUG
+            var initializeResultsBaseline = GC.GetTotalMemory(forceFullCollection: true);
+            MemoryDiagnostics.LogSnapshot("MainPage.InitializeServiceResults begin");
+            LogObjectState($"InitializeServiceResults begin (reason={reason}, allowSkip={skipRebuildWhenDebugFlagSet})");
+#endif
+
+            if (skipRebuildWhenDebugFlagSet &&
+                IsMainPageResultRebuildDisabledForDebug() &&
+                _resultControls.Count > 0 &&
+                ResultsPanel.Items.Count > 0)
+            {
+#if DEBUG
+                Debug.WriteLine($"[MainPage] InitializeServiceResults skipped due to EASYDICT_DEBUG_DISABLE_MAINPAGE_RESULT_REBUILD (reason={reason})");
+                MemoryDiagnostics.LogSnapshot("MainPage.InitializeServiceResults skipped");
+                LogObjectState($"InitializeServiceResults skipped (reason={reason})");
+#endif
+                return;
+            }
+
+            ReleaseServiceResultControls();
 
             // Get enabled services and EnabledQuery settings from settings
             var enabledServices = _settings.MainWindowEnabledServices;
@@ -484,6 +574,11 @@ namespace Easydict.WinUI.Views
             {
                 PlaceholderText.Text = LocalizationService.Instance.GetString("NoServicesEnabled");
                 PlaceholderText.Visibility = Visibility.Visible;
+#if DEBUG
+                MemoryDiagnostics.LogDelta("MainPage.InitializeServiceResults retained after empty rebuild", initializeResultsBaseline);
+                MemoryDiagnostics.LogSnapshot("MainPage.InitializeServiceResults complete (empty)");
+                LogObjectState($"InitializeServiceResults complete (empty, reason={reason})");
+#endif
                 return;
             }
 
@@ -533,6 +628,36 @@ namespace Easydict.WinUI.Views
             // Hide placeholder since we have services
             PlaceholderText.Text = LocalizationService.Instance.GetString("TranslationPlaceholder");
             PlaceholderText.Visibility = Visibility.Collapsed;
+
+#if DEBUG
+            MemoryDiagnostics.LogDelta("MainPage.InitializeServiceResults retained after rebuild", initializeResultsBaseline);
+            MemoryDiagnostics.LogSnapshot("MainPage.InitializeServiceResults complete");
+            LogObjectState($"InitializeServiceResults complete (reason={reason})");
+#endif
+        }
+
+        private void ReleaseServiceResultControls()
+        {
+#if DEBUG
+            MemoryDiagnostics.LogSnapshot("MainPage.ReleaseServiceResultControls begin");
+            LogObjectState("ReleaseServiceResultControls begin");
+#endif
+
+            foreach (var control in _resultControls)
+            {
+                control.CollapseToggled -= OnServiceCollapseToggled;
+                control.QueryRequested -= OnServiceQueryRequested;
+                control.Cleanup();
+            }
+
+            _serviceResults.Clear();
+            _resultControls.Clear();
+            ResultsPanel.Items.Clear();
+
+#if DEBUG
+            MemoryDiagnostics.LogSnapshot("MainPage.ReleaseServiceResultControls complete");
+            LogObjectState("ReleaseServiceResultControls complete");
+#endif
         }
 
         /// <summary>
@@ -1538,6 +1663,11 @@ namespace Easydict.WinUI.Views
 
         private void InitializeLongDocServices()
         {
+#if DEBUG
+            var initializeLongDocBaseline = GC.GetTotalMemory(forceFullCollection: true);
+            MemoryDiagnostics.LogSnapshot("MainPage.InitializeLongDocServices begin");
+            LogObjectState("InitializeLongDocServices begin");
+#endif
             LongDocServiceCombo.Items.Clear();
 
             var manager = TranslationManagerService.Instance.Manager;
@@ -1566,6 +1696,11 @@ namespace Easydict.WinUI.Views
             LongDocServiceCombo.SelectedItem = firstReady ?? LongDocServiceCombo.Items.FirstOrDefault();
 
             LongDocHistoryListView.ItemsSource = _longDocHistoryItems;
+#if DEBUG
+            MemoryDiagnostics.LogDelta("MainPage.InitializeLongDocServices retained after init", initializeLongDocBaseline);
+            MemoryDiagnostics.LogSnapshot("MainPage.InitializeLongDocServices complete");
+            LogObjectState("InitializeLongDocServices complete");
+#endif
         }
 
         private static bool IsLongDocSupportedService(ITranslationService service)

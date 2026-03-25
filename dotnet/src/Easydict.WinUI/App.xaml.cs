@@ -26,6 +26,20 @@ namespace Easydict.WinUI
 
         private static App Instance => (App)Current;
 
+        private static bool IsDebugEnvFlagEnabled(string variableName)
+        {
+#if DEBUG
+            var value = Environment.GetEnvironmentVariable(variableName);
+            return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+#else
+            return false;
+#endif
+        }
+
+        private static bool IsMouseSelectionTranslateDisabledForDebug()
+            => IsDebugEnvFlagEnabled("EASYDICT_DEBUG_DISABLE_MOUSE_SELECTION_TRANSLATE");
+
         /// <summary>
         /// Gets the main window instance.
         /// </summary>
@@ -384,35 +398,43 @@ namespace Easydict.WinUI
             }
 
             // Initialize mouse selection translate service
-            try
+            if (IsMouseSelectionTranslateDisabledForDebug())
             {
-                _mouseHookService = new MouseHookService();
-                _popButtonService = new PopButtonService(_window.DispatcherQueue, _mouseHookService);
-
-                _mouseHookService.IsCurrentAppExcluded = () =>
-                {
-                    var processName = PopButtonService.GetForegroundProcessName();
-                    return SettingsService.Instance.IsMouseSelectionExcluded(processName);
-                };
-                _mouseHookService.OnDragSelectionEnd += _popButtonService.OnDragSelectionEnd;
-                _mouseHookService.OnMouseDown += () => _popButtonService.Dismiss("MouseDown");
-                _mouseHookService.OnMouseScroll += () => _popButtonService.Dismiss("MouseScroll");
-                _mouseHookService.OnRightMouseDown += () => _popButtonService.Dismiss("RightMouseDown");
-                _mouseHookService.OnKeyDown += () => _popButtonService.Dismiss("KeyDown");
-
-                if (settings.MouseSelectionTranslate)
-                {
-                    if (!_mouseHookService.Install())
-                    {
-                        System.Diagnostics.Trace.WriteLine("[App] Mouse hook installation failed at startup");
-                    }
-                }
-
-                _popButtonService.IsEnabled = settings.MouseSelectionTranslate;
+                System.Diagnostics.Debug.WriteLine(
+                    "[App] Mouse selection translate disabled by EASYDICT_DEBUG_DISABLE_MOUSE_SELECTION_TRANSLATE");
             }
-            catch (Exception ex)
+            else
             {
-                System.Diagnostics.Debug.WriteLine($"[App] MouseSelectionTranslate initialization failed: {ex}");
+                try
+                {
+                    _mouseHookService = new MouseHookService();
+                    _popButtonService = new PopButtonService(_window.DispatcherQueue, _mouseHookService);
+
+                    _mouseHookService.IsCurrentAppExcluded = () =>
+                    {
+                        var processName = PopButtonService.GetForegroundProcessName();
+                        return SettingsService.Instance.IsMouseSelectionExcluded(processName);
+                    };
+                    _mouseHookService.OnDragSelectionEnd += _popButtonService.OnDragSelectionEnd;
+                    _mouseHookService.OnMouseDown += () => _popButtonService.Dismiss("MouseDown");
+                    _mouseHookService.OnMouseScroll += () => _popButtonService.Dismiss("MouseScroll");
+                    _mouseHookService.OnRightMouseDown += () => _popButtonService.Dismiss("RightMouseDown");
+                    _mouseHookService.OnKeyDown += () => _popButtonService.Dismiss("KeyDown");
+
+                    if (settings.MouseSelectionTranslate)
+                    {
+                        if (!_mouseHookService.Install())
+                        {
+                            System.Diagnostics.Trace.WriteLine("[App] Mouse hook installation failed at startup");
+                        }
+                    }
+
+                    _popButtonService.IsEnabled = settings.MouseSelectionTranslate;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] MouseSelectionTranslate initialization failed: {ex}");
+                }
             }
 
             // Apply always-on-top setting
@@ -853,6 +875,23 @@ namespace Easydict.WinUI
         public static void ApplyMouseSelectionTranslate(bool enabled)
         {
             var app = Instance;
+            if (IsMouseSelectionTranslateDisabledForDebug())
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[App] ApplyMouseSelectionTranslate ignored due to EASYDICT_DEBUG_DISABLE_MOUSE_SELECTION_TRANSLATE");
+                if (app._popButtonService != null)
+                {
+                    app._popButtonService.IsEnabled = false;
+                }
+
+                if (app._mouseHookService != null)
+                {
+                    app._mouseHookService.Uninstall();
+                }
+
+                return;
+            }
+
             if (app._popButtonService != null)
             {
                 app._popButtonService.IsEnabled = enabled;

@@ -18,6 +18,24 @@ Build in **Debug** configuration and run. The `[Memory]` markers in the VS **Out
   ...
 ```
 
+`SettingsPage` now also emits two DEBUG-only helper streams during open/back loops:
+
+- `[SettingsPage][Lifetime]`: instance ID, explicit global counts such as `globalLiveInstances` and `globalSurvivorsAfterLastTrackedFullGC`, plus delayed-check fields that say whether the specific unloaded page instance is still alive.
+- `[SettingsPage][Objects]`: counts for service collections, language items, nav icons, MDX panel children, credential field cache entries, frame back stack depth, and deferred I/O state.
+- `[SettingsPage][DeferredIO]`: explicit deferred I/O state transitions such as `queued`, `onnx-running`, `cache-running`, `cache-complete`, or `cache-canceled`.
+
+`MainPage` also emits a DEBUG helper stream during the same workflow:
+
+- `[MainPage][Objects]`: counts for `_serviceResults`, `_resultControls`, `ResultsPanel.Items`, long-document combo/history state, current mode, active A/B mode, whether result rebuild skipping is enabled, and the current rebuild reason in `InitializeServiceResults`.
+
+Use them together:
+
+- `globalLiveInstances` or `globalSurvivorsAfterLastTrackedFullGC` keeps rising across clean runs -> page retention is real.
+- `trackedInstanceAliveAfterDelayedFullGC=false` with `liveInstances=1` or `globalLiveInstances=1` -> do not call it a leak yet; that often just means a newer `SettingsPage` was opened before the delayed check ran.
+- `trackedInstanceAliveAfterDelayedFullGC=true` at the `1000ms` delayed check -> stronger evidence that the specific unloaded page is still retained.
+- Object counts stay flat but working set climbs then plateaus -> more likely WinUI/native cache warm-up than a managed event-chain leak.
+- `SettingsPage` counts return to 0 but `MainPage` result-control counts are rebuilt on every return -> prioritize `MainPage`/`ServiceResultItem` lifecycle over Settings teardown.
+
 These are emitted by `MemoryDiagnostics.LogSnapshot()` (see `Services/MemoryDiagnostics.cs`). To add more checkpoints:
 
 ```csharp
@@ -40,17 +58,23 @@ MemoryDiagnostics.LogDelta("After operation", baseline);
 
 Use this exact loop when validating SettingsPage memory behavior:
 
-1. Launch app in Debug.
-2. Stay on MainPage and take baseline snapshot.
-3. Open Settings, wait for content to reveal, then go back to MainPage.
-4. Repeat step 3 at least 5 times.
-5. Compare memory after each iteration.
+1. For manual profiling, set `EASYDICT_DEBUG_DISABLE_MOUSE_SELECTION_TRANSLATE=1` before launching.
+2. Launch app in Debug.
+3. Stay on MainPage and take baseline snapshot.
+4. Open Settings, wait for content to reveal, then go back to MainPage.
+5. Repeat step 4 at least 5 times.
+6. Compare memory after each iteration.
+
+During the loop, avoid drag-selecting text in Terminal, browsers, or the app itself. If you need repeated runs, prefer the UIAutomation loop over manual interaction.
 
 What to compare:
 
 - Managed heap (`GC Heap`): should stay roughly flat and not increase linearly per visit.
 - Working set (`WorkingSet`): may spike on first visits, but should flatten instead of growing every loop.
 - Object retention in profiler snapshots: check `SettingsPage`, `ServiceCheckItem`, and `PropertyChangedEventHandler` counts.
+- DEBUG helper output: `globalSurvivorsAfterLastTrackedFullGC`, service collection counts, language item count, nav icon count, and back stack depth should stop trending upward after the page is closed.
+- MainPage helper output: `_serviceResults`, `_resultControls`, and `ResultsPanel.Items` should not accumulate unexpectedly; the current healthy path produces only one result-panel rebuild per load cycle, and it should be `reason=OnPageLoaded`.
+- SettingsPage delayed lifetime checks: compare both `250ms` and `1000ms`, but interpret `trackedInstanceAliveAfterDelayedFullGC` first. If that field is `false`, a non-zero global `liveInstances` count can just mean a newer Settings page exists.
 
 Expected healthy pattern:
 
@@ -70,6 +94,9 @@ Extra controls:
 - `EASYDICT_UIA_MEMORY_LOOP_ITERATIONS`: number of open/back loops (default `5`).
 - `EASYDICT_UIA_MEMORY_IDLE_MS_AFTER_BACK`: extra idle delay after each Back before settled sample (default `1500`).
 - `EASYDICT_EXE_PATH`: explicit app exe path for UIAutomation launch.
+- `EASYDICT_DEBUG_DISABLE_MOUSE_SELECTION_TRANSLATE=1`: disable mouse hook / pop button profiling noise during manual runs in DEBUG.
+- `EASYDICT_DEBUG_DISABLE_SETTINGS_DEFERRED_IO=1`: skip Settings deferred ONNX/cache status work in DEBUG.
+- `EASYDICT_DEBUG_DISABLE_MAINPAGE_RESULT_REBUILD=1`: keep existing MainPage result controls on return, instead of rebuilding them, in DEBUG.
 
 Example (PowerShell):
 
@@ -100,6 +127,32 @@ It also prints aggregated summaries for two phases:
 
 - `ImmediateBack`: sample taken right after Back navigation.
 - `SettledBack`: sample taken after `EASYDICT_UIA_MEMORY_IDLE_MS_AFTER_BACK` delay.
+
+### Second-Round Isolation Workflow
+
+Use this order once instance-level delayed checks stay `false` at `1000ms` and manual input-hook noise is disabled or absent:
+
+1. Run `A` mode with current settings and confirm each `MainPage.OnPageLoaded` now shows only one `InitializeServiceResults` pass with `reason=OnPageLoaded`.
+2. Run the same loop in `B` mode and compare the tail slope of `WorkingSet`.
+3. Repeat `A` and `B` with `EASYDICT_DEBUG_DISABLE_SETTINGS_DEFERRED_IO=1`.
+4. Repeat `A` with `EASYDICT_DEBUG_DISABLE_MAINPAGE_RESULT_REBUILD=1`.
+5. Repeat `A/B` with a clean `settings.json` that omits `ImportedMdxDictionaries`.
+
+Interpretation:
+
+- `trackedInstanceAliveAfterDelayedFullGC=false` across repeated unloads -> treat `SettingsPage` managed leakage as excluded unless a later run produces `true@1000ms`.
+- `SettingsPage` survivors stay at `0`, but `A` mode keeps climbing more than `B` -> cached `MainPage` reuse and result-control rebuild are the primary suspects.
+- `trackedInstanceAliveAfterDelayedFullGC=false` while `liveInstances` or `globalLiveInstances` is non-zero -> treat that run as overlap with a newer `SettingsPage`, not proof that the unloaded page leaked.
+- `trackedInstanceAliveAfterDelayedFullGC=true` at `250ms` but `false` at `1000ms` -> prefer async tail / dispatcher lag over real leak.
+- `trackedInstanceAliveAfterDelayedFullGC=true` at `1000ms` for the same unloaded instance -> treat that as real evidence of delayed retention and investigate page-specific references again.
+- Disabling Settings deferred I/O reduces the first few jumps -> ONNX or cache warm-up is a major contributor.
+- Disabling MainPage result rebuild flattens the curve -> prioritize `MainPage` / `ServiceResultItem` cleanup and native control lifetime.
+- Removing imported MDX dictionaries materially improves the curve -> treat MDX result UI or MDX-backed WebView usage as a separate investigation lane.
+
+Hard failure condition:
+
+- If the same load cycle still logs both `reason=ApplyModeState` and `reason=OnPageLoaded`, the MainPage double-rebuild fix has regressed and that run should not be used for memory conclusions.
+- If `trackedInstanceAliveAfterDelayedFullGC=false` for an unloaded page but the run is still labeled as a retained old `SettingsPage`, the delayed-GC interpretation is wrong and that run should not be used for leak conclusions.
 
 ## Visual Studio Memory Profiler
 

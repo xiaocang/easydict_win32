@@ -45,6 +45,68 @@ public sealed partial class ServiceResultItem : UserControl
         ToolTipService.SetToolTip(ReplaceButton, LocalizationService.Instance.GetString("InsertReplace"));
     }
 
+    public void Cleanup()
+    {
+        Debug.WriteLine(
+            $"[ServiceResultItem] Cleanup serviceId={_cachedServiceId ?? _serviceResult?.ServiceId ?? "<none>"} webViewInitialized={_webViewInitialized}");
+
+        if (_serviceResult != null)
+        {
+            _serviceResult.PropertyChanged -= OnServiceResultPropertyChanged;
+        }
+
+        try
+        {
+            DictWebView.NavigationCompleted -= OnDictWebViewNavigationCompleted;
+
+            if (_webViewInitialized && DictWebView.CoreWebView2 != null)
+            {
+                DictWebView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
+
+                try
+                {
+                    DictWebView.NavigateToString("<html><body></body></html>");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[ServiceResultItem] Cleanup navigate reset failed: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[ServiceResultItem] Cleanup WebView2 teardown failed: {ex.Message}");
+        }
+
+        _serviceResult = null;
+        _currentMdxService = null;
+        _cachedServiceId = null;
+        _cachedIcon = null;
+        _alreadyShownPhonetics = null;
+        _updateUIPending = false;
+        _webViewInitialized = false;
+
+        ServiceNameText.Text = string.Empty;
+        ServiceIcon.Source = null;
+        LoadingIndicator.IsActive = false;
+        LoadingIndicator.Visibility = Visibility.Collapsed;
+        ErrorIcon.Visibility = Visibility.Collapsed;
+        RetryButton.Visibility = Visibility.Collapsed;
+        ReplaceButton.Visibility = Visibility.Collapsed;
+        ResultText.Text = string.Empty;
+        ErrorText.Text = string.Empty;
+        StatusText.Text = string.Empty;
+        PhoneticPanel.Children.Clear();
+        PhoneticPanel.Visibility = Visibility.Collapsed;
+        DictionaryPanel.Children.Clear();
+        DictionaryPanel.Visibility = Visibility.Collapsed;
+        PendingQueryText.Visibility = Visibility.Collapsed;
+        DictWebView.Visibility = Visibility.Collapsed;
+        ResultText.Visibility = Visibility.Collapsed;
+        ErrorText.Visibility = Visibility.Collapsed;
+        ContentArea.Visibility = Visibility.Collapsed;
+    }
+
     /// <summary>
     /// The service query result to display.
     /// </summary>

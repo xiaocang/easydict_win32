@@ -453,16 +453,40 @@ public sealed class LongDocumentTranslationService
         {
             try
             {
-                // If the block contains formula placeholders {v0}, {v1}, ..., inject
-                // a prompt instructing the LLM to preserve them — aligned with
-                // pdf2zh translator.py: "Keep the formula notation {v*} unchanged."
+                // Inject formula preservation prompt based on what markers are present.
+                // Two-tier system:
+                //   {vN} = high-confidence formula → LLM must preserve exactly
+                //   $...$ = low-confidence formula → LLM decides whether to preserve or translate
                 var customPrompt = options.CustomPrompt;
-                if (options.EnableFormulaProtection && block.FormulaTokenMap is { Count: > 0 })
+                if (options.EnableFormulaProtection)
                 {
-                    const string formulaPrompt = "Keep all {v0}, {v1}, ... formula placeholders exactly as-is. Do not translate, remove, or modify them.";
-                    customPrompt = string.IsNullOrWhiteSpace(customPrompt)
-                        ? formulaPrompt
-                        : $"{customPrompt}\n{formulaPrompt}";
+                    var hasHardTokens = block.FormulaTokenMap is { Count: > 0 };
+                    var hasSoftMath = block.ProtectedText.Contains('$');
+
+                    string? formulaPrompt = null;
+                    if (hasHardTokens && hasSoftMath)
+                    {
+                        formulaPrompt = "This text has formula placeholders ({v0}, {v1}, ...) and inline math ($...$). " +
+                            "Keep all {vN} placeholders exactly as-is. " +
+                            "For $...$ content: if it is a mathematical formula or technical identifier, keep it unchanged; " +
+                            "if it is ordinary text, translate it and remove the $ delimiters.";
+                    }
+                    else if (hasHardTokens)
+                    {
+                        formulaPrompt = "Keep all {v0}, {v1}, ... formula placeholders exactly as-is. Do not translate, remove, or modify them.";
+                    }
+                    else if (hasSoftMath)
+                    {
+                        formulaPrompt = "Content in $...$ is likely a mathematical formula or technical identifier. " +
+                            "If it is math, keep it unchanged. If it is ordinary text, translate it and remove the $ delimiters.";
+                    }
+
+                    if (formulaPrompt is not null)
+                    {
+                        customPrompt = string.IsNullOrWhiteSpace(customPrompt)
+                            ? formulaPrompt
+                            : $"{customPrompt}\n{formulaPrompt}";
+                    }
                 }
 
                 var request = new TranslationRequest

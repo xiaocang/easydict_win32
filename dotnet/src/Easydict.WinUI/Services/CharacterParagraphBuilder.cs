@@ -354,6 +354,39 @@ public static class CharacterParagraphBuilder
     }
 
     /// <summary>
+    /// Determines the confidence level of a formula classification.
+    /// High = definite formula signal (math font, math Unicode, layout excluded).
+    /// Low = ambiguous signal (subscript by size only, U+FFFD only).
+    /// None = not a formula character.
+    /// </summary>
+    internal enum FormulaConfidence { None, Low, High }
+
+    internal static FormulaConfidence GetFormulaConfidence(CharInfo ch, double parentFontSize, int layoutClass)
+    {
+        if (layoutClass == 0) return FormulaConfidence.High;
+
+        var fontName = ch.FontName;
+        var plusIdx = fontName.IndexOf('+');
+        if (plusIdx >= 0 && plusIdx < fontName.Length - 1)
+            fontName = fontName[(plusIdx + 1)..];
+
+        if (MathFontRegex.IsMatch(fontName)) return FormulaConfidence.High;
+        if (ch.Text.Length > 0 && MathUnicodeRegex.IsMatch(ch.Text)) return FormulaConfidence.High;
+
+        var tm = ch.TextMatrix;
+        if (tm.A == 0 && tm.D == 0 && (MathFontRegex.IsMatch(fontName) || MathUnicodeRegex.IsMatch(ch.Text)))
+            return FormulaConfidence.High;
+
+        // Weak signals — could be footnotes, encoding issues
+        if (parentFontSize > 0 && ch.PointSize < parentFontSize * SubscriptSizeRatio)
+            return FormulaConfidence.Low;
+        if (ch.Text.Contains('\uFFFD'))
+            return FormulaConfidence.Low;
+
+        return FormulaConfidence.None;
+    }
+
+    /// <summary>
     /// Returns the bracket depth change for a character.
     /// Opening brackets (parentheses, square brackets, curly braces) return +1.
     /// Closing brackets return -1.

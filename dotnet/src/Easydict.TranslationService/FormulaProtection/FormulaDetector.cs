@@ -100,6 +100,31 @@ public static class FormulaDetector
         return FormulaTokenType.UnitFragment;
     }
 
+    /// <summary>
+    /// Returns true if the token type represents a high-confidence formula detection
+    /// that should use hard protection ({vN} placeholders).
+    /// Low-confidence types use soft protection ($...$) and let the LLM decide.
+    /// </summary>
+    public static bool IsHighConfidence(FormulaTokenType type) => type switch
+    {
+        FormulaTokenType.InlineMath or          // $...$, \(...\)
+        FormulaTokenType.DisplayMath or         // $$...$$, \[...\]
+        FormulaTokenType.LaTeXEnv or            // \begin{...}\end{...}
+        FormulaTokenType.Matrix or
+        FormulaTokenType.Fraction or            // \frac{a}{b}
+        FormulaTokenType.SquareRoot or          // \sqrt{x}
+        FormulaTokenType.SumProduct or          // \sum, \prod
+        FormulaTokenType.Integral or            // \int
+        FormulaTokenType.GreekLetter or         // \alpha, \beta
+        FormulaTokenType.MathOperator or        // \infty, \pm
+        FormulaTokenType.MathFormatting or      // \mathbf{}, \mathrm{}
+        FormulaTokenType.MathSuperscript or     // x^2 (explicit ^)
+        FormulaTokenType.MathSubscript          // h_{t-1} (explicit _)
+            => true,
+        // Low confidence — InlineEquation ("x = value"), SequenceToken ("hidden_state"), UnitFragment
+        _ => false,
+    };
+
     private static readonly HashSet<string> GreekLetterNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",

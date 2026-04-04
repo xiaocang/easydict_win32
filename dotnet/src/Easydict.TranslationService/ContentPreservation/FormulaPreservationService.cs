@@ -112,13 +112,15 @@ public sealed class FormulaPreservationService : IContentPreservationService
             };
         }
 
-        // Fallback to regex-based detection
-        var protectedText = _protector.Protect(context.Text, out var tokens);
+        // Fallback to regex-based detection with two-tier confidence:
+        // High-confidence matches → {vN} hard placeholders
+        // Low-confidence matches → $...$ inline LaTeX for LLM to decide
+        var protectedText = _protector.ProtectTwoTier(context.Text, out var tokens);
         var isFormulaOnly = IsFormulaOnlyText(protectedText);
 
         var effectivePlan = isFormulaOnly
             ? plan with { Mode = PreservationMode.Opaque, SkipTranslation = true, Reason = "FormulaOnlyText" }
-            : tokens.Count > 0
+            : tokens.Count > 0 || protectedText.Contains('$')
                 ? plan with { Mode = PreservationMode.InlineProtected }
                 : plan;
 

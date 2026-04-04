@@ -1412,7 +1412,9 @@ public sealed class LongDocumentTranslationService : IDisposable
     /// <summary>
     /// Builds character-level formula protection using CharacterParagraphBuilder.
     /// Converts PdfPig Letters to lightweight CharInfo, runs character-level detection,
-    /// and returns protected text with {v*} placeholders and corresponding FormulaTokens.
+    /// and returns protected text with confidence-based two-tier output:
+    /// - High-confidence groups → {vN} placeholder (hard protection)
+    /// - Low-confidence groups → $reconstructed_latex$ (soft protection, LLM decides)
     /// </summary>
     internal static (string? ProtectedText, IReadOnlyList<FormulaToken>? Tokens)
         BuildCharacterLevelProtection(PdfPigPage page, double left, double right, double top, double bottom)
@@ -1433,7 +1435,6 @@ public sealed class LongDocumentTranslationService : IDisposable
                 if (plusIdx >= 0 && plusIdx < fontName.Length - 1)
                     fontName = fontName[(plusIdx + 1)..];
 
-                // Build synthetic text matrix from TextOrientation
                 var tm = letter.TextOrientation switch
                 {
                     TextOrientation.Rotate90 or TextOrientation.Rotate270
@@ -1462,34 +1463,78 @@ public sealed class LongDocumentTranslationService : IDisposable
             if (charInfos.Count == 0)
                 return (null, null);
 
-            // Run character-level formula detection
             var charResult = CharacterParagraphBuilder.Build(charInfos);
 
             if (charResult.AllFormulaGroups.Count == 0)
                 return (null, null);
 
-            // Build FormulaTokens from FormulaVariableGroups
-            var tokens = charResult.AllFormulaGroups.Select(g =>
+            // Determine confidence per FormulaVariableGroup and build two-tier output
+            var hardTokens = new List<FormulaToken>();
+            var hardCounter = 0;
+
+            // Build a mapping from original {vN} → replacement text for each group
+            var groupReplacements = new Dictionary<int, string>();
+
+            foreach (var g in charResult.AllFormulaGroups)
             {
-                var raw = string.Concat(g.Characters.Select(c => c.Text));
-                return new FormulaToken(
-                    FormulaTokenType.InlineMath,
-                    Raw: raw,
-                    Placeholder: $"{{v{g.Index}}}",
-                    Simplified: raw);
-            }).ToList();
+                // Min confidence across characters in the group
+                var groupConfidence = CharacterParagraphBuilder.FormulaConfidence.High;
+                foreach (var ch in g.Characters)
+                {
+                    var conf = CharacterParagraphBuilder.GetFormulaConfidence(ch, 0, 1);
+                    if (conf < groupConfidence) groupConfidence = conf;
+                }
 
-            // Combine all paragraph protected texts
-            var protectedText = string.Join("\n",
-                charResult.Paragraphs.Select(p => p.ProtectedText));
+                if (groupConfidence == CharacterParagraphBuilder.FormulaConfidence.High)
+                {
+                    // Hard protection: {vN} placeholder
+                    var raw = string.Concat(g.Characters.Select(c => c.Text));
+                    var placeholder = $"{{v{hardCounter}}}";
+                    hardTokens.Add(new FormulaToken(FormulaTokenType.InlineMath, raw, placeholder, raw));
+                    groupReplacements[g.Index] = placeholder;
+                    hardCounter++;
+                }
+                else
+                {
+                    // Soft protection: reconstruct as $latex$
+                    var charTextInfos = g.Characters.Select(c => new CharTextInfo(
+                        c.Text, c.PointSize, c.Y0,
+                        MathFontRegex.IsMatch(StripSubsetPrefix(c.FontName))
+                    )).ToList();
+                    var latex = FormulaLatexReconstructor.ReconstructLatex(charTextInfos);
+                    groupReplacements[g.Index] = $"${latex}$";
+                }
+            }
 
-            return (protectedText, tokens);
+            // Rebuild paragraph texts with the two-tier replacements
+            var paragraphTexts = new List<string>();
+            foreach (var para in charResult.Paragraphs)
+            {
+                var text = para.ProtectedText;
+                // Replace each {vN} with the appropriate replacement (hard or soft)
+                foreach (var (originalIndex, replacement) in groupReplacements)
+                {
+                    text = text.Replace($"{{v{originalIndex}}}", replacement);
+                }
+                paragraphTexts.Add(text);
+            }
+
+            // Renumber hard placeholders to be sequential {v0}, {v1}, ...
+            var protectedText = string.Join("\n", paragraphTexts);
+
+            return (protectedText, hardTokens.Count > 0 ? hardTokens : null);
         }
         catch
         {
             // Character-level analysis is best-effort — fall back to regex on any error
             return (null, null);
         }
+    }
+
+    private static string StripSubsetPrefix(string fontName)
+    {
+        var plusIdx = fontName.IndexOf('+');
+        return plusIdx >= 0 && plusIdx < fontName.Length - 1 ? fontName[(plusIdx + 1)..] : fontName;
     }
 
     internal static bool FontNameLooksBold(string fontName)

@@ -11,24 +11,12 @@ namespace Easydict.TranslationService.ContentPreservation;
 /// </summary>
 public sealed class FormulaPreservationService : IContentPreservationService
 {
-    // Shared math font regex — single source of truth.
-    // Aligned with pdf2zh converter.py font detection.
+    // Shared regex from MathPatterns — single source of truth
     private static readonly Regex MathFontRegex = new(
-        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX" +
-        @"|\bBL\b|\bRM\b|\bEU\b|\bLA\b|\bRS\b" +  // word-boundary anchored
-        @"|LINE|LCIRCLE" +
-        @"|TeX-|rsfs|txsy|wasy|stmary" +
-        @"|\w+Sym\w*|\b\w{1,5}Math\w*",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        MathPatterns.MathFontPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    // Shared math Unicode regex — single source of truth.
     private static readonly Regex MathUnicodeRegex = new(
-        @"[\u2200-\u22FF\u2100-\u214F\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9\u2150-\u218F\u27C0-\u27EF\u2980-\u29FF" +
-        @"\u02B0-\u02FF" +
-        @"\u0300-\u036F" +
-        @"\u02C6-\u02CF" +
-        @"\u200B-\u200D]",  // narrowed: only ZWSP/ZWNJ/ZWJ
-        RegexOptions.Compiled);
+        MathPatterns.MathUnicodePattern, RegexOptions.Compiled);
 
     private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
 
@@ -106,6 +94,25 @@ public sealed class FormulaPreservationService : IContentPreservationService
             };
         }
 
+        // Prefer character-level detection when available (from CharacterParagraphBuilder)
+        if (context.CharacterLevelProtectedText is not null &&
+            context.CharacterLevelTokens is { Count: > 0 })
+        {
+            var isCharFormulaOnly = IsFormulaOnlyText(context.CharacterLevelProtectedText);
+            var charPlan = isCharFormulaOnly
+                ? plan with { Mode = PreservationMode.Opaque, SkipTranslation = true, Reason = "CharLevel:FormulaOnlyText" }
+                : plan with { Mode = PreservationMode.InlineProtected };
+
+            return new ProtectedBlock
+            {
+                OriginalText = context.Text,
+                ProtectedText = context.CharacterLevelProtectedText,
+                Tokens = context.CharacterLevelTokens,
+                Plan = charPlan
+            };
+        }
+
+        // Fallback to regex-based detection
         var protectedText = _protector.Protect(context.Text, out var tokens);
         var isFormulaOnly = IsFormulaOnlyText(protectedText);
 

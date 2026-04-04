@@ -1,3 +1,4 @@
+using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.LongDocument;
 
 namespace Easydict.TranslationService.ContentPreservation;
@@ -28,4 +29,15 @@ public sealed record BlockContext
 
     /// <summary>Custom regex pattern for math character matching (user override).</summary>
     public string? FormulaCharPattern { get; init; }
+
+    /// <summary>
+    /// Character-level protected text (from CharacterParagraphBuilder), if available.
+    /// When set, FormulaPreservationService prefers this over regex-based detection.
+    /// </summary>
+    public string? CharacterLevelProtectedText { get; init; }
+
+    /// <summary>
+    /// Character-level formula tokens, paired with CharacterLevelProtectedText.
+    /// </summary>
+    public IReadOnlyList<FormulaToken>? CharacterLevelTokens { get; init; }
 }

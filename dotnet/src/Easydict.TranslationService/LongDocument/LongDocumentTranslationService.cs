@@ -246,7 +246,9 @@ public sealed class LongDocumentTranslationService
                         DetectedFontNames = block.DetectedFontNames,
                         FormulaCharacters = block.FormulaCharacters,
                         FormulaFontPattern = options?.FormulaFontPattern,
-                        FormulaCharPattern = options?.FormulaCharPattern
+                        FormulaCharPattern = options?.FormulaCharPattern,
+                        CharacterLevelProtectedText = block.CharacterLevelProtectedText,
+                        CharacterLevelTokens = block.CharacterLevelTokens
                     };
                     var plan = _preservation.Analyze(blockContext);
                     var translationSkipped = plan.SkipTranslation;
@@ -264,7 +266,9 @@ public sealed class LongDocumentTranslationService
                         ParentIrBlockId = block.ParentBlockId is null ? null : $"ir-{page.PageNumber}-{block.ParentBlockId}",
                         TranslationSkipped = translationSkipped,
                         TextStyle = block.TextStyle,
-                        FormulaCharacters = block.FormulaCharacters
+                        FormulaCharacters = block.FormulaCharacters,
+                        CharacterLevelProtectedText = block.CharacterLevelProtectedText,
+                        CharacterLevelTokens = block.CharacterLevelTokens
                     });
                 }
             }
@@ -294,7 +298,9 @@ public sealed class LongDocumentTranslationService
                 {
                     Text = block.ProtectedText,
                     BlockType = MapToSourceBlockType(block.BlockType),
-                    IsFormulaLike = false
+                    IsFormulaLike = false,
+                    CharacterLevelProtectedText = block.CharacterLevelProtectedText,
+                    CharacterLevelTokens = block.CharacterLevelTokens
                 };
                 var plan = new ProtectionPlan
                 {

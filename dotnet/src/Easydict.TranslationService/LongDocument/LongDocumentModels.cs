@@ -118,6 +118,16 @@ public sealed record SourceDocumentBlock
     public IReadOnlyList<string>? DetectedFontNames { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
     public BlockFormulaCharacters? FormulaCharacters { get; init; }
+    /// <summary>
+    /// Character-level protected text with formula spans replaced by {v0}, {v1}, ...
+    /// Populated by CharacterParagraphBuilder when character-level analysis is available.
+    /// When set, FormulaPreservationService prefers this over regex-based detection.
+    /// </summary>
+    public string? CharacterLevelProtectedText { get; init; }
+    /// <summary>
+    /// Formula tokens from character-level analysis, paired with CharacterLevelProtectedText.
+    /// </summary>
+    public IReadOnlyList<FormulaProtection.FormulaToken>? CharacterLevelTokens { get; init; }
 }
 
 public sealed record SourceDocumentPage
@@ -152,6 +162,10 @@ public sealed record DocumentBlockIr
     /// Stored here so restoration reuses the same tokens without re-running detection.
     /// </summary>
     public IReadOnlyList<FormulaProtection.FormulaToken>? FormulaTokenMap { get; init; }
+    /// <summary>Character-level protected text from CharacterParagraphBuilder (if available).</summary>
+    public string? CharacterLevelProtectedText { get; init; }
+    /// <summary>Character-level formula tokens from CharacterParagraphBuilder (if available).</summary>
+    public IReadOnlyList<FormulaProtection.FormulaToken>? CharacterLevelTokens { get; init; }
 }
 
 public sealed record DocumentIr

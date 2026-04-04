@@ -1,10 +1,12 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services.DocumentExport;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using UglyToad.PdfPig.Content;
+using UglyToad.PdfPig.Core;
 using PdfPigPage = UglyToad.PdfPig.Content.Page;
 using CoreLongDocumentTranslationService = Easydict.TranslationService.LongDocument.LongDocumentTranslationService;
 
@@ -1003,6 +1005,9 @@ public sealed class LongDocumentTranslationService : IDisposable
             // Combined pass: collect font names, text style, and formula character data from letters
             var (blockFontNames, textStyle, formulaChars) = ExtractBlockLetterData(page, linesInBlock, left, right, top, bottom);
 
+            // Character-level formula detection via CharacterParagraphBuilder
+            var (charProtectedText, charTokens) = BuildCharacterLevelProtection(page, left, right, top, bottom);
+
             blockIndex++;
             yield return new SourceDocumentBlock
             {
@@ -1013,7 +1018,9 @@ public sealed class LongDocumentTranslationService : IDisposable
                 BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
                 DetectedFontNames = blockFontNames.Count > 0 ? blockFontNames : null,
                 TextStyle = textStyle,
-                FormulaCharacters = formulaChars
+                FormulaCharacters = formulaChars,
+                CharacterLevelProtectedText = charProtectedText,
+                CharacterLevelTokens = charTokens
             };
         }
 
@@ -1174,6 +1181,9 @@ public sealed class LongDocumentTranslationService : IDisposable
             var type = GuessBlockType(blockText);
             var (blockFontNames, textStyle, formulaChars) = ExtractBlockLetterData(page, linesInBlock, left, right, top, bottom);
 
+            // Character-level formula detection via CharacterParagraphBuilder
+            var (charProtectedText, charTokens) = BuildCharacterLevelProtection(page, left, right, top, bottom);
+
             blockIndex++;
             result.Add(new SourceDocumentBlock
             {
@@ -1184,7 +1194,9 @@ public sealed class LongDocumentTranslationService : IDisposable
                 BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
                 DetectedFontNames = blockFontNames.Count > 0 ? blockFontNames : null,
                 TextStyle = textStyle,
-                FormulaCharacters = formulaChars
+                FormulaCharacters = formulaChars,
+                CharacterLevelProtectedText = charProtectedText,
+                CharacterLevelTokens = charTokens
             });
         }
 
@@ -1192,16 +1204,10 @@ public sealed class LongDocumentTranslationService : IDisposable
     }
 
     /// <summary>
-    /// Regex matching mathematical font names (TeX Computer Modern, MS math fonts, etc.).
-    /// Duplicated from CoreLongDocumentTranslationService for use in extraction.
+    /// Shared regex from MathPatterns — single source of truth.
     /// </summary>
     private static readonly Regex MathFontRegex = new(
-        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX" +
-        @"|BL|RM|EU|LA|RS" +              // pdf2zh: common math font name abbreviations
-        @"|LINE|LCIRCLE" +                 // pdf2zh: LaTeX drawing fonts
-        @"|TeX-|rsfs|txsy|wasy|stmary" +   // pdf2zh: TeX symbol font packages
-        @"|\w+Sym\w*|\w+Math\w*",          // pdf2zh: generic *Sym* / *Math* patterns (safer than .*)
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        MathPatterns.MathFontPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
     /// Combined single-pass extraction of font names, text style, and formula character data
@@ -1400,6 +1406,89 @@ public sealed class LongDocumentTranslationService : IDisposable
         catch
         {
             return (fontNames, null, null);
+        }
+    }
+
+    /// <summary>
+    /// Builds character-level formula protection using CharacterParagraphBuilder.
+    /// Converts PdfPig Letters to lightweight CharInfo, runs character-level detection,
+    /// and returns protected text with {v*} placeholders and corresponding FormulaTokens.
+    /// </summary>
+    internal static (string? ProtectedText, IReadOnlyList<FormulaToken>? Tokens)
+        BuildCharacterLevelProtection(PdfPigPage page, double left, double right, double top, double bottom)
+    {
+        try
+        {
+            // Build CharInfo array from PdfPig Letters within the block bounds
+            var charInfos = new List<CharInfo>();
+            foreach (var letter in page.Letters)
+            {
+                var lbox = letter.GlyphRectangle;
+                if (lbox.Left < left - 1 || lbox.Right > right + 1 ||
+                    lbox.Bottom < bottom - 1 || lbox.Top > top + 1)
+                    continue;
+
+                var fontName = letter.FontName ?? string.Empty;
+                var plusIdx = fontName.IndexOf('+');
+                if (plusIdx >= 0 && plusIdx < fontName.Length - 1)
+                    fontName = fontName[(plusIdx + 1)..];
+
+                // Build synthetic text matrix from TextOrientation
+                var tm = letter.TextOrientation switch
+                {
+                    TextOrientation.Rotate90 or TextOrientation.Rotate270
+                        => TransformationMatrix.FromValues(0, 1, -1, 0, lbox.Left, lbox.Bottom),
+                    _ => TransformationMatrix.Identity
+                };
+
+                charInfos.Add(new CharInfo
+                {
+                    Text = letter.Value,
+                    CharacterCode = 0,
+                    Cid = 0,
+                    Font = null!,
+                    FontName = fontName,
+                    FontSize = letter.PointSize,
+                    PointSize = letter.PointSize,
+                    TextMatrix = tm,
+                    CurrentTransformationMatrix = TransformationMatrix.Identity,
+                    X0 = lbox.Left,
+                    Y0 = lbox.Bottom,
+                    X1 = lbox.Right,
+                    Y1 = lbox.Top,
+                });
+            }
+
+            if (charInfos.Count == 0)
+                return (null, null);
+
+            // Run character-level formula detection
+            var charResult = CharacterParagraphBuilder.Build(charInfos);
+
+            if (charResult.AllFormulaGroups.Count == 0)
+                return (null, null);
+
+            // Build FormulaTokens from FormulaVariableGroups
+            var tokens = charResult.AllFormulaGroups.Select(g =>
+            {
+                var raw = string.Concat(g.Characters.Select(c => c.Text));
+                return new FormulaToken(
+                    FormulaTokenType.InlineMath,
+                    Raw: raw,
+                    Placeholder: $"{{v{g.Index}}}",
+                    Simplified: raw);
+            }).ToList();
+
+            // Combine all paragraph protected texts
+            var protectedText = string.Join("\n",
+                charResult.Paragraphs.Select(p => p.ProtectedText));
+
+            return (protectedText, tokens);
+        }
+        catch
+        {
+            // Character-level analysis is best-effort — fall back to regex on any error
+            return (null, null);
         }
     }
 

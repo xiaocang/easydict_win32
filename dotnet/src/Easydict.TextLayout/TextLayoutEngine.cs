@@ -100,10 +100,6 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
                 maxLineWidth = range.Width;
         });
 
-        // Ensure at least 1 line for non-empty text
-        if (lineCount == 0 && prepared.Count > 0)
-            lineCount = 1;
-
         return new LayoutResult(lineCount, maxLineWidth, HasOverflow: false);
     }
 
@@ -127,6 +123,32 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         }
 
         return new LayoutLinesResult(lines, maxLineWidth, HasOverflow: false);
+    }
+
+    public LayoutResult Layout(PreparedParagraph prepared, IReadOnlyList<double> maxWidths)
+    {
+        if (maxWidths.Count == 0)
+            return new LayoutResult(0, 0, HasOverflow: false);
+
+        var lineCount = 0;
+        var maxLineWidth = 0.0;
+        var cursor = LayoutCursor.Start;
+
+        while (cursor.SegmentIndex < prepared.Count)
+        {
+            var width = maxWidths[Math.Min(lineCount, maxWidths.Count - 1)];
+            var line = LayoutNextLineCore(prepared, cursor, width, buildText: false);
+            if (line is null)
+                break;
+
+            lineCount++;
+            if (line.Width > maxLineWidth)
+                maxLineWidth = line.Width;
+
+            cursor = new LayoutCursor(line.EndSegment, line.EndGrapheme);
+        }
+
+        return new LayoutResult(lineCount, maxLineWidth, HasOverflow: false);
     }
 
     public LayoutLinesResult LayoutWithLines(PreparedParagraph prepared, IReadOnlyList<double> maxWidths)
@@ -187,6 +209,9 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
 
     /// <summary>
     /// Core line-breaking algorithm. Greedy first-fit with punctuation grouping.
+    /// - Close-punctuation never starts a line (grouped with preceding content, with overflow check)
+    /// - Open-punctuation never ends a line (if it would be the last token, defer to next line)
+    /// - Trailing spaces trimmed from width calculation consistently
     /// </summary>
     private LayoutLine? LayoutNextLineCore(PreparedParagraph prepared, LayoutCursor start, double maxWidth, bool buildText)
     {
@@ -197,7 +222,6 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         if (start.SegmentIndex >= segments.Length)
             return null;
 
-        // Skip leading spaces at line start (but not at text start on first segment with grapheme offset)
         var seg = start.SegmentIndex;
         var graphemeOffset = start.GraphemeIndex;
 
@@ -217,13 +241,13 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         // Handle hard break at line start
         if (kinds[seg] == SegmentKind.HardBreak)
         {
-            return new LayoutLine(seg, seg + 1, 0, 0, 0, buildText ? string.Empty : string.Empty);
+            return new LayoutLine(seg, seg + 1, 0, 0, 0, string.Empty);
         }
 
         var lineStartSeg = seg;
-        var lineWidth = 0.0;
+        var lineWidth = 0.0;     // includes trailing spaces
+        var contentWidth = 0.0;  // excludes trailing spaces
         var sb = buildText ? new StringBuilder() : null;
-        var lastNonSpaceEnd = seg; // track last non-space segment end for trimming
 
         while (seg < segments.Length)
         {
@@ -241,9 +265,6 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
             // Check if this segment fits
             if (lineWidth + segWidth > maxWidth && lineWidth > 0)
             {
-                // Segment doesn't fit and line is non-empty — break before this segment
-                // But check: if next is ClosePunctuation, we should have included it with the previous word
-                // This is handled naturally because close-punct is attached to words during segmentation
                 break;
             }
 
@@ -251,7 +272,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
             if (lineWidth + segWidth > maxWidth && lineWidth == 0)
             {
                 // Try grapheme-level breaking for long segments
-                if (kind == SegmentKind.Word && prepared.GraphemePrefixSums[seg] is { } prefixSums)
+                if (kind == SegmentKind.Word && prepared.GraphemePrefixSums[seg] is not null)
                 {
                     return BreakLongSegment(prepared, seg, maxWidth, lineStartSeg, buildText);
                 }
@@ -259,8 +280,8 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
                 // Can't break — emit entire segment on this line
                 sb?.Append(segments[seg]);
                 lineWidth += segWidth;
+                contentWidth = lineWidth;
                 seg++;
-                lastNonSpaceEnd = seg;
                 break;
             }
 
@@ -268,7 +289,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
             if (kind == SegmentKind.Space)
             {
                 // Don't add leading space
-                if (sb is { Length: 0 })
+                if (lineWidth == 0)
                 {
                     seg++;
                     continue;
@@ -280,38 +301,42 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
             {
                 lineWidth += segWidth;
                 sb?.Append(segments[seg]);
-                lastNonSpaceEnd = seg + 1;
+                contentWidth = lineWidth;
 
-                // Look ahead: if next segment is ClosePunctuation, group it with this segment
+                // Look ahead: if next segment is ClosePunctuation, group it only if it fits
                 while (seg + 1 < segments.Length && kinds[seg + 1] == SegmentKind.ClosePunctuation)
                 {
+                    var closeWidth = widths[seg + 1];
+                    if (lineWidth + closeWidth > maxWidth)
+                        break; // let close-punct overflow to next line rather than exceed width
                     seg++;
-                    lineWidth += widths[seg];
+                    lineWidth += closeWidth;
                     sb?.Append(segments[seg]);
-                    lastNonSpaceEnd = seg + 1;
+                    contentWidth = lineWidth;
                 }
             }
 
             seg++;
 
-            // Look ahead: if next segment is OpenPunctuation and we're about to break,
-            // don't break between this segment and the open-punct
-            // (This is naturally handled: open-punct will be picked up at the start of next line)
+            // Open-punctuation should not end a line: if the next segment is
+            // OpenPunctuation and the segment after that won't fit, we'd leave
+            // open-punct dangling. Check if next is open-punct and the thing
+            // after it would overflow — if so, break now before the open-punct.
+            if (seg < segments.Length && kinds[seg] == SegmentKind.OpenPunctuation)
+            {
+                var openWidth = widths[seg];
+                // Peek at what follows the open-punct
+                var afterOpenWidth = seg + 1 < segments.Length ? widths[seg + 1] : 0.0;
+                if (lineWidth + openWidth + afterOpenWidth > maxWidth && lineWidth > 0)
+                {
+                    // Break here; open-punct starts the next line
+                    break;
+                }
+            }
         }
 
-        // Trim trailing spaces from line text
         var text = sb?.ToString().TrimEnd() ?? string.Empty;
-        var trimmedWidth = lineWidth;
-        // Adjust width by removing trailing space widths
-        for (var i = seg - 1; i >= lineStartSeg; i--)
-        {
-            if (kinds[i] == SegmentKind.Space)
-                trimmedWidth -= widths[i];
-            else
-                break;
-        }
-
-        return new LayoutLine(lineStartSeg, seg, 0, 0, trimmedWidth, text);
+        return new LayoutLine(lineStartSeg, seg, 0, 0, contentWidth, text);
     }
 
     /// <summary>

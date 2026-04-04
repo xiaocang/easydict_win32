@@ -28,6 +28,12 @@ public interface ITextLayoutEngine
     LayoutLinesResult LayoutWithLines(PreparedParagraph prepared, double maxWidth);
 
     /// <summary>
+    /// Variable-width count-only layout: returns line count without allocating line strings.
+    /// Fast path for font fitting with per-line widths.
+    /// </summary>
+    LayoutResult Layout(PreparedParagraph prepared, IReadOnlyList<double> maxWidths);
+
+    /// <summary>
     /// Variable-width layout: each line can have a different max width.
     /// If text exceeds the number of widths, continues using the last width.
     /// </summary>

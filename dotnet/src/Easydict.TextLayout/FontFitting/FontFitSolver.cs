@@ -91,9 +91,9 @@ public static class FontFitSolver
 
         if (request.LineWidths is { Count: > 0 } lineWidths)
         {
-            // Line rect mode
-            var result = engine.LayoutWithLines(prepared, lineWidths);
-            lineCount = result.Lines.Count;
+            // Line rect mode — use count-only layout to avoid string allocation
+            var result = engine.Layout(prepared, lineWidths);
+            lineCount = result.LineCount;
 
             if (lineCount > lineWidths.Count)
                 return false;

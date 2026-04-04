@@ -27,8 +27,22 @@ public static class TextSegmenter
         var i = 0;
         while (i < normalized.Length)
         {
+            // Use Rune to correctly handle surrogate pairs
+            Rune rune;
+            int runeLength;
+            if (Rune.TryGetRuneAt(normalized, i, out rune))
+            {
+                runeLength = rune.Utf16SequenceLength;
+            }
+            else
+            {
+                // Unpaired surrogate — treat as single char
+                rune = new Rune(normalized[i]);
+                runeLength = 1;
+            }
+
             var ch = normalized[i];
-            var category = Classify(ch);
+            var category = ClassifyRune(rune, ch);
 
             switch (category)
             {
@@ -51,26 +65,25 @@ public static class TextSegmenter
 
                 case CharCategory.Cjk:
                     FlushBuffer(buffer, segments, kinds, SegmentKind.Word);
-                    // Each CJK character is its own segment
-                    // Use grapheme enumeration to handle surrogate pairs
-                    segments.Add(ch.ToString());
+                    // Use the full rune length to handle surrogate pairs (Extension-B, etc.)
+                    segments.Add(normalized.Substring(i, runeLength));
                     kinds.Add(SegmentKind.CjkGrapheme);
-                    i++;
+                    i += runeLength;
                     break;
 
                 case CharCategory.OpenPunctuation:
                     FlushBuffer(buffer, segments, kinds, SegmentKind.Word);
-                    segments.Add(ch.ToString());
+                    segments.Add(normalized.Substring(i, runeLength));
                     kinds.Add(SegmentKind.OpenPunctuation);
-                    i++;
+                    i += runeLength;
                     break;
 
                 case CharCategory.ClosePunctuation:
                     // If we have a word buffer, attach closing punct to it
                     if (buffer.Length > 0)
                     {
-                        buffer.Append(ch);
-                        i++;
+                        buffer.Append(normalized, i, runeLength);
+                        i += runeLength;
                         // Consume additional closing punctuation
                         while (i < normalized.Length && IsClosePunctuation(normalized[i]))
                         {
@@ -81,24 +94,29 @@ public static class TextSegmenter
                     }
                     else
                     {
-                        segments.Add(ch.ToString());
+                        segments.Add(normalized.Substring(i, runeLength));
                         kinds.Add(SegmentKind.ClosePunctuation);
-                        i++;
+                        i += runeLength;
                     }
                     break;
 
                 default: // Latin/Cyrillic/Greek/Other
-                    buffer.Append(ch);
-                    i++;
-                    // Accumulate word characters and trailing close-punctuation
+                    buffer.Append(normalized, i, runeLength);
+                    i += runeLength;
+                    // Accumulate word characters
                     while (i < normalized.Length)
                     {
-                        var nextCh = normalized[i];
-                        var nextCat = Classify(nextCh);
-                        if (nextCat == CharCategory.Latin)
+                        if (Rune.TryGetRuneAt(normalized, i, out var nextRune))
                         {
-                            buffer.Append(nextCh);
-                            i++;
+                            if (ClassifyRune(nextRune, normalized[i]) == CharCategory.Latin)
+                            {
+                                buffer.Append(normalized, i, nextRune.Utf16SequenceLength);
+                                i += nextRune.Utf16SequenceLength;
+                            }
+                            else
+                            {
+                                break;
+                            }
                         }
                         else
                         {
@@ -111,6 +129,24 @@ public static class TextSegmenter
 
         FlushBuffer(buffer, segments, kinds, SegmentKind.Word);
         return (segments.ToArray(), kinds.ToArray());
+    }
+
+    /// <summary>
+    /// Classifies a Rune, falling back to char-based classification for BMP characters.
+    /// Handles supplementary CJK planes (Extension B+) via Rune.
+    /// </summary>
+    private static CharCategory ClassifyRune(Rune rune, char firstChar)
+    {
+        // BMP characters use the fast char-based classifier
+        if (rune.Value <= 0xFFFF)
+            return Classify(firstChar);
+
+        // Supplementary planes: check for CJK Extension B-H (U+20000..U+3FFFF)
+        if (rune.Value is >= 0x20000 and <= 0x3FFFF)
+            return CharCategory.Cjk;
+
+        // Other supplementary characters treated as Latin/Other
+        return CharCategory.Latin;
     }
 
     /// <summary>

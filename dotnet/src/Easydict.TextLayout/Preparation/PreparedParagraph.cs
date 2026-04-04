@@ -19,27 +19,32 @@ public sealed class PreparedParagraph
     public required SegmentKind[] Kinds { get; init; }
 
     /// <summary>
-    /// Per-grapheme widths within each segment. Non-null for CjkGrapheme segments
-    /// and for Word segments whose width exceeds a threshold (populated lazily during layout).
-    /// Null for segments that don't need grapheme-level breaking.
+    /// Per-grapheme widths within each segment. Populated eagerly during <c>Prepare()</c>
+    /// for <see cref="SegmentKind.Word"/> segments with more than one grapheme cluster.
+    /// Null for all other segment kinds (CjkGrapheme, Space, HardBreak, punctuation).
     /// </summary>
     public required double[]?[] GraphemeWidths { get; init; }
 
     /// <summary>
     /// Prefix sums of <see cref="GraphemeWidths"/> for binary-search line breaking
     /// of long segments. <c>GraphemePrefixSums[i][k]</c> = sum of first k+1 grapheme widths
-    /// in segment i. Null when <see cref="GraphemeWidths"/> is null for that segment.
+    /// in segment i. Populated eagerly during <c>Prepare()</c> alongside <see cref="GraphemeWidths"/>.
+    /// Null when <see cref="GraphemeWidths"/> is null for that segment.
     /// </summary>
     public required double[]?[] GraphemePrefixSums { get; init; }
 
     /// <summary>
     /// Grapheme strings for segments that have been grapheme-decomposed.
     /// Used to reconstruct text when a segment is broken mid-grapheme.
+    /// Populated eagerly during <c>Prepare()</c> alongside <see cref="GraphemeWidths"/>.
     /// Null when <see cref="GraphemeWidths"/> is null for that segment.
     /// </summary>
     public required string[]?[] Graphemes { get; init; }
 
-    /// <summary>Total width if laid out on a single line (sum of all non-HardBreak Widths).</summary>
+    /// <summary>
+    /// Sum of advance widths of all non-Space, non-HardBreak segments.
+    /// This is the "content width" — it does not include inter-word spacing.
+    /// </summary>
     public double TotalWidth { get; init; }
 
     /// <summary>Number of segments.</summary>

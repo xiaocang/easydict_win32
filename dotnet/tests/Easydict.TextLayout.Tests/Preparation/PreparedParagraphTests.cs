@@ -52,7 +52,7 @@ public class PreparedParagraphTests
         var prepared = _engine.Prepare(new TextPrepareRequest { Text = "Hello" }, _measurer);
         prepared.GraphemeWidths[0].Should().NotBeNull();
         prepared.GraphemeWidths[0]!.Length.Should().Be(5);
-        prepared.GraphemeWidths[0]!.Should().AllBe(6.0);
+        prepared.GraphemeWidths[0]!.Should().OnlyContain(w => w == 6.0);
     }
 
     [Fact]

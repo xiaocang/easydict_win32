@@ -42,7 +42,7 @@ public class TextSegmenterTests
     {
         var (segments, kinds) = TextSegmenter.Segment("你好世界");
         segments.Should().Equal("你", "好", "世", "界");
-        kinds.Should().AllBe(SegmentKind.CjkGrapheme);
+        kinds.Should().OnlyContain(k => k == SegmentKind.CjkGrapheme);
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class TextSegmenterTests
         // U+3053 = こ, U+3093 = ん, U+306B = に, U+3061 = ち, U+306F = は
         var (segments, kinds) = TextSegmenter.Segment("こんにちは");
         segments.Should().HaveCount(5);
-        kinds.Should().AllBe(SegmentKind.CjkGrapheme);
+        kinds.Should().OnlyContain(k => k == SegmentKind.CjkGrapheme);
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public class TextSegmenterTests
         // U+30AB = カ, U+30BF = タ, U+30AB = カ, U+30CA = ナ
         var (segments, kinds) = TextSegmenter.Segment("カタカナ");
         segments.Should().HaveCount(4);
-        kinds.Should().AllBe(SegmentKind.CjkGrapheme);
+        kinds.Should().OnlyContain(k => k == SegmentKind.CjkGrapheme);
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class TextSegmenterTests
     {
         var (segments, kinds) = TextSegmenter.Segment("한국어");
         segments.Should().HaveCount(3);
-        kinds.Should().AllBe(SegmentKind.CjkGrapheme);
+        kinds.Should().OnlyContain(k => k == SegmentKind.CjkGrapheme);
     }
 
     [Fact]

@@ -2,8 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
-using Easydict.TranslationService.FormulaProtection;
+using Easydict.TranslationService.ContentPreservation;
 using Easydict.TranslationService.Models;
 
 namespace Easydict.TranslationService.LongDocument;
@@ -12,6 +11,7 @@ public sealed class LongDocumentTranslationService
 {
     private readonly Func<TranslationRequest, string, CancellationToken, Task<TranslationResult>> _translateWithService;
     private readonly Func<SourceDocumentPage, CancellationToken, Task<string?>> _ocrExtractor;
+    private readonly IContentPreservationService _preservation = new FormulaPreservationService();
 
     public LongDocumentTranslationService(
         TranslationManager? manager = null,
@@ -222,7 +222,7 @@ public sealed class LongDocumentTranslationService
         return source with { Pages = pages };
     }
 
-    private static Task<DocumentIr> BuildIrAsync(SourceDocument source, LongDocumentTranslationOptions? options = null, CancellationToken cancellationToken = default)
+    private Task<DocumentIr> BuildIrAsync(SourceDocument source, LongDocumentTranslationOptions? options = null, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
@@ -238,12 +238,18 @@ public sealed class LongDocumentTranslationService
                     var irBlockId = $"ir-{page.PageNumber}-{block.BlockId}";
                     var sourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(blockText)));
 
-                    var translationSkipped = block.BlockType == SourceBlockType.Formula
-                        || block.BlockType == SourceBlockType.TableCell
-                        || block.IsFormulaLike
-                        || IsFontBasedFormula(block.DetectedFontNames, options?.FormulaFontPattern)
-                        || IsCharacterBasedFormula(blockText, options?.FormulaCharPattern)
-                        || IsSubscriptDenseFormula(block.FormulaCharacters);
+                    var blockContext = new BlockContext
+                    {
+                        Text = blockText,
+                        BlockType = block.BlockType,
+                        IsFormulaLike = block.IsFormulaLike,
+                        DetectedFontNames = block.DetectedFontNames,
+                        FormulaCharacters = block.FormulaCharacters,
+                        FormulaFontPattern = options?.FormulaFontPattern,
+                        FormulaCharPattern = options?.FormulaCharPattern
+                    };
+                    var plan = _preservation.Analyze(blockContext);
+                    var translationSkipped = plan.SkipTranslation;
 
                     irBlocks.Add(new DocumentBlockIr
                     {
@@ -271,7 +277,7 @@ public sealed class LongDocumentTranslationService
         }, cancellationToken);
     }
 
-    private static Task<DocumentIr> ApplyFormulaProtectionAsync(DocumentIr ir, CancellationToken cancellationToken = default)
+    private Task<DocumentIr> ApplyFormulaProtectionAsync(DocumentIr ir, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
@@ -284,14 +290,24 @@ public sealed class LongDocumentTranslationService
                     return block;
                 }
 
-                var protection = ProtectFormulaSpans(block.ProtectedText);
-                var protectedText = protection.ProtectedText;
-                var shouldSkip = IsFormulaOnlyText(protectedText);
+                var blockContext = new BlockContext
+                {
+                    Text = block.ProtectedText,
+                    BlockType = MapToSourceBlockType(block.BlockType),
+                    IsFormulaLike = false
+                };
+                var plan = new ProtectionPlan
+                {
+                    Mode = PreservationMode.None,
+                    SkipTranslation = false
+                };
+                var protectedBlock = _preservation.Protect(blockContext, plan);
 
                 return block with
                 {
-                    ProtectedText = protectedText,
-                    TranslationSkipped = shouldSkip
+                    ProtectedText = protectedBlock.ProtectedText,
+                    FormulaTokenMap = protectedBlock.Tokens,
+                    TranslationSkipped = protectedBlock.Plan.SkipTranslation
                 };
             }).ToList();
 
@@ -435,7 +451,7 @@ public sealed class LongDocumentTranslationService
                 // a prompt instructing the LLM to preserve them — aligned with
                 // pdf2zh translator.py: "Keep the formula notation {v*} unchanged."
                 var customPrompt = options.CustomPrompt;
-                if (options.EnableFormulaProtection && NumericPlaceholderRegex.IsMatch(block.ProtectedText))
+                if (options.EnableFormulaProtection && block.FormulaTokenMap is { Count: > 0 })
                 {
                     const string formulaPrompt = "Keep all {v0}, {v1}, ... formula placeholders exactly as-is. Do not translate, remove, or modify them.";
                     customPrompt = string.IsNullOrWhiteSpace(customPrompt)
@@ -458,10 +474,19 @@ public sealed class LongDocumentTranslationService
                 translatedText = RemoveControlCharacters(translatedText);
                 // Trim leading spaces on each line — aligned with pdf2zh converter.py:488
                 translatedText = TrimLeadingSpacesPerLine(translatedText);
-                var formulaProtection = options.EnableFormulaProtection
-                    ? ProtectFormulaSpans(block.OriginalText)
-                    : FormulaProtectionResult.Empty;
-                translatedText = RestoreFormulaSpans(translatedText, formulaProtection, block.OriginalText);
+                // Restore formulas using the stored token map via ContentPreservation service
+                if (options.EnableFormulaProtection && block.FormulaTokenMap is { Count: > 0 })
+                {
+                    var protectedBlock = new ProtectedBlock
+                    {
+                        OriginalText = block.OriginalText,
+                        ProtectedText = block.ProtectedText,
+                        Tokens = block.FormulaTokenMap,
+                        Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
+                    };
+                    var outcome = _preservation.Restore(translatedText, protectedBlock);
+                    translatedText = _preservation.ResolveFallback(outcome, protectedBlock);
+                }
                 lastError = null;
                 translationSucceeded = true;
                 break;
@@ -533,105 +558,28 @@ public sealed class LongDocumentTranslationService
         _ => BlockType.Unknown
     };
 
+    private static SourceBlockType MapToSourceBlockType(BlockType blockType) => blockType switch
+    {
+        BlockType.Paragraph => SourceBlockType.Paragraph,
+        BlockType.Heading => SourceBlockType.Heading,
+        BlockType.Caption => SourceBlockType.Caption,
+        BlockType.Table => SourceBlockType.TableCell,
+        BlockType.Formula => SourceBlockType.Formula,
+        _ => SourceBlockType.Unknown
+    };
 
-    // Level 2: Font-based formula detection
-    private static readonly Regex MathFontRegex = new(
-        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX" +
-        @"|\bBL|\bRM|\bEU|\bLA|\bRS" +     // pdf2zh: math font abbreviations (word-boundary anchored to avoid "la" in "Regular")
-        @"|LINE|LCIRCLE" +                  // pdf2zh: LaTeX drawing fonts
-        @"|TeX-|rsfs|txsy|wasy|stmary" +    // pdf2zh: TeX symbol font packages
-        @"|\w+Sym\w*|\b\w{1,5}Math\w*",    // generic *Sym* / *Math* (prefix ≤5 chars to avoid "MyCustomMathFont")
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // --- Delegating wrappers for backward compatibility with existing tests ---
+    // The real implementations live in FormulaPreservationService (ContentPreservation layer).
 
     internal static bool IsFontBasedFormula(IReadOnlyList<string>? fontNames, string? customPattern)
-    {
-        if (fontNames is null || fontNames.Count == 0) return false;
-        var pattern = !string.IsNullOrWhiteSpace(customPattern)
-            ? new Regex(customPattern, RegexOptions.IgnoreCase)
-            : MathFontRegex;
-        var mathFontCount = fontNames.Count(f =>
-        {
-            // Strip PDF subset prefix (e.g. "ABCDE+CMSY10" → "CMSY10")
-            // Aligned with pdf2zh converter.py:196: font.split("+")[-1]
-            var name = f;
-            var plusIdx = name.IndexOf('+');
-            if (plusIdx >= 0 && plusIdx < name.Length - 1)
-                name = name[(plusIdx + 1)..];
-            return pattern.IsMatch(name);
-        });
-        // Aligned with pdf2zh vflag(): any math font presence is a strong signal.
-        // Lowered from 0.5 to 0.3 to catch blocks with mixed math/text fonts.
-        return mathFontCount > fontNames.Count * 0.3;
-    }
-
-    // Level 3: Character-based formula detection
-    // Expanded to match pdf2zh vflag() Unicode categories:
-    // Sm (Math symbols), Lm (Modifier letters), Mn (Non-spacing marks), Sk (Modifier symbols),
-    // Greek (0370-03FF), superscripts/subscripts, letterlike symbols, misc math
-    private static readonly Regex MathUnicodeRegex = new(
-        @"[\u2200-\u22FF\u2100-\u214F\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9\u2150-\u218F\u27C0-\u27EF\u2980-\u29FF" +
-        @"\u02B0-\u02FF" +  // Modifier letters (Lm) — pdf2zh vflag
-        @"\u0300-\u036F" +  // Combining diacritical marks (Mn) — pdf2zh vflag
-        @"\u02C6-\u02CF" +  // Modifier symbols (Sk subset) — pdf2zh vflag
-        @"\u2000-\u200B]",  // General punctuation / spaces (Zs) — pdf2zh vflag
-        RegexOptions.Compiled);
+        => FormulaPreservationService.IsFontBasedFormula(fontNames, customPattern);
 
     internal static bool IsCharacterBasedFormula(string text, string? customPattern)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return false;
-        var pattern = !string.IsNullOrWhiteSpace(customPattern)
-            ? new Regex(customPattern)
-            : MathUnicodeRegex;
-        var mathCharCount = pattern.Matches(text).Count;
-        // Count Unicode replacement characters (\uFFFD) — these often represent unmapped CID
-        // glyphs in formula fonts. Aligned with pdf2zh converter.py:197 CID detection.
-        mathCharCount += text.Count(c => c == '\uFFFD');
-        // Lowered from 0.3 to 0.2 — pdf2zh flags individual math characters,
-        // so a lower threshold catches more formula-heavy blocks.
-        return text.Length > 0 && (double)mathCharCount / text.Length > 0.2;
-    }
+        => FormulaPreservationService.IsCharacterBasedFormula(text, customPattern);
 
-    // Level 4: Subscript/superscript density formula detection.
-    // If a block contains math font characters and >25% are subscripts/superscripts,
-    // it is likely a formula (e.g. "x_1, x_2, ..., x_n = f(y)").
-    // Aligned with pdf2zh converter.py:243 child.size < pstk[-1].size * 0.79
     internal static bool IsSubscriptDenseFormula(BlockFormulaCharacters? formulaChars)
-    {
-        if (formulaChars?.Characters is not { Count: > 0 } chars) return false;
-        if (!formulaChars.HasMathFontCharacters) return false;
-
-        var scriptCount = chars.Count(c => c.IsSubscript || c.IsSuperscript);
-        return chars.Count >= 3 && (double)scriptCount / chars.Count > 0.25;
-    }
-
-    private sealed record FormulaProtectionResult(string ProtectedText, IReadOnlyList<FormulaToken> TokenMap)
-    {
-        public static FormulaProtectionResult Empty { get; } = new(string.Empty, Array.Empty<FormulaToken>());
-    }
-
-    private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
-
-    private static FormulaProtectionResult ProtectFormulaSpans(string text)
-    {
-        var protectedText = new FormulaProtector().Protect(text, out var tokens);
-        return new FormulaProtectionResult(protectedText, tokens);
-    }
-
-    private static bool IsFormulaOnlyText(string protectedText)
-    {
-        if (string.IsNullOrWhiteSpace(protectedText))
-        {
-            return false;
-        }
-
-        var cleaned = NumericPlaceholderRegex.Replace(protectedText, string.Empty).Trim();
-        return cleaned.Length == 0;
-    }
-
-    private static string RestoreFormulaSpans(string text, FormulaProtectionResult protection, string originalText)
-    {
-        return new FormulaRestorer().Restore(text, protection.TokenMap, originalText, useSimplified: false);
-    }
+        => FormulaPreservationService.IsSubscriptDenseFormula(formulaChars);
 
     private static string ApplyGlossary(string text, IReadOnlyDictionary<string, string>? glossary)
     {

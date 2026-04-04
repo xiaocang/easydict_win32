@@ -12,6 +12,8 @@ public sealed class FormulaRestorer
 
     /// <summary>
     /// Restores formula placeholders in <paramref name="text"/>.
+    /// Uses graduated fallback: all present → full restore, ≥50% present → partial restore,
+    /// &lt;50% present → fall back to original.
     /// </summary>
     /// <param name="text">Translated text containing {v0}, {v1}, ... placeholders.</param>
     /// <param name="tokens">Ordered token list produced by <see cref="FormulaProtector.Protect"/>.</param>
@@ -30,27 +32,35 @@ public sealed class FormulaRestorer
         if (string.IsNullOrWhiteSpace(text) || tokens.Count == 0)
             return text;
 
-        // Guard against the LLM silently dropping formula placeholders.
-        // If any expected {v0}..{v(n-1)} index is absent from the translated text,
-        // the LLM removed a formula — fall back to the original.
         var presentIndices = new HashSet<int>();
         foreach (Match m in NumericPlaceholderRegex.Matches(text))
         {
             if (int.TryParse(m.Groups[1].Value, out var idx) && idx >= 0 && idx < tokens.Count)
                 presentIndices.Add(idx);
         }
-        if (presentIndices.Count < tokens.Count)
+
+        // All placeholders present → full restore with validation
+        if (presentIndices.Count == tokens.Count)
+            return RestoreFull(text, tokens, originalText, useSimplified);
+
+        // No placeholders or fewer than half → full fallback to original
+        if (presentIndices.Count == 0 || presentIndices.Count * 2 < tokens.Count)
             return originalText;
 
-        var restored = NumericPlaceholderRegex.Replace(text, match =>
-        {
-            var indexStr = match.Groups[1].Value;
-            if (int.TryParse(indexStr, out var index) && index >= 0 && index < tokens.Count)
-            {
-                return useSimplified ? tokens[index].Simplified : tokens[index].Raw;
-            }
-            return match.Value;
-        });
+        // Partial placeholders present (≥50%) → best-effort restore
+        return RestorePartial(text, tokens, originalText, useSimplified);
+    }
+
+    /// <summary>
+    /// Full restore path: all placeholders present, apply strict validation.
+    /// </summary>
+    private static string RestoreFull(
+        string text,
+        IReadOnlyList<FormulaToken> tokens,
+        string originalText,
+        bool useSimplified)
+    {
+        var restored = ReplaceTokens(text, tokens, useSimplified);
 
         // Fallback: if any placeholder remains unresolved, return original text
         if (NumericPlaceholderRegex.IsMatch(restored))
@@ -61,6 +71,46 @@ public sealed class FormulaRestorer
             return originalText;
 
         return restored;
+    }
+
+    /// <summary>
+    /// Partial restore path: some placeholders missing (LLM dropped them).
+    /// Replace whatever placeholders are present; missing formulas are simply absent
+    /// from the translated text rather than causing a full-block fallback.
+    /// </summary>
+    private static string RestorePartial(
+        string text,
+        IReadOnlyList<FormulaToken> tokens,
+        string originalText,
+        bool useSimplified)
+    {
+        var restored = ReplaceTokens(text, tokens, useSimplified);
+
+        // If any {v\d+} remains after replacement (e.g. out-of-range index),
+        // the text is corrupted — fall back.
+        if (NumericPlaceholderRegex.IsMatch(restored))
+            return originalText;
+
+        return restored;
+    }
+
+    /// <summary>
+    /// Replaces all valid {vN} placeholders with their token values.
+    /// </summary>
+    private static string ReplaceTokens(
+        string text,
+        IReadOnlyList<FormulaToken> tokens,
+        bool useSimplified)
+    {
+        return NumericPlaceholderRegex.Replace(text, match =>
+        {
+            var indexStr = match.Groups[1].Value;
+            if (int.TryParse(indexStr, out var index) && index >= 0 && index < tokens.Count)
+            {
+                return useSimplified ? tokens[index].Simplified : tokens[index].Raw;
+            }
+            return match.Value;
+        });
     }
 
     private static bool AreFormulaDelimitersBalanced(string text)

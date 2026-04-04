@@ -147,6 +147,11 @@ public sealed record DocumentBlockIr
     public bool TranslationSkipped { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
     public BlockFormulaCharacters? FormulaCharacters { get; init; }
+    /// <summary>
+    /// Formula token map produced during the protection phase.
+    /// Stored here so restoration reuses the same tokens without re-running detection.
+    /// </summary>
+    public IReadOnlyList<FormulaProtection.FormulaToken>? FormulaTokenMap { get; init; }
 }
 
 public sealed record DocumentIr

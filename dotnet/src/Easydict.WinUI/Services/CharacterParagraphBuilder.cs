@@ -119,17 +119,17 @@ public static class CharacterParagraphBuilder
     // Reuse the same math font regex from LongDocumentTranslationService
     private static readonly Regex MathFontRegex = new(
         @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX" +
-        @"|BL|RM|EU|LA|RS" +
+        @"|\bBL\b|\bRM\b|\bEU\b|\bLA\b|\bRS\b" +  // word-boundary anchored to avoid "la" in "Regular", "rm" in "TimesNewRoman"
         @"|LINE|LCIRCLE" +
         @"|TeX-|rsfs|txsy|wasy|stmary" +
-        @"|\w+Sym\w*|\w+Math\w*",
+        @"|\w+Sym\w*|\b\w{1,5}Math\w*",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // Math Unicode characters for character-level formula detection
     private static readonly Regex MathUnicodeRegex = new(
         @"[\u2200-\u22FF\u2100-\u214F\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9" +
         @"\u2150-\u218F\u27C0-\u27EF\u2980-\u29FF" +
-        @"\u02B0-\u02FF\u0300-\u036F\u02C6-\u02CF\u2000-\u200B]",
+        @"\u02B0-\u02FF\u0300-\u036F\u02C6-\u02CF\u200B-\u200D]",  // narrowed: only ZWSP/ZWNJ/ZWJ, not general spaces
         RegexOptions.Compiled);
 
     /// <summary>
@@ -348,8 +348,10 @@ public static class CharacterParagraphBuilder
 
         // Condition 5: Vertical text matrix detection
         // pdf2zh converter.py:245: child.matrix[0] == 0 and child.matrix[3] == 0
+        // Only classify as formula if the character also has a math font or math Unicode content.
+        // Plain vertical/rotated text (CJK, axis labels) should not be treated as formula.
         var tm = ch.TextMatrix;
-        if (tm.A == 0 && tm.D == 0)
+        if (tm.A == 0 && tm.D == 0 && (MathFontRegex.IsMatch(fontName) || MathUnicodeRegex.IsMatch(ch.Text)))
             return true;
 
         // Condition 6: Unicode replacement character (unmapped CID glyph)

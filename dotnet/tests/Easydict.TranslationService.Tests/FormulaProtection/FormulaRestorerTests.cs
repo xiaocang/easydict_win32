@@ -94,17 +94,45 @@ public class FormulaRestorerTests
     }
 
     [Fact]
-    public void Restore_LlmDroppedPlaceholder_ReturnsFallback()
+    public void Restore_LlmDroppedOnePlaceholder_PartialRestore()
     {
-        // Arrange: 2 tokens, but LLM output only contains {v0}, drops {v1}
+        // 2 tokens, LLM output only contains {v0}, drops {v1}.
+        // 1 of 2 present (50%) → partial restore: replace {v0}, {v1} simply absent.
         var tokens = new[]
         {
             MakeToken("x_1", "x-1"),
             MakeToken("x_n", "x-n"),
         };
-        // Act
         var result = _restorer.Restore("符号表示 {v0} 的序列", tokens, "ORIGINAL", useSimplified: false);
-        // Assert: missing {v1} → fall back
+        // Partial restore: {v0} replaced, missing {v1} is just absent from output
+        result.Should().Be("符号表示 x_1 的序列");
+    }
+
+    [Fact]
+    public void Restore_MostPlaceholdersMissing_FallsBackToOriginal()
+    {
+        // 4 tokens, LLM only kept 1 → 25% < 50% → full fallback
+        var tokens = new[]
+        {
+            MakeToken("\\alpha", "α"),
+            MakeToken("\\beta", "β"),
+            MakeToken("\\gamma", "γ"),
+            MakeToken("\\delta", "δ"),
+        };
+        var result = _restorer.Restore("只有 {v0} 剩下", tokens, "ORIGINAL", useSimplified: false);
+        result.Should().Be("ORIGINAL");
+    }
+
+    [Fact]
+    public void Restore_AllPlaceholdersMissing_FallsBackToOriginal()
+    {
+        // No placeholders at all → full fallback
+        var tokens = new[]
+        {
+            MakeToken("x_1", "x-1"),
+            MakeToken("x_n", "x-n"),
+        };
+        var result = _restorer.Restore("完全没有占位符", tokens, "ORIGINAL", useSimplified: false);
         result.Should().Be("ORIGINAL");
     }
 
@@ -119,5 +147,34 @@ public class FormulaRestorerTests
         };
         var result = _restorer.Restore("符号表示 {v0} 和 {v1}", tokens, "ORIGINAL", useSimplified: false);
         result.Should().Be("符号表示 x_1 和 x_n");
+    }
+
+    [Fact]
+    public void Restore_PartialWithUnresolvableIndex_FallsBack()
+    {
+        // Partial path: {v0} present (1 of 2 = 50%), but also has {v99} (unresolvable).
+        // After replacement, {v99} remains → fallback.
+        var tokens = new[]
+        {
+            MakeToken("\\alpha", "α"),
+            MakeToken("\\beta", "β"),
+        };
+        var result = _restorer.Restore("{v0} and {v99}", tokens, "FALLBACK", useSimplified: false);
+        result.Should().Be("FALLBACK");
+    }
+
+    [Fact]
+    public void Restore_PartialMajority_RestoresPresent()
+    {
+        // 4 tokens, 3 present (75%) → partial restore
+        var tokens = new[]
+        {
+            MakeToken("\\alpha", "α"),
+            MakeToken("\\beta", "β"),
+            MakeToken("\\gamma", "γ"),
+            MakeToken("\\delta", "δ"),
+        };
+        var result = _restorer.Restore("{v0}, {v1}, {v2} 在此", tokens, "ORIGINAL", useSimplified: false);
+        result.Should().Be("\\alpha, \\beta, \\gamma 在此");
     }
 }

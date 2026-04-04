@@ -19,6 +19,15 @@ public sealed class PreparedParagraph
     public required SegmentKind[] Kinds { get; init; }
 
     /// <summary>
+    /// Advance width contribution when this segment is at the end of a line.
+    /// For Space segments: 0 (trailing whitespace hangs past the margin).
+    /// For SoftHyphen segments: <see cref="DiscretionaryHyphenWidth"/> (adds visible hyphen).
+    /// For all others: equals <see cref="Widths"/>[i].
+    /// Inspired by Pretext's lineEndFitAdvances.
+    /// </summary>
+    public required double[] LineEndFitAdvances { get; init; }
+
+    /// <summary>
     /// Per-grapheme widths within each segment. Populated eagerly during <c>Prepare()</c>
     /// for <see cref="SegmentKind.Word"/> segments with more than one grapheme cluster.
     /// Null for all other segment kinds (CjkGrapheme, Space, HardBreak, punctuation).
@@ -42,10 +51,33 @@ public sealed class PreparedParagraph
     public required string[]?[] Graphemes { get; init; }
 
     /// <summary>
-    /// Sum of advance widths of all non-Space, non-HardBreak segments.
-    /// This is the "content width" — it does not include inter-word spacing.
+    /// True when the segment's first character is prohibited from starting a line
+    /// per Japanese kinsoku shori rules (JIS X 4051). Includes closing brackets,
+    /// CJK periods/commas, small kana, prolonged sound mark, iteration marks.
     /// </summary>
-    public double TotalWidth { get; init; }
+    public required bool[] IsProhibitedLineStart { get; init; }
+
+    /// <summary>
+    /// True when the segment's last character is prohibited from ending a line
+    /// per Japanese kinsoku shori rules. Includes opening brackets and CJK opening marks.
+    /// </summary>
+    public required bool[] IsProhibitedLineEnd { get; init; }
+
+    /// <summary>
+    /// Indices of <see cref="SegmentKind.HardBreak"/> segments within the segments array.
+    /// Empty when there are no hard breaks. Used for chunk-based fast-path optimization.
+    /// </summary>
+    public required int[] HardBreakIndices { get; init; }
+
+    /// <summary>
+    /// Width of a discretionary hyphen character, measured once during preparation.
+    /// Used as <see cref="LineEndFitAdvances"/> value for <see cref="SegmentKind.SoftHyphen"/> segments.
+    /// Zero when no soft-hyphens are present in the text.
+    /// </summary>
+    public double DiscretionaryHyphenWidth { get; init; }
+
+    /// <summary>True when there are no hard breaks — enables simplified layout path.</summary>
+    public bool IsSingleChunk => HardBreakIndices.Length == 0;
 
     /// <summary>Number of segments.</summary>
     public int Count => Segments.Length;

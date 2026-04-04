@@ -170,6 +170,22 @@ public class TextSegmenterTests
     }
 
     [Fact]
+    public void Segment_SoftHyphen_SeparateSegment()
+    {
+        var (segments, kinds) = TextSegmenter.Segment("hel\u00ADlo");
+        segments.Should().Equal("hel", "\u00AD", "lo");
+        kinds.Should().Equal(SegmentKind.Word, SegmentKind.SoftHyphen, SegmentKind.Word);
+    }
+
+    [Fact]
+    public void Segment_SoftHyphen_PreservedByNormalization()
+    {
+        // Soft-hyphens should not be collapsed by whitespace normalization
+        var (segments, kinds) = TextSegmenter.Segment("hel\u00ADlo");
+        kinds.Should().Contain(SegmentKind.SoftHyphen);
+    }
+
+    [Fact]
     public void NormalizeWhitespace_CollapsesAndTrims()
     {
         var result = TextSegmenter.NormalizeWhitespace("  Hello   world  \n  next  ");

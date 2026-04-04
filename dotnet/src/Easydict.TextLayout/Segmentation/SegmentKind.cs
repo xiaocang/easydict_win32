@@ -25,4 +25,7 @@ public enum SegmentKind
 
     /// <summary>Closing punctuation that groups with the preceding segment: ) ] } . , ; : ! ? etc.</summary>
     ClosePunctuation,
+
+    /// <summary>Soft hyphen (U+00AD) — zero width normally, visible hyphen at line break.</summary>
+    SoftHyphen,
 }

@@ -53,6 +53,13 @@ public static class TextSegmenter
                     i++;
                     break;
 
+                case CharCategory.SoftHyphen:
+                    FlushBuffer(buffer, segments, kinds, SegmentKind.Word);
+                    segments.Add("\u00AD");
+                    kinds.Add(SegmentKind.SoftHyphen);
+                    i++;
+                    break;
+
                 case CharCategory.Space:
                     FlushBuffer(buffer, segments, kinds, SegmentKind.Word);
                     // Collect contiguous spaces (already collapsed if normalizeWhitespace)

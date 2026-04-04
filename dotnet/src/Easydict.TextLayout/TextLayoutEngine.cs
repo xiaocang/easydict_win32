@@ -21,19 +21,41 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         var (segments, kinds) = TextSegmenter.Segment(request.Text, request.NormalizeWhitespace);
         var count = segments.Length;
         var widths = new double[count];
+        var lineEndFitAdvances = new double[count];
         var graphemeWidths = new double[]?[count];
         var graphemePrefixSums = new double[]?[count];
         var graphemes = new string[]?[count];
-        var totalWidth = 0.0;
+        var isProhibitedLineStart = new bool[count];
+        var isProhibitedLineEnd = new bool[count];
+        var hardBreakIndices = new List<int>();
+        var discretionaryHyphenWidth = 0.0;
+        var hasSoftHyphen = false;
 
         for (var i = 0; i < count; i++)
         {
             var segment = segments[i];
             var kind = kinds[i];
 
+            // Kinsoku flags: check first/last char of each segment
+            if (segment.Length > 0)
+            {
+                isProhibitedLineStart[i] = KinsokuTable.IsProhibitedLineStart(segment[0]);
+                isProhibitedLineEnd[i] = KinsokuTable.IsProhibitedLineEnd(segment[^1]);
+            }
+
             if (kind == SegmentKind.HardBreak)
             {
                 widths[i] = 0;
+                lineEndFitAdvances[i] = 0;
+                hardBreakIndices.Add(i);
+                continue;
+            }
+
+            if (kind == SegmentKind.SoftHyphen)
+            {
+                widths[i] = 0; // invisible when not at break
+                hasSoftHyphen = true;
+                // lineEndFitAdvances set below after hyphen width is measured
                 continue;
             }
 
@@ -41,16 +63,15 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
             {
                 var w = measurer.MeasureGrapheme(segment);
                 widths[i] = w;
-                totalWidth += w;
-                // CJK graphemes are already atomic; grapheme arrays not needed
+                lineEndFitAdvances[i] = w;
                 continue;
             }
 
             var segWidth = measurer.MeasureSegment(segment);
             widths[i] = segWidth;
 
-            if (kind != SegmentKind.Space)
-                totalWidth += segWidth;
+            // Trailing space hangs past the margin (fitAdvance = 0)
+            lineEndFitAdvances[i] = kind == SegmentKind.Space ? 0 : segWidth;
 
             // Pre-compute grapheme widths for word segments (needed for long-segment breaking)
             if (kind == SegmentKind.Word && segment.Length > 1)
@@ -67,12 +88,24 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
                 {
                     graphemes[i] = gList.ToArray();
                     graphemeWidths[i] = gwList.ToArray();
-                    var prefixSums = new double[gwList.Count];
-                    prefixSums[0] = gwList[0];
+                    var pfxSums = new double[gwList.Count];
+                    pfxSums[0] = gwList[0];
                     for (var j = 1; j < gwList.Count; j++)
-                        prefixSums[j] = prefixSums[j - 1] + gwList[j];
-                    graphemePrefixSums[i] = prefixSums;
+                        pfxSums[j] = pfxSums[j - 1] + gwList[j];
+                    graphemePrefixSums[i] = pfxSums;
                 }
+            }
+        }
+
+        // Measure discretionary hyphen once (lazy: only if soft-hyphens present)
+        if (hasSoftHyphen)
+        {
+            discretionaryHyphenWidth = measurer.MeasureGrapheme("-");
+            // Back-fill lineEndFitAdvances for soft-hyphen segments
+            for (var i = 0; i < count; i++)
+            {
+                if (kinds[i] == SegmentKind.SoftHyphen)
+                    lineEndFitAdvances[i] = discretionaryHyphenWidth;
             }
         }
 
@@ -81,10 +114,14 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
             Segments = segments,
             Widths = widths,
             Kinds = kinds,
+            LineEndFitAdvances = lineEndFitAdvances,
             GraphemeWidths = graphemeWidths,
             GraphemePrefixSums = graphemePrefixSums,
             Graphemes = graphemes,
-            TotalWidth = totalWidth,
+            IsProhibitedLineStart = isProhibitedLineStart,
+            IsProhibitedLineEnd = isProhibitedLineEnd,
+            HardBreakIndices = hardBreakIndices.ToArray(),
+            DiscretionaryHyphenWidth = discretionaryHyphenWidth,
         };
     }
 

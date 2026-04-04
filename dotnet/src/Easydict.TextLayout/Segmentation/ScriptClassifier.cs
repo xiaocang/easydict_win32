@@ -15,6 +15,7 @@ public static class ScriptClassifier
         HardBreak,
         OpenPunctuation,
         ClosePunctuation,
+        SoftHyphen,
         Other,
     }
 
@@ -25,6 +26,9 @@ public static class ScriptClassifier
     {
         if (ch == '\n')
             return CharCategory.HardBreak;
+
+        if (ch == '\u00AD')
+            return CharCategory.SoftHyphen;
 
         if (ch is ' ' or '\t' or '\r')
             return CharCategory.Space;

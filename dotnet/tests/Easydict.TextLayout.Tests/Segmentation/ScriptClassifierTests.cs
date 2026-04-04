@@ -73,6 +73,12 @@ public class ScriptClassifierTests
     }
 
     [Fact]
+    public void Classify_SoftHyphen_ReturnsSoftHyphen()
+    {
+        Classify('\u00AD').Should().Be(CharCategory.SoftHyphen);
+    }
+
+    [Fact]
     public void IsCjk_CjkUnifiedRange_ReturnsTrue()
     {
         ScriptClassifier.IsCjk('\u4E00').Should().BeTrue();

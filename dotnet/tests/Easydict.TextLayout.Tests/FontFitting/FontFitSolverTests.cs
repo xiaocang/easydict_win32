@@ -43,14 +43,15 @@ public class FontFitSolverTests
     public void Solve_TextNeedsShrinking_FindsSmallerSize()
     {
         // "Hello world" at fontSize=12: "Hello"(30) + " "(3) + "world"(30) = 63pt
-        // MaxWidth=40, MaxHeight=30, lineHeight=12*1.2=14.4 => maxLines = floor(30/14.4) = 2
-        // Need 2 lines at some smaller font size
+        // MaxWidth=40 => wraps to 2 lines: "Hello" and "world"
+        // lineHeight=12*1.2=14.4, maxLines=floor(14/14.4)=0 => doesn't fit
+        // Must shrink so that 2 lines fit within maxHeight=14
         var request = new FontFitRequest
         {
             Text = "Hello world",
             StartFontSize = 12,
             MaxWidth = 40,
-            MaxHeight = 30,
+            MaxHeight = 14,
         };
 
         var result = FontFitSolver.Solve(request, _engine, ScalingMeasurerFactory());

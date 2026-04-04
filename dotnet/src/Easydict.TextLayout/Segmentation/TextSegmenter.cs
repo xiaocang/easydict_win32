@@ -36,8 +36,8 @@ public static class TextSegmenter
             }
             else
             {
-                // Unpaired surrogate — treat as single char
-                rune = new Rune(normalized[i]);
+                // Unpaired surrogate — treat as single Latin char
+                rune = Rune.ReplacementChar;
                 runeLength = 1;
             }
 

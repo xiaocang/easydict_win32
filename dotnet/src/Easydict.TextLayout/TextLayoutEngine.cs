@@ -248,6 +248,9 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
     /// Core line-breaking algorithm. Greedy first-fit with punctuation grouping.
     /// - Close-punctuation never starts a line (grouped with preceding content, with overflow check)
     /// - Open-punctuation never ends a line (if it would be the last token, defer to next line)
+    /// - Kinsoku line-start prohibition: CJK chars like small kana, prolonged sound marks,
+    ///   and iteration marks never start a line (carried to the preceding line)
+    /// - Left-sticky punctuation: ASCII punct (. , ! ? etc.) after CJK sticks to preceding char
     /// - Trailing spaces trimmed from width calculation consistently
     /// </summary>
     private LayoutLine? LayoutNextLineCore(PreparedParagraph prepared, LayoutCursor start, double maxWidth, bool buildText)
@@ -284,6 +287,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         var lineStartSeg = seg;
         var lineWidth = 0.0;     // includes trailing spaces
         var contentWidth = 0.0;  // excludes trailing spaces
+        var lastContentKind = SegmentKind.Space; // track kind of last non-space segment for left-sticky
         var sb = buildText ? new StringBuilder() : null;
 
         while (seg < segments.Length)
@@ -302,7 +306,28 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
             // Check if this segment fits
             if (lineWidth + segWidth > maxWidth && lineWidth > 0)
             {
-                break;
+                // Kinsoku line-start prohibition: if this segment must not start a line,
+                // carry it onto the current line despite overflow. This prevents characters
+                // like small kana (っ, ょ), prolonged sound mark (ー), middle dot (・),
+                // and iteration marks (々) from appearing at line start.
+                // Safety: only carry if the line already has content (lineWidth > 0),
+                // and only for narrow segments (CjkGrapheme or ClosePunctuation) to avoid
+                // runaway overflow with long Word segments.
+                if (prepared.IsProhibitedLineStart[seg]
+                    && kind is SegmentKind.CjkGrapheme or SegmentKind.ClosePunctuation)
+                {
+                    // Fall through to add it to the current line
+                }
+                // Left-sticky punctuation: ASCII punct like . , ! ? after CJK content
+                // sticks to the preceding character and must not start a new line.
+                else if (IsLeftStickyBreak(segments[seg], lastContentKind))
+                {
+                    // Fall through to add it to the current line
+                }
+                else
+                {
+                    break;
+                }
             }
 
             // If segment doesn't fit and line IS empty, we must emit it (or break it)
@@ -339,6 +364,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
                 lineWidth += segWidth;
                 sb?.Append(segments[seg]);
                 contentWidth = lineWidth;
+                lastContentKind = kind;
 
                 // Look ahead: if next segment is ClosePunctuation, group it only if it fits
                 while (seg + 1 < segments.Length && kinds[seg + 1] == SegmentKind.ClosePunctuation)
@@ -374,6 +400,18 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
 
         var text = sb?.ToString().TrimEnd() ?? string.Empty;
         return new LayoutLine(lineStartSeg, seg, 0, 0, contentWidth, text);
+    }
+
+    /// <summary>
+    /// Checks whether breaking before this segment would violate left-sticky rules.
+    /// ASCII punctuation (. , ! ? : ; ) ] } % " …) should stick to preceding CJK content.
+    /// </summary>
+    private static bool IsLeftStickyBreak(string segment, SegmentKind lastContentKind)
+    {
+        if (segment.Length == 0) return false;
+        // Only applies when the preceding content was CJK
+        if (lastContentKind != SegmentKind.CjkGrapheme) return false;
+        return KinsokuTable.IsLeftSticky(segment[0]);
     }
 
     /// <summary>

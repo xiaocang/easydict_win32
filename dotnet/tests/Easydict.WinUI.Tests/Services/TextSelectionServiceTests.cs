@@ -13,6 +13,26 @@ namespace Easydict.WinUI.Tests.Services;
 [Trait("Category", "WinUI")]
 public class TextSelectionServiceTests
 {
+    [Theory]
+    [InlineData("mobaxterm")]
+    [InlineData("MobaXterm_Personal_26.2")]
+    [InlineData("Xshell7")]
+    [InlineData("solar-putty")]
+    [InlineData("f-secure ssh client")]
+    public void IsTerminalProcessName_ReturnsTrue_ForVersionedOrNormalizedTerminalNames(string processName)
+    {
+        TextSelectionService.IsTerminalProcessName(processName).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("notepad")]
+    [InlineData("chrome")]
+    [InlineData("Code")]
+    public void IsTerminalProcessName_ReturnsFalse_ForNonTerminalApps(string processName)
+    {
+        TextSelectionService.IsTerminalProcessName(processName).Should().BeFalse();
+    }
+
     [Fact]
     public async Task GetSelectedTextAsync_DoesNotThrow()
     {

@@ -48,7 +48,10 @@ public class ScriptClassifierTests
     [InlineData('(')]
     [InlineData('[')]
     [InlineData('{')]
+    [InlineData('\u3008')] // LEFT ANGLE BRACKET 〈
+    [InlineData('\u300A')] // LEFT DOUBLE ANGLE BRACKET 《
     [InlineData('\u300C')] // LEFT CORNER BRACKET
+    [InlineData('\u301D')] // REVERSED DOUBLE PRIME QUOTATION MARK 〝
     [InlineData('\uFF08')] // FULLWIDTH LEFT PARENTHESIS
     public void Classify_OpenPunctuation_ReturnsOpenPunctuation(char ch)
     {
@@ -66,7 +69,11 @@ public class ScriptClassifierTests
     [InlineData('?')]
     [InlineData('\u3001')] // IDEOGRAPHIC COMMA
     [InlineData('\u3002')] // IDEOGRAPHIC FULL STOP
+    [InlineData('\u3009')] // RIGHT ANGLE BRACKET 〉
+    [InlineData('\u300B')] // RIGHT DOUBLE ANGLE BRACKET 》
+    [InlineData('\u301F')] // LOW DOUBLE PRIME QUOTATION MARK 〟
     [InlineData('\uFF09')] // FULLWIDTH RIGHT PARENTHESIS
+    [InlineData('\uFF1A')] // FULLWIDTH COLON ：
     public void Classify_ClosePunctuation_ReturnsClosePunctuation(char ch)
     {
         Classify(ch).Should().Be(CharCategory.ClosePunctuation);

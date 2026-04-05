@@ -68,6 +68,8 @@ public static class ScriptClassifier
     public static bool IsOpenPunctuation(char ch)
     {
         return ch is '(' or '[' or '{' or '<'
+            or '\u3008'   // LEFT ANGLE BRACKET 〈
+            or '\u300A'   // LEFT DOUBLE ANGLE BRACKET 《
             or '\u300C'   // LEFT CORNER BRACKET
             or '\u300E'   // LEFT WHITE CORNER BRACKET
             or '\u3010'   // LEFT BLACK LENTICULAR BRACKET
@@ -75,6 +77,7 @@ public static class ScriptClassifier
             or '\u3016'   // LEFT WHITE LENTICULAR BRACKET
             or '\u3018'   // LEFT WHITE TORTOISE SHELL BRACKET
             or '\u301A'   // LEFT WHITE SQUARE BRACKET
+            or '\u301D'   // REVERSED DOUBLE PRIME QUOTATION MARK 〝
             or '\uFF08'   // FULLWIDTH LEFT PARENTHESIS
             or '\u201C'   // LEFT DOUBLE QUOTATION MARK
             or '\u2018'   // LEFT SINGLE QUOTATION MARK
@@ -91,6 +94,8 @@ public static class ScriptClassifier
             or '.' or ',' or ';' or ':' or '!' or '?' or '%'
             or '\u3001'   // IDEOGRAPHIC COMMA
             or '\u3002'   // IDEOGRAPHIC FULL STOP
+            or '\u3009'   // RIGHT ANGLE BRACKET 〉
+            or '\u300B'   // RIGHT DOUBLE ANGLE BRACKET 》
             or '\u300D'   // RIGHT CORNER BRACKET
             or '\u300F'   // RIGHT WHITE CORNER BRACKET
             or '\u3011'   // RIGHT BLACK LENTICULAR BRACKET
@@ -98,8 +103,10 @@ public static class ScriptClassifier
             or '\u3017'   // RIGHT WHITE LENTICULAR BRACKET
             or '\u3019'   // RIGHT WHITE TORTOISE SHELL BRACKET
             or '\u301B'   // RIGHT WHITE SQUARE BRACKET
+            or '\u301F'   // LOW DOUBLE PRIME QUOTATION MARK 〟
             or '\uFF09'   // FULLWIDTH RIGHT PARENTHESIS
             or '\uFF0C'   // FULLWIDTH COMMA
+            or '\uFF1A'   // FULLWIDTH COLON ：
             or '\uFF1B'   // FULLWIDTH SEMICOLON
             or '\uFF01'   // FULLWIDTH EXCLAMATION MARK
             or '\uFF1F'   // FULLWIDTH QUESTION MARK

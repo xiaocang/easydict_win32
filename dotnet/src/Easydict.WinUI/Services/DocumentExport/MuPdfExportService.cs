@@ -4,7 +4,9 @@
 
 using System.Diagnostics;
 using System.Text;
-using System.Text.RegularExpressions;
+using Easydict.TextLayout;
+using Easydict.TextLayout.Layout;
+using Easydict.TextLayout.Preparation;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.Models;
@@ -244,7 +246,8 @@ public sealed class MuPdfExportService : IDocumentExportService
 
     /// <summary>
     /// Generates PDF text operations for a translated block.
-    /// Handles line wrapping, font size adjustment, color, and ASCII/CJK font routing.
+    /// Uses TextLayout engine for line breaking, then renders each character with
+    /// font routing, super/subscript signals, and GID encoding.
     /// </summary>
     private static string GenerateBlockTextOperations(
         string translatedText,
@@ -280,152 +283,135 @@ public sealed class MuPdfExportService : IDocumentExportService
             sb.Append($"{r:F3} {g:F3} {b:F3} rg ");
         }
 
-        // Simple line wrapping: split by existing newlines, then wrap long lines
-        var lines = translatedText.Split('\n');
+        // Use TextLayout engine for line breaking.
+        // GlyphAdvanceMeasurer returns 0 for ^ and _ signals so they don't affect layout.
+        var engine = TextLayoutEngine.Instance;
+        var measurer = new GlyphAdvanceMeasurer(
+            fonts.PrimaryGlyphMap, fonts.PrimaryAdvanceWidths, fonts.PrimaryUnitsPerEm,
+            fonts.NotoGlyphMap, fonts.NotoAdvanceWidths, fonts.NotoUnitsPerEm,
+            fonts.PrimaryFontIsCjk, fontSize);
+        var prepared = engine.Prepare(
+            new TextPrepareRequest { Text = translatedText, NormalizeWhitespace = true },
+            measurer);
+
+        // Incremental layout: one line at a time, emit PDF operators per line
+        var cursor = LayoutCursor.Start;
         var currentY = startY;
         var linesRendered = 0;
 
-        foreach (var rawLine in lines)
+        while (true)
         {
-            var line = rawLine.Trim();
-            if (string.IsNullOrEmpty(line)) continue;
-
             // Check if we've exceeded the block height
             if (linesRendered > 0 && (startY - currentY) > maxHeight)
                 break;
 
-            // Estimate character width (rough: fontSize * 0.5 for Latin, fontSize for CJK)
-            var avgCharWidth = EstimateAverageCharWidth(line, fontSize);
-            var charsPerLine = maxWidth > 0 ? (int)Math.Max(1, maxWidth / avgCharWidth) : line.Length;
+            var layoutLine = engine.LayoutNextLine(prepared, cursor, maxWidth);
+            if (layoutLine is null)
+                break;
 
-            // Wrap line if needed
-            var pos = 0;
-            // Declared outside the wrap loop so super/subscript signals survive across
-            // segment boundaries (when the ^ or _ falls at the end of a wrapped segment).
+            var lineText = layoutLine.Text;
+            var currentX = startX;
+
+            // Render each character in the laid-out line
             var superNext = false;
             var subNext = false;
-            while (pos < line.Length)
+            foreach (var ch in lineText)
             {
-                var remaining = line.Length - pos;
-                var count = Math.Min(remaining, charsPerLine);
-                var segment = line.Substring(pos, count);
-
-                // Generate PDF operators for this line segment.
-                // ^ and _ are rendering signals left by SimplifyLatexMarkup:
-                // the character immediately following them is raised/lowered as super/subscript.
-
-                foreach (var ch in segment)
+                // Consume ^ and _ as super/subscript signals (not rendered as characters)
+                if (LatexFormulaSimplifier.IsScriptSignal(ch))
                 {
-                    // Consume ^ and _ as super/subscript signals (not rendered as characters)
-                    if (LatexFormulaSimplifier.IsScriptSignal(ch))
-                    {
-                        if (ch == '^') { superNext = true; subNext = false; }
-                        else { subNext = true; superNext = false; }
-                        continue;
-                    }
-
-                    // Apply super/subscript sizing and Y offset for this character only
-                    var charFontSize = fontSize;
-                    var charY = currentY;
-                    if (superNext)
-                    {
-                        charFontSize = fontSize * 0.7;
-                        charY = currentY + fontSize * 0.4;
-                        superNext = false;
-                    }
-                    else if (subNext)
-                    {
-                        charFontSize = fontSize * 0.7;
-                        charY = currentY - fontSize * 0.3;
-                        subNext = false;
-                    }
-
-                    // Route basic ASCII when the primary font is CJK.
-                    // CJK fonts map ASCII to full-width glyphs; we want half-width rendering.
-                    if (fonts.PrimaryFontIsCjk && ch >= 0x20 && ch <= 0x7E)
-                    {
-                        if (ch == ' ')
-                        {
-                            // Emit no glyph — just advance by a proper space width.
-                            // 0.55 × fontSize (old advance) was nearly 2× too wide; 0.3 is closer to Helvetica's 0.278 em.
-                            startX += charFontSize * 0.3;
-                            superNext = false;
-                            subNext = false;
-                            continue;
-                        }
-
-                        // Prefer the primary CJK font's half-width Latin glyph (visually matches CJK stroke weight).
-                        // PrimaryGlyphMap covers the full BMP including ASCII, so this succeeds for NotoSansSC / SourceHanSerif.
-                        if (fonts.PrimaryGlyphMap?.TryGetValue(ch, out var asciiGid) == true && asciiGid != 0)
-                        {
-                            sb.Append(ContentStreamInterpreter.GenerateTextOperator(
-                                fontId, charFontSize, startX, charY, asciiGid.ToString("X4")));
-                            startX += charFontSize * GetGlyphAdvanceEm(
-                                asciiGid, fonts.PrimaryAdvanceWidths, fonts.PrimaryUnitsPerEm, fallbackEm: 0.55);
-                        }
-                        else
-                        {
-                            // Helv fallback: use 1-byte encoding (X2), not 4-byte (X4).
-                            // Built-in Helvetica is a 1-byte-encoded Type1 font; <0041> is 2 bytes (0x00 + 'A').
-                            sb.Append(ContentStreamInterpreter.GenerateTextOperator(
-                                "helv", charFontSize, startX, charY, ((int)ch).ToString("X2")));
-                            startX += charFontSize * 0.55; // helv metrics not loaded; 0.55 is a reasonable avg
-                        }
-                        continue;
-                    }
-
-                    var charFontId = fontId;
-
-                    // Check if character needs the Noto font (non-Latin, non-CJK)
-                    if (fonts.NotoFontId is not null && NeedsNotoFont(ch))
-                        charFontId = fonts.NotoFontId;
-
-                    // Encode the character for the content stream.
-                    // MuPDF embeds fonts with Identity-H encoding: the char code in
-                    // [<XXXX>] TJ must be the GID (glyph index), not the Unicode code point.
-                    // This matches pdf2zh's raw_string() for the SourceHanSerif/Noto path.
-                    string hexCid;
-                    ushort resolvedGid = 0;
-                    if (charFontId == fontId && fonts.PrimaryGlyphMap is not null)
-                    {
-                        if (!fonts.PrimaryGlyphMap.TryGetValue(ch, out resolvedGid) || resolvedGid == 0)
-                            continue; // character not in font — skip (matches pdf2zh behavior)
-                        hexCid = resolvedGid.ToString("X4");
-                    }
-                    else if (charFontId == fonts.NotoFontId && fonts.NotoGlyphMap is not null)
-                    {
-                        if (!fonts.NotoGlyphMap.TryGetValue(ch, out resolvedGid) || resolvedGid == 0)
-                            continue; // character not in font — skip
-                        hexCid = resolvedGid.ToString("X4");
-                    }
-                    else
-                    {
-                        // Built-in font (e.g., Helvetica fallback) — use Unicode code point directly
-                        hexCid = ((int)ch).ToString("X4");
-                    }
-
-                    sb.Append(ContentStreamInterpreter.GenerateTextOperator(
-                        charFontId, charFontSize, startX, charY, hexCid));
-                    // CJK characters are always full-width (1 em).
-                    // For Latin/other scripts, use per-glyph advance from hmtx when available
-                    // to avoid letter-spacing of narrow glyphs (l, i, ., etc.).
-                    if (IsCjkCharacter(ch))
-                        startX += charFontSize;
-                    else if (charFontId == fontId && resolvedGid != 0)
-                        startX += charFontSize * GetGlyphAdvanceEm(
-                            resolvedGid, fonts.PrimaryAdvanceWidths, fonts.PrimaryUnitsPerEm, fallbackEm: 0.6);
-                    else if (charFontId == fonts.NotoFontId && resolvedGid != 0)
-                        startX += charFontSize * GetGlyphAdvanceEm(
-                            resolvedGid, fonts.NotoAdvanceWidths, fonts.NotoUnitsPerEm, fallbackEm: 0.6);
-                    else
-                        startX += charFontSize * 0.6;
+                    if (ch == '^') { superNext = true; subNext = false; }
+                    else { subNext = true; superNext = false; }
+                    continue;
                 }
 
-                startX = bbox.X; // Reset X for next line
-                currentY -= lineHeight;
-                pos += count;
-                linesRendered++;
+                // Apply super/subscript sizing and Y offset for this character only
+                var charFontSize = fontSize;
+                var charY = currentY;
+                if (superNext)
+                {
+                    charFontSize = fontSize * 0.7;
+                    charY = currentY + fontSize * 0.4;
+                    superNext = false;
+                }
+                else if (subNext)
+                {
+                    charFontSize = fontSize * 0.7;
+                    charY = currentY - fontSize * 0.3;
+                    subNext = false;
+                }
+
+                // Route basic ASCII when the primary font is CJK.
+                // CJK fonts map ASCII to full-width glyphs; we want half-width rendering.
+                if (fonts.PrimaryFontIsCjk && ch >= 0x20 && ch <= 0x7E)
+                {
+                    if (ch == ' ')
+                    {
+                        currentX += charFontSize * 0.3;
+                        continue;
+                    }
+
+                    if (fonts.PrimaryGlyphMap?.TryGetValue(ch, out var asciiGid) == true && asciiGid != 0)
+                    {
+                        sb.Append(ContentStreamInterpreter.GenerateTextOperator(
+                            fontId, charFontSize, currentX, charY, asciiGid.ToString("X4")));
+                        currentX += charFontSize * GetGlyphAdvanceEm(
+                            asciiGid, fonts.PrimaryAdvanceWidths, fonts.PrimaryUnitsPerEm, fallbackEm: 0.55);
+                    }
+                    else
+                    {
+                        sb.Append(ContentStreamInterpreter.GenerateTextOperator(
+                            "helv", charFontSize, currentX, charY, ((int)ch).ToString("X2")));
+                        currentX += charFontSize * 0.55;
+                    }
+                    continue;
+                }
+
+                var charFontId = fontId;
+
+                // Check if character needs the Noto font (non-Latin, non-CJK)
+                if (fonts.NotoFontId is not null && NeedsNotoFont(ch))
+                    charFontId = fonts.NotoFontId;
+
+                string hexCid;
+                ushort resolvedGid = 0;
+                if (charFontId == fontId && fonts.PrimaryGlyphMap is not null)
+                {
+                    if (!fonts.PrimaryGlyphMap.TryGetValue(ch, out resolvedGid) || resolvedGid == 0)
+                        continue;
+                    hexCid = resolvedGid.ToString("X4");
+                }
+                else if (charFontId == fonts.NotoFontId && fonts.NotoGlyphMap is not null)
+                {
+                    if (!fonts.NotoGlyphMap.TryGetValue(ch, out resolvedGid) || resolvedGid == 0)
+                        continue;
+                    hexCid = resolvedGid.ToString("X4");
+                }
+                else
+                {
+                    hexCid = ((int)ch).ToString("X4");
+                }
+
+                sb.Append(ContentStreamInterpreter.GenerateTextOperator(
+                    charFontId, charFontSize, currentX, charY, hexCid));
+
+                if (IsCjkCharacter(ch))
+                    currentX += charFontSize;
+                else if (charFontId == fontId && resolvedGid != 0)
+                    currentX += charFontSize * GetGlyphAdvanceEm(
+                        resolvedGid, fonts.PrimaryAdvanceWidths, fonts.PrimaryUnitsPerEm, fallbackEm: 0.6);
+                else if (charFontId == fonts.NotoFontId && resolvedGid != 0)
+                    currentX += charFontSize * GetGlyphAdvanceEm(
+                        resolvedGid, fonts.NotoAdvanceWidths, fonts.NotoUnitsPerEm, fallbackEm: 0.6);
+                else
+                    currentX += charFontSize * 0.6;
             }
+
+            currentY -= lineHeight;
+            linesRendered++;
+
+            // Advance cursor to next line
+            cursor = new LayoutCursor(layoutLine.EndSegment, layoutLine.EndGrapheme);
         }
 
         // Reset color to black after block
@@ -451,30 +437,6 @@ public sealed class MuPdfExportService : IDocumentExportService
     /// </summary>
     private static string SimplifyMathContent(string latex) =>
         LatexFormulaSimplifier.SimplifyMathContent(latex, preserveScriptSignals: true);
-
-    /// <summary>
-    /// Estimates average character width for line wrapping.
-    /// </summary>
-    private static double EstimateAverageCharWidth(string text, double fontSize)
-    {
-        if (string.IsNullOrEmpty(text)) return fontSize * 0.5;
-
-        // Count CJK vs Latin characters for width estimation
-        var cjkCount = 0;
-        var totalCount = 0;
-        foreach (var ch in text)
-        {
-            if (ch > 0x2E7F) cjkCount++; // Rough CJK detection
-            totalCount++;
-        }
-
-        if (totalCount == 0) return fontSize * 0.5;
-
-        var cjkRatio = (double)cjkCount / totalCount;
-        // Corrected formula: ASCII runs use ~0.55 em, CJK use ~1.0 em.
-        // Weighted average = 0.55 + 0.45 × cjkRatio  (was 0.5 + 0.5 × cjkRatio)
-        return fontSize * (0.55 + cjkRatio * 0.45);
-    }
 
     /// <summary>
     /// Checks if a character needs the Noto font (for non-Latin, non-CJK scripts).

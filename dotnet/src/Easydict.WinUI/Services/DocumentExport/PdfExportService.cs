@@ -2,6 +2,9 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Easydict.TextLayout;
+using Easydict.TextLayout.FontFitting;
+using Easydict.TextLayout.Preparation;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
 using PdfSharpCore.Drawing;
@@ -2410,21 +2413,21 @@ public sealed class PdfExportService : IDocumentExportService
 
     internal static XFont FitFontToRect(XGraphics gfx, string text, XFont baseFont, double width, double height, double lineHeight = 14d)
     {
-        var size = baseFont.Size;
-        while (size >= MinFontSize)
+        var engine = TextLayoutEngine.Instance;
+        var lineHeightMultiplier = lineHeight / baseFont.Size;
+        var request = new FontFitRequest
         {
-            var candidate = new XFont(baseFont.Name, size, baseFont.Style);
-            var lines = WrapTextByWidth(gfx, text, candidate, width).ToList();
-            var maxLines = Math.Max(1, (int)Math.Floor(height / lineHeight));
-            if (lines.Count <= maxLines)
-            {
-                return candidate;
-            }
+            Text = text,
+            StartFontSize = baseFont.Size,
+            MinFontSize = MinFontSize,
+            MaxWidth = width,
+            MaxHeight = height,
+            LineHeightMultiplier = lineHeightMultiplier,
+        };
+        var result = FontFitSolver.Solve(request, engine,
+            fontSize => new XGraphicsMeasurer(gfx, new XFont(baseFont.Name, fontSize, baseFont.Style)));
 
-            size -= 0.5;
-        }
-
-        return new XFont(baseFont.Name, MinFontSize, baseFont.Style);
+        return new XFont(baseFont.Name, result.ChosenFontSize, baseFont.Style);
     }
 
     /// <summary>
@@ -2437,26 +2440,21 @@ public sealed class PdfExportService : IDocumentExportService
             return baseFont;
 
         var widths = lineRects.Select(r => Math.Max(10, r.Width)).ToList();
-        var minHeight = Math.Max(8, lineRects.Min(r => Math.Max(1, r.Height)));
+        var heights = lineRects.Select(r => Math.Max(1, r.Height)).ToList();
 
-        var size = baseFont.Size;
-        while (size >= MinFontSize)
+        var engine = TextLayoutEngine.Instance;
+        var request = new FontFitRequest
         {
-            var candidate = new XFont(baseFont.Name, size, baseFont.Style);
-            if (candidate.Size > minHeight * 0.98)
-            {
-                size -= 0.5;
-                continue;
-            }
+            Text = text,
+            StartFontSize = baseFont.Size,
+            MinFontSize = MinFontSize,
+            LineWidths = widths,
+            LineHeights = heights,
+        };
+        var result = FontFitSolver.Solve(request, engine,
+            fontSize => new XGraphicsMeasurer(gfx, new XFont(baseFont.Name, fontSize, baseFont.Style)));
 
-            var lines = WrapTextByWidths(gfx, text, candidate, widths).ToList();
-            if (lines.Count <= lineRects.Count)
-                return candidate;
-
-            size -= 0.5;
-        }
-
-        return new XFont(baseFont.Name, MinFontSize, baseFont.Style);
+        return new XFont(baseFont.Name, result.ChosenFontSize, baseFont.Style);
     }
 
     internal static IEnumerable<string> WrapText(string text, int maxChars)
@@ -2482,42 +2480,13 @@ public sealed class PdfExportService : IDocumentExportService
 
     internal static IEnumerable<string> WrapTextByWidth(XGraphics gfx, string text, XFont font, double maxWidth)
     {
-        foreach (var paragraph in text.Replace("\r\n", "\n").Split('\n'))
-        {
-            if (string.IsNullOrEmpty(paragraph))
-            {
-                yield return string.Empty;
-                continue;
-            }
-
-            var line = new StringBuilder();
-            var lineWidth = 0.0;
-
-            foreach (var token in TokenizeForWrapping(paragraph))
-            {
-                var tokenWidth = gfx.MeasureString(token, font).Width;
-
-                if (line.Length > 0 && lineWidth + tokenWidth > maxWidth)
-                {
-                    yield return line.ToString();
-                    line.Clear();
-                    lineWidth = 0;
-                }
-
-                // Skip leading spaces at the start of wrapped lines —
-                // aligned with pdf2zh converter.py:488.
-                var t = line.Length == 0 ? token.TrimStart() : token;
-                if (t.Length > 0)
-                {
-                    var tw = line.Length == 0 && t != token ? gfx.MeasureString(t, font).Width : tokenWidth;
-                    line.Append(t);
-                    lineWidth += tw;
-                }
-            }
-
-            if (line.Length > 0)
-                yield return line.ToString();
-        }
+        var engine = TextLayoutEngine.Instance;
+        var measurer = new XGraphicsMeasurer(gfx, font);
+        var prepared = engine.Prepare(
+            new TextPrepareRequest { Text = text, NormalizeWhitespace = true },
+            measurer);
+        var result = engine.LayoutWithLines(prepared, maxWidth);
+        return result.Lines.Select(l => l.Text);
     }
 
     /// <summary>
@@ -2527,105 +2496,16 @@ public sealed class PdfExportService : IDocumentExportService
     internal static IEnumerable<string> WrapTextByWidths(XGraphics gfx, string text, XFont font, IReadOnlyList<double> maxWidths)
     {
         if (maxWidths.Count == 0)
-            yield break;
+            return [];
 
-        var widths = maxWidths.Select(w => Math.Max(10, w)).ToArray();
-        var lineIndex = 0;
-
-        foreach (var paragraph in text.Replace("\r\n", "\n").Split('\n'))
-        {
-            // Preserve explicit blank lines
-            if (paragraph.Length == 0)
-            {
-                yield return string.Empty;
-                lineIndex++;
-                continue;
-            }
-
-            var line = new StringBuilder();
-            var lineWidth = 0.0;
-
-            foreach (var token in TokenizeForWrapping(paragraph))
-            {
-                var maxWidth = widths[Math.Min(lineIndex, widths.Length - 1)];
-                var tokenWidth = gfx.MeasureString(token, font).Width;
-
-                if (line.Length > 0 && lineWidth + tokenWidth > maxWidth)
-                {
-                    yield return line.ToString();
-                    line.Clear();
-                    lineWidth = 0;
-                    lineIndex++;
-                    maxWidth = widths[Math.Min(lineIndex, widths.Length - 1)];
-                }
-
-                // Skip leading spaces at the start of wrapped lines —
-                // aligned with pdf2zh converter.py:488.
-                var t = line.Length == 0 ? token.TrimStart() : token;
-                var tw = line.Length == 0 && t != token ? gfx.MeasureString(t, font).Width : tokenWidth;
-
-                // If the token itself is too wide for an empty line, split it into characters.
-                if (line.Length == 0 && tw > maxWidth && t.Length > 1)
-                {
-                    foreach (var piece in SplitTokenByWidth(gfx, t, font, () => widths[Math.Min(lineIndex, widths.Length - 1)], () => lineIndex++))
-                    {
-                        yield return piece;
-                    }
-
-                    // After splitting, we're at the start of a new line.
-                    continue;
-                }
-
-                if (t.Length > 0)
-                {
-                    line.Append(t);
-                    lineWidth += tw;
-                }
-            }
-
-            if (line.Length > 0)
-            {
-                yield return line.ToString();
-                lineIndex++;
-            }
-        }
-    }
-
-    private static IEnumerable<string> SplitTokenByWidth(
-        XGraphics gfx,
-        string token,
-        XFont font,
-        Func<double> getMaxWidth,
-        Action advanceLine)
-    {
-        var part = new StringBuilder();
-        var partWidth = 0.0;
-
-        foreach (var ch in token)
-        {
-            var maxWidth = getMaxWidth();
-            var chStr = ch.ToString();
-            var chWidth = gfx.MeasureString(chStr, font).Width;
-
-            if (part.Length > 0 && partWidth + chWidth > maxWidth)
-            {
-                yield return part.ToString();
-                part.Clear();
-                partWidth = 0;
-                advanceLine();
-                maxWidth = getMaxWidth();
-            }
-
-            // If even a single character doesn't fit (extremely narrow column), still emit it.
-            part.Append(chStr);
-            partWidth += chWidth;
-        }
-
-        if (part.Length > 0)
-        {
-            yield return part.ToString();
-            advanceLine();
-        }
+        var widths = maxWidths.Select(w => Math.Max(10, w)).ToList();
+        var engine = TextLayoutEngine.Instance;
+        var measurer = new XGraphicsMeasurer(gfx, font);
+        var prepared = engine.Prepare(
+            new TextPrepareRequest { Text = text, NormalizeWhitespace = true },
+            measurer);
+        var result = engine.LayoutWithLines(prepared, widths);
+        return result.Lines.Select(l => l.Text);
     }
 
     /// <summary>
@@ -2754,42 +2634,6 @@ public sealed class PdfExportService : IDocumentExportService
                 return true;
         }
         return false;
-    }
-
-    /// <summary>
-    /// Splits text into wrappable tokens: individual CJK characters and space-delimited Latin words.
-    /// CJK text can break at any character boundary; Latin text breaks at spaces.
-    /// </summary>
-    private static IEnumerable<string> TokenizeForWrapping(string text)
-    {
-        var wordBuffer = new StringBuilder();
-        foreach (var ch in text)
-        {
-            if (IsCjkCharacter(ch))
-            {
-                if (wordBuffer.Length > 0)
-                {
-                    yield return wordBuffer.ToString();
-                    wordBuffer.Clear();
-                }
-                yield return ch.ToString();
-            }
-            else if (ch == ' ')
-            {
-                if (wordBuffer.Length > 0)
-                {
-                    yield return wordBuffer.ToString();
-                    wordBuffer.Clear();
-                }
-                wordBuffer.Append(ch);
-            }
-            else
-            {
-                wordBuffer.Append(ch);
-            }
-        }
-        if (wordBuffer.Length > 0)
-            yield return wordBuffer.ToString();
     }
 
     private static bool IsCjkCharacter(char ch)

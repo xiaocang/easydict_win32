@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using FlaUI.Core;
 using FlaUI.UIA3;
 
@@ -163,10 +164,39 @@ public sealed class AppLauncher : IDisposable
 
     public FlaUI.Core.AutomationElements.Window GetMainWindow(TimeSpan? timeout = null)
     {
-        var window = Application.GetMainWindow(Automation, timeout ?? TimeSpan.FromSeconds(15));
-        if (window == null)
-            throw new InvalidOperationException("Main window not found");
-        return window;
+        // The inner FlaUI call invokes CUIAutomation.ElementFromHandle via COM,
+        // which can transiently time out on loaded CI hosts (observed as
+        // COMException 0x80131505 bubbling up as TimeoutException). Retry the
+        // whole call until the overall timeout is exhausted so a single COM
+        // stall does not fail the test.
+        var overall = timeout ?? TimeSpan.FromSeconds(15);
+        var perAttempt = TimeSpan.FromSeconds(Math.Min(5, Math.Max(2, overall.TotalSeconds / 3)));
+        var sw = Stopwatch.StartNew();
+        Exception? lastException = null;
+
+        while (sw.Elapsed < overall)
+        {
+            try
+            {
+                var window = Application.GetMainWindow(Automation, perAttempt);
+                if (window != null)
+                    return window;
+            }
+            catch (TimeoutException ex)
+            {
+                lastException = ex;
+            }
+            catch (COMException ex)
+            {
+                lastException = ex;
+            }
+
+            Thread.Sleep(500);
+        }
+
+        throw new InvalidOperationException(
+            $"Main window not found within {overall.TotalSeconds}s",
+            lastException);
     }
 
     private void WaitForMainWindow(TimeSpan timeout)

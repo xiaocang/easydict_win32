@@ -84,6 +84,22 @@ public static class TextSelectionService
         "mintty",  // Git Bash, Cygwin, MSYS2
         "alacritty", "wezterm", "hyper", "terminus",  // Third-party terminals
         "wsl", "wslhost",  // WSL
+        // SSH clients & terminal multiplexers (GH issue #116)
+        "mobaxterm", "mobaxterm_personal",  // MobaXterm
+        "putty", "kitty", "solar-putty",  // PuTTY & forks
+        "xshell", "xshell_rc",  // Xshell (NetSarang)
+        "securecrt",  // SecureCRT (VanDyke)
+        "tabby",  // Tabby Terminal
+        "conemu", "conemu64", "cmder",  // ConEmu / Cmder
+        "fluentterminal",  // Fluent Terminal
+        "termius",  // Termius
+        "bitvise", "bvssh",  // Bitvise SSH Client
+        "mremoteng",  // mRemoteNG
+        "rlogin",  // Rlogin
+        "poderosa",  // Poderosa Terminal
+        "teraterm", "ttermpro",  // Tera Term
+        "smartty",  // SmarTTY
+        "f-secure ssh client",  // F-Secure SSH
     };
 
     private static readonly UIA3Automation _automation = new();

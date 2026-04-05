@@ -25,13 +25,19 @@ public sealed class FormulaProtector
     /// </summary>
     /// <param name="text">The input text possibly containing formulas.</param>
     /// <param name="hardTokens">Tokens for high-confidence matches that need {vN} restoration.</param>
+    /// <param name="demoteLevel">
+    /// 0 (default): standard confidence split. 1: demote ambiguous types
+    /// (<see cref="FormulaTokenType.MathSubscript"/>, <see cref="FormulaTokenType.MathSuperscript"/>,
+    /// <see cref="FormulaTokenType.Fraction"/>, <see cref="FormulaTokenType.SquareRoot"/>) to soft protection.
+    /// Used for retry-with-softer-protection when the LLM drops placeholders.
+    /// </param>
     /// <returns>Text with high-confidence formulas as {vN} and low-confidence as $...$.</returns>
-    public string ProtectTwoTier(string text, out IReadOnlyList<FormulaToken> hardTokens)
+    public string ProtectTwoTier(string text, out IReadOnlyList<FormulaToken> hardTokens, int demoteLevel = 0)
     {
-        return ProtectWithConfidence(text, out hardTokens, splitByConfidence: true);
+        return ProtectWithConfidence(text, out hardTokens, splitByConfidence: true, demoteLevel: demoteLevel);
     }
 
-    private string ProtectWithConfidence(string text, out IReadOnlyList<FormulaToken> hardTokens, bool splitByConfidence)
+    private string ProtectWithConfidence(string text, out IReadOnlyList<FormulaToken> hardTokens, bool splitByConfidence, int demoteLevel = 0)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -65,7 +71,7 @@ public sealed class FormulaProtector
             // Append text before this match
             sb.Append(text, lastEnd, start - lastEnd);
 
-            var isHigh = !splitByConfidence || FormulaDetector.IsHighConfidence(type);
+            var isHigh = !splitByConfidence || (FormulaDetector.IsHighConfidence(type) && !IsDemoted(type, demoteLevel));
 
             if (isHigh)
             {
@@ -111,6 +117,22 @@ public sealed class FormulaProtector
 
         hardTokens = hardList;
         return protectedText;
+    }
+
+    /// <summary>
+    /// Returns true if the given token type should be demoted from high to low confidence
+    /// at the given retry level. Level 0: no demotion. Level 1: ambiguous notation types are
+    /// moved to soft protection. Never demotes unambiguous formulas (explicit LaTeX delimiters,
+    /// Greek letters, operators, environments).
+    /// </summary>
+    private static bool IsDemoted(FormulaTokenType type, int level)
+    {
+        if (level < 1) return false;
+        return type is
+            FormulaTokenType.MathSubscript or
+            FormulaTokenType.MathSuperscript or
+            FormulaTokenType.Fraction or
+            FormulaTokenType.SquareRoot;
     }
 
     private static string BuildSimplified(string raw, FormulaTokenType type)

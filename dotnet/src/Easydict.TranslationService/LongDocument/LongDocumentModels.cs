@@ -166,6 +166,13 @@ public sealed record DocumentBlockIr
     public string? CharacterLevelProtectedText { get; init; }
     /// <summary>Character-level formula tokens from CharacterParagraphBuilder (if available).</summary>
     public IReadOnlyList<FormulaProtection.FormulaToken>? CharacterLevelTokens { get; init; }
+    /// <summary>
+    /// Preservation context captured during the initial Protect pass. Used by the retry loop
+    /// in <c>TranslateSingleBlockAsync</c> to re-run <see cref="ContentPreservation.IContentPreservationService.Protect"/>
+    /// with <see cref="ContentPreservation.BlockContext.RetryAttempt"/> incremented. Null when the
+    /// block was built from a test harness or non-PDF source that doesn't carry parser signals.
+    /// </summary>
+    public ContentPreservation.BlockContext? PreservationContext { get; init; }
 }
 
 public sealed record DocumentIr
@@ -205,6 +212,13 @@ public sealed record LongDocumentTranslationOptions
     public bool EnableFormulaProtection { get; init; } = true;
     public bool EnableOcrFallback { get; init; } = true;
     public int MaxRetriesPerBlock { get; init; } = 1;
+    /// <summary>
+    /// When true, the retry loop in <c>TranslateSingleBlockAsync</c> detects partial-restore
+    /// (LLM dropped <c>{vN}</c> placeholders) and re-runs the block with softer protection
+    /// (demoted confidence) before giving up. Shares the <see cref="MaxRetriesPerBlock"/> budget
+    /// with exception retries. Default off to preserve existing behavior.
+    /// </summary>
+    public bool EnableQualityFeedbackRetry { get; init; } = false;
     public IReadOnlyDictionary<string, string>? Glossary { get; init; }
     public LayoutDetectionMode LayoutDetection { get; init; } = LayoutDetectionMode.Auto;
     public int MaxConcurrency { get; init; } = 1;

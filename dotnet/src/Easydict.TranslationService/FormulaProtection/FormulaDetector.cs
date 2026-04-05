@@ -93,9 +93,9 @@ public static class FormulaDetector
             return FormulaTokenType.MathSubscript;
         if (rawFormula.Contains('='))
             return FormulaTokenType.InlineEquation;
-        // Implicit-subscript tuple: (x1, ..., xn)
+        // Implicit-subscript tuple: (x1, ..., xn) — low confidence, goes to soft $...$ protection
         if (rawFormula.StartsWith("(", StringComparison.Ordinal))
-            return FormulaTokenType.MathSubscript;
+            return FormulaTokenType.ImplicitTuple;
 
         return FormulaTokenType.UnitFragment;
     }
@@ -121,7 +121,7 @@ public static class FormulaDetector
         FormulaTokenType.MathSuperscript or     // x^2 (explicit ^)
         FormulaTokenType.MathSubscript          // h_{t-1} (explicit _)
             => true,
-        // Low confidence — InlineEquation ("x = value"), SequenceToken ("hidden_state"), UnitFragment
+        // Low confidence — InlineEquation, SequenceToken, ImplicitTuple, UnitFragment
         _ => false,
     };
 

@@ -17,5 +17,6 @@ public enum FormulaTokenType
     Matrix,          // \begin{bmatrix}...
     InlineEquation,  // x = y_1 + z^2
     SequenceToken,   // hidden_state, sequence_1 (long base >5 chars — NOT subscript rendered)
+    ImplicitTuple,   // (x1, ..., xn) — implicit-subscript tuple, low confidence
     UnitFragment,    // catch-all
 }

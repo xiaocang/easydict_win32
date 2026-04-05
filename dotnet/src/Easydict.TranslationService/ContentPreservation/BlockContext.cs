@@ -40,4 +40,14 @@ public sealed record BlockContext
     /// Character-level formula tokens, paired with CharacterLevelProtectedText.
     /// </summary>
     public IReadOnlyList<FormulaToken>? CharacterLevelTokens { get; init; }
+
+    /// <summary>
+    /// Retry attempt number, incremented when the translation pipeline re-invokes
+    /// <see cref="IContentPreservationService.Protect"/> after detecting placeholder loss.
+    /// Level 0 (default) is the first attempt and uses strict confidence split.
+    /// Level ≥1 demotes ambiguous formula types (subscripts, superscripts, fractions,
+    /// square roots) from hard <c>{vN}</c> protection to soft <c>$...$</c> protection
+    /// and bypasses the character-level preemption path.
+    /// </summary>
+    public int RetryAttempt { get; init; } = 0;
 }

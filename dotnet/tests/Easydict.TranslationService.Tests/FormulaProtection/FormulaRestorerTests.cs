@@ -177,4 +177,60 @@ public class FormulaRestorerTests
         var result = _restorer.Restore("{v0}, {v1}, {v2} 在此", tokens, "ORIGINAL", useSimplified: false);
         result.Should().Be("\\alpha, \\beta, \\gamma 在此");
     }
+
+    [Fact]
+    public void RestoreWithDiagnostics_AllPresent_ReportsFullRestore()
+    {
+        var tokens = new[] { MakeToken("\\alpha", "α"), MakeToken("\\beta", "β") };
+        var result = _restorer.RestoreWithDiagnostics("{v0} and {v1}", tokens, "ORIGINAL");
+        result.Status.Should().Be(FormulaRestoreStatus.FullRestore);
+        result.DroppedCount.Should().Be(0);
+        result.MissingIndices.Should().BeEmpty();
+        result.Text.Should().Be("\\alpha and \\beta");
+    }
+
+    [Fact]
+    public void RestoreWithDiagnostics_PartialRestore_ReportsMissingIndices()
+    {
+        // 4 tokens, 3 present (75%) → partial restore, missing index 3
+        var tokens = new[]
+        {
+            MakeToken("\\alpha", "α"),
+            MakeToken("\\beta", "β"),
+            MakeToken("\\gamma", "γ"),
+            MakeToken("\\delta", "δ"),
+        };
+        var result = _restorer.RestoreWithDiagnostics("{v0} {v1} {v2} here", tokens, "ORIGINAL");
+        result.Status.Should().Be(FormulaRestoreStatus.PartialRestore);
+        result.DroppedCount.Should().Be(1);
+        result.MissingIndices.Should().Equal(3);
+    }
+
+    [Fact]
+    public void RestoreWithDiagnostics_BelowHalf_ReportsFallback()
+    {
+        // 4 tokens, only 1 present (25%) → fallback, missing 1/2/3
+        var tokens = new[]
+        {
+            MakeToken("\\alpha", "α"),
+            MakeToken("\\beta", "β"),
+            MakeToken("\\gamma", "γ"),
+            MakeToken("\\delta", "δ"),
+        };
+        var result = _restorer.RestoreWithDiagnostics("only {v0} remaining", tokens, "ORIGINAL");
+        result.Status.Should().Be(FormulaRestoreStatus.FallbackToOriginal);
+        result.DroppedCount.Should().Be(3);
+        result.MissingIndices.Should().Equal(1, 2, 3);
+        result.Text.Should().Be("ORIGINAL");
+    }
+
+    [Fact]
+    public void RestoreWithDiagnostics_NoPlaceholders_ReportsFallback()
+    {
+        var tokens = new[] { MakeToken("\\alpha", "α") };
+        var result = _restorer.RestoreWithDiagnostics("no placeholders here", tokens, "ORIGINAL");
+        result.Status.Should().Be(FormulaRestoreStatus.FallbackToOriginal);
+        result.DroppedCount.Should().Be(1);
+        result.MissingIndices.Should().Equal(0);
+    }
 }

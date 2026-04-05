@@ -176,5 +176,98 @@ public class FormulaPreservationServiceTests
         var finalText = _service.ResolveFallback(outcome, protectedBlock);
 
         finalText.Should().Be("这个 \\alpha 字母");
+        outcome.Status.Should().Be(RestoreStatus.FullRestore);
+        outcome.MissingTokenCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Restore_MissingPlaceholder_ReportsPartial()
+    {
+        // 4 tokens, translated text contains only 3 placeholders (75%) → PartialRestore
+        var tokens = new[]
+        {
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\alpha", "{v0}", "α"),
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\beta", "{v1}", "β"),
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\gamma", "{v2}", "γ"),
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\delta", "{v3}", "δ"),
+        };
+        var protectedBlock = new ProtectedBlock
+        {
+            OriginalText = "\\alpha \\beta \\gamma \\delta",
+            ProtectedText = "{v0} {v1} {v2} {v3}",
+            Tokens = tokens,
+            Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
+        };
+
+        var outcome = _service.Restore("{v0} {v1} {v2}", protectedBlock);
+
+        outcome.Status.Should().Be(RestoreStatus.PartialRestore);
+        outcome.MissingTokenCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Restore_AllMissing_ReportsFallback()
+    {
+        var tokens = new[]
+        {
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\alpha", "{v0}", "α"),
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\beta", "{v1}", "β"),
+        };
+        var protectedBlock = new ProtectedBlock
+        {
+            OriginalText = "\\alpha \\beta",
+            ProtectedText = "{v0} {v1}",
+            Tokens = tokens,
+            Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
+        };
+
+        var outcome = _service.Restore("no placeholders here", protectedBlock);
+
+        outcome.Status.Should().Be(RestoreStatus.FallbackToOriginal);
+        outcome.MissingTokenCount.Should().Be(2);
+        outcome.Text.Should().Be("\\alpha \\beta");
+    }
+
+    [Fact]
+    public void Protect_RetryAttempt1_DemotesSubscript()
+    {
+        // On retry, MathSubscript is demoted to soft $...$ protection.
+        var context = new BlockContext
+        {
+            Text = "We use h_{t-1} in the recurrence.",
+            BlockType = SourceBlockType.Paragraph,
+            RetryAttempt = 1
+        };
+        var plan = new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false };
+
+        var result = _service.Protect(context, plan);
+
+        result.Tokens.Should().BeEmpty();
+        result.ProtectedText.Should().Contain("$h_{t-1}$");
+    }
+
+    [Fact]
+    public void Protect_RetryAttempt1_SkipsCharacterLevelPath()
+    {
+        // On retry, even if character-level tokens are present, the regex path is used
+        // so demoteLevel can take effect. Character-level tokens are ignored.
+        var context = new BlockContext
+        {
+            Text = "The h_{t-1} value.",
+            BlockType = SourceBlockType.Paragraph,
+            CharacterLevelProtectedText = "The {v0} value.",
+            CharacterLevelTokens = new[]
+            {
+                new FormulaToken(FormulaTokenType.MathSubscript, "h_{t-1}", "{v0}", "h_{t-1}")
+            },
+            RetryAttempt = 1
+        };
+        var plan = new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false };
+
+        var result = _service.Protect(context, plan);
+
+        // Character-level tokens not used; regex path demotes subscript to soft protection.
+        result.Tokens.Should().BeEmpty();
+        result.ProtectedText.Should().Contain("$h_{t-1}$");
     }
 }

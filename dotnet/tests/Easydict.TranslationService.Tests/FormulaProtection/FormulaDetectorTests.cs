@@ -153,9 +153,15 @@ public class FormulaDetectorTests
     }
 
     [Fact]
-    public void Classify_ImplicitTuple_ReturnsMathSubscript()
+    public void Classify_ImplicitTuple_ReturnsImplicitTuple()
     {
-        FormulaDetector.Classify("(x1, ..., xn)").Should().Be(FormulaTokenType.MathSubscript);
+        FormulaDetector.Classify("(x1, ..., xn)").Should().Be(FormulaTokenType.ImplicitTuple);
+    }
+
+    [Fact]
+    public void IsHighConfidence_ImplicitTuple_ReturnsFalse()
+    {
+        FormulaDetector.IsHighConfidence(FormulaTokenType.ImplicitTuple).Should().BeFalse();
     }
 
     [Fact]

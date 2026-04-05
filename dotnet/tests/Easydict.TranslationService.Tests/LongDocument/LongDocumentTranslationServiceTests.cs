@@ -596,6 +596,114 @@ public class LongDocumentTranslationServiceTests
         translated.Should().Be("The $E=mc^2$ represents energy in physics.");
     }
 
+    [Fact]
+    public async Task TranslateAsync_QualityFeedbackRetry_PartialRestoreTriggersRetry()
+    {
+        // The protected block will have 3 hard placeholders (3 Greek letters).
+        // Call 1: LLM returns a translation that contains only {v0} and {v1} (drops {v2}) → PartialRestore.
+        // Call 2: LLM returns a translation that contains all three placeholders → FullRestore.
+        var callCount = 0;
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            callCount++;
+            var text = callCount == 1
+                ? "Tr1 {v0} and {v1} only"
+                : "Tr2 {v0} and {v1} and {v2}";
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = text,
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-qfr",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "Use \\alpha and \\beta and \\gamma."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            MaxRetriesPerBlock = 2,
+            EnableQualityFeedbackRetry = true
+        });
+
+        callCount.Should().Be(2);
+        var block = result.Pages[0].Blocks.Single();
+        block.TranslatedText.Should().Contain("\\alpha");
+        block.TranslatedText.Should().Contain("\\beta");
+        block.TranslatedText.Should().Contain("\\gamma");
+        block.RetryCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_QualityFeedbackRetry_DisabledDoesNotRetry()
+    {
+        var callCount = 0;
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            callCount++;
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = "Tr {v0} and {v1} only", // drops {v2}
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-qfr-off",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "Use \\alpha and \\beta and \\gamma."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.English,
+            ServiceId = "google",
+            MaxRetriesPerBlock = 2
+            // EnableQualityFeedbackRetry = false (default)
+        });
+
+        callCount.Should().Be(1);
+        result.Pages[0].Blocks.Single().RetryCount.Should().Be(0);
+    }
+
     private static Task<TranslationResult> FakeTranslate(TranslationRequest request, string _, CancellationToken __)
     {
         return Task.FromResult(new TranslationResult

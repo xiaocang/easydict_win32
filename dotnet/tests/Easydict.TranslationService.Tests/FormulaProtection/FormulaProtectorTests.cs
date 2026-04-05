@@ -153,4 +153,31 @@ public class FormulaProtectorTests
         // or the whole expression — either way a token must be produced
         tokens[0].Raw.Should().Contain("frac");
     }
+
+    [Fact]
+    public void ProtectTwoTier_DemoteLevel0_SubscriptStaysHard()
+    {
+        // Explicit subscript h_{t-1} is high-confidence at demoteLevel 0 → {vN}
+        var result = _protector.ProtectTwoTier("Look at h_{t-1} here.", out var tokens, demoteLevel: 0);
+        tokens.Should().NotBeEmpty();
+        result.Should().Contain("{v0}");
+    }
+
+    [Fact]
+    public void ProtectTwoTier_DemoteLevel1_SubscriptBecomesSoft()
+    {
+        // At demoteLevel 1, MathSubscript is demoted to soft $...$ protection.
+        var result = _protector.ProtectTwoTier("Look at h_{t-1} here.", out var tokens, demoteLevel: 1);
+        tokens.Should().BeEmpty();
+        result.Should().Contain("$h_{t-1}$");
+    }
+
+    [Fact]
+    public void ProtectTwoTier_DemoteLevel1_GreekLetterStaysHard()
+    {
+        // Greek letters are unambiguous and never demoted.
+        var result = _protector.ProtectTwoTier("The \\alpha is here.", out var tokens, demoteLevel: 1);
+        tokens.Should().NotBeEmpty();
+        result.Should().Contain("{v0}");
+    }
 }

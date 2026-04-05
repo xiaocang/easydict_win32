@@ -94,8 +94,11 @@ public sealed class FormulaPreservationService : IContentPreservationService
             };
         }
 
-        // Prefer character-level detection when available (from CharacterParagraphBuilder)
-        if (context.CharacterLevelProtectedText is not null &&
+        // Prefer character-level detection when available (from CharacterParagraphBuilder).
+        // Skipped on retry (RetryAttempt >= 1) because the character-level tokens were computed
+        // under the original strict policy; the regex path lets us demote ambiguous types.
+        if (context.RetryAttempt == 0 &&
+            context.CharacterLevelProtectedText is not null &&
             context.CharacterLevelTokens is { Count: > 0 })
         {
             var isCharFormulaOnly = IsFormulaOnlyText(context.CharacterLevelProtectedText);
@@ -115,7 +118,8 @@ public sealed class FormulaPreservationService : IContentPreservationService
         // Fallback to regex-based detection with two-tier confidence:
         // High-confidence matches → {vN} hard placeholders
         // Low-confidence matches → $...$ inline LaTeX for LLM to decide
-        var protectedText = _protector.ProtectTwoTier(context.Text, out var tokens);
+        // On retry, demoteLevel = RetryAttempt shifts more ambiguous types to soft protection.
+        var protectedText = _protector.ProtectTwoTier(context.Text, out var tokens, demoteLevel: context.RetryAttempt);
         var isFormulaOnly = IsFormulaOnlyText(protectedText);
 
         var effectivePlan = isFormulaOnly
@@ -146,22 +150,25 @@ public sealed class FormulaPreservationService : IContentPreservationService
             };
         }
 
-        var restoredText = _restorer.Restore(
+        var result = _restorer.RestoreWithDiagnostics(
             translatedText,
             protectedBlock.Tokens,
             protectedBlock.OriginalText,
             useSimplified: false);
 
-        // Determine status by checking if restoration fell back to original
-        var status = restoredText == protectedBlock.OriginalText && translatedText != protectedBlock.OriginalText
-            ? RestoreStatus.FallbackToOriginal
-            : RestoreStatus.FullRestore;
+        var status = result.Status switch
+        {
+            FormulaRestoreStatus.FullRestore => RestoreStatus.FullRestore,
+            FormulaRestoreStatus.PartialRestore => RestoreStatus.PartialRestore,
+            FormulaRestoreStatus.FallbackToOriginal => RestoreStatus.FallbackToOriginal,
+            _ => RestoreStatus.FullRestore,
+        };
 
         return new RestoreOutcome
         {
-            Text = restoredText,
+            Text = result.Text,
             Status = status,
-            MissingTokenCount = 0
+            MissingTokenCount = result.DroppedCount
         };
     }
 

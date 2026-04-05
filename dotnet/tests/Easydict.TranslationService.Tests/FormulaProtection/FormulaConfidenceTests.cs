@@ -28,10 +28,23 @@ public class FormulaConfidenceTests
     [Theory]
     [InlineData(FormulaTokenType.InlineEquation)]
     [InlineData(FormulaTokenType.SequenceToken)]
+    [InlineData(FormulaTokenType.ImplicitTuple)]
     [InlineData(FormulaTokenType.UnitFragment)]
     public void IsHighConfidence_LowConfidenceTypes_ReturnsFalse(FormulaTokenType type)
     {
         FormulaDetector.IsHighConfidence(type).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ProtectTwoTier_ImplicitTuple_ProducesDollarWrapped()
+    {
+        var protector = new FormulaProtector();
+        // "(x1, ..., xn)" is an implicit-subscript tuple → ImplicitTuple → low confidence
+        var result = protector.ProtectTwoTier("The tuple (x1, ..., xn) is a sequence.", out var tokens);
+
+        // Low confidence → no hard tokens, wrapped in $...$
+        tokens.Should().BeEmpty();
+        result.Should().Contain("$(x1");
     }
 
     [Fact]

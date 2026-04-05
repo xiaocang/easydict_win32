@@ -296,7 +296,7 @@ public sealed class LongDocumentTranslationService
 
                 var blockContext = new BlockContext
                 {
-                    Text = block.ProtectedText,
+                    Text = block.OriginalText,
                     BlockType = MapToSourceBlockType(block.BlockType),
                     IsFormulaLike = false,
                     CharacterLevelProtectedText = block.CharacterLevelProtectedText,
@@ -313,7 +313,8 @@ public sealed class LongDocumentTranslationService
                 {
                     ProtectedText = protectedBlock.ProtectedText,
                     FormulaTokenMap = protectedBlock.Tokens,
-                    TranslationSkipped = protectedBlock.Plan.SkipTranslation
+                    TranslationSkipped = protectedBlock.Plan.SkipTranslation,
+                    PreservationContext = blockContext
                 };
             }).ToList();
 
@@ -449,6 +450,13 @@ public sealed class LongDocumentTranslationService
         string translatedText = block.ProtectedText;
         var translationSucceeded = false;
 
+        // These mutate across retries when quality feedback triggers re-protection with a higher
+        // demoteLevel. First attempt uses the block's initial protection; subsequent attempts rebuild
+        // currentProtectedText / currentTokens from BlockContext.RetryAttempt.
+        var currentProtectedText = block.ProtectedText;
+        var currentTokens = block.FormulaTokenMap;
+        var currentRetryAttempt = 0;
+
         for (; retryCount <= options.MaxRetriesPerBlock; retryCount++)
         {
             try
@@ -460,8 +468,8 @@ public sealed class LongDocumentTranslationService
                 var customPrompt = options.CustomPrompt;
                 if (options.EnableFormulaProtection)
                 {
-                    var hasHardTokens = block.FormulaTokenMap is { Count: > 0 };
-                    var hasSoftMath = block.ProtectedText.Contains('$');
+                    var hasHardTokens = currentTokens is { Count: > 0 };
+                    var hasSoftMath = currentProtectedText.Contains('$');
 
                     string? formulaPrompt = null;
                     if (hasHardTokens && hasSoftMath)
@@ -481,6 +489,13 @@ public sealed class LongDocumentTranslationService
                             "If it is math, keep it unchanged. If it is ordinary text, translate it and remove the $ delimiters.";
                     }
 
+                    if (currentRetryAttempt >= 1 && formulaPrompt is not null)
+                    {
+                        formulaPrompt = "The previous translation attempt lost some protected content. " +
+                            "Translate carefully and preserve EVERY {vN} placeholder and every $...$ span exactly as written.\n" +
+                            formulaPrompt;
+                    }
+
                     if (formulaPrompt is not null)
                     {
                         customPrompt = string.IsNullOrWhiteSpace(customPrompt)
@@ -491,7 +506,7 @@ public sealed class LongDocumentTranslationService
 
                 var request = new TranslationRequest
                 {
-                    Text = block.ProtectedText,
+                    Text = currentProtectedText,
                     FromLanguage = options.FromLanguage,
                     ToLanguage = options.ToLanguage,
                     CustomPrompt = customPrompt
@@ -505,17 +520,44 @@ public sealed class LongDocumentTranslationService
                 // Trim leading spaces on each line — aligned with pdf2zh converter.py:488
                 translatedText = TrimLeadingSpacesPerLine(translatedText);
                 // Restore formulas using the stored token map via ContentPreservation service
-                if (options.EnableFormulaProtection && block.FormulaTokenMap is { Count: > 0 })
+                if (options.EnableFormulaProtection && currentTokens is { Count: > 0 })
                 {
                     var protectedBlock = new ProtectedBlock
                     {
                         OriginalText = block.OriginalText,
-                        ProtectedText = block.ProtectedText,
-                        Tokens = block.FormulaTokenMap,
+                        ProtectedText = currentProtectedText,
+                        Tokens = currentTokens,
                         Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
                     };
                     var outcome = _preservation.Restore(translatedText, protectedBlock);
                     translatedText = _preservation.ResolveFallback(outcome, protectedBlock);
+
+                    // Quality feedback: if the LLM dropped placeholders and retries remain,
+                    // re-protect the block with a higher demoteLevel and try again.
+                    var shouldRetryForQuality = options.EnableQualityFeedbackRetry
+                        && retryCount < options.MaxRetriesPerBlock
+                        && (outcome.Status == RestoreStatus.PartialRestore
+                            || outcome.Status == RestoreStatus.FallbackToOriginal);
+                    if (shouldRetryForQuality)
+                    {
+                        currentRetryAttempt++;
+                        var retryContext = (block.PreservationContext ?? new BlockContext
+                        {
+                            Text = block.OriginalText,
+                            BlockType = MapToSourceBlockType(block.BlockType)
+                        }) with { RetryAttempt = currentRetryAttempt };
+                        var reprotected = _preservation.Protect(retryContext, new ProtectionPlan
+                        {
+                            Mode = PreservationMode.None,
+                            SkipTranslation = false
+                        });
+                        currentProtectedText = reprotected.ProtectedText;
+                        currentTokens = reprotected.Tokens;
+                        lastError = $"quality-feedback:{outcome.Status} missing={outcome.MissingTokenCount}";
+                        Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: quality feedback retry #{currentRetryAttempt} " +
+                            $"(status={outcome.Status}, missing={outcome.MissingTokenCount})");
+                        continue;
+                    }
                 }
                 lastError = null;
                 translationSucceeded = true;

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using FlaUI.Core.AutomationElements;
 using FlaUI.UIA3;
 using Microsoft.UI.Dispatching;
@@ -86,7 +87,7 @@ public static class TextSelectionService
         "wsl", "wslhost",  // WSL
         // SSH clients & terminal multiplexers (GH issue #116)
         "mobaxterm", "mobaxterm_personal",  // MobaXterm
-        "putty", "kitty", "solar-putty",  // PuTTY & forks
+        "putty", "kitty", "solar_putty",  // PuTTY & forks
         "xshell", "xshell_rc",  // Xshell (NetSarang)
         "securecrt",  // SecureCRT (VanDyke)
         "tabby",  // Tabby Terminal
@@ -99,8 +100,14 @@ public static class TextSelectionService
         "poderosa",  // Poderosa Terminal
         "teraterm", "ttermpro",  // Tera Term
         "smartty",  // SmarTTY
-        "f-secure ssh client",  // F-Secure SSH
+        "f_secure_ssh_client",  // F-Secure SSH
     };
+    private static readonly Regex TrailingVersionSuffixRegex = new(
+        @"(?:[._\-\s]+v?\d+(?:\.\d+)*)+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex TrailingNumericSuffixRegex = new(
+        @"(?<=\D)\d+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly UIA3Automation _automation = new();
     private static readonly SemaphoreSlim _automationSemaphore = new(1, 1);
@@ -194,6 +201,8 @@ public static class TextSelectionService
 
         var isElectron = IsElectronApp(processName);
         var isTerminal = IsTerminalApp(processName);
+        var normalizedProcessName = NormalizeProcessName(processName);
+        Debug.WriteLine($"[TextSelectionService] App classification: raw='{processName}', normalized='{normalizedProcessName}', electron={isElectron}, terminal={isTerminal}");
 
         // Track if we already tried clipboard for Electron to avoid double Ctrl+C
         bool clipboardAlreadyAttempted = false;
@@ -368,9 +377,33 @@ public static class TextSelectionService
     /// <summary>
     /// Checks if the given process name belongs to a terminal app.
     /// Ctrl+C sends SIGINT in terminal apps, so we should not use clipboard method.
+    /// Supports versioned executable names such as MobaXterm_Personal_26.2.exe.
     /// </summary>
     private static bool IsTerminalApp(string? processName)
-        => processName != null && TerminalProcessNames.Contains(processName);
+        => IsTerminalProcessName(processName);
+
+    internal static bool IsTerminalProcessName(string? processName)
+    {
+        var normalized = NormalizeProcessName(processName);
+        return !string.IsNullOrEmpty(normalized) && TerminalProcessNames.Contains(normalized);
+    }
+
+    internal static string NormalizeProcessName(string? processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName))
+        {
+            return string.Empty;
+        }
+
+        var normalized = processName.Trim().ToLowerInvariant()
+            .Replace('-', '_')
+            .Replace(' ', '_');
+
+        normalized = TrailingVersionSuffixRegex.Replace(normalized, "");
+        normalized = TrailingNumericSuffixRegex.Replace(normalized, "");
+
+        return normalized.Trim('_', '.');
+    }
 
     /// <summary>
     /// Gets selected text using clipboard method (Ctrl+C).

@@ -171,6 +171,34 @@ public class TranslationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task ClearTranslationCache_RemovesCachedTranslationResults()
+    {
+        var service = new TestTranslationService("cache-test", "Cache Test");
+        _manager.RegisterService(service);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        var first = await _manager.TranslateAsync(request, serviceId: "cache-test");
+        var second = await _manager.TranslateAsync(request, serviceId: "cache-test");
+
+        first.FromCache.Should().BeFalse();
+        second.FromCache.Should().BeTrue();
+        service.TranslationCallCount.Should().Be(1);
+
+        _manager.ClearTranslationCache();
+
+        var third = await _manager.TranslateAsync(request, serviceId: "cache-test");
+
+        third.FromCache.Should().BeFalse();
+        service.TranslationCallCount.Should().Be(2);
+    }
+
+    [Fact]
     public void Services_ReturnsReadOnlyDictionary()
     {
         var services = _manager.Services;
@@ -200,11 +228,13 @@ public class TranslationManagerTests : IDisposable
         public bool RequiresApiKey => false;
         public bool IsConfigured => true;
         public IReadOnlyList<Language> SupportedLanguages => new[] { Language.English, Language.SimplifiedChinese };
+        public int TranslationCallCount { get; private set; }
 
         public bool SupportsLanguagePair(Language from, Language to) => true;
 
         public Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default)
         {
+            TranslationCallCount++;
             return Task.FromResult(new TranslationResult
             {
                 TranslatedText = $"Translated: {request.Text}",

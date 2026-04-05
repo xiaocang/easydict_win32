@@ -3060,6 +3060,7 @@ public sealed partial class SettingsPage : Page
         {
             using var cacheService = new TranslationCacheService();
             await cacheService.ClearAsync();
+            TranslationManagerService.Instance.ClearTranslationCache();
             CacheStatusText.Text = "Cache cleared.";
         }
         catch (Exception ex)

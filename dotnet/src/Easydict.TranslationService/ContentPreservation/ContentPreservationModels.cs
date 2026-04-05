@@ -51,6 +51,20 @@ public sealed record ProtectionPlan
 }
 
 /// <summary>
+/// A low-confidence protected span that remains inline in the translation request.
+/// Stored so post-translation validation can check whether exact-preservation spans
+/// survived unchanged.
+/// </summary>
+public sealed record SoftProtectedSpan
+{
+    public required string RawText { get; init; }
+    public required FormulaTokenType TokenType { get; init; }
+    public required string WrappedText { get; init; }
+    public bool SyntheticDelimiters { get; init; }
+    public bool RequiresExactPreservation { get; init; }
+}
+
+/// <summary>
 /// The result of applying content protection to a block.
 /// </summary>
 public sealed record ProtectedBlock
@@ -58,6 +72,7 @@ public sealed record ProtectedBlock
     public required string OriginalText { get; init; }
     public required string ProtectedText { get; init; }
     public required IReadOnlyList<FormulaToken> Tokens { get; init; }
+    public required IReadOnlyList<SoftProtectedSpan> SoftSpans { get; init; }
     public required ProtectionPlan Plan { get; init; }
 }
 
@@ -77,6 +92,17 @@ public enum RestoreStatus
 }
 
 /// <summary>
+/// Status of post-translation validation for soft-protected spans.
+/// </summary>
+public enum SoftValidationStatus
+{
+    None,
+    Passed,
+    Normalized,
+    Failed
+}
+
+/// <summary>
 /// The result of restoring protected content in translated text.
 /// </summary>
 public sealed record RestoreOutcome
@@ -84,4 +110,7 @@ public sealed record RestoreOutcome
     public required string Text { get; init; }
     public required RestoreStatus Status { get; init; }
     public int MissingTokenCount { get; init; }
+    public SoftValidationStatus SoftValidationStatus { get; init; } = SoftValidationStatus.None;
+    public int SoftFailureCount { get; init; }
+    public int SyntheticDelimiterStripCount { get; init; }
 }

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Easydict.TranslationService.ContentPreservation;
+using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.Models;
 
 namespace Easydict.TranslationService.LongDocument;
@@ -313,6 +314,7 @@ public sealed class LongDocumentTranslationService
                 {
                     ProtectedText = protectedBlock.ProtectedText,
                     FormulaTokenMap = protectedBlock.Tokens,
+                    SoftProtectedSpans = protectedBlock.SoftSpans,
                     TranslationSkipped = protectedBlock.Plan.SkipTranslation,
                     PreservationContext = blockContext
                 };
@@ -440,6 +442,32 @@ public sealed class LongDocumentTranslationService
         return new Dictionary<string, TranslatedDocumentBlock>(result, StringComparer.Ordinal);
     }
 
+    private static string BuildQualityFeedbackError(RestoreOutcome outcome)
+    {
+        var parts = new List<string>
+        {
+            $"quality-feedback:{outcome.Status}",
+            $"missing={outcome.MissingTokenCount}"
+        };
+
+        if (outcome.SoftValidationStatus != SoftValidationStatus.None)
+        {
+            parts.Add($"soft={outcome.SoftValidationStatus}");
+        }
+
+        if (outcome.SoftFailureCount > 0)
+        {
+            parts.Add($"softFailures={outcome.SoftFailureCount}");
+        }
+
+        if (outcome.SyntheticDelimiterStripCount > 0)
+        {
+            parts.Add($"softStrips={outcome.SyntheticDelimiterStripCount}");
+        }
+
+        return string.Join(' ', parts);
+    }
+
     private async Task<TranslatedDocumentBlock> TranslateSingleBlockAsync(
         DocumentBlockIr block,
         LongDocumentTranslationOptions options,
@@ -450,26 +478,31 @@ public sealed class LongDocumentTranslationService
         string translatedText = block.ProtectedText;
         var translationSucceeded = false;
 
-        // These mutate across retries when quality feedback triggers re-protection with a higher
-        // demoteLevel. First attempt uses the block's initial protection; subsequent attempts rebuild
-        // currentProtectedText / currentTokens from BlockContext.RetryAttempt.
+        // Mutated across retries when quality feedback triggers re-protection at a higher demoteLevel.
         var currentProtectedText = block.ProtectedText;
         var currentTokens = block.FormulaTokenMap;
+        var currentSoftSpans = block.SoftProtectedSpans;
         var currentRetryAttempt = 0;
+        var lastSoftValidationFailed = false;
 
         for (; retryCount <= options.MaxRetriesPerBlock; retryCount++)
         {
             try
             {
-                // Inject formula preservation prompt based on what markers are present.
-                // Two-tier system:
-                //   {vN} = high-confidence formula → LLM must preserve exactly
-                //   $...$ = low-confidence formula → LLM decides whether to preserve or translate
+                // Two-tier formula prompt: {vN} = hard, $...$ = soft.
                 var customPrompt = options.CustomPrompt;
                 if (options.EnableFormulaProtection)
                 {
                     var hasHardTokens = currentTokens is { Count: > 0 };
-                    var hasSoftMath = currentProtectedText.Contains('$');
+                    var hasSoftMath = currentSoftSpans is { Count: > 0 };
+                    var hasExactSoftSpans = false;
+                    if (currentSoftSpans is not null)
+                    {
+                        foreach (var span in currentSoftSpans)
+                        {
+                            if (span.RequiresExactPreservation) { hasExactSoftSpans = true; break; }
+                        }
+                    }
 
                     string? formulaPrompt = null;
                     if (hasHardTokens && hasSoftMath)
@@ -491,9 +524,12 @@ public sealed class LongDocumentTranslationService
 
                     if (currentRetryAttempt >= 1 && formulaPrompt is not null)
                     {
-                        formulaPrompt = "The previous translation attempt lost some protected content. " +
-                            "Translate carefully and preserve EVERY {vN} placeholder and every $...$ span exactly as written.\n" +
-                            formulaPrompt;
+                        var retryInstruction = lastSoftValidationFailed && hasExactSoftSpans
+                            ? "The previous translation attempt changed a protected technical symbol sequence. " +
+                              "Copy every technical symbol sequence inside synthetic $...$ verbatim, and do not keep the synthetic $ delimiters in the final output.\n"
+                            : "The previous translation attempt lost some protected content. " +
+                              "Translate carefully and preserve EVERY {vN} placeholder and every $...$ span exactly as written.\n";
+                        formulaPrompt = retryInstruction + formulaPrompt;
                     }
 
                     if (formulaPrompt is not null)
@@ -514,30 +550,27 @@ public sealed class LongDocumentTranslationService
 
                 var translated = await _translateWithService(request, options.ServiceId, cancellationToken);
                 translatedText = ApplyGlossary(translated.TranslatedText, options.Glossary);
-                // Remove Unicode control characters that LLMs occasionally inject —
-                // aligned with pdf2zh translator.py:36 remove_control_characters()
                 translatedText = RemoveControlCharacters(translatedText);
-                // Trim leading spaces on each line — aligned with pdf2zh converter.py:488
                 translatedText = TrimLeadingSpacesPerLine(translatedText);
-                // Restore formulas using the stored token map via ContentPreservation service
-                if (options.EnableFormulaProtection && currentTokens is { Count: > 0 })
+                if (options.EnableFormulaProtection &&
+                    (currentTokens is { Count: > 0 } || currentSoftSpans is { Count: > 0 }))
                 {
                     var protectedBlock = new ProtectedBlock
                     {
                         OriginalText = block.OriginalText,
                         ProtectedText = currentProtectedText,
-                        Tokens = currentTokens,
+                        Tokens = currentTokens ?? Array.Empty<FormulaToken>(),
+                        SoftSpans = currentSoftSpans ?? Array.Empty<SoftProtectedSpan>(),
                         Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
                     };
                     var outcome = _preservation.Restore(translatedText, protectedBlock);
                     translatedText = _preservation.ResolveFallback(outcome, protectedBlock);
 
-                    // Quality feedback: if the LLM dropped placeholders and retries remain,
-                    // re-protect the block with a higher demoteLevel and try again.
+                    var hasQualityIssue = outcome.Status != RestoreStatus.FullRestore
+                        || outcome.SoftValidationStatus == SoftValidationStatus.Failed;
                     var shouldRetryForQuality = options.EnableQualityFeedbackRetry
                         && retryCount < options.MaxRetriesPerBlock
-                        && (outcome.Status == RestoreStatus.PartialRestore
-                            || outcome.Status == RestoreStatus.FallbackToOriginal);
+                        && hasQualityIssue;
                     if (shouldRetryForQuality)
                     {
                         currentRetryAttempt++;
@@ -553,13 +586,27 @@ public sealed class LongDocumentTranslationService
                         });
                         currentProtectedText = reprotected.ProtectedText;
                         currentTokens = reprotected.Tokens;
-                        lastError = $"quality-feedback:{outcome.Status} missing={outcome.MissingTokenCount}";
+                        currentSoftSpans = reprotected.SoftSpans;
+                        lastSoftValidationFailed = outcome.SoftValidationStatus == SoftValidationStatus.Failed;
+                        lastError = BuildQualityFeedbackError(outcome);
                         Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: quality feedback retry #{currentRetryAttempt} " +
-                            $"(status={outcome.Status}, missing={outcome.MissingTokenCount})");
+                            $"(status={outcome.Status}, missing={outcome.MissingTokenCount}, " +
+                            $"softStatus={outcome.SoftValidationStatus}, softFailures={outcome.SoftFailureCount})");
                         continue;
+                    }
+
+                    if (hasQualityIssue)
+                    {
+                        lastError = BuildQualityFeedbackError(outcome);
+                        lastSoftValidationFailed = outcome.SoftValidationStatus == SoftValidationStatus.Failed;
+                        Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: unresolved quality issue " +
+                            $"(status={outcome.Status}, missing={outcome.MissingTokenCount}, " +
+                            $"softStatus={outcome.SoftValidationStatus}, softFailures={outcome.SoftFailureCount})");
+                        break;
                     }
                 }
                 lastError = null;
+                lastSoftValidationFailed = false;
                 translationSucceeded = true;
                 break;
             }

@@ -90,6 +90,7 @@ public sealed class FormulaPreservationService : IContentPreservationService
                 OriginalText = context.Text,
                 ProtectedText = context.Text,
                 Tokens = Array.Empty<FormulaToken>(),
+                SoftSpans = Array.Empty<SoftProtectedSpan>(),
                 Plan = plan
             };
         }
@@ -111,6 +112,7 @@ public sealed class FormulaPreservationService : IContentPreservationService
                 OriginalText = context.Text,
                 ProtectedText = context.CharacterLevelProtectedText,
                 Tokens = context.CharacterLevelTokens,
+                SoftSpans = Array.Empty<SoftProtectedSpan>(),
                 Plan = charPlan
             };
         }
@@ -119,12 +121,16 @@ public sealed class FormulaPreservationService : IContentPreservationService
         // High-confidence matches → {vN} hard placeholders
         // Low-confidence matches → $...$ inline LaTeX for LLM to decide
         // On retry, demoteLevel = RetryAttempt shifts more ambiguous types to soft protection.
-        var protectedText = _protector.ProtectTwoTier(context.Text, out var tokens, demoteLevel: context.RetryAttempt);
+        var protectedText = _protector.ProtectTwoTier(
+            context.Text,
+            out var tokens,
+            out var softSpans,
+            demoteLevel: context.RetryAttempt);
         var isFormulaOnly = IsFormulaOnlyText(protectedText);
 
         var effectivePlan = isFormulaOnly
             ? plan with { Mode = PreservationMode.Opaque, SkipTranslation = true, Reason = "FormulaOnlyText" }
-            : tokens.Count > 0 || protectedText.Contains('$')
+            : tokens.Count > 0 || softSpans.Count > 0
                 ? plan with { Mode = PreservationMode.InlineProtected }
                 : plan;
 
@@ -133,6 +139,7 @@ public sealed class FormulaPreservationService : IContentPreservationService
             OriginalText = context.Text,
             ProtectedText = protectedText,
             Tokens = tokens,
+            SoftSpans = softSpans,
             Plan = effectivePlan
         };
     }
@@ -140,36 +147,41 @@ public sealed class FormulaPreservationService : IContentPreservationService
     /// <inheritdoc />
     public RestoreOutcome Restore(string translatedText, ProtectedBlock protectedBlock)
     {
+        RestoreOutcome outcome;
         if (protectedBlock.Tokens.Count == 0)
         {
-            return new RestoreOutcome
+            outcome = new RestoreOutcome
             {
                 Text = translatedText,
                 Status = RestoreStatus.FullRestore,
                 MissingTokenCount = 0
             };
         }
-
-        var result = _restorer.RestoreWithDiagnostics(
-            translatedText,
-            protectedBlock.Tokens,
-            protectedBlock.OriginalText,
-            useSimplified: false);
-
-        var status = result.Status switch
+        else
         {
-            FormulaRestoreStatus.FullRestore => RestoreStatus.FullRestore,
-            FormulaRestoreStatus.PartialRestore => RestoreStatus.PartialRestore,
-            FormulaRestoreStatus.FallbackToOriginal => RestoreStatus.FallbackToOriginal,
-            _ => RestoreStatus.FullRestore,
-        };
+            var result = _restorer.RestoreWithDiagnostics(
+                translatedText,
+                protectedBlock.Tokens,
+                protectedBlock.OriginalText,
+                useSimplified: false);
 
-        return new RestoreOutcome
-        {
-            Text = result.Text,
-            Status = status,
-            MissingTokenCount = result.DroppedCount
-        };
+            var status = result.Status switch
+            {
+                FormulaRestoreStatus.FullRestore => RestoreStatus.FullRestore,
+                FormulaRestoreStatus.PartialRestore => RestoreStatus.PartialRestore,
+                FormulaRestoreStatus.FallbackToOriginal => RestoreStatus.FallbackToOriginal,
+                _ => RestoreStatus.FullRestore,
+            };
+
+            outcome = new RestoreOutcome
+            {
+                Text = result.Text,
+                Status = status,
+                MissingTokenCount = result.DroppedCount
+            };
+        }
+
+        return ValidateSoftProtectedSpans(outcome, protectedBlock);
     }
 
     /// <inheritdoc />
@@ -225,5 +237,82 @@ public sealed class FormulaPreservationService : IContentPreservationService
         if (string.IsNullOrWhiteSpace(protectedText)) return false;
         var cleaned = NumericPlaceholderRegex.Replace(protectedText, string.Empty).Trim();
         return cleaned.Length == 0;
+    }
+
+    private static RestoreOutcome ValidateSoftProtectedSpans(RestoreOutcome outcome, ProtectedBlock protectedBlock)
+    {
+        if (protectedBlock.SoftSpans.Count == 0 || outcome.Status == RestoreStatus.FallbackToOriginal)
+        {
+            return outcome;
+        }
+
+        // Collect exact-preservation spans and count expected occurrences per raw text in a single pass.
+        Dictionary<string, int>? expectedByRaw = null;
+        List<SoftProtectedSpan>? exactSpans = null;
+        foreach (var span in protectedBlock.SoftSpans)
+        {
+            if (!span.RequiresExactPreservation) continue;
+            exactSpans ??= new List<SoftProtectedSpan>();
+            expectedByRaw ??= new Dictionary<string, int>(StringComparer.Ordinal);
+            exactSpans.Add(span);
+            expectedByRaw[span.RawText] = expectedByRaw.TryGetValue(span.RawText, out var c) ? c + 1 : 1;
+        }
+
+        if (exactSpans is null) return outcome;
+
+        // Strip synthetic $...$ delimiters by literal replace of WrappedText (set at protection time).
+        var normalizedText = outcome.Text;
+        var stripCount = 0;
+        foreach (var span in exactSpans)
+        {
+            if (!span.SyntheticDelimiters) continue;
+            var hits = CountOccurrences(normalizedText, span.WrappedText);
+            if (hits == 0) continue;
+            normalizedText = normalizedText.Replace(span.WrappedText, span.RawText);
+            stripCount += hits;
+        }
+
+        var softFailureCount = 0;
+        foreach (var (raw, expected) in expectedByRaw!)
+        {
+            var actual = CountOccurrences(normalizedText, raw);
+            if (actual < expected) softFailureCount += expected - actual;
+        }
+
+        if (softFailureCount > 0)
+        {
+            return new RestoreOutcome
+            {
+                Text = protectedBlock.OriginalText,
+                Status = RestoreStatus.FallbackToOriginal,
+                MissingTokenCount = outcome.MissingTokenCount,
+                SoftValidationStatus = SoftValidationStatus.Failed,
+                SoftFailureCount = softFailureCount,
+                SyntheticDelimiterStripCount = stripCount
+            };
+        }
+
+        return new RestoreOutcome
+        {
+            Text = normalizedText,
+            Status = outcome.Status,
+            MissingTokenCount = outcome.MissingTokenCount,
+            SoftValidationStatus = stripCount > 0 ? SoftValidationStatus.Normalized : SoftValidationStatus.Passed,
+            SoftFailureCount = 0,
+            SyntheticDelimiterStripCount = stripCount
+        };
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(value)) return 0;
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 }

@@ -162,6 +162,11 @@ public sealed record DocumentBlockIr
     /// Stored here so restoration reuses the same tokens without re-running detection.
     /// </summary>
     public IReadOnlyList<FormulaProtection.FormulaToken>? FormulaTokenMap { get; init; }
+    /// <summary>
+    /// Low-confidence inline spans that remain in the translation request and are
+    /// validated after translation.
+    /// </summary>
+    public IReadOnlyList<ContentPreservation.SoftProtectedSpan>? SoftProtectedSpans { get; init; }
     /// <summary>Character-level protected text from CharacterParagraphBuilder (if available).</summary>
     public string? CharacterLevelProtectedText { get; init; }
     /// <summary>Character-level formula tokens from CharacterParagraphBuilder (if available).</summary>

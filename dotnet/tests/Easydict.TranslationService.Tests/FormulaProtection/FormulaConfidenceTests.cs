@@ -39,12 +39,43 @@ public class FormulaConfidenceTests
     public void ProtectTwoTier_ImplicitTuple_ProducesDollarWrapped()
     {
         var protector = new FormulaProtector();
-        // "(x1, ..., xn)" is an implicit-subscript tuple → ImplicitTuple → low confidence
         var result = protector.ProtectTwoTier("The tuple (x1, ..., xn) is a sequence.", out var tokens);
 
-        // Low confidence → no hard tokens, wrapped in $...$
         tokens.Should().BeEmpty();
         result.Should().Contain("$(x1");
+    }
+
+    [Fact]
+    public void ProtectTwoTier_ImplicitTuple_ProducesExactSoftSpanMetadata()
+    {
+        var protector = new FormulaProtector();
+        var result = protector.ProtectTwoTier(
+            "The tuple (x1, ..., xn) is a sequence.",
+            out var tokens,
+            out var softSpans);
+
+        tokens.Should().BeEmpty();
+        result.Should().Contain("$(x1, ..., xn)$");
+        softSpans.Should().ContainSingle();
+        softSpans[0].RawText.Should().Be("(x1, ..., xn)");
+        softSpans[0].WrappedText.Should().Be("$(x1, ..., xn)$");
+        softSpans[0].RequiresExactPreservation.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ProtectTwoTier_TupleAssignment_ProducesExactSoftSpanMetadata()
+    {
+        var protector = new FormulaProtector();
+        var result = protector.ProtectTwoTier(
+            "Here z = (z1, ..., zn) is defined.",
+            out var tokens,
+            out var softSpans);
+
+        tokens.Should().BeEmpty();
+        result.Should().Contain("$z = (z1, ..., zn)$");
+        softSpans.Should().ContainSingle();
+        softSpans[0].RawText.Should().Be("z = (z1, ..., zn)");
+        softSpans[0].RequiresExactPreservation.Should().BeTrue();
     }
 
     [Fact]
@@ -62,25 +93,22 @@ public class FormulaConfidenceTests
     public void ProtectTwoTier_LowConfidence_ProducesDollarWrapped()
     {
         var protector = new FormulaProtector();
-        // "speed = 5" matches the simple equation pattern → InlineEquation → low confidence
-        var result = protector.ProtectTwoTier("The speed = 5 is fast.", out var tokens);
+        var result = protector.ProtectTwoTier("The speed = 5 is fast.", out var tokens, out var softSpans);
 
-        // Low confidence → no hard tokens, wrapped in $...$
         tokens.Should().BeEmpty();
         result.Should().Contain("$speed = 5$");
+        softSpans.Should().ContainSingle();
+        softSpans[0].RequiresExactPreservation.Should().BeFalse();
     }
 
     [Fact]
     public void ProtectTwoTier_Mixed_BothTypes()
     {
         var protector = new FormulaProtector();
-        // \alpha is high confidence, "x = 5" is low confidence
         var result = protector.ProtectTwoTier("We have \\alpha and x = 5 here.", out var tokens);
 
-        // \alpha → high confidence → {v0}
         tokens.Should().HaveCountGreaterOrEqualTo(1);
         result.Should().Contain("{v0}");
-        // x = 5 → low confidence → $...$
         result.Should().Contain("$");
     }
 
@@ -88,10 +116,8 @@ public class FormulaConfidenceTests
     public void Protect_BackwardCompatible_AllHard()
     {
         var protector = new FormulaProtector();
-        // Old Protect method should still treat everything as hard
         var result = protector.Protect("The speed = 5 is fast.", out var tokens);
 
-        // Even low-confidence matches become {vN} in the old API
         tokens.Should().HaveCountGreaterOrEqualTo(1);
         result.Should().Contain("{v0}");
         result.Should().NotContain("$speed");

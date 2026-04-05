@@ -704,6 +704,119 @@ public class LongDocumentTranslationServiceTests
         result.Pages[0].Blocks.Single().RetryCount.Should().Be(0);
     }
 
+    [Fact]
+    public async Task TranslateAsync_ShouldStripSyntheticDelimitersForExactSoftSpans()
+    {
+        var sut = new LongDocumentTranslationService(translateWithService: (_, _, _) =>
+            Task.FromResult(new TranslationResult
+            {
+                OriginalText = "x",
+                TranslatedText = "Translated text keeps $(x1, ..., xn)$ and $z = (z1, ..., zn)$ intact.",
+                ServiceName = "fake",
+                TargetLanguage = Language.SimplifiedChinese
+            }));
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-soft-strip",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "Most competitive models use an encoder-decoder structure, with input sequence (x1, ..., xn) and continuous representations z = (z1, ..., zn)."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        var translated = result.Pages[0].Blocks.Single().TranslatedText;
+        translated.Should().Contain("(x1, ..., xn)");
+        translated.Should().Contain("z = (z1, ..., zn)");
+        translated.Should().NotContain("$(x1, ..., xn)$");
+        translated.Should().NotContain("$z = (z1, ..., zn)$");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_QualityFeedbackRetry_ExactSoftSpanMutationFallsBackToOriginalAndTagsLastError()
+    {
+        var callCount = 0;
+        var prompts = new List<string?>();
+        const string originalText =
+            "Most competitive neural sequence transduction models have an encoder-decoder structure. " +
+            "The encoder maps the input sequence (x1, ..., xn) to continuous representations z = (z1, ..., zn).";
+
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            callCount++;
+            prompts.Add(request.CustomPrompt);
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = callCount == 1
+                    ? "First attempt rewrites the input sequence as sequence1 and the continuous representation as sequence2."
+                    : "Second attempt still rewrites the input sequence as sequence1 and the continuous representation as sequence2.",
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-soft-fallback",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = originalText
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "google",
+            EnableFormulaProtection = true,
+            EnableQualityFeedbackRetry = true,
+            MaxRetriesPerBlock = 1
+        });
+
+        callCount.Should().Be(2);
+        prompts.Should().HaveCount(2);
+        prompts[1].Should().Contain("Copy every technical symbol sequence inside synthetic $...$ verbatim");
+        prompts[1].Should().Contain("do not keep the synthetic $ delimiters");
+
+        var block = result.Pages[0].Blocks.Single();
+        block.TranslatedText.Should().Be(originalText);
+        block.RetryCount.Should().Be(1);
+        block.LastError.Should().Contain("quality-feedback:");
+        block.LastError.Should().Contain("soft=Failed");
+    }
+
     private static Task<TranslationResult> FakeTranslate(TranslationRequest request, string _, CancellationToken __)
     {
         return Task.FromResult(new TranslationResult

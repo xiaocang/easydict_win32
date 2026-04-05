@@ -1,3 +1,5 @@
+using Easydict.TranslationService.ContentPreservation;
+
 namespace Easydict.TranslationService.FormulaProtection;
 
 /// <summary>
@@ -13,7 +15,7 @@ public sealed class FormulaProtector
     /// </summary>
     public string Protect(string text, out IReadOnlyList<FormulaToken> tokens)
     {
-        return ProtectWithConfidence(text, out tokens, splitByConfidence: false);
+        return ProtectWithConfidence(text, out tokens, out _, splitByConfidence: false);
     }
 
     /// <summary>
@@ -34,14 +36,33 @@ public sealed class FormulaProtector
     /// <returns>Text with high-confidence formulas as {vN} and low-confidence as $...$.</returns>
     public string ProtectTwoTier(string text, out IReadOnlyList<FormulaToken> hardTokens, int demoteLevel = 0)
     {
-        return ProtectWithConfidence(text, out hardTokens, splitByConfidence: true, demoteLevel: demoteLevel);
+        return ProtectWithConfidence(text, out hardTokens, out _, splitByConfidence: true, demoteLevel: demoteLevel);
     }
 
-    private string ProtectWithConfidence(string text, out IReadOnlyList<FormulaToken> hardTokens, bool splitByConfidence, int demoteLevel = 0)
+    /// <summary>
+    /// Protects formula spans with confidence-based two-tier output and returns metadata
+    /// for low-confidence inline spans that remain in the request.
+    /// </summary>
+    public string ProtectTwoTier(
+        string text,
+        out IReadOnlyList<FormulaToken> hardTokens,
+        out IReadOnlyList<SoftProtectedSpan> softSpans,
+        int demoteLevel = 0)
+    {
+        return ProtectWithConfidence(text, out hardTokens, out softSpans, splitByConfidence: true, demoteLevel: demoteLevel);
+    }
+
+    private string ProtectWithConfidence(
+        string text,
+        out IReadOnlyList<FormulaToken> hardTokens,
+        out IReadOnlyList<SoftProtectedSpan> softSpans,
+        bool splitByConfidence,
+        int demoteLevel = 0)
     {
         if (string.IsNullOrEmpty(text))
         {
             hardTokens = Array.Empty<FormulaToken>();
+            softSpans = Array.Empty<SoftProtectedSpan>();
             return text;
         }
 
@@ -57,11 +78,13 @@ public sealed class FormulaProtector
         if (matches.Count == 0)
         {
             hardTokens = Array.Empty<FormulaToken>();
+            softSpans = Array.Empty<SoftProtectedSpan>();
             return text;
         }
 
         // Second pass: build protected text, splitting by confidence
         var hardList = new List<FormulaToken>();
+        var softList = new List<SoftProtectedSpan>();
         var hardCounter = 0;
         var sb = new System.Text.StringBuilder();
         var lastEnd = 0;
@@ -87,9 +110,16 @@ public sealed class FormulaProtector
                 // Soft protection: wrap in $...$ for LLM to decide
                 // Escape any literal $ inside the raw text to avoid breaking LaTeX delimiters
                 var escaped = raw.Replace("$", "\\$");
-                sb.Append('$');
-                sb.Append(escaped);
-                sb.Append('$');
+                var wrapped = $"${escaped}$";
+                softList.Add(new SoftProtectedSpan
+                {
+                    RawText = raw,
+                    TokenType = type,
+                    WrappedText = wrapped,
+                    SyntheticDelimiters = true,
+                    RequiresExactPreservation = FormulaDetector.RequiresExactSoftPreservation(raw, type)
+                });
+                sb.Append(wrapped);
             }
 
             lastEnd = start + length;
@@ -116,6 +146,7 @@ public sealed class FormulaProtector
         }
 
         hardTokens = hardList;
+        softSpans = softList;
         return protectedText;
     }
 

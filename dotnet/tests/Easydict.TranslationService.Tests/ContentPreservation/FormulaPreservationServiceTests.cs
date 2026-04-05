@@ -10,8 +10,6 @@ public class FormulaPreservationServiceTests
 {
     private readonly FormulaPreservationService _service = new();
 
-    // --- Character-level evidence preference tests ---
-
     [Fact]
     public void Protect_WithCharacterLevelEvidence_PrefersCharacterLevel()
     {
@@ -20,10 +18,10 @@ public class FormulaPreservationServiceTests
             Text = "The value x equals 5",
             BlockType = SourceBlockType.Paragraph,
             CharacterLevelProtectedText = "The value {v0} equals 5",
-            CharacterLevelTokens = new[]
-            {
+            CharacterLevelTokens =
+            [
                 new FormulaToken(FormulaTokenType.InlineMath, "x", "{v0}", "x")
-            }
+            ]
         };
         var plan = new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false };
 
@@ -32,6 +30,7 @@ public class FormulaPreservationServiceTests
         result.ProtectedText.Should().Be("The value {v0} equals 5");
         result.Tokens.Should().HaveCount(1);
         result.Tokens[0].Raw.Should().Be("x");
+        result.SoftSpans.Should().BeEmpty();
         result.Plan.Mode.Should().Be(PreservationMode.InlineProtected);
     }
 
@@ -41,15 +40,12 @@ public class FormulaPreservationServiceTests
         var context = new BlockContext
         {
             Text = "The value $\\alpha$ equals 5",
-            BlockType = SourceBlockType.Paragraph,
-            CharacterLevelProtectedText = null,
-            CharacterLevelTokens = null
+            BlockType = SourceBlockType.Paragraph
         };
         var plan = new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false };
 
         var result = _service.Protect(context, plan);
 
-        // Regex should detect $\alpha$ and protect it
         result.ProtectedText.Should().Contain("{v0}");
         result.Tokens.Should().HaveCountGreaterOrEqualTo(1);
     }
@@ -68,7 +64,6 @@ public class FormulaPreservationServiceTests
 
         var result = _service.Protect(context, plan);
 
-        // Empty char-level tokens → falls back to regex
         result.ProtectedText.Should().Contain("{v0}");
         result.Tokens.Should().HaveCountGreaterOrEqualTo(1);
     }
@@ -81,10 +76,10 @@ public class FormulaPreservationServiceTests
             Text = "x + y = z",
             BlockType = SourceBlockType.Paragraph,
             CharacterLevelProtectedText = "{v0}",
-            CharacterLevelTokens = new[]
-            {
+            CharacterLevelTokens =
+            [
                 new FormulaToken(FormulaTokenType.InlineMath, "x + y = z", "{v0}", "x + y = z")
-            }
+            ]
         };
         var plan = new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false };
 
@@ -108,10 +103,9 @@ public class FormulaPreservationServiceTests
 
         result.ProtectedText.Should().Be("formula block");
         result.Tokens.Should().BeEmpty();
+        result.SoftSpans.Should().BeEmpty();
         result.Plan.SkipTranslation.Should().BeTrue();
     }
-
-    // --- Analyze tests ---
 
     [Fact]
     public void Analyze_FormulaBlockType_ReturnsOpaque()
@@ -155,11 +149,8 @@ public class FormulaPreservationServiceTests
 
         var plan = _service.Analyze(context);
 
-        // 2/3 = 67% > 30% threshold
         plan.SkipTranslation.Should().BeTrue();
     }
-
-    // --- Restore + ResolveFallback tests ---
 
     [Fact]
     public void RestoreAndResolve_AllPresent_ReturnsRestoredText()
@@ -168,14 +159,15 @@ public class FormulaPreservationServiceTests
         {
             OriginalText = "The \\alpha letter",
             ProtectedText = "The {v0} letter",
-            Tokens = new[] { new FormulaToken(FormulaTokenType.GreekLetter, "\\alpha", "{v0}", "α") },
+            Tokens = new[] { new FormulaToken(FormulaTokenType.GreekLetter, "\\alpha", "{v0}", "alpha") },
+            SoftSpans = Array.Empty<SoftProtectedSpan>(),
             Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
         };
 
-        var outcome = _service.Restore("这个 {v0} 字母", protectedBlock);
+        var outcome = _service.Restore("The {v0} letter in translation", protectedBlock);
         var finalText = _service.ResolveFallback(outcome, protectedBlock);
 
-        finalText.Should().Be("这个 \\alpha 字母");
+        finalText.Should().Be("The \\alpha letter in translation");
         outcome.Status.Should().Be(RestoreStatus.FullRestore);
         outcome.MissingTokenCount.Should().Be(0);
     }
@@ -183,19 +175,19 @@ public class FormulaPreservationServiceTests
     [Fact]
     public void Restore_MissingPlaceholder_ReportsPartial()
     {
-        // 4 tokens, translated text contains only 3 placeholders (75%) → PartialRestore
         var tokens = new[]
         {
-            new FormulaToken(FormulaTokenType.GreekLetter, "\\alpha", "{v0}", "α"),
-            new FormulaToken(FormulaTokenType.GreekLetter, "\\beta", "{v1}", "β"),
-            new FormulaToken(FormulaTokenType.GreekLetter, "\\gamma", "{v2}", "γ"),
-            new FormulaToken(FormulaTokenType.GreekLetter, "\\delta", "{v3}", "δ"),
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\alpha", "{v0}", "alpha"),
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\beta", "{v1}", "beta"),
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\gamma", "{v2}", "gamma"),
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\delta", "{v3}", "delta"),
         };
         var protectedBlock = new ProtectedBlock
         {
             OriginalText = "\\alpha \\beta \\gamma \\delta",
             ProtectedText = "{v0} {v1} {v2} {v3}",
             Tokens = tokens,
+            SoftSpans = Array.Empty<SoftProtectedSpan>(),
             Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
         };
 
@@ -210,14 +202,15 @@ public class FormulaPreservationServiceTests
     {
         var tokens = new[]
         {
-            new FormulaToken(FormulaTokenType.GreekLetter, "\\alpha", "{v0}", "α"),
-            new FormulaToken(FormulaTokenType.GreekLetter, "\\beta", "{v1}", "β"),
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\alpha", "{v0}", "alpha"),
+            new FormulaToken(FormulaTokenType.GreekLetter, "\\beta", "{v1}", "beta"),
         };
         var protectedBlock = new ProtectedBlock
         {
             OriginalText = "\\alpha \\beta",
             ProtectedText = "{v0} {v1}",
             Tokens = tokens,
+            SoftSpans = Array.Empty<SoftProtectedSpan>(),
             Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
         };
 
@@ -231,7 +224,6 @@ public class FormulaPreservationServiceTests
     [Fact]
     public void Protect_RetryAttempt1_DemotesSubscript()
     {
-        // On retry, MathSubscript is demoted to soft $...$ protection.
         var context = new BlockContext
         {
             Text = "We use h_{t-1} in the recurrence.",
@@ -249,25 +241,103 @@ public class FormulaPreservationServiceTests
     [Fact]
     public void Protect_RetryAttempt1_SkipsCharacterLevelPath()
     {
-        // On retry, even if character-level tokens are present, the regex path is used
-        // so demoteLevel can take effect. Character-level tokens are ignored.
         var context = new BlockContext
         {
             Text = "The h_{t-1} value.",
             BlockType = SourceBlockType.Paragraph,
             CharacterLevelProtectedText = "The {v0} value.",
-            CharacterLevelTokens = new[]
-            {
+            CharacterLevelTokens =
+            [
                 new FormulaToken(FormulaTokenType.MathSubscript, "h_{t-1}", "{v0}", "h_{t-1}")
-            },
+            ],
             RetryAttempt = 1
         };
         var plan = new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false };
 
         var result = _service.Protect(context, plan);
 
-        // Character-level tokens not used; regex path demotes subscript to soft protection.
         result.Tokens.Should().BeEmpty();
         result.ProtectedText.Should().Contain("$h_{t-1}$");
+    }
+
+    [Fact]
+    public void Protect_ImplicitTuple_AddsExactSoftSpanMetadata()
+    {
+        var context = new BlockContext
+        {
+            Text = "The tuple (x1, ..., xn) is a sequence.",
+            BlockType = SourceBlockType.Paragraph
+        };
+        var plan = new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false };
+
+        var result = _service.Protect(context, plan);
+
+        result.Tokens.Should().BeEmpty();
+        result.SoftSpans.Should().ContainSingle();
+        result.SoftSpans[0].RawText.Should().Be("(x1, ..., xn)");
+        result.SoftSpans[0].RequiresExactPreservation.Should().BeTrue();
+        result.ProtectedText.Should().Contain("$(x1, ..., xn)$");
+    }
+
+    [Fact]
+    public void Restore_ExactSoftSpanStripsSyntheticDelimiters()
+    {
+        const string originalText = "The tuple (x1, ..., xn) is a sequence.";
+        var protectedBlock = new ProtectedBlock
+        {
+            OriginalText = originalText,
+            ProtectedText = "The tuple $(x1, ..., xn)$ is a sequence.",
+            Tokens = Array.Empty<FormulaToken>(),
+            SoftSpans =
+            [
+                new SoftProtectedSpan
+                {
+                    RawText = "(x1, ..., xn)",
+                    TokenType = FormulaTokenType.ImplicitTuple,
+                    WrappedText = "$(x1, ..., xn)$",
+                    SyntheticDelimiters = true,
+                    RequiresExactPreservation = true
+                }
+            ],
+            Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
+        };
+
+        var outcome = _service.Restore("The tuple $(x1, ..., xn)$ is a sequence.", protectedBlock);
+
+        outcome.Text.Should().Be(originalText);
+        outcome.Status.Should().Be(RestoreStatus.FullRestore);
+        outcome.SoftValidationStatus.Should().Be(SoftValidationStatus.Normalized);
+        outcome.SyntheticDelimiterStripCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Restore_ExactSoftSpanMutation_FallsBackToOriginal()
+    {
+        const string originalText = "The tuple (x1, ..., xn) is a sequence.";
+        var protectedBlock = new ProtectedBlock
+        {
+            OriginalText = originalText,
+            ProtectedText = "The tuple $(x1, ..., xn)$ is a sequence.",
+            Tokens = Array.Empty<FormulaToken>(),
+            SoftSpans =
+            [
+                new SoftProtectedSpan
+                {
+                    RawText = "(x1, ..., xn)",
+                    TokenType = FormulaTokenType.ImplicitTuple,
+                    WrappedText = "$(x1, ..., xn)$",
+                    SyntheticDelimiters = true,
+                    RequiresExactPreservation = true
+                }
+            ],
+            Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
+        };
+
+        var outcome = _service.Restore("The tuple sequence1 is a sequence.", protectedBlock);
+
+        outcome.Text.Should().Be(originalText);
+        outcome.Status.Should().Be(RestoreStatus.FallbackToOriginal);
+        outcome.SoftValidationStatus.Should().Be(SoftValidationStatus.Failed);
+        outcome.SoftFailureCount.Should().Be(1);
     }
 }

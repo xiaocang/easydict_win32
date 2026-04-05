@@ -169,4 +169,25 @@ public class FormulaDetectorTests
     {
         FormulaDetector.Classify("z = (z1, ..., zn)").Should().Be(FormulaTokenType.InlineEquation);
     }
+
+    [Fact]
+    public void RequiresExactSoftPreservation_ImplicitTuple_ReturnsTrue()
+    {
+        FormulaDetector.RequiresExactSoftPreservation("(x1, ..., xn)", FormulaTokenType.ImplicitTuple)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void RequiresExactSoftPreservation_AssignmentWithTuple_ReturnsTrue()
+    {
+        FormulaDetector.RequiresExactSoftPreservation("z = (z1, ..., zn)", FormulaTokenType.InlineEquation)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void RequiresExactSoftPreservation_GenericInlineEquation_ReturnsFalse()
+    {
+        FormulaDetector.RequiresExactSoftPreservation("speed = 5", FormulaTokenType.InlineEquation)
+            .Should().BeFalse();
+    }
 }

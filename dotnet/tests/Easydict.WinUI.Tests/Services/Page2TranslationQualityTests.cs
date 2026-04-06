@@ -21,6 +21,19 @@ public class Page2TranslationQualityTests
     private const string Section3SourceSnippet = "sequence (y1, ..., ym) of symbols one element at a time";
     private const string Page2VisualReviewPdfName = "page2-visual-review-section3.pdf";
     private const string Page2VisualReviewPngName = "page2-visual-review-section3.png";
+    private const string FailedFallbackFormulaText =
+        "\u5FAA\u73AF\u6A21\u578B\u901A\u5E38\u6CBF\u7740\u8F93\u5165\u548C\u8F93\u51FA\u5E8F\u5217\u7684\u7B26\u53F7\u4F4D\u7F6E\u8FDB\u884C\u8BA1\u7B97\u7684\u5206\u89E3\u3002\u5B83\u4EEC\u6839\u636E\u524D\u4E00\u4E2A\u9690\u85CF\u72B6\u6001 $h_{t-1}$ \u548C\u4F4D\u7F6E t \u7684\u8F93\u5165\uFF0C\u751F\u6210\u4E00\u7CFB\u5217\u9690\u85CF\u72B6\u6001 $h_t$\u3002";
+    private const string VisualPage2Heading = "3 \u6A21\u578B\u67B6\u6784";
+    private const string VisualPage2Intro =
+        "\u5927\u591A\u6570\u5177\u6709\u7ADE\u4E89\u529B\u7684\u795E\u7ECF\u5E8F\u5217\u8F6C\u6362\u6A21\u578B\u90FD\u91C7\u7528\u4E86\u7F16\u7801\u5668-\u89E3\u7801\u5668\u7ED3\u6784\u3002";
+    private const string VisualPage2Encoder =
+        "\u5176\u4E2D\uFF0C\u7F16\u7801\u5668\u5C06\u8F93\u5165\u7B26\u53F7\u8868\u793A\u5E8F\u5217 (x1, ..., xn) \u6620\u5C04\u4E3A\u4E00\u7EC4\u8FDE\u7EED\u8868\u793A z = (z1, ..., zn)\u3002";
+    private const string VisualPage2Decoder =
+        "\u7ED9\u5B9A z \u540E\uFF0C\u89E3\u7801\u5668\u518D\u9010\u4E2A\u751F\u6210\u8F93\u51FA\u5E8F\u5217 (y1, ..., ym) \u7684\u7B26\u53F7\u3002\u5728\u6BCF\u4E00\u6B65\u4E2D\uFF0C\u6A21\u578B\u90FD\u662F\u81EA\u56DE\u5F52\u7684\u3002";
+    private const string VisualPage2Autoregressive =
+        "[10]\uFF0C\u5728\u751F\u6210\u4E0B\u4E00\u4E2A\u7B26\u53F7\u65F6\uFF0C\u4F1A\u628A\u5148\u524D\u751F\u6210\u7684\u7B26\u53F7\u4F5C\u4E3A\u989D\u5916\u8F93\u5165\u3002";
+    private const string VisualPage2Section3RetryParagraph =
+        "\u5927\u591A\u6570\u5177\u6709\u7ADE\u4E89\u529B\u7684\u795E\u7ECF\u5E8F\u5217\u8F6C\u6362\u6A21\u578B\u90FD\u91C7\u7528\u4E86\u7F16\u7801\u5668-\u89E3\u7801\u5668\u7ED3\u6784\u3002\u5176\u4E2D\uFF0C\u7F16\u7801\u5668\u5C06\u8F93\u5165\u7B26\u53F7\u8868\u793A\u5E8F\u5217\u6620\u5C04\u4E3A\u8FDE\u7EED\u8868\u793A\uFF0C\u800C\u89E3\u7801\u5668\u4F1A\u9010\u4E2A\u751F\u6210\u8F93\u51FA\u7B26\u53F7\uFF0C\u5E76\u5728\u6BCF\u4E00\u6B65\u5229\u7528\u5148\u524D\u751F\u6210\u7684\u7ED3\u679C\u4F5C\u4E3A\u989D\u5916\u8F93\u5165\u3002";
     private const string StableChineseParagraph =
         "\u8FD9\u662F\u56DE\u5F52\u6D4B\u8BD5\u6BB5\u843D\uFF0C\u7528\u6765\u9A8C\u8BC1\u6B63\u5E38\u60C5\u51B5\u4E0B\u5B57\u53F7\u4FDD\u6301\u4E0D\u53D8\u3002";
 
@@ -130,6 +143,55 @@ public class Page2TranslationQualityTests
         found.Should().BeTrue();
         usesSourceFallback.Should().BeTrue();
         renderText.Should().Be(metadata.FallbackText);
+    }
+
+    [SkippableFact]
+    public async Task Page1_MuPdfFailedFallbackPlanner_ShouldNormalizeFormulaRenderableText()
+    {
+        var pdfPath = GetPdfFixturePath();
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
+        var checkpoint = BuildPage1FormulaFallbackCheckpoint(source, pdfPath);
+        var formulaChunkIndex = checkpoint.FailedChunkIndexes.Should().ContainSingle().Which;
+
+        var (_, _, plan) = BuildRetryPagePlan(checkpoint, pdfPath, 1);
+        var plannedBlock = plan.Single(block => block.Block.ChunkIndex == formulaChunkIndex);
+        var expectedRenderableText = MuPdfExportService.PrepareRenderableTextForPdf(FailedFallbackFormulaText);
+
+        plannedBlock.Block.UsesSourceFallback.Should().BeTrue();
+        plannedBlock.RenderableText.Should().Be(expectedRenderableText);
+        plannedBlock.RenderableText.Should().Contain("h_t");
+        plannedBlock.RenderableText.Should().Contain("_-");
+        plannedBlock.RenderableText.Should().NotContain("$");
+        plannedBlock.RenderableText.Should().NotContain("{");
+        plannedBlock.RenderableText.Should().NotContain("}");
+
+        var outputPath = Path.Combine(Path.GetTempPath(), $"page1-formula-fallback-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            try
+            {
+                var exportService = new MuPdfExportService();
+                exportService.Export(checkpoint, pdfPath, outputPath, DocumentOutputMode.Monolingual);
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
+            {
+                Skip.If(true, $"MuPDF unavailable: {ex.Message}");
+            }
+
+            using var outputDoc = PdfPigDocument.Open(outputPath);
+            var page1Text = Normalize(outputDoc.GetPages().Single(p => p.Number == 1).Text);
+
+            page1Text.Should().Contain("h");
+            page1Text.Should().NotContain("$h_{t-1}$");
+            page1Text.Should().NotContain("$h_t$");
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+                File.Delete(outputPath);
+        }
     }
 
     [SkippableFact]
@@ -382,7 +444,7 @@ public class Page2TranslationQualityTests
             using var outputDoc = PdfPigDocument.Open(outputPath);
             var page2Text = Normalize(outputDoc.GetPages().Single(p => p.Number == 2).Text);
 
-            page2Text.Should().Contain("Translated section three paragraph");
+            page2Text.Should().Contain("大多数具有竞争");
             page2Text.Should().NotContain(Section3SourceSnippet);
             page2Text.Should().NotContain("At each step the model is auto-regressive");
         }
@@ -400,7 +462,7 @@ public class Page2TranslationQualityTests
         Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
 
         var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
-        var checkpoint = BuildPage2Section3RetryCheckpoint(source, pdfPath);
+        var checkpoint = BuildPage2VisualReviewCheckpoint(source, pdfPath);
         var outputPdfPath = Path.Combine(Path.GetTempPath(), Page2VisualReviewPdfName);
         var outputPngPath = Path.Combine(Path.GetTempPath(), Page2VisualReviewPngName);
 
@@ -428,6 +490,15 @@ public class Page2TranslationQualityTests
 
             File.Exists(outputPdfPath).Should().BeTrue();
             File.Exists(outputPngPath).Should().BeTrue();
+
+            using var outputDoc = PdfPigDocument.Open(outputPdfPath);
+            var page2Text = Normalize(outputDoc.GetPages().Single(p => p.Number == 2).Text);
+            page2Text.Should().Contain("\u795E\u7ECF\u5E8F\u5217\u8F6C\u6362\u6A21\u578B");
+            page2Text.Should().Contain("\u7ED9\u5B9A z");
+            page2Text.Should().Contain("Transformer");
+            page2Text.Should().Contain("ByteNet");
+            page2Text.Should().NotContain("translated-");
+
             Console.WriteLine($"Page 2 visual review PDF: {outputPdfPath}");
             Console.WriteLine($"Page 2 visual review PNG: {outputPngPath}");
         }
@@ -601,11 +672,64 @@ public class Page2TranslationQualityTests
         SourceDocument source,
         string pdfPath)
     {
-        var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
+        var checkpoint = BuildPage2VisualReviewCheckpoint(source, pdfPath);
         OverrideTranslatedChunkForNeedle(
             checkpoint,
             IntroPhrase,
-            "Translated section three paragraph that should wrap across multiple lines without leaving the original English source visible under the new content.");
+            VisualPage2Section3RetryParagraph);
+        return checkpoint;
+    }
+
+    private static LongDocumentTranslationCheckpoint BuildPage1FormulaFallbackCheckpoint(
+        SourceDocument source,
+        string pdfPath)
+    {
+        var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
+        var targetMetadata = SelectParagraphCandidate(checkpoint, 1);
+
+        var updatedMetadata = checkpoint.ChunkMetadata
+            .Select(metadata => metadata.ChunkIndex == targetMetadata.ChunkIndex
+                ? CloneMetadata(
+                    metadata,
+                    fallbackText: FailedFallbackFormulaText,
+                    detectedFontNames: metadata.DetectedFontNames ?? ["Times New Roman"])
+                : CloneMetadata(metadata))
+            .ToList();
+
+        var updatedTranslations = checkpoint.TranslatedChunks
+            .Where(pair => pair.Key != targetMetadata.ChunkIndex)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+        var updatedFailedIndexes = new HashSet<int> { targetMetadata.ChunkIndex };
+
+        return new LongDocumentTranslationCheckpoint
+        {
+            InputMode = checkpoint.InputMode,
+            SourceFilePath = checkpoint.SourceFilePath,
+            TargetLanguage = checkpoint.TargetLanguage,
+            SourceChunks = [.. checkpoint.SourceChunks],
+            ChunkMetadata = updatedMetadata,
+            TranslatedChunks = updatedTranslations,
+            FailedChunkIndexes = updatedFailedIndexes
+        };
+    }
+
+    private static LongDocumentTranslationCheckpoint BuildPage2VisualReviewCheckpoint(
+        SourceDocument source,
+        string pdfPath)
+    {
+        var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
+
+        foreach (var metadata in checkpoint.ChunkMetadata.Where(metadata => metadata.PageNumber == 2))
+        {
+            if (!checkpoint.TranslatedChunks.ContainsKey(metadata.ChunkIndex))
+                continue;
+
+            checkpoint.TranslatedChunks[metadata.ChunkIndex] = CreateReadablePage2ChineseMock(
+                checkpoint.SourceChunks[metadata.ChunkIndex],
+                metadata.SourceBlockType,
+                metadata.OrderInPage);
+        }
+
         MarkRetryForNeedle(checkpoint, IntroPhrase);
         return checkpoint;
     }
@@ -663,6 +787,108 @@ public class Page2TranslationQualityTests
 
         metadata.Should().NotBeNull();
         metadata!.RetryCount = retryCount;
+    }
+
+    private static LongDocumentChunkMetadata CloneMetadata(
+        LongDocumentChunkMetadata metadata,
+        string? fallbackText = null,
+        IReadOnlyList<string>? detectedFontNames = null)
+    {
+        return new LongDocumentChunkMetadata
+        {
+            ChunkIndex = metadata.ChunkIndex,
+            PageNumber = metadata.PageNumber,
+            SourceBlockId = metadata.SourceBlockId,
+            SourceBlockType = metadata.SourceBlockType,
+            IsFormulaLike = metadata.IsFormulaLike,
+            OrderInPage = metadata.OrderInPage,
+            RegionType = metadata.RegionType,
+            RegionConfidence = metadata.RegionConfidence,
+            RegionSource = metadata.RegionSource,
+            ReadingOrderScore = metadata.ReadingOrderScore,
+            BoundingBox = metadata.BoundingBox,
+            TextStyle = metadata.TextStyle,
+            FormulaCharacters = metadata.FormulaCharacters,
+            RetryCount = metadata.RetryCount,
+            FallbackText = fallbackText ?? metadata.FallbackText,
+            DetectedFontNames = detectedFontNames ?? metadata.DetectedFontNames
+        };
+    }
+
+    private static string CreateReadablePage2ChineseMock(
+        string sourceText,
+        SourceBlockType sourceBlockType,
+        int orderInPage)
+    {
+        var normalized = Normalize(sourceText);
+
+        if (sourceBlockType == SourceBlockType.Heading &&
+            normalized.Contains("Model Architecture", StringComparison.Ordinal))
+        {
+            return VisualPage2Heading;
+        }
+
+        if (normalized.Contains(IntroPhrase, StringComparison.Ordinal))
+            return VisualPage2Intro;
+
+        if (normalized.Contains("encoder maps an input sequence of symbol representations", StringComparison.Ordinal) ||
+            normalized.Contains(ContinuousPhrase, StringComparison.Ordinal))
+        {
+            return VisualPage2Encoder;
+        }
+
+        if (normalized.Contains("Given z", StringComparison.Ordinal) ||
+            normalized.Contains(Section3SourceSnippet, StringComparison.Ordinal) ||
+            normalized.Contains("At each step the model is auto-regressive", StringComparison.Ordinal))
+        {
+            return VisualPage2Decoder;
+        }
+
+        if (normalized.Contains("consuming the previously generated symbols as additional input when generating the next", StringComparison.Ordinal))
+            return VisualPage2Autoregressive;
+
+        if (normalized.Contains("ByteNet", StringComparison.Ordinal) || normalized.Contains("ConvS2S", StringComparison.Ordinal))
+            return "\u8FD9\u4E9B\u6A21\u578B\u5305\u62EC ConvS2S \u548C ByteNet\uFF0C\u5E76\u80FD\u591F\u5E76\u884C\u8BA1\u7B97\u6240\u6709\u8F93\u5165\u4E0E\u8F93\u51FA\u4F4D\u7F6E\u3002";
+
+        if (normalized.Contains("Transformer", StringComparison.Ordinal))
+            return "\u800C\u5728 Transformer \u4E2D\uFF0C\u8FD9\u4E00\u64CD\u4F5C\u88AB\u51CF\u5C11\u5230\u56FA\u5B9A\u6B21\u6570\u3002";
+
+        if (normalized.Contains("Recurrent models typically factor computation along the symbol positions", StringComparison.Ordinal))
+            return "\u5FAA\u73AF\u6A21\u578B\u901A\u5E38\u6CBF\u7740\u8F93\u5165\u548C\u8F93\u51FA\u5E8F\u5217\u7684\u7B26\u53F7\u4F4D\u7F6E\u8FDB\u884C\u8BA1\u7B97\u5206\u89E3\u3002";
+
+        if (normalized.Contains("Aligning the positions to steps in computation time", StringComparison.Ordinal) ||
+            normalized.Contains("previous hidden state", StringComparison.Ordinal))
+        {
+            return "\u901A\u8FC7\u5C06\u4F4D\u7F6E\u4E0E\u8BA1\u7B97\u65F6\u95F4\u6B65\u9AA4\u5BF9\u9F50\uFF0C\u5B83\u4EEC\u6839\u636E\u524D\u4E00\u4E2A\u9690\u85CF\u72B6\u6001 h_{t-1} \u548C\u4F4D\u7F6E t \u7684\u8F93\u5165\uFF0C\u751F\u6210\u4E00\u7CFB\u5217\u9690\u85CF\u72B6\u6001 h_t\u3002";
+        }
+
+        if (normalized.Contains("This inherently sequential nature precludes parallelization within training examples", StringComparison.Ordinal) ||
+            normalized.Contains("The fundamental constraint of sequential computation", StringComparison.Ordinal))
+        {
+            return "\u8FD9\u79CD\u56FA\u6709\u7684\u987A\u5E8F\u6027\u963B\u788D\u4E86\u8BAD\u7EC3\u6837\u672C\u5185\u90E8\u7684\u5E76\u884C\u5316\uFF0C\u800C\u987A\u5E8F\u8BA1\u7B97\u7684\u6839\u672C\u7EA6\u675F\u4F9D\u7136\u5B58\u5728\u3002";
+        }
+
+        if (normalized.Contains("Recent work has achieved significant improvements", StringComparison.Ordinal) ||
+            normalized.Contains("conditional computation", StringComparison.Ordinal))
+        {
+            return "\u6700\u8FD1\u7684\u7814\u7A76\u901A\u8FC7\u5206\u89E3\u6280\u5DE7\u548C\u6761\u4EF6\u8BA1\u7B97\uFF0C\u5728\u8BA1\u7B97\u6548\u7387\u4E0A\u53D6\u5F97\u4E86\u663E\u8457\u63D0\u5347\u3002";
+        }
+
+        if (normalized.Contains("Self-attention, sometimes called intra-attention", StringComparison.Ordinal))
+            return "\u81EA\u6CE8\u610F\u529B\u6709\u65F6\u4E5F\u88AB\u79F0\u4E3A\u5185\u90E8\u6CE8\u610F\u529B\uFF0C\u662F\u4E00\u79CD\u5C06\u5355\u4E2A\u5E8F\u5217\u4E2D\u4E0D\u540C\u4F4D\u7F6E\u5173\u8054\u8D77\u6765\u4EE5\u8BA1\u7B97\u5E8F\u5217\u8868\u793A\u7684\u673A\u5236\u3002";
+
+        if (normalized.Contains("Self-attention has been used successfully in a variety of tasks", StringComparison.Ordinal))
+            return "\u81EA\u6CE8\u610F\u529B\u5DF2\u7ECF\u5728\u591A\u79CD\u4EFB\u52A1\u4E2D\u5F97\u5230\u6210\u529F\u5E94\u7528\uFF0C\u5305\u62EC\u9605\u8BFB\u7406\u89E3\u3001\u6458\u8981\u751F\u6210\u548C\u53E5\u5B50\u8868\u793A\u5B66\u4E60\u3002";
+
+        if (normalized.Contains("End-to-end memory networks are based on a recurrent attention mechanism", StringComparison.Ordinal))
+            return "\u7AEF\u5230\u7AEF\u8BB0\u5FC6\u7F51\u7EDC\u57FA\u4E8E\u5FAA\u73AF\u6CE8\u610F\u529B\u673A\u5236\uFF0C\u800C\u4E0D\u662F\u9010\u4F4D\u7F6E\u5BF9\u9F50\u7684\u5FAA\u73AF\u7ED3\u6784\u3002";
+
+        if (normalized.Contains("To the best of our knowledge", StringComparison.Ordinal))
+            return "\u7136\u800C\uFF0C\u636E\u6211\u4EEC\u6240\u77E5\uFF0CTransformer \u662F\u9996\u4E2A\u5B8C\u5168\u4F9D\u8D56\u81EA\u6CE8\u610F\u529B\u6765\u8BA1\u7B97\u8F93\u5165\u4E0E\u8F93\u51FA\u8868\u793A\u7684\u8F6C\u6362\u6A21\u578B\u3002";
+
+        return sourceBlockType == SourceBlockType.Heading
+            ? $"\u7B2C 2 \u9875\u6807\u9898\u6A21\u62DF {orderInPage + 1}"
+            : $"\u8FD9\u662F\u7528\u4E8E\u7B2C 2 \u9875\u4EBA\u5DE5\u89C6\u89C9\u68C0\u67E5\u7684\u4E2D\u6587\u6A21\u62DF\u6BB5\u843D {orderInPage + 1}\u3002";
     }
 
     private static MuPdfExportService.EmbeddedFontInfo CreatePrimaryCjkFonts() =>

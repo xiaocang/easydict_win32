@@ -369,13 +369,12 @@ public sealed class MuPdfExportService : IDocumentExportService
         IReadOnlyList<BlockRect>? renderLineRects = null,
         IReadOnlyList<BlockRect>? backgroundLineRects = null)
     {
-        // Simplify inline LaTeX formulas to plain text with ^ _ super/subscript signals
-        translatedText = SimplifyLatexMarkup(translatedText);
-        if (string.IsNullOrWhiteSpace(translatedText))
+        var renderableText = PrepareRenderableTextForPdf(translatedText);
+        if (string.IsNullOrWhiteSpace(renderableText))
             return new BlockTextRenderResult(string.Empty, fontSize, 0, WasShrunk: false, WasTruncated: false);
 
         var renderFont = ResolveRenderFontPlan(
-            translatedText,
+            renderableText,
             fontId,
             fonts,
             sourceBlockType,
@@ -393,7 +392,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         var availableHeight = ResolveAvailableHeight(bbox, renderLineRects, backgroundLineRects);
 
         var fitResult = SolveFontFit(
-            translatedText,
+            renderableText,
             originalFontSize,
             bbox,
             renderLineRects,
@@ -403,7 +402,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             lineHeightMultiplier);
 
         var chosenFontSize = fitResult.ChosenFontSize;
-        var prepared = PrepareLayoutParagraph(translatedText, renderFont, fonts, chosenFontSize);
+        var prepared = PrepareLayoutParagraph(renderableText, renderFont, fonts, chosenFontSize);
         var wrappedLines = LayoutLines(prepared, renderLineRects, bbox.Width).Select(l => l.Text).ToList();
 
         var lineHeight = fitResult.ChosenLineHeight;
@@ -891,6 +890,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             PlannedLinesRendered = 0,
             PlannedWasShrunk = false,
             PlannedWasTruncated = false,
+            RenderableText = PrepareRenderableTextForPdf(block.TranslatedText),
         };
     }
 
@@ -934,6 +934,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             PlannedLinesRendered = plannedTextLayout.LinesRendered,
             PlannedWasShrunk = plannedTextLayout.WasShrunk,
             PlannedWasTruncated = plannedTextLayout.WasTruncated,
+            RenderableText = plannedTextLayout.RenderableText,
         };
     }
 
@@ -946,8 +947,9 @@ public sealed class MuPdfExportService : IDocumentExportService
         XRect sourceBoundsTopLeft,
         IReadOnlyList<XRect>? preferredRenderRectsTopLeft)
     {
+        var renderableText = PrepareRenderableTextForPdf(block.TranslatedText);
         var renderFont = ResolveRenderFontPlan(
-            block.TranslatedText,
+            renderableText,
             fontId,
             fonts,
             block.SourceBlockType,
@@ -976,7 +978,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         var fitResult = FontFitSolver.Solve(
             new FontFitRequest
             {
-                Text = block.TranslatedText,
+                Text = renderableText,
                 StartFontSize = originalFontSize,
                 MinFontSize = MinFontSize,
                 NormalizeWhitespace = false,
@@ -989,7 +991,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             size => CreateGlyphMeasurer(renderFont, fonts, size));
 
         var chosenFontSize = fitResult.ChosenFontSize;
-        var prepared = PrepareLayoutParagraph(block.TranslatedText, renderFont, fonts, chosenFontSize);
+        var prepared = PrepareLayoutParagraph(renderableText, renderFont, fonts, chosenFontSize);
         var wrappedLines = TextLayoutEngine.Instance.LayoutWithLines(prepared, plannedWidths)
             .Lines
             .Select(line => line.Text)
@@ -1011,7 +1013,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         }
 
         if (wrappedLines.Count == 0)
-            wrappedLines = [block.TranslatedText];
+            wrappedLines = [renderableText];
 
         var renderRectsTopLeft = new List<XRect>(wrappedLines.Count);
         for (var i = 0; i < wrappedLines.Count; i++)
@@ -1043,6 +1045,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             LinesRendered = wrappedLines.Count,
             WasShrunk = chosenFontSize < originalFontSize - 0.01,
             WasTruncated = wasTruncated,
+            RenderableText = renderableText,
         };
     }
 
@@ -1394,6 +1397,14 @@ public sealed class MuPdfExportService : IDocumentExportService
     /// </summary>
     private static string SimplifyLatexMarkup(string text) =>
         LatexFormulaSimplifier.Simplify(text, preserveScriptSignals: true);
+
+    internal static string PrepareRenderableTextForPdf(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        return SimplifyLatexMarkup(text);
+    }
 
     /// <summary>
     /// Simplifies LaTeX math content to a Unicode approximation.
@@ -2069,6 +2080,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         public int PlannedLinesRendered { get; init; }
         public bool PlannedWasShrunk { get; init; }
         public bool PlannedWasTruncated { get; init; }
+        public string? RenderableText { get; init; }
     }
 
     internal sealed record PlannedRetryTextLayout
@@ -2080,6 +2092,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         public int LinesRendered { get; init; }
         public bool WasShrunk { get; init; }
         public bool WasTruncated { get; init; }
+        public required string RenderableText { get; init; }
     }
 
     internal readonly record struct LatinFontKey(LatinFontFamily Family, LatinFontVariant Variant);

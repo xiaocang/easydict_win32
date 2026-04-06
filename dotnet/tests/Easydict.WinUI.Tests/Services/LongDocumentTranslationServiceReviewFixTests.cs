@@ -883,6 +883,87 @@ public class LongDocumentTranslationServiceReviewFixTests
     }
 
     [Fact]
+    public void BuildCheckpointFromCoreResult_ShouldCarryRetryCountIntoMetadataForSuccessfulRetryBlock()
+    {
+        var sourceDocument = new SourceDocument
+        {
+            DocumentId = "doc-1",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "p1-body-b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "Most competitive neural sequence models.",
+                            BoundingBox = new BlockRect(10, 10, 100, 20),
+                            TextStyle = new BlockTextStyle { FontSize = 12 }
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var coreResult = new CoreLongDocumentTranslationResult
+        {
+            Ir = new DocumentIr
+            {
+                DocumentId = "doc-1",
+                Blocks = []
+            },
+            Pages =
+            [
+                new TranslatedDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new TranslatedDocumentBlock
+                        {
+                            IrBlockId = "ir-1-p1-body-b1",
+                            SourceBlockId = "p1-body-b1",
+                            BlockType = BlockType.Paragraph,
+                            OriginalText = "Most competitive neural sequence models.",
+                            ProtectedText = "Most competitive neural sequence models.",
+                            TranslatedText = "\u5927\u591A\u6570\u5177\u6709\u7ADE\u4E89\u529B\u7684\u795E\u7ECF\u5E8F\u5217\u6A21\u578B\u3002",
+                            SourceHash = "hash-1",
+                            BoundingBox = new BlockRect(10, 10, 100, 20),
+                            TranslationSkipped = false,
+                            RetryCount = 1,
+                            LastError = null,
+                            TextStyle = new BlockTextStyle { FontSize = 12 }
+                        }
+                    ]
+                }
+            ],
+            QualityReport = new LongDocumentQualityReport
+            {
+                StageTimingsMs = new Dictionary<string, long>(),
+                TotalBlocks = 1,
+                TranslatedBlocks = 1,
+                SkippedBlocks = 0,
+                FailedBlocks = []
+            }
+        };
+
+        var checkpoint = WinUiLongDocumentTranslationService.BuildCheckpointFromCoreResult(
+            LongDocumentInputMode.Pdf,
+            "dummy.pdf",
+            Language.SimplifiedChinese,
+            sourceDocument,
+            coreResult);
+
+        checkpoint.ChunkMetadata.Should().ContainSingle();
+        checkpoint.ChunkMetadata[0].RetryCount.Should().Be(1);
+        checkpoint.TranslatedChunks.Should().ContainKey(0);
+        checkpoint.FailedChunkIndexes.Should().BeEmpty();
+    }
+
+    [Fact]
     public void BuildParagraphTextsForTesting_ShouldKeepFormulaContinuationAttached()
     {
         var paragraphs = WinUiLongDocumentTranslationService.BuildParagraphTextsForTesting(

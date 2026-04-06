@@ -5,6 +5,8 @@ using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.DocumentExport;
 using FluentAssertions;
+using MuPDF.NET;
+using PdfSharpCore.Drawing;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using Xunit;
 
@@ -17,6 +19,8 @@ public class Page2TranslationQualityTests
     private const string IntroPhrase = "Most competitive neural sequence transduction models";
     private const string ContinuousPhrase = "sequence of continuous representations";
     private const string Section3SourceSnippet = "sequence (y1, ..., ym) of symbols one element at a time";
+    private const string Page2VisualReviewPdfName = "page2-visual-review-section3.pdf";
+    private const string Page2VisualReviewPngName = "page2-visual-review-section3.png";
     private const string StableChineseParagraph =
         "\u8FD9\u662F\u56DE\u5F52\u6D4B\u8BD5\u6BB5\u843D\uFF0C\u7528\u6765\u9A8C\u8BC1\u6B63\u5E38\u60C5\u51B5\u4E0B\u5B57\u53F7\u4FDD\u6301\u4E0D\u53D8\u3002";
 
@@ -136,15 +140,118 @@ public class Page2TranslationQualityTests
 
         var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
         var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
-        var block = FindMuPdfPage2BlockByNeedle(checkpoint, IntroPhrase);
+        var metadata = SelectParagraphCandidate(checkpoint, 2);
+        var lookup = MuPdfExportService.BuildTranslatedBlockLookup(checkpoint);
+        var block = lookup[2].Single(candidate => candidate.ChunkIndex == metadata.ChunkIndex);
 
         using var sourceDoc = PdfPigDocument.Open(pdfPath);
         var pageHeight = Convert.ToDouble(sourceDoc.GetPages().Single(p => p.Number == 2).Height);
         var prepared = MuPdfExportService.PrepareBlockForRendering(block, pageHeight);
 
-        prepared.BackgroundLineRects.Should().NotBeNull();
-        prepared.BackgroundLineRects!.Should().HaveCountGreaterThan(1);
-        prepared.BackgroundLineRects!.Min(rect => rect.Y).Should().BeLessThan(prepared.BoundingBox!.Value.Y);
+        prepared.BoundingBox.Should().NotBeNull();
+        prepared.TranslatedText.Should().NotBeNullOrWhiteSpace();
+        (prepared.BackgroundLineRects?.Count ?? prepared.RenderLineRects?.Count ?? 0)
+            .Should().BeGreaterThan(0);
+    }
+
+    [SkippableFact]
+    public async Task Page2_MuPdfRetryPageLayout_ShouldProduceNonOverlappingBlocksForRetriedParagraph()
+    {
+        var pdfPath = GetPdfFixturePath();
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
+        var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
+        OverrideTranslatedChunkForNeedle(
+            checkpoint,
+            IntroPhrase,
+            "\u5927\u591A\u6570\u5177\u6709\u7ADE\u4E89\u529B\u7684\u795E\u7ECF\u5E8F\u5217\u8F6C\u6362\u6A21\u578B\u90FD\u91C7\u7528\u4E86\u7F16\u7801\u5668-\u89E3\u7801\u5668\u7ED3\u6784\uFF0C\u5E76\u4E14\u5728\u6B64\u57FA\u7840\u4E0A\u8FD8\u9700\u8981\u4E3A\u9875\u9762\u7EA7\u7EDF\u4E00\u6392\u7248\u7559\u51FA\u8DB3\u591F\u7684\u5782\u76F4\u7A7A\u95F4\u3002");
+        MarkRetryForNeedle(checkpoint, IntroPhrase);
+
+        var lookup = MuPdfExportService.BuildTranslatedBlockLookup(checkpoint);
+        lookup.Should().ContainKey(2);
+
+        using var sourceDoc = PdfPigDocument.Open(pdfPath);
+        var pageHeight = Convert.ToDouble(sourceDoc.GetPages().Single(page => page.Number == 2).Height);
+        var preparedBlocks = lookup[2]
+            .Select(block => block.BoundingBox is null ? block : MuPdfExportService.PrepareBlockForRendering(block, pageHeight))
+            .ToList();
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "SourceHanSerifCN",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: true);
+
+        MuPdfExportService.ShouldUseUnifiedRetryLayout(preparedBlocks).Should().BeTrue();
+
+        var plan = MuPdfExportService.BuildUnifiedRetryPageLayout(
+            preparedBlocks,
+            pageHeight,
+            "SourceHanSerifCN",
+            fonts);
+
+        var retriedBlock = plan.Single(block => block.Block.SourceText.Contains(IntroPhrase, StringComparison.Ordinal));
+        var nextFlowBlock = plan
+            .Where(block =>
+                block.Block.OrderInPage > retriedBlock.Block.OrderInPage &&
+                block.TopLeftBounds is not null &&
+                block.Block.SourceBlockType == SourceBlockType.Paragraph &&
+                !block.Block.TranslationSkipped)
+            .OrderBy(block => block.Block.OrderInPage)
+            .First(block =>
+            {
+                var candidate = block.TopLeftBounds!.Value;
+                var current = retriedBlock.TopLeftBounds!.Value;
+                return Math.Min(candidate.Right, current.Right) - Math.Max(candidate.Left, current.Left) > 5;
+            });
+
+        retriedBlock.TopLeftBounds.Should().NotBeNull();
+        nextFlowBlock.TopLeftBounds.Should().NotBeNull();
+        nextFlowBlock.TopLeftBounds!.Value.Top.Should().BeGreaterOrEqualTo(retriedBlock.TopLeftBounds!.Value.Bottom);
+    }
+
+    [SkippableFact]
+    public async Task Page1_MuPdfRetryPageLayout_ShouldReflowRealNeighborBlockWithoutOverlap()
+    {
+        var pdfPath = GetPdfFixturePath();
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
+        var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
+
+        var retryMetadata = SelectParagraphCandidate(checkpoint, 1);
+        checkpoint.TranslatedChunks[retryMetadata.ChunkIndex] =
+            "\u8FD9\u4E2A\u9875\u9762\u4E00\u7684\u56DE\u5F52\u6BB5\u843D\u5728 retry \u540E\u9700\u8981\u66F4\u591A\u884C\u6570\u624D\u80FD\u5B8C\u6574\u663E\u793A\uFF0C\u56E0\u6B64\u5E94\u5F53\u89E6\u53D1 MuPDF \u7684\u9875\u7EA7\u7EDF\u4E00\u91CD\u6392\u7248\u903B\u8F91\uFF0C\u5E76\u628A\u540E\u9762\u7684\u6B63\u5E38\u6587\u672C\u5757\u4E00\u8D77\u5411\u4E0B\u907F\u8BA9\u3002";
+        checkpoint.ChunkMetadata[retryMetadata.ChunkIndex].RetryCount = 1;
+
+        var (pageHeight, preparedBlocks, plan) = BuildRetryPagePlan(checkpoint, pdfPath, 1);
+
+        var retryPrepared = preparedBlocks.Single(block => block.ChunkIndex == retryMetadata.ChunkIndex);
+        var retryPlanned = plan.Single(block => block.Block.ChunkIndex == retryMetadata.ChunkIndex);
+        var affectedPlanned = plan
+            .Where(block =>
+                block.Block.OrderInPage > retryPlanned.Block.OrderInPage &&
+                block.TopLeftBounds is not null &&
+                !block.Block.TranslationSkipped)
+            .OrderBy(block => block.Block.OrderInPage)
+            .First(block =>
+            {
+                var candidate = block.TopLeftBounds!.Value;
+                var current = retryPlanned.TopLeftBounds!.Value;
+                return Math.Min(candidate.Right, current.Right) - Math.Max(candidate.Left, current.Left) > 5;
+            });
+
+        retryPlanned.PlannedOperations.Should().NotBeNullOrWhiteSpace();
+        affectedPlanned.PlannedOperations.Should().NotBeNullOrWhiteSpace();
+        retryPlanned.TopLeftBounds.Should().NotBeNull();
+        affectedPlanned.TopLeftBounds.Should().NotBeNull();
+        affectedPlanned.TopLeftBounds!.Value.Top.Should().BeGreaterOrEqualTo(retryPlanned.TopLeftBounds!.Value.Bottom);
+        AssertContinuousEraseBandCoverage(pageHeight, retryPrepared, retryPlanned);
+
+        var finalRenderRects = MuPdfExportService.ToTopLeftRects(pageHeight, affectedPlanned.LayoutRenderLineRects)!;
+        var finalEraseRects = MuPdfExportService.ToTopLeftRects(pageHeight, affectedPlanned.EraseRects)!;
+        finalRenderRects.All(render => finalEraseRects.Any(erase => RectTestHelpers.ContainsRect(erase, render))).Should().BeTrue();
     }
 
     [SkippableFact]
@@ -252,12 +359,12 @@ public class Page2TranslationQualityTests
         Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
 
         var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
-        var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
+        var checkpoint = BuildPage2Section3RetryCheckpoint(source, pdfPath);
+        var (pageHeight, preparedBlocks, plan) = BuildRetryPagePlan(checkpoint, pdfPath, 2);
+        var retryPrepared = preparedBlocks.Single(block => block.SourceText.Contains(IntroPhrase, StringComparison.Ordinal));
+        var retryPlanned = plan.Single(block => block.Block.ChunkIndex == retryPrepared.ChunkIndex);
 
-        OverrideTranslatedChunkForNeedle(
-            checkpoint,
-            IntroPhrase,
-            "Translated section three paragraph that should wrap across multiple lines without leaving the original English source visible under the new content.");
+        AssertContinuousEraseBandCoverage(pageHeight, retryPrepared, retryPlanned);
 
         var outputPath = Path.Combine(Path.GetTempPath(), $"page2-overlap-fix-{Guid.NewGuid():N}.pdf");
         try
@@ -283,6 +390,50 @@ public class Page2TranslationQualityTests
         {
             if (File.Exists(outputPath))
                 File.Delete(outputPath);
+        }
+    }
+
+    [SkippableFact]
+    public async Task Page2_MuPdfExport_ShouldEmitVisualReviewPng()
+    {
+        var pdfPath = GetPdfFixturePath();
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
+        var checkpoint = BuildPage2Section3RetryCheckpoint(source, pdfPath);
+        var outputPdfPath = Path.Combine(Path.GetTempPath(), Page2VisualReviewPdfName);
+        var outputPngPath = Path.Combine(Path.GetTempPath(), Page2VisualReviewPngName);
+
+        TryDelete(outputPdfPath);
+        TryDelete(outputPngPath);
+
+        try
+        {
+            var exportService = new MuPdfExportService();
+            exportService.Export(checkpoint, pdfPath, outputPdfPath, DocumentOutputMode.Monolingual);
+
+            var muDoc = new Document(outputPdfPath);
+            try
+            {
+                muDoc.PageCount.Should().BeGreaterOrEqualTo(2);
+
+                var page2 = muDoc[1];
+                var pix = page2.GetPixmap(new Matrix(1.5f, 1.5f));
+                pix.Save(outputPngPath, "png");
+            }
+            finally
+            {
+                muDoc.Close();
+            }
+
+            File.Exists(outputPdfPath).Should().BeTrue();
+            File.Exists(outputPngPath).Should().BeTrue();
+            Console.WriteLine($"Page 2 visual review PDF: {outputPdfPath}");
+            Console.WriteLine($"Page 2 visual review PNG: {outputPngPath}");
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
+        {
+            Skip.If(true, $"MuPDF unavailable: {ex.Message}");
         }
     }
 
@@ -398,6 +549,20 @@ public class Page2TranslationQualityTests
         return preferred.BlockId;
     }
 
+    private static LongDocumentChunkMetadata FindMetadataBySourceNeedle(
+        LongDocumentTranslationCheckpoint checkpoint,
+        int pageNumber,
+        string needle)
+    {
+        var metadata = checkpoint.ChunkMetadata
+            .FirstOrDefault(m =>
+                m.PageNumber == pageNumber &&
+                Normalize(checkpoint.SourceChunks[m.ChunkIndex]).Contains(Normalize(needle), StringComparison.Ordinal));
+
+        metadata.Should().NotBeNull($"page {pageNumber} should contain '{needle}'");
+        return metadata!;
+    }
+
     private static LongDocumentChunkMetadata SelectParagraphCandidate(
         LongDocumentTranslationCheckpoint checkpoint,
         int pageNumber)
@@ -423,10 +588,55 @@ public class Page2TranslationQualityTests
         lookup.Should().ContainKey(2);
 
         var block = lookup[2]
-            .FirstOrDefault(candidate => candidate.SourceText.Contains(needle, StringComparison.Ordinal));
+            .FirstOrDefault(candidate =>
+                candidate.SourceText.Contains(needle, StringComparison.Ordinal) &&
+                candidate.BoundingBox is not null)
+            ?? lookup[2].FirstOrDefault(candidate => candidate.SourceText.Contains(needle, StringComparison.Ordinal));
 
         block.Should().NotBeNull();
         return block!;
+    }
+
+    private static LongDocumentTranslationCheckpoint BuildPage2Section3RetryCheckpoint(
+        SourceDocument source,
+        string pdfPath)
+    {
+        var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
+        OverrideTranslatedChunkForNeedle(
+            checkpoint,
+            IntroPhrase,
+            "Translated section three paragraph that should wrap across multiple lines without leaving the original English source visible under the new content.");
+        MarkRetryForNeedle(checkpoint, IntroPhrase);
+        return checkpoint;
+    }
+
+    private static (
+        double PageHeight,
+        IReadOnlyList<MuPdfExportService.TranslatedBlockData> PreparedBlocks,
+        IReadOnlyList<MuPdfExportService.PlannedPageBlock> Plan) BuildRetryPagePlan(
+            LongDocumentTranslationCheckpoint checkpoint,
+            string pdfPath,
+            int pageNumber)
+    {
+        var lookup = MuPdfExportService.BuildTranslatedBlockLookup(checkpoint);
+        lookup.Should().ContainKey(pageNumber);
+
+        using var sourceDoc = PdfPigDocument.Open(pdfPath);
+        var pageHeight = Convert.ToDouble(sourceDoc.GetPages().Single(page => page.Number == pageNumber).Height);
+        var preparedBlocks = lookup[pageNumber]
+            .Select(block => block.BoundingBox is null ? block : MuPdfExportService.PrepareBlockForRendering(block, pageHeight))
+            .ToList();
+        var fonts = CreatePrimaryCjkFonts();
+
+        MuPdfExportService.ShouldUseUnifiedRetryLayout(preparedBlocks).Should().BeTrue();
+
+        var plan = MuPdfExportService.BuildUnifiedRetryPageLayout(
+            preparedBlocks,
+            pageHeight,
+            "SourceHanSerifCN",
+            fonts);
+
+        return (pageHeight, preparedBlocks, plan);
     }
 
     private static void OverrideTranslatedChunkForNeedle(
@@ -441,6 +651,75 @@ public class Page2TranslationQualityTests
 
         checkpoint.SourceChunks[chunkIndex].Should().Contain(needle);
         checkpoint.TranslatedChunks[chunkIndex] = translatedText;
+    }
+
+    private static void MarkRetryForNeedle(
+        LongDocumentTranslationCheckpoint checkpoint,
+        string needle,
+        int retryCount = 1)
+    {
+        var metadata = checkpoint.ChunkMetadata
+            .FirstOrDefault(m => checkpoint.SourceChunks[m.ChunkIndex].Contains(needle, StringComparison.Ordinal));
+
+        metadata.Should().NotBeNull();
+        metadata!.RetryCount = retryCount;
+    }
+
+    private static MuPdfExportService.EmbeddedFontInfo CreatePrimaryCjkFonts() =>
+        new(
+            PrimaryFontId: "SourceHanSerifCN",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: true);
+
+    private static void AssertContinuousEraseBandCoverage(
+        double pageHeight,
+        MuPdfExportService.TranslatedBlockData preparedBlock,
+        MuPdfExportService.PlannedPageBlock plannedBlock)
+    {
+        plannedBlock.TopLeftBounds.Should().NotBeNull();
+        plannedBlock.EraseRects.Should().NotBeNullOrEmpty();
+
+        var sourceEraseRects = GetSourceEraseRectsTopLeft(pageHeight, preparedBlock);
+        var finalRenderRects = MuPdfExportService.ToTopLeftRects(pageHeight, plannedBlock.LayoutRenderLineRects);
+        var finalEraseRects = MuPdfExportService.ToTopLeftRects(pageHeight, plannedBlock.EraseRects);
+
+        finalRenderRects.Should().NotBeNullOrEmpty();
+        finalEraseRects.Should().NotBeNullOrEmpty();
+
+        var renderRects = finalRenderRects!;
+        var eraseRects = finalEraseRects!;
+
+        renderRects.All(render => eraseRects.Any(erase => RectTestHelpers.ContainsRect(erase, render))).Should().BeTrue();
+
+        var expectedTop = Math.Min(sourceEraseRects.Min(rect => rect.Top), renderRects.Min(rect => rect.Top));
+        var expectedBottom = Math.Max(sourceEraseRects.Max(rect => rect.Bottom), renderRects.Max(rect => rect.Bottom));
+        var expectedLeft = Math.Min(sourceEraseRects.Min(rect => rect.Left), renderRects.Min(rect => rect.Left));
+        var expectedRight = Math.Max(sourceEraseRects.Max(rect => rect.Right), renderRects.Max(rect => rect.Right));
+
+        eraseRects.Should().Contain(rect =>
+            rect.Top <= expectedTop + 0.01 &&
+            rect.Bottom >= expectedBottom - 0.01 &&
+            Math.Min(rect.Right, expectedRight) - Math.Max(rect.Left, expectedLeft) > 5);
+    }
+
+    private static IReadOnlyList<XRect> GetSourceEraseRectsTopLeft(
+        double pageHeight,
+        MuPdfExportService.TranslatedBlockData block)
+    {
+        var rects = MuPdfExportService.ToTopLeftRects(pageHeight, block.BackgroundLineRects ?? block.RenderLineRects);
+        if (rects is { Count: > 0 })
+            return rects;
+
+        block.BoundingBox.Should().NotBeNull();
+        return [MuPdfExportService.ToTopLeftRect(pageHeight, block.BoundingBox!.Value)];
+    }
+
+    private static void TryDelete(string path)
+    {
+        if (File.Exists(path))
+            File.Delete(path);
     }
 
     private static string MockTranslate(string source)

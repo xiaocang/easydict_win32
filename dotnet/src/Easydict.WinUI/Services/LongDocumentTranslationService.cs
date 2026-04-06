@@ -89,6 +89,7 @@ public sealed class LongDocumentChunkMetadata
     public BlockRect? BoundingBox { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
     public BlockFormulaCharacters? FormulaCharacters { get; init; }
+    public int RetryCount { get; set; }
     public string? FallbackText { get; init; }
     public IReadOnlyList<string>? DetectedFontNames { get; init; }
 }
@@ -338,6 +339,7 @@ public sealed class LongDocumentTranslationService : IDisposable
                         BoundingBox = item.Block.BoundingBox,
                         TextStyle = item.Block.TextStyle,
                         FormulaCharacters = item.Block.FormulaCharacters,
+                        RetryCount = item.Block.RetryCount,
                         FallbackText = sourceBlock?.FallbackText,
                         DetectedFontNames = sourceBlock?.DetectedFontNames
                     };
@@ -480,6 +482,9 @@ public sealed class LongDocumentTranslationService : IDisposable
             }
 
             onProgress?.Invoke($"Translating chunk {chunkIndex + 1}/{checkpoint.SourceChunks.Count}...");
+
+            if (metadataByChunkIndex.TryGetValue(chunkIndex, out var metadata))
+                metadata.RetryCount = Math.Max(metadata.RetryCount, translatedBlock.RetryCount);
 
             if (!string.IsNullOrWhiteSpace(translatedBlock.LastError) || string.IsNullOrWhiteSpace(translatedBlock.TranslatedText))
             {

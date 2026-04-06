@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Easydict.TranslationService.LongDocument;
 using Easydict.WinUI.Services.DocumentExport;
 using FluentAssertions;
+using PdfSharpCore.Drawing;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
@@ -262,4 +263,350 @@ public class MuPdfExportServiceSpacingTests
         result.WasTruncated.Should().BeTrue();
         result.LinesRendered.Should().Be(2);
     }
+
+    [Fact]
+    public void ShouldUseUnifiedRetryLayout_ReturnsTrueForRetryOrFallbackPagesOnly()
+    {
+        MuPdfExportService.TranslatedBlockData[] normalPageBlocks =
+        [
+            new MuPdfExportService.TranslatedBlockData
+            {
+                ChunkIndex = 0,
+                PageNumber = 1,
+                SourceBlockId = "p1-body-b1",
+                OrderInPage = 0,
+                ReadingOrderScore = 1,
+                SourceText = "source",
+                TranslatedText = "translated",
+                BoundingBox = new BlockRect(10, 10, 100, 20),
+                FontSize = 12,
+                SourceBlockType = SourceBlockType.Paragraph,
+                RetryCount = 0,
+                UsesSourceFallback = false
+            }
+        ];
+
+        MuPdfExportService.TranslatedBlockData[] retryPageBlocks =
+        [
+            normalPageBlocks[0] with { RetryCount = 1 }
+        ];
+
+        MuPdfExportService.TranslatedBlockData[] fallbackPageBlocks =
+        [
+            normalPageBlocks[0] with { UsesSourceFallback = true }
+        ];
+
+        MuPdfExportService.ShouldUseUnifiedRetryLayout(normalPageBlocks).Should().BeFalse();
+        MuPdfExportService.ShouldUseUnifiedRetryLayout(retryPageBlocks).Should().BeTrue();
+        MuPdfExportService.ShouldUseUnifiedRetryLayout(fallbackPageBlocks).Should().BeTrue();
+    }
+
+    [Fact]
+    public void BuildUnifiedRetryPageLayout_WithGrowingLeadingParagraph_PushesUnknownFollowingTextBlockDown()
+    {
+        const double pageHeight = 400;
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "Arial",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: false);
+
+        var first = MuPdfExportService.PrepareBlockForRendering(
+            new MuPdfExportService.TranslatedBlockData
+            {
+                ChunkIndex = 0,
+                PageNumber = 1,
+                SourceBlockId = "p1-body-b1",
+                OrderInPage = 0,
+                ReadingOrderScore = 1,
+                SourceText = "Source block one",
+                TranslatedText = "This retried paragraph grows substantially after retry and now needs several lines of final layout to fit cleanly within the page column.",
+                BoundingBox = new BlockRect(40, 300, 240, 28),
+                FontSize = 12,
+                TextStyle = new BlockTextStyle
+                {
+                    FontSize = 12,
+                    LineSpacing = 14,
+                    LinePositions =
+                    [
+                        new BlockLinePosition(322, 40, 280),
+                        new BlockLinePosition(308, 40, 280)
+                    ]
+                },
+                SourceBlockType = SourceBlockType.Paragraph,
+                RetryCount = 1,
+                UsesSourceFallback = false
+            },
+            pageHeight);
+
+        var second = MuPdfExportService.PrepareBlockForRendering(
+            new MuPdfExportService.TranslatedBlockData
+            {
+                ChunkIndex = 1,
+                PageNumber = 1,
+                SourceBlockId = "p1-body-b2",
+                OrderInPage = 1,
+                ReadingOrderScore = 0.5,
+                SourceText = "Source block two",
+                TranslatedText = "Following paragraph remains short.",
+                BoundingBox = new BlockRect(40, 248, 240, 28),
+                FontSize = 12,
+                TextStyle = new BlockTextStyle
+                {
+                    FontSize = 12,
+                    LineSpacing = 14,
+                    LinePositions =
+                    [
+                        new BlockLinePosition(270, 40, 280),
+                        new BlockLinePosition(256, 40, 280)
+                    ]
+                },
+                SourceBlockType = SourceBlockType.Unknown,
+                RetryCount = 0,
+                UsesSourceFallback = false
+            },
+            pageHeight);
+
+        var plan = MuPdfExportService.BuildUnifiedRetryPageLayout(
+            [first, second],
+            pageHeight,
+            "Arial",
+            fonts);
+
+        var firstPlanned = plan.Single(block => block.Block.ChunkIndex == 0);
+        var secondPlanned = plan.Single(block => block.Block.ChunkIndex == 1);
+
+        firstPlanned.TopLeftBounds.Should().NotBeNull();
+        secondPlanned.TopLeftBounds.Should().NotBeNull();
+        secondPlanned.PlannedOperations.Should().NotBeNullOrWhiteSpace();
+        secondPlanned.TopLeftBounds!.Value.Y.Should().BeGreaterThan(
+            MuPdfExportService.ToTopLeftRect(pageHeight, second.BoundingBox!.Value).Y);
+        secondPlanned.TopLeftBounds!.Value.Top.Should().BeGreaterOrEqualTo(firstPlanned.TopLeftBounds!.Value.Bottom);
+    }
+
+    [Fact]
+    public void BuildUnifiedRetryPageLayout_WithFallbackParagraph_UsesUnifiedPlanAndAvoidsOverlap()
+    {
+        const double pageHeight = 400;
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "Arial",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: false);
+
+        var fallbackBlock = MuPdfExportService.PrepareBlockForRendering(
+            new MuPdfExportService.TranslatedBlockData
+            {
+                ChunkIndex = 0,
+                PageNumber = 1,
+                SourceBlockId = "p1-body-b1",
+                OrderInPage = 0,
+                ReadingOrderScore = 1,
+                SourceText = "Fallback source block",
+                TranslatedText = "Fallback source block with enough content to occupy more than one line in the final unified layout.",
+                BoundingBox = new BlockRect(40, 300, 230, 28),
+                FontSize = 12,
+                TextStyle = new BlockTextStyle
+                {
+                    FontSize = 12,
+                    LineSpacing = 14,
+                    LinePositions =
+                    [
+                        new BlockLinePosition(322, 40, 270),
+                        new BlockLinePosition(308, 40, 270)
+                    ]
+                },
+                SourceBlockType = SourceBlockType.Paragraph,
+                RetryCount = 0,
+                UsesSourceFallback = true
+            },
+            pageHeight);
+
+        var neighbor = MuPdfExportService.PrepareBlockForRendering(
+            new MuPdfExportService.TranslatedBlockData
+            {
+                ChunkIndex = 1,
+                PageNumber = 1,
+                SourceBlockId = "p1-body-b2",
+                OrderInPage = 1,
+                ReadingOrderScore = 0.5,
+                SourceText = "Neighbor source block",
+                TranslatedText = "Neighbor paragraph.",
+                BoundingBox = new BlockRect(40, 252, 230, 28),
+                FontSize = 12,
+                TextStyle = new BlockTextStyle
+                {
+                    FontSize = 12,
+                    LineSpacing = 14,
+                    LinePositions =
+                    [
+                        new BlockLinePosition(274, 40, 270),
+                        new BlockLinePosition(260, 40, 270)
+                    ]
+                },
+                SourceBlockType = SourceBlockType.Paragraph,
+                RetryCount = 0,
+                UsesSourceFallback = false
+            },
+            pageHeight);
+
+        var plan = MuPdfExportService.BuildUnifiedRetryPageLayout(
+            [fallbackBlock, neighbor],
+            pageHeight,
+            "Arial",
+            fonts);
+
+        var fallbackPlanned = plan.Single(block => block.Block.ChunkIndex == 0);
+        var neighborPlanned = plan.Single(block => block.Block.ChunkIndex == 1);
+
+        fallbackPlanned.EraseRects.Should().NotBeNullOrEmpty();
+        neighborPlanned.TopLeftBounds.Should().NotBeNull();
+        neighborPlanned.TopLeftBounds!.Value.Top.Should().BeGreaterOrEqualTo(fallbackPlanned.TopLeftBounds!.Value.Bottom);
+    }
+
+    [Fact]
+    public void BuildUnifiedRetryPageLayout_ReusesPlannedOperationsDuringRendering()
+    {
+        const double pageHeight = 400;
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "Arial",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: false);
+
+        var block = MuPdfExportService.PrepareBlockForRendering(
+            new MuPdfExportService.TranslatedBlockData
+            {
+                ChunkIndex = 0,
+                PageNumber = 1,
+                SourceBlockId = "p1-body-b1",
+                OrderInPage = 0,
+                ReadingOrderScore = 1,
+                SourceText = "Source block one",
+                TranslatedText = "This retried block should be laid out once and then rendered from the final planned operations without a second fitting pass.",
+                BoundingBox = new BlockRect(40, 300, 240, 28),
+                FontSize = 12,
+                TextStyle = new BlockTextStyle
+                {
+                    FontSize = 12,
+                    LineSpacing = 14,
+                    LinePositions =
+                    [
+                        new BlockLinePosition(322, 40, 280),
+                        new BlockLinePosition(308, 40, 280)
+                    ]
+                },
+                SourceBlockType = SourceBlockType.Paragraph,
+                RetryCount = 1,
+                UsesSourceFallback = false
+            },
+            pageHeight);
+
+        var planned = MuPdfExportService.BuildUnifiedRetryPageLayout(
+            [block],
+            pageHeight,
+            "Arial",
+            fonts).Single();
+
+        planned.PlannedOperations.Should().NotBeNullOrWhiteSpace();
+        planned.LayoutRenderLineRects.Should().NotBeNullOrEmpty();
+
+        var renderResult = MuPdfExportService.RenderPlannedBlockTextOperations(planned);
+
+        renderResult.Operations.Should().Be(planned.PlannedOperations);
+        renderResult.ChosenFontSize.Should().BeApproximately(planned.PlannedChosenFontSize, 0.01);
+        renderResult.LinesRendered.Should().Be(planned.PlannedLinesRendered);
+        renderResult.WasShrunk.Should().Be(planned.PlannedWasShrunk);
+        renderResult.WasTruncated.Should().Be(planned.PlannedWasTruncated);
+    }
+
+    [Fact]
+    public void BuildUnifiedRetryPageLayout_WhenBlockMoves_EraseRectsCoverFinalRenderAndSourceCleanup()
+    {
+        const double pageHeight = 400;
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "Arial",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: false);
+
+        var first = MuPdfExportService.PrepareBlockForRendering(
+            new MuPdfExportService.TranslatedBlockData
+            {
+                ChunkIndex = 0,
+                PageNumber = 1,
+                SourceBlockId = "p1-body-b1",
+                OrderInPage = 0,
+                ReadingOrderScore = 1,
+                SourceText = "Source block one",
+                TranslatedText = "This retried paragraph grows substantially after retry and now needs several lines of final layout to fit cleanly within the page column.",
+                BoundingBox = new BlockRect(40, 300, 240, 28),
+                FontSize = 12,
+                TextStyle = new BlockTextStyle
+                {
+                    FontSize = 12,
+                    LineSpacing = 14,
+                    LinePositions =
+                    [
+                        new BlockLinePosition(322, 40, 280),
+                        new BlockLinePosition(308, 40, 280)
+                    ]
+                },
+                SourceBlockType = SourceBlockType.Paragraph,
+                RetryCount = 1,
+                UsesSourceFallback = false
+            },
+            pageHeight);
+
+        var second = MuPdfExportService.PrepareBlockForRendering(
+            new MuPdfExportService.TranslatedBlockData
+            {
+                ChunkIndex = 1,
+                PageNumber = 1,
+                SourceBlockId = "p1-body-b2",
+                OrderInPage = 1,
+                ReadingOrderScore = 0.5,
+                SourceText = "Source block two",
+                TranslatedText = "Neighbor text block.",
+                BoundingBox = new BlockRect(40, 252, 230, 28),
+                FontSize = 12,
+                TextStyle = new BlockTextStyle
+                {
+                    FontSize = 12,
+                    LineSpacing = 14,
+                    LinePositions =
+                    [
+                        new BlockLinePosition(274, 40, 270),
+                        new BlockLinePosition(260, 40, 270)
+                    ]
+                },
+                SourceBlockType = SourceBlockType.Unknown,
+                RetryCount = 0,
+                UsesSourceFallback = false
+            },
+            pageHeight);
+
+        var planned = MuPdfExportService.BuildUnifiedRetryPageLayout(
+            [first, second],
+            pageHeight,
+            "Arial",
+            fonts);
+
+        var secondPlanned = planned.Single(block => block.Block.ChunkIndex == 1);
+        var originalSourceEraseRects = MuPdfExportService.ToTopLeftRects(
+            pageHeight,
+            second.BackgroundLineRects ?? [second.BoundingBox!.Value])!;
+        var finalRenderRects = MuPdfExportService.ToTopLeftRects(pageHeight, secondPlanned.LayoutRenderLineRects)!;
+        var finalEraseRects = MuPdfExportService.ToTopLeftRects(pageHeight, secondPlanned.EraseRects)!;
+
+        finalRenderRects.Should().NotBeNullOrEmpty();
+        finalEraseRects.Should().NotBeNullOrEmpty();
+        finalRenderRects.All(render => finalEraseRects.Any(erase => RectTestHelpers.ContainsRect(erase, render))).Should().BeTrue();
+        finalEraseRects.Any(erase => !originalSourceEraseRects.Any(source => RectTestHelpers.NearlySameRect(erase, source))).Should().BeTrue();
+    }
+
 }

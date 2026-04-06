@@ -10,12 +10,18 @@ namespace Easydict.WinUI.Services.DocumentExport;
 /// </summary>
 internal sealed class GlyphAdvanceMeasurer : ITextMeasurer
 {
+    internal const double CjkPrimaryAsciiAdvanceEm = 0.55;
+    internal const double SpaceAdvanceEm = 0.3;
+
     private readonly IReadOnlyDictionary<char, ushort>? _primaryGlyphMap;
     private readonly IReadOnlyDictionary<ushort, ushort>? _primaryAdvanceWidths;
     private readonly ushort _primaryUnitsPerEm;
     private readonly IReadOnlyDictionary<char, ushort>? _notoGlyphMap;
     private readonly IReadOnlyDictionary<ushort, ushort>? _notoAdvanceWidths;
     private readonly ushort _notoUnitsPerEm;
+    private readonly IReadOnlyDictionary<char, ushort>? _latinGlyphMap;
+    private readonly IReadOnlyDictionary<ushort, ushort>? _latinAdvanceWidths;
+    private readonly ushort _latinUnitsPerEm;
     private readonly bool _primaryFontIsCjk;
     private readonly double _fontSize;
 
@@ -27,7 +33,10 @@ internal sealed class GlyphAdvanceMeasurer : ITextMeasurer
         IReadOnlyDictionary<ushort, ushort>? notoAdvanceWidths,
         ushort notoUnitsPerEm,
         bool primaryFontIsCjk,
-        double fontSize)
+        double fontSize,
+        IReadOnlyDictionary<char, ushort>? latinGlyphMap = null,
+        IReadOnlyDictionary<ushort, ushort>? latinAdvanceWidths = null,
+        ushort latinUnitsPerEm = 1000)
     {
         _primaryGlyphMap = primaryGlyphMap;
         _primaryAdvanceWidths = primaryAdvanceWidths;
@@ -35,6 +44,9 @@ internal sealed class GlyphAdvanceMeasurer : ITextMeasurer
         _notoGlyphMap = notoGlyphMap;
         _notoAdvanceWidths = notoAdvanceWidths;
         _notoUnitsPerEm = notoUnitsPerEm;
+        _latinGlyphMap = latinGlyphMap;
+        _latinAdvanceWidths = latinAdvanceWidths;
+        _latinUnitsPerEm = latinUnitsPerEm;
         _primaryFontIsCjk = primaryFontIsCjk;
         _fontSize = fontSize;
     }
@@ -59,18 +71,36 @@ internal sealed class GlyphAdvanceMeasurer : ITextMeasurer
         if (LatexFormulaSimplifier.IsScriptSignal(ch))
             return 0;
 
-        // Space: use a fixed 0.3em advance (matching MuPdfExportService behavior)
+        // Space: under CJK-primary rendering, prefer the Latin fallback face when available.
+        // Otherwise keep the fixed half-width space that matches the Helvetica fallback path.
+        // Outside CJK-primary rendering, prefer the selected font's actual space advance.
         if (ch == ' ')
-            return _fontSize * 0.3;
+        {
+            if (_primaryFontIsCjk)
+            {
+                if (_latinGlyphMap?.TryGetValue(ch, out var latinSpaceGid) == true && latinSpaceGid != 0)
+                    return _fontSize * GetGlyphAdvanceEm(latinSpaceGid, _latinAdvanceWidths, _latinUnitsPerEm, SpaceAdvanceEm);
 
-        // ASCII routing: when primary font is CJK, ASCII uses half-width advance
+                return _fontSize * SpaceAdvanceEm;
+            }
+
+            if (_primaryGlyphMap?.TryGetValue(ch, out var primarySpaceGid) == true && primarySpaceGid != 0)
+                return _fontSize * GetGlyphAdvanceEm(primarySpaceGid, _primaryAdvanceWidths, _primaryUnitsPerEm, SpaceAdvanceEm);
+
+            if (_notoGlyphMap?.TryGetValue(ch, out var notoSpaceGid) == true && notoSpaceGid != 0)
+                return _fontSize * GetGlyphAdvanceEm(notoSpaceGid, _notoAdvanceWidths, _notoUnitsPerEm, SpaceAdvanceEm);
+
+            return _fontSize * SpaceAdvanceEm;
+        }
+
+        // Under CJK-primary rendering, prefer the Latin fallback face metrics for ASCII when available.
+        // Otherwise keep the fixed Helvetica-style half-width fallback metrics.
         if (_primaryFontIsCjk && ch >= 0x20 && ch <= 0x7E)
         {
-            if (_primaryGlyphMap?.TryGetValue(ch, out var gid) == true && gid != 0)
-                return _fontSize * GetGlyphAdvanceEm(gid, _primaryAdvanceWidths, _primaryUnitsPerEm, 0.55);
+            if (_latinGlyphMap?.TryGetValue(ch, out var latinGid) == true && latinGid != 0)
+                return _fontSize * GetGlyphAdvanceEm(latinGid, _latinAdvanceWidths, _latinUnitsPerEm, CjkPrimaryAsciiAdvanceEm);
 
-            // Helvetica fallback
-            return _fontSize * 0.55;
+            return _fontSize * CjkPrimaryAsciiAdvanceEm;
         }
 
         // CJK characters are full-width (1 em)

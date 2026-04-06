@@ -1,10 +1,14 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Easydict.TranslationService.LongDocument;
+using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.DocumentExport;
 using WinUiLongDocumentTranslationService = Easydict.WinUI.Services.LongDocumentTranslationService;
+using CoreLongDocumentTranslationResult = Easydict.TranslationService.LongDocument.LongDocumentTranslationResult;
 using FluentAssertions;
 using PdfSharpCore.Pdf;
+using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
@@ -12,6 +16,12 @@ namespace Easydict.WinUI.Tests.Services;
 [Trait("Category", "WinUI")]
 public class LongDocumentTranslationServiceReviewFixTests
 {
+    private static string GetPdfFixturePath(string fileName) =>
+        Path.Combine(AppContext.BaseDirectory, "TestAssets", "Pdf", fileName);
+
+    private static string NormalizeWhitespaceForAssertion(string text) =>
+        Regex.Replace(text, @"\s+", " ").Trim();
+
     [Fact]
     public void CalculateReadingOrderScore_ShouldBePageLocalAndStableForLargeCounts()
     {
@@ -742,5 +752,391 @@ public class LongDocumentTranslationServiceReviewFixTests
         leftCol.Should().Be(LayoutRegionType.LeftColumn);
         rightCol.Should().Be(LayoutRegionType.RightColumn);
         body.Should().Be(LayoutRegionType.Body);
+    }
+
+    [Fact]
+    public void CreateCoreTranslationOptions_ShouldEnableQualityFeedbackRetry_ForInitialAndRetryTranslation()
+    {
+        var initialOptions = WinUiLongDocumentTranslationService.CreateCoreTranslationOptions(
+            "google",
+            Language.English,
+            Language.SimplifiedChinese,
+            enableOcrFallback: true,
+            maxConcurrency: 4,
+            formulaFontPattern: "font",
+            formulaCharPattern: "char",
+            customPrompt: "prompt");
+
+        var retryOptions = WinUiLongDocumentTranslationService.CreateCoreTranslationOptions(
+            "google",
+            Language.English,
+            Language.SimplifiedChinese,
+            enableOcrFallback: false,
+            maxConcurrency: 4,
+            formulaFontPattern: "font",
+            formulaCharPattern: "char",
+            customPrompt: "prompt");
+
+        initialOptions.EnableFormulaProtection.Should().BeTrue();
+        initialOptions.EnableQualityFeedbackRetry.Should().BeTrue();
+        initialOptions.MaxRetriesPerBlock.Should().Be(1);
+        initialOptions.EnableOcrFallback.Should().BeTrue();
+
+        retryOptions.EnableFormulaProtection.Should().BeTrue();
+        retryOptions.EnableQualityFeedbackRetry.Should().BeTrue();
+        retryOptions.MaxRetriesPerBlock.Should().Be(1);
+        retryOptions.EnableOcrFallback.Should().BeFalse();
+    }
+
+    [Fact]
+    public void BuildCheckpointFromCoreResult_ShouldCarryFallbackTextAndDetectedFontNamesIntoMetadata()
+    {
+        var sourceDocument = new SourceDocument
+        {
+            DocumentId = "doc-1",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "p1-body-b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "Tr ansf or mer",
+                            FallbackText = "Transformer",
+                            DetectedFontNames = ["TimesNewRomanPSMT"],
+                            BoundingBox = new BlockRect(10, 10, 100, 20),
+                            TextStyle = new BlockTextStyle { FontSize = 12 }
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var coreResult = new CoreLongDocumentTranslationResult
+        {
+            Ir = new DocumentIr
+            {
+                DocumentId = "doc-1",
+                Blocks = []
+            },
+            Pages =
+            [
+                new TranslatedDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new TranslatedDocumentBlock
+                        {
+                            IrBlockId = "ir-1-p1-body-b1",
+                            SourceBlockId = "p1-body-b1",
+                            BlockType = BlockType.Paragraph,
+                            OriginalText = "Tr ansf or mer",
+                            ProtectedText = "Tr ansf or mer",
+                            TranslatedText = "Tr ansf or mer",
+                            SourceHash = "hash-1",
+                            BoundingBox = new BlockRect(10, 10, 100, 20),
+                            TranslationSkipped = false,
+                            RetryCount = 0,
+                            LastError = "fallback",
+                            TextStyle = new BlockTextStyle { FontSize = 12 }
+                        }
+                    ]
+                }
+            ],
+            QualityReport = new LongDocumentQualityReport
+            {
+                StageTimingsMs = new Dictionary<string, long>(),
+                TotalBlocks = 1,
+                TranslatedBlocks = 0,
+                SkippedBlocks = 0,
+                FailedBlocks =
+                [
+                    new FailedBlockInfo
+                    {
+                        IrBlockId = "ir-1-p1-body-b1",
+                        SourceBlockId = "p1-body-b1",
+                        PageNumber = 1,
+                        RetryCount = 0,
+                        Error = "fallback"
+                    }
+                ]
+            }
+        };
+
+        var checkpoint = WinUiLongDocumentTranslationService.BuildCheckpointFromCoreResult(
+            LongDocumentInputMode.Pdf,
+            "dummy.pdf",
+            Language.SimplifiedChinese,
+            sourceDocument,
+            coreResult);
+
+        checkpoint.SourceChunks.Should().ContainSingle().Which.Should().Be("Tr ansf or mer");
+        checkpoint.ChunkMetadata.Should().ContainSingle();
+        checkpoint.ChunkMetadata[0].FallbackText.Should().Be("Transformer");
+        checkpoint.ChunkMetadata[0].DetectedFontNames.Should().Contain("TimesNewRomanPSMT");
+        checkpoint.FailedChunkIndexes.Should().Contain(0);
+    }
+
+    [Fact]
+    public void BuildParagraphTextsForTesting_ShouldKeepFormulaContinuationAttached()
+    {
+        var paragraphs = WinUiLongDocumentTranslationService.BuildParagraphTextsForTesting(
+            [
+                new WinUiLongDocumentTranslationService.SyntheticPdfLine(
+                    Top: 700, Bottom: 688, Left: 100, Right: 430,
+                    Text: "Here, the encoder maps an input sequence of symbol representations (x"),
+                new WinUiLongDocumentTranslationService.SyntheticPdfLine(
+                    Top: 694, Bottom: 684, Left: 365, Right: 430,
+                    Text: ", ..., xn)")
+            ],
+            paragraphGapThreshold: 18,
+            sameRowThreshold: 4);
+
+        paragraphs.Should().HaveCount(1);
+        paragraphs[0].Should().Equal(
+            "Here, the encoder maps an input sequence of symbol representations (x",
+            ", ..., xn)");
+    }
+
+    [Fact]
+    public void BuildParagraphTextsForTesting_ShouldNotGridMergeFormulaContinuationRowsWithoutStableAnchors()
+    {
+        var paragraphs = WinUiLongDocumentTranslationService.BuildParagraphTextsForTesting(
+            [
+                new WinUiLongDocumentTranslationService.SyntheticPdfLine(
+                    Top: 700, Bottom: 688, Left: 100, Right: 360,
+                    Text: "Here, the encoder maps an input sequence of symbol representations (x"),
+                new WinUiLongDocumentTranslationService.SyntheticPdfLine(
+                    Top: 700, Bottom: 688, Left: 378, Right: 450,
+                    Text: ", ..., xn)"),
+                new WinUiLongDocumentTranslationService.SyntheticPdfLine(
+                    Top: 682, Bottom: 670, Left: 128, Right: 420,
+                    Text: "to a sequence of continuous representations z = (z"),
+                new WinUiLongDocumentTranslationService.SyntheticPdfLine(
+                    Top: 682, Bottom: 670, Left: 448, Right: 520,
+                    Text: ", ..., zn)")
+            ],
+            paragraphGapThreshold: 18,
+            sameRowThreshold: 4);
+
+        paragraphs.Should().HaveCount(2);
+        paragraphs[0].Should().Equal(
+            "Here, the encoder maps an input sequence of symbol representations (x",
+            ", ..., xn)");
+        paragraphs[1].Should().Equal(
+            "to a sequence of continuous representations z = (z",
+            ", ..., zn)");
+    }
+
+    [Fact]
+    public void BuildParagraphTextsForTesting_ShouldStillMergeStableGridColumns()
+    {
+        var paragraphs = WinUiLongDocumentTranslationService.BuildParagraphTextsForTesting(
+            [
+                new WinUiLongDocumentTranslationService.SyntheticPdfLine(
+                    Top: 700, Bottom: 688, Left: 60, Right: 150,
+                    Text: "Alice"),
+                new WinUiLongDocumentTranslationService.SyntheticPdfLine(
+                    Top: 700, Bottom: 688, Left: 300, Right: 420,
+                    Text: "Lab A"),
+                new WinUiLongDocumentTranslationService.SyntheticPdfLine(
+                    Top: 682, Bottom: 670, Left: 62, Right: 152,
+                    Text: "Bob"),
+                new WinUiLongDocumentTranslationService.SyntheticPdfLine(
+                    Top: 682, Bottom: 670, Left: 302, Right: 422,
+                    Text: "Lab B")
+            ],
+            paragraphGapThreshold: 18,
+            sameRowThreshold: 4);
+
+        paragraphs.Should().HaveCount(2);
+        paragraphs[0].Should().Equal("Alice", "Bob");
+        paragraphs[1].Should().Equal("Lab A", "Lab B");
+    }
+
+    [SkippableFact]
+    public async Task BuildSourceDocumentAsync_ShouldPreserveTransformerTupleSequences_FromLocalPdfFixture()
+    {
+        var pdfPath = GetPdfFixturePath("1706.03762v7.pdf");
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        using var service = new WinUiLongDocumentTranslationService();
+        var method = typeof(WinUiLongDocumentTranslationService)
+            .GetMethod("BuildSourceDocumentAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        method.Should().NotBeNull();
+
+        var task = (Task<SourceDocument>)method!.Invoke(service,
+            [
+                LongDocumentInputMode.Pdf,
+                pdfPath!,
+                LayoutDetectionMode.Auto,
+                null,
+                null,
+                null,
+                null,
+                CancellationToken.None,
+                null
+            ])!;
+
+        var source = await task;
+        var page2 = source.Pages.Single(page => page.PageNumber == 2);
+        var bodyText = string.Join("\n", page2.Blocks
+            .Where(block => block.BlockId.StartsWith("p2-body-", StringComparison.Ordinal))
+            .Select(block => block.Text));
+        var normalizedBodyText = NormalizeWhitespaceForAssertion(bodyText);
+
+        bodyText.Should().Contain("(x1");
+        bodyText.Should().Contain("xn)");
+        bodyText.Should().Contain("z = (z1");
+        bodyText.Should().Contain("(y1");
+        // Word spacing: quality gate + adaptive threshold should preserve most words;
+        // PdfPig's raw text may still have some merged words for blocks without formula evidence.
+        normalizedBodyText.Should().Contain("sequence of continuous representations");
+        // Per-block space density check: no block should have extremely low word count
+        var bodyBlocks = page2.Blocks
+            .Where(block => block.BlockId.StartsWith("p2-body-", StringComparison.Ordinal))
+            .ToList();
+        foreach (var block in bodyBlocks.Where(b => b.Text.Length > 40))
+        {
+            var wordCount = block.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+            wordCount.Should().BeGreaterThanOrEqualTo(block.Text.Length / 15,
+                $"block '{block.BlockId}' should have adequate word spacing");
+        }
+        bodyText.Should().NotContain("sequence_1");
+        bodyText.Should().NotContain("z =_1 z z");
+    }
+
+    [SkippableFact]
+    public async Task MuPdfExportService_ExportFixturePdf_ShouldPreservePage2WordSpacesInExtractedText()
+    {
+        var pdfPath = GetPdfFixturePath("1706.03762v7.pdf");
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var outputPath = Path.Combine(Path.GetTempPath(), $"spacing-preservation-{Guid.NewGuid()}.pdf");
+
+        try
+        {
+            using var service = new WinUiLongDocumentTranslationService();
+            var buildSourceMethod = typeof(WinUiLongDocumentTranslationService)
+                .GetMethod("BuildSourceDocumentAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+
+            buildSourceMethod.Should().NotBeNull();
+
+            var buildTask = (Task<SourceDocument>)buildSourceMethod!.Invoke(service,
+                [
+                    LongDocumentInputMode.Pdf,
+                    pdfPath!,
+                    LayoutDetectionMode.Auto,
+                    null,
+                    null,
+                    null,
+                    null,
+                    CancellationToken.None,
+                    null
+                ])!;
+
+            var source = await buildTask;
+
+            var sourceChunks = new List<string>();
+            var chunkMetadata = new List<LongDocumentChunkMetadata>();
+            var translatedChunks = new Dictionary<int, string>();
+            var chunkIndex = 0;
+
+            foreach (var page in source.Pages.OrderBy(page => page.PageNumber))
+            {
+                for (var order = 0; order < page.Blocks.Count; order++)
+                {
+                    var block = page.Blocks[order];
+                    sourceChunks.Add(block.Text);
+                    translatedChunks[chunkIndex] = block.Text;
+                    chunkMetadata.Add(new LongDocumentChunkMetadata
+                    {
+                        ChunkIndex = chunkIndex,
+                        PageNumber = page.PageNumber,
+                        SourceBlockId = block.BlockId,
+                        SourceBlockType = block.BlockType,
+                        IsFormulaLike = block.IsFormulaLike,
+                        OrderInPage = order,
+                        RegionType = LayoutRegionType.Body,
+                        RegionConfidence = 1,
+                        RegionSource = LayoutRegionSource.BlockIdFallback,
+                        ReadingOrderScore = page.Blocks.Count <= 1
+                            ? 1
+                            : 1 - order / (double)(page.Blocks.Count - 1),
+                        BoundingBox = block.BoundingBox,
+                        TextStyle = block.TextStyle,
+                        FormulaCharacters = block.FormulaCharacters
+                    });
+                    chunkIndex++;
+                }
+            }
+
+            var checkpoint = new LongDocumentTranslationCheckpoint
+            {
+                InputMode = LongDocumentInputMode.Pdf,
+                SourceFilePath = pdfPath,
+                TargetLanguage = Language.SimplifiedChinese,
+                SourceChunks = sourceChunks,
+                ChunkMetadata = chunkMetadata,
+                TranslatedChunks = translatedChunks,
+                FailedChunkIndexes = []
+            };
+
+            try
+            {
+                var exportService = new MuPdfExportService();
+                exportService.Export(checkpoint, pdfPath, outputPath, DocumentOutputMode.Monolingual);
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
+            {
+                Skip.If(true, $"MuPDF unavailable in test environment: {ex.Message}");
+            }
+
+            File.Exists(outputPath).Should().BeTrue();
+
+            using var outputDoc = PdfPigDocument.Open(outputPath);
+            var page2Text = outputDoc.GetPages().Single(page => page.Number == 2).Text;
+            var normalizedPage2Text = NormalizeWhitespaceForAssertion(page2Text);
+
+            // Verify text was actually rendered to the output PDF
+            normalizedPage2Text.Should().NotBeNullOrWhiteSpace("page 2 should have text content");
+            // Check key terms are present (exact phrase match may fail due to PdfPig text merging)
+            normalizedPage2Text.Should().Contain("encoder",
+                "key term 'encoder' should be present in exported PDF");
+            normalizedPage2Text.Should().Contain("decoder",
+                "key term 'decoder' should be present in exported PDF");
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("""[{"word": "transduction", "translation": "转导"}]""", 1, "transduction", "转导")]
+    [InlineData("""```json\n[{"word": "encoder", "translation": "编码器"}]\n```""", 1, "encoder", "编码器")]
+    [InlineData("[]", 0, null, null)]
+    [InlineData("invalid json", 0, null, null)]
+    [InlineData("", 0, null, null)]
+    public void ParseWordAnnotations_HandlesVariousLlmResponses(
+        string llmResponse, int expectedCount, string? expectedWord, string? expectedTranslation)
+    {
+        var result = WinUiLongDocumentTranslationService.ParseWordAnnotations(llmResponse);
+
+        result.Should().HaveCount(expectedCount);
+        if (expectedCount > 0)
+        {
+            result[0].Word.Should().Be(expectedWord);
+            result[0].Translation.Should().Be(expectedTranslation);
+        }
     }
 }

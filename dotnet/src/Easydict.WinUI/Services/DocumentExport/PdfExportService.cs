@@ -260,6 +260,7 @@ public sealed class PdfExportService : IDocumentExportService
         public required int ChunkIndex { get; init; }
         public required string TranslatedText { get; init; }
         public required LongDocumentChunkMetadata Metadata { get; init; }
+        public bool UsesSourceFallback { get; init; }
         public required XRect Rect { get; init; }
         public required double Padding { get; init; }
         public IReadOnlyList<XRect>? BackgroundLineRects { get; init; }
@@ -306,7 +307,11 @@ public sealed class PdfExportService : IDocumentExportService
             var metadata = metadataByChunkIndex[chunkIndex];
             var sourceText = checkpoint.SourceChunks[chunkIndex];
             CollectProtectedFormulaRect(protectedFormulaRectsByPage, doc, metadata);
-            if (!checkpoint.TranslatedChunks.TryGetValue(chunkIndex, out var translated) || string.IsNullOrWhiteSpace(translated))
+            if (!PdfExportCheckpointTextResolver.TryGetRenderableText(
+                    checkpoint,
+                    chunkIndex,
+                    out var translated,
+                    out var usesSourceFallback))
             {
                 blockIssues.Add(new BackfillBlockIssue
                 {
@@ -373,6 +378,16 @@ public sealed class PdfExportService : IDocumentExportService
                 objectReplaceBlocks++;
                 perPage.RenderedBlocks++;
                 perPage.ObjectReplaceBlocks++;
+                if (usesSourceFallback)
+                {
+                    blockIssues.Add(new BackfillBlockIssue
+                    {
+                        ChunkIndex = chunkIndex,
+                        SourceBlockId = metadata.SourceBlockId,
+                        PageNumber = metadata.PageNumber,
+                        Kind = "rendered-source-fallback"
+                    });
+                }
                 blockIssues.Add(new BackfillBlockIssue
                 {
                     ChunkIndex = chunkIndex,
@@ -481,6 +496,7 @@ public sealed class PdfExportService : IDocumentExportService
                 ChunkIndex = chunkIndex,
                 TranslatedText = translatedText,
                 Metadata = metadata,
+                UsesSourceFallback = usesSourceFallback,
                 Rect = rect,
                 Padding = pad,
                 BackgroundLineRects = backgroundLineRects,
@@ -687,6 +703,16 @@ public sealed class PdfExportService : IDocumentExportService
                     overlayModeBlocks++;
                     perPage.RenderedBlocks++;
                     perPage.OverlayModeBlocks++;
+                    if (block.UsesSourceFallback)
+                    {
+                        blockIssues.Add(new BackfillBlockIssue
+                        {
+                            ChunkIndex = block.ChunkIndex,
+                            SourceBlockId = metadata.SourceBlockId,
+                            PageNumber = metadata.PageNumber,
+                            Kind = "rendered-source-fallback"
+                        });
+                    }
                     blockIssues.Add(new BackfillBlockIssue
                     {
                         ChunkIndex = block.ChunkIndex,
@@ -738,6 +764,7 @@ public sealed class PdfExportService : IDocumentExportService
             var issueKinds = new HashSet<string>(StringComparer.Ordinal)
             {
                 "missing-translation",
+                "rendered-source-fallback",
                 "skipped-formula",
                 "skipped-rotated",
                 "skipped-table-like-unsafe",
@@ -1799,7 +1826,11 @@ public sealed class PdfExportService : IDocumentExportService
                 foreach (var chunkIndex in pageGroup)
                 {
                     var metadata = metadataByChunkIndex[chunkIndex];
-                    var content = checkpoint.TranslatedChunks.TryGetValue(chunkIndex, out var translated)
+                    var content = PdfExportCheckpointTextResolver.TryGetRenderableText(
+                            checkpoint,
+                            chunkIndex,
+                            out var translated,
+                            out _)
                         ? translated
                         : $"[Chunk {chunkIndex + 1} translation failed. Retry required.]";
 
@@ -2483,7 +2514,7 @@ public sealed class PdfExportService : IDocumentExportService
         var engine = TextLayoutEngine.Instance;
         var measurer = new XGraphicsMeasurer(gfx, font);
         var prepared = engine.Prepare(
-            new TextPrepareRequest { Text = text, NormalizeWhitespace = true },
+            new TextPrepareRequest { Text = text, NormalizeWhitespace = false },
             measurer);
         var result = engine.LayoutWithLines(prepared, maxWidth);
         return result.Lines.Select(l => l.Text);
@@ -2502,7 +2533,7 @@ public sealed class PdfExportService : IDocumentExportService
         var engine = TextLayoutEngine.Instance;
         var measurer = new XGraphicsMeasurer(gfx, font);
         var prepared = engine.Prepare(
-            new TextPrepareRequest { Text = text, NormalizeWhitespace = true },
+            new TextPrepareRequest { Text = text, NormalizeWhitespace = false },
             measurer);
         var result = engine.LayoutWithLines(prepared, widths);
         return result.Lines.Select(l => l.Text);

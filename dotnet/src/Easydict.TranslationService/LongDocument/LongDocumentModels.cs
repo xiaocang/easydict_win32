@@ -2,6 +2,13 @@ using Easydict.TranslationService.Models;
 
 namespace Easydict.TranslationService.LongDocument;
 
+/// <summary>
+/// Optional annotation metadata for source-fallback blocks: a difficult word paired with
+/// its short translation. The default PDF fallback path no longer renders these inline,
+/// but the model is kept for diagnostics and any future optional UI/export surfaces.
+/// </summary>
+public sealed record WordAnnotation(string Word, string Translation);
+
 public enum SourceBlockType
 {
     Paragraph,
@@ -128,6 +135,12 @@ public sealed record SourceDocumentBlock
     /// Formula tokens from character-level analysis, paired with CharacterLevelProtectedText.
     /// </summary>
     public IReadOnlyList<FormulaProtection.FormulaToken>? CharacterLevelTokens { get; init; }
+    /// <summary>
+    /// PdfPig's original line-joined text without formula-aware reconstruction.
+    /// Used as retry fallback when the primary <see cref="Text"/> causes translation failure.
+    /// Preserves correct word spacing but lacks _/^ script markers.
+    /// </summary>
+    public string? FallbackText { get; init; }
 }
 
 public sealed record SourceDocumentPage
@@ -178,6 +191,12 @@ public sealed record DocumentBlockIr
     /// block was built from a test harness or non-PDF source that doesn't carry parser signals.
     /// </summary>
     public ContentPreservation.BlockContext? PreservationContext { get; init; }
+    /// <summary>
+    /// Fallback text from <see cref="SourceDocumentBlock.FallbackText"/>. Carried through
+    /// IR so the retry loop can re-protect and re-translate with PdfPig's original text
+    /// when the primary text causes translation failure.
+    /// </summary>
+    public string? FallbackText { get; init; }
 }
 
 public sealed record DocumentIr

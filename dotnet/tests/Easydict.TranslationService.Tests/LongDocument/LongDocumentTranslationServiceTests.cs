@@ -1,5 +1,6 @@
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.FormulaProtection;
 using FluentAssertions;
 using Xunit;
 
@@ -815,6 +816,149 @@ public class LongDocumentTranslationServiceTests
         block.RetryCount.Should().Be(1);
         block.LastError.Should().Contain("quality-feedback:");
         block.LastError.Should().Contain("soft=Failed");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_QualityFeedbackRetry_WithCharacterLevelEvidenceAndExactSoftCandidates_BypassesCharacterPathAndFallsBack()
+    {
+        var callCount = 0;
+        var prompts = new List<string?>();
+        var protectedRequests = new List<string>();
+        const string originalText =
+            "Most competitive neural sequence transduction models have an encoder-decoder structure. " +
+            "The encoder maps the input sequence (x1, ..., xn) to continuous representations z = (z1, ..., zn).";
+
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            callCount++;
+            prompts.Add(request.CustomPrompt);
+            protectedRequests.Add(request.Text);
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = callCount == 1
+                    ? "First attempt rewrites the input sequence as sequence1 and the continuous representation as sequence2."
+                    : "Second attempt still rewrites the input sequence as sequence1 and the continuous representation as sequence2.",
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-soft-fallback-char-level",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = originalText,
+                            CharacterLevelProtectedText =
+                                "Most competitive neural sequence transduction models have an encoder-decoder structure. " +
+                                "The encoder maps the input sequence {v0} to continuous representations {v1}.",
+                            CharacterLevelTokens =
+                            [
+                                new FormulaToken(FormulaTokenType.InlineMath, "(x1, ..., xn)", "{v0}", "(x1, ..., xn)"),
+                                new FormulaToken(FormulaTokenType.InlineEquation, "z = (z1, ..., zn)", "{v1}", "z = (z1, ..., zn)")
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "google",
+            EnableFormulaProtection = true,
+            EnableQualityFeedbackRetry = true,
+            MaxRetriesPerBlock = 1
+        });
+
+        callCount.Should().Be(2);
+        protectedRequests.Should().HaveCount(2);
+        protectedRequests[0].Should().Contain("$(x1, ..., xn)$");
+        protectedRequests[0].Should().Contain("$z = (z1, ..., zn)$");
+        protectedRequests[0].Should().NotContain("{v0}");
+        protectedRequests[0].Should().NotContain("{v1}");
+        prompts[1].Should().Contain("Copy every technical symbol sequence inside synthetic $...$ verbatim");
+        prompts[1].Should().Contain("do not keep the synthetic $ delimiters");
+
+        var block = result.Pages[0].Blocks.Single();
+        block.TranslatedText.Should().Be(originalText);
+        block.RetryCount.Should().Be(1);
+        block.LastError.Should().Contain("quality-feedback:");
+        block.LastError.Should().Contain("soft=Failed");
+    }
+
+    [Fact]
+    public async Task TranslateSingleBlock_ShouldRetryWithFallbackText_WhenTranslationFails()
+    {
+        var callCount = 0;
+        var requestTexts = new List<string>();
+
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            callCount++;
+            requestTexts.Add(request.Text);
+            if (callCount == 1)
+                throw new TranslationException("Network error") { ErrorCode = TranslationErrorCode.NetworkError };
+            if (callCount == 2)
+                throw new TranslationException("Network error again") { ErrorCode = TranslationErrorCode.NetworkError };
+
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = $"translated:{request.Text}",
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-fallback",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "p1-b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "Mostcompetitiveneural sequencetransduction",
+                            FallbackText = "Most competitive neural sequence transduction",
+                            BoundingBox = new BlockRect(10, 20, 400, 40)
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ServiceId = "fake",
+            ToLanguage = Language.SimplifiedChinese,
+            MaxRetriesPerBlock = 1
+        });
+
+        callCount.Should().BeGreaterThanOrEqualTo(3,
+            "should retry with original text, then with FallbackText");
+        requestTexts.Last().Should().Contain("Most competitive neural",
+            "the final successful request should use the FallbackText with correct spacing");
+
+        var block = result.Pages[0].Blocks.Single();
+        block.TranslatedText.Should().StartWith("translated:");
     }
 
     private static Task<TranslationResult> FakeTranslate(TranslationRequest request, string _, CancellationToken __)

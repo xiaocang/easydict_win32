@@ -261,6 +261,35 @@ public class FormulaPreservationServiceTests
     }
 
     [Fact]
+    public void Protect_WithCharacterLevelEvidenceAndExactTupleCandidates_FallsBackToRegexSoftProtection()
+    {
+        var context = new BlockContext
+        {
+            Text = "The encoder maps the input sequence (x1, ..., xn) to continuous representations z = (z1, ..., zn).",
+            BlockType = SourceBlockType.Paragraph,
+            CharacterLevelProtectedText = "The encoder maps the input sequence {v0} to continuous representations {v1}.",
+            CharacterLevelTokens =
+            [
+                new FormulaToken(FormulaTokenType.InlineMath, "(x1, ..., xn)", "{v0}", "(x1, ..., xn)"),
+                new FormulaToken(FormulaTokenType.InlineEquation, "z = (z1, ..., zn)", "{v1}", "z = (z1, ..., zn)")
+            ]
+        };
+        var plan = new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false };
+
+        var result = _service.Protect(context, plan);
+
+        result.Tokens.Should().BeEmpty();
+        result.SoftSpans.Should().HaveCount(2);
+        result.SoftSpans.Select(span => span.RawText)
+            .Should().Contain(["(x1, ..., xn)", "z = (z1, ..., zn)"]);
+        result.SoftSpans.Should().OnlyContain(span => span.RequiresExactPreservation);
+        result.ProtectedText.Should().Contain("$(x1, ..., xn)$");
+        result.ProtectedText.Should().Contain("$z = (z1, ..., zn)$");
+        result.ProtectedText.Should().NotContain("{v0}");
+        result.ProtectedText.Should().NotContain("{v1}");
+    }
+
+    [Fact]
     public void Protect_ImplicitTuple_AddsExactSoftSpanMetadata()
     {
         var context = new BlockContext

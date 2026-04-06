@@ -1,7 +1,9 @@
 using Easydict.TranslationService.LongDocument;
+using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.DocumentExport;
 using FluentAssertions;
+using PdfSharpCore.Pdf;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
@@ -49,6 +51,46 @@ public class DocumentExportServiceTests
                 [2] = "再见。"
             },
             FailedChunkIndexes = []
+        };
+    }
+
+    private static LongDocumentTranslationCheckpoint CreateFailedFallbackCheckpoint(
+        LongDocumentInputMode mode,
+        string? sourceFilePath = null)
+    {
+        return new LongDocumentTranslationCheckpoint
+        {
+            InputMode = mode,
+            SourceFilePath = sourceFilePath,
+            TargetLanguage = Language.English,
+            SourceChunks = ["Fa llback source block."],
+            ChunkMetadata =
+            [
+                new LongDocumentChunkMetadata
+                {
+                    ChunkIndex = 0,
+                    PageNumber = 1,
+                    SourceBlockId = "p1-body-b1",
+                    SourceBlockType = SourceBlockType.Paragraph,
+                    OrderInPage = 0,
+                    RegionType = LayoutRegionType.Body,
+                    RegionConfidence = 0.9,
+                    RegionSource = LayoutRegionSource.BlockIdFallback,
+                    ReadingOrderScore = 1,
+                    BoundingBox = new BlockRect(60, 680, 220, 40),
+                    TextStyle = new BlockTextStyle
+                    {
+                        FontSize = 12,
+                        RotationAngle = 0,
+                        Alignment = TextAlignment.Left,
+                        LineSpacing = 14
+                    },
+                    FallbackText = "Fallback source block.",
+                    DetectedFontNames = ["TimesNewRomanPSMT"]
+                }
+            ],
+            TranslatedChunks = [],
+            FailedChunkIndexes = [0]
         };
     }
 
@@ -148,6 +190,17 @@ public class DocumentExportServiceTests
 
         PlainTextExportService.BuildBilingualOutputPath("/tmp/my file.txt")
             .Should().EndWith("my file-bilingual.txt");
+    }
+
+    [Fact]
+    public void PlainTextExportService_ComposeMonolingualText_FailedFallbackChunkStillShowsFailureMarker()
+    {
+        var checkpoint = CreateFailedFallbackCheckpoint(LongDocumentInputMode.PlainText);
+
+        var content = PlainTextExportService.ComposeMonolingualText(checkpoint);
+
+        content.Should().Contain("[Chunk 1 translation failed.]");
+        content.Should().NotContain("Fallback source block.");
     }
 
     #endregion
@@ -267,6 +320,17 @@ public class DocumentExportServiceTests
             .Should().EndWith("doc-bilingual.md");
     }
 
+    [Fact]
+    public void MarkdownExportService_ComposeMonolingualMarkdown_FailedFallbackChunkStillShowsFailureMarker()
+    {
+        var checkpoint = CreateFailedFallbackCheckpoint(LongDocumentInputMode.Markdown);
+
+        var content = MarkdownExportService.ComposeMonolingualMarkdown(checkpoint);
+
+        content.Should().Contain("> *[Chunk 1 translation failed.]*");
+        content.Should().NotContain("Fallback source block.");
+    }
+
     #endregion
 
     #region PdfExportService
@@ -286,6 +350,75 @@ public class DocumentExportServiceTests
 
         PdfExportService.BuildBilingualOutputPath("/tmp/my document.pdf")
             .Should().EndWith("my document-bilingual.pdf");
+    }
+
+    [Fact]
+    public void PdfExportCheckpointTextResolver_TryGetRenderableText_UsesSourceFallbackForFailedChunk()
+    {
+        var checkpoint = CreateFailedFallbackCheckpoint(LongDocumentInputMode.Pdf, "dummy.pdf");
+
+        var found = PdfExportCheckpointTextResolver.TryGetRenderableText(
+            checkpoint,
+            0,
+            out var text,
+            out var usesSourceFallback);
+
+        found.Should().BeTrue();
+        usesSourceFallback.Should().BeTrue();
+        text.Should().Be("Fallback source block.");
+        checkpoint.TranslatedChunks.Should().BeEmpty();
+        checkpoint.FailedChunkIndexes.Should().Contain(0);
+    }
+
+    [Fact]
+    public void MuPdfExportService_BuildTranslatedBlockLookup_IncludesFailedSourceFallbackChunk()
+    {
+        var checkpoint = CreateFailedFallbackCheckpoint(LongDocumentInputMode.Pdf, "dummy.pdf");
+
+        var lookup = MuPdfExportService.BuildTranslatedBlockLookup(checkpoint);
+
+        lookup.Should().ContainKey(1);
+        lookup[1].Should().ContainSingle();
+        lookup[1][0].TranslatedText.Should().Be("Fallback source block.");
+        lookup[1][0].TranslationSkipped.Should().BeFalse();
+        lookup[1][0].UsesSourceFallback.Should().BeTrue();
+        lookup[1][0].DetectedFontNames.Should().Contain("TimesNewRomanPSMT");
+    }
+
+    [Fact]
+    public void PdfExportService_ExportPdfWithCoordinateBackfill_RendersFailedSourceFallbackWithoutMissingTranslationIssue()
+    {
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"source-{Guid.NewGuid()}.pdf");
+        var outputPath = Path.Combine(Path.GetTempPath(), $"output-{Guid.NewGuid()}.pdf");
+
+        try
+        {
+            using (var sourceDoc = new PdfDocument())
+            {
+                var page = sourceDoc.AddPage();
+                page.Width = 612;
+                page.Height = 792;
+                sourceDoc.Save(sourcePath);
+            }
+
+            var checkpoint = CreateFailedFallbackCheckpoint(LongDocumentInputMode.Pdf, sourcePath);
+
+            var metrics = PdfExportService.ExportPdfWithCoordinateBackfill(checkpoint, sourcePath, outputPath);
+
+            File.Exists(outputPath).Should().BeTrue();
+            metrics.CandidateBlocks.Should().Be(1);
+            metrics.RenderedBlocks.Should().Be(1);
+            metrics.BlockIssues.Should().NotBeNull();
+            metrics.BlockIssues!.Select(issue => issue.Kind).Should().Contain("rendered-source-fallback");
+            metrics.BlockIssues!.Select(issue => issue.Kind).Should().NotContain("missing-translation");
+            checkpoint.TranslatedChunks.Should().BeEmpty();
+            checkpoint.FailedChunkIndexes.Should().Contain(0);
+        }
+        finally
+        {
+            if (File.Exists(sourcePath)) File.Delete(sourcePath);
+            if (File.Exists(outputPath)) File.Delete(outputPath);
+        }
     }
 
     #endregion

@@ -269,7 +269,8 @@ public sealed class LongDocumentTranslationService
                         TextStyle = block.TextStyle,
                         FormulaCharacters = block.FormulaCharacters,
                         CharacterLevelProtectedText = block.CharacterLevelProtectedText,
-                        CharacterLevelTokens = block.CharacterLevelTokens
+                        CharacterLevelTokens = block.CharacterLevelTokens,
+                        FallbackText = block.FallbackText
                     });
                 }
             }
@@ -477,6 +478,7 @@ public sealed class LongDocumentTranslationService
         string? lastError = null;
         string translatedText = block.ProtectedText;
         var translationSucceeded = false;
+        var usedFallbackText = false;
 
         // Mutated across retries when quality feedback triggers re-protection at a higher demoteLevel.
         var currentProtectedText = block.ProtectedText;
@@ -597,6 +599,17 @@ public sealed class LongDocumentTranslationService
 
                     if (hasQualityIssue)
                     {
+                        if (!usedFallbackText && TryPrepareFallbackText(block, options,
+                                out var fbText, out var fbTokens, out var fbSoftSpans))
+                        {
+                            usedFallbackText = true;
+                            currentProtectedText = fbText;
+                            currentTokens = fbTokens;
+                            currentSoftSpans = fbSoftSpans;
+                            Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: retrying with FallbackText after quality issue");
+                            continue;
+                        }
+
                         lastError = BuildQualityFeedbackError(outcome);
                         lastSoftValidationFailed = outcome.SoftValidationStatus == SoftValidationStatus.Failed;
                         Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: unresolved quality issue " +
@@ -622,6 +635,18 @@ public sealed class LongDocumentTranslationService
                 Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: attempt {retryCount + 1}/{options.MaxRetriesPerBlock + 1} failed ({errorType}): {ex.Message}");
                 if (retryCount >= options.MaxRetriesPerBlock)
                 {
+                    if (!usedFallbackText && TryPrepareFallbackText(block, options,
+                            out var fbText, out var fbTokens, out var fbSoftSpans))
+                    {
+                        usedFallbackText = true;
+                        currentProtectedText = fbText;
+                        currentTokens = fbTokens;
+                        currentSoftSpans = fbSoftSpans;
+                        retryCount--;
+                        Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: retrying with FallbackText after exception");
+                        continue;
+                    }
+
                     Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId} permanently failed after {retryCount + 1} attempt(s)");
                     translatedText = block.OriginalText;
                 }
@@ -648,6 +673,37 @@ public sealed class LongDocumentTranslationService
             TextStyle = block.TextStyle,
             FormulaCharacters = block.FormulaCharacters
         };
+    }
+
+    private bool TryPrepareFallbackText(
+        DocumentBlockIr block,
+        LongDocumentTranslationOptions options,
+        out string protectedText,
+        out IReadOnlyList<FormulaProtection.FormulaToken>? tokens,
+        out IReadOnlyList<ContentPreservation.SoftProtectedSpan>? softSpans)
+    {
+        protectedText = string.Empty;
+        tokens = null;
+        softSpans = null;
+
+        if (block.FallbackText is null)
+            return false;
+
+        var fbContext = (block.PreservationContext ?? new ContentPreservation.BlockContext
+        {
+            Text = block.FallbackText,
+            BlockType = MapToSourceBlockType(block.BlockType)
+        }) with { Text = block.FallbackText };
+
+        var plan = _preservation.Analyze(fbContext);
+        if (plan.SkipTranslation)
+            return false;
+
+        var result = _preservation.Protect(fbContext, plan);
+        protectedText = result.ProtectedText;
+        tokens = result.Tokens;
+        softSpans = result.SoftSpans;
+        return true;
     }
 
     private static IReadOnlyList<TranslatedDocumentPage> BuildStructuredOutput(

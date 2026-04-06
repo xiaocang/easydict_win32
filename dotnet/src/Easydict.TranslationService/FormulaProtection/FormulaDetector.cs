@@ -149,6 +149,27 @@ public static class FormulaDetector
         _ => false,
     };
 
+    /// <summary>
+    /// Returns true when the text contains any low-confidence span that must survive translation verbatim.
+    /// Used to keep tuple-style symbolic sequences on the regex soft-protection path even when
+    /// character-level protection is available.
+    /// </summary>
+    internal static bool ContainsExactSoftPreservationCandidate(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        foreach (Match match in FormulaRegex.Matches(text))
+        {
+            var raw = match.Value;
+            var type = Classify(raw);
+            if (RequiresExactSoftPreservation(raw, type))
+                return true;
+        }
+
+        return false;
+    }
+
     private static readonly HashSet<string> GreekLetterNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",

@@ -95,10 +95,17 @@ public sealed class FormulaPreservationService : IContentPreservationService
             };
         }
 
+        var hasExactSoftCandidates = context.RetryAttempt == 0 &&
+            FormulaDetector.ContainsExactSoftPreservationCandidate(context.Text);
+
         // Prefer character-level detection when available (from CharacterParagraphBuilder).
         // Skipped on retry (RetryAttempt >= 1) because the character-level tokens were computed
         // under the original strict policy; the regex path lets us demote ambiguous types.
+        // Also skipped when the raw block contains exact-preservation soft spans such as
+        // tuple-style symbolic sequences; those must stay on the regex soft-protection path
+        // so post-translation validation can enforce verbatim preservation.
         if (context.RetryAttempt == 0 &&
+            !hasExactSoftCandidates &&
             context.CharacterLevelProtectedText is not null &&
             context.CharacterLevelTokens is { Count: > 0 })
         {

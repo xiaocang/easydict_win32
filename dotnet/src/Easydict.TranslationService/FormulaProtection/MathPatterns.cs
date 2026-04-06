@@ -29,4 +29,16 @@ public static class MathPatterns
         @"[\u2200-\u22FF\u2100-\u214F\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9" +
         @"\u2150-\u218F\u27C0-\u27EF\u2980-\u29FF" +
         @"\u02B0-\u02FF\u0300-\u036F\u02C6-\u02CF\u200B-\u200D]";
+
+    /// <summary>
+    /// Returns true if <paramref name="token"/> looks like a mathematical subscript or
+    /// superscript token: letters, digits, or common operators (+, -, =, ., ,, (, ), /, *).
+    /// Footnote markers (\u2020, \u2021, \u00a7, \u00b6, etc.) return false.
+    /// </summary>
+    public static bool IsMathToken(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+            return false;
+        return token.All(c => char.IsLetterOrDigit(c) || c is '+' or '-' or '=' or '.' or ',' or '(' or ')' or '/' or '*');
+    }
 }

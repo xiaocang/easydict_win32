@@ -23,16 +23,15 @@ namespace Easydict.UIAutomation.Tests.Tests;
 /// - Real Windows desktop environment (not headless)
 /// - Easydict installed (MSIX) or built (exe)
 /// - These tests are in the "UIAutomation" category
+///
+/// Uses IClassFixture to share a single Easydict + Notepad instance across all tests.
 /// </summary>
 [Trait("Category", "UIAutomation")]
 [Collection("UIAutomation")]
-public class PopButtonSelectionTests : IDisposable
+public class PopButtonSelectionTests : IClassFixture<PopButtonSelectionFixture>
 {
-    private readonly AppLauncher _launcher;
-    private readonly NotepadTestTarget? _notepad;
+    private readonly PopButtonSelectionFixture _fixture;
     private readonly ITestOutputHelper _output;
-    private readonly uint _easydictProcessId;
-    private bool _settingEnabled;
 
     /// <summary>
     /// Total time budget for the PopButton to appear after a selection gesture.
@@ -51,49 +50,30 @@ public class PopButtonSelectionTests : IDisposable
     /// </summary>
     private const int DragDistance = 180;
 
-    public PopButtonSelectionTests(ITestOutputHelper output)
+    public PopButtonSelectionTests(PopButtonSelectionFixture fixture, ITestOutputHelper output)
     {
+        _fixture = fixture;
         _output = output;
 
-        // 1. Launch Easydict
-        _launcher = new AppLauncher();
-        _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
-        _easydictProcessId = (uint)_launcher.Application.ProcessId;
-        _output.WriteLine($"Easydict launched, PID={_easydictProcessId}");
-
-        // 2. Enable MouseSelectionTranslate in Settings
-        _settingEnabled = TryEnableMouseSelectionTranslate();
-
-        if (!_settingEnabled)
+        // Dump fixture setup log for the first test that runs
+        foreach (var msg in _fixture.SetupLog)
         {
-            _output.WriteLine("WARNING: Could not enable MouseSelectionTranslate setting. " +
-                              "Selection tests will verify infrastructure but popup may not appear.");
-        }
-
-        // 3. Launch Notepad with known text
-        try
-        {
-            _notepad = new NotepadTestTarget("Hello World test selection text for Easydict popup verification");
-            _notepad.BringToForeground();
-            _output.WriteLine("Notepad launched with test text");
-        }
-        catch (Exception ex)
-        {
-            _output.WriteLine($"WARNING: Failed to launch Notepad: {ex.Message}");
+            _output.WriteLine($"[Fixture] {msg}");
         }
     }
 
     [Fact]
     public void DragSelect_InNotepad_PopButtonAppears()
     {
-        if (_notepad == null)
+        if (_fixture.Notepad == null)
         {
             _output.WriteLine("SKIP: Notepad not available");
             return;
         }
 
         // Arrange: Get text area bounds
-        var bounds = _notepad.GetTextBounds();
+        _fixture.Notepad.BringToForeground();
+        var bounds = _fixture.Notepad.GetTextBounds();
         _output.WriteLine($"Text area bounds: {bounds}");
 
         var startX = bounds.Left + TextAreaPadding;
@@ -107,7 +87,7 @@ public class PopButtonSelectionTests : IDisposable
         SimulateDragSelect(startX, startY, endX, endY);
 
         // Assert: PopButton should appear
-        var popHwnd = PopButtonFinder.WaitForPopButton(_easydictProcessId, PopButtonTimeout);
+        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
 
         // Screenshot for debugging regardless of result
         var screenshotPath = ScreenshotHelper.CaptureScreen("e2e_drag_select_result");
@@ -166,14 +146,15 @@ public class PopButtonSelectionTests : IDisposable
     [Fact]
     public void DoubleClick_InNotepad_PopButtonAppears()
     {
-        if (_notepad == null)
+        if (_fixture.Notepad == null)
         {
             _output.WriteLine("SKIP: Notepad not available");
             return;
         }
 
         // Arrange: Click position on a word in Notepad
-        var bounds = _notepad.GetTextBounds();
+        _fixture.Notepad.BringToForeground();
+        var bounds = _fixture.Notepad.GetTextBounds();
         var clickX = bounds.Left + 40;
         var clickY = bounds.Top + TextAreaPadding;
         var clickPoint = new Point(clickX, clickY);
@@ -186,7 +167,7 @@ public class PopButtonSelectionTests : IDisposable
 
         // Assert: PopButton should appear (longer timeout for multi-click detection)
         var popHwnd = PopButtonFinder.WaitForPopButton(
-            _easydictProcessId, TimeSpan.FromSeconds(5));
+            _fixture.EasydictProcessId, TimeSpan.FromSeconds(5));
 
         var screenshotPath = ScreenshotHelper.CaptureScreen("e2e_double_click_result");
         _output.WriteLine($"Screenshot: {screenshotPath}");
@@ -206,19 +187,20 @@ public class PopButtonSelectionTests : IDisposable
     [Fact]
     public void PopButton_AutoDismisses_After5Seconds()
     {
-        if (_notepad == null)
+        if (_fixture.Notepad == null)
         {
             _output.WriteLine("SKIP: Notepad not available");
             return;
         }
 
         // Arrange + Act: Trigger popup via drag select
-        var bounds = _notepad.GetTextBounds();
+        _fixture.Notepad.BringToForeground();
+        var bounds = _fixture.Notepad.GetTextBounds();
         var startX = bounds.Left + TextAreaPadding;
         var startY = bounds.Top + TextAreaPadding;
         SimulateDragSelect(startX, startY, startX + DragDistance, startY);
 
-        var popHwnd = PopButtonFinder.WaitForPopButton(_easydictProcessId, PopButtonTimeout);
+        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
         if (popHwnd == IntPtr.Zero)
         {
             _output.WriteLine("SKIP: PopButton did not appear, cannot test auto-dismiss");
@@ -243,19 +225,20 @@ public class PopButtonSelectionTests : IDisposable
     [Fact]
     public void PopButton_DismissesOnScroll()
     {
-        if (_notepad == null)
+        if (_fixture.Notepad == null)
         {
             _output.WriteLine("SKIP: Notepad not available");
             return;
         }
 
         // Arrange: Trigger popup
-        var bounds = _notepad.GetTextBounds();
+        _fixture.Notepad.BringToForeground();
+        var bounds = _fixture.Notepad.GetTextBounds();
         var startX = bounds.Left + TextAreaPadding;
         var startY = bounds.Top + TextAreaPadding;
         SimulateDragSelect(startX, startY, startX + DragDistance, startY);
 
-        var popHwnd = PopButtonFinder.WaitForPopButton(_easydictProcessId, PopButtonTimeout);
+        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
         if (popHwnd == IntPtr.Zero)
         {
             _output.WriteLine("SKIP: PopButton did not appear, cannot test scroll dismiss");
@@ -277,19 +260,20 @@ public class PopButtonSelectionTests : IDisposable
     [Fact]
     public void PopButton_DismissesOnRightClick()
     {
-        if (_notepad == null)
+        if (_fixture.Notepad == null)
         {
             _output.WriteLine("SKIP: Notepad not available");
             return;
         }
 
         // Arrange: Trigger popup
-        var bounds = _notepad.GetTextBounds();
+        _fixture.Notepad.BringToForeground();
+        var bounds = _fixture.Notepad.GetTextBounds();
         var startX = bounds.Left + TextAreaPadding;
         var startY = bounds.Top + TextAreaPadding;
         SimulateDragSelect(startX, startY, startX + DragDistance, startY);
 
-        var popHwnd = PopButtonFinder.WaitForPopButton(_easydictProcessId, PopButtonTimeout);
+        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
         if (popHwnd == IntPtr.Zero)
         {
             _output.WriteLine("SKIP: PopButton did not appear, cannot test right-click dismiss");
@@ -312,19 +296,20 @@ public class PopButtonSelectionTests : IDisposable
     [Fact]
     public void PopButton_DismissesOnKeyPress()
     {
-        if (_notepad == null)
+        if (_fixture.Notepad == null)
         {
             _output.WriteLine("SKIP: Notepad not available");
             return;
         }
 
         // Arrange: Trigger popup
-        var bounds = _notepad.GetTextBounds();
+        _fixture.Notepad.BringToForeground();
+        var bounds = _fixture.Notepad.GetTextBounds();
         var startX = bounds.Left + TextAreaPadding;
         var startY = bounds.Top + TextAreaPadding;
         SimulateDragSelect(startX, startY, startX + DragDistance, startY);
 
-        var popHwnd = PopButtonFinder.WaitForPopButton(_easydictProcessId, PopButtonTimeout);
+        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
         if (popHwnd == IntPtr.Zero)
         {
             _output.WriteLine("SKIP: PopButton did not appear, cannot test key dismiss");
@@ -348,19 +333,20 @@ public class PopButtonSelectionTests : IDisposable
     [Fact]
     public void PopButton_Click_OpensMiniWindow()
     {
-        if (_notepad == null)
+        if (_fixture.Notepad == null)
         {
             _output.WriteLine("SKIP: Notepad not available");
             return;
         }
 
         // Arrange: Trigger popup via drag select
-        var bounds = _notepad.GetTextBounds();
+        _fixture.Notepad.BringToForeground();
+        var bounds = _fixture.Notepad.GetTextBounds();
         var startX = bounds.Left + TextAreaPadding;
         var startY = bounds.Top + TextAreaPadding;
         SimulateDragSelect(startX, startY, startX + DragDistance, startY);
 
-        var popHwnd = PopButtonFinder.WaitForPopButton(_easydictProcessId, PopButtonTimeout);
+        var popHwnd = PopButtonFinder.WaitForPopButton(_fixture.EasydictProcessId, PopButtonTimeout);
         if (popHwnd == IntPtr.Zero)
         {
             _output.WriteLine("SKIP: PopButton did not appear, cannot test click → mini window");
@@ -379,7 +365,7 @@ public class PopButtonSelectionTests : IDisposable
 
         // Assert: Mini window should open
         var miniWindow = UITestHelper.FindSecondaryWindow(
-            _launcher.Application, _launcher.Automation, "Mini", _output);
+            _fixture.Launcher.Application, _fixture.Launcher.Automation, "Mini", _output);
 
         var screenshotPath = ScreenshotHelper.CaptureScreen("e2e_pop_button_click_mini_window");
         _output.WriteLine($"Screenshot: {screenshotPath}");
@@ -408,22 +394,22 @@ public class PopButtonSelectionTests : IDisposable
         // Capture a complete screenshot sequence documenting the selection flow,
         // even when the popup doesn't appear (useful for CI artifact review).
 
-        var window = _launcher.GetMainWindow();
+        var window = _fixture.Launcher.GetMainWindow();
 
         // Step 1: Initial Easydict state
         var step1 = ScreenshotHelper.CaptureWindow(window, "e2e_workflow_01_easydict_initial");
         _output.WriteLine($"Step 1 (Easydict): {step1}");
 
         // Step 2: Notepad with text
-        if (_notepad != null)
+        if (_fixture.Notepad != null)
         {
-            _notepad.BringToForeground();
+            _fixture.Notepad.BringToForeground();
             Thread.Sleep(300);
             var step2 = ScreenshotHelper.CaptureScreen("e2e_workflow_02_notepad_ready");
             _output.WriteLine($"Step 2 (Notepad): {step2}");
 
             // Step 3: After drag select
-            var bounds = _notepad.GetTextBounds();
+            var bounds = _fixture.Notepad.GetTextBounds();
             var startX = bounds.Left + TextAreaPadding;
             var startY = bounds.Top + TextAreaPadding;
             SimulateDragSelect(startX, startY, startX + DragDistance, startY);
@@ -478,124 +464,5 @@ public class PopButtonSelectionTests : IDisposable
 
         Thread.Sleep(50);
         Mouse.Up(MouseButton.Left);
-    }
-
-    /// <summary>
-    /// Navigate to Settings, scroll to the Behavior section, and enable the
-    /// MouseSelectionTranslate toggle. The toggle is not visible without scrolling
-    /// because the Behavior section is near the bottom of the settings page.
-    /// Returns true if the toggle was found and enabled.
-    /// </summary>
-    private bool TryEnableMouseSelectionTranslate()
-    {
-        try
-        {
-            var window = _launcher.GetMainWindow();
-            Thread.Sleep(2000);
-
-            // Navigate to Settings page via the SettingsButton (AutomationId)
-            var settingsButton = Retry.WhileNull(
-                () => window.FindFirstDescendant(c => c.ByAutomationId("SettingsButton")),
-                TimeSpan.FromSeconds(10)).Result;
-
-            if (settingsButton == null)
-            {
-                _output.WriteLine("SettingsButton not found by AutomationId");
-                return false;
-            }
-
-            settingsButton.Click();
-            _output.WriteLine("Clicked SettingsButton, waiting for settings page...");
-            Thread.Sleep(2000);
-
-            // Capture settings page for debugging
-            ScreenshotHelper.CaptureWindow(window, "e2e_settings_before_scroll");
-
-            // Find the MainScrollViewer to scroll down to Behavior section
-            var scrollViewer = Retry.WhileNull(
-                () => window.FindFirstDescendant(c => c.ByAutomationId("MainScrollViewer")),
-                TimeSpan.FromSeconds(5)).Result;
-
-            if (scrollViewer == null)
-            {
-                _output.WriteLine("MainScrollViewer not found — cannot scroll to Behavior section");
-                return false;
-            }
-
-            // Scroll down to the Behavior section. The section order is:
-            // Language Prefs → Enabled Services → Service Config → HTTP Proxy → Behavior
-            // Need ~5 scroll gestures of -10 each to reach Behavior section.
-            Mouse.MoveTo(scrollViewer.GetClickablePoint());
-            for (int i = 0; i < 5; i++)
-            {
-                Mouse.Scroll(-10);
-                Thread.Sleep(500);
-            }
-
-            _output.WriteLine("Scrolled to Behavior section");
-            ScreenshotHelper.CaptureWindow(window, "e2e_settings_behavior_section");
-
-            // Try to find the toggle by AutomationId first, then by header text
-            var toggle = Retry.WhileNull(
-                () => window.FindFirstDescendant(c => c.ByAutomationId("MouseSelectionTranslateToggle")),
-                TimeSpan.FromSeconds(3)).Result;
-
-            if (toggle == null)
-            {
-                _output.WriteLine("Toggle not found by AutomationId, trying header text...");
-                toggle = window.FindFirstDescendant(c => c.ByName("Mouse selection translate"));
-            }
-
-            if (toggle == null)
-            {
-                // Scroll a bit more in case we haven't reached the toggle yet
-                _output.WriteLine("Toggle not visible, scrolling more...");
-                Mouse.Scroll(-10);
-                Thread.Sleep(500);
-
-                toggle = window.FindFirstDescendant(c => c.ByAutomationId("MouseSelectionTranslateToggle"))
-                      ?? window.FindFirstDescendant(c => c.ByName("Mouse selection translate"));
-            }
-
-            if (toggle != null)
-            {
-                var toggleButton = toggle.AsToggleButton();
-                if (toggleButton != null &&
-                    toggleButton.ToggleState == FlaUI.Core.Definitions.ToggleState.Off)
-                {
-                    toggleButton.Toggle();
-                    _output.WriteLine("MouseSelectionTranslate toggle enabled (was Off → On)");
-                    Thread.Sleep(500);
-                }
-                else if (toggleButton != null)
-                {
-                    _output.WriteLine($"MouseSelectionTranslate toggle already On (state={toggleButton.ToggleState})");
-                }
-                else
-                {
-                    _output.WriteLine("Element found but could not be used as ToggleButton");
-                    return false;
-                }
-
-                // Capture confirmation screenshot
-                ScreenshotHelper.CaptureWindow(window, "e2e_settings_toggle_enabled");
-                return true;
-            }
-
-            _output.WriteLine("MouseSelectionTranslate toggle not found after scrolling");
-            ScreenshotHelper.CaptureWindow(window, "e2e_settings_toggle_not_found");
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _output.WriteLine($"Error enabling MouseSelectionTranslate: {ex.Message}");
-            return false;
-        }
-    }
-
-    public void Dispose()
-    {
-        _notepad?.Dispose();
-        _launcher.Dispose();
     }
 }

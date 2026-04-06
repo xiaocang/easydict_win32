@@ -2,7 +2,8 @@ namespace Easydict.TextLayout.FontFitting;
 
 /// <summary>
 /// Input for font size fitting. Supports two modes:
-/// block-rect (MaxWidth + MaxHeight) and line-rect (LineWidths + LineHeights).
+/// block-rect (MaxWidth + MaxHeight) and line-width
+/// (LineWidths with optional MaxLineCount / MaxHeight / LineHeights).
 /// </summary>
 public sealed record FontFitRequest
 {
@@ -26,6 +27,9 @@ public sealed record FontFitRequest
 
     /// <summary>Line rect mode: per-line maximum widths.</summary>
     public IReadOnlyList<double>? LineWidths { get; init; }
+
+    /// <summary>Line rect mode: maximum number of visible lines. Defaults to LineWidths.Count.</summary>
+    public int? MaxLineCount { get; init; }
 
     /// <summary>Line rect mode: per-line heights (for font-size ceiling).</summary>
     public IReadOnlyList<double>? LineHeights { get; init; }

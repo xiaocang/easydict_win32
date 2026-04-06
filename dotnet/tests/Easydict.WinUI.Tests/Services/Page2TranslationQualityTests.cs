@@ -16,6 +16,9 @@ public class Page2TranslationQualityTests
     private const string PdfFixture = "1706.03762v7.pdf";
     private const string IntroPhrase = "Most competitive neural sequence transduction models";
     private const string ContinuousPhrase = "sequence of continuous representations";
+    private const string Section3SourceSnippet = "sequence (y1, ..., ym) of symbols one element at a time";
+    private const string StableChineseParagraph =
+        "\u8FD9\u662F\u56DE\u5F52\u6D4B\u8BD5\u6BB5\u843D\uFF0C\u7528\u6765\u9A8C\u8BC1\u6B63\u5E38\u60C5\u51B5\u4E0B\u5B57\u53F7\u4FDD\u6301\u4E0D\u53D8\u3002";
 
     private static string GetPdfFixturePath() =>
         Path.Combine(AppContext.BaseDirectory, "TestAssets", "Pdf", PdfFixture);
@@ -50,6 +53,53 @@ public class Page2TranslationQualityTests
     }
 
     [SkippableFact]
+    public async Task Page1AndPage2_MuPdfLayout_ShouldPreserveOriginalFontSizeForFittingChineseParagraphs()
+    {
+        var pdfPath = GetPdfFixturePath();
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
+        var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "SourceHanSerifCN",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: true);
+
+        using var sourceDoc = PdfPigDocument.Open(pdfPath);
+        foreach (var pageNumber in new[] { 1, 2 })
+        {
+            var metadata = SelectParagraphCandidate(checkpoint, pageNumber);
+            checkpoint.TranslatedChunks[metadata.ChunkIndex] = StableChineseParagraph;
+
+            var lookup = MuPdfExportService.BuildTranslatedBlockLookup(checkpoint);
+            var block = lookup[pageNumber].Single(candidate => candidate.ChunkIndex == metadata.ChunkIndex);
+            var pageHeight = Convert.ToDouble(sourceDoc.GetPages().Single(page => page.Number == pageNumber).Height);
+            var prepared = MuPdfExportService.PrepareBlockForRendering(block, pageHeight);
+
+            prepared.BoundingBox.Should().NotBeNull();
+
+            var result = MuPdfExportService.GenerateBlockTextOperations(
+                prepared.TranslatedText,
+                fontId: "SourceHanSerifCN",
+                fontSize: prepared.FontSize > 0 ? prepared.FontSize : 10.0,
+                bbox: prepared.BoundingBox!.Value,
+                fonts: fonts,
+                textStyle: prepared.TextStyle,
+                sourceBlockType: prepared.SourceBlockType,
+                usesSourceFallback: prepared.UsesSourceFallback,
+                detectedFontNames: prepared.DetectedFontNames,
+                renderLineRects: prepared.RenderLineRects,
+                backgroundLineRects: prepared.BackgroundLineRects);
+
+            result.WasShrunk.Should().BeFalse($"page {pageNumber} paragraph should fit without shrinking");
+            result.WasTruncated.Should().BeFalse();
+            result.ChosenFontSize.Should().BeApproximately(prepared.FontSize > 0 ? prepared.FontSize : 10.0, 0.01);
+        }
+    }
+
+    [SkippableFact]
     public async Task Page2_SourceFallback_ShouldPreferFallbackTextOverOriginalChunkText()
     {
         var pdfPath = GetPdfFixturePath();
@@ -79,6 +129,25 @@ public class Page2TranslationQualityTests
     }
 
     [SkippableFact]
+    public async Task Page2_MuPdfPrepareBlock_ShouldBuildExpandedBackgroundRectsForSection3Paragraph()
+    {
+        var pdfPath = GetPdfFixturePath();
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
+        var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
+        var block = FindMuPdfPage2BlockByNeedle(checkpoint, IntroPhrase);
+
+        using var sourceDoc = PdfPigDocument.Open(pdfPath);
+        var pageHeight = Convert.ToDouble(sourceDoc.GetPages().Single(p => p.Number == 2).Height);
+        var prepared = MuPdfExportService.PrepareBlockForRendering(block, pageHeight);
+
+        prepared.BackgroundLineRects.Should().NotBeNull();
+        prepared.BackgroundLineRects!.Should().HaveCountGreaterThan(1);
+        prepared.BackgroundLineRects!.Min(rect => rect.Y).Should().BeLessThan(prepared.BoundingBox!.Value.Y);
+    }
+
+    [SkippableFact]
     public async Task Page2_MuPdfExport_ShouldRenderFallbackBlocksWithoutBrokenLatinSpacing()
     {
         var pdfPath = GetPdfFixturePath();
@@ -90,8 +159,6 @@ public class Page2TranslationQualityTests
         var failedIndex = checkpoint.FailedChunkIndexes.First();
         var metadata = checkpoint.ChunkMetadata[failedIndex];
 
-        // The failed block should have FallbackText (different from its Text)
-        // or at minimum have meaningful source text for fallback rendering.
         var fallbackOrSource = metadata.FallbackText ?? checkpoint.SourceChunks[failedIndex];
         fallbackOrSource.Should().NotBeNullOrWhiteSpace();
 
@@ -111,15 +178,12 @@ public class Page2TranslationQualityTests
             using var outputDoc = PdfPigDocument.Open(outputPath);
             var page2Text = Normalize(outputDoc.GetPages().Single(p => p.Number == 2).Text);
 
-            // The exported page should have text content (not empty)
             page2Text.Should().NotBeNullOrWhiteSpace();
 
-            // The fallback block's source text should appear in the exported PDF
             var expectedSnippet = Normalize(fallbackOrSource).Split(' ').Take(3).ToArray();
             if (expectedSnippet.Length >= 3)
                 page2Text.Should().Contain(string.Join(" ", expectedSnippet));
 
-            // Latin terms in fallback blocks should not have broken spacing
             page2Text.Should().NotContain("Tr ansf or mer");
         }
         finally
@@ -173,6 +237,47 @@ public class Page2TranslationQualityTests
             page2Text.Should().NotContain("Tr ansf or mer");
             page2Text.Should().NotContain("Byt eNet");
             page2Text.Should().NotContain("Conv S2S");
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+                File.Delete(outputPath);
+        }
+    }
+
+    [SkippableFact]
+    public async Task Page2_MuPdfExport_ShouldEraseSection3SourceBleedThrough()
+    {
+        var pdfPath = GetPdfFixturePath();
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
+        var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
+
+        OverrideTranslatedChunkForNeedle(
+            checkpoint,
+            IntroPhrase,
+            "Translated section three paragraph that should wrap across multiple lines without leaving the original English source visible under the new content.");
+
+        var outputPath = Path.Combine(Path.GetTempPath(), $"page2-overlap-fix-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            try
+            {
+                var exportService = new MuPdfExportService();
+                exportService.Export(checkpoint, pdfPath, outputPath, DocumentOutputMode.Monolingual);
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
+            {
+                Skip.If(true, $"MuPDF unavailable: {ex.Message}");
+            }
+
+            using var outputDoc = PdfPigDocument.Open(outputPath);
+            var page2Text = Normalize(outputDoc.GetPages().Single(p => p.Number == 2).Text);
+
+            page2Text.Should().Contain("Translated section three paragraph");
+            page2Text.Should().NotContain(Section3SourceSnippet);
+            page2Text.Should().NotContain("At each step the model is auto-regressive");
         }
         finally
         {
@@ -286,13 +391,42 @@ public class Page2TranslationQualityTests
 
         page2Blocks.Should().NotBeEmpty();
 
-        // Prefer a block with FallbackText (meaning letter-reconstruction differs from PdfPig),
-        // otherwise pick the longest body block as a reasonable fallback target.
         var preferred = page2Blocks.FirstOrDefault(
                 b => !string.IsNullOrWhiteSpace(b.FallbackText))
             ?? page2Blocks.OrderByDescending(b => b.Text.Length).First();
 
         return preferred.BlockId;
+    }
+
+    private static LongDocumentChunkMetadata SelectParagraphCandidate(
+        LongDocumentTranslationCheckpoint checkpoint,
+        int pageNumber)
+    {
+        var candidate = checkpoint.ChunkMetadata
+            .Where(metadata =>
+                metadata.PageNumber == pageNumber &&
+                metadata.SourceBlockType == SourceBlockType.Paragraph &&
+                metadata.BoundingBox is not null &&
+                metadata.TextStyle?.LinePositions is { Count: > 1 })
+            .OrderByDescending(metadata => checkpoint.SourceChunks[metadata.ChunkIndex].Length)
+            .FirstOrDefault();
+
+        candidate.Should().NotBeNull($"page {pageNumber} should have a multi-line paragraph block");
+        return candidate!;
+    }
+
+    private static MuPdfExportService.TranslatedBlockData FindMuPdfPage2BlockByNeedle(
+        LongDocumentTranslationCheckpoint checkpoint,
+        string needle)
+    {
+        var lookup = MuPdfExportService.BuildTranslatedBlockLookup(checkpoint);
+        lookup.Should().ContainKey(2);
+
+        var block = lookup[2]
+            .FirstOrDefault(candidate => candidate.SourceText.Contains(needle, StringComparison.Ordinal));
+
+        block.Should().NotBeNull();
+        return block!;
     }
 
     private static void OverrideTranslatedChunkForNeedle(

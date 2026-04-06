@@ -382,6 +382,7 @@ public class DocumentExportServiceTests
         lookup[1][0].TranslatedText.Should().Be("Fallback source block.");
         lookup[1][0].TranslationSkipped.Should().BeFalse();
         lookup[1][0].UsesSourceFallback.Should().BeTrue();
+        lookup[1][0].SourceText.Should().Be("Original source block.");
         lookup[1][0].DetectedFontNames.Should().Contain("TimesNewRomanPSMT");
     }
 

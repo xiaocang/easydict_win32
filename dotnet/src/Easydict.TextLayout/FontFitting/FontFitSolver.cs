@@ -95,14 +95,25 @@ public static class FontFitSolver
             var result = engine.Layout(prepared, lineWidths);
             lineCount = result.LineCount;
 
-            if (lineCount > lineWidths.Count)
+            var maxLineCount = request.MaxLineCount ?? lineWidths.Count;
+            if (maxLineCount > 0 && lineCount > maxLineCount)
                 return false;
+
+            if (request.MaxHeight.HasValue)
+            {
+                var totalHeight = lineCount * lineHeight;
+                if (totalHeight > request.MaxHeight.Value + 0.01)
+                    return false;
+            }
 
             // Check font size against line heights
             if (request.LineHeights is { Count: > 0 } lineHeights)
             {
+                if (lineCount > lineHeights.Count)
+                    return false;
+
                 var minHeight = double.MaxValue;
-                for (var i = 0; i < Math.Min(lineHeights.Count, lineCount); i++)
+                for (var i = 0; i < lineCount; i++)
                     minHeight = Math.Min(minHeight, lineHeights[i]);
 
                 if (fontSize > minHeight * 0.98)

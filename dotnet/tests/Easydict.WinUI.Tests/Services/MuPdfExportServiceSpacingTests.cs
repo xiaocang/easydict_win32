@@ -19,16 +19,15 @@ public class MuPdfExportServiceSpacingTests
             NotoGlyphMap: null,
             PrimaryFontIsCjk: true);
 
-        var ops = MuPdfExportService.GenerateBlockTextOperations(
+        var result = MuPdfExportService.GenerateBlockTextOperations(
             translatedText: "Most  competitive neural",
             fontId: "SourceHanSerifCN",
             fontSize: 12,
             bbox: new BlockRect(10, 10, 1000, 40),
             fonts: fonts,
             textStyle: null);
+        var ops = result.Operations;
 
-        // Space glyphs should be present — either as helv 2-digit "20" or Latin font 4-digit "0020"
-        // Helvetica batches all ASCII into one run, so look for "20" pattern within hex strings
         ops.Should().Contain("/helv");
         ops.Should().Contain("20", "space glyph must appear in Helvetica hex runs");
     }
@@ -59,7 +58,7 @@ public class MuPdfExportServiceSpacingTests
             PrimaryFontIsCjk: true,
             LatinFontFaces: latinFaces);
 
-        var ops = MuPdfExportService.GenerateBlockTextOperations(
+        var result = MuPdfExportService.GenerateBlockTextOperations(
             translatedText: "Most competitive neural",
             fontId: "SourceHanSerifCN",
             fontSize: 12,
@@ -69,11 +68,11 @@ public class MuPdfExportServiceSpacingTests
             sourceBlockType: SourceBlockType.Paragraph,
             usesSourceFallback: true,
             detectedFontNames: ["TimesNewRomanPSMT"]);
+        var ops = result.Operations;
 
         ops.Should().Contain("/latserifr");
         ops.Should().NotContain("/helv");
         ops.Should().NotContain("/SourceHanSerifCN");
-        // Space glyph (GID 0x0020) should be present — either as separate <0020> or embedded in a run
         ops.Should().Contain("0020");
     }
 
@@ -117,7 +116,7 @@ public class MuPdfExportServiceSpacingTests
             PrimaryAdvanceWidths: primaryAdvanceWidths,
             LatinFontFaces: latinFaces);
 
-        var ops = MuPdfExportService.GenerateBlockTextOperations(
+        var result = MuPdfExportService.GenerateBlockTextOperations(
             translatedText: "\u800C\u5728 Transformer \u4E2D",
             fontId: "SourceHanSerifCN",
             fontSize: 12,
@@ -127,12 +126,140 @@ public class MuPdfExportServiceSpacingTests
             sourceBlockType: SourceBlockType.Paragraph,
             usesSourceFallback: false,
             detectedFontNames: ["TimesNewRomanPSMT"]);
+        var ops = result.Operations;
 
         Regex.Matches(ops, @"/latserifr").Count.Should().Be(1);
         ops.Should().Contain("/SourceHanSerifCN");
         ops.Should().Contain("/latserifr");
         ops.Should().NotContain("/helv");
-        // "Transformer" GIDs should appear in the Latin font run (may include surrounding space 0020)
         ops.Should().Contain("005400720061006E00730066006F0072006D00650072");
+    }
+
+    [Fact]
+    public void PrepareBlockForRendering_WithBaselineDerivedRects_ExtendsBackgroundBeyondRawBoundingBox()
+    {
+        var block = new MuPdfExportService.TranslatedBlockData
+        {
+            ChunkIndex = 0,
+            PageNumber = 2,
+            SourceBlockId = "p2-body-b1",
+            SourceText = "line one\nline two\nline three",
+            TranslatedText = "first line\nsecond line\nthird line",
+            BoundingBox = new BlockRect(100, 100, 220, 22),
+            FontSize = 12,
+            TranslationSkipped = false,
+            TextStyle = new BlockTextStyle
+            {
+                FontSize = 12,
+                LineSpacing = 14,
+                LinePositions =
+                [
+                    new BlockLinePosition(118, 100, 300),
+                    new BlockLinePosition(104, 100, 300),
+                    new BlockLinePosition(90, 100, 300)
+                ]
+            },
+            SourceBlockType = SourceBlockType.Paragraph,
+            UsesSourceFallback = false,
+            DetectedFontNames = ["TimesNewRomanPSMT"]
+        };
+
+        var prepared = MuPdfExportService.PrepareBlockForRendering(block, 400);
+
+        prepared.BackgroundLineRects.Should().NotBeNull();
+        prepared.BackgroundLineRects!.Should().HaveCount(3);
+        prepared.BackgroundLineRects!.Min(r => r.Y).Should().BeLessThan(block.BoundingBox!.Value.Y);
+    }
+
+    [Fact]
+    public void GenerateBlockTextOperations_WithShortLineRectsButEnoughTotalHeight_KeepsOriginalFontSize()
+    {
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "SourceHanSerifCN",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: true);
+
+        var result = MuPdfExportService.GenerateBlockTextOperations(
+            translatedText: "\u5FAA\u73AF\u795E\u7ECF\u7F51\u7EDC\u5DF2\u7ECF\u5728\u5E8F\u5217\u5EFA\u6A21\u4EFB\u52A1\u4E2D\u88AB\u8BC1\u660E\u6709\u6548",
+            fontId: "SourceHanSerifCN",
+            fontSize: 14,
+            bbox: new BlockRect(10, 10, 180, 44),
+            fonts: fonts,
+            textStyle: new BlockTextStyle { FontSize = 14, LineSpacing = 16 },
+            sourceBlockType: SourceBlockType.Paragraph,
+            renderLineRects:
+            [
+                new BlockRect(10, 38, 180, 10),
+                new BlockRect(10, 12, 180, 10)
+            ]);
+
+        result.Operations.Should().NotBeNullOrWhiteSpace();
+        result.WasShrunk.Should().BeFalse();
+        result.WasTruncated.Should().BeFalse();
+        result.ChosenFontSize.Should().BeApproximately(14, 0.01);
+    }
+
+    [Fact]
+    public void GenerateBlockTextOperations_WithSourceFallbackAndShortLineRects_DoesNotShrinkSolelyForLineSlotHeight()
+    {
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "SourceHanSerifCN",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: true);
+
+        var result = MuPdfExportService.GenerateBlockTextOperations(
+            translatedText: "Most competitive neural models remain effective.",
+            fontId: "SourceHanSerifCN",
+            fontSize: 14,
+            bbox: new BlockRect(10, 10, 200, 44),
+            fonts: fonts,
+            textStyle: new BlockTextStyle { FontSize = 14, LineSpacing = 16 },
+            sourceBlockType: SourceBlockType.Paragraph,
+            usesSourceFallback: true,
+            detectedFontNames: ["TimesNewRomanPSMT"],
+            renderLineRects:
+            [
+                new BlockRect(10, 38, 200, 10),
+                new BlockRect(10, 12, 200, 10)
+            ]);
+
+        result.Operations.Should().NotBeNullOrWhiteSpace();
+        result.WasShrunk.Should().BeFalse();
+        result.WasTruncated.Should().BeFalse();
+        result.ChosenFontSize.Should().BeApproximately(14, 0.01);
+    }
+
+    [Fact]
+    public void GenerateBlockTextOperations_WithConstrainedLineRects_ShrinksAndTruncatesInsteadOfOverflowing()
+    {
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "Arial",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: false);
+
+        var result = MuPdfExportService.GenerateBlockTextOperations(
+            translatedText: "Most competitive neural sequence transduction models have an encoder decoder structure",
+            fontId: "Arial",
+            fontSize: 14,
+            bbox: new BlockRect(10, 10, 55, 26),
+            fonts: fonts,
+            textStyle: new BlockTextStyle { FontSize = 14, LineSpacing = 16 },
+            sourceBlockType: SourceBlockType.Paragraph,
+            renderLineRects:
+            [
+                new BlockRect(10, 24, 55, 10),
+                new BlockRect(10, 12, 55, 10)
+            ]);
+
+        result.Operations.Should().NotBeNullOrWhiteSpace();
+        result.WasShrunk.Should().BeTrue();
+        result.WasTruncated.Should().BeTrue();
+        result.LinesRendered.Should().Be(2);
     }
 }

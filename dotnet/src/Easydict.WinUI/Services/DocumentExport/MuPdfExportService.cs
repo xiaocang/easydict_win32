@@ -5,12 +5,14 @@
 using System.Diagnostics;
 using System.Text;
 using Easydict.TextLayout;
+using Easydict.TextLayout.FontFitting;
 using Easydict.TextLayout.Layout;
 using Easydict.TextLayout.Preparation;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.Models;
 using MuPDF.NET;
+using PdfSharpCore.Drawing;
 using MuPdfPage = MuPDF.NET.Page;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using PdfPigPage = UglyToad.PdfPig.Content.Page;
@@ -28,6 +30,8 @@ namespace Easydict.WinUI.Services.DocumentExport;
 /// </summary>
 public sealed class MuPdfExportService : IDocumentExportService
 {
+    private const double MinFontSize = 6.0;
+
     public IReadOnlyList<string> SupportedExtensions => [".pdf"];
 
     /// <summary>
@@ -128,6 +132,11 @@ public sealed class MuPdfExportService : IDocumentExportService
         var pageCount = pdfPigDoc.NumberOfPages;
         var totalRendered = 0;
         var totalCandidates = 0;
+        var totalMissingBoundingBoxes = 0;
+        var totalShrinkFontBlocks = 0;
+        var totalTruncatedBlocks = 0;
+        var pageMetrics = new Dictionary<int, BackfillPageMetrics>();
+        var blockIssues = new List<BackfillBlockIssue>();
 
         // Build lookup: page number → translated blocks
         var translatedBlocksByPage = BuildTranslatedBlockLookup(checkpoint);
@@ -146,14 +155,42 @@ public sealed class MuPdfExportService : IDocumentExportService
 
             try
             {
-                var rendered = RenderPageWithContentStreamReplacement(
+                var pageResult = RenderPageWithContentStreamReplacement(
                     pdfPigPage, muPage, muDoc, blocks, fontPaths);
-                totalRendered += rendered;
+                totalRendered += pageResult.RenderedBlocks;
                 totalCandidates += blocks.Count;
+                totalMissingBoundingBoxes += pageResult.MissingBoundingBoxBlocks;
+                totalShrinkFontBlocks += pageResult.ShrinkFontBlocks;
+                totalTruncatedBlocks += pageResult.TruncatedBlocks;
+                pageMetrics[pageNumber] = new BackfillPageMetrics
+                {
+                    CandidateBlocks = blocks.Count,
+                    RenderedBlocks = pageResult.RenderedBlocks,
+                    MissingBoundingBoxBlocks = pageResult.MissingBoundingBoxBlocks,
+                    ShrinkFontBlocks = pageResult.ShrinkFontBlocks,
+                    TruncatedBlocks = pageResult.TruncatedBlocks,
+                    ObjectReplaceBlocks = 0,
+                    OverlayModeBlocks = 0,
+                    StructuredFallbackBlocks = 0,
+                };
+                if (pageResult.BlockIssues.Count > 0)
+                    blockIssues.AddRange(pageResult.BlockIssues);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[MuPdfExport] Page {pageNumber} failed: {ex.Message}");
+                totalCandidates += blocks.Count;
+                pageMetrics[pageNumber] = new BackfillPageMetrics
+                {
+                    CandidateBlocks = blocks.Count,
+                    RenderedBlocks = 0,
+                    MissingBoundingBoxBlocks = 0,
+                    ShrinkFontBlocks = 0,
+                    TruncatedBlocks = 0,
+                    ObjectReplaceBlocks = 0,
+                    OverlayModeBlocks = 0,
+                    StructuredFallbackBlocks = 0,
+                };
                 // Fall through — page retains original content
             }
         }
@@ -175,19 +212,21 @@ public sealed class MuPdfExportService : IDocumentExportService
         {
             CandidateBlocks = totalCandidates,
             RenderedBlocks = totalRendered,
-            MissingBoundingBoxBlocks = 0,
-            ShrinkFontBlocks = 0,
-            TruncatedBlocks = 0,
+            MissingBoundingBoxBlocks = totalMissingBoundingBoxes,
+            ShrinkFontBlocks = totalShrinkFontBlocks,
+            TruncatedBlocks = totalTruncatedBlocks,
             ObjectReplaceBlocks = 0,
             OverlayModeBlocks = 0,
             StructuredFallbackBlocks = 0,
+            PageMetrics = pageMetrics.Count > 0 ? pageMetrics : null,
+            BlockIssues = blockIssues.Count > 0 ? blockIssues : null,
         };
     }
 
     /// <summary>
     /// Renders a single page by replacing its content stream with translated text.
     /// </summary>
-    private int RenderPageWithContentStreamReplacement(
+    private PageRenderResult RenderPageWithContentStreamReplacement(
         PdfPigPage pdfPigPage,
         MuPdfPage muPage,
         Document muDoc,
@@ -200,18 +239,34 @@ public sealed class MuPdfExportService : IDocumentExportService
 
         // Step 2: Embed fonts into the page
         var embeddedFonts = EmbedFonts(muPage, fontPaths);
+        var pageHeightPoints = Convert.ToDouble(pdfPigPage.Height);
 
-        // Step 3: Generate translated text operations
+        // Step 3: Pre-compute line-aware render geometry
+        var preparedBlocks = blocks
+            .Select(block => block.BoundingBox is null
+                ? block
+                : PrepareBlockForRendering(block, pageHeightPoints))
+            .ToList();
+
+        // Step 4: Generate translated text operations
         var opsText = new StringBuilder();
+        var opsErase = new StringBuilder();
         var rendered = 0;
+        var missingBoundingBoxes = 0;
+        var shrinkFontBlocks = 0;
+        var truncatedBlocks = 0;
+        var blockIssues = new List<BackfillBlockIssue>();
 
-        foreach (var block in blocks)
+        foreach (var block in preparedBlocks)
         {
             if (block.TranslationSkipped || string.IsNullOrWhiteSpace(block.TranslatedText))
                 continue;
 
             if (block.BoundingBox is null)
+            {
+                missingBoundingBoxes++;
                 continue;
+            }
 
             var bbox = block.BoundingBox.Value;
 
@@ -220,7 +275,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             var fontSize = block.FontSize > 0 ? block.FontSize : 10.0;
 
             // Generate text operations for this block
-            var blockOps = GenerateBlockTextOperations(
+            var blockRenderResult = GenerateBlockTextOperations(
                 block.TranslatedText,
                 fontId,
                 fontSize,
@@ -229,28 +284,47 @@ public sealed class MuPdfExportService : IDocumentExportService
                 block.TextStyle,
                 block.SourceBlockType,
                 block.UsesSourceFallback,
-                block.DetectedFontNames);
+                block.DetectedFontNames,
+                block.RenderLineRects,
+                block.BackgroundLineRects);
 
-            opsText.Append(blockOps);
+            if (string.IsNullOrWhiteSpace(blockRenderResult.Operations))
+                continue;
+
+            opsText.Append(blockRenderResult.Operations);
+            AppendEraseOperations(opsErase, block, embeddedFonts.PrimaryFontIsCjk);
             rendered++;
-        }
 
-        // Step 4: Build and replace content stream
-        if (rendered > 0)
-        {
-            // Generate white rectangle erasure ops to cover original content (including
-            // Form XObject text) in all translated block areas, preventing bleed-through.
-            var opsErase = new StringBuilder();
-            foreach (var block in blocks)
+            if (blockRenderResult.WasShrunk)
             {
-                if (block.TranslationSkipped || string.IsNullOrWhiteSpace(block.TranslatedText) || block.BoundingBox is null)
-                    continue;
-
-                var bbox = block.BoundingBox.Value;
-                // bbox.Y is the bottom-left Y in PDF bottom-up coords; use directly for 're' operator
-                opsErase.Append($"1 1 1 rg {bbox.X:F6} {bbox.Y:F6} {bbox.Width:F6} {bbox.Height:F6} re f ");
+                shrinkFontBlocks++;
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = block.ChunkIndex,
+                    SourceBlockId = block.SourceBlockId,
+                    PageNumber = block.PageNumber,
+                    Kind = "shrink-font",
+                    Detail = $"Font shrunk from {fontSize:F1}pt to {blockRenderResult.ChosenFontSize:F1}pt"
+                });
             }
 
+            if (blockRenderResult.WasTruncated)
+            {
+                truncatedBlocks++;
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = block.ChunkIndex,
+                    SourceBlockId = block.SourceBlockId,
+                    PageNumber = block.PageNumber,
+                    Kind = "truncated",
+                    Detail = $"Rendered {blockRenderResult.LinesRendered} lines at {blockRenderResult.ChosenFontSize:F1}pt"
+                });
+            }
+        }
+
+        // Step 5: Build and replace content stream
+        if (rendered > 0)
+        {
             var contentStream = ContentStreamInterpreter.BuildContentStream(
                 opsBase, opsText.ToString(), eraseOps: opsErase.ToString());
 
@@ -261,7 +335,12 @@ public sealed class MuPdfExportService : IDocumentExportService
             muPage.SetContents(xref);
         }
 
-        return rendered;
+        return new PageRenderResult(
+            rendered,
+            missingBoundingBoxes,
+            shrinkFontBlocks,
+            truncatedBlocks,
+            blockIssues);
     }
 
     /// <summary>
@@ -269,7 +348,7 @@ public sealed class MuPdfExportService : IDocumentExportService
     /// Uses TextLayout engine for line breaking, then renders each character with
     /// font routing, super/subscript signals, and GID encoding.
     /// </summary>
-    internal static string GenerateBlockTextOperations(
+    internal static BlockTextRenderResult GenerateBlockTextOperations(
         string translatedText,
         string fontId,
         double fontSize,
@@ -278,11 +357,14 @@ public sealed class MuPdfExportService : IDocumentExportService
         BlockTextStyle? textStyle = null,
         SourceBlockType sourceBlockType = SourceBlockType.Paragraph,
         bool usesSourceFallback = false,
-        IReadOnlyList<string>? detectedFontNames = null)
+        IReadOnlyList<string>? detectedFontNames = null,
+        IReadOnlyList<BlockRect>? renderLineRects = null,
+        IReadOnlyList<BlockRect>? backgroundLineRects = null)
     {
         // Simplify inline LaTeX formulas to plain text with ^ _ super/subscript signals
         translatedText = SimplifyLatexMarkup(translatedText);
-        if (string.IsNullOrWhiteSpace(translatedText)) return string.Empty;
+        if (string.IsNullOrWhiteSpace(translatedText))
+            return new BlockTextRenderResult(string.Empty, fontSize, 0, WasShrunk: false, WasTruncated: false);
 
         var renderFont = ResolveRenderFontPlan(
             translatedText,
@@ -292,19 +374,66 @@ public sealed class MuPdfExportService : IDocumentExportService
             usesSourceFallback,
             detectedFontNames,
             textStyle);
-        var sb = new StringBuilder();
-        var lineHeight = usesSourceFallback && textStyle?.LineSpacing > 0
-            ? textStyle.LineSpacing
-            : fontSize * 1.2;
 
-        // PDF coordinate system: origin at bottom-left, Y increases upward.
-        // bbox.Y is the BOTTOM of the block in PDF bottom-up coords.
-        // Place the first baseline one font-size below the top edge so that
-        // ascenders sit inside the box rather than protruding above it.
-        var startX = bbox.X;
-        var startY = bbox.Y + bbox.Height - fontSize;
-        var maxWidth = bbox.Width;
-        var maxHeight = bbox.Height;
+        var originalFontSize = fontSize > 0 ? fontSize : 10.0;
+        var baseLineHeight = usesSourceFallback && textStyle?.LineSpacing > 0
+            ? textStyle.LineSpacing
+            : originalFontSize * 1.2;
+        var lineHeightMultiplier = originalFontSize > 0
+            ? Math.Max(1.0, baseLineHeight / originalFontSize)
+            : 1.2;
+        var availableHeight = ResolveAvailableHeight(bbox, renderLineRects, backgroundLineRects);
+
+        var fitResult = SolveFontFit(
+            translatedText,
+            originalFontSize,
+            bbox,
+            renderLineRects,
+            availableHeight,
+            renderFont,
+            fonts,
+            lineHeightMultiplier);
+
+        var chosenFontSize = fitResult.ChosenFontSize;
+        var prepared = PrepareLayoutParagraph(translatedText, renderFont, fonts, chosenFontSize);
+        var wrappedLines = LayoutLines(prepared, renderLineRects, bbox.Width).Select(l => l.Text).ToList();
+
+        var lineHeight = fitResult.ChosenLineHeight;
+        if (renderLineRects is not { Count: > 0 })
+        {
+            var totalTextHeight = wrappedLines.Count * lineHeight;
+            while (totalTextHeight > bbox.Height && lineHeight > chosenFontSize)
+            {
+                lineHeight -= 0.05 * chosenFontSize;
+                totalTextHeight = wrappedLines.Count * lineHeight;
+            }
+
+            lineHeight = Math.Max(lineHeight, chosenFontSize);
+        }
+
+        var maxVisibleLines = renderLineRects is { Count: > 0 }
+            ? renderLineRects.Count
+            : Math.Max(1, (int)Math.Floor(bbox.Height / Math.Max(chosenFontSize, lineHeight)));
+        var wasTruncated = fitResult.WasTruncated;
+        if (wrappedLines.Count > maxVisibleLines)
+        {
+            wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
+            var lastWidth = renderLineRects is { Count: > 0 }
+                ? renderLineRects[Math.Min(maxVisibleLines, renderLineRects.Count) - 1].Width
+                : bbox.Width;
+            wrappedLines[^1] = TruncateLineToFitWidth(
+                wrappedLines[^1],
+                lastWidth,
+                renderFont,
+                fonts,
+                chosenFontSize);
+            wasTruncated = true;
+        }
+
+        if (wrappedLines.Count == 0)
+            return new BlockTextRenderResult(string.Empty, chosenFontSize, 0, WasShrunk: fitResult.WasShrunk, WasTruncated: wasTruncated);
+
+        var sb = new StringBuilder();
 
         // Apply non-black color before block characters
         var hasColor = textStyle is not null && !textStyle.IsBlack;
@@ -316,143 +445,468 @@ public sealed class MuPdfExportService : IDocumentExportService
             sb.Append($"{r:F3} {g:F3} {b:F3} rg ");
         }
 
-        // Use TextLayout engine for line breaking.
-        // GlyphAdvanceMeasurer returns 0 for ^ and _ signals so they don't affect layout.
-        var engine = TextLayoutEngine.Instance;
-        var measurer = new GlyphAdvanceMeasurer(
-            renderFont.PrimaryFace.GlyphMap, renderFont.PrimaryFace.AdvanceWidths, renderFont.PrimaryFace.UnitsPerEm,
-            fonts.NotoGlyphMap, fonts.NotoAdvanceWidths, fonts.NotoUnitsPerEm,
-            renderFont.PrimaryIsCjk,
-            fontSize,
-            renderFont.LatinFace?.GlyphMap,
-            renderFont.LatinFace?.AdvanceWidths,
-            renderFont.LatinFace?.UnitsPerEm ?? 1000);
-        var prepared = engine.Prepare(
-            new TextPrepareRequest { Text = translatedText, NormalizeWhitespace = false },
-            measurer);
-
-        // Incremental layout: one line at a time, emit PDF operators per line
-        var cursor = LayoutCursor.Start;
-        var currentY = startY;
-        var linesRendered = 0;
-
-        while (true)
+        for (var lineIndex = 0; lineIndex < wrappedLines.Count; lineIndex++)
         {
-            // Check if we've exceeded the block height
-            if (linesRendered > 0 && (startY - currentY) > maxHeight)
-                break;
+            var lineText = wrappedLines[lineIndex];
+            if (string.IsNullOrEmpty(lineText))
+                continue;
 
-            var layoutLine = engine.LayoutNextLine(prepared, cursor, maxWidth);
-            if (layoutLine is null)
-                break;
-
-            var lineText = layoutLine.Text;
-            var currentX = startX;
-            StringBuilder? runHex = null;
-            string? runFontId = null;
-            double runFontSize = 0;
-            double runY = 0;
-            double runAdvance = 0;
-
-            void FlushRun()
+            double startX;
+            double baselineY;
+            if (renderLineRects is { Count: > 0 })
             {
-                if (runFontId is null || runHex is null || runHex.Length == 0)
-                    return;
-
-                sb.Append(ContentStreamInterpreter.GenerateTextOperator(
-                    runFontId,
-                    runFontSize,
-                    currentX,
-                    runY,
-                    runHex.ToString()));
-
-                currentX += runAdvance;
-                runFontId = null;
-                runFontSize = 0;
-                runY = 0;
-                runAdvance = 0;
-                runHex.Clear();
+                var rect = renderLineRects[lineIndex];
+                startX = rect.X;
+                baselineY = rect.Y + rect.Height - chosenFontSize;
+            }
+            else
+            {
+                startX = bbox.X;
+                baselineY = bbox.Y + bbox.Height - chosenFontSize - lineIndex * lineHeight;
             }
 
-            void AppendGlyphRun(ResolvedGlyph glyph, double glyphFontSize, double glyphY)
-            {
-                if (runFontId is not null &&
-                    string.Equals(runFontId, glyph.FontId, StringComparison.Ordinal) &&
-                    Math.Abs(runFontSize - glyphFontSize) < 0.001 &&
-                    Math.Abs(runY - glyphY) < 0.001)
-                {
-                    runHex!.Append(glyph.Hex);
-                    runAdvance += glyph.Advance;
-                    return;
-                }
-
-                FlushRun();
-
-                runHex ??= new StringBuilder();
-                runHex.Clear();
-                runHex.Append(glyph.Hex);
-                runFontId = glyph.FontId;
-                runFontSize = glyphFontSize;
-                runY = glyphY;
-                runAdvance = glyph.Advance;
-            }
-
-            // Render each character in the laid-out line
-            var superNext = false;
-            var subNext = false;
-            foreach (var ch in lineText)
-            {
-                // Consume ^ and _ as super/subscript signals (not rendered as characters)
-                if (LatexFormulaSimplifier.IsScriptSignal(ch))
-                {
-                    if (ch == '^') { superNext = true; subNext = false; }
-                    else { subNext = true; superNext = false; }
-                    continue;
-                }
-
-                // Apply super/subscript sizing and Y offset for this character only
-                var charFontSize = fontSize;
-                var charY = currentY;
-                if (superNext)
-                {
-                    charFontSize = fontSize * 0.7;
-                    charY = currentY + fontSize * 0.4;
-                    superNext = false;
-                }
-                else if (subNext)
-                {
-                    charFontSize = fontSize * 0.7;
-                    charY = currentY - fontSize * 0.3;
-                    subNext = false;
-                }
-
-                if (!TryResolveGlyph(
-                        ch,
-                        charFontSize,
-                        renderFont,
-                        fonts,
-                        out var glyph))
-                {
-                    FlushRun();
-                    continue;
-                }
-
-                AppendGlyphRun(glyph, charFontSize, charY);
-            }
-
-            FlushRun();
-            currentY -= lineHeight;
-            linesRendered++;
-
-            // Advance cursor to next line
-            cursor = new LayoutCursor(layoutLine.EndSegment, layoutLine.EndGrapheme);
+            AppendLineTextOperations(
+                sb,
+                lineText,
+                startX,
+                baselineY,
+                chosenFontSize,
+                renderFont,
+                fonts);
         }
 
         // Reset color to black after block
         if (hasColor)
             sb.Append("0 0 0 rg ");
 
-        return sb.ToString();
+        return new BlockTextRenderResult(
+            sb.ToString(),
+            chosenFontSize,
+            wrappedLines.Count,
+            WasShrunk: chosenFontSize < originalFontSize - 0.01,
+            WasTruncated: wasTruncated);
+    }
+
+    private static FontFitResult SolveFontFit(
+        string translatedText,
+        double fontSize,
+        BlockRect bbox,
+        IReadOnlyList<BlockRect>? renderLineRects,
+        double availableHeight,
+        RenderFontPlan renderFont,
+        EmbeddedFontInfo fonts,
+        double lineHeightMultiplier)
+    {
+        var request = new FontFitRequest
+        {
+            Text = translatedText,
+            StartFontSize = fontSize,
+            MinFontSize = MinFontSize,
+            NormalizeWhitespace = false,
+            LineHeightMultiplier = lineHeightMultiplier,
+        };
+
+        if (renderLineRects is { Count: > 0 })
+        {
+            request = request with
+            {
+                LineWidths = renderLineRects.Select(r => Math.Max(10, r.Width)).ToList(),
+                MaxLineCount = renderLineRects.Count,
+                MaxHeight = availableHeight,
+            };
+        }
+        else
+        {
+            request = request with
+            {
+                MaxWidth = bbox.Width,
+                MaxHeight = availableHeight,
+            };
+        }
+
+        return FontFitSolver.Solve(
+            request,
+            TextLayoutEngine.Instance,
+            size => CreateGlyphMeasurer(renderFont, fonts, size));
+    }
+
+    private static double ResolveAvailableHeight(
+        BlockRect bbox,
+        IReadOnlyList<BlockRect>? renderLineRects,
+        IReadOnlyList<BlockRect>? backgroundLineRects)
+    {
+        return TryGetVerticalSpan(backgroundLineRects)
+            ?? TryGetVerticalSpan(renderLineRects)
+            ?? Math.Max(1, bbox.Height);
+    }
+
+    private static double? TryGetVerticalSpan(IReadOnlyList<BlockRect>? rects)
+    {
+        if (rects is not { Count: > 0 })
+            return null;
+
+        var minY = rects.Min(rect => rect.Y);
+        var maxBottom = rects.Max(rect => rect.Y + rect.Height);
+        return Math.Max(1, maxBottom - minY);
+    }
+
+    private static PreparedParagraph PrepareLayoutParagraph(
+        string text,
+        RenderFontPlan renderFont,
+        EmbeddedFontInfo fonts,
+        double fontSize)
+    {
+        return TextLayoutEngine.Instance.Prepare(
+            new TextPrepareRequest
+            {
+                Text = text,
+                NormalizeWhitespace = false,
+            },
+            CreateGlyphMeasurer(renderFont, fonts, fontSize));
+    }
+
+    private static GlyphAdvanceMeasurer CreateGlyphMeasurer(
+        RenderFontPlan renderFont,
+        EmbeddedFontInfo fonts,
+        double fontSize)
+    {
+        return new GlyphAdvanceMeasurer(
+            renderFont.PrimaryFace.GlyphMap,
+            renderFont.PrimaryFace.AdvanceWidths,
+            renderFont.PrimaryFace.UnitsPerEm,
+            fonts.NotoGlyphMap,
+            fonts.NotoAdvanceWidths,
+            fonts.NotoUnitsPerEm,
+            renderFont.PrimaryIsCjk,
+            fontSize,
+            renderFont.LatinFace?.GlyphMap,
+            renderFont.LatinFace?.AdvanceWidths,
+            renderFont.LatinFace?.UnitsPerEm ?? 1000);
+    }
+
+    private static IReadOnlyList<LayoutLine> LayoutLines(
+        PreparedParagraph prepared,
+        IReadOnlyList<BlockRect>? renderLineRects,
+        double maxWidth)
+    {
+        if (renderLineRects is { Count: > 0 })
+        {
+            return TextLayoutEngine.Instance
+                .LayoutWithLines(prepared, renderLineRects.Select(r => Math.Max(10, r.Width)).ToList())
+                .Lines;
+        }
+
+        return TextLayoutEngine.Instance.LayoutWithLines(prepared, maxWidth).Lines;
+    }
+
+    private static string TruncateLineToFitWidth(
+        string lineText,
+        double maxWidth,
+        RenderFontPlan renderFont,
+        EmbeddedFontInfo fonts,
+        double fontSize)
+    {
+        var baseText = lineText.TrimEnd('.', ' ');
+        var candidate = string.IsNullOrEmpty(baseText) ? "..." : $"{baseText}...";
+        while (candidate.Length > 3 && !FitsWithinWidth(candidate, maxWidth, renderFont, fonts, fontSize))
+        {
+            if (string.IsNullOrEmpty(baseText))
+                return "...";
+
+            baseText = baseText[..^1].TrimEnd();
+            candidate = string.IsNullOrEmpty(baseText) ? "..." : $"{baseText}...";
+        }
+
+        return candidate;
+    }
+
+    private static bool FitsWithinWidth(
+        string text,
+        double maxWidth,
+        RenderFontPlan renderFont,
+        EmbeddedFontInfo fonts,
+        double fontSize)
+    {
+        var prepared = PrepareLayoutParagraph(text, renderFont, fonts, fontSize);
+        return TextLayoutEngine.Instance.Layout(prepared, maxWidth).LineCount <= 1;
+    }
+
+    private static void AppendLineTextOperations(
+        StringBuilder sb,
+        string lineText,
+        double startX,
+        double baselineY,
+        double fontSize,
+        RenderFontPlan renderFont,
+        EmbeddedFontInfo fonts)
+    {
+        var currentX = startX;
+        StringBuilder? runHex = null;
+        string? runFontId = null;
+        double runFontSize = 0;
+        double runY = 0;
+        double runAdvance = 0;
+
+        void FlushRun()
+        {
+            if (runFontId is null || runHex is null || runHex.Length == 0)
+                return;
+
+            sb.Append(ContentStreamInterpreter.GenerateTextOperator(
+                runFontId,
+                runFontSize,
+                currentX,
+                runY,
+                runHex.ToString()));
+
+            currentX += runAdvance;
+            runFontId = null;
+            runFontSize = 0;
+            runY = 0;
+            runAdvance = 0;
+            runHex.Clear();
+        }
+
+        void AppendGlyphRun(ResolvedGlyph glyph, double glyphFontSize, double glyphY)
+        {
+            if (runFontId is not null &&
+                string.Equals(runFontId, glyph.FontId, StringComparison.Ordinal) &&
+                Math.Abs(runFontSize - glyphFontSize) < 0.001 &&
+                Math.Abs(runY - glyphY) < 0.001)
+            {
+                runHex!.Append(glyph.Hex);
+                runAdvance += glyph.Advance;
+                return;
+            }
+
+            FlushRun();
+
+            runHex ??= new StringBuilder();
+            runHex.Clear();
+            runHex.Append(glyph.Hex);
+            runFontId = glyph.FontId;
+            runFontSize = glyphFontSize;
+            runY = glyphY;
+            runAdvance = glyph.Advance;
+        }
+
+        var superNext = false;
+        var subNext = false;
+        foreach (var ch in lineText)
+        {
+            if (LatexFormulaSimplifier.IsScriptSignal(ch))
+            {
+                if (ch == '^') { superNext = true; subNext = false; }
+                else { subNext = true; superNext = false; }
+                continue;
+            }
+
+            var charFontSize = fontSize;
+            var charY = baselineY;
+            if (superNext)
+            {
+                charFontSize = fontSize * 0.7;
+                charY = baselineY + fontSize * 0.4;
+                superNext = false;
+            }
+            else if (subNext)
+            {
+                charFontSize = fontSize * 0.7;
+                charY = baselineY - fontSize * 0.3;
+                subNext = false;
+            }
+
+            if (!TryResolveGlyph(
+                    ch,
+                    charFontSize,
+                    renderFont,
+                    fonts,
+                    out var glyph))
+            {
+                FlushRun();
+                continue;
+            }
+
+            AppendGlyphRun(glyph, charFontSize, charY);
+        }
+
+        FlushRun();
+    }
+
+    private static void AppendEraseOperations(
+        StringBuilder opsErase,
+        TranslatedBlockData block,
+        bool primaryFontIsCjk)
+    {
+        var fontSize = block.FontSize > 0
+            ? block.FontSize
+            : (block.TextStyle?.FontSize > 0 ? block.TextStyle.FontSize : 10.0);
+        var padding = GetErasePadding(fontSize, primaryFontIsCjk);
+
+        if (block.BackgroundLineRects is { Count: > 0 })
+        {
+            foreach (var rect in block.BackgroundLineRects)
+                AppendEraseRect(opsErase, rect, padding);
+            return;
+        }
+
+        if (block.BoundingBox is BlockRect bbox)
+            AppendEraseRect(opsErase, bbox, padding);
+    }
+
+    private static void AppendEraseRect(StringBuilder opsErase, BlockRect rect, double padding)
+    {
+        var x = Math.Max(0, rect.X - padding);
+        var y = Math.Max(0, rect.Y - padding);
+        var width = rect.Width + padding * 2;
+        var height = rect.Height + padding * 2;
+        opsErase.Append($"1 1 1 rg {x:F6} {y:F6} {width:F6} {height:F6} re f ");
+    }
+
+    private static double GetErasePadding(double fontSize, bool primaryFontIsCjk)
+    {
+        var pad = Math.Clamp(fontSize * 0.25, 2.5, 10);
+        if (primaryFontIsCjk)
+            pad = Math.Max(pad, Math.Clamp(fontSize * 0.30, 3, 12));
+        return pad;
+    }
+
+    internal static TranslatedBlockData PrepareBlockForRendering(
+        TranslatedBlockData block,
+        double pageHeightPoints)
+    {
+        if (block.BoundingBox is not BlockRect bbox)
+            return block;
+
+        var lineHeight = block.TextStyle?.LineSpacing > 0
+            ? block.TextStyle.LineSpacing
+            : (block.FontSize > 0 ? block.FontSize * 1.2 : 14d);
+        var pageRect = ToTopLeftRect(pageHeightPoints, bbox);
+        var lineRects = BuildMuPdfLineRects(pageHeightPoints, pageRect, block.TextStyle, lineHeight);
+        var (translatedText, renderLineRects, backgroundLineRects, _) =
+            PdfExportService.HandleInlineScriptLinesForOverlay(block.SourceText, block.TranslatedText, lineRects);
+
+        if (lineRects is { Count: > 0 } && renderLineRects is { Count: 0 })
+        {
+            renderLineRects = null;
+            backgroundLineRects = null;
+        }
+
+        return new TranslatedBlockData
+        {
+            ChunkIndex = block.ChunkIndex,
+            PageNumber = block.PageNumber,
+            SourceBlockId = block.SourceBlockId,
+            SourceText = block.SourceText,
+            TranslatedText = translatedText,
+            BoundingBox = block.BoundingBox,
+            FontSize = block.FontSize,
+            TranslationSkipped = block.TranslationSkipped,
+            TextStyle = block.TextStyle,
+            SourceBlockType = block.SourceBlockType,
+            UsesSourceFallback = block.UsesSourceFallback,
+            DetectedFontNames = block.DetectedFontNames,
+            RenderLineRects = ToBottomUpRects(pageHeightPoints, renderLineRects),
+            BackgroundLineRects = ToBottomUpRects(pageHeightPoints, backgroundLineRects),
+        };
+    }
+
+    internal static IReadOnlyList<XRect>? BuildMuPdfLineRects(
+        double pageHeightPoints,
+        XRect blockRect,
+        BlockTextStyle? style,
+        double fallbackLineHeight)
+    {
+        var positions = style?.LinePositions;
+        if (positions == null || positions.Count == 0)
+            return null;
+
+        if (positions.Count == 1)
+            return PdfExportService.TryBuildLineRects(pageHeightPoints, blockRect, style, fallbackLineHeight);
+
+        if (PdfExportService.LooksLikeGridLinePositions(positions))
+            return null;
+
+        var lineSpacing = style?.LineSpacing > 0
+            ? style.LineSpacing
+            : ComputeLineSpacing(positions, fallbackLineHeight);
+
+        var result = new List<XRect>(positions.Count);
+        var ordered = positions.OrderByDescending(p => p.BaselineY).ToList();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var pos = ordered[i];
+            var upperPdf = i == 0
+                ? pos.BaselineY + lineSpacing / 2
+                : (ordered[i - 1].BaselineY + pos.BaselineY) / 2;
+            var lowerPdf = i == ordered.Count - 1
+                ? pos.BaselineY - lineSpacing / 2
+                : (pos.BaselineY + ordered[i + 1].BaselineY) / 2;
+            if (upperPdf <= lowerPdf)
+                continue;
+
+            var y = pageHeightPoints - upperPdf;
+            var height = upperPdf - lowerPdf;
+            var left = Math.Max(blockRect.X, pos.Left);
+            var right = Math.Min(blockRect.Right, pos.Right);
+            if (right - left < 5)
+                continue;
+
+            var yTop = Math.Max(0, y);
+            var yBottom = Math.Min(pageHeightPoints, y + height);
+            var h = yBottom - yTop;
+            if (h < 3)
+                continue;
+
+            result.Add(new XRect(left, yTop, right - left, h));
+        }
+
+        return result.Count > 0 ? result : null;
+    }
+
+    private static double ComputeLineSpacing(
+        IReadOnlyList<BlockLinePosition> positions,
+        double fallbackLineHeight)
+    {
+        var sortedBaselines = positions.Select(p => p.BaselineY).OrderByDescending(v => v).ToList();
+        var gaps = new List<double>();
+        for (var i = 0; i < sortedBaselines.Count - 1; i++)
+        {
+            var gap = sortedBaselines[i] - sortedBaselines[i + 1];
+            if (gap > 0.1)
+                gaps.Add(gap);
+        }
+
+        if (gaps.Count > 0)
+        {
+            gaps.Sort();
+            return gaps[gaps.Count / 2];
+        }
+
+        return Math.Max(8, fallbackLineHeight);
+    }
+
+    internal static XRect ToTopLeftRect(double pageHeightPoints, BlockRect box, double minSize = 10) =>
+        new(
+            Math.Max(0, box.X),
+            Math.Max(0, pageHeightPoints - (box.Y + box.Height)),
+            Math.Max(minSize, box.Width),
+            Math.Max(minSize, box.Height));
+
+    private static IReadOnlyList<BlockRect>? ToBottomUpRects(
+        double pageHeightPoints,
+        IReadOnlyList<XRect>? rects)
+    {
+        if (rects is null || rects.Count == 0)
+            return null;
+
+        return rects
+            .Select(rect => new BlockRect(
+                rect.X,
+                Math.Max(0, pageHeightPoints - (rect.Y + rect.Height)),
+                rect.Width,
+                rect.Height))
+            .ToList();
     }
 
     /// <summary>
@@ -990,6 +1444,10 @@ public sealed class MuPdfExportService : IDocumentExportService
 
             var block = new TranslatedBlockData
             {
+                ChunkIndex = i,
+                PageNumber = metadata.PageNumber,
+                SourceBlockId = metadata.SourceBlockId,
+                SourceText = checkpoint.SourceChunks[i],
                 TranslatedText = translated,
                 BoundingBox = metadata.BoundingBox,
                 FontSize = metadata.TextStyle?.FontSize ?? 10.0,
@@ -998,6 +1456,8 @@ public sealed class MuPdfExportService : IDocumentExportService
                 SourceBlockType = metadata.SourceBlockType,
                 UsesSourceFallback = usesSourceFallback,
                 DetectedFontNames = metadata.DetectedFontNames,
+                RenderLineRects = null,
+                BackgroundLineRects = null,
             };
 
             if (!result.TryGetValue(metadata.PageNumber, out var list))
@@ -1080,8 +1540,26 @@ public sealed class MuPdfExportService : IDocumentExportService
 
     // --- Internal types ---
 
+    private sealed record PageRenderResult(
+        int RenderedBlocks,
+        int MissingBoundingBoxBlocks,
+        int ShrinkFontBlocks,
+        int TruncatedBlocks,
+        IReadOnlyList<BackfillBlockIssue> BlockIssues);
+
+    internal sealed record BlockTextRenderResult(
+        string Operations,
+        double ChosenFontSize,
+        int LinesRendered,
+        bool WasShrunk,
+        bool WasTruncated);
+
     internal sealed record TranslatedBlockData
     {
+        public required int ChunkIndex { get; init; }
+        public required int PageNumber { get; init; }
+        public required string SourceBlockId { get; init; }
+        public required string SourceText { get; init; }
         public required string TranslatedText { get; init; }
         public BlockRect? BoundingBox { get; init; }
         public double FontSize { get; init; }
@@ -1090,6 +1568,8 @@ public sealed class MuPdfExportService : IDocumentExportService
         public SourceBlockType SourceBlockType { get; init; }
         public bool UsesSourceFallback { get; init; }
         public IReadOnlyList<string>? DetectedFontNames { get; init; }
+        public IReadOnlyList<BlockRect>? RenderLineRects { get; init; }
+        public IReadOnlyList<BlockRect>? BackgroundLineRects { get; init; }
     }
 
     internal readonly record struct LatinFontKey(LatinFontFamily Family, LatinFontVariant Variant);

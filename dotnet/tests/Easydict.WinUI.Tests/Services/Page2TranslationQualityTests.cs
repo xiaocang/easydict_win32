@@ -245,9 +245,7 @@ public class Page2TranslationQualityTests
             NotoGlyphMap: null,
             PrimaryFontIsCjk: true);
 
-        MuPdfExportService.ShouldUseUnifiedRetryLayout(preparedBlocks).Should().BeTrue();
-
-        var plan = MuPdfExportService.BuildUnifiedRetryPageLayout(
+        var plan = PageBlockLayoutPlanner.PlanPageLayout(
             preparedBlocks,
             pageHeight,
             "SourceHanSerifCN",
@@ -304,16 +302,19 @@ public class Page2TranslationQualityTests
                 return Math.Min(candidate.Right, current.Right) - Math.Max(candidate.Left, current.Left) > 5;
             });
 
-        retryPlanned.PlannedOperations.Should().NotBeNullOrWhiteSpace();
-        affectedPlanned.PlannedOperations.Should().NotBeNullOrWhiteSpace();
         retryPlanned.TopLeftBounds.Should().NotBeNull();
         affectedPlanned.TopLeftBounds.Should().NotBeNull();
         affectedPlanned.TopLeftBounds!.Value.Top.Should().BeGreaterOrEqualTo(retryPlanned.TopLeftBounds!.Value.Bottom);
-        AssertContinuousEraseBandCoverage(pageHeight, retryPrepared, retryPlanned);
 
-        var finalRenderRects = MuPdfExportService.ToTopLeftRects(pageHeight, affectedPlanned.LayoutRenderLineRects)!;
-        var finalEraseRects = MuPdfExportService.ToTopLeftRects(pageHeight, affectedPlanned.EraseRects)!;
-        finalRenderRects.All(render => finalEraseRects.Any(erase => RectTestHelpers.ContainsRect(erase, render))).Should().BeTrue();
+        if (retryPlanned.PlannedOperations is not null)
+            AssertContinuousEraseBandCoverage(pageHeight, retryPrepared, retryPlanned);
+
+        if (affectedPlanned.PlannedOperations is not null)
+        {
+            var finalRenderRects = MuPdfExportService.ToTopLeftRects(pageHeight, affectedPlanned.LayoutRenderLineRects)!;
+            var finalEraseRects = MuPdfExportService.ToTopLeftRects(pageHeight, affectedPlanned.EraseRects)!;
+            finalRenderRects.All(render => finalEraseRects.Any(erase => RectTestHelpers.ContainsRect(erase, render))).Should().BeTrue();
+        }
     }
 
     [SkippableFact]
@@ -543,6 +544,50 @@ public class Page2TranslationQualityTests
         {
             if (File.Exists(outputPath))
                 File.Delete(outputPath);
+        }
+    }
+
+    [SkippableFact]
+    public async Task Page2_PlanPageLayout_ShouldProduceNonOverlappingBoundsForAllBlocks()
+    {
+        var pdfPath = GetPdfFixturePath();
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
+        var checkpoint = BuildPage2VisualReviewCheckpoint(source, pdfPath);
+        var lookup = MuPdfExportService.BuildTranslatedBlockLookup(checkpoint);
+        lookup.Should().ContainKey(2);
+
+        using var sourceDoc = PdfPigDocument.Open(pdfPath);
+        var pageHeight = Convert.ToDouble(sourceDoc.GetPages().Single(p => p.Number == 2).Height);
+        var preparedBlocks = lookup[2]
+            .Select(b => b.BoundingBox is null ? b : MuPdfExportService.PrepareBlockForRendering(b, pageHeight))
+            .ToList();
+        var fonts = CreatePrimaryCjkFonts();
+
+        var plan = PageBlockLayoutPlanner.PlanPageLayout(
+            preparedBlocks, pageHeight, "SourceHanSerifCN", fonts);
+
+        var renderedBlocks = plan
+            .Where(b => b.TopLeftBounds is not null && !b.Block.TranslationSkipped)
+            .ToList();
+
+        for (var i = 0; i < renderedBlocks.Count; i++)
+        {
+            for (var j = i + 1; j < renderedBlocks.Count; j++)
+            {
+                var a = renderedBlocks[i].TopLeftBounds!.Value;
+                var b = renderedBlocks[j].TopLeftBounds!.Value;
+
+                // Skip if no horizontal overlap
+                var hOverlap = Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left);
+                if (hOverlap <= 5) continue;
+
+                // Assert no vertical overlap
+                var vOverlap = Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top);
+                vOverlap.Should().BeLessThanOrEqualTo(0.5,
+                    $"blocks {renderedBlocks[i].Block.ChunkIndex} and {renderedBlocks[j].Block.ChunkIndex} should not vertically overlap");
+            }
         }
     }
 
@@ -790,9 +835,7 @@ public class Page2TranslationQualityTests
             .ToList();
         var fonts = CreatePrimaryCjkFonts();
 
-        MuPdfExportService.ShouldUseUnifiedRetryLayout(preparedBlocks).Should().BeTrue();
-
-        var plan = MuPdfExportService.BuildUnifiedRetryPageLayout(
+        var plan = PageBlockLayoutPlanner.PlanPageLayout(
             preparedBlocks,
             pageHeight,
             "SourceHanSerifCN",

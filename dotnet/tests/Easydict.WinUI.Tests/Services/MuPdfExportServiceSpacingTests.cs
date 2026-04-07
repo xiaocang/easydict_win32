@@ -296,9 +296,14 @@ public class MuPdfExportServiceSpacingTests
             normalPageBlocks[0] with { UsesSourceFallback = true }
         ];
 
-        MuPdfExportService.ShouldUseUnifiedRetryLayout(normalPageBlocks).Should().BeFalse();
-        MuPdfExportService.ShouldUseUnifiedRetryLayout(retryPageBlocks).Should().BeTrue();
-        MuPdfExportService.ShouldUseUnifiedRetryLayout(fallbackPageBlocks).Should().BeTrue();
+        // Unified layout planner now handles all blocks — no ShouldUseUnifiedRetryLayout gate.
+        // Verify PlanPageLayout accepts all block types without errors.
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "Arial", NotoFontId: null, PrimaryGlyphMap: null,
+            NotoGlyphMap: null, PrimaryFontIsCjk: false);
+        PageBlockLayoutPlanner.PlanPageLayout(normalPageBlocks, 400, "Arial", fonts).Should().HaveCount(1);
+        PageBlockLayoutPlanner.PlanPageLayout(retryPageBlocks, 400, "Arial", fonts).Should().HaveCount(1);
+        PageBlockLayoutPlanner.PlanPageLayout(fallbackPageBlocks, 400, "Arial", fonts).Should().HaveCount(1);
     }
 
     [Fact]
@@ -368,7 +373,7 @@ public class MuPdfExportServiceSpacingTests
             },
             pageHeight);
 
-        var plan = MuPdfExportService.BuildUnifiedRetryPageLayout(
+        var plan = PageBlockLayoutPlanner.PlanPageLayout(
             [first, second],
             pageHeight,
             "Arial",
@@ -452,7 +457,7 @@ public class MuPdfExportServiceSpacingTests
             },
             pageHeight);
 
-        var plan = MuPdfExportService.BuildUnifiedRetryPageLayout(
+        var plan = PageBlockLayoutPlanner.PlanPageLayout(
             [fallbackBlock, neighbor],
             pageHeight,
             "Arial",
@@ -505,7 +510,7 @@ public class MuPdfExportServiceSpacingTests
             },
             pageHeight);
 
-        var planned = MuPdfExportService.BuildUnifiedRetryPageLayout(
+        var planned = PageBlockLayoutPlanner.PlanPageLayout(
             [block],
             pageHeight,
             "Arial",
@@ -590,7 +595,7 @@ public class MuPdfExportServiceSpacingTests
             },
             pageHeight);
 
-        var planned = MuPdfExportService.BuildUnifiedRetryPageLayout(
+        var planned = PageBlockLayoutPlanner.PlanPageLayout(
             [first, second],
             pageHeight,
             "Arial",

@@ -258,7 +258,7 @@ public sealed class MuPdfExportService : IDocumentExportService
                 ? block
                 : PrepareBlockForRendering(block, pageHeightPoints))
             .ToList();
-        var pagePlan = BuildPageRenderPlan(
+        var pagePlan = PageBlockLayoutPlanner.PlanPageLayout(
             preparedBlocks,
             pageHeightPoints,
             embeddedFonts.PrimaryFontId,
@@ -570,7 +570,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             plannedBlock.UsedGlyphs);
     }
 
-    private static string BuildBlockTextOperationsFromLines(
+    internal static string BuildBlockTextOperationsFromLines(
         IReadOnlyList<string> lines,
         double chosenFontSize,
         RenderFontPlan renderFont,
@@ -629,7 +629,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         return sb.ToString();
     }
 
-    private static FontFitResult SolveFontFit(
+    internal static FontFitResult SolveFontFit(
         string translatedText,
         double fontSize,
         BlockRect bbox,
@@ -672,7 +672,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             size => CreateGlyphMeasurer(renderFont, fonts, size));
     }
 
-    private static double ResolveAvailableHeight(
+    internal static double ResolveAvailableHeight(
         BlockRect bbox,
         IReadOnlyList<BlockRect>? renderLineRects,
         IReadOnlyList<BlockRect>? backgroundLineRects)
@@ -692,7 +692,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         return Math.Max(1, maxBottom - minY);
     }
 
-    private static PreparedParagraph PrepareLayoutParagraph(
+    internal static PreparedParagraph PrepareLayoutParagraph(
         string text,
         RenderFontPlan renderFont,
         EmbeddedFontInfo fonts,
@@ -707,7 +707,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             CreateGlyphMeasurer(renderFont, fonts, fontSize));
     }
 
-    private static GlyphAdvanceMeasurer CreateGlyphMeasurer(
+    internal static GlyphAdvanceMeasurer CreateGlyphMeasurer(
         RenderFontPlan renderFont,
         EmbeddedFontInfo fonts,
         double fontSize)
@@ -726,7 +726,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             renderFont.LatinFace?.UnitsPerEm ?? 1000);
     }
 
-    private static IReadOnlyList<LayoutLine> LayoutLines(
+    internal static IReadOnlyList<LayoutLine> LayoutLines(
         PreparedParagraph prepared,
         IReadOnlyList<BlockRect>? renderLineRects,
         double maxWidth)
@@ -741,7 +741,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         return TextLayoutEngine.Instance.LayoutWithLines(prepared, maxWidth).Lines;
     }
 
-    private static string TruncateLineToFitWidth(
+    internal static string TruncateLineToFitWidth(
         string lineText,
         double maxWidth,
         RenderFontPlan renderFont,
@@ -879,286 +879,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         FlushRun();
     }
 
-    internal static bool ShouldUseUnifiedRetryLayout(IReadOnlyList<TranslatedBlockData> blocks)
-    {
-        return blocks.Any(block =>
-            !block.TranslationSkipped &&
-            block.BoundingBox is not null &&
-            IsUnifiedRetryLayoutEligible(block) &&
-            (block.RetryCount > 0 || block.UsesSourceFallback));
-    }
-
-    internal static IReadOnlyList<PlannedPageBlock> BuildPageRenderPlan(
-        IReadOnlyList<TranslatedBlockData> preparedBlocks,
-        double pageHeightPoints,
-        string fontId,
-        EmbeddedFontInfo fonts)
-    {
-        return ShouldUseUnifiedRetryLayout(preparedBlocks)
-            ? BuildUnifiedRetryPageLayout(preparedBlocks, pageHeightPoints, fontId, fonts)
-            : preparedBlocks.Select(block => BuildDefaultPageBlock(block, pageHeightPoints)).ToList();
-    }
-
-    internal static IReadOnlyList<PlannedPageBlock> BuildUnifiedRetryPageLayout(
-        IReadOnlyList<TranslatedBlockData> preparedBlocks,
-        double pageHeightPoints,
-        string fontId,
-        EmbeddedFontInfo fonts)
-    {
-        var plansByChunkIndex = new Dictionary<int, PlannedPageBlock>();
-        var placedBounds = new List<XRect>();
-
-        foreach (var block in preparedBlocks
-                     .OrderBy(block => block.OrderInPage)
-                     .ThenByDescending(block => block.ReadingOrderScore)
-                     .ThenBy(block => block.ChunkIndex))
-        {
-            if (block.BoundingBox is not BlockRect bbox ||
-                block.TranslationSkipped ||
-                string.IsNullOrWhiteSpace(block.TranslatedText) ||
-                !IsUnifiedRetryLayoutEligible(block))
-            {
-                var defaultPlan = BuildDefaultPageBlock(block, pageHeightPoints);
-                plansByChunkIndex[block.ChunkIndex] = defaultPlan;
-                if (defaultPlan.TopLeftBounds is XRect occupiedBounds)
-                    placedBounds.Add(occupiedBounds);
-                continue;
-            }
-
-            var sourceBoundsTopLeft = ToTopLeftRect(pageHeightPoints, bbox);
-            var preferredRenderRectsTopLeft = ToTopLeftRects(pageHeightPoints, block.RenderLineRects);
-            var preferredEraseRectsTopLeft = ToTopLeftRects(
-                pageHeightPoints,
-                block.BackgroundLineRects ?? block.RenderLineRects);
-            var preferredTop = preferredEraseRectsTopLeft?.Min(rect => rect.Y)
-                ?? preferredRenderRectsTopLeft?.Min(rect => rect.Y)
-                ?? sourceBoundsTopLeft.Y;
-            var gap = GetUnifiedRetryLayoutGap(block);
-            var finalTop = FindNextAvailableTop(
-                preferredTop,
-                sourceBoundsTopLeft,
-                placedBounds,
-                gap);
-
-            PlannedPageBlock plannedBlock;
-            while (true)
-            {
-                plannedBlock = BuildUnifiedRetryPageBlock(
-                    block,
-                    finalTop,
-                    pageHeightPoints,
-                    fontId,
-                    fonts,
-                    sourceBoundsTopLeft,
-                    preferredRenderRectsTopLeft,
-                    preferredEraseRectsTopLeft);
-
-                if (plannedBlock.TopLeftBounds is not XRect actualBounds)
-                    break;
-
-                var adjustedTop = FindNextAvailableTop(finalTop, actualBounds, placedBounds, gap);
-                if (adjustedTop <= finalTop + 0.01)
-                    break;
-
-                finalTop = adjustedTop;
-            }
-
-            plansByChunkIndex[block.ChunkIndex] = plannedBlock;
-            if (plannedBlock.TopLeftBounds is XRect topLeftBounds)
-                placedBounds.Add(topLeftBounds);
-        }
-
-        return preparedBlocks
-            .Select(block => plansByChunkIndex.TryGetValue(block.ChunkIndex, out var plan)
-                ? plan
-                : BuildDefaultPageBlock(block, pageHeightPoints))
-            .ToList();
-    }
-
-    private static PlannedPageBlock BuildDefaultPageBlock(
-        TranslatedBlockData block,
-        double pageHeightPoints)
-    {
-        return new PlannedPageBlock
-        {
-            Block = block,
-            LayoutBoundingBox = block.BoundingBox,
-            LayoutRenderLineRects = block.RenderLineRects,
-            LayoutBackgroundLineRects = block.BackgroundLineRects,
-            EraseRects = block.BackgroundLineRects,
-            TopLeftBounds = block.BoundingBox is BlockRect bbox
-                ? ToTopLeftRect(pageHeightPoints, bbox)
-                : null,
-            PlannedOperations = null,
-            PlannedChosenFontSize = 0,
-            PlannedLinesRendered = 0,
-            PlannedWasShrunk = false,
-            PlannedWasTruncated = false,
-            RenderableText = PrepareRenderableTextForPdf(block.TranslatedText),
-            UsedGlyphs = null,
-        };
-    }
-
-    private static PlannedPageBlock BuildUnifiedRetryPageBlock(
-        TranslatedBlockData block,
-        double top,
-        double pageHeightPoints,
-        string fontId,
-        EmbeddedFontInfo fonts,
-        XRect sourceBoundsTopLeft,
-        IReadOnlyList<XRect>? preferredRenderRectsTopLeft,
-        IReadOnlyList<XRect>? preferredEraseRectsTopLeft)
-    {
-        var plannedTextLayout = PlanUnifiedRetryPageBlockTextLayout(
-            block,
-            top,
-            pageHeightPoints,
-            fontId,
-            fonts,
-            sourceBoundsTopLeft,
-            preferredRenderRectsTopLeft);
-        var renderBoundsTopLeft = GetBounds(plannedTextLayout.RenderRectsTopLeft);
-        var sourceEraseRectsTopLeft = preferredEraseRectsTopLeft is { Count: > 0 }
-            ? preferredEraseRectsTopLeft
-            : [sourceBoundsTopLeft];
-        var eraseRectsTopLeft = BuildFinalEraseRectsTopLeft(
-            sourceEraseRectsTopLeft,
-            plannedTextLayout.RenderRectsTopLeft);
-        var eraseRects = ToBottomUpRects(pageHeightPoints, eraseRectsTopLeft);
-
-        return new PlannedPageBlock
-        {
-            Block = block,
-            LayoutBoundingBox = ToBottomUpRect(pageHeightPoints, renderBoundsTopLeft),
-            LayoutRenderLineRects = plannedTextLayout.RenderLineRects,
-            LayoutBackgroundLineRects = eraseRects,
-            EraseRects = eraseRects,
-            TopLeftBounds = renderBoundsTopLeft,
-            PlannedOperations = plannedTextLayout.Operations,
-            PlannedChosenFontSize = plannedTextLayout.ChosenFontSize,
-            PlannedLinesRendered = plannedTextLayout.LinesRendered,
-            PlannedWasShrunk = plannedTextLayout.WasShrunk,
-            PlannedWasTruncated = plannedTextLayout.WasTruncated,
-            RenderableText = plannedTextLayout.RenderableText,
-            UsedGlyphs = plannedTextLayout.UsedGlyphs,
-        };
-    }
-
-    private static PlannedRetryTextLayout PlanUnifiedRetryPageBlockTextLayout(
-        TranslatedBlockData block,
-        double top,
-        double pageHeightPoints,
-        string fontId,
-        EmbeddedFontInfo fonts,
-        XRect sourceBoundsTopLeft,
-        IReadOnlyList<XRect>? preferredRenderRectsTopLeft)
-    {
-        var renderableText = PrepareRenderableTextForPdf(block.TranslatedText);
-        var renderFont = ResolveRenderFontPlan(
-            renderableText,
-            fontId,
-            fonts,
-            block.SourceBlockType,
-            block.UsesSourceFallback,
-            block.DetectedFontNames,
-            block.TextStyle);
-
-        var originalFontSize = block.FontSize > 0 ? block.FontSize : 10.0;
-        var baseLineHeight = block.UsesSourceFallback && block.TextStyle?.LineSpacing > 0
-            ? block.TextStyle.LineSpacing
-            : originalFontSize * 1.2;
-        var lineHeightMultiplier = originalFontSize > 0
-            ? Math.Max(1.0, baseLineHeight / originalFontSize)
-            : 1.2;
-
-        var availableHeight = Math.Max(MinFontSize, pageHeightPoints - top);
-        var baseWidths = preferredRenderRectsTopLeft is { Count: > 0 }
-            ? preferredRenderRectsTopLeft.Select(rect => Math.Max(10, rect.Width)).ToList()
-            : [Math.Max(10, sourceBoundsTopLeft.Width)];
-        var baseXs = preferredRenderRectsTopLeft is { Count: > 0 }
-            ? preferredRenderRectsTopLeft.Select(rect => rect.X).ToList()
-            : [sourceBoundsTopLeft.X];
-        var maxPossibleLines = Math.Max(1, (int)Math.Ceiling(availableHeight / MinFontSize));
-        var plannedWidths = ExpandLineWidths(baseWidths, maxPossibleLines);
-
-        var fitResult = FontFitSolver.Solve(
-            new FontFitRequest
-            {
-                Text = renderableText,
-                StartFontSize = originalFontSize,
-                MinFontSize = MinFontSize,
-                NormalizeWhitespace = false,
-                LineHeightMultiplier = lineHeightMultiplier,
-                LineWidths = plannedWidths,
-                MaxLineCount = maxPossibleLines,
-                MaxHeight = availableHeight,
-            },
-            TextLayoutEngine.Instance,
-            size => CreateGlyphMeasurer(renderFont, fonts, size));
-
-        var chosenFontSize = fitResult.ChosenFontSize;
-        var prepared = PrepareLayoutParagraph(renderableText, renderFont, fonts, chosenFontSize);
-        var wrappedLines = TextLayoutEngine.Instance.LayoutWithLines(prepared, plannedWidths)
-            .Lines
-            .Select(line => line.Text)
-            .ToList();
-        var lineHeight = Math.Max(chosenFontSize, fitResult.ChosenLineHeight);
-        var maxVisibleLines = Math.Max(1, (int)Math.Floor(availableHeight / lineHeight));
-        var wasTruncated = fitResult.WasTruncated;
-        if (wrappedLines.Count > maxVisibleLines)
-        {
-            wrappedLines = wrappedLines.Take(maxVisibleLines).ToList();
-            var lastWidth = plannedWidths[Math.Min(maxVisibleLines, plannedWidths.Count) - 1];
-            wrappedLines[^1] = TruncateLineToFitWidth(
-                wrappedLines[^1],
-                lastWidth,
-                renderFont,
-                fonts,
-                chosenFontSize);
-            wasTruncated = true;
-        }
-
-        if (wrappedLines.Count == 0)
-            wrappedLines = [renderableText];
-
-        var renderRectsTopLeft = new List<XRect>(wrappedLines.Count);
-        for (var i = 0; i < wrappedLines.Count; i++)
-        {
-            var width = plannedWidths[Math.Min(i, plannedWidths.Count - 1)];
-            var x = baseXs[Math.Min(i, baseXs.Count - 1)];
-            renderRectsTopLeft.Add(new XRect(x, top + i * lineHeight, width, lineHeight));
-        }
-
-        var renderBoundsBottomUp = ToBottomUpRect(pageHeightPoints, GetBounds(renderRectsTopLeft));
-        var renderLineRects = ToBottomUpRects(pageHeightPoints, renderRectsTopLeft)
-            ?? Array.Empty<BlockRect>();
-        var usedGlyphs = new List<UsedGlyph>();
-        var operations = BuildBlockTextOperationsFromLines(
-            wrappedLines,
-            chosenFontSize,
-            renderFont,
-            fonts,
-            block.TextStyle,
-            renderBoundsBottomUp,
-            renderLineRects,
-            lineHeight,
-            usedGlyphs);
-
-        return new PlannedRetryTextLayout
-        {
-            Operations = operations,
-            RenderRectsTopLeft = renderRectsTopLeft,
-            RenderLineRects = renderLineRects,
-            ChosenFontSize = chosenFontSize,
-            LinesRendered = wrappedLines.Count,
-            WasShrunk = chosenFontSize < originalFontSize - 0.01,
-            WasTruncated = wasTruncated,
-            RenderableText = renderableText,
-            UsedGlyphs = usedGlyphs,
-        };
-    }
-
-    private static IReadOnlyList<double> ExpandLineWidths(
+    internal static IReadOnlyList<double> ExpandLineWidths(
         IReadOnlyList<double> widths,
         int count)
     {
@@ -1224,7 +945,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         return Math.Clamp(fontSize * 0.15, 1.5, 6);
     }
 
-    private static XRect GetBounds(IReadOnlyList<XRect> rects)
+    internal static XRect GetBounds(IReadOnlyList<XRect> rects)
     {
         var minX = rects.Min(rect => rect.X);
         var minY = rects.Min(rect => rect.Y);
@@ -1233,7 +954,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         return new XRect(minX, minY, maxRight - minX, maxBottom - minY);
     }
 
-    private static IReadOnlyList<XRect> BuildFinalEraseRectsTopLeft(
+    internal static IReadOnlyList<XRect> BuildFinalEraseRectsTopLeft(
         IReadOnlyList<XRect> sourceEraseRectsTopLeft,
         IReadOnlyList<XRect> finalRenderRectsTopLeft)
     {
@@ -1281,7 +1002,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             .ToList();
     }
 
-    private static bool RectsBelongToSameEraseBand(XRect left, XRect right)
+    internal static bool RectsBelongToSameEraseBand(XRect left, XRect right)
     {
         var horizontalOverlap = Math.Min(left.Right, right.Right) - Math.Max(left.Left, right.Left);
         if (horizontalOverlap > 3)
@@ -1476,14 +1197,14 @@ public sealed class MuPdfExportService : IDocumentExportService
             .ToList();
     }
 
-    private static BlockRect ToBottomUpRect(double pageHeightPoints, XRect rect) =>
+    internal static BlockRect ToBottomUpRect(double pageHeightPoints, XRect rect) =>
         new(
             rect.X,
             Math.Max(0, pageHeightPoints - (rect.Y + rect.Height)),
             rect.Width,
             rect.Height);
 
-    private static IReadOnlyList<BlockRect>? ToBottomUpRects(
+    internal static IReadOnlyList<BlockRect>? ToBottomUpRects(
         double pageHeightPoints,
         IReadOnlyList<XRect>? rects)
     {
@@ -1569,7 +1290,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         (ch >= '\u2E80' && ch <= '\u2FFF') ||  // CJK Radicals, Symbols & Punctuation
         (ch >= '\uF900' && ch <= '\uFAFF');    // CJK Compatibility Ideographs
 
-    private readonly record struct RenderFontPlan(
+    internal readonly record struct RenderFontPlan(
         EmbeddedFontFace PrimaryFace,
         EmbeddedFontFace? LatinFace,
         bool PrimaryIsCjk,
@@ -1583,7 +1304,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         char UnicodeChar,
         int FontXref);
 
-    private static RenderFontPlan ResolveRenderFontPlan(
+    internal static RenderFontPlan ResolveRenderFontPlan(
         string text,
         string defaultFontId,
         EmbeddedFontInfo fonts,

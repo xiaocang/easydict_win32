@@ -137,6 +137,22 @@ public class FormulaAwareTextReconstructorTests
     }
 
     [Fact]
+    public void ShouldUseLetterBasedBlockText_ReturnsTrue_WhenTupleContinuationEvidenceIsPresent()
+    {
+        FormulaAwareTextReconstructor
+            .ShouldUseLetterBasedBlockText(
+                [
+                    "Here, the encoder maps an input sequence of symbol representations (x",
+                    ", ..., xn)",
+                    "to a sequence of continuous representations z = (z",
+                    ", ..., zn)"
+                ],
+                formulaChars: null,
+                characterLevelProtectedText: null)
+            .Should().BeTrue();
+    }
+
+    [Fact]
     public void ShouldUseLetterBasedBlockText_ReturnsFalse_WhenNoEvidence()
     {
         FormulaAwareTextReconstructor
@@ -182,6 +198,18 @@ public class FormulaAwareTextReconstructorTests
     {
         FormulaAwareTextReconstructor.IsReconstructionQualityAcceptable(reconstructed, fallback)
             .Should().Be(expected);
+    }
+
+    [Fact]
+    public void IsReconstructionQualityAcceptable_ReturnsTrue_WhenTupleAnchorsAreRestoredDespiteLowerSpaceDensity()
+    {
+        const string fallback =
+            "Here, the encoder ma ps an in put sequence of symbol representations x1 ... xn to a sequence of continuous representations z = z1 ... zn";
+        const string reconstructed =
+            "Here, the encoder maps an input sequence of symbol representations (x1, ..., xn) to a sequence of continuous representations z = (z1, ..., zn)";
+
+        FormulaAwareTextReconstructor.IsReconstructionQualityAcceptable(reconstructed, fallback)
+            .Should().BeTrue();
     }
 
     [Fact]

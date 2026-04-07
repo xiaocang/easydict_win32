@@ -137,6 +137,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         var totalTruncatedBlocks = 0;
         var pageMetrics = new Dictionary<int, BackfillPageMetrics>();
         var blockIssues = new List<BackfillBlockIssue>();
+        var usedGlyphsByFontXref = new Dictionary<int, Dictionary<ushort, char>>();
 
         // Build lookup: page number → translated blocks
         var translatedBlocksByPage = BuildTranslatedBlockLookup(checkpoint);
@@ -162,6 +163,7 @@ public sealed class MuPdfExportService : IDocumentExportService
                 totalMissingBoundingBoxes += pageResult.MissingBoundingBoxBlocks;
                 totalShrinkFontBlocks += pageResult.ShrinkFontBlocks;
                 totalTruncatedBlocks += pageResult.TruncatedBlocks;
+                MergeUsedGlyphs(usedGlyphsByFontXref, pageResult.UsedGlyphs);
                 pageMetrics[pageNumber] = new BackfillPageMetrics
                 {
                     CandidateBlocks = blocks.Count,
@@ -203,6 +205,15 @@ public sealed class MuPdfExportService : IDocumentExportService
         catch (Exception ex)
         {
             Debug.WriteLine($"[MuPdfExport] SubsetFonts failed: {ex.Message}");
+        }
+
+        try
+        {
+            AttachToUnicodeMaps(muDoc, usedGlyphsByFontXref);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MuPdfExport] AttachToUnicodeMaps failed: {ex.Message}");
         }
 
         muDoc.Save(outputPath);
@@ -261,6 +272,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         var shrinkFontBlocks = 0;
         var truncatedBlocks = 0;
         var blockIssues = new List<BackfillBlockIssue>();
+        var usedGlyphs = new List<UsedGlyph>();
 
         foreach (var plannedBlock in pagePlan)
         {
@@ -302,6 +314,8 @@ public sealed class MuPdfExportService : IDocumentExportService
             opsText.Append(blockRenderResult.Operations);
             AppendEraseOperations(opsErase, block, embeddedFonts.PrimaryFontIsCjk, plannedBlock.EraseRects);
             rendered++;
+            if (blockRenderResult.UsedGlyphs is { Count: > 0 })
+                usedGlyphs.AddRange(blockRenderResult.UsedGlyphs);
 
             if (blockRenderResult.WasShrunk)
             {
@@ -348,7 +362,87 @@ public sealed class MuPdfExportService : IDocumentExportService
             missingBoundingBoxes,
             shrinkFontBlocks,
             truncatedBlocks,
-            blockIssues);
+            blockIssues,
+            usedGlyphs);
+    }
+
+    private static void MergeUsedGlyphs(
+        IDictionary<int, Dictionary<ushort, char>> destination,
+        IReadOnlyList<UsedGlyph>? usedGlyphs)
+    {
+        if (usedGlyphs is null || usedGlyphs.Count == 0)
+            return;
+
+        foreach (var usedGlyph in usedGlyphs)
+        {
+            if (usedGlyph.FontXref <= 0)
+                continue;
+
+            if (!destination.TryGetValue(usedGlyph.FontXref, out var glyphs))
+            {
+                glyphs = new Dictionary<ushort, char>();
+                destination[usedGlyph.FontXref] = glyphs;
+            }
+
+            glyphs[usedGlyph.GlyphId] = usedGlyph.UnicodeChar;
+        }
+    }
+
+    private static void AttachToUnicodeMaps(
+        Document muDoc,
+        IReadOnlyDictionary<int, Dictionary<ushort, char>> usedGlyphsByFontXref)
+    {
+        foreach (var (fontXref, glyphMap) in usedGlyphsByFontXref)
+        {
+            if (fontXref <= 0 || glyphMap.Count == 0)
+                continue;
+
+            var cmapStream = BuildToUnicodeCMap(fontXref, glyphMap);
+            var cmapXref = muDoc.GetNewXref();
+            muDoc.UpdateObject(cmapXref, "<<>>");
+            muDoc.UpdateStream(cmapXref, Encoding.ASCII.GetBytes(cmapStream));
+            muDoc.SetKeyXRef(fontXref, "ToUnicode", $"{cmapXref} 0 R");
+        }
+    }
+
+    private static string BuildToUnicodeCMap(
+        int fontXref,
+        IReadOnlyDictionary<ushort, char> glyphMap)
+    {
+        var entries = glyphMap
+            .OrderBy(entry => entry.Key)
+            .ToList();
+
+        var cmapName = $"F{fontXref}ToUnicode";
+        var sb = new StringBuilder();
+        sb.Append("/CIDInit /ProcSet findresource begin\n");
+        sb.Append("12 dict begin\n");
+        sb.Append("begincmap\n");
+        sb.Append("/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> def\n");
+        sb.Append($"/CMapName /{cmapName} def\n");
+        sb.Append("/CMapType 2 def\n");
+        sb.Append("1 begincodespacerange\n");
+        sb.Append("<0000> <FFFF>\n");
+        sb.Append("endcodespacerange\n");
+
+        const int chunkSize = 100;
+        for (var index = 0; index < entries.Count; index += chunkSize)
+        {
+            var end = Math.Min(index + chunkSize, entries.Count);
+            sb.Append($"{end - index} beginbfchar\n");
+            for (var j = index; j < end; j++)
+            {
+                var (gid, unicodeChar) = entries[j];
+                sb.AppendFormat("<{0:X4}> <{1:X4}>\n", gid, (int)unicodeChar);
+            }
+            sb.Append("endbfchar\n");
+        }
+
+        sb.Append("endcmap\n");
+        sb.Append("CMapName currentdict /CMap defineresource pop\n");
+        sb.Append("end\n");
+        sb.Append("end\n");
+        return sb.ToString();
     }
 
     /// <summary>
@@ -440,6 +534,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         if (wrappedLines.Count == 0)
             return new BlockTextRenderResult(string.Empty, chosenFontSize, 0, WasShrunk: fitResult.WasShrunk, WasTruncated: wasTruncated);
 
+        var usedGlyphs = new List<UsedGlyph>();
         var operations = BuildBlockTextOperationsFromLines(
             wrappedLines,
             chosenFontSize,
@@ -448,14 +543,16 @@ public sealed class MuPdfExportService : IDocumentExportService
             textStyle,
             bbox,
             renderLineRects,
-            lineHeight);
+            lineHeight,
+            usedGlyphs);
 
         return new BlockTextRenderResult(
             operations,
             chosenFontSize,
             wrappedLines.Count,
             WasShrunk: chosenFontSize < originalFontSize - 0.01,
-            WasTruncated: wasTruncated);
+            WasTruncated: wasTruncated,
+            UsedGlyphs: usedGlyphs);
     }
 
     internal static BlockTextRenderResult RenderPlannedBlockTextOperations(
@@ -469,7 +566,8 @@ public sealed class MuPdfExportService : IDocumentExportService
             plannedBlock.PlannedChosenFontSize,
             plannedBlock.PlannedLinesRendered,
             plannedBlock.PlannedWasShrunk,
-            plannedBlock.PlannedWasTruncated);
+            plannedBlock.PlannedWasTruncated,
+            plannedBlock.UsedGlyphs);
     }
 
     private static string BuildBlockTextOperationsFromLines(
@@ -480,7 +578,8 @@ public sealed class MuPdfExportService : IDocumentExportService
         BlockTextStyle? textStyle,
         BlockRect bbox,
         IReadOnlyList<BlockRect>? renderLineRects,
-        double lineHeight)
+        double lineHeight,
+        List<UsedGlyph>? usedGlyphs = null)
     {
         var sb = new StringBuilder();
 
@@ -520,7 +619,8 @@ public sealed class MuPdfExportService : IDocumentExportService
                 baselineY,
                 chosenFontSize,
                 renderFont,
-                fonts);
+                fonts,
+                usedGlyphs);
         }
 
         if (hasColor)
@@ -680,7 +780,8 @@ public sealed class MuPdfExportService : IDocumentExportService
         double baselineY,
         double fontSize,
         RenderFontPlan renderFont,
-        EmbeddedFontInfo fonts)
+        EmbeddedFontInfo fonts,
+        List<UsedGlyph>? usedGlyphs = null)
     {
         var currentX = startX;
         StringBuilder? runHex = null;
@@ -768,6 +869,9 @@ public sealed class MuPdfExportService : IDocumentExportService
                 FlushRun();
                 continue;
             }
+
+            if (glyph.FontXref > 0 && glyph.GlyphId.HasValue)
+                usedGlyphs?.Add(new UsedGlyph(glyph.FontXref, glyph.GlyphId.Value, glyph.UnicodeChar));
 
             AppendGlyphRun(glyph, charFontSize, charY);
         }
@@ -891,6 +995,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             PlannedWasShrunk = false,
             PlannedWasTruncated = false,
             RenderableText = PrepareRenderableTextForPdf(block.TranslatedText),
+            UsedGlyphs = null,
         };
     }
 
@@ -935,6 +1040,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             PlannedWasShrunk = plannedTextLayout.WasShrunk,
             PlannedWasTruncated = plannedTextLayout.WasTruncated,
             RenderableText = plannedTextLayout.RenderableText,
+            UsedGlyphs = plannedTextLayout.UsedGlyphs,
         };
     }
 
@@ -1026,6 +1132,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         var renderBoundsBottomUp = ToBottomUpRect(pageHeightPoints, GetBounds(renderRectsTopLeft));
         var renderLineRects = ToBottomUpRects(pageHeightPoints, renderRectsTopLeft)
             ?? Array.Empty<BlockRect>();
+        var usedGlyphs = new List<UsedGlyph>();
         var operations = BuildBlockTextOperationsFromLines(
             wrappedLines,
             chosenFontSize,
@@ -1034,7 +1141,8 @@ public sealed class MuPdfExportService : IDocumentExportService
             block.TextStyle,
             renderBoundsBottomUp,
             renderLineRects,
-            lineHeight);
+            lineHeight,
+            usedGlyphs);
 
         return new PlannedRetryTextLayout
         {
@@ -1046,6 +1154,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             WasShrunk = chosenFontSize < originalFontSize - 0.01,
             WasTruncated = wasTruncated,
             RenderableText = renderableText,
+            UsedGlyphs = usedGlyphs,
         };
     }
 
@@ -1469,7 +1578,10 @@ public sealed class MuPdfExportService : IDocumentExportService
     private readonly record struct ResolvedGlyph(
         string FontId,
         string Hex,
-        double Advance);
+        double Advance,
+        ushort? GlyphId,
+        char UnicodeChar,
+        int FontXref);
 
     private static RenderFontPlan ResolveRenderFontPlan(
         string text,
@@ -1484,7 +1596,8 @@ public sealed class MuPdfExportService : IDocumentExportService
             defaultFontId,
             fonts.PrimaryGlyphMap,
             fonts.PrimaryAdvanceWidths,
-            fonts.PrimaryUnitsPerEm);
+            fonts.PrimaryUnitsPerEm,
+            fonts.PrimaryFontXref);
 
         if (usesSourceFallback &&
             IsLatinDominant(text) &&
@@ -1555,7 +1668,8 @@ public sealed class MuPdfExportService : IDocumentExportService
                 fonts.NotoFontId,
                 fonts.NotoGlyphMap,
                 fonts.NotoAdvanceWidths,
-                fonts.NotoUnitsPerEm);
+                fonts.NotoUnitsPerEm,
+                fonts.NotoFontXref);
 
             return TryResolveFaceGlyph(ch, charFontSize, notoFace, 0.6, out glyph);
         }
@@ -1585,7 +1699,10 @@ public sealed class MuPdfExportService : IDocumentExportService
             glyph = new ResolvedGlyph(
                 face.FontId,
                 gid.ToString("X4"),
-                charFontSize * GetGlyphAdvanceEm(gid, face.AdvanceWidths, face.UnitsPerEm, fallbackEm));
+                charFontSize * GetGlyphAdvanceEm(gid, face.AdvanceWidths, face.UnitsPerEm, fallbackEm),
+                gid,
+                ch,
+                face.FontXref);
             return true;
         }
 
@@ -1598,7 +1715,10 @@ public sealed class MuPdfExportService : IDocumentExportService
         glyph = new ResolvedGlyph(
             face.FontId,
             ((int)ch).ToString("X4"),
-            charFontSize * (IsCjkCharacter(ch) ? 1.0 : fallbackEm));
+            charFontSize * (IsCjkCharacter(ch) ? 1.0 : fallbackEm),
+            null,
+            ch,
+            face.FontXref);
         return true;
     }
 
@@ -1608,7 +1728,10 @@ public sealed class MuPdfExportService : IDocumentExportService
             ((int)ch).ToString("X2"),
             charFontSize * (ch == ' '
                 ? GlyphAdvanceMeasurer.SpaceAdvanceEm
-                : GlyphAdvanceMeasurer.CjkPrimaryAsciiAdvanceEm));
+                : GlyphAdvanceMeasurer.CjkPrimaryAsciiAdvanceEm),
+            null,
+            ch,
+            0);
 
     private static bool ShouldUseLatinFaceForAscii(char ch, RenderFontPlan renderFont) =>
         renderFont.LatinFace is not null && IsAscii(ch);
@@ -1746,6 +1869,8 @@ public sealed class MuPdfExportService : IDocumentExportService
     {
         string? primaryFontId = null;
         string? notoFontId = null;
+        var primaryFontXref = 0;
+        var notoFontXref = 0;
         IReadOnlyDictionary<char, ushort>? primaryGlyphMap = null;
         IReadOnlyDictionary<char, ushort>? notoGlyphMap = null;
         IReadOnlyDictionary<ushort, ushort>? primaryAdvanceWidths = null;
@@ -1766,6 +1891,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             {
                 var xref = muPage.InsertFont(fontPaths.PrimaryFontName, fontPaths.PrimaryFontPath);
                 primaryFontId = fontPaths.PrimaryFontName;
+                primaryFontXref = xref;
                 Debug.WriteLine($"[MuPdfExport] Embedded primary font: {fontPaths.PrimaryFontName} (xref={xref})");
             }
             catch (Exception ex)
@@ -1794,6 +1920,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             {
                 var xref = muPage.InsertFont(NotoFontName, fontPaths.NotoFontPath);
                 notoFontId = NotoFontName;
+                notoFontXref = xref;
                 Debug.WriteLine($"[MuPdfExport] Embedded Noto font (xref={xref})");
             }
             catch (Exception ex)
@@ -1823,7 +1950,9 @@ public sealed class MuPdfExportService : IDocumentExportService
             primaryFontIsCjk,
             primaryAdvanceWidths, primaryUnitsPerEm,
             notoAdvanceWidths, notoUnitsPerEm,
-            latinFontFaces);
+            latinFontFaces,
+            primaryFontXref,
+            notoFontXref);
     }
 
     private static void TryEmbedLatinSystemFont(
@@ -1838,9 +1967,10 @@ public sealed class MuPdfExportService : IDocumentExportService
         if (!File.Exists(fontPath))
             return;
 
+        var xref = 0;
         try
         {
-            var xref = muPage.InsertFont(fontId, fontPath);
+            xref = muPage.InsertFont(fontId, fontPath);
             Debug.WriteLine($"[MuPdfExport] Embedded Latin fallback font: {fontId} (xref={xref})");
         }
         catch (Exception ex)
@@ -1854,7 +1984,8 @@ public sealed class MuPdfExportService : IDocumentExportService
             fontId,
             metrics?.GlyphMap,
             metrics?.AdvanceWidths,
-            metrics?.UnitsPerEm ?? 1000);
+            metrics?.UnitsPerEm ?? 1000,
+            xref);
     }
 
     /// <summary>
@@ -2037,14 +2168,21 @@ public sealed class MuPdfExportService : IDocumentExportService
         int MissingBoundingBoxBlocks,
         int ShrinkFontBlocks,
         int TruncatedBlocks,
-        IReadOnlyList<BackfillBlockIssue> BlockIssues);
+        IReadOnlyList<BackfillBlockIssue> BlockIssues,
+        IReadOnlyList<UsedGlyph> UsedGlyphs);
 
     internal sealed record BlockTextRenderResult(
         string Operations,
         double ChosenFontSize,
         int LinesRendered,
         bool WasShrunk,
-        bool WasTruncated);
+        bool WasTruncated,
+        IReadOnlyList<UsedGlyph>? UsedGlyphs = null);
+
+    internal readonly record struct UsedGlyph(
+        int FontXref,
+        ushort GlyphId,
+        char UnicodeChar);
 
     internal sealed record TranslatedBlockData
     {
@@ -2081,6 +2219,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         public bool PlannedWasShrunk { get; init; }
         public bool PlannedWasTruncated { get; init; }
         public string? RenderableText { get; init; }
+        public IReadOnlyList<UsedGlyph>? UsedGlyphs { get; init; }
     }
 
     internal sealed record PlannedRetryTextLayout
@@ -2093,6 +2232,7 @@ public sealed class MuPdfExportService : IDocumentExportService
         public bool WasShrunk { get; init; }
         public bool WasTruncated { get; init; }
         public required string RenderableText { get; init; }
+        public IReadOnlyList<UsedGlyph>? UsedGlyphs { get; init; }
     }
 
     internal readonly record struct LatinFontKey(LatinFontFamily Family, LatinFontVariant Variant);
@@ -2101,7 +2241,8 @@ public sealed class MuPdfExportService : IDocumentExportService
         string FontId,
         IReadOnlyDictionary<char, ushort>? GlyphMap,
         IReadOnlyDictionary<ushort, ushort>? AdvanceWidths,
-        ushort UnitsPerEm);
+        ushort UnitsPerEm,
+        int FontXref = 0);
 
     internal sealed record EmbeddedFontInfo(
         string PrimaryFontId,
@@ -2113,7 +2254,9 @@ public sealed class MuPdfExportService : IDocumentExportService
         ushort PrimaryUnitsPerEm = 1000,
         IReadOnlyDictionary<ushort, ushort>? NotoAdvanceWidths = null,
         ushort NotoUnitsPerEm = 1000,
-        IReadOnlyDictionary<LatinFontKey, EmbeddedFontFace>? LatinFontFaces = null);
+        IReadOnlyDictionary<LatinFontKey, EmbeddedFontFace>? LatinFontFaces = null,
+        int PrimaryFontXref = 0,
+        int NotoFontXref = 0);
 
     internal enum LatinFontFamily
     {

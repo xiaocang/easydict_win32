@@ -52,6 +52,10 @@ public static class FormulaAwareTextReconstructor
         @"([“‘])\s+", RegexOptions.Compiled);
     private static readonly Regex CollapseWhitespaceRegex = new(
         @"\s{2,}", RegexOptions.Compiled);
+    private static readonly Regex TupleSequenceAnchorRegex = new(
+        @"\([A-Za-z]1", RegexOptions.Compiled);
+    private static readonly Regex EquationTupleAnchorRegex = new(
+        @"[A-Za-z]=\([A-Za-z]1", RegexOptions.Compiled);
 
     /// <summary>
     /// Returns true when the block's line texts contain enough evidence (math fonts,
@@ -75,7 +79,9 @@ public static class FormulaAwareTextReconstructor
 
         for (var i = 0; i < lineTexts.Count; i++)
         {
-            if (LineContainsScriptHint(lineTexts[i]))
+            if (LineContainsScriptHint(lineTexts[i]) ||
+                LooksLikeFormulaContinuationText(lineTexts[i]) ||
+                PreviousLineLikelyExpectsFormulaTail(lineTexts[i]))
             {
                 return true;
             }
@@ -129,9 +135,11 @@ public static class FormulaAwareTextReconstructor
         if (fallbackSpaces <= 2)
             return true;
 
+        var restoresTupleOrEquationAnchors = RestoresTupleOrEquationAnchors(reconstructedText, fallbackText);
+
         // Check 1: overall space density
         var reconstructedSpaces = reconstructedText.Count(c => c == ' ');
-        if (reconstructedSpaces < fallbackSpaces * 0.8)
+        if (reconstructedSpaces < fallbackSpaces * 0.8 && !restoresTupleOrEquationAnchors)
             return false;
 
         // Check 2: detect merged-word artifacts — abnormally long Latin-only tokens
@@ -225,6 +233,19 @@ public static class FormulaAwareTextReconstructor
     private static bool LineContainsScriptHint(string text) =>
         !string.IsNullOrWhiteSpace(text) &&
         (text.Contains('_', StringComparison.Ordinal) || text.Contains('^', StringComparison.Ordinal));
+
+    private static bool RestoresTupleOrEquationAnchors(string reconstructedText, string fallbackText)
+    {
+        var reconstructedCompact = CollapseWhitespaceRegex.Replace(reconstructedText, string.Empty);
+        var fallbackCompact = CollapseWhitespaceRegex.Replace(fallbackText, string.Empty);
+        return CountTupleOrEquationAnchors(reconstructedCompact) > CountTupleOrEquationAnchors(fallbackCompact);
+    }
+
+    private static int CountTupleOrEquationAnchors(string compactText)
+    {
+        return TupleSequenceAnchorRegex.Matches(compactText).Count +
+            EquationTupleAnchorRegex.Matches(compactText).Count;
+    }
 
     private static List<ReconstructedLetterLine> GroupLettersIntoReadingLines(IReadOnlyList<LetterGeometry> letters)
     {

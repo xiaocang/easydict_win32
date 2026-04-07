@@ -508,6 +508,44 @@ public class Page2TranslationQualityTests
         }
     }
 
+    [SkippableFact]
+    public async Task Page2_MuPdfExport_ShouldExposeReadableChineseTextToPdfPig()
+    {
+        var pdfPath = GetPdfFixturePath();
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
+        var checkpoint = BuildPage2VisualReviewCheckpoint(source, pdfPath);
+        var outputPath = Path.Combine(Path.GetTempPath(), $"page2-cjk-extractability-{Guid.NewGuid():N}.pdf");
+
+        try
+        {
+            try
+            {
+                var exportService = new MuPdfExportService();
+                exportService.Export(checkpoint, pdfPath, outputPath, DocumentOutputMode.Monolingual);
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
+            {
+                Skip.If(true, $"MuPDF unavailable: {ex.Message}");
+            }
+
+            using var outputDoc = PdfPigDocument.Open(outputPath);
+            var page2Text = Normalize(outputDoc.GetPages().Single(p => p.Number == 2).Text);
+
+            page2Text.Should().Contain("\u795E\u7ECF\u5E8F\u5217\u8F6C\u6362\u6A21\u578B");
+            page2Text.Should().Contain("\u7ED9\u5B9A z");
+            page2Text.Should().Contain("Transformer");
+            page2Text.Should().Contain("ByteNet");
+            page2Text.Should().NotContain("translated-");
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+                File.Delete(outputPath);
+        }
+    }
+
     private static async Task<(SourceDocument source, IReadOnlyList<SourceDocumentBlock> page2Blocks)>
         BuildPage2SourceBlocksAsync(string pdfPath)
     {
@@ -852,6 +890,18 @@ public class Page2TranslationQualityTests
 
         if (normalized.Contains("Transformer", StringComparison.Ordinal))
             return "\u800C\u5728 Transformer \u4E2D\uFF0C\u8FD9\u4E00\u64CD\u4F5C\u88AB\u51CF\u5C11\u5230\u56FA\u5B9A\u6B21\u6570\u3002";
+
+        if (normalized.Contains("Attention mechanisms have become an integral part", StringComparison.Ordinal))
+            return "\u6CE8\u610F\u529B\u673A\u5236\u5DF2\u7ECF\u6210\u4E3A\u5404\u7C7B\u5E8F\u5217\u5EFA\u6A21\u4E0E\u8F6C\u6362\u4EFB\u52A1\u7684\u91CD\u8981\u7EC4\u6210\u90E8\u5206\u3002";
+
+        if (normalized.Contains("In this work we propose the Transformer", StringComparison.Ordinal))
+            return "\u5728\u8FD9\u9879\u5DE5\u4F5C\u4E2D\uFF0C\u6211\u4EEC\u63D0\u51FA\u4E86 Transformer \u8FD9\u4E00\u6A21\u578B\u67B6\u6784\u3002";
+
+        if (normalized.Contains("The Transformer allows for significantly more parallelization", StringComparison.Ordinal))
+            return "Transformer \u80FD\u591F\u5B9E\u73B0\u66F4\u9AD8\u7684\u5E76\u884C\u5316\u7A0B\u5EA6\uFF0C\u5E76\u5728\u7FFB\u8BD1\u8D28\u91CF\u4E0A\u53D6\u5F97\u4E86\u65B0\u7684\u6700\u4F18\u7ED3\u679C\u3002";
+
+        if (normalized.Contains("The goal of reducing sequential computation also forms the foundation", StringComparison.Ordinal))
+            return "\u964D\u4F4E\u987A\u5E8F\u8BA1\u7B97\u7684\u76EE\u6807\u4E5F\u6784\u6210\u4E86 Extended Neural GPU\u3001ByteNet \u4E0E ConvS2S \u7B49\u6A21\u578B\u7684\u57FA\u7840\u3002";
 
         if (normalized.Contains("Recurrent models typically factor computation along the symbol positions", StringComparison.Ordinal))
             return "\u5FAA\u73AF\u6A21\u578B\u901A\u5E38\u6CBF\u7740\u8F93\u5165\u548C\u8F93\u51FA\u5E8F\u5217\u7684\u7B26\u53F7\u4F4D\u7F6E\u8FDB\u884C\u8BA1\u7B97\u5206\u89E3\u3002";

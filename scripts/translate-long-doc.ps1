@@ -10,6 +10,7 @@ param(
     [string]$OutputMode,
     [string]$Layout,
     [string]$PdfExportMode,
+    [int]$Page,
     [string]$PageRange,
     [int]$MaxConcurrency,
     [string]$VisionEndpoint,
@@ -17,6 +18,8 @@ param(
     [string]$VisionModel,
     [switch]$ListServices
 )
+
+$ErrorActionPreference = "Stop"
 
 $projectPath = Join-Path $PSScriptRoot "..\dotnet\src\Easydict.WinUI\Easydict.WinUI.csproj"
 $arguments = @(
@@ -34,6 +37,8 @@ if ($ListServices) {
 else {
     if (-not $InputFile) { throw "InputFile is required unless -ListServices is used." }
     if (-not $TargetLanguage) { throw "TargetLanguage is required unless -ListServices is used." }
+    if ($PSBoundParameters.ContainsKey("Page") -and $PageRange) { throw "Use either -Page or -PageRange, not both." }
+    if ($PSBoundParameters.ContainsKey("Page") -and $Page -lt 1) { throw "Page must be >= 1." }
 
     $arguments += @("--input", $InputFile, "--target-language", $TargetLanguage)
 
@@ -44,6 +49,7 @@ else {
     if ($OutputMode) { $arguments += @("--output-mode", $OutputMode) }
     if ($Layout) { $arguments += @("--layout", $Layout) }
     if ($PdfExportMode) { $arguments += @("--pdf-export-mode", $PdfExportMode) }
+    if ($PSBoundParameters.ContainsKey("Page")) { $arguments += @("--page", $Page) }
     if ($PageRange) { $arguments += @("--page-range", $PageRange) }
     if ($PSBoundParameters.ContainsKey("MaxConcurrency")) { $arguments += @("--max-concurrency", $MaxConcurrency) }
     if ($VisionEndpoint) { $arguments += @("--vision-endpoint", $VisionEndpoint) }

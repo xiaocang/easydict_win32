@@ -1,10 +1,6 @@
-using System;
-using System.Linq;
-using System.Threading;
 using Microsoft.UI.Dispatching;
 using Microsoft.Windows.AppLifecycle;
 using Easydict.WinUI.Services;
-using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI;
 

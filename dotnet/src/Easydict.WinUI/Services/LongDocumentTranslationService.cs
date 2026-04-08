@@ -63,6 +63,7 @@ public sealed class LongDocumentTranslationCheckpoint
     public required LongDocumentInputMode InputMode { get; init; }
     public string? SourceFilePath { get; init; }
     public Language? TargetLanguage { get; init; }
+    public string? PageRange { get; init; }
     public required List<string> SourceChunks { get; init; }
     public required List<LongDocumentChunkMetadata> ChunkMetadata { get; init; }
     public required Dictionary<int, string> TranslatedChunks { get; init; }
@@ -221,7 +222,8 @@ public sealed class LongDocumentTranslationService : IDisposable
             sourceFilePath,
             to,
             sourceDocument,
-            coreResult);
+            coreResult,
+            pageRange);
 
         // Try to resolve failed chunks from persistent cache before retrying
         if (SettingsService.Instance.EnableTranslationCache && checkpoint.FailedChunkIndexes.Count > 0)
@@ -273,7 +275,8 @@ public sealed class LongDocumentTranslationService : IDisposable
         string sourceFilePath,
         Language targetLanguage,
         SourceDocument sourceDocument,
-        CoreLongDocumentTranslationResult coreResult)
+        CoreLongDocumentTranslationResult coreResult,
+        string? pageRange = null)
     {
         var allBlocks = coreResult.Pages
             .SelectMany(page => page.Blocks.Select(block => new
@@ -304,6 +307,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             InputMode = mode,
             SourceFilePath = sourceFilePath,
             TargetLanguage = targetLanguage,
+            PageRange = pageRange,
             SourceChunks = allBlocks.Select(item => item.Block.OriginalText).ToList(),
             ChunkMetadata = allBlocks
                 .Select((item, index) =>

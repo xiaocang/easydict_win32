@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -63,18 +62,17 @@ internal static class LongDocumentCliCommand
         new("EASYDICT_ENABLE_TRANSLATION_CACHE", nameof(SettingsService.EnableTranslationCache)),
     ];
 
-    private static readonly Dictionary<string, Language> LanguageTokens = BuildLanguageTokens();
+    private static readonly Dictionary<string, Language> LanguageAliases = BuildLanguageAliases();
 
-    internal static bool IsCommand(string[] args) =>
-        args.Any(arg => string.Equals(arg, "--translate-long-doc", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(arg, "translate-long-doc", StringComparison.OrdinalIgnoreCase));
+    internal static bool IsCommand(string[] args) => args.Any(IsCommandToken);
+
+    private static bool IsCommandToken(string arg) =>
+        string.Equals(arg, "--translate-long-doc", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(arg, "translate-long-doc", StringComparison.OrdinalIgnoreCase);
 
     internal static async Task<int> RunAsync(string[] args)
     {
-        var filteredArgs = args
-            .Where(arg => !string.Equals(arg, "--translate-long-doc", StringComparison.OrdinalIgnoreCase) &&
-                          !string.Equals(arg, "translate-long-doc", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var filteredArgs = args.Where(arg => !IsCommandToken(arg)).ToArray();
 
         if (filteredArgs.Length == 0 || filteredArgs.Any(arg => arg is "-h" or "--help"))
         {
@@ -103,7 +101,7 @@ internal static class LongDocumentCliCommand
                 : LoadEnvFile(options.EnvFile);
 
             ApplyEnvironmentVariables(envOverrides);
-            ApplyEnvironmentOverrides(settings, CaptureEnvironmentSnapshot());
+            ApplyEnvironmentOverrides(settings);
             ApplyOptionOverrides(settings, options);
 
             var manager = TranslationManagerService.Instance.Manager;
@@ -131,11 +129,16 @@ internal static class LongDocumentCliCommand
             try
             {
                 var serviceId = ResolveServiceId(manager, options.ServiceId ?? GetEnvironmentValue("EASYDICT_SERVICE_ID", "LONGDOC_SERVICE_ID", "SERVICE_ID"));
-                var layoutMode = await ResolveLayoutModeAsync(inputMode, options, settings, cts.Token).ConfigureAwait(false);
                 var outputMode = ParseDocumentOutputMode(options.OutputMode ?? settings.DocumentOutputMode);
                 var pdfExportMode = ParsePdfExportMode(options.PdfExportMode);
 
-                await EnsureFontReadyAsync(inputMode, options.TargetLanguage, cts.Token).ConfigureAwait(false);
+                using var translator = new LongDocumentTranslationService();
+
+                // Layout model and CJK font downloads are independent network IO — overlap them.
+                var layoutTask = ResolveLayoutModeAsync(translator, inputMode, options, settings, cts.Token);
+                var fontTask = EnsureFontReadyAsync(inputMode, options.TargetLanguage, cts.Token);
+                await Task.WhenAll(layoutTask, fontTask).ConfigureAwait(false);
+                var layoutMode = await layoutTask.ConfigureAwait(false);
 
                 Console.WriteLine($"Input: {inputPath}");
                 Console.WriteLine($"Output: {outputPath}");
@@ -146,7 +149,6 @@ internal static class LongDocumentCliCommand
                 Console.WriteLine($"Output mode: {outputMode}");
                 Console.WriteLine();
 
-                using var translator = new LongDocumentTranslationService();
                 var reporter = new ConsoleProgressReporter();
 
                 var result = await translator.TranslateToPdfAsync(
@@ -266,6 +268,8 @@ internal static class LongDocumentCliCommand
                     pdfExportMode = ReadValue(args, ref i, arg);
                     break;
                 case "--page-range":
+                case "--pages":
+                case "--page":
                     pageRange = ReadValue(args, ref i, arg);
                     break;
                 case "--max-concurrency":
@@ -349,45 +353,51 @@ internal static class LongDocumentCliCommand
 
     private static bool TryParseLanguage(string rawValue, bool allowAuto, out Language language)
     {
-        var normalized = NormalizeToken(rawValue);
-        if (LanguageTokens.TryGetValue(normalized, out language))
+        var trimmed = (rawValue ?? string.Empty).Trim();
+        if (trimmed.Length == 0)
         {
-            if (!allowAuto && language == Language.Auto)
-                return false;
+            language = default;
+            return false;
+        }
 
+        if (trimmed.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            language = Language.Auto;
+            return allowAuto;
+        }
+
+        // Standard short codes (zh, zh-cn, en, ja, ...)
+        var fromCode = LanguageExtensions.FromCode(trimmed);
+        if (fromCode != Language.Auto)
+        {
+            language = fromCode;
             return true;
         }
+
+        // Friendly aliases and enum names
+        if (LanguageAliases.TryGetValue(NormalizeToken(trimmed), out language))
+            return allowAuto || language != Language.Auto;
 
         language = default;
         return false;
     }
 
-    private static Dictionary<string, Language> BuildLanguageTokens()
+    private static Dictionary<string, Language> BuildLanguageAliases()
     {
-        var result = new Dictionary<string, Language>(KeyComparer);
+        var result = new Dictionary<string, Language>(KeyComparer)
+        {
+            ["chinese"] = Language.SimplifiedChinese,
+            ["simplifiedchinese"] = Language.SimplifiedChinese,
+            ["traditionalchinese"] = Language.TraditionalChinese,
+            ["classicalchinese"] = Language.ClassicalChinese,
+            ["tagalog"] = Language.Filipino,
+        };
+
+        // Enum names: english, japanese, simplifiedchinese, ...
         foreach (Language language in Enum.GetValues(typeof(Language)))
-        {
-            AddLanguageToken(result, language.ToCode(), language);
-            AddLanguageToken(result, language.ToIso639(), language);
-            AddLanguageToken(result, language.ToString(), language);
-            AddLanguageToken(result, language.GetDisplayName(), language);
-        }
+            result[NormalizeToken(language.ToString())] = language;
 
-        AddLanguageToken(result, "chinese", Language.SimplifiedChinese);
-        AddLanguageToken(result, "simplified-chinese", Language.SimplifiedChinese);
-        AddLanguageToken(result, "traditional-chinese", Language.TraditionalChinese);
-        AddLanguageToken(result, "classical-chinese", Language.ClassicalChinese);
-        AddLanguageToken(result, "tagalog", Language.Filipino);
         return result;
-    }
-
-    private static void AddLanguageToken(IDictionary<string, Language> tokens, string rawToken, Language language)
-    {
-        var normalized = NormalizeToken(rawToken);
-        if (!string.IsNullOrWhiteSpace(normalized))
-        {
-            tokens[normalized] = language;
-        }
     }
 
     private static string NormalizeToken(string? value)
@@ -489,44 +499,37 @@ internal static class LongDocumentCliCommand
         }
     }
 
-    private static Dictionary<string, string> CaptureEnvironmentSnapshot()
+    private static readonly Dictionary<string, PropertyInfo> SettingsPropertyCache = BuildSettingsPropertyCache();
+
+    private static Dictionary<string, PropertyInfo> BuildSettingsPropertyCache()
     {
-        var snapshot = new Dictionary<string, string>(KeyComparer);
-        foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        var cache = new Dictionary<string, PropertyInfo>(KeyComparer);
+        foreach (var binding in EnvAliasBindings)
         {
-            if (entry.Key is string key && entry.Value is string value)
-            {
-                snapshot[key] = value;
-            }
-        }
-
-        foreach (var alias in EnvAliasBindings)
-        {
-            if (snapshot.TryGetValue(alias.Alias, out var rawValue))
-            {
-                snapshot[alias.PropertyName] = alias.Transform?.Invoke(rawValue) ?? rawValue;
-            }
-        }
-
-        return snapshot;
-    }
-
-    private static void ApplyEnvironmentOverrides(SettingsService settings, IReadOnlyDictionary<string, string> environment)
-    {
-        var properties = typeof(SettingsService)
-            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
-            .Where(prop => prop.CanWrite && prop.GetIndexParameters().Length == 0)
-            .ToArray();
-
-        foreach (var property in properties)
-        {
-            if (!environment.TryGetValue(property.Name, out var rawValue))
+            if (cache.ContainsKey(binding.PropertyName))
                 continue;
 
-            if (TryConvertFromString(rawValue, property.PropertyType, out var value))
-            {
+            var prop = typeof(SettingsService).GetProperty(binding.PropertyName, BindingFlags.Instance | BindingFlags.Public);
+            if (prop is not null && prop.CanWrite && prop.GetIndexParameters().Length == 0)
+                cache[binding.PropertyName] = prop;
+        }
+        return cache;
+    }
+
+    private static void ApplyEnvironmentOverrides(SettingsService settings)
+    {
+        foreach (var binding in EnvAliasBindings)
+        {
+            var rawValue = Environment.GetEnvironmentVariable(binding.Alias);
+            if (string.IsNullOrEmpty(rawValue))
+                continue;
+
+            if (!SettingsPropertyCache.TryGetValue(binding.PropertyName, out var property))
+                continue;
+
+            var transformed = binding.Transform?.Invoke(rawValue) ?? rawValue;
+            if (TryConvertFromString(transformed, property.PropertyType, out var value))
                 property.SetValue(settings, value);
-            }
         }
     }
 
@@ -605,20 +608,10 @@ internal static class LongDocumentCliCommand
             settings.LongDocMaxConcurrency = options.MaxConcurrency.Value;
 
         if (!string.IsNullOrWhiteSpace(options.OutputMode))
-            settings.DocumentOutputMode = NormalizeOutputMode(options.OutputMode);
+            settings.DocumentOutputMode = ParseDocumentOutputMode(options.OutputMode).ToString();
 
         if (!string.IsNullOrWhiteSpace(options.LayoutMode))
-            settings.LayoutDetectionMode = NormalizeLayoutMode(options.LayoutMode);
-    }
-
-    private static string NormalizeOutputMode(string rawValue)
-    {
-        return ParseDocumentOutputMode(rawValue).ToString();
-    }
-
-    private static string NormalizeLayoutMode(string rawValue)
-    {
-        return ParseLayoutDetectionMode(rawValue).ToString();
+            settings.LayoutDetectionMode = ParseLayoutDetectionMode(options.LayoutMode).ToString();
     }
 
     private static string ResolveServiceId(TranslationManager manager, string? requestedServiceId)
@@ -683,6 +676,7 @@ internal static class LongDocumentCliCommand
     }
 
     private static async Task<LayoutDetectionMode> ResolveLayoutModeAsync(
+        LongDocumentTranslationService translator,
         LongDocumentInputMode inputMode,
         Options options,
         SettingsService settings,
@@ -695,8 +689,7 @@ internal static class LongDocumentCliCommand
         if (requestedMode == LayoutDetectionMode.Heuristic)
             return requestedMode;
 
-        using var service = new LongDocumentTranslationService();
-        var downloadService = service.GetLayoutModelDownloadService();
+        var downloadService = translator.GetLayoutModelDownloadService();
 
         if (requestedMode == LayoutDetectionMode.Auto)
             return downloadService.IsReady ? LayoutDetectionMode.OnnxLocal : LayoutDetectionMode.Heuristic;
@@ -810,7 +803,8 @@ internal static class LongDocumentCliCommand
         Console.WriteLine("      --output-mode        Monolingual, Bilingual, or Both.");
         Console.WriteLine("      --layout             Auto, Heuristic, OnnxLocal, or VisionLLM.");
         Console.WriteLine("      --pdf-export-mode    ContentStreamReplacement or Overlay.");
-        Console.WriteLine("      --page-range         Page range for PDF input, e.g. 1-3,5.");
+        Console.WriteLine("      --page              Single PDF page, e.g. 2.");
+        Console.WriteLine("      --page-range        Page range for PDF input, e.g. 1-3,5.");
         Console.WriteLine("      --max-concurrency    1-16.");
         Console.WriteLine("      --vision-endpoint    Vision layout API endpoint.");
         Console.WriteLine("      --vision-api-key     Vision layout API key.");

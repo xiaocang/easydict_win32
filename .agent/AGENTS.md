@@ -43,10 +43,13 @@ dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"
 ```bash
 dotnet run --project dotnet/tools/PdfToImages -- --input <file.pdf>
 dotnet run --project dotnet/tools/PdfToImages -- --input <file.pdf> --output-dir <dir> --dpi 144 --format png
+dotnet run --project dotnet/tools/PdfToImages -- --input <file.pdf> --page 2
+dotnet run --project dotnet/tools/PdfToImages -- --input <file.pdf> --page-range 2-4,7
 ```
 - Notes:
   - Default output directory is `<pdf-name>_pages` beside the source PDF.
   - Supported formats are `png` and `jpg`.
+  - `--page` exports a single page; `--page-range` supports comma-separated pages/ranges like `1-3,5`.
   - This is a developer utility, not a user-facing packaged feature.
 
 ### Local Long-Doc Translation CLI
@@ -60,12 +63,25 @@ powershell -File scripts/translate-long-doc.ps1 `
   -TargetLanguage zh `
   -EnvFile ".env"
 ```
+```powershell
+powershell -File scripts/translate-long-doc.ps1 `
+  -InputFile "C:\path\paper.pdf" `
+  -TargetLanguage zh `
+  -Page 2
+```
+```powershell
+powershell -File scripts/translate-long-doc.ps1 `
+  -InputFile "C:\path\paper.pdf" `
+  -TargetLanguage zh `
+  -PageRange "2-4,7"
+```
 ```bash
 dotnet run --project dotnet/src/Easydict.WinUI -p:WindowsPackageType=None -p:EnableLocalDebugLongDocCli=true -- --translate-long-doc --input <file> --target-language <lang> [options]
 ```
 - Useful options:
   - `--service <id>`: choose translation service
   - `--output <path>`: override output path
+  - `--page 2`: translate a single PDF page
   - `--page-range 1-3,5`: limit PDF pages
   - `--list-services`: list available long-doc-capable services
 - Important packaging rule:

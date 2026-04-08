@@ -1,4 +1,7 @@
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using Easydict.TranslationService.LongDocument;
 using MuPDF.NET;
 
 if (args.Length == 0 || args.Any(static arg => arg is "-h" or "--help"))
@@ -26,23 +29,27 @@ try
     var document = new Document(options.InputPdf);
     try
     {
+        var selectedPages = ResolveSelectedPages(options.PageSelection, document.PageCount);
+        var pagesToRender = selectedPages ?? Enumerable.Range(1, document.PageCount).ToArray();
+
         Console.WriteLine($"Input PDF : {options.InputPdf}");
         Console.WriteLine($"Output dir: {outputDir}");
-        Console.WriteLine($"Pages     : {document.PageCount}");
+        Console.WriteLine($"Pages     : {FormatPageSummary(selectedPages, document.PageCount)}");
         Console.WriteLine($"Format    : {options.Format}");
         Console.WriteLine($"Scale     : {scale:F2} ({options.Dpi:F0} DPI)");
         Console.WriteLine();
 
-        for (var pageIndex = 0; pageIndex < document.PageCount; pageIndex++)
+        for (var i = 0; i < pagesToRender.Count; i++)
         {
-            var pageNumber = pageIndex + 1;
+            var pageNumber = pagesToRender[i];
+            var pageIndex = pageNumber - 1;
             var outputPath = Path.Combine(outputDir, $"{baseName}_p{pageNumber:D4}.{options.Format}");
 
             var page = document[pageIndex];
             var pixmap = page.GetPixmap(new Matrix((float)scale, (float)scale));
             pixmap.Save(outputPath, options.Format);
 
-            Console.WriteLine($"[{pageNumber}/{document.PageCount}] {outputPath}");
+            Console.WriteLine($"[{i + 1}/{pagesToRender.Count}] {outputPath}");
         }
     }
     finally
@@ -67,6 +74,7 @@ static Options ParseArgs(IReadOnlyList<string> args)
     double dpi = 144;
     double? scale = null;
     var format = "png";
+    string? pageSelection = null;
 
     for (var i = 0; i < args.Count; i++)
     {
@@ -91,6 +99,13 @@ static Options ParseArgs(IReadOnlyList<string> args)
             case "-f":
                 format = NormalizeFormat(ReadValue(args, ref i, arg));
                 break;
+            case "--page":
+                pageSelection = NormalizeSinglePage(ReadValue(args, ref i, arg), arg);
+                break;
+            case "--page-range":
+            case "--pages":
+                pageSelection = ReadValue(args, ref i, arg);
+                break;
             default:
                 if (arg.StartsWith("-", StringComparison.Ordinal))
                     throw new ArgumentException($"Unknown argument: {arg}");
@@ -108,7 +123,8 @@ static Options ParseArgs(IReadOnlyList<string> args)
         OutputDir: string.IsNullOrWhiteSpace(outputDir) ? null : Path.GetFullPath(outputDir),
         Dpi: dpi,
         Scale: scale,
-        Format: format);
+        Format: format,
+        PageSelection: pageSelection);
 }
 
 static string ReadValue(IReadOnlyList<string> args, ref int index, string option)
@@ -122,9 +138,7 @@ static string ReadValue(IReadOnlyList<string> args, ref int index, string option
 
 static double ParsePositiveDouble(string value, string option)
 {
-    if (!double.TryParse(value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var result) &&
-        !double.TryParse(value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out result) ||
-        result <= 0)
+    if (!double.TryParse(value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var result) || result <= 0)
         throw new ArgumentException($"{option} must be a positive number.");
 
     return result;
@@ -138,6 +152,34 @@ static string NormalizeFormat(string value) =>
         "jpeg" => "jpg",
         _ => throw new ArgumentException("Only png and jpg are supported.")
     };
+
+static string NormalizeSinglePage(string value, string option)
+{
+    if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var pageNumber) || pageNumber < 1)
+        throw new ArgumentException($"{option} must be an integer >= 1.");
+
+    return pageNumber.ToString(CultureInfo.InvariantCulture);
+}
+
+static IReadOnlyList<int>? ResolveSelectedPages(string? pageSelection, int totalPages)
+{
+    var parsed = PageRangeParser.Parse(pageSelection, totalPages);
+    if (parsed is null)
+        return null;
+
+    if (parsed.Count == 0)
+        throw new ArgumentException($"Page selection '{pageSelection}' does not match any page in this PDF.");
+
+    return parsed.OrderBy(p => p).ToArray();
+}
+
+static string FormatPageSummary(IReadOnlyList<int>? selectedPages, int totalPages)
+{
+    if (selectedPages is null)
+        return $"{totalPages} (all)";
+
+    return $"{selectedPages.Count} selected ({string.Join(", ", selectedPages)})";
+}
 
 static string BuildDefaultOutputDir(string inputPdf)
 {
@@ -157,6 +199,8 @@ static void PrintUsage()
     Console.WriteLine("      --dpi          Target DPI. Default: 144");
     Console.WriteLine("      --scale        Render scale. Overrides DPI if provided.");
     Console.WriteLine("  -f, --format       png or jpg. Default: png");
+    Console.WriteLine("      --page         Single page to export, e.g. 2.");
+    Console.WriteLine("      --page-range   Page range to export, e.g. 1-3,5.");
 }
 
 sealed record Options(
@@ -164,4 +208,5 @@ sealed record Options(
     string? OutputDir,
     double Dpi,
     double? Scale,
-    string Format);
+    string Format,
+    string? PageSelection);

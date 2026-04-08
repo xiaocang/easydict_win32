@@ -11,6 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Easydict.TranslationService\Easydict.TranslationService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="MuPDF.NET" Condition="'$(MuPdfRuntimeDir)' != ''">
       <HintPath>$(MuPdfRuntimeDir)\MuPDF.NET.dll</HintPath>
       <Private>true</Private>

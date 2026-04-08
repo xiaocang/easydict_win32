@@ -85,9 +85,11 @@ public sealed class PdfExportService : IDocumentExportService
         if (outputMode is DocumentOutputMode.Bilingual or DocumentOutputMode.Both)
         {
             bilingualPath = BuildBilingualOutputPath(outputPath);
-            ExportBilingualPdf(sourceFilePath, outputPath, bilingualPath);
+            ExportBilingualPdf(sourceFilePath, outputPath, bilingualPath, checkpoint.PageRange);
             WriteBackfillIssuesSidecar(bilingualPath, renderingMetrics.BlockIssues);
         }
+
+        PdfPageSelectionHelper.FilterPdfInPlace(outputPath, checkpoint.PageRange);
 
         // 3. Bilingual-only: delete intermediate monolingual file, return bilingual path
         if (outputMode == DocumentOutputMode.Bilingual && bilingualPath != null)
@@ -118,7 +120,11 @@ public sealed class PdfExportService : IDocumentExportService
     /// Creates a bilingual PDF by interleaving pages from the source PDF and the translated PDF.
     /// Original page 1 → Translated page 1 → Original page 2 → Translated page 2 → ...
     /// </summary>
-    internal static void ExportBilingualPdf(string sourcePdfPath, string translatedPdfPath, string bilingualOutputPath)
+    internal static void ExportBilingualPdf(
+        string sourcePdfPath,
+        string translatedPdfPath,
+        string bilingualOutputPath,
+        string? pageRange = null)
     {
         var outputDirectory = Path.GetDirectoryName(bilingualOutputPath);
         if (!string.IsNullOrWhiteSpace(outputDirectory))
@@ -130,23 +136,42 @@ public sealed class PdfExportService : IDocumentExportService
         using var translatedDoc = PdfReader.Open(translatedPdfPath, PdfDocumentOpenMode.Import);
         var bilingualDoc = new PdfDocument();
 
-        var maxPages = Math.Max(sourceDoc.PageCount, translatedDoc.PageCount);
-
-        for (var i = 0; i < maxPages; i++)
+        var selectedPages = PdfPageSelectionHelper.ResolveSelectedPages(pageRange, sourceDoc.PageCount);
+        if (selectedPages is null)
         {
-            if (i < sourceDoc.PageCount)
+            var maxPages = Math.Max(sourceDoc.PageCount, translatedDoc.PageCount);
+            for (var i = 0; i < maxPages; i++)
             {
-                bilingualDoc.AddPage(sourceDoc.Pages[i]);
-            }
+                if (i < sourceDoc.PageCount)
+                {
+                    bilingualDoc.AddPage(sourceDoc.Pages[i]);
+                }
 
-            if (i < translatedDoc.PageCount)
+                if (i < translatedDoc.PageCount)
+                {
+                    bilingualDoc.AddPage(translatedDoc.Pages[i]);
+                }
+            }
+        }
+        else
+        {
+            foreach (var pageNumber in selectedPages)
             {
-                bilingualDoc.AddPage(translatedDoc.Pages[i]);
+                var pageIndex = pageNumber - 1;
+                if (pageIndex < sourceDoc.PageCount)
+                {
+                    bilingualDoc.AddPage(sourceDoc.Pages[pageIndex]);
+                }
+
+                if (pageIndex < translatedDoc.PageCount)
+                {
+                    bilingualDoc.AddPage(translatedDoc.Pages[pageIndex]);
+                }
             }
         }
 
         // Copy bookmarks from source PDF, mapping page numbers for interleaved layout
-        CopyBookmarksForBilingual(sourceDoc, bilingualDoc);
+        CopyBookmarksForBilingual(sourceDoc, bilingualDoc, selectedPages);
 
         bilingualDoc.Save(bilingualOutputPath);
     }
@@ -155,14 +180,18 @@ public sealed class PdfExportService : IDocumentExportService
     /// Copies bookmarks from the source PDF to the bilingual PDF,
     /// adjusting page references for the interleaved layout (source page N → bilingual page 2N-1).
     /// </summary>
-    internal static void CopyBookmarksForBilingual(PdfDocument sourceDoc, PdfDocument bilingualDoc)
+    internal static void CopyBookmarksForBilingual(
+        PdfDocument sourceDoc,
+        PdfDocument bilingualDoc,
+        IReadOnlyList<int>? selectedPages = null)
     {
         try
         {
-            if (sourceDoc.Outlines.Count == 0)
+            if (sourceDoc.Outlines.Count == 0 || bilingualDoc.PageCount == 0)
                 return;
 
-            CopyOutlineLevel(sourceDoc.Outlines, bilingualDoc.Outlines, sourceDoc, bilingualDoc);
+            var pageIndexMap = BuildBilingualPageIndexMap(sourceDoc.PageCount, selectedPages);
+            CopyOutlineLevel(sourceDoc.Outlines, bilingualDoc.Outlines, sourceDoc, bilingualDoc, pageIndexMap);
         }
         catch (Exception ex)
         {
@@ -174,24 +203,23 @@ public sealed class PdfExportService : IDocumentExportService
         PdfOutlineCollection sourceOutlines,
         PdfOutlineCollection targetOutlines,
         PdfDocument sourceDoc,
-        PdfDocument bilingualDoc)
+        PdfDocument bilingualDoc,
+        IReadOnlyDictionary<int, int> pageIndexMap)
     {
         foreach (var sourceOutline in sourceOutlines)
         {
             try
             {
                 var sourcePageIndex = FindOutlinePageIndex(sourceOutline, sourceDoc);
-                if (sourcePageIndex < 0)
+                if (sourcePageIndex < 0 || !pageIndexMap.TryGetValue(sourcePageIndex, out var bilingualPageIndex))
                 {
-                    // No page reference, add as title-only bookmark
-                    var newOutline = targetOutlines.Add(sourceOutline.Title, bilingualDoc.Pages[0]);
+                    // Skip bookmarks outside the selected page subset, but keep descending into children.
                     if (sourceOutline.Outlines.Count > 0)
-                        CopyOutlineLevel(sourceOutline.Outlines, newOutline.Outlines, sourceDoc, bilingualDoc);
+                        CopyOutlineLevel(sourceOutline.Outlines, targetOutlines, sourceDoc, bilingualDoc, pageIndexMap);
                     continue;
                 }
 
                 // Map source page index to bilingual page index: source page i → bilingual page 2*i
-                var bilingualPageIndex = sourcePageIndex * 2;
                 if (bilingualPageIndex >= bilingualDoc.PageCount)
                     bilingualPageIndex = bilingualDoc.PageCount - 1;
 
@@ -199,13 +227,28 @@ public sealed class PdfExportService : IDocumentExportService
 
                 // Recurse into children
                 if (sourceOutline.Outlines.Count > 0)
-                    CopyOutlineLevel(sourceOutline.Outlines, targetOutline.Outlines, sourceDoc, bilingualDoc);
+                    CopyOutlineLevel(sourceOutline.Outlines, targetOutline.Outlines, sourceDoc, bilingualDoc, pageIndexMap);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[PdfExport] Failed to copy bookmark '{sourceOutline.Title}': {ex.Message}");
             }
         }
+    }
+
+    private static IReadOnlyDictionary<int, int> BuildBilingualPageIndexMap(int totalPages, IReadOnlyList<int>? selectedPages)
+    {
+        if (selectedPages is null)
+        {
+            return Enumerable.Range(0, totalPages)
+                .ToDictionary(pageIndex => pageIndex, pageIndex => pageIndex * 2);
+        }
+
+        return selectedPages
+            .Select((pageNumber, selectedIndex) => new { pageNumber, selectedIndex })
+            .ToDictionary(
+                entry => entry.pageNumber - 1,
+                entry => entry.selectedIndex * 2);
     }
 
     /// <summary>

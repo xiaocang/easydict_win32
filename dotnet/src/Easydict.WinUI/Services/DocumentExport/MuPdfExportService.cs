@@ -98,7 +98,20 @@ public sealed class MuPdfExportService : IDocumentExportService
             bilingualPath = Path.Combine(
                 Path.GetDirectoryName(outputPath) ?? ".",
                 Path.GetFileNameWithoutExtension(outputPath) + "_bilingual.pdf");
-            GenerateBilingualPdf(sourceFilePath, outputPath, bilingualPath);
+            GenerateBilingualPdf(sourceFilePath, outputPath, bilingualPath, checkpoint.PageRange);
+        }
+
+        PdfPageSelectionHelper.FilterPdfInPlace(outputPath, checkpoint.PageRange);
+
+        if (outputMode == DocumentOutputMode.Bilingual && bilingualPath != null)
+        {
+            try { File.Delete(outputPath); } catch { /* best-effort cleanup */ }
+            return new DocumentExportResult
+            {
+                OutputPath = bilingualPath,
+                BilingualOutputPath = bilingualPath,
+                BackfillMetrics = metrics,
+            };
         }
 
         return new DocumentExportResult
@@ -1757,44 +1770,22 @@ public sealed class MuPdfExportService : IDocumentExportService
     /// Generates a bilingual (dual) PDF by interleaving original and translated pages.
     /// Matches pdf2zh's dual PDF output: original page 1, translated page 1, original page 2, ...
     /// </summary>
-    private static void GenerateBilingualPdf(string sourcePath, string translatedPath, string outputPath)
+    private static void GenerateBilingualPdf(
+        string sourcePath,
+        string translatedPath,
+        string outputPath,
+        string? pageRange = null)
     {
-        var sourceDoc = new Document(sourcePath);
-        var translatedDoc = new Document(translatedPath);
         try
         {
-            var originalPageCount = sourceDoc.PageCount;
-
-            // Insert all translated pages after the source document
-            sourceDoc.InsertFile(translatedDoc);
-
-            // Interleave: move translated pages to be after each original page
-            // After insert, pages are: [orig1, orig2, ..., origN, trans1, trans2, ..., transN]
-            // We want: [orig1, trans1, orig2, trans2, ...]
-            for (var i = 0; i < originalPageCount; i++)
-            {
-                // The translated page at index (originalPageCount + i) needs to move to (2*i + 1)
-                var fromIndex = originalPageCount + i;
-                var toIndex = 2 * i + 1;
-                if (fromIndex != toIndex)
-                {
-                    sourceDoc.MovePage(fromIndex, toIndex);
-                }
-            }
-
-            sourceDoc.Save(outputPath);
-            Debug.WriteLine($"[MuPdfExport] Bilingual PDF saved: {outputPath} ({sourceDoc.PageCount} pages)");
+            PdfExportService.ExportBilingualPdf(sourcePath, translatedPath, outputPath, pageRange);
+            Debug.WriteLine($"[MuPdfExport] Bilingual PDF saved: {outputPath}");
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[MuPdfExport] Bilingual PDF generation failed: {ex.Message}");
             // Fallback: copy the monolingual translated PDF
             File.Copy(translatedPath, outputPath, overwrite: true);
-        }
-        finally
-        {
-            sourceDoc.Close();
-            translatedDoc.Close();
         }
     }
 

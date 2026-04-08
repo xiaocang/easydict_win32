@@ -70,6 +70,18 @@
         <BypassFrameworkInstallChecks>true</BypassFrameworkInstallChecks>
     </PropertyGroup>
 
+    <PropertyGroup>
+        <!-- Local-only debug CLI:
+             Available for unpackaged local debugging, but excluded from release/MSIX/ZIP/EXE artifacts.
+             Can be force-enabled for local runs with -p:EnableLocalDebugLongDocCli=true. -->
+        <EnableLocalDebugLongDocCli Condition="'$(EnableLocalDebugLongDocCli)' == '' and '$(Configuration)' == 'Debug' and '$(WindowsPackageType)' == 'None'">true</EnableLocalDebugLongDocCli>
+        <DefineConstants Condition="'$(EnableLocalDebugLongDocCli)' == 'true'">$(DefineConstants);LOCAL_DEBUG_LONGDOC_CLI</DefineConstants>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(EnableLocalDebugLongDocCli)' != 'true'">
+        <Compile Remove="Services\LongDocumentCliCommand.cs" />
+    </ItemGroup>
+
     <!-- Verify resources.pri is generated in both packaged and unpackaged modes -->
     <Target Name="VerifyPriFile" AfterTargets="Build">
         <Message Importance="high" Text="[Localization] Checking for resources.pri..." />

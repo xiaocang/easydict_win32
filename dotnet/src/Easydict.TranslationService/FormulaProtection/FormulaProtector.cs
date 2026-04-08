@@ -117,7 +117,8 @@ public sealed class FormulaProtector
                     TokenType = type,
                     WrappedText = wrapped,
                     SyntheticDelimiters = true,
-                    RequiresExactPreservation = FormulaDetector.RequiresExactSoftPreservation(raw, type)
+                    RequiresExactPreservation = FormulaDetector.RequiresExactSoftPreservation(raw, type),
+                    WrapperKind = SoftProtectionWrapperKind.DollarMath
                 });
                 sb.Append(wrapped);
             }

@@ -753,6 +753,64 @@ public class LongDocumentTranslationServiceTests
     }
 
     [Fact]
+    public async Task TranslateAsync_ShouldWrapEquationSoftCandidateAndInjectPrompt()
+    {
+        var requests = new List<string>();
+        var prompts = new List<string?>();
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            requests.Add(request.Text);
+            prompts.Add(request.CustomPrompt);
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = request.Text,
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-eq-soft",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "Attention score = softmax(QK^T)",
+                            CharacterLevelProtectedText = "Attention score = softmax({v0})",
+                            CharacterLevelTokens =
+                            [
+                                new FormulaToken(FormulaTokenType.InlineMath, "QK^T", "{v0}", "QK^T")
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "google",
+            EnableFormulaProtection = true
+        });
+
+        requests.Should().ContainSingle()
+            .Which.Should().Be("[[EQ_SOFT]]Attention score = softmax({v0})[[/EQ_SOFT]]");
+        prompts.Should().ContainSingle();
+        prompts[0].Should().Contain("[[EQ_SOFT]]...[[/EQ_SOFT]]");
+        result.Ir.Blocks.Single().ProtectedText.Should().Be("[[EQ_SOFT]]Attention score = softmax({v0})[[/EQ_SOFT]]");
+    }
+
+    [Fact]
     public async Task TranslateAsync_QualityFeedbackRetry_ExactSoftSpanMutationFallsBackToOriginalAndTagsLastError()
     {
         var callCount = 0;
@@ -810,6 +868,77 @@ public class LongDocumentTranslationServiceTests
         prompts.Should().HaveCount(2);
         prompts[1].Should().Contain("Copy every technical symbol sequence inside synthetic $...$ verbatim");
         prompts[1].Should().Contain("do not keep the synthetic $ delimiters");
+
+        var block = result.Pages[0].Blocks.Single();
+        block.TranslatedText.Should().Be(originalText);
+        block.RetryCount.Should().Be(1);
+        block.LastError.Should().Contain("quality-feedback:");
+        block.LastError.Should().Contain("soft=Failed");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_QualityFeedbackRetry_EquationSoftMutationFallsBackAndAddsRetryPrompt()
+    {
+        var callCount = 0;
+        var prompts = new List<string?>();
+        var requestTexts = new List<string>();
+        const string originalText = "Attention score = softmax(QK^T)";
+
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            callCount++;
+            prompts.Add(request.CustomPrompt);
+            requestTexts.Add(request.Text);
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = callCount == 1
+                    ? "[[EQ_SOFT]]Attention score = 注意力({v0})[[/EQ_SOFT]]"
+                    : "[[EQ_SOFT]]Attention score = 注意力({v0})[[/EQ_SOFT]]",
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-eq-soft-retry",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = originalText,
+                            CharacterLevelProtectedText = "Attention score = softmax({v0})",
+                            CharacterLevelTokens =
+                            [
+                                new FormulaToken(FormulaTokenType.InlineMath, "QK^T", "{v0}", "QK^T")
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "google",
+            EnableFormulaProtection = true,
+            EnableQualityFeedbackRetry = true,
+            MaxRetriesPerBlock = 1
+        });
+
+        callCount.Should().Be(2);
+        requestTexts.Should().OnlyContain(text => text == "[[EQ_SOFT]]Attention score = softmax({v0})[[/EQ_SOFT]]");
+        prompts[1].Should().Contain("Copy everything inside [[EQ_SOFT]]...[[/EQ_SOFT]] verbatim");
+        prompts[1].Should().Contain("remove only the wrapper markers");
 
         var block = result.Pages[0].Blocks.Single();
         block.TranslatedText.Should().Be(originalText);

@@ -381,9 +381,62 @@ public class DocumentExportServiceTests
         lookup[1].Should().ContainSingle();
         lookup[1][0].TranslatedText.Should().Be("Fallback source block.");
         lookup[1][0].TranslationSkipped.Should().BeFalse();
+        lookup[1][0].PreserveOriginalTextInPdfExport.Should().BeFalse();
         lookup[1][0].UsesSourceFallback.Should().BeTrue();
         lookup[1][0].SourceText.Should().Be(checkpoint.SourceChunks[0]);
         lookup[1][0].DetectedFontNames.Should().Contain("TimesNewRomanPSMT");
+    }
+
+    [Fact]
+    public void MuPdfExportService_BuildTranslatedBlockLookup_PreservedFormulaChunk_UsesOriginalPdfText()
+    {
+        var checkpoint = new LongDocumentTranslationCheckpoint
+        {
+            InputMode = LongDocumentInputMode.Pdf,
+            SourceFilePath = "dummy.pdf",
+            TargetLanguage = Language.SimplifiedChinese,
+            SourceChunks = ["Attention(Q, K, V) = softmax(QK^T)V"],
+            ChunkMetadata =
+            [
+                new LongDocumentChunkMetadata
+                {
+                    ChunkIndex = 0,
+                    PageNumber = 1,
+                    SourceBlockId = "p1-body-b-formula",
+                    SourceBlockType = SourceBlockType.Formula,
+                    IsFormulaLike = false,
+                    OrderInPage = 0,
+                    RegionType = LayoutRegionType.Formula,
+                    RegionConfidence = 0.9,
+                    RegionSource = LayoutRegionSource.BlockIdFallback,
+                    ReadingOrderScore = 1,
+                    BoundingBox = new BlockRect(60, 680, 260, 40),
+                    TranslationSkipped = true,
+                    PreserveOriginalTextInPdfExport = true,
+                    TextStyle = new BlockTextStyle
+                    {
+                        FontSize = 12,
+                        RotationAngle = 0,
+                        Alignment = TextAlignment.Center,
+                        LineSpacing = 14
+                    },
+                    DetectedFontNames = ["TimesNewRomanPSMT", "CMMI10"]
+                }
+            ],
+            TranslatedChunks = new Dictionary<int, string>
+            {
+                [0] = "Attention(Q, K, V) = softmax(QK^T)V"
+            },
+            FailedChunkIndexes = []
+        };
+
+        var lookup = MuPdfExportService.BuildTranslatedBlockLookup(checkpoint);
+        var block = lookup[1].Single();
+
+        block.TranslationSkipped.Should().BeTrue();
+        block.PreserveOriginalTextInPdfExport.Should().BeTrue();
+        MuPdfExportService.ShouldRenderBlockText(block).Should().BeFalse();
+        MuPdfExportService.ShouldEraseBlockBackground(block).Should().BeFalse();
     }
 
     [Fact]

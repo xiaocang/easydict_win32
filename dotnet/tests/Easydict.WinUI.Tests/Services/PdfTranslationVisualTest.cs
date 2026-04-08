@@ -79,13 +79,12 @@ public class PdfTranslationVisualTest
         var muDoc = new Document(outputPath);
         try
         {
-            var pagesToRender = Math.Min(2, muDoc.PageCount);
-            for (var i = 0; i < pagesToRender; i++)
+            foreach (var pageNumber in new[] { 1, 2, 4 }.Where(pageNumber => pageNumber <= muDoc.PageCount))
             {
-                var muPage = muDoc[i];
+                var muPage = muDoc[pageNumber - 1];
                 var mat = new Matrix(1.5f, 1.5f); // 108 DPI
                 var pix = muPage.GetPixmap(mat);
-                var pngPath = Path.Combine(outputDir, $"translated_p{i + 1}.png");
+                var pngPath = Path.Combine(outputDir, $"translated_p{pageNumber}.png");
                 pix.Save(pngPath, "png");
                 System.Diagnostics.Debug.WriteLine($"[VisualTest] Saved PNG: {pngPath}");
             }

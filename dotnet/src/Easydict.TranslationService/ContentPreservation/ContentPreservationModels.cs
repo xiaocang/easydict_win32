@@ -51,6 +51,15 @@ public sealed record ProtectionPlan
 }
 
 /// <summary>
+/// Wrapper syntax used for a soft-protected span.
+/// </summary>
+public enum SoftProtectionWrapperKind
+{
+    DollarMath,
+    EquationSoftTag
+}
+
+/// <summary>
 /// A low-confidence protected span that remains inline in the translation request.
 /// Stored so post-translation validation can check whether exact-preservation spans
 /// survived unchanged.
@@ -62,6 +71,7 @@ public sealed record SoftProtectedSpan
     public required string WrappedText { get; init; }
     public bool SyntheticDelimiters { get; init; }
     public bool RequiresExactPreservation { get; init; }
+    public SoftProtectionWrapperKind WrapperKind { get; init; } = SoftProtectionWrapperKind.DollarMath;
 }
 
 /// <summary>

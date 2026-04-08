@@ -10,6 +10,15 @@ namespace Easydict.TranslationService.LongDocument;
 
 public sealed class LongDocumentTranslationService
 {
+    private static readonly HashSet<string> PreserveOriginalFormulaReasons = new(StringComparer.Ordinal)
+    {
+        "MathFontDensity>30%",
+        "MathCharDensity>20%",
+        "SubscriptDensity>25%",
+        "CharLevel:FormulaOnlyText",
+        "FormulaOnlyText",
+    };
+
     private readonly Func<TranslationRequest, string, CancellationToken, Task<TranslationResult>> _translateWithService;
     private readonly Func<SourceDocumentPage, CancellationToken, Task<string?>> _ocrExtractor;
     private readonly IContentPreservationService _preservation = new FormulaPreservationService();
@@ -249,10 +258,13 @@ public sealed class LongDocumentTranslationService
                         FormulaFontPattern = options?.FormulaFontPattern,
                         FormulaCharPattern = options?.FormulaCharPattern,
                         CharacterLevelProtectedText = block.CharacterLevelProtectedText,
-                        CharacterLevelTokens = block.CharacterLevelTokens
+                        CharacterLevelTokens = block.CharacterLevelTokens,
+                        DebugBlockId = block.BlockId,
+                        DebugPageNumber = page.PageNumber
                     };
                     var plan = _preservation.Analyze(blockContext);
                     var translationSkipped = plan.SkipTranslation;
+                    var preserveOriginalTextInPdfExport = ShouldPreserveOriginalTextInPdfExport(block.BlockType, plan.Reason);
 
                     irBlocks.Add(new DocumentBlockIr
                     {
@@ -270,7 +282,8 @@ public sealed class LongDocumentTranslationService
                         FormulaCharacters = block.FormulaCharacters,
                         CharacterLevelProtectedText = block.CharacterLevelProtectedText,
                         CharacterLevelTokens = block.CharacterLevelTokens,
-                        FallbackText = block.FallbackText
+                        FallbackText = block.FallbackText,
+                        PreserveOriginalTextInPdfExport = preserveOriginalTextInPdfExport
                     });
                 }
             }
@@ -301,8 +314,11 @@ public sealed class LongDocumentTranslationService
                     Text = block.OriginalText,
                     BlockType = MapToSourceBlockType(block.BlockType),
                     IsFormulaLike = false,
+                    FormulaCharacters = block.FormulaCharacters,
                     CharacterLevelProtectedText = block.CharacterLevelProtectedText,
-                    CharacterLevelTokens = block.CharacterLevelTokens
+                    CharacterLevelTokens = block.CharacterLevelTokens,
+                    DebugBlockId = block.SourceBlockId,
+                    DebugPageNumber = block.PageNumber
                 };
                 var plan = new ProtectionPlan
                 {
@@ -317,7 +333,11 @@ public sealed class LongDocumentTranslationService
                     FormulaTokenMap = protectedBlock.Tokens,
                     SoftProtectedSpans = protectedBlock.SoftSpans,
                     TranslationSkipped = protectedBlock.Plan.SkipTranslation,
-                    PreservationContext = blockContext
+                    PreservationContext = blockContext,
+                    PreserveOriginalTextInPdfExport = block.PreserveOriginalTextInPdfExport ||
+                        ShouldPreserveOriginalTextInPdfExport(
+                            MapToSourceBlockType(block.BlockType),
+                            protectedBlock.Plan.Reason)
                 };
             }).ToList();
 
@@ -351,7 +371,8 @@ public sealed class LongDocumentTranslationService
                     TranslationSkipped = true,
                     RetryCount = 0,
                     TextStyle = block.TextStyle,
-                    FormulaCharacters = block.FormulaCharacters
+                    FormulaCharacters = block.FormulaCharacters,
+                    PreserveOriginalTextInPdfExport = block.PreserveOriginalTextInPdfExport
                 };
             }
             else
@@ -491,46 +512,70 @@ public sealed class LongDocumentTranslationService
         {
             try
             {
-                // Two-tier formula prompt: {vN} = hard, $...$ = soft.
+                // Formula prompt: {vN} = hard, $...$ = soft math, [[EQ_SOFT]] = equation-like exact span.
                 var customPrompt = options.CustomPrompt;
                 if (options.EnableFormulaProtection)
                 {
                     var hasHardTokens = currentTokens is { Count: > 0 };
-                    var hasSoftMath = currentSoftSpans is { Count: > 0 };
+                    var hasDollarSoftMath = false;
+                    var hasEquationSoftTags = false;
                     var hasExactSoftSpans = false;
                     if (currentSoftSpans is not null)
                     {
                         foreach (var span in currentSoftSpans)
                         {
-                            if (span.RequiresExactPreservation) { hasExactSoftSpans = true; break; }
+                            if (span.WrapperKind == SoftProtectionWrapperKind.DollarMath)
+                            {
+                                hasDollarSoftMath = true;
+                            }
+                            else if (span.WrapperKind == SoftProtectionWrapperKind.EquationSoftTag)
+                            {
+                                hasEquationSoftTags = true;
+                            }
+
+                            if (span.RequiresExactPreservation)
+                            {
+                                hasExactSoftSpans = true;
+                            }
                         }
                     }
 
                     string? formulaPrompt = null;
-                    if (hasHardTokens && hasSoftMath)
+                    if (hasHardTokens || hasDollarSoftMath || hasEquationSoftTags)
                     {
-                        formulaPrompt = "This text has formula placeholders ({v0}, {v1}, ...) and inline math ($...$). " +
-                            "Keep all {vN} placeholders exactly as-is. " +
-                            "For $...$ content: if it is a mathematical formula or technical identifier, keep it unchanged; " +
-                            "if it is ordinary text, translate it and remove the $ delimiters.";
-                    }
-                    else if (hasHardTokens)
-                    {
-                        formulaPrompt = "Keep all {v0}, {v1}, ... formula placeholders exactly as-is. Do not translate, remove, or modify them.";
-                    }
-                    else if (hasSoftMath)
-                    {
-                        formulaPrompt = "Content in $...$ is likely a mathematical formula or technical identifier. " +
-                            "If it is math, keep it unchanged. If it is ordinary text, translate it and remove the $ delimiters.";
+                        var promptParts = new List<string>();
+                        if (hasHardTokens)
+                        {
+                            promptParts.Add(
+                                "This text has formula placeholders ({v0}, {v1}, ...). " +
+                                "Keep all {vN} placeholders exactly as-is. Do not translate, remove, or modify them.");
+                        }
+
+                        if (hasDollarSoftMath)
+                        {
+                            promptParts.Add(
+                                "Content in $...$ is likely a mathematical formula or technical identifier. " +
+                                "If it is math, keep it unchanged. If it is ordinary text, translate it and remove the $ delimiters.");
+                        }
+
+                        if (hasEquationSoftTags)
+                        {
+                            promptParts.Add(
+                                "Content inside [[EQ_SOFT]]...[[/EQ_SOFT]] is an equation-like technical span. " +
+                                "Copy the inner content verbatim and remove only the wrapper markers in the final output.");
+                        }
+
+                        formulaPrompt = string.Join(' ', promptParts);
                     }
 
                     if (currentRetryAttempt >= 1 && formulaPrompt is not null)
                     {
                         var retryInstruction = lastSoftValidationFailed && hasExactSoftSpans
-                            ? "The previous translation attempt changed a protected technical symbol sequence. " +
-                              "Copy every technical symbol sequence inside synthetic $...$ verbatim, and do not keep the synthetic $ delimiters in the final output.\n"
+                            ? "The previous translation attempt changed a protected technical span. " +
+                              "Copy every technical symbol sequence inside synthetic $...$ verbatim, do not keep the synthetic $ delimiters in the final output, " +
+                              "Copy everything inside [[EQ_SOFT]]...[[/EQ_SOFT]] verbatim and remove only the wrapper markers in the final output.\n"
                             : "The previous translation attempt lost some protected content. " +
-                              "Translate carefully and preserve EVERY {vN} placeholder and every $...$ span exactly as written.\n";
+                              "Translate carefully and preserve EVERY {vN} placeholder, every $...$ span, and every [[EQ_SOFT]]...[[/EQ_SOFT]] span exactly as written.\n";
                         formulaPrompt = retryInstruction + formulaPrompt;
                     }
 
@@ -576,19 +621,26 @@ public sealed class LongDocumentTranslationService
                     if (shouldRetryForQuality)
                     {
                         currentRetryAttempt++;
-                        var retryContext = (block.PreservationContext ?? new BlockContext
+                        var preserveEquationSoftProtection = outcome.SoftValidationStatus == SoftValidationStatus.Failed &&
+                            currentSoftSpans?.Any(span => span.WrapperKind == SoftProtectionWrapperKind.EquationSoftTag) == true;
+
+                        if (!preserveEquationSoftProtection)
                         {
-                            Text = block.OriginalText,
-                            BlockType = MapToSourceBlockType(block.BlockType)
-                        }) with { RetryAttempt = currentRetryAttempt };
-                        var reprotected = _preservation.Protect(retryContext, new ProtectionPlan
-                        {
-                            Mode = PreservationMode.None,
-                            SkipTranslation = false
-                        });
-                        currentProtectedText = reprotected.ProtectedText;
-                        currentTokens = reprotected.Tokens;
-                        currentSoftSpans = reprotected.SoftSpans;
+                            var retryContext = (block.PreservationContext ?? new BlockContext
+                            {
+                                Text = block.OriginalText,
+                                BlockType = MapToSourceBlockType(block.BlockType)
+                            }) with { RetryAttempt = currentRetryAttempt };
+                            var reprotected = _preservation.Protect(retryContext, new ProtectionPlan
+                            {
+                                Mode = PreservationMode.None,
+                                SkipTranslation = false
+                            });
+                            currentProtectedText = reprotected.ProtectedText;
+                            currentTokens = reprotected.Tokens;
+                            currentSoftSpans = reprotected.SoftSpans;
+                        }
+
                         lastSoftValidationFailed = outcome.SoftValidationStatus == SoftValidationStatus.Failed;
                         lastError = BuildQualityFeedbackError(outcome);
                         Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: quality feedback retry #{currentRetryAttempt} " +
@@ -671,7 +723,8 @@ public sealed class LongDocumentTranslationService
             RetryCount = effectiveRetryCount,
             LastError = lastError,
             TextStyle = block.TextStyle,
-            FormulaCharacters = block.FormulaCharacters
+            FormulaCharacters = block.FormulaCharacters,
+            PreserveOriginalTextInPdfExport = false
         };
     }
 
@@ -692,7 +745,10 @@ public sealed class LongDocumentTranslationService
         var fbContext = (block.PreservationContext ?? new ContentPreservation.BlockContext
         {
             Text = block.FallbackText,
-            BlockType = MapToSourceBlockType(block.BlockType)
+            BlockType = MapToSourceBlockType(block.BlockType),
+            FormulaCharacters = block.FormulaCharacters,
+            DebugBlockId = block.SourceBlockId,
+            DebugPageNumber = block.PageNumber
         }) with { Text = block.FallbackText };
 
         var plan = _preservation.Analyze(fbContext);
@@ -705,6 +761,13 @@ public sealed class LongDocumentTranslationService
         softSpans = result.SoftSpans;
         return true;
     }
+
+    private static bool ShouldPreserveOriginalTextInPdfExport(
+        SourceBlockType blockType,
+        string? preservationReason) =>
+        blockType == SourceBlockType.Formula ||
+        (!string.IsNullOrWhiteSpace(preservationReason) &&
+         PreserveOriginalFormulaReasons.Contains(preservationReason));
 
     private static IReadOnlyList<TranslatedDocumentPage> BuildStructuredOutput(
         DocumentIr ir,

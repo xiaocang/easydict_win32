@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.LongDocument;
@@ -11,7 +12,33 @@ namespace Easydict.TranslationService.ContentPreservation;
 /// </summary>
 public sealed class FormulaPreservationService : IContentPreservationService
 {
-    // Shared regex from MathPatterns — single source of truth
+    private enum FormulaOnlyClassification
+    {
+        No,
+        AllPlaceholders,
+        BothSidesOfEquals,
+        ResidueOnly,
+    }
+
+    private readonly record struct DisplayEquationDiagnostics(
+        bool Candidate,
+        bool HasEquals,
+        bool HasMathFontChars,
+        int NonMathWordCount);
+
+    private readonly record struct EquationSoftDiagnostics(
+        bool Candidate,
+        bool HasEquals,
+        bool HasMathFontChars,
+        bool HasPlaceholderEvidence,
+        int NonMathWordCount,
+        bool LeftSuspicious,
+        bool RightSuspicious);
+
+    private const string EquationSoftOpenTag = "[[EQ_SOFT]]";
+    private const string EquationSoftCloseTag = "[[/EQ_SOFT]]";
+
+    // Shared regex from MathPatterns; single source of truth.
     private static readonly Regex MathFontRegex = new(
         MathPatterns.MathFontPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -19,6 +46,52 @@ public sealed class FormulaPreservationService : IContentPreservationService
         MathPatterns.MathUnicodePattern, RegexOptions.Compiled);
 
     private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
+
+    private static readonly Regex NaturalWordRegex = new(@"\b[a-zA-Z]{4,}\b", RegexOptions.Compiled);
+
+    private static readonly Regex ResidueSplitRegex = new(@"[\s=(),+\-*/^\[\]{}<>|]+", RegexOptions.Compiled);
+
+    private static readonly Regex SideTokenRegex = new(
+        @"\{v\d+\}|[A-Za-z]+\d+[A-Za-z\d]*|\d+[A-Za-z][A-Za-z\d]*|[A-Za-z][A-Za-z\d]*",
+        RegexOptions.Compiled);
+
+    private static readonly char[] SuspiciousEquationChars =
+    [
+        '(',
+        ')',
+        '[',
+        ']',
+        '{',
+        '}',
+        '/',
+        '*',
+        '^',
+        ',',
+        '+',
+        '-',
+        '\u221A',
+    ];
+
+    private static readonly HashSet<string> CommonShortEnglishWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "and",
+        "the",
+        "for",
+        "use",
+        "with",
+        "from",
+        "into",
+        "this",
+        "that",
+        "then",
+        "only",
+        "each",
+        "are",
+        "was",
+        "were",
+        "our",
+        "its",
+    };
 
     private readonly FormulaProtector _protector = new();
     private readonly FormulaRestorer _restorer = new();
@@ -31,48 +104,50 @@ public sealed class FormulaPreservationService : IContentPreservationService
             context.BlockType == SourceBlockType.TableCell ||
             context.IsFormulaLike)
         {
-            return new ProtectionPlan
-            {
-                Mode = PreservationMode.Opaque,
-                SkipTranslation = true,
-                Reason = $"BlockType={context.BlockType}, IsFormulaLike={context.IsFormulaLike}"
-            };
+            return SkipTranslation(context, $"BlockType={context.BlockType}, IsFormulaLike={context.IsFormulaLike}");
         }
 
         // Level 2: Font-based formula detection
         if (IsFontBasedFormula(context.DetectedFontNames, context.FormulaFontPattern))
         {
-            return new ProtectionPlan
-            {
-                Mode = PreservationMode.Opaque,
-                SkipTranslation = true,
-                Reason = "MathFontDensity>30%"
-            };
+            return SkipTranslation(context, "MathFontDensity>30%");
         }
 
         // Level 3: Character-based formula detection
         if (IsCharacterBasedFormula(context.Text, context.FormulaCharPattern))
         {
-            return new ProtectionPlan
-            {
-                Mode = PreservationMode.Opaque,
-                SkipTranslation = true,
-                Reason = "MathCharDensity>20%"
-            };
+            return SkipTranslation(context, "MathCharDensity>20%");
         }
 
         // Level 4: Subscript density
         if (IsSubscriptDenseFormula(context.FormulaCharacters))
         {
+            return SkipTranslation(context, "SubscriptDensity>25%");
+        }
+
+        // Level 5: Short display equation fallback when ONNX/parser misses the block.
+        var displayDiagnostics = GetDisplayEquationDiagnostics(context);
+        if (displayDiagnostics.Candidate)
+        {
+            LogDebug(
+                context,
+                $"Analyze hit=DisplayEquationHeuristic len={context.Text.Length} nonMathWords={displayDiagnostics.NonMathWordCount}");
             return new ProtectionPlan
             {
                 Mode = PreservationMode.Opaque,
                 SkipTranslation = true,
-                Reason = "SubscriptDensity>25%"
+                Reason = "DisplayEquationHeuristic"
             };
         }
 
-        // No block-level skip — text may still have inline formulas
+        if (displayDiagnostics.HasEquals && displayDiagnostics.HasMathFontChars)
+        {
+            LogDebug(
+                context,
+                $"Analyze near-miss DisplayEquationHeuristic len={context.Text.Length} nonMathWords={displayDiagnostics.NonMathWordCount}");
+        }
+
+        // No block-level skip; text may still have inline formulas or suspicious equations.
         return new ProtectionPlan
         {
             Mode = PreservationMode.None,
@@ -109,37 +184,106 @@ public sealed class FormulaPreservationService : IContentPreservationService
             context.CharacterLevelProtectedText is not null &&
             context.CharacterLevelTokens is { Count: > 0 })
         {
-            var isCharFormulaOnly = IsFormulaOnlyText(context.CharacterLevelProtectedText);
-            var charPlan = isCharFormulaOnly
-                ? plan with { Mode = PreservationMode.Opaque, SkipTranslation = true, Reason = "CharLevel:FormulaOnlyText" }
-                : plan with { Mode = PreservationMode.InlineProtected };
+            var formulaOnlyClassification = GetFormulaOnlyClassification(context.CharacterLevelProtectedText);
+            LogDebug(
+                context,
+                $"Protect path=CharacterLevel formulaOnly={formulaOnlyClassification} tokens={context.CharacterLevelTokens.Count}");
+
+            if (formulaOnlyClassification != FormulaOnlyClassification.No)
+            {
+                return new ProtectedBlock
+                {
+                    OriginalText = context.Text,
+                    ProtectedText = context.CharacterLevelProtectedText,
+                    Tokens = context.CharacterLevelTokens,
+                    SoftSpans = Array.Empty<SoftProtectedSpan>(),
+                    Plan = plan with
+                    {
+                        Mode = PreservationMode.Opaque,
+                        SkipTranslation = true,
+                        Reason = "CharLevel:FormulaOnlyText"
+                    }
+                };
+            }
+
+            var equationSoftDiagnostics = GetEquationSoftProtectionDiagnostics(
+                context.CharacterLevelProtectedText,
+                context);
+            LogEquationSoftDiagnostics(context, equationSoftDiagnostics);
+
+            var charSoftSpans = Array.Empty<SoftProtectedSpan>();
+            var charProtectedText = context.CharacterLevelProtectedText;
+            if (equationSoftDiagnostics.Candidate)
+            {
+                charProtectedText = WrapEquationSoftProtectedText(charProtectedText);
+                charSoftSpans =
+                [
+                    CreateEquationSoftSpan(context.Text, charProtectedText)
+                ];
+            }
 
             return new ProtectedBlock
             {
                 OriginalText = context.Text,
-                ProtectedText = context.CharacterLevelProtectedText,
+                ProtectedText = charProtectedText,
                 Tokens = context.CharacterLevelTokens,
-                SoftSpans = Array.Empty<SoftProtectedSpan>(),
-                Plan = charPlan
+                SoftSpans = charSoftSpans,
+                Plan = plan with { Mode = PreservationMode.InlineProtected }
             };
         }
 
         // Fallback to regex-based detection with two-tier confidence:
-        // High-confidence matches → {vN} hard placeholders
-        // Low-confidence matches → $...$ inline LaTeX for LLM to decide
+        // High-confidence matches -> {vN} hard placeholders
+        // Low-confidence matches -> $...$ inline LaTeX for LLM to decide
         // On retry, demoteLevel = RetryAttempt shifts more ambiguous types to soft protection.
-        var protectedText = _protector.ProtectTwoTier(
+        var protectedTextFromRegex = _protector.ProtectTwoTier(
             context.Text,
             out var tokens,
-            out var softSpans,
+            out var softSpansFromRegex,
             demoteLevel: context.RetryAttempt);
-        var isFormulaOnly = IsFormulaOnlyText(protectedText);
 
-        var effectivePlan = isFormulaOnly
-            ? plan with { Mode = PreservationMode.Opaque, SkipTranslation = true, Reason = "FormulaOnlyText" }
-            : tokens.Count > 0 || softSpans.Count > 0
-                ? plan with { Mode = PreservationMode.InlineProtected }
-                : plan;
+        var formulaOnly = GetFormulaOnlyClassification(protectedTextFromRegex);
+        LogDebug(
+            context,
+            $"Protect path=Regex formulaOnly={formulaOnly} hardTokens={tokens.Count} softSpans={softSpansFromRegex.Count}");
+
+        if (formulaOnly != FormulaOnlyClassification.No)
+        {
+            return new ProtectedBlock
+            {
+                OriginalText = context.Text,
+                ProtectedText = protectedTextFromRegex,
+                Tokens = tokens,
+                SoftSpans = softSpansFromRegex,
+                Plan = plan with
+                {
+                    Mode = PreservationMode.Opaque,
+                    SkipTranslation = true,
+                    Reason = "FormulaOnlyText"
+                }
+            };
+        }
+
+        var equationSoftDiagnosticsRegex = GetEquationSoftProtectionDiagnostics(
+            protectedTextFromRegex,
+            context);
+        LogEquationSoftDiagnostics(context, equationSoftDiagnosticsRegex);
+
+        var protectedText = protectedTextFromRegex;
+        IReadOnlyList<SoftProtectedSpan> softSpans = softSpansFromRegex;
+        if (equationSoftDiagnosticsRegex.Candidate &&
+            !HasEquationSoftWrapper(protectedText) &&
+            !IsAlreadyFullySoftProtected(protectedText, tokens, softSpansFromRegex))
+        {
+            protectedText = WrapEquationSoftProtectedText(protectedText);
+            var updatedSoftSpans = softSpansFromRegex.ToList();
+            updatedSoftSpans.Add(CreateEquationSoftSpan(context.Text, protectedText));
+            softSpans = updatedSoftSpans;
+        }
+
+        var effectivePlan = tokens.Count > 0 || softSpans.Count > 0
+            ? plan with { Mode = PreservationMode.InlineProtected }
+            : plan;
 
         return new ProtectedBlock
         {
@@ -209,7 +353,6 @@ public sealed class FormulaPreservationService : IContentPreservationService
             : MathFontRegex;
         var mathFontCount = fontNames.Count(f =>
         {
-            // Strip PDF subset prefix (e.g. "ABCDE+CMSY10" → "CMSY10")
             var name = f;
             var plusIdx = name.IndexOf('+');
             if (plusIdx >= 0 && plusIdx < name.Length - 1)
@@ -239,12 +382,270 @@ public sealed class FormulaPreservationService : IContentPreservationService
         return chars.Count >= 3 && (double)scriptCount / chars.Count > 0.25;
     }
 
-    private static bool IsFormulaOnlyText(string protectedText)
+    private static ProtectionPlan SkipTranslation(BlockContext context, string reason)
     {
-        if (string.IsNullOrWhiteSpace(protectedText)) return false;
-        var cleaned = NumericPlaceholderRegex.Replace(protectedText, string.Empty).Trim();
-        return cleaned.Length == 0;
+        LogDebug(context, $"Analyze hit={reason}");
+        return new ProtectionPlan
+        {
+            Mode = PreservationMode.Opaque,
+            SkipTranslation = true,
+            Reason = reason
+        };
     }
+
+    private static FormulaOnlyClassification GetFormulaOnlyClassification(string protectedText)
+    {
+        if (string.IsNullOrWhiteSpace(protectedText))
+        {
+            return FormulaOnlyClassification.No;
+        }
+
+        var hasPlaceholders = NumericPlaceholderRegex.IsMatch(protectedText);
+        var cleaned = NumericPlaceholderRegex.Replace(protectedText, string.Empty).Trim();
+        if (cleaned.Length == 0)
+        {
+            return FormulaOnlyClassification.AllPlaceholders;
+        }
+
+        if (!hasPlaceholders)
+        {
+            return FormulaOnlyClassification.No;
+        }
+
+        if (HasFormulaPlaceholdersOnBothSidesOfEquals(protectedText))
+        {
+            return FormulaOnlyClassification.BothSidesOfEquals;
+        }
+
+        if (IsFormulaResidueOnly(cleaned))
+        {
+            return FormulaOnlyClassification.ResidueOnly;
+        }
+
+        return FormulaOnlyClassification.No;
+    }
+
+    private static bool HasFormulaPlaceholdersOnBothSidesOfEquals(string protectedText)
+    {
+        for (var i = 0; i < protectedText.Length; i++)
+        {
+            if (protectedText[i] != '=') continue;
+
+            var left = protectedText[..i];
+            var right = protectedText[(i + 1)..];
+            if (NumericPlaceholderRegex.IsMatch(left) && NumericPlaceholderRegex.IsMatch(right))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsFormulaResidueOnly(string cleaned)
+    {
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            return false;
+        }
+
+        var tokens = ResidueSplitRegex.Split(cleaned)
+            .Where(static token => !string.IsNullOrWhiteSpace(token));
+        var hasMathFunction = false;
+        var shortAlphaTokenCount = 0;
+
+        foreach (var token in tokens)
+        {
+            if (MathPatterns.MathFunctionNames.Contains(token))
+            {
+                hasMathFunction = true;
+                continue;
+            }
+
+            if (token.All(char.IsDigit))
+            {
+                continue;
+            }
+
+            if (token.Length <= 3)
+            {
+                if (token.All(char.IsLetter))
+                {
+                    if (CommonShortEnglishWords.Contains(token))
+                    {
+                        return false;
+                    }
+
+                    shortAlphaTokenCount++;
+                }
+
+                continue;
+            }
+
+            return false;
+        }
+
+        return hasMathFunction || shortAlphaTokenCount <= 1;
+    }
+
+    private static DisplayEquationDiagnostics GetDisplayEquationDiagnostics(BlockContext context)
+    {
+        var hasEquals = context.Text.Contains('=');
+        var hasMathFontChars = context.FormulaCharacters?.HasMathFontCharacters == true;
+        var nonMathWordCount = CountNonMathFunctionWords(context.Text);
+        var candidate = context.Text.Length <= 200 &&
+            hasEquals &&
+            hasMathFontChars &&
+            nonMathWordCount <= 1;
+
+        return new DisplayEquationDiagnostics(candidate, hasEquals, hasMathFontChars, nonMathWordCount);
+    }
+
+    private static EquationSoftDiagnostics GetEquationSoftProtectionDiagnostics(string protectedText, BlockContext context)
+    {
+        if (string.IsNullOrWhiteSpace(protectedText) || protectedText.Length > 220)
+        {
+            return new EquationSoftDiagnostics(false, false, false, false, 0, false, false);
+        }
+
+        var hasEquals = protectedText.Contains('=');
+        var hasMathFontChars = context.FormulaCharacters?.HasMathFontCharacters == true;
+        var hasPlaceholderEvidence = NumericPlaceholderRegex.IsMatch(protectedText);
+        var nonMathWordCount = CountNonMathFunctionWords(protectedText);
+
+        if (!hasEquals)
+        {
+            return new EquationSoftDiagnostics(
+                false,
+                false,
+                hasMathFontChars,
+                hasPlaceholderEvidence,
+                nonMathWordCount,
+                false,
+                false);
+        }
+
+        var leftSuspicious = false;
+        var rightSuspicious = false;
+        for (var i = 0; i < protectedText.Length; i++)
+        {
+            if (protectedText[i] != '=') continue;
+
+            var left = protectedText[..i].Trim();
+            var right = protectedText[(i + 1)..].Trim();
+            if (left.Length == 0 || right.Length == 0)
+            {
+                continue;
+            }
+
+            var leftCandidate = IsSuspiciousEquationSide(left);
+            var rightCandidate = IsSuspiciousEquationSide(right);
+            leftSuspicious |= leftCandidate;
+            rightSuspicious |= rightCandidate;
+            if (leftCandidate && rightCandidate)
+            {
+                break;
+            }
+        }
+
+        var candidate = hasEquals &&
+            (hasMathFontChars || hasPlaceholderEvidence) &&
+            nonMathWordCount <= 1 &&
+            leftSuspicious &&
+            rightSuspicious;
+
+        return new EquationSoftDiagnostics(
+            candidate,
+            true,
+            hasMathFontChars,
+            hasPlaceholderEvidence,
+            nonMathWordCount,
+            leftSuspicious,
+            rightSuspicious);
+    }
+
+    private static bool IsSuspiciousEquationSide(string side)
+    {
+        if (string.IsNullOrWhiteSpace(side))
+        {
+            return false;
+        }
+
+        side = side.Trim();
+        var hasPlaceholder = NumericPlaceholderRegex.IsMatch(side);
+        var hasEquationSyntax = side.IndexOfAny(SuspiciousEquationChars) >= 0;
+        var tokens = SideTokenRegex.Matches(side)
+            .Select(match => match.Value)
+            .Where(static token => !NumericPlaceholderRegex.IsMatch(token))
+            .ToList();
+
+        var hasFunctionName = tokens.Any(MathPatterns.MathFunctionNames.Contains);
+        var hasShortToken = tokens.Any(token => token.All(char.IsDigit) || token.Length <= 3);
+        var hasLetterDigitMix = tokens.Any(HasLetterDigitMix);
+        var hasRejectedNaturalWord = tokens.Any(token =>
+            token.Length > 3 &&
+            !MathPatterns.MathFunctionNames.Contains(token) &&
+            !HasLetterDigitMix(token));
+
+        if (!hasPlaceholder && hasRejectedNaturalWord && !hasEquationSyntax && !hasFunctionName)
+        {
+            return false;
+        }
+
+        return hasPlaceholder || hasEquationSyntax || hasFunctionName || hasShortToken || hasLetterDigitMix;
+    }
+
+    private static bool HasLetterDigitMix(string token)
+    {
+        var hasLetter = false;
+        var hasDigit = false;
+        foreach (var c in token)
+        {
+            if (char.IsLetter(c)) hasLetter = true;
+            if (char.IsDigit(c)) hasDigit = true;
+            if (hasLetter && hasDigit) return true;
+        }
+
+        return false;
+    }
+
+    private static int CountNonMathFunctionWords(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return 0;
+        }
+
+        return NaturalWordRegex.Matches(text)
+            .Select(match => match.Value)
+            .Count(word => !MathPatterns.MathFunctionNames.Contains(word));
+    }
+
+    private static bool HasEquationSoftWrapper(string protectedText) =>
+        protectedText.StartsWith(EquationSoftOpenTag, StringComparison.Ordinal) &&
+        protectedText.EndsWith(EquationSoftCloseTag, StringComparison.Ordinal);
+
+    private static bool IsAlreadyFullySoftProtected(
+        string protectedText,
+        IReadOnlyList<FormulaToken> tokens,
+        IReadOnlyList<SoftProtectedSpan> softSpans) =>
+        tokens.Count == 0 &&
+        softSpans.Count == 1 &&
+        string.Equals(softSpans[0].WrappedText, protectedText, StringComparison.Ordinal);
+
+    private static string WrapEquationSoftProtectedText(string protectedText) =>
+        $"{EquationSoftOpenTag}{protectedText}{EquationSoftCloseTag}";
+
+    private static SoftProtectedSpan CreateEquationSoftSpan(string originalText, string wrappedProtectedText) =>
+        new()
+        {
+            RawText = originalText,
+            TokenType = FormulaTokenType.InlineEquation,
+            WrappedText = wrappedProtectedText,
+            SyntheticDelimiters = true,
+            RequiresExactPreservation = true,
+            WrapperKind = SoftProtectionWrapperKind.EquationSoftTag
+        };
 
     private static RestoreOutcome ValidateSoftProtectedSpans(RestoreOutcome outcome, ProtectedBlock protectedBlock)
     {
@@ -253,7 +654,6 @@ public sealed class FormulaPreservationService : IContentPreservationService
             return outcome;
         }
 
-        // Collect exact-preservation spans and count expected occurrences per raw text in a single pass.
         Dictionary<string, int>? expectedByRaw = null;
         List<SoftProtectedSpan>? exactSpans = null;
         foreach (var span in protectedBlock.SoftSpans)
@@ -265,17 +665,22 @@ public sealed class FormulaPreservationService : IContentPreservationService
             expectedByRaw[span.RawText] = expectedByRaw.TryGetValue(span.RawText, out var c) ? c + 1 : 1;
         }
 
-        if (exactSpans is null) return outcome;
+        if (exactSpans is null)
+        {
+            return outcome;
+        }
 
-        // Strip synthetic $...$ delimiters by literal replace of WrappedText (set at protection time).
         var normalizedText = outcome.Text;
         var stripCount = 0;
         foreach (var span in exactSpans)
         {
             if (!span.SyntheticDelimiters) continue;
-            var hits = CountOccurrences(normalizedText, span.WrappedText);
+
+            var wrappedRaw = GetWrappedRawText(span);
+            var hits = CountOccurrences(normalizedText, wrappedRaw);
             if (hits == 0) continue;
-            normalizedText = normalizedText.Replace(span.WrappedText, span.RawText);
+
+            normalizedText = normalizedText.Replace(wrappedRaw, span.RawText);
             stripCount += hits;
         }
 
@@ -310,6 +715,12 @@ public sealed class FormulaPreservationService : IContentPreservationService
         };
     }
 
+    private static string GetWrappedRawText(SoftProtectedSpan span) => span.WrapperKind switch
+    {
+        SoftProtectionWrapperKind.EquationSoftTag => $"{EquationSoftOpenTag}{span.RawText}{EquationSoftCloseTag}",
+        _ => span.WrappedText,
+    };
+
     private static int CountOccurrences(string text, string value)
     {
         if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(value)) return 0;
@@ -320,6 +731,53 @@ public sealed class FormulaPreservationService : IContentPreservationService
             count++;
             index += value.Length;
         }
+
         return count;
+    }
+
+    [Conditional("DEBUG")]
+    private static void LogEquationSoftDiagnostics(BlockContext context, EquationSoftDiagnostics diagnostics)
+    {
+        if (!diagnostics.HasEquals)
+        {
+            return;
+        }
+
+        if (diagnostics.Candidate)
+        {
+            LogDebug(
+                context,
+                "Protect equation-soft hit " +
+                $"hasMathFontChars={diagnostics.HasMathFontChars} " +
+                $"hasPlaceholderEvidence={diagnostics.HasPlaceholderEvidence} " +
+                $"nonMathWords={diagnostics.NonMathWordCount}");
+            return;
+        }
+
+        if (context.Text.Length <= 220 &&
+            (diagnostics.HasMathFontChars || diagnostics.HasPlaceholderEvidence || diagnostics.LeftSuspicious || diagnostics.RightSuspicious))
+        {
+            LogDebug(
+                context,
+                "Protect equation-soft near-miss " +
+                $"hasMathFontChars={diagnostics.HasMathFontChars} " +
+                $"hasPlaceholderEvidence={diagnostics.HasPlaceholderEvidence} " +
+                $"nonMathWords={diagnostics.NonMathWordCount} " +
+                $"leftSuspicious={diagnostics.LeftSuspicious} " +
+                $"rightSuspicious={diagnostics.RightSuspicious}");
+        }
+    }
+
+    [Conditional("DEBUG")]
+    private static void LogDebug(BlockContext context, string message)
+    {
+        Debug.WriteLine($"[FormulaPreservation] {GetDebugLabel(context)} {message}");
+    }
+
+    private static string GetDebugLabel(BlockContext context)
+    {
+        var page = context.DebugPageNumber?.ToString() ?? "?";
+        var block = string.IsNullOrWhiteSpace(context.DebugBlockId) ? "?" : context.DebugBlockId;
+        return $"p{page}/{block}";
     }
 }

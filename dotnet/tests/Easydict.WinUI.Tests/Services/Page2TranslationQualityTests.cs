@@ -642,7 +642,7 @@ public class Page2TranslationQualityTests
                     SourceBlockType = block.BlockType,
                     IsFormulaLike = block.IsFormulaLike,
                     OrderInPage = order,
-                    RegionType = LayoutRegionType.Body,
+                    RegionType = InferFixtureRegionType(block),
                     RegionConfidence = 1,
                     RegionSource = LayoutRegionSource.BlockIdFallback,
                     ReadingOrderScore = page.Blocks.Count <= 1
@@ -651,6 +651,8 @@ public class Page2TranslationQualityTests
                     BoundingBox = block.BoundingBox,
                     TextStyle = block.TextStyle,
                     FormulaCharacters = block.FormulaCharacters,
+                    TranslationSkipped = block.BlockType == SourceBlockType.Formula,
+                    PreserveOriginalTextInPdfExport = block.BlockType == SourceBlockType.Formula,
                     FallbackText = block.FallbackText,
                     DetectedFontNames = block.DetectedFontNames
                 });
@@ -890,11 +892,21 @@ public class Page2TranslationQualityTests
             BoundingBox = metadata.BoundingBox,
             TextStyle = metadata.TextStyle,
             FormulaCharacters = metadata.FormulaCharacters,
+            TranslationSkipped = metadata.TranslationSkipped,
+            PreserveOriginalTextInPdfExport = metadata.PreserveOriginalTextInPdfExport,
             RetryCount = metadata.RetryCount,
             FallbackText = fallbackText ?? metadata.FallbackText,
             DetectedFontNames = detectedFontNames ?? metadata.DetectedFontNames
         };
     }
+
+    private static LayoutRegionType InferFixtureRegionType(SourceDocumentBlock block) =>
+        block.BlockType switch
+        {
+            SourceBlockType.Formula => LayoutRegionType.Formula,
+            SourceBlockType.TableCell => LayoutRegionType.TableLike,
+            _ => LayoutRegionType.Body
+        };
 
     private static string CreateReadablePage2ChineseMock(
         string sourceText,

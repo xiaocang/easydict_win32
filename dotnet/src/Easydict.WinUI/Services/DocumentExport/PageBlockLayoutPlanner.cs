@@ -100,8 +100,7 @@ internal static class PageBlockLayoutPlanner
         EmbeddedFontInfo fonts)
     {
         if (block.BoundingBox is not BlockRect bbox ||
-            block.TranslationSkipped ||
-            string.IsNullOrWhiteSpace(block.TranslatedText) ||
+            !ShouldRenderBlockText(block) ||
             !IsLayoutEligible(block))
         {
             var sourceBounds = block.BoundingBox is BlockRect b
@@ -336,6 +335,7 @@ internal static class PageBlockLayoutPlanner
     }
 
     private static bool IsLayoutEligible(TranslatedBlockData block) =>
+        !block.PreserveOriginalTextInPdfExport &&
         block.SourceBlockType is not SourceBlockType.Formula
             and not SourceBlockType.TableCell;
 

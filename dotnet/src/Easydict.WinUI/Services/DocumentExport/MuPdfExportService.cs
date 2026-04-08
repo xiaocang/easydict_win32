@@ -246,7 +246,10 @@ public sealed class MuPdfExportService : IDocumentExportService
     {
         // Step 1: Extract content stream — separate text from graphics
         var streamResult = ContentStreamInterpreter.Interpret(pdfPigPage);
-        var opsBase = streamResult.SerializeGraphicsOperations();
+        var usesOriginalTextBase = blocks.Any(block => block.PreserveOriginalTextInPdfExport);
+        var opsBase = usesOriginalTextBase
+            ? streamResult.SerializeAllOperations()
+            : streamResult.SerializeGraphicsOperations();
 
         // Step 2: Embed fonts into the page
         var embeddedFonts = EmbedFonts(muPage, fontPaths);
@@ -274,10 +277,37 @@ public sealed class MuPdfExportService : IDocumentExportService
         var blockIssues = new List<BackfillBlockIssue>();
         var usedGlyphs = new List<UsedGlyph>();
 
+        if (usesOriginalTextBase)
+        {
+            var firstPreserved = blocks.First(block => block.PreserveOriginalTextInPdfExport);
+            Debug.WriteLine($"[MuPdfExport] Page {firstPreserved.PageNumber}: using full original content stream base for preserved formulas.");
+            blockIssues.Add(new BackfillBlockIssue
+            {
+                ChunkIndex = firstPreserved.ChunkIndex,
+                SourceBlockId = firstPreserved.SourceBlockId,
+                PageNumber = firstPreserved.PageNumber,
+                Kind = "page-full-original-ops",
+                Detail = "Using original page text operators because this page contains preserved formulas."
+            });
+        }
+
         foreach (var plannedBlock in pagePlan)
         {
             var block = plannedBlock.Block;
-            if (block.TranslationSkipped || string.IsNullOrWhiteSpace(block.TranslatedText))
+            if (block.PreserveOriginalTextInPdfExport)
+            {
+                blockIssues.Add(new BackfillBlockIssue
+                {
+                    ChunkIndex = block.ChunkIndex,
+                    SourceBlockId = block.SourceBlockId,
+                    PageNumber = block.PageNumber,
+                    Kind = "preserved-original-formula",
+                    Detail = $"SourceBlockType={block.SourceBlockType}, TranslationSkipped={block.TranslationSkipped}"
+                });
+                continue;
+            }
+
+            if (!ShouldRenderBlockText(block))
                 continue;
 
             var effectiveBoundingBox = plannedBlock.LayoutBoundingBox ?? block.BoundingBox;
@@ -312,7 +342,11 @@ public sealed class MuPdfExportService : IDocumentExportService
                 continue;
 
             opsText.Append(blockRenderResult.Operations);
-            AppendEraseOperations(opsErase, block, embeddedFonts.PrimaryFontIsCjk, plannedBlock.EraseRects);
+            if (ShouldEraseBlockBackground(block))
+            {
+                AppendEraseOperations(opsErase, block, embeddedFonts.PrimaryFontIsCjk, plannedBlock.EraseRects);
+            }
+
             rendered++;
             if (blockRenderResult.UsedGlyphs is { Count: > 0 })
                 usedGlyphs.AddRange(blockRenderResult.UsedGlyphs);
@@ -1059,6 +1093,13 @@ public sealed class MuPdfExportService : IDocumentExportService
         return pad;
     }
 
+    internal static bool ShouldRenderBlockText(TranslatedBlockData block) =>
+        !string.IsNullOrWhiteSpace(block.TranslatedText) &&
+        !block.TranslationSkipped;
+
+    internal static bool ShouldEraseBlockBackground(TranslatedBlockData block) =>
+        ShouldRenderBlockText(block) && !block.SkipErase;
+
     internal static TranslatedBlockData PrepareBlockForRendering(
         TranslatedBlockData block,
         double pageHeightPoints)
@@ -1092,6 +1133,9 @@ public sealed class MuPdfExportService : IDocumentExportService
             BoundingBox = block.BoundingBox,
             FontSize = block.FontSize,
             TranslationSkipped = block.TranslationSkipped,
+            RenderFromSourceText = block.RenderFromSourceText,
+            SkipErase = block.SkipErase,
+            PreserveOriginalTextInPdfExport = block.PreserveOriginalTextInPdfExport,
             TextStyle = block.TextStyle,
             SourceBlockType = block.SourceBlockType,
             RetryCount = block.RetryCount,
@@ -1777,11 +1821,10 @@ public sealed class MuPdfExportService : IDocumentExportService
                     out var usesSourceFallback))
                 continue;
 
-            var isFormulaSkipped = metadata.SourceBlockType == SourceBlockType.Formula
-                || metadata.IsFormulaLike;
-
             var rotationAngle = metadata.TextStyle?.RotationAngle ?? 0;
             var isVertical = Math.Abs(rotationAngle) > 15.0;
+            var translationSkipped = metadata.TranslationSkipped || isVertical;
+            var preserveOriginalTextInPdfExport = metadata.PreserveOriginalTextInPdfExport && !isVertical;
 
             var block = new TranslatedBlockData
             {
@@ -1794,7 +1837,10 @@ public sealed class MuPdfExportService : IDocumentExportService
                 TranslatedText = translated,
                 BoundingBox = metadata.BoundingBox,
                 FontSize = metadata.TextStyle?.FontSize ?? 10.0,
-                TranslationSkipped = isFormulaSkipped || isVertical,
+                TranslationSkipped = translationSkipped,
+                RenderFromSourceText = false,
+                SkipErase = false,
+                PreserveOriginalTextInPdfExport = preserveOriginalTextInPdfExport,
                 TextStyle = metadata.TextStyle,
                 SourceBlockType = metadata.SourceBlockType,
                 RetryCount = metadata.RetryCount,
@@ -1917,6 +1963,9 @@ public sealed class MuPdfExportService : IDocumentExportService
         public BlockRect? BoundingBox { get; init; }
         public double FontSize { get; init; }
         public bool TranslationSkipped { get; init; }
+        public bool RenderFromSourceText { get; init; }
+        public bool SkipErase { get; init; }
+        public bool PreserveOriginalTextInPdfExport { get; init; }
         public BlockTextStyle? TextStyle { get; init; }
         public SourceBlockType SourceBlockType { get; init; }
         public int RetryCount { get; init; }

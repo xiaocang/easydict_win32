@@ -173,6 +173,38 @@ public class MuPdfExportServiceSpacingTests
     }
 
     [Fact]
+    public void PreservedFormulaBlock_UsesOriginalPdfTextInsteadOfRedraw()
+    {
+        var block = new MuPdfExportService.TranslatedBlockData
+        {
+            ChunkIndex = 0,
+            PageNumber = 2,
+            SourceBlockId = "p2-body-formula",
+            SourceText = "Attention(Q, K, V) = softmax(QK^T)V",
+            TranslatedText = "Attention(Q, K, V) = softmax(QK^T)V",
+            BoundingBox = new BlockRect(100, 120, 320, 32),
+            FontSize = 14,
+            TranslationSkipped = true,
+            RenderFromSourceText = false,
+            SkipErase = false,
+            PreserveOriginalTextInPdfExport = true,
+            TextStyle = new BlockTextStyle
+            {
+                FontSize = 14,
+                LineSpacing = 16,
+                Alignment = TextAlignment.Center
+            },
+            SourceBlockType = SourceBlockType.Formula,
+            UsesSourceFallback = false,
+            DetectedFontNames = ["TimesNewRomanPSMT", "CMMI10"]
+        };
+
+        MuPdfExportService.ShouldRenderBlockText(block).Should().BeFalse();
+        MuPdfExportService.ShouldEraseBlockBackground(block).Should().BeFalse();
+        block.PreserveOriginalTextInPdfExport.Should().BeTrue();
+    }
+
+    [Fact]
     public void GenerateBlockTextOperations_WithShortLineRectsButEnoughTotalHeight_KeepsOriginalFontSize()
     {
         var fonts = new MuPdfExportService.EmbeddedFontInfo(

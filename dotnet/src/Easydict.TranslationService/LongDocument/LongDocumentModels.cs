@@ -197,6 +197,11 @@ public sealed record DocumentBlockIr
     /// when the primary text causes translation failure.
     /// </summary>
     public string? FallbackText { get; init; }
+    /// <summary>
+    /// True when PDF export should keep the original page text operators for this block
+    /// instead of redrawing translated text. Used for hard-confirmed formulas.
+    /// </summary>
+    public bool PreserveOriginalTextInPdfExport { get; init; }
 }
 
 public sealed record DocumentIr
@@ -226,6 +231,10 @@ public sealed record TranslatedDocumentBlock
     public string? LastError { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
     public BlockFormulaCharacters? FormulaCharacters { get; init; }
+    /// <summary>
+    /// True when PDF export should preserve this block's original PDF text content instead of redrawing it.
+    /// </summary>
+    public bool PreserveOriginalTextInPdfExport { get; init; }
 }
 
 public sealed record LongDocumentTranslationOptions

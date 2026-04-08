@@ -89,6 +89,8 @@ public sealed class LongDocumentChunkMetadata
     public BlockRect? BoundingBox { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
     public BlockFormulaCharacters? FormulaCharacters { get; init; }
+    public bool TranslationSkipped { get; init; }
+    public bool PreserveOriginalTextInPdfExport { get; init; }
     public int RetryCount { get; set; }
     public string? FallbackText { get; init; }
     public IReadOnlyList<string>? DetectedFontNames { get; init; }
@@ -308,21 +310,22 @@ public sealed class LongDocumentTranslationService : IDisposable
                 {
                     var regionInfo = InferRegionInfoFromBlockId(item.Block.SourceBlockId);
                     sourceBlocksByPageAndId.TryGetValue((item.PageNumber, item.Block.SourceBlockId), out var sourceBlock);
+                    var sourceBlockType = item.Block.BlockType switch
+                    {
+                        BlockType.Heading => SourceBlockType.Heading,
+                        BlockType.Caption => SourceBlockType.Caption,
+                        BlockType.Table => SourceBlockType.TableCell,
+                        BlockType.Formula => SourceBlockType.Formula,
+                        BlockType.Unknown => SourceBlockType.Unknown,
+                        _ => SourceBlockType.Paragraph
+                    };
                     return new LongDocumentChunkMetadata
                     {
                         ChunkIndex = index,
                         PageNumber = item.PageNumber,
                         SourceBlockId = item.Block.SourceBlockId,
-                        SourceBlockType = item.Block.BlockType switch
-                        {
-                            BlockType.Heading => SourceBlockType.Heading,
-                            BlockType.Caption => SourceBlockType.Caption,
-                            BlockType.Table => SourceBlockType.TableCell,
-                            BlockType.Formula => SourceBlockType.Formula,
-                            BlockType.Unknown => SourceBlockType.Unknown,
-                            _ => SourceBlockType.Paragraph
-                        },
-                        IsFormulaLike = item.Block.TranslationSkipped,
+                        SourceBlockType = sourceBlockType,
+                        IsFormulaLike = sourceBlock?.IsFormulaLike ?? sourceBlockType == SourceBlockType.Formula,
                         OrderInPage = orderBySourceBlockId.TryGetValue(item.PageNumber, out var orders) &&
                                       orders.TryGetValue(item.Block.SourceBlockId, out var order)
                             ? order
@@ -339,6 +342,11 @@ public sealed class LongDocumentTranslationService : IDisposable
                         BoundingBox = item.Block.BoundingBox,
                         TextStyle = item.Block.TextStyle,
                         FormulaCharacters = item.Block.FormulaCharacters,
+                        TranslationSkipped = item.Block.TranslationSkipped,
+                        PreserveOriginalTextInPdfExport =
+                            item.Block.PreserveOriginalTextInPdfExport ||
+                            sourceBlockType == SourceBlockType.Formula ||
+                            regionInfo.Type is LayoutRegionType.Formula or LayoutRegionType.IsolatedFormula,
                         RetryCount = item.Block.RetryCount,
                         FallbackText = sourceBlock?.FallbackText,
                         DetectedFontNames = sourceBlock?.DetectedFontNames
@@ -830,7 +838,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         return sb.ToString().Trim();
     }
 
-    private static readonly Regex FormulaHeuristicRegex = new(@"(\$[^$]+\$|\\([^)]+\\)|\\[[^\]]+\\]|\b\w+\s*=\s*[-+*/^()\w]+)", RegexOptions.Compiled);
+    private static readonly Regex FormulaHeuristicRegex = new(@"(\$[^$]+\$|\\([^)]+\\)|\\[[^\]]+\\]|\b\w+\s*=\s*[-+*/^()\w\u221A]+)", RegexOptions.Compiled);
 
     private static Task<SourceDocument> BuildSourceDocumentBasicAsync(LongDocumentInputMode mode, string input, string? pageRange = null)
     {

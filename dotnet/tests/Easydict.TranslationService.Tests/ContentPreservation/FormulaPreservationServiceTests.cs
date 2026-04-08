@@ -90,6 +90,105 @@ public class FormulaPreservationServiceTests
     }
 
     [Fact]
+    public void Protect_CharacterLevelPlaceholdersOnBothSidesOfEquals_MarksAsOpaque()
+    {
+        var context = new BlockContext
+        {
+            Text = "Attention(Q, K, V) = softmax(QK^T)V",
+            BlockType = SourceBlockType.Paragraph,
+            CharacterLevelProtectedText = "Attention({v0}) = softmax({v1}){v2}",
+            CharacterLevelTokens =
+            [
+                new FormulaToken(FormulaTokenType.InlineMath, "Q, K, V", "{v0}", "Q, K, V"),
+                new FormulaToken(FormulaTokenType.InlineMath, "QK^T", "{v1}", "QK^T"),
+                new FormulaToken(FormulaTokenType.InlineMath, "V", "{v2}", "V")
+            ]
+        };
+
+        var result = _service.Protect(context, new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false });
+
+        result.Plan.SkipTranslation.Should().BeTrue();
+        result.Plan.Mode.Should().Be(PreservationMode.Opaque);
+    }
+
+    [Fact]
+    public void Protect_CharacterLevelMathFunctionResidueOnly_MarksAsOpaque()
+    {
+        var context = new BlockContext
+        {
+            Text = "softmax(QK^T) + V",
+            BlockType = SourceBlockType.Paragraph,
+            CharacterLevelProtectedText = "softmax({v0}) + {v1}",
+            CharacterLevelTokens =
+            [
+                new FormulaToken(FormulaTokenType.InlineMath, "QK^T", "{v0}", "QK^T"),
+                new FormulaToken(FormulaTokenType.InlineMath, "V", "{v1}", "V")
+            ]
+        };
+
+        var result = _service.Protect(context, new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false });
+
+        result.Plan.SkipTranslation.Should().BeTrue();
+        result.Plan.Mode.Should().Be(PreservationMode.Opaque);
+    }
+
+    [Fact]
+    public void Protect_CharacterLevelEquationSuspicion_WrapsWithEqSoftTag()
+    {
+        var context = new BlockContext
+        {
+            Text = "Attention score = softmax(QK^T)",
+            BlockType = SourceBlockType.Paragraph,
+            CharacterLevelProtectedText = "Attention score = softmax({v0})",
+            CharacterLevelTokens =
+            [
+                new FormulaToken(FormulaTokenType.InlineMath, "QK^T", "{v0}", "QK^T")
+            ]
+        };
+
+        var result = _service.Protect(context, new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false });
+
+        result.Plan.SkipTranslation.Should().BeFalse();
+        result.Plan.Mode.Should().Be(PreservationMode.InlineProtected);
+        result.ProtectedText.Should().Be("[[EQ_SOFT]]Attention score = softmax({v0})[[/EQ_SOFT]]");
+        result.SoftSpans.Should().ContainSingle();
+        result.SoftSpans[0].WrapperKind.Should().Be(SoftProtectionWrapperKind.EquationSoftTag);
+        result.SoftSpans[0].RequiresExactPreservation.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Protect_ShortPlainText_DoesNotClassifyAsFormulaOnly()
+    {
+        var context = new BlockContext
+        {
+            Text = "OK",
+            BlockType = SourceBlockType.Paragraph
+        };
+
+        var result = _service.Protect(context, new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false });
+
+        result.Plan.SkipTranslation.Should().BeFalse();
+        result.ProtectedText.Should().Be("OK");
+        result.Tokens.Should().BeEmpty();
+        result.SoftSpans.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Protect_OrdinaryProseWithEquals_DoesNotWrapWithEqSoftTag()
+    {
+        var context = new BlockContext
+        {
+            Text = "This means speed = 5 in practice.",
+            BlockType = SourceBlockType.Paragraph
+        };
+
+        var result = _service.Protect(context, new ProtectionPlan { Mode = PreservationMode.None, SkipTranslation = false });
+
+        result.ProtectedText.Should().NotContain("[[EQ_SOFT]]");
+        result.SoftSpans.Should().OnlyContain(span => span.WrapperKind == SoftProtectionWrapperKind.DollarMath);
+    }
+
+    [Fact]
     public void Protect_SkipTranslation_ReturnsOpaqueBlock()
     {
         var context = new BlockContext
@@ -150,6 +249,80 @@ public class FormulaPreservationServiceTests
         var plan = _service.Analyze(context);
 
         plan.SkipTranslation.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Analyze_DisplayEquationHeuristic_WithMathFonts_SkipsTranslation()
+    {
+        var context = new BlockContext
+        {
+            Text = "Attention(Q, K, V) = softmax(QK^T)V",
+            BlockType = SourceBlockType.Paragraph,
+            FormulaCharacters = new BlockFormulaCharacters
+            {
+                Characters =
+                [
+                    new FormulaCharacterInfo("Q", "CMMI10", 12, 0, 0, 6, 12, true, false, false),
+                    new FormulaCharacterInfo("K", "CMMI10", 12, 6, 0, 6, 12, true, false, false)
+                ],
+                MedianTextFontSize = 12,
+                MedianBaselineY = 0,
+                HasMathFontCharacters = true
+            }
+        };
+
+        var plan = _service.Analyze(context);
+
+        plan.SkipTranslation.Should().BeTrue();
+        plan.Reason.Should().Be("DisplayEquationHeuristic");
+    }
+
+    [Fact]
+    public void Analyze_DisplayEquationHeuristic_WithoutMathFonts_DoesNotSkip()
+    {
+        var context = new BlockContext
+        {
+            Text = "Attention(Q, K, V) = softmax(QK^T)V",
+            BlockType = SourceBlockType.Paragraph,
+            FormulaCharacters = new BlockFormulaCharacters
+            {
+                Characters =
+                [
+                    new FormulaCharacterInfo("Q", "Arial", 12, 0, 0, 6, 12, false, false, false)
+                ],
+                MedianTextFontSize = 12,
+                MedianBaselineY = 0,
+                HasMathFontCharacters = false
+            }
+        };
+
+        var plan = _service.Analyze(context);
+
+        plan.SkipTranslation.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Analyze_DisplayEquationHeuristic_TooManyNaturalWords_DoesNotSkip()
+    {
+        var context = new BlockContext
+        {
+            Text = "The output value = the sequence representation for each position in the model",
+            BlockType = SourceBlockType.Paragraph,
+            FormulaCharacters = new BlockFormulaCharacters
+            {
+                Characters =
+                [
+                    new FormulaCharacterInfo("x", "CMMI10", 12, 0, 0, 6, 12, true, false, false)
+                ],
+                MedianTextFontSize = 12,
+                MedianBaselineY = 0,
+                HasMathFontCharacters = true
+            }
+        };
+
+        var plan = _service.Analyze(context);
+
+        plan.SkipTranslation.Should().BeFalse();
     }
 
     [Fact]
@@ -363,6 +536,70 @@ public class FormulaPreservationServiceTests
         };
 
         var outcome = _service.Restore("The tuple sequence1 is a sequence.", protectedBlock);
+
+        outcome.Text.Should().Be(originalText);
+        outcome.Status.Should().Be(RestoreStatus.FallbackToOriginal);
+        outcome.SoftValidationStatus.Should().Be(SoftValidationStatus.Failed);
+        outcome.SoftFailureCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Restore_EquationSoftTagStripsMarkers()
+    {
+        const string originalText = "a = softmax(QK^T)";
+        var protectedBlock = new ProtectedBlock
+        {
+            OriginalText = originalText,
+            ProtectedText = "[[EQ_SOFT]]a = softmax(QK^T)[[/EQ_SOFT]]",
+            Tokens = Array.Empty<FormulaToken>(),
+            SoftSpans =
+            [
+                new SoftProtectedSpan
+                {
+                    RawText = originalText,
+                    TokenType = FormulaTokenType.InlineEquation,
+                    WrappedText = "[[EQ_SOFT]]a = softmax(QK^T)[[/EQ_SOFT]]",
+                    SyntheticDelimiters = true,
+                    RequiresExactPreservation = true,
+                    WrapperKind = SoftProtectionWrapperKind.EquationSoftTag
+                }
+            ],
+            Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
+        };
+
+        var outcome = _service.Restore("[[EQ_SOFT]]a = softmax(QK^T)[[/EQ_SOFT]]", protectedBlock);
+
+        outcome.Text.Should().Be(originalText);
+        outcome.Status.Should().Be(RestoreStatus.FullRestore);
+        outcome.SoftValidationStatus.Should().Be(SoftValidationStatus.Normalized);
+        outcome.SyntheticDelimiterStripCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Restore_EquationSoftTagMutation_FallsBackToOriginal()
+    {
+        const string originalText = "a = softmax(QK^T)";
+        var protectedBlock = new ProtectedBlock
+        {
+            OriginalText = originalText,
+            ProtectedText = "[[EQ_SOFT]]a = softmax(QK^T)[[/EQ_SOFT]]",
+            Tokens = Array.Empty<FormulaToken>(),
+            SoftSpans =
+            [
+                new SoftProtectedSpan
+                {
+                    RawText = originalText,
+                    TokenType = FormulaTokenType.InlineEquation,
+                    WrappedText = "[[EQ_SOFT]]a = softmax(QK^T)[[/EQ_SOFT]]",
+                    SyntheticDelimiters = true,
+                    RequiresExactPreservation = true,
+                    WrapperKind = SoftProtectionWrapperKind.EquationSoftTag
+                }
+            ],
+            Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
+        };
+
+        var outcome = _service.Restore("[[EQ_SOFT]]a = 注意力KV[[/EQ_SOFT]]", protectedBlock);
 
         outcome.Text.Should().Be(originalText);
         outcome.Status.Should().Be(RestoreStatus.FallbackToOriginal);

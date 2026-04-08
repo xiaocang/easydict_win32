@@ -7,6 +7,7 @@ using Easydict.WinUI.Services.DocumentExport;
 using WinUiLongDocumentTranslationService = Easydict.WinUI.Services.LongDocumentTranslationService;
 using CoreLongDocumentTranslationResult = Easydict.TranslationService.LongDocument.LongDocumentTranslationResult;
 using FluentAssertions;
+using MuPDF.NET;
 using PdfSharpCore.Pdf;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using Xunit;
@@ -21,6 +22,99 @@ public class LongDocumentTranslationServiceReviewFixTests
 
     private static string NormalizeWhitespaceForAssertion(string text) =>
         Regex.Replace(text, @"\s+", " ").Trim();
+
+    private static string CompactWhitespaceForAssertion(string text) =>
+        Regex.Replace(text, @"\s+", string.Empty);
+
+    private static async Task<SourceDocument> BuildSourceDocumentFromFixtureAsync(string pdfPath)
+    {
+        using var service = new WinUiLongDocumentTranslationService();
+        var buildSourceMethod = typeof(WinUiLongDocumentTranslationService)
+            .GetMethod("BuildSourceDocumentAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        buildSourceMethod.Should().NotBeNull();
+
+        var buildTask = (Task<SourceDocument>)buildSourceMethod!.Invoke(service,
+            [
+                LongDocumentInputMode.Pdf,
+                pdfPath,
+                LayoutDetectionMode.Auto,
+                null,
+                null,
+                null,
+                null,
+                CancellationToken.None,
+                null
+            ])!;
+
+        return await buildTask;
+    }
+
+    private static LongDocumentTranslationCheckpoint BuildIdentityCheckpoint(SourceDocument source, string pdfPath)
+    {
+        var sourceChunks = new List<string>();
+        var chunkMetadata = new List<LongDocumentChunkMetadata>();
+        var translatedChunks = new Dictionary<int, string>();
+        var chunkIndex = 0;
+
+        foreach (var page in source.Pages.OrderBy(page => page.PageNumber))
+        {
+            for (var order = 0; order < page.Blocks.Count; order++)
+            {
+                var block = page.Blocks[order];
+                var isFormulaBlock = block.BlockType == SourceBlockType.Formula;
+
+                sourceChunks.Add(block.Text);
+                translatedChunks[chunkIndex] = block.Text;
+                chunkMetadata.Add(new LongDocumentChunkMetadata
+                {
+                    ChunkIndex = chunkIndex,
+                    PageNumber = page.PageNumber,
+                    SourceBlockId = block.BlockId,
+                    SourceBlockType = block.BlockType,
+                    IsFormulaLike = block.IsFormulaLike,
+                    OrderInPage = order,
+                    RegionType = InferFixtureRegionType(block),
+                    RegionConfidence = 1,
+                    RegionSource = LayoutRegionSource.BlockIdFallback,
+                    ReadingOrderScore = page.Blocks.Count <= 1
+                        ? 1
+                        : 1 - order / (double)(page.Blocks.Count - 1),
+                    BoundingBox = block.BoundingBox,
+                    TextStyle = block.TextStyle,
+                    FormulaCharacters = block.FormulaCharacters,
+                    TranslationSkipped = isFormulaBlock,
+                    PreserveOriginalTextInPdfExport = isFormulaBlock
+                });
+                chunkIndex++;
+            }
+        }
+
+        return new LongDocumentTranslationCheckpoint
+        {
+            InputMode = LongDocumentInputMode.Pdf,
+            SourceFilePath = pdfPath,
+            TargetLanguage = Language.SimplifiedChinese,
+            SourceChunks = sourceChunks,
+            ChunkMetadata = chunkMetadata,
+            TranslatedChunks = translatedChunks,
+            FailedChunkIndexes = []
+        };
+    }
+
+    private static LayoutRegionType InferFixtureRegionType(SourceDocumentBlock block) =>
+        block.BlockType switch
+        {
+            SourceBlockType.Formula => LayoutRegionType.Formula,
+            SourceBlockType.TableCell => LayoutRegionType.TableLike,
+            _ => LayoutRegionType.Body
+        };
+
+    private static void TryDelete(string path)
+    {
+        if (File.Exists(path))
+            File.Delete(path);
+    }
 
     [Fact]
     public void CalculateReadingOrderScore_ShouldBePageLocalAndStableForLargeCounts()
@@ -76,6 +170,18 @@ public class LongDocumentTranslationServiceReviewFixTests
 
         var splits = (IReadOnlyList<int>)method!.Invoke(null, [wordBoxes, 10d])!;
         splits.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GuessBlockType_ShouldTreatSquareRootEquationAsFormula()
+    {
+        var method = typeof(WinUiLongDocumentTranslationService)
+            .GetMethod("GuessBlockType", BindingFlags.NonPublic | BindingFlags.Static);
+
+        method.Should().NotBeNull();
+
+        var result = (SourceBlockType)method!.Invoke(null, ["x = √d_k"])!;
+        result.Should().Be(SourceBlockType.Formula);
     }
 
     [Fact]
@@ -964,6 +1070,89 @@ public class LongDocumentTranslationServiceReviewFixTests
     }
 
     [Fact]
+    public void BuildCheckpointFromCoreResult_ShouldNotDeriveIsFormulaLikeFromTranslationSkipped()
+    {
+        var sourceDocument = new SourceDocument
+        {
+            DocumentId = "doc-1",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "p1-body-b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "Attention(Q, K, V) = softmax(QK^T)V",
+                            IsFormulaLike = false,
+                            BoundingBox = new BlockRect(10, 10, 100, 20),
+                            TextStyle = new BlockTextStyle { FontSize = 12 }
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var coreResult = new CoreLongDocumentTranslationResult
+        {
+            Ir = new DocumentIr
+            {
+                DocumentId = "doc-1",
+                Blocks = []
+            },
+            Pages =
+            [
+                new TranslatedDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new TranslatedDocumentBlock
+                        {
+                            IrBlockId = "ir-1-p1-body-b1",
+                            SourceBlockId = "p1-body-b1",
+                            BlockType = BlockType.Paragraph,
+                            OriginalText = "Attention(Q, K, V) = softmax(QK^T)V",
+                            ProtectedText = "Attention(Q, K, V) = softmax(QK^T)V",
+                            TranslatedText = "Attention(Q, K, V) = softmax(QK^T)V",
+                            SourceHash = "hash-1",
+                            BoundingBox = new BlockRect(10, 10, 100, 20),
+                            TranslationSkipped = true,
+                            PreserveOriginalTextInPdfExport = true,
+                            RetryCount = 0,
+                            LastError = null,
+                            TextStyle = new BlockTextStyle { FontSize = 12 }
+                        }
+                    ]
+                }
+            ],
+            QualityReport = new LongDocumentQualityReport
+            {
+                StageTimingsMs = new Dictionary<string, long>(),
+                TotalBlocks = 1,
+                TranslatedBlocks = 0,
+                SkippedBlocks = 1,
+                FailedBlocks = []
+            }
+        };
+
+        var checkpoint = WinUiLongDocumentTranslationService.BuildCheckpointFromCoreResult(
+            LongDocumentInputMode.Pdf,
+            "dummy.pdf",
+            Language.SimplifiedChinese,
+            sourceDocument,
+            coreResult);
+
+        checkpoint.ChunkMetadata.Should().ContainSingle();
+        checkpoint.ChunkMetadata[0].IsFormulaLike.Should().BeFalse();
+        checkpoint.ChunkMetadata[0].TranslationSkipped.Should().BeTrue();
+        checkpoint.ChunkMetadata[0].PreserveOriginalTextInPdfExport.Should().BeTrue();
+    }
+
+    [Fact]
     public void BuildParagraphTextsForTesting_ShouldKeepFormulaContinuationAttached()
     {
         var paragraphs = WinUiLongDocumentTranslationService.BuildParagraphTextsForTesting(
@@ -1103,71 +1292,8 @@ public class LongDocumentTranslationServiceReviewFixTests
 
         try
         {
-            using var service = new WinUiLongDocumentTranslationService();
-            var buildSourceMethod = typeof(WinUiLongDocumentTranslationService)
-                .GetMethod("BuildSourceDocumentAsync", BindingFlags.Instance | BindingFlags.NonPublic);
-
-            buildSourceMethod.Should().NotBeNull();
-
-            var buildTask = (Task<SourceDocument>)buildSourceMethod!.Invoke(service,
-                [
-                    LongDocumentInputMode.Pdf,
-                    pdfPath!,
-                    LayoutDetectionMode.Auto,
-                    null,
-                    null,
-                    null,
-                    null,
-                    CancellationToken.None,
-                    null
-                ])!;
-
-            var source = await buildTask;
-
-            var sourceChunks = new List<string>();
-            var chunkMetadata = new List<LongDocumentChunkMetadata>();
-            var translatedChunks = new Dictionary<int, string>();
-            var chunkIndex = 0;
-
-            foreach (var page in source.Pages.OrderBy(page => page.PageNumber))
-            {
-                for (var order = 0; order < page.Blocks.Count; order++)
-                {
-                    var block = page.Blocks[order];
-                    sourceChunks.Add(block.Text);
-                    translatedChunks[chunkIndex] = block.Text;
-                    chunkMetadata.Add(new LongDocumentChunkMetadata
-                    {
-                        ChunkIndex = chunkIndex,
-                        PageNumber = page.PageNumber,
-                        SourceBlockId = block.BlockId,
-                        SourceBlockType = block.BlockType,
-                        IsFormulaLike = block.IsFormulaLike,
-                        OrderInPage = order,
-                        RegionType = LayoutRegionType.Body,
-                        RegionConfidence = 1,
-                        RegionSource = LayoutRegionSource.BlockIdFallback,
-                        ReadingOrderScore = page.Blocks.Count <= 1
-                            ? 1
-                            : 1 - order / (double)(page.Blocks.Count - 1),
-                        BoundingBox = block.BoundingBox,
-                        TextStyle = block.TextStyle,
-                        FormulaCharacters = block.FormulaCharacters
-                    });
-                    chunkIndex++;
-                }
-            }
-
-            var checkpoint = new LongDocumentTranslationCheckpoint
-            {
-                InputMode = LongDocumentInputMode.Pdf,
-                SourceFilePath = pdfPath,
-                TargetLanguage = Language.SimplifiedChinese,
-                SourceChunks = sourceChunks,
-                ChunkMetadata = chunkMetadata,
-                TranslatedChunks = translatedChunks,
-                FailedChunkIndexes = []
-            };
+            var source = await BuildSourceDocumentFromFixtureAsync(pdfPath);
+            var checkpoint = BuildIdentityCheckpoint(source, pdfPath);
 
             try
             {
@@ -1199,6 +1325,68 @@ public class LongDocumentTranslationServiceReviewFixTests
             {
                 File.Delete(outputPath);
             }
+        }
+    }
+
+    [SkippableFact]
+    public async Task MuPdfExportService_ExportFixturePdf_ShouldPreservePage4FormulasAndEmitReviewPng()
+    {
+        var pdfPath = GetPdfFixturePath("1706.03762v7.pdf");
+        Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+
+        var outputPdfPath = Path.Combine(Path.GetTempPath(), "page4-formula-review.pdf");
+        var outputPngPath = Path.Combine(Path.GetTempPath(), "page4-formula-review.png");
+
+        TryDelete(outputPdfPath);
+        TryDelete(outputPngPath);
+
+        try
+        {
+            var source = await BuildSourceDocumentFromFixtureAsync(pdfPath);
+            var checkpoint = BuildIdentityCheckpoint(source, pdfPath);
+
+            try
+            {
+                var exportService = new MuPdfExportService();
+                exportService.Export(checkpoint, pdfPath, outputPdfPath, DocumentOutputMode.Monolingual);
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
+            {
+                Skip.If(true, $"MuPDF unavailable in test environment: {ex.Message}");
+            }
+
+            File.Exists(outputPdfPath).Should().BeTrue();
+
+            using var outputDoc = PdfPigDocument.Open(outputPdfPath);
+            var page4Text = outputDoc.GetPages().Single(page => page.Number == 4).Text;
+            var compactPage4Text = CompactWhitespaceForAssertion(page4Text);
+
+            compactPage4Text.Should().Contain("Attention(Q,K,V)=softmax",
+                "the page 4 display equation should remain in the exported PDF");
+            compactPage4Text.Should().Contain("√dk",
+                "the page 4 display equation should preserve its square-root denominator");
+
+            var muDoc = new Document(outputPdfPath);
+            try
+            {
+                muDoc.PageCount.Should().BeGreaterOrEqualTo(4);
+
+                var page4 = muDoc[3];
+                var pix = page4.GetPixmap(new Matrix(1.5f, 1.5f));
+                pix.Save(outputPngPath, "png");
+            }
+            finally
+            {
+                muDoc.Close();
+            }
+
+            File.Exists(outputPngPath).Should().BeTrue();
+            Console.WriteLine($"Page 4 formula review PDF: {outputPdfPath}");
+            Console.WriteLine($"Page 4 formula review PNG: {outputPngPath}");
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
+        {
+            Skip.If(true, $"MuPDF unavailable in test environment: {ex.Message}");
         }
     }
 

@@ -50,4 +50,14 @@ public sealed record BlockContext
     /// and bypasses the character-level preemption path.
     /// </summary>
     public int RetryAttempt { get; init; } = 0;
+
+    /// <summary>
+    /// Optional source block identifier for DEBUG logging.
+    /// </summary>
+    public string? DebugBlockId { get; init; }
+
+    /// <summary>
+    /// Optional source page number for DEBUG logging.
+    /// </summary>
+    public int? DebugPageNumber { get; init; }
 }

@@ -31,6 +31,31 @@ public static class MathPatterns
         @"\u02B0-\u02FF\u0300-\u036F\u02C6-\u02CF\u200B-\u200D]";
 
     /// <summary>
+    /// Known math and ML-style function names that may legitimately appear as the
+    /// English-looking residue of a formula block.
+    /// </summary>
+    public static readonly HashSet<string> MathFunctionNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "attention",
+        "softmax",
+        "multihead",
+        "concat",
+        "layernorm",
+        "ffn",
+        "relu",
+        "gelu",
+        "sin",
+        "cos",
+        "min",
+        "max",
+        "argmax",
+        "argmin",
+        "log",
+        "exp",
+        "tr",
+    };
+
+    /// <summary>
     /// Returns true if <paramref name="token"/> looks like a mathematical subscript or
     /// superscript token: letters, digits, or common operators (+, -, =, ., ,, (, ), /, *).
     /// Footnote markers (\u2020, \u2021, \u00a7, \u00b6, etc.) return false.

@@ -67,6 +67,12 @@ public sealed record CharInfo
 public sealed class ContentStreamResult
 {
     /// <summary>
+    /// Original page operations in content-stream order, including text ops.
+    /// Used when export needs to preserve source text for selected blocks.
+    /// </summary>
+    public required IReadOnlyList<IGraphicsStateOperation> AllOperations { get; init; }
+
+    /// <summary>
     /// Graphics-only operations (everything except text operations).
     /// These can be written back as ops_base when reconstructing the content stream.
     /// </summary>
@@ -89,9 +95,18 @@ public sealed class ContentStreamResult
     /// to a PDF content stream (ops_base in pdf2zh terminology).
     /// </summary>
     public byte[] SerializeGraphicsOperations()
+        => SerializeOperations(GraphicsOperations);
+
+    /// <summary>
+    /// Serializes the original page operations, including text operators.
+    /// </summary>
+    public byte[] SerializeAllOperations()
+        => SerializeOperations(AllOperations);
+
+    private static byte[] SerializeOperations(IReadOnlyList<IGraphicsStateOperation> operations)
     {
         using var ms = new MemoryStream();
-        foreach (var op in GraphicsOperations)
+        foreach (var op in operations)
         {
             op.Write(ms);
             // Add newline separator between operations for readability
@@ -186,6 +201,7 @@ public static class ContentStreamInterpreter
 
         return new ContentStreamResult
         {
+            AllOperations = operations,
             GraphicsOperations = graphicsOps,
             Characters = characters,
             FontMap = fontMap,

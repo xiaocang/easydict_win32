@@ -684,10 +684,15 @@ public sealed class FormulaPreservationService : IContentPreservationService
             stripCount += hits;
         }
 
+        // For exact-span comparison, collapse LaTeX-equivalent forms (subscript underscores,
+        // ellipsis variants) so that e.g. "(y_1, \ldots, y_m)" matches the raw "(y1, ..., ym)".
+        // Without this, a well-behaved LLM that normalizes tuple notation trips soft=Failed.
+        var comparisonText = NormalizeForExactSpanComparison(normalizedText);
         var softFailureCount = 0;
         foreach (var (raw, expected) in expectedByRaw!)
         {
-            var actual = CountOccurrences(normalizedText, raw);
+            var comparisonRaw = NormalizeForExactSpanComparison(raw);
+            var actual = CountOccurrences(comparisonText, comparisonRaw);
             if (actual < expected) softFailureCount += expected - actual;
         }
 
@@ -720,6 +725,42 @@ public sealed class FormulaPreservationService : IContentPreservationService
         SoftProtectionWrapperKind.EquationSoftTag => $"{EquationSoftOpenTag}{span.RawText}{EquationSoftCloseTag}",
         _ => span.WrappedText,
     };
+
+    /// <summary>
+    /// Normalizes a text fragment so that LaTeX-equivalent tuple notations compare equal.
+    /// Accepts benign LLM reformatting like <c>(y_1, \ldots, y_m)</c> when the source was
+    /// <c>(y1, ..., ym)</c>, without weakening hard-token validation or affecting prose.
+    /// </summary>
+    internal static string NormalizeForExactSpanComparison(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+
+        // Replace LaTeX ellipsis commands and Unicode horizontal ellipsis with ASCII "...".
+        var replaced = text
+            .Replace("\\ldots", "...", StringComparison.Ordinal)
+            .Replace("\\dots", "...", StringComparison.Ordinal)
+            .Replace("\\cdots", "...", StringComparison.Ordinal)
+            .Replace("\u2026", "...", StringComparison.Ordinal);
+
+        // Strip subscript underscores between a letter base and a single letter/digit subscript
+        // (e.g. "y_1" → "y1", "x_n" → "xn"). Only drops underscore when the context is clearly a
+        // subscript; leaves identifier underscores like "my_var" intact.
+        var sb = new System.Text.StringBuilder(replaced.Length);
+        for (var i = 0; i < replaced.Length; i++)
+        {
+            var c = replaced[i];
+            if (c == '_' &&
+                i > 0 && char.IsLetter(replaced[i - 1]) &&
+                i + 1 < replaced.Length && char.IsLetterOrDigit(replaced[i + 1]) &&
+                (i + 2 >= replaced.Length || !char.IsLetterOrDigit(replaced[i + 2])))
+            {
+                // "y_1)" or "x_n," — subscript pattern, drop the underscore.
+                continue;
+            }
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
 
     private static int CountOccurrences(string text, string value)
     {

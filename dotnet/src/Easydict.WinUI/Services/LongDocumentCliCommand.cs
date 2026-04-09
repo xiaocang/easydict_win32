@@ -180,6 +180,38 @@ internal static class LongDocumentCliCommand
                 if (result.State == LongDocumentJobState.PartialSuccess)
                 {
                     Console.WriteLine($"Failed chunk indexes: {string.Join(", ", result.FailedChunkIndexes.Select(i => i + 1))}");
+
+                    if (result.QualityReport?.FailedBlocks is { Count: > 0 } failures)
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("Failed block details:");
+
+                        // Build lookup from SourceBlockId → source text using the checkpoint
+                        // to show a short preview of each failing chunk.
+                        var sourceTextByBlockId = new Dictionary<string, string>(StringComparer.Ordinal);
+                        for (var i = 0; i < result.Checkpoint.ChunkMetadata.Count; i++)
+                        {
+                            var meta = result.Checkpoint.ChunkMetadata[i];
+                            if (i < result.Checkpoint.SourceChunks.Count)
+                                sourceTextByBlockId[meta.SourceBlockId] = result.Checkpoint.SourceChunks[i];
+                        }
+
+                        foreach (var failure in failures
+                            .OrderBy(f => f.PageNumber)
+                            .ThenBy(f => f.SourceBlockId, StringComparer.Ordinal))
+                        {
+                            Console.WriteLine($"  p{failure.PageNumber} {failure.SourceBlockId} retries={failure.RetryCount}: {failure.Error}");
+                            if (sourceTextByBlockId.TryGetValue(failure.SourceBlockId, out var sourceText) &&
+                                !string.IsNullOrEmpty(sourceText))
+                            {
+                                var preview = sourceText.Replace('\n', ' ').Replace('\r', ' ');
+                                if (preview.Length > 200)
+                                    preview = preview[..200] + "…";
+                                Console.WriteLine($"    src({sourceText.Length}): {preview}");
+                            }
+                        }
+                    }
+
                     return 2;
                 }
 

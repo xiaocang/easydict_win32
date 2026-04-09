@@ -606,4 +606,57 @@ public class FormulaPreservationServiceTests
         outcome.SoftValidationStatus.Should().Be(SoftValidationStatus.Failed);
         outcome.SoftFailureCount.Should().Be(1);
     }
+
+    [Theory]
+    [InlineData("The sequence (y_1, \\ldots, y_m) of symbols.")]
+    [InlineData("The sequence (y_1, \\dots, y_m) of symbols.")]
+    [InlineData("The sequence (y_1, \\cdots, y_m) of symbols.")]
+    [InlineData("The sequence (y_1, ..., y_m) of symbols.")]
+    [InlineData("The sequence (y_1, \u2026, y_m) of symbols.")]
+    public void Restore_ExactSoftSpan_AcceptsLatexEquivalentTupleForms(string translatedText)
+    {
+        // Regression for p2-body-b14 on Attention paper: DeepSeek occasionally rewrites
+        // "(y1, ..., ym)" as "(y_1, \ldots, y_m)" since the prompt tells it the $...$
+        // content is math. The validator must accept these semantically equivalent forms.
+        const string originalText = "The sequence (y1, ..., ym) of symbols.";
+        var protectedBlock = new ProtectedBlock
+        {
+            OriginalText = originalText,
+            ProtectedText = "The sequence $(y1, ..., ym)$ of symbols.",
+            Tokens = Array.Empty<FormulaToken>(),
+            SoftSpans =
+            [
+                new SoftProtectedSpan
+                {
+                    RawText = "(y1, ..., ym)",
+                    TokenType = FormulaTokenType.ImplicitTuple,
+                    WrappedText = "$(y1, ..., ym)$",
+                    SyntheticDelimiters = true,
+                    RequiresExactPreservation = true,
+                    WrapperKind = SoftProtectionWrapperKind.DollarMath
+                }
+            ],
+            Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
+        };
+
+        var outcome = _service.Restore(translatedText, protectedBlock);
+
+        outcome.Status.Should().NotBe(RestoreStatus.FallbackToOriginal);
+        outcome.SoftValidationStatus.Should().NotBe(SoftValidationStatus.Failed);
+        outcome.SoftFailureCount.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("", "")]
+    [InlineData("(y1, ..., ym)", "(y1, ..., ym)")]
+    [InlineData("(y_1, \\ldots, y_m)", "(y1, ..., ym)")]
+    [InlineData("(y_1, \\dots, y_m)", "(y1, ..., ym)")]
+    [InlineData("(y_1, \\cdots, y_m)", "(y1, ..., ym)")]
+    [InlineData("(y_1, \u2026, y_m)", "(y1, ..., ym)")]
+    [InlineData("my_var = 5", "my_var = 5")] // identifier underscore not stripped
+    [InlineData("z_1, z_2, z_n", "z1, z2, zn")]
+    public void NormalizeForExactSpanComparison_CollapsesLatexEquivalents(string input, string expected)
+    {
+        FormulaPreservationService.NormalizeForExactSpanComparison(input).Should().Be(expected);
+    }
 }

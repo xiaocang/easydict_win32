@@ -646,4 +646,113 @@ public class MuPdfExportServiceSpacingTests
         finalEraseRects.Any(erase => !originalSourceEraseRects.Any(source => RectTestHelpers.NearlySameRect(erase, source))).Should().BeTrue();
     }
 
+    [Fact]
+    public void PlanPageLayout_PreservedRegionsArePreservedAndDoNotPushParagraphs()
+    {
+        // Layout fixture (top-left coordinates, page height = 400):
+        //   Paragraph A: top=100, height=80   → translatable, encloses inline formula B
+        //   Inline formula B: top=130, height=18 → preserved, FULLY enclosed by A
+        //   Display formula C: top=200, height=30 → preserved, sits below A
+        //
+        // Expectations after PlanPageLayout:
+        //   - B and C are marked IsPreserved = true with EraseRects = null and
+        //     PlannedOperations = null (no text/erase emitted by export).
+        //   - A is marked IsPreserved = false.
+        //   - A stays at its source top (~100). The containment rule must prevent
+        //     the nested obstacle B from pushing A below itself, which is the
+        //     bottom-pile regression we are guarding against.
+        //   - C stays at its source top (~200). It is not subject to collision
+        //     pushing because passthrough blocks short-circuit ArrangeGroup.
+
+        const double pageHeight = 400;
+        var fonts = new MuPdfExportService.EmbeddedFontInfo(
+            PrimaryFontId: "Arial",
+            NotoFontId: null,
+            PrimaryGlyphMap: null,
+            NotoGlyphMap: null,
+            PrimaryFontIsCjk: false);
+
+        // PDF coords are bottom-up: BlockRect.Y is the BOTTOM edge in PDF space.
+        // Top-left Y = pageHeight - BlockRect.Y - BlockRect.Height
+        //   A top=100, h=80 → BlockRect Y = 400 - 100 - 80 = 220
+        //   B top=130, h=18 → BlockRect Y = 400 - 130 - 18 = 252
+        //   C top=200, h=30 → BlockRect Y = 400 - 200 - 30 = 170
+        var paragraphA = new MuPdfExportService.TranslatedBlockData
+        {
+            ChunkIndex = 0,
+            PageNumber = 1,
+            SourceBlockId = "p1-body-A",
+            OrderInPage = 0,
+            ReadingOrderScore = 1.0,
+            SourceText = "English paragraph containing an inline formula in the middle of the line.",
+            TranslatedText = "中文翻译段落内嵌一个公式占位的样本文字以填满区域。",
+            BoundingBox = new BlockRect(50, 220, 400, 80),
+            FontSize = 12,
+            SourceBlockType = SourceBlockType.Paragraph,
+        };
+
+        var inlineFormulaB = new MuPdfExportService.TranslatedBlockData
+        {
+            ChunkIndex = 1,
+            PageNumber = 1,
+            SourceBlockId = "p1-formula-B",
+            OrderInPage = 1,
+            ReadingOrderScore = 0.9,
+            SourceText = "x_i",
+            TranslatedText = "x_i",
+            BoundingBox = new BlockRect(150, 252, 60, 18),
+            FontSize = 12,
+            SourceBlockType = SourceBlockType.Formula,
+            TranslationSkipped = true,
+        };
+
+        var displayFormulaC = new MuPdfExportService.TranslatedBlockData
+        {
+            ChunkIndex = 2,
+            PageNumber = 1,
+            SourceBlockId = "p1-formula-C",
+            OrderInPage = 2,
+            ReadingOrderScore = 0.5,
+            SourceText = "y = f(x)",
+            TranslatedText = "y = f(x)",
+            BoundingBox = new BlockRect(50, 170, 400, 30),
+            FontSize = 12,
+            SourceBlockType = SourceBlockType.Formula,
+            TranslationSkipped = true,
+        };
+
+        var plan = PageBlockLayoutPlanner.PlanPageLayout(
+            [paragraphA, inlineFormulaB, displayFormulaC],
+            pageHeight,
+            "Arial",
+            fonts);
+
+        var planA = plan.Single(b => b.Block.ChunkIndex == 0);
+        var planB = plan.Single(b => b.Block.ChunkIndex == 1);
+        var planC = plan.Single(b => b.Block.ChunkIndex == 2);
+
+        // Preserved blocks must be marked as such, with no erase or operations.
+        planB.IsPreserved.Should().BeTrue("inline formula must be preserved");
+        planB.EraseRects.Should().BeNull("preserved blocks must not generate erase rects");
+        planB.PlannedOperations.Should().BeNull("preserved blocks must not generate text ops");
+
+        planC.IsPreserved.Should().BeTrue("display formula must be preserved");
+        planC.EraseRects.Should().BeNull("preserved blocks must not generate erase rects");
+        planC.PlannedOperations.Should().BeNull("preserved blocks must not generate text ops");
+
+        // Paragraph is translatable.
+        planA.IsPreserved.Should().BeFalse("paragraph must remain translatable");
+
+        // Paragraph A must NOT be pushed below the nested inline formula B.
+        // Its top should be very close to the source top (~100 in top-left coords).
+        planA.TopLeftBounds.Should().NotBeNull();
+        planA.TopLeftBounds!.Value.Y.Should().BeApproximately(100, 5,
+            "containment rule must prevent the nested obstacle B from pushing A down");
+
+        // Display formula C must remain at its source top-left position (~200).
+        planC.TopLeftBounds.Should().NotBeNull();
+        planC.TopLeftBounds!.Value.Y.Should().BeApproximately(200, 1,
+            "preserved blocks are pinned to their source position");
+    }
+
 }

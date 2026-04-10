@@ -24,6 +24,17 @@ internal static class PageBlockLayoutPlanner
         string fontId,
         EmbeddedFontInfo fonts)
     {
+        // Phase 0: spatially promote table-neighbor blocks to "preserved".
+        // The ML layout detector sometimes misses sparse-cell tables (e.g. the
+        // Transformer paper Table 3) and routes table cells through as Paragraph
+        // blocks. Numeric-data rows are caught by FormulaPreservationService and
+        // arrive here as preserved already. Table HEADERS ("train PPL BLEU params"),
+        // row labels ("(D)"), and footnotes are NOT numeric and slip through as
+        // translatable. We use spatial proximity to a preserved-numeric block plus
+        // a "looks like a header / short label" filter to promote them, so the
+        // entire visual table is preserved verbatim from the source PDF.
+        preparedBlocks = PromoteTableNeighbors(preparedBlocks, pageHeightPoints);
+
         var ordered = preparedBlocks
             .Select((block, index) => (block, index))
             .OrderBy(pair => pair.block.OrderInPage)
@@ -254,6 +265,16 @@ internal static class PageBlockLayoutPlanner
         var finalPositions = new Dictionary<int, double>();
         var placedBounds = new List<XRect>();
 
+        // Pre-seed every preserved (passthrough) block as an immovable obstacle.
+        // This guarantees translated text blocks see them during collision detection
+        // regardless of reading-order position. ArrangeGroup short-circuits passthrough
+        // blocks below so they are not double-added.
+        for (var i = 0; i < preparedBlocks.Count; i++)
+        {
+            if (measurements[i].IsPassthrough)
+                placedBounds.Add(measurements[i].SourceBoundsTopLeft);
+        }
+
         foreach (var group in groups)
             ArrangeGroup(group, measurements, preparedBlocks, pageHeightPoints, placedBounds, finalPositions);
 
@@ -274,6 +295,17 @@ internal static class PageBlockLayoutPlanner
         {
             var measurement = measurements[index];
             var block = preparedBlocks[index];
+
+            // Passthrough blocks are pinned to their source position. They were
+            // pre-seeded into placedBounds in ArrangeGroups, so we don't add them
+            // again here — and we MUST NOT subject them to collision pushing.
+            if (measurement.IsPassthrough)
+            {
+                finalPositions[index] = measurement.SourceTop;
+                currentTop = Math.Max(currentTop, measurement.SourceBoundsTopLeft.Bottom);
+                continue;
+            }
+
             var preferredTop = Math.Max(currentTop, measurement.PreferredTop);
 
             var gap = GetLayoutGap(block);
@@ -285,7 +317,12 @@ internal static class PageBlockLayoutPlanner
                 preferredTop,
                 measurement.SourceBoundsTopLeft.Width,
                 blockHeight);
-            var adjustedTop = FindNextAvailableTop(preferredTop, candidateRect, placedBounds, gap);
+            var adjustedTop = FindNextAvailableTop(
+                preferredTop,
+                candidateRect,
+                placedBounds,
+                gap,
+                candidateSourceBounds: measurement.SourceBoundsTopLeft);
 
             finalPositions[index] = adjustedTop;
 
@@ -304,7 +341,8 @@ internal static class PageBlockLayoutPlanner
         double preferredTop,
         XRect candidateBounds,
         IReadOnlyList<XRect> placedBounds,
-        double gap)
+        double gap,
+        XRect? candidateSourceBounds = null)
     {
         var top = preferredTop;
         while (true)
@@ -314,6 +352,33 @@ internal static class PageBlockLayoutPlanner
             foreach (var placed in placedBounds)
             {
                 if (!HorizontallyOverlaps(candidateRect, placed))
+                    continue;
+
+                // Source-position guard (only when candidateSourceBounds is known):
+                // Skip obstacles whose source top is at or below the candidate's
+                // source bottom — they live BELOW the candidate in document order,
+                // so they should not push the candidate further down. Without this
+                // guard, pre-seeded preserved blocks (which include obstacles from
+                // across the entire page) would shove paragraphs above them down
+                // by the height of the obstacle below.
+                if (candidateSourceBounds is XRect srcBounds &&
+                    placed.Top >= srcBounds.Bottom - 0.5)
+                    continue;
+
+                // Containment skip: when the obstacle is fully enclosed by the
+                // candidate's source bounding box, this is an inline-within-paragraph
+                // situation (e.g. an inline formula whose bbox sits inside the
+                // surrounding paragraph's bbox). The previous attempt at obstacle-
+                // aware layout pushed the paragraph below such inline obstacles,
+                // cascading every following block to the page bottom. Refuse to
+                // push for nested obstacles — the paragraph stays at its source
+                // position; per-line carving (future work) will route text around
+                // the obstacle inside the paragraph if needed.
+                if (candidateSourceBounds is XRect src &&
+                    src.Left <= placed.Left + 0.5 &&
+                    src.Right >= placed.Right - 0.5 &&
+                    src.Top <= placed.Top + 0.5 &&
+                    src.Bottom >= placed.Bottom - 0.5)
                     continue;
 
                 var minAllowedTop = placed.Bottom + gap;
@@ -334,10 +399,136 @@ internal static class PageBlockLayoutPlanner
         return overlap > 5;
     }
 
-    private static bool IsLayoutEligible(TranslatedBlockData block) =>
-        !block.PreserveOriginalTextInPdfExport &&
-        block.SourceBlockType is not SourceBlockType.Formula
-            and not SourceBlockType.TableCell;
+    /// <summary>
+    /// True when a block must be preserved verbatim from the source PDF.
+    /// Includes blocks the upstream pipeline already flagged via PreserveOriginalTextInPdfExport
+    /// (display formulas) and any block whose type is Formula or TableCell. The export honors
+    /// this via PlannedPageBlock.IsPreserved (no erase, no text generation).
+    /// </summary>
+    internal static bool IsPreservedBlock(TranslatedBlockData block) =>
+        block.PreserveOriginalTextInPdfExport ||
+        block.SourceBlockType is SourceBlockType.Formula
+            or SourceBlockType.TableCell;
+
+    private static bool IsLayoutEligible(TranslatedBlockData block) => !IsPreservedBlock(block);
+
+    /// <summary>
+    /// Phase 0: walk the page once and promote any non-preserved short header /
+    /// label block that sits inside or immediately next to an already-preserved
+    /// block (numeric-data row, formula, etc). Returns a new list with promoted
+    /// blocks rewritten as <c>PreserveOriginalTextInPdfExport=true,
+    /// TranslationSkipped=true</c>.
+    ///
+    /// Two predicates have to fire together:
+    ///   1. The candidate's source bbox is vertically close to a preserved block
+    ///      (overlap, or vertical gap &lt;= ~24pt). Translates to "in the same
+    ///      visual table block".
+    ///   2. The candidate's text "looks like" a header / row label / short
+    ///      identifier — no natural-language word of 7+ letters and a low total
+    ///      letter count. Prevents prose paragraphs near a formula from being
+    ///      silently dropped from translation.
+    /// </summary>
+    private static IReadOnlyList<TranslatedBlockData> PromoteTableNeighbors(
+        IReadOnlyList<TranslatedBlockData> blocks,
+        double pageHeightPoints)
+    {
+        // Step 1: collect top-left rects of every already-preserved block.
+        var preservedRects = new List<XRect>();
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            var b = blocks[i];
+            if (!IsPreservedBlock(b)) continue;
+            if (b.BoundingBox is not BlockRect bbox) continue;
+            preservedRects.Add(ToTopLeftRect(pageHeightPoints, bbox));
+        }
+
+        if (preservedRects.Count == 0)
+            return blocks;
+
+        const double VerticalAdjacencyTolerance = 24.0;
+
+        var promoted = new TranslatedBlockData[blocks.Count];
+        var anyChanged = false;
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            var block = blocks[i];
+            promoted[i] = block;
+
+            if (IsPreservedBlock(block)) continue;
+            if (block.BoundingBox is not BlockRect bbox) continue;
+            if (!LooksLikeShortTableLabel(block.SourceText ?? block.TranslatedText ?? "")) continue;
+
+            var rect = ToTopLeftRect(pageHeightPoints, bbox);
+
+            var nearPreserved = false;
+            foreach (var p in preservedRects)
+            {
+                // Vertical adjacency: rects either overlap vertically or are
+                // separated by no more than VerticalAdjacencyTolerance points.
+                var verticalGap = Math.Max(0, Math.Max(rect.Top - p.Bottom, p.Top - rect.Bottom));
+                if (verticalGap > VerticalAdjacencyTolerance) continue;
+
+                // Horizontal proximity: rects either overlap horizontally or share
+                // some column space within the table region (within 30pt).
+                var horizontalGap = Math.Max(0, Math.Max(rect.Left - p.Right, p.Left - rect.Right));
+                if (horizontalGap > 30.0) continue;
+
+                nearPreserved = true;
+                break;
+            }
+
+            if (!nearPreserved) continue;
+
+            promoted[i] = block with
+            {
+                PreserveOriginalTextInPdfExport = true,
+                TranslationSkipped = true,
+            };
+            anyChanged = true;
+        }
+
+        return anyChanged ? promoted : blocks;
+    }
+
+    /// <summary>
+    /// Heuristic: returns true when the text is a plausible table header / row
+    /// label / short identifier — i.e. ≤ 40 characters, contains no
+    /// natural-language word of 7+ letters, and the total letter count is small
+    /// enough to rule out short prose. Used together with the spatial-adjacency
+    /// check above; this filter alone is intentionally permissive.
+    /// </summary>
+    private static bool LooksLikeShortTableLabel(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var trimmed = text.Trim();
+        if (trimmed.Length == 0 || trimmed.Length > 40) return false;
+
+        var letterCount = 0;
+        var currentRun = 0;
+        var maxRun = 0;
+        foreach (var ch in trimmed)
+        {
+            if (char.IsLetter(ch))
+            {
+                letterCount++;
+                currentRun++;
+                if (currentRun > maxRun) maxRun = currentRun;
+            }
+            else
+            {
+                currentRun = 0;
+            }
+        }
+
+        // Reject prose: any 7+ letter natural word disqualifies (e.g. "Section",
+        // "Variations", "Transformer", "introduces"). Allows "params" (6).
+        if (maxRun >= 7) return false;
+
+        // Reject sentences: too many letters total means it's not a label.
+        if (letterCount > 30) return false;
+
+        return true;
+    }
 
     private static double GetLayoutGap(TranslatedBlockData block)
     {
@@ -355,13 +546,18 @@ internal static class PageBlockLayoutPlanner
         TranslatedBlockData block,
         double pageHeightPoints)
     {
+        // Preserved (passthrough) block: the source PDF content under this block's
+        // bbox must show through verbatim. EraseRects MUST be null — generating
+        // a white-rect erase here would cover the original cell text / formula
+        // glyphs and leave the area visually empty.
         return new PlannedPageBlock
         {
             Block = block,
+            IsPreserved = true,
             LayoutBoundingBox = block.BoundingBox,
             LayoutRenderLineRects = block.RenderLineRects,
             LayoutBackgroundLineRects = block.BackgroundLineRects,
-            EraseRects = block.BackgroundLineRects,
+            EraseRects = null,
             TopLeftBounds = block.BoundingBox is BlockRect bbox
                 ? ToTopLeftRect(pageHeightPoints, bbox)
                 : null,
@@ -382,6 +578,7 @@ internal static class PageBlockLayoutPlanner
         return new PlannedPageBlock
         {
             Block = block,
+            IsPreserved = false,
             LayoutBoundingBox = block.BoundingBox,
             LayoutRenderLineRects = block.RenderLineRects,
             LayoutBackgroundLineRects = block.BackgroundLineRects,
@@ -416,6 +613,7 @@ internal static class PageBlockLayoutPlanner
         return new PlannedPageBlock
         {
             Block = block,
+            IsPreserved = false,
             LayoutBoundingBox = MuPdfExportService.ToBottomUpRect(pageHeightPoints, renderBoundsTopLeft),
             LayoutRenderLineRects = layout.RenderLineRects,
             LayoutBackgroundLineRects = eraseRects,

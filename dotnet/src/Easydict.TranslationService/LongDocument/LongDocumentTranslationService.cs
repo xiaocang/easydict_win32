@@ -17,6 +17,7 @@ public sealed class LongDocumentTranslationService
         "SubscriptDensity>25%",
         "CharLevel:FormulaOnlyText",
         "FormulaOnlyText",
+        "NumericData",
     };
 
     private readonly Func<TranslationRequest, string, CancellationToken, Task<TranslationResult>> _translateWithService;

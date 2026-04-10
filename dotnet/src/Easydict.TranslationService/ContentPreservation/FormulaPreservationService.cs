@@ -125,6 +125,17 @@ public sealed class FormulaPreservationService : IContentPreservationService
             return SkipTranslation(context, "SubscriptDensity>25%");
         }
 
+        // Level 4.5: Numeric data (table cell, parameter value, configuration list).
+        // The ML layout detector sometimes misses table regions on sparse-cell tables
+        // (e.g., the 1706.03762 Table 3) and routes individual cell rows here as
+        // Paragraph blocks. Their text is essentially digits, decimals, and a few
+        // identifier letters — translating them via an LLM produces nonsense and
+        // visually corrupts the table. Detect "mostly numeric" runs and preserve.
+        if (IsNumericDataBlock(context.Text))
+        {
+            return SkipTranslation(context, "NumericData");
+        }
+
         // Level 5: Short display equation fallback when ONNX/parser misses the block.
         var displayDiagnostics = GetDisplayEquationDiagnostics(context);
         if (displayDiagnostics.Candidate)
@@ -380,6 +391,57 @@ public sealed class FormulaPreservationService : IContentPreservationService
 
         var scriptCount = chars.Count(c => c.IsSubscript || c.IsSuperscript);
         return chars.Count >= 3 && (double)scriptCount / chars.Count > 0.25;
+    }
+
+    /// <summary>
+    /// Detects "mostly numeric data" blocks — table cells, parameter rows, BLEU scores,
+    /// configuration values. The block must contain at least one digit and the digits
+    /// must dominate the alphanumeric content; any alphabetic letters present must be
+    /// short row identifiers ("base", "big", "K", "PPL") rather than natural prose.
+    ///
+    /// We do NOT use a "4+ letter word" rejection rule because legitimate table row
+    /// labels like "base" and "BLEU" are exactly 4 letters and would be filtered out.
+    /// Instead we cap the total alphabetic-letter count and require a high digit ratio.
+    ///
+    /// Examples that match (preserve original):
+    ///   "1 512 512 5.29 24.9", "0.1 0.1 100K", "32 16 16 5.01 25.4",
+    ///   "256 32 32 5.75 24.5 28", "6 1024 4096 16 0.3 300K 4.33 26.4 213",
+    ///   "base 6 512 2048 8 64 64 0.1 0.1 100K 4.92 25.8 65"
+    ///
+    /// Examples that do NOT match (translate normally):
+    ///   "Section 3.2 introduces the Transformer.", "Figure 5 shows the architecture",
+    ///   "We trained a 4-layer transformer with dmodel = 1024" — too many letters.
+    /// </summary>
+    internal static bool IsNumericDataBlock(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+
+        var trimmed = text.Trim();
+        if (trimmed.Length == 0) return false;
+
+        var digitCount = 0;
+        var letterCount = 0;
+        foreach (var ch in trimmed)
+        {
+            if (char.IsDigit(ch)) digitCount++;
+            else if (char.IsLetter(ch)) letterCount++;
+        }
+
+        // Must contain at least one digit, otherwise it's not numeric data.
+        if (digitCount == 0) return false;
+
+        // Hard cap on alphabetic letter count: typical table row labels are very
+        // short (e.g. "base"=4 letters + "K"=1 letter for "100K" = 5 letters total).
+        // Anything beyond ~8 letters is almost certainly natural prose.
+        if (letterCount > 8) return false;
+
+        // Require digits to dominate the alphanumeric content. Row labels and unit
+        // markers are allowed but the bulk of the content must be numeric.
+        var alphanum = digitCount + letterCount;
+        var digitRatio = (double)digitCount / alphanum;
+        if (digitRatio < 0.65) return false;
+
+        return true;
     }
 
     private static ProtectionPlan SkipTranslation(BlockContext context, string reason)

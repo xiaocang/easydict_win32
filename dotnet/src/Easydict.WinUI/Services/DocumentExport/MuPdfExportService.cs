@@ -257,9 +257,14 @@ public sealed class MuPdfExportService : IDocumentExportService
         List<TranslatedBlockData> blocks,
         FontPaths fontPaths)
     {
-        // Step 1: Extract content stream — separate text from graphics
+        // Step 1: Extract content stream — separate text from graphics.
+        // If any block on this page must be preserved verbatim (display formula,
+        // table cell, or anything else flagged via PreserveOriginalTextInPdfExport),
+        // keep the full original text operators in the base stream so the preserved
+        // regions show through. Translated paragraphs cover their own original text
+        // via per-block erase rectangles drawn before the new text is rendered.
         var streamResult = ContentStreamInterpreter.Interpret(pdfPigPage);
-        var usesOriginalTextBase = blocks.Any(block => block.PreserveOriginalTextInPdfExport);
+        var usesOriginalTextBase = blocks.Any(PageBlockLayoutPlanner.IsPreservedBlock);
         var opsBase = usesOriginalTextBase
             ? streamResult.SerializeAllOperations()
             : streamResult.SerializeGraphicsOperations();
@@ -292,30 +297,33 @@ public sealed class MuPdfExportService : IDocumentExportService
 
         if (usesOriginalTextBase)
         {
-            var firstPreserved = blocks.First(block => block.PreserveOriginalTextInPdfExport);
-            Debug.WriteLine($"[MuPdfExport] Page {firstPreserved.PageNumber}: using full original content stream base for preserved formulas.");
+            var firstPreserved = blocks.First(PageBlockLayoutPlanner.IsPreservedBlock);
+            Debug.WriteLine($"[MuPdfExport] Page {firstPreserved.PageNumber}: using full original content stream base because the page contains preserved blocks (formula/table/figure).");
             blockIssues.Add(new BackfillBlockIssue
             {
                 ChunkIndex = firstPreserved.ChunkIndex,
                 SourceBlockId = firstPreserved.SourceBlockId,
                 PageNumber = firstPreserved.PageNumber,
                 Kind = "page-full-original-ops",
-                Detail = "Using original page text operators because this page contains preserved formulas."
+                Detail = $"Using original page text operators because this page contains preserved blocks. First preserved SourceBlockType={firstPreserved.SourceBlockType}, PreserveFlag={firstPreserved.PreserveOriginalTextInPdfExport}."
             });
         }
 
         foreach (var plannedBlock in pagePlan)
         {
             var block = plannedBlock.Block;
-            if (block.PreserveOriginalTextInPdfExport)
+            // Planner is the authority on what stays verbatim. Skip preserved blocks
+            // entirely — no erase, no text generation. The original page content
+            // stream (already in opsBase) supplies the cell text / formula glyphs.
+            if (plannedBlock.IsPreserved)
             {
                 blockIssues.Add(new BackfillBlockIssue
                 {
                     ChunkIndex = block.ChunkIndex,
                     SourceBlockId = block.SourceBlockId,
                     PageNumber = block.PageNumber,
-                    Kind = "preserved-original-formula",
-                    Detail = $"SourceBlockType={block.SourceBlockType}, TranslationSkipped={block.TranslationSkipped}"
+                    Kind = "planner-preserved",
+                    Detail = $"SourceBlockType={block.SourceBlockType}, PreserveFlag={block.PreserveOriginalTextInPdfExport}, TranslationSkipped={block.TranslationSkipped}"
                 });
                 continue;
             }
@@ -1100,9 +1108,14 @@ public sealed class MuPdfExportService : IDocumentExportService
 
     private static double GetErasePadding(double fontSize, bool primaryFontIsCjk)
     {
-        var pad = Math.Clamp(fontSize * 0.25, 2.5, 10);
+        // PdfPig BoundingBox is a tight character-advance box and does not include
+        // the font's full ascender/descender. We pad generously so the white erase
+        // rect fully covers the original glyphs (ascender ~0.9em for typical serif
+        // fonts) — leftover ascender/descender pixels show up as a "double text"
+        // smudge when the page base stream still contains the original text ops.
+        var pad = Math.Clamp(fontSize * 0.35, 4.0, 14.0);
         if (primaryFontIsCjk)
-            pad = Math.Max(pad, Math.Clamp(fontSize * 0.30, 3, 12));
+            pad = Math.Max(pad, Math.Clamp(fontSize * 0.40, 5.0, 16.0));
         return pad;
     }
 
@@ -1969,6 +1982,14 @@ public sealed class MuPdfExportService : IDocumentExportService
     internal sealed record PlannedPageBlock
     {
         public required TranslatedBlockData Block { get; init; }
+
+        /// <summary>
+        /// True when the planner decided this block should be left exactly as in the source PDF.
+        /// Export must NOT generate erase or text operations for preserved blocks — the original
+        /// page content stream's text/graphics in the block's region show through unchanged.
+        /// </summary>
+        public bool IsPreserved { get; init; }
+
         public BlockRect? LayoutBoundingBox { get; init; }
         public IReadOnlyList<BlockRect>? LayoutRenderLineRects { get; init; }
         public IReadOnlyList<BlockRect>? LayoutBackgroundLineRects { get; init; }

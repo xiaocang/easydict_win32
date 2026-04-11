@@ -595,7 +595,7 @@ public class Page2TranslationQualityTests
             preparedBlocks, pageHeight, "SourceHanSerifCN", fonts);
 
         var renderedBlocks = plan
-            .Where(b => b.TopLeftBounds is not null && !b.Block.TranslationSkipped)
+            .Where(b => b.TopLeftBounds is not null && !b.Block.TranslationSkipped && !b.IsPreserved)
             .ToList();
 
         for (var i = 0; i < renderedBlocks.Count; i++)
@@ -630,7 +630,7 @@ public class Page2TranslationQualityTests
         [
             LongDocumentInputMode.Pdf,
             pdfPath,
-            LayoutDetectionMode.Auto,
+            LayoutDetectionMode.Heuristic,
             null, null, null, null,
             CancellationToken.None,
             null
@@ -828,6 +828,7 @@ public class Page2TranslationQualityTests
         SourceDocument source,
         string pdfPath)
     {
+        EnsureTestCjkFontInstalled();
         var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
 
         foreach (var metadata in checkpoint.ChunkMetadata.Where(metadata => metadata.PageNumber == 2))
@@ -933,6 +934,55 @@ public class Page2TranslationQualityTests
             SourceBlockType.TableCell => LayoutRegionType.TableLike,
             _ => LayoutRegionType.Body
         };
+
+    private static void EnsureTestCjkFontInstalled()
+    {
+        var appDataFontsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Easydict",
+            "Fonts");
+        Directory.CreateDirectory(appDataFontsDir);
+
+        var targetPath = Path.Combine(appDataFontsDir, "NotoSansSC-Regular.ttf");
+        if (File.Exists(targetPath))
+            return;
+
+        var bundledFontPath = FindBundledTestFontPath();
+        Skip.IfNot(File.Exists(bundledFontPath), $"Bundled test CJK font not found: {bundledFontPath}");
+
+        File.Copy(bundledFontPath, targetPath, overwrite: false);
+    }
+
+    private static string FindBundledTestFontPath()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            var candidate = Path.Combine(
+                current.FullName,
+                "lib",
+                "PdfPig",
+                "src",
+                "UglyToad.PdfPig.Tests",
+                "Fonts",
+                "TrueType",
+                "PMingLiU.ttf");
+            if (File.Exists(candidate))
+                return candidate;
+
+            current = current.Parent;
+        }
+
+        return Path.Combine(
+            AppContext.BaseDirectory,
+            "lib",
+            "PdfPig",
+            "src",
+            "UglyToad.PdfPig.Tests",
+            "Fonts",
+            "TrueType",
+            "PMingLiU.ttf");
+    }
 
     private static string CreateReadablePage2ChineseMock(
         string sourceText,

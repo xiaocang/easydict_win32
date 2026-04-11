@@ -194,6 +194,24 @@ public sealed partial class ServiceResultItem : UserControl
             return;
         }
 
+        // Hide entire control when the service returned no result and the user has
+        // opted to hide empty results. Header + content collapse together so the
+        // surrounding ItemsControl skips layout for this row entirely.
+        var hideEmpty = SettingsService.Instance.HideEmptyServiceResults
+            && !_serviceResult.IsLoading
+            && !_serviceResult.IsStreaming
+            && !_serviceResult.HasError
+            && _serviceResult.Result?.ResultKind == TranslationResultKind.NoResult;
+        if (hideEmpty)
+        {
+            this.Visibility = Visibility.Collapsed;
+            return;
+        }
+        if (this.Visibility == Visibility.Collapsed)
+        {
+            this.Visibility = Visibility.Visible;
+        }
+
         // Service info
         ServiceNameText.Text = _serviceResult.ServiceDisplayName;
 

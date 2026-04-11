@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Easydict.WinUI.Services;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -11,6 +12,12 @@ namespace Easydict.WinUI
     /// </summary>
     public partial class App : Application
     {
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
         private Window? _window;
         private TrayIconService? _trayIconService;
         private HotkeyService? _hotkeyService;
@@ -464,7 +471,16 @@ namespace Easydict.WinUI
 
             _window?.DispatcherQueue.TryEnqueue(() =>
             {
-                ShowAndActivateWindow();
+                // Toggle behavior (issue #123): if window is foreground, hide it.
+                // If visible-but-background, raise it (#129). Else show it.
+                if (IsMainWindowVisible && IsMainWindowForeground)
+                {
+                    HideWindow();
+                }
+                else
+                {
+                    ShowAndActivateWindow();
+                }
             });
         }
 
@@ -507,10 +523,18 @@ namespace Easydict.WinUI
                 {
                     if (!string.IsNullOrWhiteSpace(text))
                     {
+                        // Selected text takes precedence — always show with the new text.
                         MiniWindowService.Instance.ShowWithText(text);
+                    }
+                    else if (MiniWindowService.Instance.IsVisible
+                        && MiniWindowService.Instance.IsForeground)
+                    {
+                        // Toggle behavior (issue #123): hotkey re-press hides foreground window.
+                        MiniWindowService.Instance.Hide();
                     }
                     else
                     {
+                        // Show or raise from background (#129).
                         MiniWindowService.Instance.Show();
                     }
                 });
@@ -535,10 +559,18 @@ namespace Easydict.WinUI
                 {
                     if (!string.IsNullOrWhiteSpace(text))
                     {
+                        // Selected text takes precedence — always show with the new text.
                         FixedWindowService.Instance.ShowWithText(text);
+                    }
+                    else if (FixedWindowService.Instance.IsVisible
+                        && FixedWindowService.Instance.IsForeground)
+                    {
+                        // Toggle behavior (issue #123): hotkey re-press hides foreground window.
+                        FixedWindowService.Instance.Hide();
                     }
                     else
                     {
+                        // Show or raise from background (#129).
                         FixedWindowService.Instance.Show();
                     }
                 });
@@ -756,9 +788,47 @@ namespace Easydict.WinUI
         {
             if (_window == null) return;
 
-            // Show and activate the window
+            // Show the window
             _appWindow?.Show();
+
+            // Try to bring window to front using multiple methods
+            try
+            {
+                _appWindow?.MoveInZOrderAtTop();
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"App: MoveInZOrderAtTop failed: {ex.Message}");
+            }
+
+            // Use Win32 SetForegroundWindow to forcefully bring window to front
+            // (Activate() alone does not raise an already-visible-but-background window)
+            var hWnd = WindowNative.GetWindowHandle(_window);
+            var foregroundSet = SetForegroundWindow(hWnd);
+            if (!foregroundSet)
+            {
+                System.Diagnostics.Debug.WriteLine("App: SetForegroundWindow failed; relying on Activate()");
+            }
+
             _window.Activate();
+        }
+
+        /// <summary>
+        /// Returns true if the main window is currently visible.
+        /// </summary>
+        private bool IsMainWindowVisible => _appWindow?.IsVisible ?? false;
+
+        /// <summary>
+        /// Returns true if the main window is currently the foreground window.
+        /// </summary>
+        private bool IsMainWindowForeground
+        {
+            get
+            {
+                if (_window == null) return false;
+                var hWnd = WindowNative.GetWindowHandle(_window);
+                return GetForegroundWindow() == hWnd;
+            }
         }
 
         private void HideWindow()

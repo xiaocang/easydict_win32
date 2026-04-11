@@ -191,6 +191,19 @@ public sealed class SettingsService
     public string OcrTranslateHotkey { get; set; } = "Ctrl+Alt+S";
     public string SilentOcrHotkey { get; set; } = "Ctrl+Alt+Shift+S";
 
+    // Per-hotkey enable flags. When false, the corresponding RegisterHotKey call is skipped at startup.
+    public bool EnableShowWindowHotkey { get; set; } = true;
+    public bool EnableTranslateSelectionHotkey { get; set; } = true;
+    public bool EnableShowMiniWindowHotkey { get; set; } = true;
+    public bool EnableShowFixedWindowHotkey { get; set; } = true;
+    public bool EnableOcrTranslateHotkey { get; set; } = true;
+    public bool EnableSilentOcrHotkey { get; set; } = true;
+
+    /// <summary>
+    /// When true, ServiceResultItem panels collapse entirely when the service returned no result.
+    /// </summary>
+    public bool HideEmptyServiceResults { get; set; } = true;
+
     /// <summary>
     /// Preferred OCR recognition language. "auto" uses the system profile languages.
     /// Otherwise a BCP-47 tag like "zh-Hans-CN", "en-US", "ja".
@@ -583,6 +596,13 @@ public sealed class SettingsService
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");
         OcrTranslateHotkey = GetValue(nameof(OcrTranslateHotkey), "Ctrl+Alt+S");
         SilentOcrHotkey = GetValue(nameof(SilentOcrHotkey), "Ctrl+Alt+Shift+S");
+        EnableShowWindowHotkey = GetValue(nameof(EnableShowWindowHotkey), true);
+        EnableTranslateSelectionHotkey = GetValue(nameof(EnableTranslateSelectionHotkey), true);
+        EnableShowMiniWindowHotkey = GetValue(nameof(EnableShowMiniWindowHotkey), true);
+        EnableShowFixedWindowHotkey = GetValue(nameof(EnableShowFixedWindowHotkey), true);
+        EnableOcrTranslateHotkey = GetValue(nameof(EnableOcrTranslateHotkey), true);
+        EnableSilentOcrHotkey = GetValue(nameof(EnableSilentOcrHotkey), true);
+        HideEmptyServiceResults = GetValue(nameof(HideEmptyServiceResults), true);
         OcrLanguage = GetValue(nameof(OcrLanguage), "auto");
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
         UILanguage = GetValue(nameof(UILanguage), "");
@@ -745,6 +765,13 @@ public sealed class SettingsService
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;
         _settings[nameof(OcrTranslateHotkey)] = OcrTranslateHotkey;
         _settings[nameof(SilentOcrHotkey)] = SilentOcrHotkey;
+        _settings[nameof(EnableShowWindowHotkey)] = EnableShowWindowHotkey;
+        _settings[nameof(EnableTranslateSelectionHotkey)] = EnableTranslateSelectionHotkey;
+        _settings[nameof(EnableShowMiniWindowHotkey)] = EnableShowMiniWindowHotkey;
+        _settings[nameof(EnableShowFixedWindowHotkey)] = EnableShowFixedWindowHotkey;
+        _settings[nameof(EnableOcrTranslateHotkey)] = EnableOcrTranslateHotkey;
+        _settings[nameof(EnableSilentOcrHotkey)] = EnableSilentOcrHotkey;
+        _settings[nameof(HideEmptyServiceResults)] = HideEmptyServiceResults;
         _settings[nameof(OcrLanguage)] = OcrLanguage;
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;
         _settings[nameof(UILanguage)] = UILanguage;

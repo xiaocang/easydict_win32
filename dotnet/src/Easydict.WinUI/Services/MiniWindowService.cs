@@ -64,6 +64,11 @@ public sealed class MiniWindowService : IDisposable
     public bool IsVisible => _miniWindow?.IsVisible ?? false;
 
     /// <summary>
+    /// Gets whether the mini window is currently the foreground window.
+    /// </summary>
+    public bool IsForeground => _miniWindow?.IsForeground ?? false;
+
+    /// <summary>
     /// Called by MiniWindow when the user switches query modes.
     /// Updates CurrentQueryMode and fires QueryModeChanged.
     /// </summary>

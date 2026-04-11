@@ -164,6 +164,62 @@ jobs:
           Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow
           Write-Host "Windows App Runtime installed"
 
+      # Cache the ONNX runtime + DocLayout-YOLO + TATR models under
+      # %LocalAppData%\Easydict\Models so Page2TranslationQualityTests and other
+      # ML-layout-dependent tests exercise the ONNX path instead of the heuristic
+      # fallback. Without these, MuPdf export tests that depend on ML-detected
+      # region boxes / table structure produce nondeterministic block layouts
+      # and fail. Cache key is pinned to the URLs/versions in LayoutModelDownloadService.cs.
+      # GitHub Windows runners run as the 'runneradmin' user, so LocalAppData is
+      # C:\Users\runneradmin\AppData\Local — hardcoded here because actions/cache
+      # resolves `path` at workflow-evaluation time before any step-level env vars
+      # (like $env:LOCALAPPDATA from pwsh) are available.
+      - name: Cache ONNX layout models
+        id: cache-onnx-models
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\AppData\Local\Easydict\Models
+          key: onnx-layout-v1-ort1.21.0-doclayout-yolo-docstructbench-tatr-structure-xenova-fp32
+
+      - name: Download ONNX layout models
+        if: steps.cache-onnx-models.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $modelsDir = Join-Path $env:LOCALAPPDATA "Easydict\Models"
+          New-Item -ItemType Directory -Force -Path $modelsDir | Out-Null
+
+          Write-Host "Downloading ONNX Runtime v1.21.0 (win-x64)..."
+          $ortZip = Join-Path $env:TEMP "onnxruntime-win-x64-1.21.0.zip"
+          Invoke-WebRequest `
+            -Uri "https://github.com/microsoft/onnxruntime/releases/download/v1.21.0/onnxruntime-win-x64-1.21.0.zip" `
+            -OutFile $ortZip -UseBasicParsing
+          $ortExtract = Join-Path $env:TEMP "onnxruntime-extract"
+          if (Test-Path $ortExtract) { Remove-Item $ortExtract -Recurse -Force }
+          Expand-Archive -Path $ortZip -DestinationPath $ortExtract -Force
+          $ortDll = Join-Path $ortExtract "onnxruntime-win-x64-1.21.0\lib\onnxruntime.dll"
+          Copy-Item -Path $ortDll -Destination (Join-Path $modelsDir "onnxruntime.dll") -Force
+          $ortSize = (Get-Item (Join-Path $modelsDir "onnxruntime.dll")).Length
+          Write-Host "onnxruntime.dll: $ortSize bytes"
+
+          Write-Host "Downloading DocLayout-YOLO model..."
+          Invoke-WebRequest `
+            -Uri "https://huggingface.co/wybxc/DocLayout-YOLO-DocStructBench-onnx/resolve/main/doclayout_yolo_docstructbench_imgsz1024.onnx" `
+            -OutFile (Join-Path $modelsDir "doclayout_yolo.onnx") -UseBasicParsing
+          $ylSize = (Get-Item (Join-Path $modelsDir "doclayout_yolo.onnx")).Length
+          Write-Host "doclayout_yolo.onnx: $ylSize bytes"
+
+          Write-Host "Downloading TATR structure model..."
+          Invoke-WebRequest `
+            -Uri "https://huggingface.co/Xenova/table-transformer-structure-recognition/resolve/main/onnx/model.onnx" `
+            -OutFile (Join-Path $modelsDir "tatr_structure.onnx") -UseBasicParsing
+          $tatrSize = (Get-Item (Join-Path $modelsDir "tatr_structure.onnx")).Length
+          Write-Host "tatr_structure.onnx: $tatrSize bytes"
+
+          if ($ortSize -lt 5MB -or $ylSize -lt 20MB -or $tatrSize -lt 60MB) {
+            Write-Error "Downloaded model files are smaller than expected — refusing to cache a truncated download."
+            exit 1
+          }
+
       - name: Build WinUI Unit Tests
         working-directory: dotnet
         run: |

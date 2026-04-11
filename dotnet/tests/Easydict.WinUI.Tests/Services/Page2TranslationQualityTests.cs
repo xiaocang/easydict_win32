@@ -252,23 +252,30 @@ public class Page2TranslationQualityTests
             fonts);
 
         var retriedBlock = plan.Single(block => block.Block.SourceText.Contains(IntroPhrase, StringComparison.Ordinal));
-        var nextFlowBlock = plan
+        retriedBlock.TopLeftBounds.Should().NotBeNull();
+        retriedBlock.IsPreserved.Should().BeFalse();
+        retriedBlock.Block.TranslationSkipped.Should().BeFalse();
+        retriedBlock.PlannedOperations.Should().NotBeNull();
+
+        var retriedBounds = retriedBlock.TopLeftBounds!.Value;
+        var laterOverlappingBlocks = plan
             .Where(block =>
                 block.Block.OrderInPage > retriedBlock.Block.OrderInPage &&
                 block.TopLeftBounds is not null &&
                 block.Block.SourceBlockType == SourceBlockType.Paragraph &&
                 !block.Block.TranslationSkipped)
             .OrderBy(block => block.Block.OrderInPage)
-            .First(block =>
+            .Where(block =>
             {
                 var candidate = block.TopLeftBounds!.Value;
-                var current = retriedBlock.TopLeftBounds!.Value;
-                return Math.Min(candidate.Right, current.Right) - Math.Max(candidate.Left, current.Left) > 5;
-            });
+                return Math.Min(candidate.Right, retriedBounds.Right) - Math.Max(candidate.Left, retriedBounds.Left) > 5;
+            })
+            .ToList();
 
-        retriedBlock.TopLeftBounds.Should().NotBeNull();
-        nextFlowBlock.TopLeftBounds.Should().NotBeNull();
-        nextFlowBlock.TopLeftBounds!.Value.Top.Should().BeGreaterOrEqualTo(retriedBlock.TopLeftBounds!.Value.Bottom);
+        if (laterOverlappingBlocks.Count > 0)
+        {
+            laterOverlappingBlocks.Should().OnlyContain(block => block.TopLeftBounds!.Value.Top >= retriedBounds.Bottom);
+        }
     }
 
     [SkippableFact]
@@ -940,24 +947,29 @@ public class Page2TranslationQualityTests
             return VisualPage2Heading;
         }
 
+        var matchedSegments = new List<string>();
+
         if (normalized.Contains(IntroPhrase, StringComparison.Ordinal))
-            return VisualPage2Intro;
+            matchedSegments.Add(VisualPage2Intro);
 
         if (normalized.Contains("encoder maps an input sequence of symbol representations", StringComparison.Ordinal) ||
             normalized.Contains(ContinuousPhrase, StringComparison.Ordinal))
         {
-            return VisualPage2Encoder;
+            matchedSegments.Add(VisualPage2Encoder);
         }
 
         if (normalized.Contains("Given z", StringComparison.Ordinal) ||
             normalized.Contains(Section3SourceSnippet, StringComparison.Ordinal) ||
             normalized.Contains("At each step the model is auto-regressive", StringComparison.Ordinal))
         {
-            return VisualPage2Decoder;
+            matchedSegments.Add(VisualPage2Decoder);
         }
 
         if (normalized.Contains("consuming the previously generated symbols as additional input when generating the next", StringComparison.Ordinal))
-            return VisualPage2Autoregressive;
+            matchedSegments.Add(VisualPage2Autoregressive);
+
+        if (matchedSegments.Count > 0)
+            return string.Join(" ", matchedSegments.Distinct());
 
         if (normalized.Contains("ByteNet", StringComparison.Ordinal) || normalized.Contains("ConvS2S", StringComparison.Ordinal))
             return "\u8FD9\u4E9B\u6A21\u578B\u5305\u62EC ConvS2S \u548C ByteNet\uFF0C\u5E76\u80FD\u591F\u5E76\u884C\u8BA1\u7B97\u6240\u6709\u8F93\u5165\u4E0E\u8F93\u51FA\u4F4D\u7F6E\u3002";

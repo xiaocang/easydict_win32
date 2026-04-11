@@ -856,6 +856,7 @@ public sealed class LongDocumentTranslationService : IDisposable
     }
 
     private static readonly Regex FormulaHeuristicRegex = new(@"(\$[^$]+\$|\\([^)]+\\)|\\[[^\]]+\\]|\b\w+\s*=\s*[-+*/^()\w\u221A]+)", RegexOptions.Compiled);
+    private static readonly Regex NaturalWordRegex = new(@"\b[a-zA-Z]{4,}\b", RegexOptions.Compiled);
 
     private static Task<SourceDocument> BuildSourceDocumentBasicAsync(LongDocumentInputMode mode, string input, string? pageRange = null)
     {
@@ -2838,12 +2839,25 @@ public sealed class LongDocumentTranslationService : IDisposable
             return SourceBlockType.Unknown;
         }
 
-        if (FormulaHeuristicRegex.IsMatch(text))
+        var trimmed = text.Trim();
+        var formulaMatch = FormulaHeuristicRegex.Match(trimmed);
+        if (formulaMatch.Success)
         {
+            var naturalWordCount = NaturalWordRegex.Matches(trimmed).Count;
+            var proseDominantInlineEquation =
+                trimmed.Length > 80 &&
+                naturalWordCount >= 6 &&
+                formulaMatch.Length < trimmed.Length * 0.45;
+
+            if (proseDominantInlineEquation)
+            {
+                return SourceBlockType.Paragraph;
+            }
+
             return SourceBlockType.Formula;
         }
 
-        if (text.Length < 80 && text.All(c => !char.IsLetter(c) || char.IsUpper(c)))
+        if (trimmed.Length < 80 && trimmed.All(c => !char.IsLetter(c) || char.IsUpper(c)))
         {
             return SourceBlockType.Heading;
         }

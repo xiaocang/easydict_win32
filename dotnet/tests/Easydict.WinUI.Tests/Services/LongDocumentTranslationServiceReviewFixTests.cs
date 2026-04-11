@@ -185,6 +185,23 @@ public class LongDocumentTranslationServiceReviewFixTests
     }
 
     [Fact]
+    public void GuessBlockType_ShouldTreatLongProseWithInlineEquationAsParagraph()
+    {
+        var method = typeof(WinUiLongDocumentTranslationService)
+            .GetMethod("GuessBlockType", BindingFlags.NonPublic | BindingFlags.Static);
+
+        method.Should().NotBeNull();
+
+        const string text =
+            "Most competitive neural sequence transduction models have an encoder-decoder structure. " +
+            "Here, the encoder maps the input sequence of symbol representations (x1, ..., xn) " +
+            "to a sequence of continuous representations z = (z1, ..., zn).";
+
+        var result = (SourceBlockType)method!.Invoke(null, [text])!;
+        result.Should().Be(SourceBlockType.Paragraph);
+    }
+
+    [Fact]
     public void IsSafeTableLikeCell_ShouldAllowWideHeaderSentenceInHeaderBand()
     {
         var method = typeof(PdfExportService)

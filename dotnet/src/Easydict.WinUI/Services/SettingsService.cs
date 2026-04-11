@@ -232,6 +232,15 @@ public sealed class SettingsService
     public int LongDocMaxConcurrency { get; set; } = 4;
 
     /// <summary>
+    /// When enabled, long-document translation runs a Pass 1 LLM read of the
+    /// document (page-by-page, parallel, gated by <see cref="LongDocMaxConcurrency"/>)
+    /// to extract a glossary, summary, and preservation hints, then prepends
+    /// them to every Pass 2 translation prompt for terminology consistency.
+    /// Default: true.
+    /// </summary>
+    public bool LongDocEnableDocumentContextPass { get; set; } = true;
+
+    /// <summary>
     /// Custom regex pattern for font-based formula detection (Level 2).
     /// Empty uses the built-in math font regex.
     /// </summary>
@@ -638,6 +647,7 @@ public sealed class SettingsService
         OnnxModelDownloaded = GetValue(nameof(OnnxModelDownloaded), false);
         DocumentOutputMode = GetValue(nameof(DocumentOutputMode), "Monolingual");
         LongDocMaxConcurrency = GetValue(nameof(LongDocMaxConcurrency), 4);
+        LongDocEnableDocumentContextPass = GetValue(nameof(LongDocEnableDocumentContextPass), true);
     }
 
     public void Save()
@@ -783,6 +793,7 @@ public sealed class SettingsService
         _settings[nameof(OnnxModelDownloaded)] = OnnxModelDownloaded;
         _settings[nameof(DocumentOutputMode)] = DocumentOutputMode;
         _settings[nameof(LongDocMaxConcurrency)] = LongDocMaxConcurrency;
+        _settings[nameof(LongDocEnableDocumentContextPass)] = LongDocEnableDocumentContextPass;
 
         try
         {

@@ -681,6 +681,17 @@
                         </ComboBox.Header>
                     </ComboBox>
 
+                    <!-- Row 2, Cols 0-2: Two-pass translation toggle -->
+                    <CheckBox x:Name="LongDocDocumentContextPassCheckBox"
+                              Grid.Row="2"
+                              Grid.Column="0"
+                              Grid.ColumnSpan="3"
+                              Content="Two-pass translation (extract glossary + summary first for terminology consistency)"
+                              IsChecked="True"
+                              Checked="OnLongDocDocumentContextPassChanged"
+                              Unchecked="OnLongDocDocumentContextPassChanged"
+                              ToolTipService.ToolTip="When enabled, the LLM first reads the entire document page-by-page to build a glossary, summary, and preservation list, then translates blocks with that shared context. Improves consistency at the cost of extra LLM calls."/>
+
                     <!-- Row 2, Col 3: Translate button (right-aligned, own row) -->
                     <Button x:Name="LongDocTranslateButton"
                             Grid.Row="2"

@@ -18,6 +18,7 @@ public sealed class LongDocumentTranslationService
         "CharLevel:FormulaOnlyText",
         "FormulaOnlyText",
         "NumericData",
+        "LlmHint",
     };
 
     private readonly Func<TranslationRequest, string, CancellationToken, Task<TranslationResult>> _translateWithService;
@@ -121,8 +122,68 @@ public sealed class LongDocumentTranslationService
         // Yield control to allow UI thread to process messages
         await Task.Yield();
 
+        // Pass 1: Document context extraction (optional). Reads the whole doc page-by-page,
+        // produces glossary + summary + preservation hints. Hints are applied to the IR
+        // so matched blocks bypass the LLM in pass 2; summary + glossary are prepended to
+        // every per-block prompt for terminology consistency.
+        DocumentContext? documentContext = null;
+        if (options.EnableDocumentContextPass)
+        {
+            progress?.Report(new LongDocumentTranslationProgress
+            {
+                Stage = LongDocumentTranslationStage.DocumentContext,
+                CurrentBlock = 0,
+                TotalBlocks = ir.Blocks.Count,
+                CurrentPage = 0,
+                TotalPages = totalPages,
+                Percentage = 12
+            });
+
+            var ctxSw = Stopwatch.StartNew();
+            try
+            {
+                var extractor = new DocumentContextExtractor(_translateWithService);
+                var ctxProgress = new Progress<DocumentContextProgress>(sub =>
+                {
+                    progress?.Report(new LongDocumentTranslationProgress
+                    {
+                        Stage = LongDocumentTranslationStage.DocumentContext,
+                        CurrentBlock = sub.MappedPages,
+                        TotalBlocks = sub.TotalPages,
+                        CurrentPage = sub.MappedPages,
+                        TotalPages = sub.TotalPages,
+                        Percentage = 12 + (sub.IsReducing ? 6 : (double)sub.MappedPages / Math.Max(1, sub.TotalPages) * 6)
+                    });
+                });
+
+                documentContext = await extractor
+                    .ExtractAsync(ir.Blocks, options, ctxProgress, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Pass 1 must never block pass 2. On any failure, fall back to empty context.
+                documentContext = DocumentContext.Empty;
+                Debug.WriteLine($"[LongDocumentTranslationService] DocumentContextExtractor failed: {ex.Message}");
+            }
+            ctxSw.Stop();
+            timings["document-context"] = ctxSw.ElapsedMilliseconds;
+
+            // Apply preservation hints to the IR (mark matched blocks as skipped+preserved).
+            if (documentContext is { PreservationHints.Count: > 0 })
+            {
+                var hintSw = Stopwatch.StartNew();
+                ir = ApplyPreservationHints(ir, documentContext.PreservationHints);
+                hintSw.Stop();
+                timings["preservation-hints"] = hintSw.ElapsedMilliseconds;
+            }
+
+            // Yield control to allow UI thread to process messages
+            await Task.Yield();
+        }
+
         var translateSw = Stopwatch.StartNew();
-        var translatedBlocks = await TranslateBlocksAsync(ir, options, cancellationToken).ConfigureAwait(false);
+        var translatedBlocks = await TranslateBlocksAsync(ir, options, documentContext, cancellationToken).ConfigureAwait(false);
         translateSw.Stop();
         timings["translate"] = translateSw.ElapsedMilliseconds;
 
@@ -346,9 +407,104 @@ public sealed class LongDocumentTranslationService
         }, cancellationToken);
     }
 
+    /// <summary>
+    /// Rewrites the IR so that any block whose <c>OriginalText</c> matches a Pass 1
+    /// preservation hint becomes <c>TranslationSkipped = true</c> and
+    /// <c>PreserveOriginalTextInPdfExport = true</c>. Match rules (case-sensitive):
+    ///   * exact equality on trimmed text
+    ///   * hint contains the block's text (block is a substring of the hint)
+    ///   * block's text contains the hint AND the hint is ≥ 20 chars
+    /// The 20-char floor on substring matches prevents short hints (e.g. a single
+    /// term like "BLEU") from accidentally swallowing whole paragraphs.
+    /// </summary>
+    internal static DocumentIr ApplyPreservationHints(DocumentIr ir, IReadOnlyList<string> hints)
+    {
+        if (hints is null || hints.Count == 0) return ir;
+
+        // Pre-trim hints once. Discard any < 3 chars (defensive — extractor already filters).
+        var trimmedHints = new List<string>(hints.Count);
+        foreach (var h in hints)
+        {
+            if (string.IsNullOrWhiteSpace(h)) continue;
+            var t = h.Trim();
+            if (t.Length < 3) continue;
+            trimmedHints.Add(t);
+        }
+        if (trimmedHints.Count == 0) return ir;
+
+        var rewritten = new List<DocumentBlockIr>(ir.Blocks.Count);
+        var anyChanged = false;
+        foreach (var block in ir.Blocks)
+        {
+            if (block.TranslationSkipped || block.PreserveOriginalTextInPdfExport)
+            {
+                rewritten.Add(block);
+                continue;
+            }
+
+            var blockText = block.OriginalText?.Trim() ?? string.Empty;
+            if (blockText.Length == 0)
+            {
+                rewritten.Add(block);
+                continue;
+            }
+
+            // Defensive length cap: legitimate preservation targets (table cells, code
+            // lines, captions, citations, identifiers) are short. If the LLM accidentally
+            // dumps a whole paragraph as a hint, do not let rule 1/2 catch it — long blocks
+            // must always go through translation. This is the consumer-side guard against
+            // a regression where the LLM flags entire prose paragraphs as hints.
+            const int MaxPreservedBlockLength = 300;
+            if (blockText.Length > MaxPreservedBlockLength)
+            {
+                rewritten.Add(block);
+                continue;
+            }
+
+            var matched = false;
+            foreach (var hint in trimmedHints)
+            {
+                // Rule 1: block IS the hint (table cell, code line, heading, caption).
+                if (string.Equals(blockText, hint, StringComparison.Ordinal))
+                {
+                    matched = true;
+                    break;
+                }
+                // Rule 2: block is a sub-cell of a longer hint (e.g. one cell of a row
+                // the LLM concatenated into a single hint string).
+                if (hint.Contains(blockText, StringComparison.Ordinal))
+                {
+                    matched = true;
+                    break;
+                }
+                // NOTE: there is intentionally no "hint inside block" rule. A long prose
+                // paragraph that happens to mention a 20+ char identifier or formula
+                // reference must remain translatable — only blocks that ARE the hint
+                // (rule 1) or are sub-cells of a larger row hint (rule 2) are preserved.
+            }
+
+            if (matched)
+            {
+                rewritten.Add(block with
+                {
+                    TranslationSkipped = true,
+                    PreserveOriginalTextInPdfExport = true,
+                });
+                anyChanged = true;
+            }
+            else
+            {
+                rewritten.Add(block);
+            }
+        }
+
+        return anyChanged ? ir with { Blocks = rewritten } : ir;
+    }
+
     private async Task<Dictionary<string, TranslatedDocumentBlock>> TranslateBlocksAsync(
         DocumentIr ir,
         LongDocumentTranslationOptions options,
+        DocumentContext? documentContext,
         CancellationToken cancellationToken)
     {
         var result = new ConcurrentDictionary<string, TranslatedDocumentBlock>(StringComparer.Ordinal);
@@ -407,7 +563,7 @@ public sealed class LongDocumentTranslationService
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var block = blocksToTranslate[i];
-                var translated = await TranslateSingleBlockAsync(block, options, cancellationToken);
+                var translated = await TranslateSingleBlockAsync(block, options, documentContext, cancellationToken);
                 result[block.IrBlockId] = translated;
                 completedBlocks++;
 
@@ -435,7 +591,7 @@ public sealed class LongDocumentTranslationService
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    var translated = await TranslateSingleBlockAsync(block, options, cancellationToken);
+                    var translated = await TranslateSingleBlockAsync(block, options, documentContext, cancellationToken);
                     result[block.IrBlockId] = translated;
 
                     // Thread-safe progress reporting in parallel path
@@ -494,6 +650,7 @@ public sealed class LongDocumentTranslationService
     private async Task<TranslatedDocumentBlock> TranslateSingleBlockAsync(
         DocumentBlockIr block,
         LongDocumentTranslationOptions options,
+        DocumentContext? documentContext,
         CancellationToken cancellationToken)
     {
         var retryCount = 0;
@@ -515,6 +672,30 @@ public sealed class LongDocumentTranslationService
             {
                 // Formula prompt: {vN} = hard, $...$ = soft math, [[EQ_SOFT]] = equation-like exact span.
                 var customPrompt = options.CustomPrompt;
+
+                // Pass 1 document context (if extracted) goes first so the model has a
+                // shared frame of reference before the per-block formula instructions.
+                if (documentContext is not null &&
+                    (!string.IsNullOrWhiteSpace(documentContext.Summary) || documentContext.Glossary.Count > 0))
+                {
+                    var ctxParts = new List<string>(2);
+                    if (!string.IsNullOrWhiteSpace(documentContext.Summary))
+                    {
+                        ctxParts.Add($"Document summary: {documentContext.Summary}");
+                    }
+                    if (documentContext.Glossary.Count > 0)
+                    {
+                        var glossaryLines = string.Join(
+                            "\n",
+                            documentContext.Glossary.Select(kv => $"  {kv.Key} → {kv.Value}"));
+                        ctxParts.Add($"Use these term translations consistently across the document:\n{glossaryLines}");
+                    }
+                    var ctxPrompt = string.Join("\n\n", ctxParts);
+                    customPrompt = string.IsNullOrWhiteSpace(customPrompt)
+                        ? ctxPrompt
+                        : $"{ctxPrompt}\n\n{customPrompt}";
+                }
+
                 if (options.EnableFormulaProtection)
                 {
                     var hasHardTokens = currentTokens is { Count: > 0 };

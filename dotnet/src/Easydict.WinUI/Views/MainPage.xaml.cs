@@ -1747,6 +1747,9 @@ namespace Easydict.WinUI.Views
 
             // Initialize Page Range TextBox
             LongDocPageRangeBox.Text = _settings.LongDocPageRange ?? "";
+
+            // Initialize Two-Pass Translation CheckBox
+            LongDocDocumentContextPassCheckBox.IsChecked = _settings.LongDocEnableDocumentContextPass;
         }
 
         private static void SelectComboByTag(ComboBox combo, string? tag)
@@ -2125,6 +2128,12 @@ namespace Easydict.WinUI.Views
         {
             if (LongDocPageRangeBox is null) return;
             _settings.LongDocPageRange = LongDocPageRangeBox.Text?.Trim() ?? "";
+        }
+
+        private void OnLongDocDocumentContextPassChanged(object sender, RoutedEventArgs e)
+        {
+            if (LongDocDocumentContextPassCheckBox is null) return;
+            _settings.LongDocEnableDocumentContextPass = LongDocDocumentContextPassCheckBox.IsChecked == true;
         }
 
         private void OnLongDocClearHistoryClicked(object sender, RoutedEventArgs e)

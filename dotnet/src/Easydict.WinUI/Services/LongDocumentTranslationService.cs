@@ -205,6 +205,7 @@ public sealed class LongDocumentTranslationService : IDisposable
         var formulaFontPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaFontPattern) ? null : SettingsService.Instance.FormulaFontPattern;
         var formulaCharPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaCharPattern) ? null : SettingsService.Instance.FormulaCharPattern;
         var customPrompt = string.IsNullOrWhiteSpace(SettingsService.Instance.LongDocCustomPrompt) ? null : SettingsService.Instance.LongDocCustomPrompt;
+        var enableDocumentContextPass = SettingsService.Instance.LongDocEnableDocumentContextPass;
         var coreOptions = CreateCoreTranslationOptions(
             serviceId,
             from,
@@ -214,7 +215,8 @@ public sealed class LongDocumentTranslationService : IDisposable
             formulaFontPattern,
             formulaCharPattern,
             customPrompt,
-            progress);
+            progress,
+            enableDocumentContextPass);
         var coreResult = await _coreLongDocumentService.TranslateAsync(sourceDocument, coreOptions, cancellationToken).ConfigureAwait(false);
 
         var checkpoint = BuildCheckpointFromCoreResult(
@@ -481,7 +483,10 @@ public sealed class LongDocumentTranslationService : IDisposable
             retryFormulaFontPattern,
             retryFormulaCharPattern,
             retryCustomPrompt,
-            progress);
+            progress,
+            // Pass 1 already ran on the initial translation; the retry translates only
+            // failed chunks and would just re-do the document-context call wastefully.
+            enableDocumentContextPass: false);
         var retryResult = await coreLongDocumentService.TranslateAsync(retrySource, retryOptions, cancellationToken).ConfigureAwait(false);
 
         foreach (var translatedBlock in retryResult.Pages.SelectMany(page => page.Blocks))
@@ -527,7 +532,8 @@ public sealed class LongDocumentTranslationService : IDisposable
         string? formulaFontPattern,
         string? formulaCharPattern,
         string? customPrompt,
-        System.IProgress<LongDocumentTranslationProgress>? progress = null)
+        System.IProgress<LongDocumentTranslationProgress>? progress = null,
+        bool enableDocumentContextPass = true)
     {
         return new LongDocumentTranslationOptions
         {
@@ -535,6 +541,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             FromLanguage = from,
             ToLanguage = to,
             EnableFormulaProtection = true,
+            EnableDocumentContextPass = enableDocumentContextPass,
             EnableOcrFallback = enableOcrFallback,
             EnableQualityFeedbackRetry = true,
             MaxRetriesPerBlock = 1,

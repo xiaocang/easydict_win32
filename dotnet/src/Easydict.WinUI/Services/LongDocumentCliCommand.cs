@@ -59,6 +59,7 @@ internal static class LongDocumentCliCommand
         new("EASYDICT_LONGDOC_MAX_CONCURRENCY", nameof(SettingsService.LongDocMaxConcurrency)),
         new("EASYDICT_LONGDOC_PAGE_RANGE", nameof(SettingsService.LongDocPageRange)),
         new("EASYDICT_LONGDOC_CUSTOM_PROMPT", nameof(SettingsService.LongDocCustomPrompt)),
+        new("EASYDICT_LONGDOC_DOCUMENT_CONTEXT_PASS", nameof(SettingsService.LongDocEnableDocumentContextPass)),
         new("EASYDICT_ENABLE_TRANSLATION_CACHE", nameof(SettingsService.EnableTranslationCache)),
     ];
 

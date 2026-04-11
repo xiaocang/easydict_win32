@@ -32,11 +32,12 @@ try
         var selectedPages = ResolveSelectedPages(options.PageSelection, document.PageCount);
         var pagesToRender = selectedPages ?? Enumerable.Range(1, document.PageCount).ToArray();
 
+        var effectiveDpi = scale * 72.0;
         Console.WriteLine($"Input PDF : {options.InputPdf}");
         Console.WriteLine($"Output dir: {outputDir}");
         Console.WriteLine($"Pages     : {FormatPageSummary(selectedPages, document.PageCount)}");
         Console.WriteLine($"Format    : {options.Format}");
-        Console.WriteLine($"Scale     : {scale:F2} ({options.Dpi:F0} DPI)");
+        Console.WriteLine($"Scale     : {scale:F2} ({effectiveDpi:F0} DPI)");
         Console.WriteLine();
 
         for (var i = 0; i < pagesToRender.Count; i++)
@@ -165,10 +166,19 @@ static IReadOnlyList<int>? ResolveSelectedPages(string? pageSelection, int total
 {
     var parsed = PageRangeParser.Parse(pageSelection, totalPages);
     if (parsed is null)
+    {
+        // PageRangeParser.Parse returns null for three distinct cases:
+        //   1. null/empty input        → "all pages"
+        //   2. input == "all"          → "all pages"
+        //   3. input parsed but matched nothing in range → invalid
+        // Only the first two should fall through as "no selection = all pages".
+        var isAllPagesRequest = string.IsNullOrWhiteSpace(pageSelection)
+            || pageSelection.Trim().Equals("all", StringComparison.OrdinalIgnoreCase);
+        if (!isAllPagesRequest)
+            throw new ArgumentException(
+                $"Page selection '{pageSelection}' is invalid or does not match any page in this PDF.");
         return null;
-
-    if (parsed.Count == 0)
-        throw new ArgumentException($"Page selection '{pageSelection}' does not match any page in this PDF.");
+    }
 
     return parsed.OrderBy(p => p).ToArray();
 }

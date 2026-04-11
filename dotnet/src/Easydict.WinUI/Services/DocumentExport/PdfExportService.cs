@@ -211,21 +211,21 @@ public sealed class PdfExportService : IDocumentExportService
             try
             {
                 var sourcePageIndex = FindOutlinePageIndex(sourceOutline, sourceDoc);
-                if (sourcePageIndex < 0 || !pageIndexMap.TryGetValue(sourcePageIndex, out var bilingualPageIndex))
-                {
-                    // Skip bookmarks outside the selected page subset, but keep descending into children.
-                    if (sourceOutline.Outlines.Count > 0)
-                        CopyOutlineLevel(sourceOutline.Outlines, targetOutlines, sourceDoc, bilingualDoc, pageIndexMap);
-                    continue;
-                }
+                int? bilingualPageIndex = null;
+                if (sourcePageIndex >= 0 && pageIndexMap.TryGetValue(sourcePageIndex, out var mapped))
+                    bilingualPageIndex = mapped;
 
-                // Map source page index to bilingual page index: source page i → bilingual page 2*i
-                if (bilingualPageIndex >= bilingualDoc.PageCount)
-                    bilingualPageIndex = bilingualDoc.PageCount - 1;
+                // Fall back to the first in-range descendant so we can still anchor a
+                // placeholder parent and preserve the original hierarchy.
+                bilingualPageIndex ??= FindFirstInRangeDescendantPage(sourceOutline, sourceDoc, pageIndexMap);
 
-                var targetOutline = targetOutlines.Add(sourceOutline.Title, bilingualDoc.Pages[bilingualPageIndex]);
+                if (bilingualPageIndex is null)
+                    continue; // Entire subtree is out of range — drop it instead of flattening.
 
-                // Recurse into children
+                var clamped = Math.Min(bilingualPageIndex.Value, bilingualDoc.PageCount - 1);
+                var targetOutline = targetOutlines.Add(sourceOutline.Title, bilingualDoc.Pages[clamped]);
+
+                // Recurse into children under the new parent, preserving nesting.
                 if (sourceOutline.Outlines.Count > 0)
                     CopyOutlineLevel(sourceOutline.Outlines, targetOutline.Outlines, sourceDoc, bilingualDoc, pageIndexMap);
             }
@@ -234,6 +234,28 @@ public sealed class PdfExportService : IDocumentExportService
                 Debug.WriteLine($"[PdfExport] Failed to copy bookmark '{sourceOutline.Title}': {ex.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// Depth-first search for the first descendant outline whose page falls inside the selected
+    /// page subset. Returns the mapped bilingual page index, or null if no descendant qualifies.
+    /// </summary>
+    private static int? FindFirstInRangeDescendantPage(
+        PdfOutline outline,
+        PdfDocument sourceDoc,
+        IReadOnlyDictionary<int, int> pageIndexMap)
+    {
+        foreach (var child in outline.Outlines)
+        {
+            var childPageIndex = FindOutlinePageIndex(child, sourceDoc);
+            if (childPageIndex >= 0 && pageIndexMap.TryGetValue(childPageIndex, out var mapped))
+                return mapped;
+
+            var descendant = FindFirstInRangeDescendantPage(child, sourceDoc, pageIndexMap);
+            if (descendant is not null)
+                return descendant;
+        }
+        return null;
     }
 
     private static IReadOnlyDictionary<int, int> BuildBilingualPageIndexMap(int totalPages, IReadOnlyList<int>? selectedPages)

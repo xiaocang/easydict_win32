@@ -687,7 +687,6 @@
                               Grid.Column="0"
                               Grid.ColumnSpan="3"
                               Content="Two-pass translation (extract glossary + summary first for terminology consistency)"
-                              IsChecked="True"
                               Checked="OnLongDocDocumentContextPassChanged"
                               Unchecked="OnLongDocDocumentContextPassChanged"
                               ToolTipService.ToolTip="When enabled, the LLM first reads the entire document page-by-page to build a glossary, summary, and preservation list, then translates blocks with that shared context. Improves consistency at the cost of extra LLM calls."/>

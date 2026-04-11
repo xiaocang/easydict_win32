@@ -165,15 +165,11 @@ jobs:
           Write-Host "Windows App Runtime installed"
 
       # Cache the ONNX runtime + DocLayout-YOLO + TATR models under
-      # %LocalAppData%\Easydict\Models and the Noto Sans CJK SC font under
-      # %LocalAppData%\Easydict\Fonts so Page2TranslationQualityTests and other
-      # ML-layout / CJK-export-dependent tests exercise the full ONNX path plus
-      # real CJK glyph embedding. Without these, MuPdf export tests that
-      # validate block layout / EraseRects / readable Chinese text (re-extracted
-      # via PdfPig) fail because the heuristic fallback produces different blocks
-      # and the helv font renders CJK as mojibake.
-      # Cache keys are pinned to URLs/versions in LayoutModelDownloadService.cs and
-      # FontDownloadService.cs.
+      # %LocalAppData%\Easydict\Models so Page2TranslationQualityTests and other
+      # ML-layout-dependent tests exercise the ONNX path instead of the heuristic
+      # fallback. Without these, MuPdf export tests that depend on ML-detected
+      # region boxes / table structure produce nondeterministic block layouts
+      # and fail. Cache key is pinned to the URLs/versions in LayoutModelDownloadService.cs.
       # GitHub Windows runners run as the 'runneradmin' user, so LocalAppData is
       # C:\Users\runneradmin\AppData\Local — hardcoded here because actions/cache
       # resolves `path` at workflow-evaluation time before any step-level env vars
@@ -184,13 +180,6 @@ jobs:
         with:
           path: C:\Users\runneradmin\AppData\Local\Easydict\Models
           key: onnx-layout-v1-ort1.21.0-doclayout-yolo-docstructbench-tatr-structure-xenova-fp32
-
-      - name: Cache CJK font
-        id: cache-cjk-font
-        uses: actions/cache@v4
-        with:
-          path: C:\Users\runneradmin\AppData\Local\Easydict\Fonts
-          key: cjk-font-v1-notosans-cjk-sc-vf
 
       - name: Download ONNX layout models
         if: steps.cache-onnx-models.outputs.cache-hit != 'true'
@@ -228,25 +217,6 @@ jobs:
 
           if ($ortSize -lt 5MB -or $ylSize -lt 20MB -or $tatrSize -lt 60MB) {
             Write-Error "Downloaded model files are smaller than expected — refusing to cache a truncated download."
-            exit 1
-          }
-
-      - name: Download CJK font
-        if: steps.cache-cjk-font.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          $fontsDir = Join-Path $env:LOCALAPPDATA "Easydict\Fonts"
-          New-Item -ItemType Directory -Force -Path $fontsDir | Out-Null
-
-          Write-Host "Downloading Noto Sans CJK SC variable font (renamed to NotoSansSC-Regular.ttf to match FontDownloadService)..."
-          Invoke-WebRequest `
-            -Uri "https://github.com/notofonts/noto-cjk/raw/main/Sans/Variable/TTF/NotoSansCJKsc-VF.ttf" `
-            -OutFile (Join-Path $fontsDir "NotoSansSC-Regular.ttf") -UseBasicParsing
-          $fontSize = (Get-Item (Join-Path $fontsDir "NotoSansSC-Regular.ttf")).Length
-          Write-Host "NotoSansSC-Regular.ttf: $fontSize bytes"
-
-          if ($fontSize -lt 10MB) {
-            Write-Error "Downloaded font file smaller than expected — refusing to cache a truncated download."
             exit 1
           }
 

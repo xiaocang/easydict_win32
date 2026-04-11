@@ -129,8 +129,7 @@ public sealed class DocLayoutYoloService : IDisposable
 
         using var results = _session.Run(inputs);
 
-        // Parse output: YOLO format [1, numClasses+4, numDetections]
-        // The output tensor shape is [1, 14, 8400] where 14 = 4 (bbox) + 10 (classes)
+        // Parse output: see ParseDetections for the two supported output shapes.
         var outputTensor = results.First().AsTensor<float>();
         return ParseDetections(outputTensor, scaleX, scaleY, padX, padY, width, height, confidenceThreshold);
     }
@@ -160,36 +159,33 @@ public sealed class DocLayoutYoloService : IDisposable
 
         var tensor = new DenseTensor<float>([1, 3, ModelInputSize, ModelInputSize]);
 
-        // Fill with gray (114/255) for padding
-        var grayValue = 114f / 255f;
-        for (var c = 0; c < 3; c++)
-            for (var y = 0; y < ModelInputSize; y++)
-                for (var x = 0; x < ModelInputSize; x++)
-                    tensor[0, c, y, x] = grayValue;
+        // Direct span access is ~3-5x faster than the multidim indexer on this hot path.
+        var span = tensor.Buffer.Span;
+        span.Fill(114f / 255f);  // gray letterbox padding
 
-        // Bilinear resize and fill the tensor
+        var channelStride = ModelInputSize * ModelInputSize;
+        var rBase = 0;
+        var gBase = channelStride;
+        var bBase = 2 * channelStride;
+        var invScale = 1.0 / scale;
+
+        // Nearest-neighbor resample into the non-padded rectangle.
         for (var y = 0; y < newH; y++)
         {
+            var sy = Math.Min((int)(y * invScale), height - 1);
+            var srcRowStart = sy * width;
+            var dstRow = (y + padY) * ModelInputSize + padX;
+
             for (var x = 0; x < newW; x++)
             {
-                // Map back to original image coordinates
-                var srcX = x / scale;
-                var srcY = y / scale;
-
-                // Nearest-neighbor sampling for simplicity
-                var sx = Math.Min((int)srcX, width - 1);
-                var sy = Math.Min((int)srcY, height - 1);
-
-                var srcIdx = (sy * width + sx) * 4; // BGRA8 format
+                var sx = Math.Min((int)(x * invScale), width - 1);
+                var srcIdx = (srcRowStart + sx) * 4; // BGRA8
                 if (srcIdx + 2 >= bgra.Length) continue;
 
-                var b = bgra[srcIdx] / 255f;
-                var g = bgra[srcIdx + 1] / 255f;
-                var r = bgra[srcIdx + 2] / 255f;
-
-                tensor[0, 0, y + padY, x + padX] = r;
-                tensor[0, 1, y + padY, x + padX] = g;
-                tensor[0, 2, y + padY, x + padX] = b;
+                var dst = dstRow + x;
+                span[rBase + dst] = bgra[srcIdx + 2] / 255f;
+                span[gBase + dst] = bgra[srcIdx + 1] / 255f;
+                span[bBase + dst] = bgra[srcIdx] / 255f;
             }
         }
 
@@ -198,7 +194,19 @@ public sealed class DocLayoutYoloService : IDisposable
 
     /// <summary>
     /// Parse YOLO detection output tensor into LayoutDetection list.
-    /// Output shape: [1, numClasses+4, numDetections] where bbox format is (cx, cy, w, h).
+    /// Supports TWO output layouts depending on how the model was exported:
+    ///
+    /// A) End-to-end with NMS baked in — <c>[1, N, 6]</c>. Each row is
+    ///    <c>[x1, y1, x2, y2, confidence, class_id]</c> in model space (pre-NMS).
+    ///    This is the format produced by the wybxc/DocLayout-YOLO-DocStructBench
+    ///    Hugging Face export that we currently download.
+    ///
+    /// B) Classic raw anchor output — <c>[1, 4+numClasses, numAnchors]</c> with
+    ///    <c>(cx, cy, w, h, score0, …, scoreK-1)</c>. Used by vanilla YOLOv8/v10
+    ///    ONNX exports without bundled NMS.
+    ///
+    /// Both formats get the same letterbox-unmapping + image-bound clipping and
+    /// go through the post-filter NMS (which is a no-op on format A but harmless).
     /// </summary>
     internal static List<LayoutDetection> ParseDetections(
         Tensor<float> output,
@@ -213,16 +221,64 @@ public sealed class DocLayoutYoloService : IDisposable
         var results = new List<LayoutDetection>();
         var dims = output.Dimensions;
 
-        // Expected shape: [1, 4+numClasses, numDetections]
         if (dims.Length != 3) return results;
 
+        // Disambiguate format A vs B.
+        // Format A: [1, N, 6] with N typically 300, always dims[2] == 6.
+        // Format B: [1, 4+numClasses, numAnchors] with dims[1] == 14 for 10 classes
+        //           and dims[2] typically in the thousands.
+        var isEndToEnd = dims[2] == 6 && dims[1] >= 1 && dims[1] != 14;
+
+        if (isEndToEnd)
+        {
+            var numDetections = dims[1];
+            for (var i = 0; i < numDetections; i++)
+            {
+                var x1Raw = output[0, i, 0];
+                var y1Raw = output[0, i, 1];
+                var x2Raw = output[0, i, 2];
+                var y2Raw = output[0, i, 3];
+                var confidence = output[0, i, 4];
+                var classIdxFloat = output[0, i, 5];
+
+                if (confidence < confidenceThreshold) continue;
+
+                var classIdx = (int)Math.Round(classIdxFloat);
+                var regionType = MapClassToRegionType(classIdx);
+
+                // Convert from model space to original image space.
+                var x1 = (x1Raw - padX) / scaleX;
+                var y1 = (y1Raw - padY) / scaleY;
+                var x2 = (x2Raw - padX) / scaleX;
+                var y2 = (y2Raw - padY) / scaleY;
+
+                var bw = x2 - x1;
+                var bh = y2 - y1;
+
+                // Clip to image bounds.
+                x1 = Math.Max(0, Math.Min(x1, originalWidth));
+                y1 = Math.Max(0, Math.Min(y1, originalHeight));
+                bw = Math.Min(bw, originalWidth - x1);
+                bh = Math.Min(bh, originalHeight - y1);
+
+                if (bw <= 0 || bh <= 0) continue;
+
+                results.Add(new LayoutDetection(regionType, confidence, x1, y1, bw, bh));
+            }
+
+            // Format A already has NMS baked in by the model export, but we
+            // still run our NMS as a defensive dedup — cheap on ≤300 boxes.
+            return ApplyNms(results, 0.45f);
+        }
+
+        // Format B: classic YOLOv8/v10 raw output.
         var numFeatures = dims[1]; // 4 (bbox) + numClasses
-        var numDetections = dims[2];
+        var rawNumDetections = dims[2];
         var numClasses = numFeatures - 4;
 
         if (numClasses <= 0) return results;
 
-        for (var i = 0; i < numDetections; i++)
+        for (var i = 0; i < rawNumDetections; i++)
         {
             // Find best class
             var bestClassIdx = -1;
@@ -301,19 +357,29 @@ public sealed class DocLayoutYoloService : IDisposable
     /// <summary>
     /// Compute Intersection over Union between two detections.
     /// </summary>
-    internal static float ComputeIoU(LayoutDetection a, LayoutDetection b)
+    internal static float ComputeIoU(LayoutDetection a, LayoutDetection b) =>
+        ComputeRectIoU(a.X, a.Y, a.Width, a.Height, b.X, b.Y, b.Width, b.Height);
+
+    /// <summary>
+    /// Compute Intersection over Union between two axis-aligned rectangles.
+    /// Shared by <see cref="DocLayoutYoloService"/> NMS and TATR row/column
+    /// deduplication — both operate in the same (pixel) coordinate space.
+    /// </summary>
+    internal static float ComputeRectIoU(
+        double ax, double ay, double aw, double ah,
+        double bx, double by, double bw, double bh)
     {
-        var x1 = Math.Max(a.X, b.X);
-        var y1 = Math.Max(a.Y, b.Y);
-        var x2 = Math.Min(a.X + a.Width, b.X + b.Width);
-        var y2 = Math.Min(a.Y + a.Height, b.Y + b.Height);
+        var x1 = Math.Max(ax, bx);
+        var y1 = Math.Max(ay, by);
+        var x2 = Math.Min(ax + aw, bx + bw);
+        var y2 = Math.Min(ay + ah, by + bh);
 
         var interW = Math.Max(0, x2 - x1);
         var interH = Math.Max(0, y2 - y1);
         var interArea = interW * interH;
 
-        var aArea = a.Width * a.Height;
-        var bArea = b.Width * b.Height;
+        var aArea = aw * ah;
+        var bArea = bw * bh;
         var unionArea = aArea + bArea - interArea;
 
         return unionArea > 0 ? (float)(interArea / unionArea) : 0f;

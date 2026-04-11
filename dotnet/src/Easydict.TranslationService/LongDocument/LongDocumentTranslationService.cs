@@ -543,6 +543,37 @@ public sealed class LongDocumentTranslationService
         var completedBlocks = 0;
         var progress = options.Progress;
 
+        // Pre-compute per-page filtered glossary. Cost is paid once up front
+        // (O(pages × terms × avg_page_text)) instead of per block. Each block's
+        // prompt then does a single dictionary lookup keyed by page number.
+        // Filtering at PAGE granularity (not block) so all blocks on a page
+        // share the same glossary prefix — friendlier to provider prompt caches
+        // and gives cross-block consistency within a page.
+        Dictionary<int, IReadOnlyList<KeyValuePair<string, string>>>? glossaryByPage = null;
+        if (documentContext is { Glossary.Count: > 0 })
+        {
+            var terms = documentContext.Glossary
+                .Where(kv => !string.IsNullOrEmpty(kv.Key))
+                .ToList();
+
+            var pageTextByNumber = blocksToTranslate
+                .Where(b => !string.IsNullOrWhiteSpace(b.OriginalText))
+                .GroupBy(b => b.PageNumber)
+                .ToDictionary(g => g.Key, g => string.Join("\n", g.Select(b => b.OriginalText)));
+
+            glossaryByPage = new Dictionary<int, IReadOnlyList<KeyValuePair<string, string>>>(pageTextByNumber.Count);
+            foreach (var (pageNumber, pageText) in pageTextByNumber)
+            {
+                var matched = new List<KeyValuePair<string, string>>(terms.Count);
+                foreach (var kv in terms)
+                {
+                    if (pageText.Contains(kv.Key, StringComparison.Ordinal))
+                        matched.Add(kv);
+                }
+                glossaryByPage[pageNumber] = matched;
+            }
+        }
+
         // Report initial progress
         progress?.Report(new LongDocumentTranslationProgress
         {
@@ -563,7 +594,7 @@ public sealed class LongDocumentTranslationService
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var block = blocksToTranslate[i];
-                var translated = await TranslateSingleBlockAsync(block, options, documentContext, cancellationToken);
+                var translated = await TranslateSingleBlockAsync(block, options, documentContext, glossaryByPage, cancellationToken);
                 result[block.IrBlockId] = translated;
                 completedBlocks++;
 
@@ -591,7 +622,7 @@ public sealed class LongDocumentTranslationService
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    var translated = await TranslateSingleBlockAsync(block, options, documentContext, cancellationToken);
+                    var translated = await TranslateSingleBlockAsync(block, options, documentContext, glossaryByPage, cancellationToken);
                     result[block.IrBlockId] = translated;
 
                     // Thread-safe progress reporting in parallel path
@@ -651,6 +682,7 @@ public sealed class LongDocumentTranslationService
         DocumentBlockIr block,
         LongDocumentTranslationOptions options,
         DocumentContext? documentContext,
+        IReadOnlyDictionary<int, IReadOnlyList<KeyValuePair<string, string>>>? glossaryByPage,
         CancellationToken cancellationToken)
     {
         var retryCount = 0;
@@ -675,19 +707,28 @@ public sealed class LongDocumentTranslationService
 
                 // Pass 1 document context (if extracted) goes first so the model has a
                 // shared frame of reference before the per-block formula instructions.
-                if (documentContext is not null &&
-                    (!string.IsNullOrWhiteSpace(documentContext.Summary) || documentContext.Glossary.Count > 0))
+                // The glossary is filtered per page (by glossaryByPage precompute in
+                // TranslateBlocksAsync) — only entries whose source term appears somewhere
+                // on the current page are injected, keeping prompts short without losing
+                // terminology consistency across blocks that reference the same term.
+                IReadOnlyList<KeyValuePair<string, string>>? pageGlossary = null;
+                glossaryByPage?.TryGetValue(block.PageNumber, out pageGlossary);
+
+                var hasSummary = documentContext is not null && !string.IsNullOrWhiteSpace(documentContext.Summary);
+                var hasPageGlossary = pageGlossary is { Count: > 0 };
+
+                if (hasSummary || hasPageGlossary)
                 {
                     var ctxParts = new List<string>(2);
-                    if (!string.IsNullOrWhiteSpace(documentContext.Summary))
+                    if (hasSummary)
                     {
-                        ctxParts.Add($"Document summary: {documentContext.Summary}");
+                        ctxParts.Add($"Document summary: {documentContext!.Summary}");
                     }
-                    if (documentContext.Glossary.Count > 0)
+                    if (hasPageGlossary)
                     {
                         var glossaryLines = string.Join(
                             "\n",
-                            documentContext.Glossary.Select(kv => $"  {kv.Key} → {kv.Value}"));
+                            pageGlossary!.Select(kv => $"  {kv.Key} → {kv.Value}"));
                         ctxParts.Add($"Use these term translations consistently across the document:\n{glossaryLines}");
                     }
                     var ctxPrompt = string.Join("\n\n", ctxParts);

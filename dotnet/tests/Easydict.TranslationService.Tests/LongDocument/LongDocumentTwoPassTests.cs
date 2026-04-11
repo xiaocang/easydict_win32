@@ -47,7 +47,11 @@ public class LongDocumentTwoPassTests
             });
         });
 
-        var source = BuildSourceWith("Hello world.", "Another paragraph here.");
+        // Source text uses the SAME casing as glossary keys ("Hello", "World") so
+        // the page-scoped case-sensitive filter matches. Both terms appear on page 1,
+        // so every page-1 block should see both entries regardless of which one
+        // actually mentions which term.
+        var source = BuildSourceWith("Hello World.", "Another paragraph here.");
 
         await sut.TranslateAsync(source, new LongDocumentTranslationOptions
         {
@@ -207,6 +211,254 @@ public class LongDocumentTwoPassTests
         var ir = BuildIr("paragraph");
         LongDocumentTranslationService.ApplyPreservationHints(ir, Array.Empty<string>())
             .Should().BeSameAs(ir);
+    }
+
+    // ---- Content-matched glossary injection (page-scoped filter) ----
+
+    [Fact]
+    public async Task TranslateAsync_GlossaryInjection_OnlyIncludesTermsAppearingOnPage()
+    {
+        // Page 1 has "Hello there"; page 2 has "World peace". Glossary covers three
+        // terms; only Hello appears on page 1 and only World appears on page 2.
+        var promptsByText = new ConcurrentDictionary<string, string?>();
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            if (request.CustomPrompt == DocumentContextExtractor.MapPagePrompt)
+            {
+                return Task.FromResult(new TranslationResult
+                {
+                    OriginalText = request.Text,
+                    TranslatedText = """
+                        {"summary":"test doc","glossary":{"Hello":"你好","World":"世界","Foo":"酒吧"},"preservation_hints":[]}
+                        """,
+                    ServiceName = "fake",
+                    TargetLanguage = request.ToLanguage,
+                });
+            }
+            if (request.CustomPrompt != DocumentContextExtractor.ReduceSummaryPrompt)
+            {
+                promptsByText[request.Text] = request.CustomPrompt;
+            }
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = $"T:{request.Text}",
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage,
+            });
+        });
+
+        var source = new SourceDocument
+        {
+            DocumentId = "doc-glossary-pages",
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b0",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "Hello there",
+                            BoundingBox = new BlockRect(10, 20, 400, 25),
+                        }
+                    ]
+                },
+                new SourceDocumentPage
+                {
+                    PageNumber = 2,
+                    Blocks =
+                    [
+                        new SourceDocumentBlock
+                        {
+                            BlockId = "b1",
+                            BlockType = SourceBlockType.Paragraph,
+                            Text = "World peace",
+                            BoundingBox = new BlockRect(10, 20, 400, 25),
+                        }
+                    ]
+                }
+            ]
+        };
+
+        await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "fake",
+            EnableFormulaProtection = false,
+            EnableDocumentContextPass = true,
+        });
+
+        var page1Prompt = promptsByText["Hello there"];
+        var page2Prompt = promptsByText["World peace"];
+
+        page1Prompt.Should().Contain("Hello → 你好");
+        page1Prompt.Should().NotContain("World → 世界");
+        page1Prompt.Should().NotContain("Foo → 酒吧");
+
+        page2Prompt.Should().Contain("World → 世界");
+        page2Prompt.Should().NotContain("Hello → 你好");
+        page2Prompt.Should().NotContain("Foo → 酒吧");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_GlossaryInjection_SamePageBlocksShareSameGlossary()
+    {
+        // Two blocks on page 1 — one says "Hello", the other says "Goodbye". Both
+        // terms appear SOMEWHERE on page 1, so both blocks should get both entries
+        // regardless of which individual block mentions which term. "Foo" appears
+        // nowhere, so it's dropped.
+        var promptsByText = new ConcurrentDictionary<string, string?>();
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            if (request.CustomPrompt == DocumentContextExtractor.MapPagePrompt)
+            {
+                return Task.FromResult(new TranslationResult
+                {
+                    OriginalText = request.Text,
+                    TranslatedText = """
+                        {"summary":"","glossary":{"Hello":"你好","Goodbye":"再见","Foo":"酒吧"},"preservation_hints":[]}
+                        """,
+                    ServiceName = "fake",
+                    TargetLanguage = request.ToLanguage,
+                });
+            }
+            if (request.CustomPrompt != DocumentContextExtractor.ReduceSummaryPrompt)
+            {
+                promptsByText[request.Text] = request.CustomPrompt;
+            }
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = $"T:{request.Text}",
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage,
+            });
+        });
+
+        var source = BuildSourceWith("Hello", "Goodbye");
+
+        await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "fake",
+            EnableFormulaProtection = false,
+            EnableDocumentContextPass = true,
+        });
+
+        foreach (var blockText in new[] { "Hello", "Goodbye" })
+        {
+            var prompt = promptsByText[blockText];
+            prompt.Should().Contain("Hello → 你好",
+                $"'{blockText}' block should see the page-scoped glossary entry for Hello");
+            prompt.Should().Contain("Goodbye → 再见",
+                $"'{blockText}' block should see the page-scoped glossary entry for Goodbye");
+            prompt.Should().NotContain("Foo → 酒吧",
+                "Foo is not on the page so it must be filtered out");
+        }
+    }
+
+    [Fact]
+    public async Task TranslateAsync_GlossaryInjection_MatchesMultiWordTerms()
+    {
+        // Multi-word glossary keys must work because .Contains is a substring
+        // match, not a word-split match. This test pins that behavior so a future
+        // "improvement" that adds word-boundary matching doesn't regress it.
+        var promptsByText = new ConcurrentDictionary<string, string?>();
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            if (request.CustomPrompt == DocumentContextExtractor.MapPagePrompt)
+            {
+                return Task.FromResult(new TranslationResult
+                {
+                    OriginalText = request.Text,
+                    TranslatedText = """
+                        {"summary":"","glossary":{"self-attention mechanism":"自注意力机制"},"preservation_hints":[]}
+                        """,
+                    ServiceName = "fake",
+                    TargetLanguage = request.ToLanguage,
+                });
+            }
+            if (request.CustomPrompt != DocumentContextExtractor.ReduceSummaryPrompt)
+            {
+                promptsByText[request.Text] = request.CustomPrompt;
+            }
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = $"T:{request.Text}",
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage,
+            });
+        });
+
+        var source = BuildSourceWith("The encoder uses a self-attention mechanism.");
+
+        await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "fake",
+            EnableFormulaProtection = false,
+            EnableDocumentContextPass = true,
+        });
+
+        var prompt = promptsByText["The encoder uses a self-attention mechanism."];
+        prompt.Should().Contain("self-attention mechanism → 自注意力机制");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_GlossaryInjection_OmitsGlossaryBlockWhenPageHasNoMatches()
+    {
+        // Glossary says "Transformer"; the block says "encoder". Nothing matches.
+        // The glossary block header should NOT appear, but the summary should.
+        var promptsByText = new ConcurrentDictionary<string, string?>();
+        var sut = new LongDocumentTranslationService(translateWithService: (request, _, _) =>
+        {
+            if (request.CustomPrompt == DocumentContextExtractor.MapPagePrompt)
+            {
+                return Task.FromResult(new TranslationResult
+                {
+                    OriginalText = request.Text,
+                    TranslatedText = """
+                        {"summary":"This is a test paper.","glossary":{"Transformer":"Transformer"},"preservation_hints":[]}
+                        """,
+                    ServiceName = "fake",
+                    TargetLanguage = request.ToLanguage,
+                });
+            }
+            if (request.CustomPrompt != DocumentContextExtractor.ReduceSummaryPrompt)
+            {
+                promptsByText[request.Text] = request.CustomPrompt;
+            }
+            return Task.FromResult(new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = $"T:{request.Text}",
+                ServiceName = "fake",
+                TargetLanguage = request.ToLanguage,
+            });
+        });
+
+        var source = BuildSourceWith("The encoder processes input sequences.");
+
+        await sut.TranslateAsync(source, new LongDocumentTranslationOptions
+        {
+            ToLanguage = Language.SimplifiedChinese,
+            ServiceId = "fake",
+            EnableFormulaProtection = false,
+            EnableDocumentContextPass = true,
+        });
+
+        var prompt = promptsByText["The encoder processes input sequences."];
+        prompt.Should().Contain("Document summary: This is a test paper.",
+            "summary is always prepended regardless of glossary match");
+        prompt.Should().NotContain("Use these term translations consistently",
+            "no glossary block when nothing on the page matches");
+        prompt.Should().NotContain("Transformer → Transformer",
+            "non-matching glossary entries must not appear in the prompt");
     }
 
     // ---- helpers ----

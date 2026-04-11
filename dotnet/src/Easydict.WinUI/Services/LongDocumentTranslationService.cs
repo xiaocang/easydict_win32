@@ -123,6 +123,7 @@ public sealed class LongDocumentTranslationService : IDisposable
     // Layout detection services (lazy-initialized)
     private LayoutModelDownloadService? _layoutModelDownloadService;
     private DocLayoutYoloService? _docLayoutYoloService;
+    private TableStructureRecognitionService? _tatrService;
     private HttpClient? _visionHttpClient;
     private VisionLayoutDetectionService? _visionLayoutDetectionService;
     private LayoutDetectionStrategy? _layoutDetectionStrategy;
@@ -138,10 +139,13 @@ public sealed class LongDocumentTranslationService : IDisposable
 
         _layoutModelDownloadService ??= new LayoutModelDownloadService();
         _docLayoutYoloService ??= new DocLayoutYoloService(_layoutModelDownloadService);
+        _tatrService ??= new TableStructureRecognitionService(_layoutModelDownloadService);
         _visionHttpClient ??= new HttpClient();
         _visionLayoutDetectionService ??= new VisionLayoutDetectionService(_visionHttpClient);
         _layoutDetectionStrategy = new LayoutDetectionStrategy(
-            _docLayoutYoloService, _visionLayoutDetectionService, _layoutModelDownloadService);
+            _docLayoutYoloService, _visionLayoutDetectionService, _layoutModelDownloadService,
+            _tatrService,
+            tatrEnabledGetter: () => SettingsService.Instance.EnableTatrTableStructure);
 
         return _layoutDetectionStrategy;
     }
@@ -159,6 +163,8 @@ public sealed class LongDocumentTranslationService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _docLayoutYoloService?.Dispose();
+        _tatrService?.Dispose();
         _layoutModelDownloadService?.Dispose();
         _visionHttpClient?.Dispose();
         _cacheService.Dispose();

@@ -280,8 +280,27 @@ public class Page2TranslationQualityTests
         var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
         var checkpoint = BuildMockTranslationCheckpoint(source, pdfPath, failOneBlock: false);
 
-        var retryMetadata = SelectParagraphCandidate(checkpoint, 1);
-        checkpoint.TranslatedChunks[retryMetadata.ChunkIndex] =
+        // Pick the longest multi-line paragraph on page 1 that has at least one
+        // non-skipped paragraph after it in reading order — otherwise there's
+        // nothing below to reflow against, which would make the test trivially
+        // unsatisfiable. (The ML layout detector can legitimately place the
+        // longest paragraph at the end of the page.)
+        var retryMetadata = checkpoint.ChunkMetadata
+            .Where(metadata =>
+                metadata.PageNumber == 1 &&
+                metadata.SourceBlockType == SourceBlockType.Paragraph &&
+                metadata.BoundingBox is not null &&
+                metadata.TextStyle?.LinePositions is { Count: > 1 } &&
+                checkpoint.ChunkMetadata.Any(later =>
+                    later.PageNumber == 1 &&
+                    later.OrderInPage > metadata.OrderInPage &&
+                    later.SourceBlockType != SourceBlockType.Formula &&
+                    later.BoundingBox is not null))
+            .OrderByDescending(metadata => checkpoint.SourceChunks[metadata.ChunkIndex].Length)
+            .FirstOrDefault();
+        retryMetadata.Should().NotBeNull("page 1 should have a multi-line paragraph followed by another paragraph");
+
+        checkpoint.TranslatedChunks[retryMetadata!.ChunkIndex] =
             "\u8FD9\u4E2A\u9875\u9762\u4E00\u7684\u56DE\u5F52\u6BB5\u843D\u5728 retry \u540E\u9700\u8981\u66F4\u591A\u884C\u6570\u624D\u80FD\u5B8C\u6574\u663E\u793A\uFF0C\u56E0\u6B64\u5E94\u5F53\u89E6\u53D1 MuPDF \u7684\u9875\u7EA7\u7EDF\u4E00\u91CD\u6392\u7248\u903B\u8F91\uFF0C\u5E76\u628A\u540E\u9762\u7684\u6B63\u5E38\u6587\u672C\u5757\u4E00\u8D77\u5411\u4E0B\u907F\u8BA9\u3002";
         checkpoint.ChunkMetadata[retryMetadata.ChunkIndex].RetryCount = 1;
 

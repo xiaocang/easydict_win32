@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -60,6 +61,7 @@ internal static class LongDocumentCliCommand
         new("EASYDICT_LONGDOC_PAGE_RANGE", nameof(SettingsService.LongDocPageRange)),
         new("EASYDICT_LONGDOC_CUSTOM_PROMPT", nameof(SettingsService.LongDocCustomPrompt)),
         new("EASYDICT_LONGDOC_DOCUMENT_CONTEXT_PASS", nameof(SettingsService.LongDocEnableDocumentContextPass)),
+        new("EASYDICT_LONGDOC_ENABLE_TATR", nameof(SettingsService.EnableTatrTableStructure)),
         new("EASYDICT_ENABLE_TRANSLATION_CACHE", nameof(SettingsService.EnableTranslationCache)),
     ];
 
@@ -73,6 +75,16 @@ internal static class LongDocumentCliCommand
 
     internal static async Task<int> RunAsync(string[] args)
     {
+        // Pipe Debug.WriteLine to stderr so layout-detection diagnostics are
+        // visible when the CLI is run from translate-long-doc.ps1. Stderr keeps
+        // the user-facing Console.WriteLine output (progress, result summary)
+        // clean on stdout while still surfacing troubleshooting info.
+        if (!Trace.Listeners.OfType<TextWriterTraceListener>().Any(l => l.Writer == Console.Error))
+        {
+            Trace.Listeners.Add(new TextWriterTraceListener(Console.Error));
+            Trace.AutoFlush = true;
+        }
+
         var filteredArgs = args.Where(arg => !IsCommandToken(arg)).ToArray();
 
         if (filteredArgs.Length == 0 || filteredArgs.Any(arg => arg is "-h" or "--help"))

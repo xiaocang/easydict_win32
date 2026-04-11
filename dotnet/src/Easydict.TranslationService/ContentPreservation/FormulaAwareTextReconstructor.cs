@@ -131,6 +131,36 @@ public static class FormulaAwareTextReconstructor
         if (string.IsNullOrWhiteSpace(fallbackText))
             return true;
 
+        // Check 0a: character-loss detection. The reconstructor must not drop glyphs
+        // that PdfPig already decoded. Baseline-clustering bugs on certain PDFs
+        // (e.g. arXiv papers with per-letter baseline jitter) can strand descender
+        // or subscript glyphs in orphan reading lines that then get dropped, turning
+        // "maps an input" into "ma s an in ut". That artefact has more spaces than
+        // the fallback, not fewer, so the density check below is blind to it — but
+        // the alphanumeric count collapses. A healthy reconstruction should retain
+        // essentially every letter/digit the fallback has (sub/sup annotations only
+        // add non-alphanumeric markers like '_' and '{'), so require ≥95%.
+        var fallbackAlphaCount = fallbackText.Count(char.IsLetterOrDigit);
+        if (fallbackAlphaCount > 10)
+        {
+            var reconstructedAlphaCount = reconstructedText.Count(char.IsLetterOrDigit);
+            if (reconstructedAlphaCount < fallbackAlphaCount * 0.95)
+                return false;
+        }
+
+        // Check 0b: anchor-loss detection. The inverse of the tuple-anchor *restoration*
+        // check below — if the fallback already has tuple/equation anchors like "(x1"
+        // or "z=(z1", the reconstruction must not strip them out. This catches the same
+        // descender-loss bug at a finer granularity than the global alpha-count check,
+        // because a large block with one broken line may dilute alpha loss below the
+        // 5% threshold but still lose every parenthesised tuple marker.
+        var fallbackCompact = CollapseWhitespaceRegex.Replace(fallbackText, string.Empty);
+        var reconstructedCompact = CollapseWhitespaceRegex.Replace(reconstructedText, string.Empty);
+        var fallbackAnchors = CountTupleOrEquationAnchors(fallbackCompact);
+        var reconstructedAnchors = CountTupleOrEquationAnchors(reconstructedCompact);
+        if (fallbackAnchors > reconstructedAnchors)
+            return false;
+
         var fallbackSpaces = fallbackText.Count(c => c == ' ');
         if (fallbackSpaces <= 2)
             return true;

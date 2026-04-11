@@ -1154,10 +1154,17 @@ public sealed class LongDocumentTranslationService : IDisposable
         foreach (var word in words)
         {
             var box = word.BoundingBox;
-            var line = lines.FirstOrDefault(l => Math.Abs(l.Top - box.Top) <= sameLineThreshold);
+            // Match by SeedBottom (baseline proxy). Matching on Top alone is unreliable
+            // because the word bounding-box Top varies with ascender height — "Here" and
+            // "maps" on the same visual line can differ by 2-3pt, which can exceed the
+            // sameLineThreshold and cause them to land in different logical lines. The
+            // baseline (word.BoundingBox.Bottom) is stable within a single horizontal
+            // visual line but varies dramatically between different visual lines.
+            var line = lines.FirstOrDefault(l =>
+                !double.IsNaN(l.SeedBottom) && Math.Abs(l.SeedBottom - box.Bottom) <= sameLineThreshold);
             if (line is null)
             {
-                line = new PdfTextLine(box.Top);
+                line = new PdfTextLine(box.Top, box.Bottom);
                 lines.Add(line);
             }
 
@@ -1349,15 +1356,17 @@ public sealed class LongDocumentTranslationService : IDisposable
             .ThenBy(w => w.BoundingBox.Left)
             .ToList();
 
-        // Group words into text lines by Y proximity
+        // Group words into text lines by baseline proximity (see matching note in
+        // ExtractLayoutBlocksFromPage).
         var lines = new List<PdfTextLine>();
         foreach (var word in sorted)
         {
             var box = word.BoundingBox;
-            var line = lines.FirstOrDefault(l => Math.Abs(l.Top - box.Top) <= sameLineThreshold);
+            var line = lines.FirstOrDefault(l =>
+                !double.IsNaN(l.SeedBottom) && Math.Abs(l.SeedBottom - box.Bottom) <= sameLineThreshold);
             if (line is null)
             {
-                line = new PdfTextLine(box.Top);
+                line = new PdfTextLine(box.Top, box.Bottom);
                 lines.Add(line);
             }
             line.Words.Add(word);
@@ -1973,7 +1982,12 @@ public sealed class LongDocumentTranslationService : IDisposable
         var isTwoColumn = span > pageWidth * 0.22;
 
         var headerTop = Math.Max(pageHeight * 0.88, lines.Max(l => l.Top) - pageHeight * 0.05);
-        var footerBottom = Math.Min(pageHeight * 0.12, lines.Min(l => l.Bottom) + pageHeight * 0.05);
+        // 0.08 rather than 0.12: dense academic layouts (e.g. arXiv two-column papers)
+        // regularly run body text down to the bottom ~10% of the page margin. A 0.12
+        // threshold mis-routes those final body paragraphs into the "footer" region tag,
+        // hiding them from body-only consumers. 0.08 still catches true page-number
+        // footers while leaving dense bodies classified as body.
+        var footerBottom = Math.Min(pageHeight * 0.08, lines.Min(l => l.Bottom) + pageHeight * 0.05);
 
         return new LayoutProfile(
             pageWidth,
@@ -2397,7 +2411,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             var start = 0;
             foreach (var splitAfter in splitIndices)
             {
-                var subLine = new PdfTextLine(line.Top);
+                var subLine = new PdfTextLine(line.Top, line.SeedBottom);
                 subLine.IsColumnSplitFragment = true;
                 for (var i = start; i <= splitAfter; i++)
                 {
@@ -2410,7 +2424,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             // Add remaining words as last sub-line
             if (start < sortedWords.Count)
             {
-                var lastSubLine = new PdfTextLine(line.Top);
+                var lastSubLine = new PdfTextLine(line.Top, line.SeedBottom);
                 lastSubLine.IsColumnSplitFragment = true;
                 for (var i = start; i < sortedWords.Count; i++)
                 {
@@ -2467,9 +2481,17 @@ public sealed class LongDocumentTranslationService : IDisposable
         return splitIndices;
     }
 
-    internal sealed class PdfTextLine(double top)
+    internal sealed class PdfTextLine(double top, double seedBottom = double.NaN)
     {
         public double Top { get; } = top;
+        /// <summary>
+        /// Bottom of the first word added to this line (or NaN if seeded synthetically).
+        /// Used during line grouping to reject matches from spatially distant visual
+        /// lines that happen to share a glyph Top value — the baseline (seed bottom)
+        /// is stable across different ascender heights within one visual line but
+        /// varies dramatically between different visual lines on the same page.
+        /// </summary>
+        public double SeedBottom { get; } = seedBottom;
         public bool IsColumnSplitFragment { get; set; }
         public List<Word> Words { get; } = [];
         public double Left { get; private set; }
@@ -2481,7 +2503,7 @@ public sealed class LongDocumentTranslationService : IDisposable
 
         internal static PdfTextLine CreateSynthetic(SyntheticPdfLine line)
         {
-            return new PdfTextLine(line.Top)
+            return new PdfTextLine(line.Top, line.Bottom)
             {
                 Bottom = line.Bottom,
                 Left = line.Left,

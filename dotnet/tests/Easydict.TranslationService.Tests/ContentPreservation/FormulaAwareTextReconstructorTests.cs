@@ -201,6 +201,24 @@ public class FormulaAwareTextReconstructorTests
     }
 
     [Fact]
+    public void IsReconstructionQualityAcceptable_ReturnsFalse_WhenReconstructionDropsDescenderLetters()
+    {
+        // Reproduces the arXiv 1706.03762v7 descender-loss symptom:
+        // "maps an input sequence of symbol representations" becomes
+        // "ma s an in ut se uence of s mbol re resentations" when the reconstructor's
+        // baseline clustering strands 'p', 'q', 'y' in orphan reading lines.
+        // The broken output has MORE spaces than the fallback (so the density check passes),
+        // but fewer alphanumerics. The Check-0 character-loss guard must catch it.
+        const string fallback =
+            "Here, the encoder maps an input sequence of symbol representations (x1, ..., xn) to a sequence of continuous representations z = (z1, ..., zn).";
+        const string reconstructed =
+            "Here, the encoder ma s an in ut se uence of s mbol re resentations x1... x to a se uence of continuous re resentations z = z1... zn";
+
+        FormulaAwareTextReconstructor.IsReconstructionQualityAcceptable(reconstructed, fallback)
+            .Should().BeFalse("dropping descender and paren glyphs must not pass the quality gate");
+    }
+
+    [Fact]
     public void IsReconstructionQualityAcceptable_ReturnsTrue_WhenTupleAnchorsAreRestoredDespiteLowerSpaceDensity()
     {
         const string fallback =

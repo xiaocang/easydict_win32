@@ -194,9 +194,9 @@ public sealed partial class ServiceResultItem : UserControl
             return;
         }
 
-        // Hide entire control when the service returned no result and the user has
-        // opted to hide empty results. Header + content collapse together so the
-        // surrounding ItemsControl skips layout for this row entirely.
+        // Keep the service row visible for no-result dictionary queries, but force
+        // it collapsed so the header can still show the "No result" status without
+        // expanding the full empty payload.
         var hideEmpty = SettingsService.Instance.HideEmptyServiceResults
             && !_serviceResult.IsLoading
             && !_serviceResult.IsStreaming
@@ -204,12 +204,7 @@ public sealed partial class ServiceResultItem : UserControl
             && _serviceResult.Result?.ResultKind == TranslationResultKind.NoResult;
         if (hideEmpty)
         {
-            this.Visibility = Visibility.Collapsed;
-            return;
-        }
-        if (this.Visibility == Visibility.Collapsed)
-        {
-            this.Visibility = Visibility.Visible;
+            _serviceResult.IsExpanded = false;
         }
 
         // Service info

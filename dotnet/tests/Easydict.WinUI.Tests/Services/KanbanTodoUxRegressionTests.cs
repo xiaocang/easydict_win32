@@ -89,18 +89,23 @@ public class KanbanTodoUxRegressionTests
     }
 
     [Fact]
-    public void ServiceResultItem_CollapsesNoResultRowsWhenHideEmptyResultsIsEnabled()
+    public void ServiceResultItem_LeavesNoResultRowsVisibleButCollapsedWhenHideEmptyResultsIsEnabled()
     {
         var code = File.ReadAllText(ServiceResultItemPath);
+        var marker = "var hideEmpty = SettingsService.Instance.HideEmptyServiceResults";
+        var start = code.IndexOf(marker, StringComparison.Ordinal);
+
+        start.Should().BeGreaterOrEqualTo(0, "the hide-empty guard should still exist in ServiceResultItem");
+        var snippet = code.Substring(start, Math.Min(320, code.Length - start));
 
         code.Should().Contain("SettingsService.Instance.HideEmptyServiceResults",
-            "the new settings toggle should control no-result row collapsing");
+            "the new settings toggle should control no-result row presentation");
         code.Should().Contain("TranslationResultKind.NoResult",
-            "only true no-result responses should be collapsed");
-        code.Should().Contain("this.Visibility = Visibility.Collapsed;",
-            "no-result rows should be removed from layout instead of merely dimmed");
-        code.Should().Contain("this.Visibility = Visibility.Visible;",
-            "rows should become visible again when they later have content or an error");
+            "only true no-result responses should be collapsed by the hide-empty rule");
+        snippet.Should().Contain("_serviceResult.IsExpanded = false;",
+            "hide-empty should force the row closed while keeping the service visible in the list");
+        snippet.Should().NotContain("this.Visibility = Visibility.Collapsed;",
+            "hide-empty should no longer remove the entire service row from the results list");
     }
 
     [Fact]

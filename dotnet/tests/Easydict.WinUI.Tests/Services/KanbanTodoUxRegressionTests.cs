@@ -145,6 +145,26 @@ public class KanbanTodoUxRegressionTests
     }
 
     [Fact]
+    public void SettingsPage_ScrollNavSync_DoesNotMutateFontSize()
+    {
+        var code = File.ReadAllText(SettingsPageCodePath);
+        var marker = "private void UpdateActiveNavIcon(int activeIndex)";
+        var start = code.IndexOf(marker, StringComparison.Ordinal);
+
+        start.Should().BeGreaterOrEqualTo(0, "the settings nav rail should still have an active-state update helper");
+        var snippet = code.Substring(start, Math.Min(900, code.Length - start));
+
+        snippet.Should().Contain("AccentFillColorDefaultBrush",
+            "the active nav item should still stand out visually");
+        snippet.Should().Contain("TextFillColorSecondaryBrush",
+            "inactive nav items should still use the secondary styling");
+        snippet.Should().NotContain("icon.FontSize = 16",
+            "scroll-driven nav highlighting must not resize the Auto-column icon rail and trigger a layout feedback loop");
+        snippet.Should().NotContain("icon.FontSize = 14",
+            "scroll-driven nav highlighting should keep icon size stable once the rail is created");
+    }
+
+    [Fact]
     public void ServiceResultItem_LeavesNoResultRowsVisibleButCollapsedWhenHideEmptyResultsIsEnabled()
     {
         var code = File.ReadAllText(ServiceResultItemPath);

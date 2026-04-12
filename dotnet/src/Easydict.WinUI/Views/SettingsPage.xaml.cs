@@ -2548,14 +2548,12 @@ public sealed partial class SettingsPage : Page
             {
                 if (i == activeIndex)
                 {
-                    // Active icon: larger + accent color
-                    icon.FontSize = 16;
+                    // Keep the nav rail layout-stable during scroll sync.
                     icon.Foreground = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
                 }
                 else
                 {
-                    // Inactive icon: smaller + secondary color
-                    icon.FontSize = 14;
+                    // Only change non-layout-affecting state for inactive items.
                     icon.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
                 }
             }

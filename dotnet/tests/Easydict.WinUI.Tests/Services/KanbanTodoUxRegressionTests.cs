@@ -223,8 +223,14 @@ public class KanbanTodoUxRegressionTests
             "dictionary HTML should signal top/bottom wheel-boundary events back to the host");
         code.Should().Contain("type: 'dict-wheel-boundary'",
             "the wheel relay should use a dedicated message type instead of piggybacking on unrelated messages");
+        code.Should().Contain("type: 'dict-wheel-passthrough'",
+            "dictionary HTML should also proxy ordinary wheel input back to the host when there is no true internal scroll container");
         code.Should().Contain("private void OnDictWebViewWebMessageReceived",
             "the host control should translate WebView wheel-boundary messages into outer ScrollViewer movement");
+        code.Should().Contain("ResultContentScrollViewer ?? FindAncestorScrollViewer(DictWebView)",
+            "the WebView relay should target the named result-content scroller first instead of relying only on ancestor lookup");
+        code.Should().Contain("typeElement.GetString() is not \"dict-wheel-boundary\" and not \"dict-wheel-passthrough\"",
+            "the host should accept both boundary handoff and full passthrough wheel messages from the WebView surface");
         code.Should().NotContain("Math.Min(height + 8, 800)",
             "the WebView should no longer keep its own 800px internal scroll cap");
     }

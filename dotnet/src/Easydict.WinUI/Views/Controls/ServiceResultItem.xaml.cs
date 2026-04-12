@@ -1279,12 +1279,17 @@ public sealed partial class ServiceResultItem : UserControl
                                 node = node.parentElement;
                             }
 
-                            return document.scrollingElement || document.documentElement;
+                            return null;
                         };
 
                         window.addEventListener('wheel', event => {
                             const scrollable = findScrollableContainer(event.target);
                             if (!scrollable) {
+                                window.chrome?.webview?.postMessage({
+                                    type: 'dict-wheel-passthrough',
+                                    deltaY: event.deltaY
+                                });
+                                event.preventDefault();
                                 return;
                             }
 
@@ -1420,7 +1425,7 @@ public sealed partial class ServiceResultItem : UserControl
             using var document = JsonDocument.Parse(args.WebMessageAsJson);
             var root = document.RootElement;
             if (!root.TryGetProperty("type", out var typeElement) ||
-                typeElement.GetString() != "dict-wheel-boundary" ||
+                (typeElement.GetString() is not "dict-wheel-boundary" and not "dict-wheel-passthrough") ||
                 !root.TryGetProperty("deltaY", out var deltaElement))
             {
                 return;
@@ -1436,18 +1441,18 @@ public sealed partial class ServiceResultItem : UserControl
                 return;
             }
 
-            var outerScrollViewer = FindAncestorScrollViewer(DictWebView);
-            if (outerScrollViewer == null)
+            var hostScrollViewer = ResultContentScrollViewer ?? FindAncestorScrollViewer(DictWebView);
+            if (hostScrollViewer == null)
             {
                 return;
             }
 
             var targetOffset = Math.Clamp(
-                outerScrollViewer.VerticalOffset + deltaY,
+                hostScrollViewer.VerticalOffset + deltaY,
                 0,
-                outerScrollViewer.ScrollableHeight);
+                hostScrollViewer.ScrollableHeight);
 
-            outerScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
+            hostScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
         }
         catch (Exception ex)
         {

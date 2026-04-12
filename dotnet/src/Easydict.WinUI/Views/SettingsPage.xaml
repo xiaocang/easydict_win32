@@ -156,11 +156,11 @@
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
                         <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock x:Name="MainWindowHeaderText" Text="Main Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
                             <Button x:Name="MainWindowReorderModeButton"
                                     Click="OnToggleMainWindowReorderModeClicked"
                                     Padding="8,2"
                                     VerticalAlignment="Center" />
-                            <TextBlock x:Name="MainWindowHeaderText" Text="Main Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
                         </StackPanel>
                         <ItemsControl x:Name="MainWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
@@ -218,11 +218,11 @@
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
                         <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock x:Name="MiniWindowHeaderText" Text="Mini Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
                             <Button x:Name="MiniWindowReorderModeButton"
                                     Click="OnToggleMiniWindowReorderModeClicked"
                                     Padding="8,2"
                                     VerticalAlignment="Center" />
-                            <TextBlock x:Name="MiniWindowHeaderText" Text="Mini Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
                         </StackPanel>
                         <ItemsControl x:Name="MiniWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
@@ -280,11 +280,11 @@
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
                         <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock x:Name="FixedWindowHeaderText" Text="Fixed Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
                             <Button x:Name="FixedWindowReorderModeButton"
                                     Click="OnToggleFixedWindowReorderModeClicked"
                                     Padding="8,2"
                                     VerticalAlignment="Center" />
-                            <TextBlock x:Name="FixedWindowHeaderText" Text="Fixed Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
                         </StackPanel>
                         <ItemsControl x:Name="FixedWindowServicesPanel">
                             <ItemsControl.ItemTemplate>

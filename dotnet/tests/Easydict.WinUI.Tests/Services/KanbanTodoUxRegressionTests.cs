@@ -115,9 +115,9 @@ public class KanbanTodoUxRegressionTests
             "the reorder entry should use localized copy");
         code.Should().Contain("EnabledServicesDoneReorderingButton",
             "the active-state button label should also come from localization");
-        AssertPrecedes(xaml, "MainWindowReorderModeButton", "MainWindowHeaderText");
-        AssertPrecedes(xaml, "MiniWindowReorderModeButton", "MiniWindowHeaderText");
-        AssertPrecedes(xaml, "FixedWindowReorderModeButton", "FixedWindowHeaderText");
+        AssertPrecedes(xaml, "MainWindowHeaderText", "MainWindowReorderModeButton");
+        AssertPrecedes(xaml, "MiniWindowHeaderText", "MiniWindowReorderModeButton");
+        AssertPrecedes(xaml, "FixedWindowHeaderText", "FixedWindowReorderModeButton");
     }
 
     [Fact]

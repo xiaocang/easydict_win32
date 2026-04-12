@@ -1031,4 +1031,10 @@
   <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
     <value>Prozessnamen, die von der Mausauswahl-Übersetzung ausgeschlossen werden sollen, durch Kommas getrennt. Beispiel: "code" für VS Code.</value>
   </data>
+  <data name="EnabledServicesReorderButton" xml:space="preserve">
+    <value>Neu anordnen</value>
+  </data>
+  <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
+    <value>Fertig</value>
+  </data>
 </root>

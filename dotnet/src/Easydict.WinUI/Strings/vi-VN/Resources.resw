@@ -914,4 +914,10 @@
   <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
     <value>Tên tiến trình cần loại trừ khỏi dịch chọn chuột, phân cách bằng dấu phẩy. Ví dụ: "code" cho VS Code.</value>
   </data>
+  <data name="EnabledServicesReorderButton" xml:space="preserve">
+    <value>Sắp xếp lại</value>
+  </data>
+  <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
+    <value>Xong</value>
+  </data>
 </root>

@@ -34,6 +34,7 @@ public sealed partial class SettingsPage : Page
     private bool _isTornDown;
     private bool _changeHandlersRegistered;
     private bool _hasUnsavedChanges; // Track whether any settings have been modified since last save
+    private bool _isServiceReorderModeEnabled;
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
     private readonly CancellationTokenSource _lifetimeCts = new();
 
@@ -235,6 +236,7 @@ public sealed partial class SettingsPage : Page
             EnabledServicesHeaderText.Text = loc.GetString("EnabledServices");
         if (EnabledServicesDescriptionText != null)
             EnabledServicesDescriptionText.Text = loc.GetString("EnabledServicesDescription");
+        UpdateServiceReorderModeButtonText();
 
         // International Services toggle
         EnableInternationalServicesHeaderText.Text = loc.GetString("EnableInternationalServices");
@@ -899,6 +901,42 @@ public sealed partial class SettingsPage : Page
         }
     }
 
+    private void OnToggleServiceReorderModeClicked(object sender, RoutedEventArgs e)
+    {
+        SetServiceReorderMode(!_isServiceReorderModeEnabled);
+    }
+
+    private void SetServiceReorderMode(bool isEnabled)
+    {
+        _isServiceReorderModeEnabled = isEnabled;
+        ApplyServiceReorderMode(_mainWindowServices, isEnabled);
+        ApplyServiceReorderMode(_miniWindowServices, isEnabled);
+        ApplyServiceReorderMode(_fixedWindowServices, isEnabled);
+        UpdateServiceReorderModeButtonText();
+    }
+
+    private static void ApplyServiceReorderMode(ObservableCollection<ServiceCheckItem> collection, bool isEnabled)
+    {
+        foreach (var item in collection)
+        {
+            item.IsReorderModeEnabled = isEnabled;
+        }
+    }
+
+    private void UpdateServiceReorderModeButtonText()
+    {
+        if (ServiceReorderModeButton == null)
+        {
+            return;
+        }
+
+        var loc = LocalizationService.Instance;
+        ServiceReorderModeButton.Content = loc.GetString(
+            _isServiceReorderModeEnabled
+                ? "EnabledServicesDoneReorderingButton"
+                : "EnabledServicesReorderButton");
+    }
+
     /// <summary>
     /// Move a service one position up in the given collection.
     /// </summary>
@@ -1110,6 +1148,7 @@ public sealed partial class SettingsPage : Page
             PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices, _settings.MiniWindowServiceEnabledQuery, manager);
             PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices, _settings.FixedWindowServiceEnabledQuery, manager);
         }
+        SetServiceReorderMode(false);
         if (_changeHandlersRegistered)
         {
             RegisterServiceCollectionHandlers(_mainWindowServices);
@@ -2183,6 +2222,7 @@ public sealed partial class SettingsPage : Page
 
         // Persist to storage
         _settings.Save();
+        SetServiceReorderMode(false);
 
         // Refresh window service results to pick up new EnabledQuery settings
         MiniWindowService.Instance.RefreshServiceResults();

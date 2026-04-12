@@ -1031,4 +1031,10 @@
   <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
     <value>Noms de processus à exclure de la traduction par sélection, séparés par des virgules. Exemple : "code" pour VS Code.</value>
   </data>
+  <data name="EnabledServicesReorderButton" xml:space="preserve">
+    <value>Réorganiser</value>
+  </data>
+  <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
+    <value>Terminer</value>
+  </data>
 </root>

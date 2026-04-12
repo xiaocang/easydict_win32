@@ -1073,4 +1073,10 @@
   <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
     <value>排除劃詞翻譯的程序名稱，用逗號分隔。範例："code" 代表 VS Code。</value>
   </data>
+  <data name="EnabledServicesReorderButton" xml:space="preserve">
+    <value>排序</value>
+  </data>
+  <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
+    <value>完成排序</value>
+  </data>
 </root>

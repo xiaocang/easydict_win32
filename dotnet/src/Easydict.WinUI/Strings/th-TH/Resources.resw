@@ -868,4 +868,10 @@
   <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
     <value>ชื่อโปรเซสที่ต้องการยกเว้นจากการแปลเมื่อเลือกข้อความ คั่นด้วยเครื่องหมายจุลภาค ตัวอย่าง: "code" สำหรับ VS Code</value>
   </data>
+  <data name="EnabledServicesReorderButton" xml:space="preserve">
+    <value>จัดลำดับ</value>
+  </data>
+  <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
+    <value>เสร็จสิ้น</value>
+  </data>
 </root>

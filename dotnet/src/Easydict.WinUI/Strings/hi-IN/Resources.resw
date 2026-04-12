@@ -458,4 +458,10 @@
   <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
     <value>माउस चयन अनुवाद से बाहर रखने के लिए प्रक्रिया नाम, अल्पविराम से अलग करें। उदाहरण: VS Code के लिए "code"।</value>
   </data>
+  <data name="EnabledServicesReorderButton" xml:space="preserve">
+    <value>पुन: क्रमित करें</value>
+  </data>
+  <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
+    <value>पूर्ण</value>
+  </data>
 </root>

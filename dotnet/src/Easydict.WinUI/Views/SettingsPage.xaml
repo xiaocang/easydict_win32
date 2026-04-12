@@ -115,6 +115,12 @@
                 <TextBlock x:Name="EnabledServicesDescriptionText" Text="Select which translation services to display in each window. Multiple services will run in parallel."
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
+                <Button x:Name="ServiceReorderModeButton"
+                        Content="Reorder"
+                        Click="OnToggleServiceReorderModeClicked"
+                        HorizontalAlignment="Left"
+                        Padding="10,4" />
+
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="ImportMdxDictionaryButton"
                             Content="Import MDX Dictionary"
@@ -186,6 +192,7 @@
                                             Click="OnMoveMainServiceUp"
                                             Tag="{Binding ServiceId}"
                                             ToolTipService.ToolTip="Move up"
+                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
                                             Width="32" Height="28" Padding="0"
                                             Margin="4,0,0,0">
                                             <FontIcon Glyph="&#xE70E;" FontSize="12" />
@@ -195,6 +202,7 @@
                                             Click="OnMoveMainServiceDown"
                                             Tag="{Binding ServiceId}"
                                             ToolTipService.ToolTip="Move down"
+                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
                                             Width="32" Height="28" Padding="0"
                                             Margin="2,0,0,0">
                                             <FontIcon Glyph="&#xE70D;" FontSize="12" />
@@ -240,6 +248,7 @@
                                             Click="OnMoveMiniServiceUp"
                                             Tag="{Binding ServiceId}"
                                             ToolTipService.ToolTip="Move up"
+                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
                                             Width="32" Height="28" Padding="0"
                                             Margin="4,0,0,0">
                                             <FontIcon Glyph="&#xE70E;" FontSize="12" />
@@ -249,6 +258,7 @@
                                             Click="OnMoveMiniServiceDown"
                                             Tag="{Binding ServiceId}"
                                             ToolTipService.ToolTip="Move down"
+                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
                                             Width="32" Height="28" Padding="0"
                                             Margin="2,0,0,0">
                                             <FontIcon Glyph="&#xE70D;" FontSize="12" />
@@ -294,6 +304,7 @@
                                             Click="OnMoveFixedServiceUp"
                                             Tag="{Binding ServiceId}"
                                             ToolTipService.ToolTip="Move up"
+                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
                                             Width="32" Height="28" Padding="0"
                                             Margin="4,0,0,0">
                                             <FontIcon Glyph="&#xE70E;" FontSize="12" />
@@ -303,6 +314,7 @@
                                             Click="OnMoveFixedServiceDown"
                                             Tag="{Binding ServiceId}"
                                             ToolTipService.ToolTip="Move down"
+                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
                                             Width="32" Height="28" Padding="0"
                                             Margin="2,0,0,0">
                                             <FontIcon Glyph="&#xE70D;" FontSize="12" />

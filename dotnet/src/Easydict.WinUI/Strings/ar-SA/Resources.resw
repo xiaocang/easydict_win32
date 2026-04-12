@@ -914,4 +914,10 @@
   <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
     <value>أسماء العمليات المراد استثناؤها من ترجمة تحديد الماوس، مفصولة بفواصل. مثال: "code" لـ VS Code.</value>
   </data>
+  <data name="EnabledServicesReorderButton" xml:space="preserve">
+    <value>إعادة الترتيب</value>
+  </data>
+  <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
+    <value>تم</value>
+  </data>
 </root>

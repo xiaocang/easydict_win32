@@ -207,6 +207,14 @@ public class KanbanTodoUxRegressionTests
             "dictionary body text should render with a slightly more readable line height");
         code.Should().Contain("overflow-x: hidden;",
             "dictionary WebView content should avoid accidental horizontal overflow");
+        code.Should().Contain("ol, ul {",
+            "dictionary definition lists should get consistent spacing");
+        code.Should().Contain("li {",
+            "dictionary list items should keep a little vertical separation");
+        code.Should().Contain("[class*=\"phon\"], [class*=\"pron\"], [class*=\"ipa\"] {",
+            "common phonetic markup should get a small readability pass");
+        code.Should().Contain("[class*=\"meaning\"], [class*=\"def\"], [class*=\"sense\"], [class*=\"gloss\"] {",
+            "common meaning/definition markup should get a slightly roomier line height");
         code.Should().Contain("img, svg, table { max-width: 100% !important; height: auto; }",
             "media-heavy dictionary content should stay inside the result viewport");
         code.Should().Contain("pre { white-space: pre-wrap; overflow-wrap: anywhere; }",

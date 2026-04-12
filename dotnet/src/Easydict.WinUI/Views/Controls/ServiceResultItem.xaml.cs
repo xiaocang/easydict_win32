@@ -1203,6 +1203,24 @@ public sealed partial class ServiceResultItem : UserControl
                         max-width: 100%;
                         overflow-x: hidden;
                     }
+                    h1, h2, h3, h4, h5, h6 {
+                        margin: 0 0 10px;
+                        line-height: 1.2;
+                    }
+                    ol, ul {
+                        margin: 8px 0 12px;
+                        padding-left: 1.35em;
+                    }
+                    li {
+                        margin: 4px 0;
+                    }
+                    [class*="phon"], [class*="pron"], [class*="ipa"] {
+                        letter-spacing: 0.01em;
+                        line-height: 1.35;
+                    }
+                    [class*="meaning"], [class*="def"], [class*="sense"], [class*="gloss"] {
+                        line-height: 1.55;
+                    }
                     img, svg, table { max-width: 100% !important; height: auto; }
                     pre { white-space: pre-wrap; overflow-wrap: anywhere; }
                     a { color: {{(isDark ? "#569cd6" : "#0066cc")}}; }

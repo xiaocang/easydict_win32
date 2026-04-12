@@ -17,6 +17,9 @@ public class KanbanTodoUxRegressionTests
 {
     private static readonly string ProjectRoot = FindProjectRoot();
     private static readonly string StringsPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Strings");
+    private static readonly string MainPageXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MainPage.xaml");
+    private static readonly string MiniWindowXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MiniWindow.xaml");
+    private static readonly string FixedWindowXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "FixedWindow.xaml");
     private static readonly string SettingsPageXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml");
     private static readonly string SettingsPageCodePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml.cs");
     private static readonly string ServiceCheckItemPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Models", "ServiceCheckItem.cs");
@@ -192,8 +195,8 @@ public class KanbanTodoUxRegressionTests
 
         xaml.Should().Contain("x:Name=\"ResultContentScrollViewer\"",
             "service results should use an explicit inner scroll container for long content");
-        xaml.Should().Contain("VerticalScrollBarVisibility=\"Auto\"",
-            "the inner result container should expose a scrollbar when the content is long");
+        xaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"",
+            "the inner result container should reserve scrollbar width so WebView2 height measurement does not feed back into layout width");
         xaml.Should().Contain("PointerWheelChanged=\"OnResultContentScrollViewerPointerWheelChanged\"",
             "scrolling at the inner boundary should explicitly hand wheel input to the outer results list");
         xaml.Should().Contain("MaxHeight=\"800\"",
@@ -224,6 +227,28 @@ public class KanbanTodoUxRegressionTests
             "the host control should translate WebView wheel-boundary messages into outer ScrollViewer movement");
         code.Should().NotContain("Math.Min(height + 8, 800)",
             "the WebView should no longer keep its own 800px internal scroll cap");
+    }
+
+    [Fact]
+    public void ResultHosts_ReserveScrollbarWidth_ForDictionaryContent()
+    {
+        var mainXaml = File.ReadAllText(MainPageXamlPath);
+        var miniXaml = File.ReadAllText(MiniWindowXamlPath);
+        var fixedXaml = File.ReadAllText(FixedWindowXamlPath);
+        var itemXaml = File.ReadAllText(ServiceResultItemXamlPath);
+
+        mainXaml.Should().Contain("x:Name=\"QuickTranslateContent\"");
+        mainXaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"",
+            "the main results surface should reserve scrollbar width so dictionary WebView sizing does not feed back into page width");
+        miniXaml.Should().Contain("Grid.Row=\"4\"");
+        miniXaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"",
+            "the mini-window results host should reserve scrollbar width for the same reason");
+        fixedXaml.Should().Contain("Grid.Row=\"4\"");
+        fixedXaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"",
+            "the fixed-window results host should reserve scrollbar width for the same reason");
+        itemXaml.Should().Contain("x:Name=\"ResultContentScrollViewer\"");
+        itemXaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"",
+            "the inner result container should keep a stable viewport width while the dictionary WebView height is being applied");
     }
 
     [Fact]

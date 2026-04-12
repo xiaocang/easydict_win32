@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
 using FlaUI.Core.AutomationElements;
@@ -16,8 +17,10 @@ public class DictionaryWebViewRenderingTests : IDisposable
     private readonly AppLauncher _launcher;
     private readonly ITestOutputHelper _output;
 
-    private const string DictionaryQuery = "no";
     private const int TranslationWaitMs = 10000;
+
+    private static string DictionaryQuery =>
+        Environment.GetEnvironmentVariable("EASYDICT_UIA_DICTIONARY_QUERY") ?? "no";
 
     public DictionaryWebViewRenderingTests(ITestOutputHelper output)
     {
@@ -61,11 +64,7 @@ public class DictionaryWebViewRenderingTests : IDisposable
         File.Exists(pathAfterTranslate).Should().BeTrue("the post-query screenshot should be written for manual review");
 
         var visibleDictWebView = Retry.WhileNull(
-            () =>
-            {
-                var candidate = window.FindFirstDescendant(cf => cf.ByAutomationId("DictWebView"));
-                return candidate != null && !candidate.IsOffscreen ? candidate : null;
-            },
+            () => TryFindVisibleDescendant(window, "DictWebView"),
             TimeSpan.FromSeconds(5)).Result;
 
         if (visibleDictWebView != null)
@@ -77,11 +76,7 @@ public class DictionaryWebViewRenderingTests : IDisposable
         else
         {
             var visibleResultText = Retry.WhileNull(
-                () =>
-                {
-                    var candidate = window.FindFirstDescendant(cf => cf.ByAutomationId("ResultText"));
-                    return candidate != null && !candidate.IsOffscreen ? candidate : null;
-                },
+                () => TryFindVisibleDescendant(window, "ResultText"),
                 TimeSpan.FromSeconds(5)).Result;
 
             visibleResultText.Should().NotBeNull(
@@ -107,5 +102,22 @@ public class DictionaryWebViewRenderingTests : IDisposable
     public void Dispose()
     {
         _launcher.Dispose();
+    }
+
+    private static AutomationElement? TryFindVisibleDescendant(AutomationElement root, string automationId)
+    {
+        try
+        {
+            var candidate = root.FindFirstDescendant(cf => cf.ByAutomationId(automationId));
+            return candidate != null && !candidate.IsOffscreen ? candidate : null;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
     }
 }

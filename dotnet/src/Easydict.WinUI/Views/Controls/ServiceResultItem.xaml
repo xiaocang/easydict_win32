@@ -15,8 +15,8 @@
         PointerExited="OnControlPointerExited">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="30" />
-                <RowDefinition Height="Auto" />
+                <RowDefinition Height="30"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Header Bar (30 DIPs, matches macOS EZResultViewMiniHeight) -->
@@ -30,12 +30,12 @@
                 PointerExited="OnHeaderBarPointerExited">
                 <Grid Padding="8,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Service Icon -->
@@ -45,7 +45,7 @@
                         Width="16"
                         Height="16"
                         Margin="0,0,6,0"
-                        VerticalAlignment="Center" />
+                        VerticalAlignment="Center"/>
 
                     <!-- Service Name -->
                     <TextBlock
@@ -54,7 +54,7 @@
                         FontSize="12"
                         FontWeight="SemiBold"
                         VerticalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 
                     <!-- Status Text (timing/error) -->
                     <TextBlock
@@ -64,7 +64,7 @@
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
-                        Margin="8,0" />
+                        Margin="8,0"/>
 
                     <!-- Loading Ring -->
                     <ProgressRing
@@ -74,7 +74,7 @@
                         Height="14"
                         IsActive="False"
                         Visibility="Collapsed"
-                        Margin="0,0,4,0" />
+                        Margin="0,0,4,0"/>
 
                     <!-- Error Icon -->
                     <FontIcon
@@ -85,7 +85,7 @@
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         Visibility="Collapsed"
                         Margin="0,0,4,0"
-                        ToolTipService.ToolTip="Translation error" />
+                        ToolTipService.ToolTip="Translation error"/>
 
                     <!-- Retry Button (visible on error) -->
                     <Button
@@ -100,7 +100,9 @@
                         Padding="0"
                         VerticalAlignment="Center"
                         Visibility="Collapsed">
-                        <FontIcon Glyph="&#xE72C;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
+                        <FontIcon Glyph="&#xE72C;"
+                                FontSize="12"
+                                Foreground="{ThemeResource ActionButtonIconBrush}"/>
                     </Button>
 
                     <!-- Expand/Collapse Arrow -->
@@ -110,7 +112,7 @@
                         Glyph="&#xE70D;"
                         FontSize="10"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        VerticalAlignment="Center" />
+                        VerticalAlignment="Center"/>
                 </Grid>
             </Border>
 
@@ -124,18 +126,18 @@
                     <ScrollViewer
                         x:Name="ResultContentScrollViewer"
                         MaxHeight="800"
-                        VerticalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Visible"
                         HorizontalScrollBarVisibility="Disabled"
                         VerticalScrollMode="Auto"
                         HorizontalScrollMode="Disabled"
                         PointerWheelChanged="OnResultContentScrollViewerPointerWheelChanged">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <!-- Pending Query Hint (for manual-query services not yet queried) -->
@@ -146,7 +148,7 @@
                                 FontStyle="Italic"
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Visibility="Collapsed" />
+                                Visibility="Collapsed"/>
 
                             <!-- Phonetic Transcription Badges -->
                             <StackPanel
@@ -176,15 +178,14 @@
                                 TextWrapping="Wrap"
                                 IsTextSelectionEnabled="True"
                                 Foreground="{ThemeResource QueryTextBrush}"
-                                FontSize="13"
-                                />
+                                FontSize="13"/>
 
                             <!-- Dictionary HTML Rendering (WebView2, for MDX with MDD resources) -->
                             <WebView2
                                 x:Name="DictWebView"
                                 Grid.Row="3"
                                 DefaultBackgroundColor="Transparent"
-                                Visibility="Collapsed" />
+                                Visibility="Collapsed"/>
 
                             <!-- Error Message -->
                             <TextBlock
@@ -194,7 +195,7 @@
                                 IsTextSelectionEnabled="True"
                                 Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                 FontSize="12"
-                                Visibility="Collapsed" />
+                                Visibility="Collapsed"/>
 
                             <!-- Grammar Correction Result (visible only in grammar mode) -->
                             <StackPanel
@@ -209,7 +210,7 @@
                                     TextWrapping="Wrap"
                                     IsTextSelectionEnabled="True"
                                     Foreground="{ThemeResource QueryTextBrush}"
-                                    FontSize="13" />
+                                    FontSize="13"/>
 
                                 <!-- Original text (secondary, muted) -->
                                 <StackPanel Spacing="2">
@@ -217,28 +218,30 @@
                                         x:Name="OriginalLabel"
                                         Text="Original:"
                                         FontSize="11"
-                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
                                     <TextBlock
                                         x:Name="OriginalText"
                                         TextWrapping="Wrap"
                                         IsTextSelectionEnabled="True"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        FontSize="12" />
+                                        FontSize="12"/>
                                 </StackPanel>
 
                                 <!-- Explanation of changes -->
-                                <StackPanel x:Name="ExplanationPanel" Spacing="2" Visibility="Collapsed">
+                                <StackPanel x:Name="ExplanationPanel"
+                                        Spacing="2"
+                                        Visibility="Collapsed">
                                     <TextBlock
                                         x:Name="ChangesLabel"
                                         Text="Changes:"
                                         FontSize="11"
-                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
                                     <TextBlock
                                         x:Name="ExplanationText"
                                         TextWrapping="Wrap"
                                         IsTextSelectionEnabled="True"
                                         FontSize="12"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                 </StackPanel>
 
                                 <!-- No corrections needed -->
@@ -247,7 +250,7 @@
                                     Text="No grammar issues found."
                                     Visibility="Collapsed"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    FontSize="12" />
+                                    FontSize="12"/>
                             </StackPanel>
                         </Grid>
                     </ScrollViewer>
@@ -274,7 +277,10 @@
                             Height="24"
                             Padding="0"
                             Visibility="Collapsed">
-                            <FontIcon x:Name="ReplaceIcon" Glyph="&#xE8AC;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
+                            <FontIcon x:Name="ReplaceIcon"
+                                    Glyph="&#xE8AC;"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource ActionButtonIconBrush}"/>
                         </Button>
 
                         <!-- TTS Play Button -->
@@ -287,7 +293,10 @@
                             Width="24"
                             Height="24"
                             Padding="0">
-                            <FontIcon x:Name="PlayIcon" Glyph="&#xE768;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
+                            <FontIcon x:Name="PlayIcon"
+                                    Glyph="&#xE768;"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource ActionButtonIconBrush}"/>
                         </Button>
 
                         <!-- Copy Button -->
@@ -300,7 +309,10 @@
                             Width="24"
                             Height="24"
                             Padding="0">
-                            <FontIcon x:Name="CopyIcon" Glyph="&#xE8C8;" FontSize="12" Foreground="{ThemeResource ActionButtonIconBrush}" />
+                            <FontIcon x:Name="CopyIcon"
+                                    Glyph="&#xE8C8;"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource ActionButtonIconBrush}"/>
                         </Button>
                     </StackPanel>
                 </Grid>

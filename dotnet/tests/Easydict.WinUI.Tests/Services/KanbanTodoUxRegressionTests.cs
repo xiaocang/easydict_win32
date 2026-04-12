@@ -194,6 +194,14 @@ public class KanbanTodoUxRegressionTests
             "dictionary navigation should not walk the entire DOM on the UI thread after every query");
         code.Should().Contain("var targetHeight = height + 8;",
             "dictionary WebView sizing should still derive from measured content height");
+        code.Should().Contain("DictWebView.CoreWebView2.WebMessageReceived += OnDictWebViewWebMessageReceived;",
+            "the host should subscribe to WebView messages so wheel-boundary events can escape the dictionary surface");
+        code.Should().Contain("window.chrome?.webview?.postMessage({",
+            "dictionary HTML should signal top/bottom wheel-boundary events back to the host");
+        code.Should().Contain("type: 'dict-wheel-boundary'",
+            "the wheel relay should use a dedicated message type instead of piggybacking on unrelated messages");
+        code.Should().Contain("private void OnDictWebViewWebMessageReceived",
+            "the host control should translate WebView wheel-boundary messages into outer ScrollViewer movement");
         code.Should().NotContain("Math.Min(height + 8, 800)",
             "the WebView should no longer keep its own 800px internal scroll cap");
     }

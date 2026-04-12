@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
@@ -62,6 +63,7 @@ public sealed partial class ServiceResultItem : UserControl
             if (_webViewInitialized && DictWebView.CoreWebView2 != null)
             {
                 DictWebView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
+                DictWebView.CoreWebView2.WebMessageReceived -= OnDictWebViewWebMessageReceived;
 
                 try
                 {
@@ -1137,10 +1139,12 @@ public sealed partial class ServiceResultItem : UserControl
                 DictWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 DictWebView.CoreWebView2.Settings.IsScriptEnabled = true;
                 DictWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+                DictWebView.CoreWebView2.Settings.IsWebMessageEnabled = true;
 
                 // Register resource request filter for MDD resources
                 DictWebView.CoreWebView2.AddWebResourceRequestedFilter("https://dictassets/*", CoreWebView2WebResourceContext.All);
                 DictWebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
+                DictWebView.CoreWebView2.WebMessageReceived += OnDictWebViewWebMessageReceived;
                 DictWebView.NavigationCompleted += OnDictWebViewNavigationCompleted;
             }
 
@@ -1241,6 +1245,44 @@ public sealed partial class ServiceResultItem : UserControl
                         height: auto !important;
                     }
                 </style>
+                <script>
+                    (() => {
+                        const findScrollableContainer = (start) => {
+                            let node = start instanceof Element ? start : null;
+                            while (node && node !== document.body) {
+                                const style = window.getComputedStyle(node);
+                                const overflowY = style.overflowY || style.overflow;
+                                const canScroll =
+                                    (overflowY === 'auto' || overflowY === 'scroll')
+                                    && node.scrollHeight > node.clientHeight + 1;
+                                if (canScroll) {
+                                    return node;
+                                }
+
+                                node = node.parentElement;
+                            }
+
+                            return document.scrollingElement || document.documentElement;
+                        };
+
+                        window.addEventListener('wheel', event => {
+                            const scrollable = findScrollableContainer(event.target);
+                            if (!scrollable) {
+                                return;
+                            }
+
+                            const atTop = scrollable.scrollTop <= 0;
+                            const atBottom = scrollable.scrollTop + scrollable.clientHeight >= scrollable.scrollHeight - 1;
+                            if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
+                                window.chrome?.webview?.postMessage({
+                                    type: 'dict-wheel-boundary',
+                                    deltaY: event.deltaY
+                                });
+                                event.preventDefault();
+                            }
+                        }, { passive: false, capture: true });
+                    })();
+                </script>
                 </head>
                 <body>{{processedHtml}}</body>
                 </html>
@@ -1328,6 +1370,48 @@ public sealed partial class ServiceResultItem : UserControl
         catch (Exception ex)
         {
             Debug.WriteLine($"[ServiceResultItem] Failed to auto-size WebView2: {ex.Message}");
+        }
+    }
+
+    private void OnDictWebViewWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(args.WebMessageAsJson);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("type", out var typeElement) ||
+                typeElement.GetString() != "dict-wheel-boundary" ||
+                !root.TryGetProperty("deltaY", out var deltaElement))
+            {
+                return;
+            }
+
+            var deltaY = deltaElement.ValueKind switch
+            {
+                JsonValueKind.Number when deltaElement.TryGetDouble(out var value) => value,
+                _ => 0
+            };
+            if (Math.Abs(deltaY) < double.Epsilon)
+            {
+                return;
+            }
+
+            var outerScrollViewer = FindAncestorScrollViewer(DictWebView);
+            if (outerScrollViewer == null)
+            {
+                return;
+            }
+
+            var targetOffset = Math.Clamp(
+                outerScrollViewer.VerticalOffset + deltaY,
+                0,
+                outerScrollViewer.ScrollableHeight);
+
+            outerScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[ServiceResultItem] Failed to relay WebView wheel boundary: {ex.Message}");
         }
     }
 

@@ -1260,8 +1260,9 @@ public sealed partial class ServiceResultItem : UserControl
         try
         {
             // Let the outer result ScrollViewer own the overflow behavior so wheel
-            // input can chain into the parent results list at the top/bottom edge.
-            var heightStr = await sender.CoreWebView2.ExecuteScriptAsync("document.body.scrollHeight.toString()");
+            // input can chain into the parent results list at the top/bottom edge,
+            // even when dictionary HTML ships with its own nested vertical scrollers.
+            var heightStr = await NormalizeDictionaryVerticalOverflowAsync(sender);
             if (int.TryParse(heightStr.Trim('"'), out var height) && height > 0)
             {
                 sender.Height = height + 8;
@@ -1307,6 +1308,47 @@ public sealed partial class ServiceResultItem : UserControl
 
         outerScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
         e.Handled = true;
+    }
+
+    private static async Task<string> NormalizeDictionaryVerticalOverflowAsync(WebView2 sender)
+    {
+        return await sender.CoreWebView2.ExecuteScriptAsync(
+            """
+            (() => {
+                const root = document.documentElement;
+                const body = document.body;
+                if (!root || !body) {
+                    return "0";
+                }
+
+                root.style.overflowY = 'hidden';
+                root.style.height = 'auto';
+                body.style.overflowY = 'hidden';
+                body.style.maxHeight = 'none';
+                body.style.height = 'auto';
+
+                for (const element of document.querySelectorAll('*')) {
+                    const style = window.getComputedStyle(element);
+                    const hasVerticalScroller =
+                        (style.overflowY === 'auto' || style.overflowY === 'scroll')
+                        && element.scrollHeight > element.clientHeight + 1;
+                    if (!hasVerticalScroller) {
+                        continue;
+                    }
+
+                    element.style.overflowY = 'visible';
+                    element.style.maxHeight = 'none';
+                    element.style.height = 'auto';
+                }
+
+                return Math.max(
+                    body.scrollHeight,
+                    body.offsetHeight,
+                    root.scrollHeight,
+                    root.offsetHeight
+                ).toString();
+            })()
+            """);
     }
 
     private static ScrollViewer? FindAncestorScrollViewer(DependencyObject? start)

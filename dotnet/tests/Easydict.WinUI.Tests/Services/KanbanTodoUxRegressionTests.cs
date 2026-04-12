@@ -184,6 +184,12 @@ public class KanbanTodoUxRegressionTests
             "edge-wheel forwarding should locate the parent results ScrollViewer");
         code.Should().Contain("outerScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);",
             "the outer results ScrollViewer should continue scrolling once the inner content hits its edge");
+        code.Should().Contain("NormalizeDictionaryVerticalOverflowAsync(sender)",
+            "dictionary WebView results should normalize nested HTML overflow before sizing themselves");
+        code.Should().Contain("element.style.overflowY = 'visible';",
+            "nested vertical scrollers inside dictionary HTML should be flattened so wheel input can escape to the host");
+        code.Should().Contain("body.style.overflowY = 'hidden';",
+            "the dictionary document itself should stop owning a separate vertical scroll layer");
         code.Should().Contain("sender.Height = height + 8;",
             "dictionary WebView content should expand to its full height so the outer chained ScrollViewer owns overflow");
         code.Should().NotContain("Math.Min(height + 8, 800)",

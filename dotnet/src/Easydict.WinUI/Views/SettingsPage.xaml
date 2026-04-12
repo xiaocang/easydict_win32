@@ -10,17 +10,17 @@
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <Page.Resources>
-        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-        <local:BoolToOpacityConverter x:Key="BoolToOpacityConverter" />
-        <local:BoolToCompactMarginConverter x:Key="BoolToCompactMarginConverter" />
-        <local:BoolToCompactFontSizeConverter x:Key="BoolToCompactFontSizeConverter" />
-        <local:BoolToItalicFontStyleConverter x:Key="BoolToItalicFontStyleConverter" />
+        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <local:BoolToOpacityConverter x:Key="BoolToOpacityConverter"/>
+        <local:BoolToCompactMarginConverter x:Key="BoolToCompactMarginConverter"/>
+        <local:BoolToCompactFontSizeConverter x:Key="BoolToCompactFontSizeConverter"/>
+        <local:BoolToItalicFontStyleConverter x:Key="BoolToItalicFontStyleConverter"/>
     </Page.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- Loading overlay (visible initially, hidden after init) -->
@@ -29,1020 +29,1710 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Spacing="12">
-            <ProgressRing IsActive="True" Width="32" Height="32" />
+            <ProgressRing IsActive="True"
+                    Width="32"
+                    Height="32"/>
         </StackPanel>
 
-        <ScrollViewer x:Name="MainScrollViewer" Grid.Column="1" Padding="24" ViewChanged="OnScrollViewChanged" Visibility="Collapsed">
-            <StackPanel Spacing="24" MaxWidth="800">
-            <!-- Header -->
-            <Grid x:Name="HeaderSection">
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <Button Click="OnBackClick" Style="{StaticResource AccentButtonStyle}" Padding="8">
-                        <FontIcon Glyph="&#xE72B;" FontSize="16" />
-                    </Button>
-                    <TextBlock x:Name="SettingsHeaderText" Text="Settings" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
-                </StackPanel>
-            </Grid>
-
-            <!-- Language Preferences -->
-            <StackPanel x:Name="LanguagePreferencesSection" Spacing="12">
-                <TextBlock x:Name="LanguagePreferencesHeaderText" Text="Language Preferences" FontSize="18" FontWeight="SemiBold" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <!-- First Language -->
-                        <ComboBox
-                            x:Name="FirstLanguageCombo"
-                            Header="First Language"
-                            Width="250"
-                            HorizontalAlignment="Left">
-                            <!-- Populated dynamically in code-behind -->
-                        </ComboBox>
-
-                        <!-- Second Language -->
-                        <ComboBox
-                            x:Name="SecondLanguageCombo"
-                            Header="Second Language"
-                            Width="250"
-                            HorizontalAlignment="Left">
-                            <!-- Populated dynamically in code-behind -->
-                        </ComboBox>
-
-                        <!-- Explanation -->
-                        <TextBlock
-                            x:Name="LanguagePreferencesDescriptionText"
-                            TextWrapping="Wrap"
-                            FontSize="12"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Margin="0,4,0,0">
-                            <Run Text="When detected language matches your First Language, translation target will be your Second Language, and vice versa." />
-                        </TextBlock>
-
-                        <!-- Auto-Select Toggle -->
-                        <ToggleSwitch
-                            x:Name="AutoSelectTargetToggle"
-                            Header="Automatically select target language based on detected source"
-                            IsOn="True" />
+        <ScrollViewer x:Name="MainScrollViewer"
+                Grid.Column="1"
+                Padding="24"
+                ViewChanged="OnScrollViewChanged"
+                Visibility="Collapsed">
+            <StackPanel Spacing="24"
+                    MaxWidth="800">
+                <!-- Header -->
+                <Grid x:Name="HeaderSection">
+                    <StackPanel Orientation="Horizontal"
+                            Spacing="12">
+                        <Button Click="OnBackClick"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Padding="8">
+                            <FontIcon Glyph="&#xE72B;"
+                                    FontSize="16"/>
+                        </Button>
+                        <TextBlock x:Name="SettingsHeaderText"
+                                Text="Settings"
+                                FontSize="28"
+                                FontWeight="SemiBold"
+                                VerticalAlignment="Center"/>
                     </StackPanel>
-                </Border>
+                </Grid>
 
-                <!-- Available Languages -->
-                <Expander x:Name="AvailableLanguagesExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <TextBlock x:Name="AvailableLanguagesHeaderText" Text="Available Languages" FontWeight="SemiBold" />
-                    </Expander.Header>
-                    <StackPanel Spacing="8" Padding="4">
-                        <TextBlock x:Name="AvailableLanguagesDescText"
-                                   Text="Select languages available in source/target pickers. At least 2 required."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <ItemsRepeater x:Name="LanguageCheckboxGrid">
-                            <ItemsRepeater.Layout>
-                                <UniformGridLayout MinItemWidth="180" MinColumnSpacing="8" MinRowSpacing="4"
-                                                   ItemsStretch="Fill" MaximumRowsOrColumns="4" />
-                            </ItemsRepeater.Layout>
-                        </ItemsRepeater>
-                    </StackPanel>
-                </Expander>
-            </StackPanel>
+                <!-- Language Preferences -->
+                <StackPanel x:Name="LanguagePreferencesSection"
+                        Spacing="12">
+                    <TextBlock x:Name="LanguagePreferencesHeaderText"
+                            Text="Language Preferences"
+                            FontSize="18"
+                            FontWeight="SemiBold"/>
 
-            <!-- Enabled Services for Each Window -->
-            <StackPanel x:Name="EnabledServicesSection" Spacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock x:Name="EnabledServicesHeaderText" Text="Enabled Services" FontSize="18" FontWeight="SemiBold" />
-                    <FontIcon x:Name="EnabledServicesHelpIcon" Glyph="&#xE897;" FontSize="14"
-                              Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
-                </StackPanel>
-                <TextBlock x:Name="EnabledServicesDescriptionText" Text="Select which translation services to display in each window. Multiple services will run in parallel."
-                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="ImportMdxDictionaryButton"
-                            Content="Import MDX Dictionary"
-                            Click="OnImportMdxDictionaryClicked"
-                            Padding="10,4" />
-                    <TextBlock x:Name="ImportedMdxSummaryText"
-                               Text="No MDX dictionaries imported"
-                               VerticalAlignment="Center"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-
-                <!-- International Services Toggle -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="12,8">
-                    <StackPanel Spacing="4">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="EnableInternationalServicesHeaderText"
-                                       Text="Enable International Services"
-                                       FontSize="13"
-                                       VerticalAlignment="Center" />
-                            <ToggleSwitch x:Name="EnableInternationalServicesToggle"
-                                          Grid.Column="1"
-                                          Toggled="OnEnableInternationalServicesToggled"
-                                          MinWidth="0"
-                                          VerticalAlignment="Center" />
-                        </Grid>
-                        <TextBlock x:Name="EnableInternationalServicesDescriptionText"
-                                   Text="Some services require international network access."
-                                   FontSize="11"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Main Window Services -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="12">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock x:Name="MainWindowHeaderText" Text="Main Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
-                            <Button x:Name="MainWindowReorderModeButton"
-                                    Click="OnToggleMainWindowReorderModeClicked"
-                                    Padding="8,2"
-                                    VerticalAlignment="Center" />
-                        </StackPanel>
-                        <ItemsControl x:Name="MainWindowServicesPanel">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox
-                                            Content="{Binding DisplayName}"
-                                            FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
-                                            FontStyle="{Binding IsUnconfigured, Converter={StaticResource BoolToItalicFontStyleConverter}}"
-                                            Tag="{Binding ServiceId}"
-                                            IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                            IsEnabled="{Binding IsAvailable}" />
-                                        <ToggleSwitch
-                                            Grid.Column="1"
-                                            IsOn="{Binding EnabledQuery, Mode=TwoWay}"
-                                            Loaded="OnServiceToggleSwitchLoaded"
-                                            Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            IsEnabled="{Binding IsAvailable}"
-                                            MinWidth="0"
-                                            Margin="8,0,0,0" />
-                                        <Button
-                                            Grid.Column="2"
-                                            Click="OnMoveMainServiceUp"
-                                            Tag="{Binding ServiceId}"
-                                            ToolTipService.ToolTip="Move up"
-                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            Width="32" Height="28" Padding="0"
-                                            Margin="4,0,0,0">
-                                            <FontIcon Glyph="&#xE70E;" FontSize="12" />
-                                        </Button>
-                                        <Button
-                                            Grid.Column="3"
-                                            Click="OnMoveMainServiceDown"
-                                            Tag="{Binding ServiceId}"
-                                            ToolTipService.ToolTip="Move down"
-                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            Width="32" Height="28" Padding="0"
-                                            Margin="2,0,0,0">
-                                            <FontIcon Glyph="&#xE70D;" FontSize="12" />
-                                        </Button>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
-                <!-- Mini Window Services -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="12">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock x:Name="MiniWindowHeaderText" Text="Mini Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
-                            <Button x:Name="MiniWindowReorderModeButton"
-                                    Click="OnToggleMiniWindowReorderModeClicked"
-                                    Padding="8,2"
-                                    VerticalAlignment="Center" />
-                        </StackPanel>
-                        <ItemsControl x:Name="MiniWindowServicesPanel">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox
-                                            Content="{Binding DisplayName}"
-                                            FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
-                                            FontStyle="{Binding IsUnconfigured, Converter={StaticResource BoolToItalicFontStyleConverter}}"
-                                            Tag="{Binding ServiceId}"
-                                            IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                            IsEnabled="{Binding IsAvailable}" />
-                                        <ToggleSwitch
-                                            Grid.Column="1"
-                                            IsOn="{Binding EnabledQuery, Mode=TwoWay}"
-                                            Loaded="OnServiceToggleSwitchLoaded"
-                                            Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            IsEnabled="{Binding IsAvailable}"
-                                            MinWidth="0"
-                                            Margin="8,0,0,0" />
-                                        <Button
-                                            Grid.Column="2"
-                                            Click="OnMoveMiniServiceUp"
-                                            Tag="{Binding ServiceId}"
-                                            ToolTipService.ToolTip="Move up"
-                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            Width="32" Height="28" Padding="0"
-                                            Margin="4,0,0,0">
-                                            <FontIcon Glyph="&#xE70E;" FontSize="12" />
-                                        </Button>
-                                        <Button
-                                            Grid.Column="3"
-                                            Click="OnMoveMiniServiceDown"
-                                            Tag="{Binding ServiceId}"
-                                            ToolTipService.ToolTip="Move down"
-                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            Width="32" Height="28" Padding="0"
-                                            Margin="2,0,0,0">
-                                            <FontIcon Glyph="&#xE70D;" FontSize="12" />
-                                        </Button>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
-                <!-- Fixed Window Services -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="12">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock x:Name="FixedWindowHeaderText" Text="Fixed Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
-                            <Button x:Name="FixedWindowReorderModeButton"
-                                    Click="OnToggleFixedWindowReorderModeClicked"
-                                    Padding="8,2"
-                                    VerticalAlignment="Center" />
-                        </StackPanel>
-                        <ItemsControl x:Name="FixedWindowServicesPanel">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}" Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox
-                                            Content="{Binding DisplayName}"
-                                            FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
-                                            FontStyle="{Binding IsUnconfigured, Converter={StaticResource BoolToItalicFontStyleConverter}}"
-                                            Tag="{Binding ServiceId}"
-                                            IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                            IsEnabled="{Binding IsAvailable}" />
-                                        <ToggleSwitch
-                                            Grid.Column="1"
-                                            IsOn="{Binding EnabledQuery, Mode=TwoWay}"
-                                            Loaded="OnServiceToggleSwitchLoaded"
-                                            Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            IsEnabled="{Binding IsAvailable}"
-                                            MinWidth="0"
-                                            Margin="8,0,0,0" />
-                                        <Button
-                                            Grid.Column="2"
-                                            Click="OnMoveFixedServiceUp"
-                                            Tag="{Binding ServiceId}"
-                                            ToolTipService.ToolTip="Move up"
-                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            Width="32" Height="28" Padding="0"
-                                            Margin="4,0,0,0">
-                                            <FontIcon Glyph="&#xE70E;" FontSize="12" />
-                                        </Button>
-                                        <Button
-                                            Grid.Column="3"
-                                            Click="OnMoveFixedServiceDown"
-                                            Tag="{Binding ServiceId}"
-                                            ToolTipService.ToolTip="Move down"
-                                            Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            Width="32" Height="28" Padding="0"
-                                            Margin="2,0,0,0">
-                                            <FontIcon Glyph="&#xE70D;" FontSize="12" />
-                                        </Button>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- Service Configuration -->
-            <StackPanel x:Name="ServiceConfigurationSection" Spacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock x:Name="ServiceConfigurationHeaderText" Text="Service Configuration" FontSize="18" FontWeight="SemiBold" />
-                    <FontIcon x:Name="ServiceConfigHelpIcon" Glyph="&#xE897;" FontSize="14"
-                              Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
-                </StackPanel>
-                <TextBlock x:Name="ServiceConfigurationDescriptionText" Text="Configure API keys, endpoints, and models for each translation service."
-                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-                <!-- DeepL -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="DeepL" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="DeepLStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="DeepLKeyBox" Header="API Key (Optional)" Width="350" PlaceholderText="Enter your DeepL API key" HorizontalAlignment="Left" />
-                        <CheckBox x:Name="DeepLFreeCheck" Content="Use Free API (no API key required for web translation)" />
-                        <TextBlock Text="Leave API key empty to use free web translation. Pro API key gives higher limits."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestDeepLButton" Content="Test" Click="OnTestDeepL" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- OpenAI -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="OpenAI" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="OpenAIStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="OpenAIKeyBox" Header="API Key" Width="350" PlaceholderText="sk-..." HorizontalAlignment="Left" />
-                        <TextBox x:Name="OpenAIEndpointBox" Header="Endpoint (Optional)" Width="450"
-                                 PlaceholderText="https://api.openai.com/v1/chat/completions" HorizontalAlignment="Left" />
-                        <ComboBox x:Name="OpenAIModelCombo" Header="Model" Width="280" IsEditable="True">
-                            <ComboBoxItem Content="gpt-4o-mini" Tag="gpt-4o-mini" />
-                            <ComboBoxItem Content="gpt-4o" Tag="gpt-4o" />
-                            <ComboBoxItem Content="gpt-4-turbo" Tag="gpt-4-turbo" />
-                            <ComboBoxItem Content="gpt-3.5-turbo" Tag="gpt-3.5-turbo" />
-                        </ComboBox>
-                        <TextBlock Text="You can type a custom model name directly."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <Button x:Name="TestOpenAIButton" Content="Test" Click="OnTestOpenAI" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- DeepSeek -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="DeepSeek" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="DeepSeekStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="DeepSeekKeyBox" Header="API Key" Width="350" PlaceholderText="sk-..." HorizontalAlignment="Left" />
-                        <ComboBox x:Name="DeepSeekModelCombo" Header="Model" Width="280" IsEditable="True">
-                            <ComboBoxItem Content="deepseek-chat" Tag="deepseek-chat" />
-                            <ComboBoxItem Content="deepseek-reasoner" Tag="deepseek-reasoner" />
-                        </ComboBox>
-                        <TextBlock Text="Get your API key from platform.deepseek.com. You can type a custom model name."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestDeepSeekButton" Content="Test" Click="OnTestDeepSeek" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- Groq -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="Groq" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="GroqStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="GroqKeyBox" Header="API Key" Width="350" PlaceholderText="gsk_..." HorizontalAlignment="Left" />
-                        <ComboBox x:Name="GroqModelCombo" Header="Model" Width="280" IsEditable="True">
-                            <ComboBoxItem Content="llama-3.3-70b-versatile" Tag="llama-3.3-70b-versatile" />
-                            <ComboBoxItem Content="llama-3.1-8b-instant" Tag="llama-3.1-8b-instant" />
-                            <ComboBoxItem Content="qwen/qwen-3-32b" Tag="qwen/qwen-3-32b" />
-                        </ComboBox>
-                        <TextBlock Text="Groq provides fast inference. Get your API key from console.groq.com. You can type a custom model name."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestGroqButton" Content="Test" Click="OnTestGroq" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- Zhipu (智谱) -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="Zhipu (智谱)" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="ZhipuStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="ZhipuKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Zhipu API key" HorizontalAlignment="Left" />
-                        <ComboBox x:Name="ZhipuModelCombo" Header="Model" Width="280" IsEditable="True">
-                            <ComboBoxItem Content="glm-4.5-flash" Tag="glm-4.5-flash" />
-                            <ComboBoxItem Content="glm-4-flash-250414" Tag="glm-4-flash-250414" />
-                            <ComboBoxItem Content="glm-4.7" Tag="glm-4.7" />
-                            <ComboBoxItem Content="glm-4.5-air" Tag="glm-4.5-air" />
-                        </ComboBox>
-                        <TextBlock Text="Get your API key from open.bigmodel.cn. You can type a custom model name."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestZhipuButton" Content="Test" Click="OnTestZhipu" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- GitHub Models -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="GitHub Models" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="GitHubModelsStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="GitHubModelsTokenBox" Header="GitHub Token" Width="350" PlaceholderText="ghp_..." HorizontalAlignment="Left" />
-                        <ComboBox x:Name="GitHubModelsModelCombo" Header="Model" Width="280" IsEditable="True">
-                            <ComboBoxItem Content="gpt-4.1" Tag="gpt-4.1" />
-                            <ComboBoxItem Content="gpt-4.1-mini" Tag="gpt-4.1-mini" />
-                            <ComboBoxItem Content="gpt-4.1-nano" Tag="gpt-4.1-nano" />
-                            <ComboBoxItem Content="gpt-4o" Tag="gpt-4o" />
-                            <ComboBoxItem Content="gpt-4o-mini" Tag="gpt-4o-mini" />
-                            <ComboBoxItem Content="deepseek-v3-0324" Tag="deepseek-v3-0324" />
-                        </ComboBox>
-                        <TextBlock Text="Use your GitHub personal access token. Get one from github.com/settings/tokens. You can type a custom model name."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestGitHubModelsButton" Content="Test" Click="OnTestGitHubModels" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- Gemini -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="Gemini" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="GeminiStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="GeminiKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Gemini API key" HorizontalAlignment="Left" />
-                        <ComboBox x:Name="GeminiModelCombo" Header="Model" Width="280" IsEditable="True">
-                            <ComboBoxItem Content="gemini-2.5-flash" Tag="gemini-2.5-flash" />
-                            <ComboBoxItem Content="gemini-2.5-flash-lite" Tag="gemini-2.5-flash-lite" />
-                            <ComboBoxItem Content="gemini-2.5-pro" Tag="gemini-2.5-pro" />
-                            <ComboBoxItem Content="gemini-2.0-flash" Tag="gemini-2.0-flash" />
-                            <ComboBoxItem Content="gemini-1.5-flash" Tag="gemini-1.5-flash" />
-                            <ComboBoxItem Content="gemini-1.5-pro" Tag="gemini-1.5-pro" />
-                            <ComboBoxItem Content="gemini-3-flash-preview" Tag="gemini-3-flash-preview" />
-                            <ComboBoxItem Content="gemini-3-pro-preview" Tag="gemini-3-pro-preview" />
-                        </ComboBox>
-                        <TextBlock Text="Get your API key from aistudio.google.com. You can type a custom model name."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestGeminiButton" Content="Test" Click="OnTestGemini" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- Custom OpenAI Compatible -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="Custom OpenAI Compatible" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="CustomOpenAIStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <TextBox x:Name="CustomOpenAIEndpointBox" Header="Endpoint (Required)" Width="450"
-                                 PlaceholderText="https://your-api.example.com/v1/chat/completions" HorizontalAlignment="Left" />
-                        <PasswordBox x:Name="CustomOpenAIKeyBox" Header="API Key (Optional)" Width="350" PlaceholderText="Enter API key if required" HorizontalAlignment="Left" />
-                        <TextBox x:Name="CustomOpenAIModelBox" Header="Model" Width="200"
-                                 PlaceholderText="gpt-3.5-turbo" HorizontalAlignment="Left" />
-                        <TextBlock Text="Configure any OpenAI-compatible API endpoint (e.g., local LLM servers, other AI providers)."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestCustomOpenAIButton" Content="Test" Click="OnTestCustomOpenAI" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- Ollama (Local) -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="Ollama (Local LLM)" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="OllamaStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <TextBox x:Name="OllamaEndpointBox" Header="Endpoint" Width="450"
-                                 PlaceholderText="http://localhost:11434/v1/chat/completions" HorizontalAlignment="Left" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <ComboBox x:Name="OllamaModelCombo" Header="Model" Width="200" IsEditable="True" />
-                            <Button x:Name="RefreshOllamaButton" Content="Refresh" Click="OnRefreshOllamaModels"
-                                    VerticalAlignment="Bottom" Padding="12,6" />
-                            <Button x:Name="TestOllamaButton" Content="Test" Click="OnTestOllama"
-                                    VerticalAlignment="Bottom" Padding="8,4" />
-                        </StackPanel>
-                        <TextBlock Text="Ollama must be running locally. Click Refresh to load available models."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- Built-in AI -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="Built-in AI" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="BuiltInStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <InfoBar x:Name="BuiltInAIHintBar"
-                                 IsOpen="True" IsClosable="False" Severity="Informational"
-                                 Title="Hint"
-                                 Message="The built-in key has limited free quota and is not guaranteed to always be available. For stable use, get your own free API key." />
-                        <ComboBox x:Name="BuiltInModelCombo" Header="Model" Width="280" IsEditable="True">
-                            <ComboBoxItem Content="glm-4-flash-250414 (GLM)" Tag="glm-4-flash-250414" />
-                            <ComboBoxItem Content="glm-4-flash (GLM)" Tag="glm-4-flash" />
-                            <ComboBoxItem Content="llama-3.3-70b-versatile (Groq)" Tag="llama-3.3-70b-versatile" />
-                            <ComboBoxItem Content="llama-3.1-8b-instant (Groq)" Tag="llama-3.1-8b-instant" />
-                        </ComboBox>
-                        <PasswordBox x:Name="BuiltInApiKeyBox" Header="API Key (Optional)" Width="350"
-                                     PlaceholderText="Leave empty to use built-in key" HorizontalAlignment="Left" />
-                        <TextBlock x:Name="BuiltInDescriptionText"
-                                   Text="Uses GLM (Zhipu AI) or Groq free models. You can provide your own API key from open.bigmodel.cn (GLM) or console.groq.com (Groq)."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestBuiltInButton" Content="Test" Click="OnTestBuiltIn" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- Doubao (豆包) -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="Doubao (豆包)" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="DoubaoStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="DoubaoKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Doubao API key" HorizontalAlignment="Left" />
-                        <TextBox x:Name="DoubaoEndpointBox" Header="Endpoint" Width="450"
-                                 PlaceholderText="https://ark.cn-beijing.volces.com/api/v3/responses" HorizontalAlignment="Left" />
-                        <TextBox x:Name="DoubaoModelBox" Header="Model" Width="300"
-                                 PlaceholderText="doubao-seed-translation-250915" HorizontalAlignment="Left" />
-                        <TextBlock Text="ByteDance's Doubao translation service. Get your API key from console.volcengine.com"
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestDoubaoButton" Content="Test" Click="OnTestDoubao" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- Caiyun (彩云小译) -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="Caiyun (彩云小译)" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="CaiyunStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="CaiyunKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your Caiyun API key" HorizontalAlignment="Left" />
-                        <TextBlock Text="Get your API key from fanyi.caiyunapp.com"
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <Button x:Name="TestCaiyunButton" Content="Test" Click="OnTestCaiyun" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- NiuTrans (小牛翻译) -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <Grid>
-                            <TextBlock Text="NiuTrans (小牛翻译)" FontWeight="SemiBold" HorizontalAlignment="Left" />
-                            <TextBlock x:Name="NiuTransStatusText" Text="✅" FontWeight="SemiBold"
-                                       Foreground="Green" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Visibility="Collapsed" />
-                        </Grid>
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="NiuTransKeyBox" Header="API Key" Width="350" PlaceholderText="Enter your NiuTrans API key" HorizontalAlignment="Left" />
-                        <TextBlock Text="NiuTrans supports 450+ language pairs. Get your API key from niutrans.com"
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <Button x:Name="TestNiuTransButton" Content="Test" Click="OnTestNiuTrans" Padding="8,4" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- Youdao (有道翻译) -->
-                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <Expander.Header>
-                        <TextBlock Text="Youdao (有道翻译)" FontWeight="SemiBold" />
-                    </Expander.Header>
-                    <StackPanel Spacing="12" Padding="0,8">
-                        <PasswordBox x:Name="YoudaoAppKeyBox" Header="App Key" Width="350" PlaceholderText="Enter your Youdao App Key" HorizontalAlignment="Left" />
-                        <PasswordBox x:Name="YoudaoAppSecretBox" Header="App Secret" Width="350" PlaceholderText="Enter your Youdao App Secret" HorizontalAlignment="Left" />
-                        <ToggleSwitch x:Name="YoudaoUseOfficialApiToggle" Header="Use Official API" />
-                        <TextBlock Text="Youdao provides phonetic transcriptions for English words. Without API keys, uses free web dictionary. With API keys, enables official API for higher limits. Get API keys from ai.youdao.com"
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Expander>
-
-                <!-- Imported MDX Dictionaries (dynamically populated) -->
-                <StackPanel x:Name="ImportedMdxConfigPanel" Spacing="8" />
-
-                <!-- Google Translate & Linguee (No configuration needed) -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock x:Name="FreeServicesHeaderText" Text="Free Services (No Configuration Required)" FontWeight="SemiBold" />
-                        <TextBlock x:Name="FreeServicesDescriptionText" Text="Google Translate and Linguee Dictionary work out of the box without API keys."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- Layout Detection (Long Document) -->
-            <StackPanel x:Name="LayoutDetectionSection" Spacing="12">
-                <TextBlock x:Name="LayoutDetectionHeaderText" Text="Layout Detection" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock x:Name="LayoutDetectionDescriptionText"
-                           Text="ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas."
-                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <ComboBox x:Name="LayoutDetectionModeCombo" Header="Detection Mode" Width="300">
-                            <ComboBoxItem x:Name="LayoutDetectionAutoItem" Content="Auto (Recommended)" Tag="Auto" />
-                            <ComboBoxItem x:Name="LayoutDetectionOnnxItem" Content="Local ONNX Model" Tag="OnnxLocal" />
-                            <ComboBoxItem x:Name="LayoutDetectionVisionItem" Content="Vision LLM" Tag="VisionLLM" />
-                            <ComboBoxItem x:Name="LayoutDetectionHeuristicItem" Content="Heuristic Only" Tag="Heuristic" />
-                        </ComboBox>
-
-                        <!-- ONNX Model Download -->
-                        <StackPanel x:Name="OnnxModelPanel" Spacing="8">
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <TextBlock x:Name="OnnxModelStatusText" Text="ONNX Model: Not Downloaded" VerticalAlignment="Center" />
-                                <FontIcon x:Name="OnnxModelStatusIcon" Glyph="&#xE946;" FontSize="14" Visibility="Collapsed"
-                                          Foreground="{ThemeResource SystemFillColorSuccessBrush}" VerticalAlignment="Center" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button x:Name="DownloadOnnxModelButton" Content="Download Model (~75MB)" Click="OnDownloadOnnxModelClick" />
-                                <Button x:Name="DeleteOnnxModelButton" Content="Delete" Click="OnDeleteOnnxModelClick" Visibility="Collapsed" />
-                            </StackPanel>
-                            <ProgressBar x:Name="OnnxDownloadProgress" Visibility="Collapsed" Minimum="0" Maximum="100" />
-                            <TextBlock x:Name="OnnxDownloadProgressText" Visibility="Collapsed"
-                                       FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-
-                        <!-- Vision LLM Service Selection (visible when VisionLLM mode selected) -->
-                        <StackPanel x:Name="VisionLLMPanel" Spacing="8" Visibility="Collapsed">
-                            <ComboBox x:Name="VisionLayoutServiceCombo" Header="Vision Service" Width="300">
-                                <ComboBoxItem Content="OpenAI (GPT-4o)" Tag="openai" />
-                                <ComboBoxItem Content="Gemini" Tag="gemini" />
-                                <ComboBoxItem Content="Custom OpenAI" Tag="custom_openai" />
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="16">
+                            <!-- First Language -->
+                            <ComboBox
+                                x:Name="FirstLanguageCombo"
+                                Header="First Language"
+                                Width="250"
+                                HorizontalAlignment="Left">
+                                <!-- Populated dynamically in code-behind -->
                             </ComboBox>
-                            <TextBlock Text="Requires a configured API key for the selected service."
-                                       FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                            <!-- Second Language -->
+                            <ComboBox
+                                x:Name="SecondLanguageCombo"
+                                Header="Second Language"
+                                Width="250"
+                                HorizontalAlignment="Left">
+                                <!-- Populated dynamically in code-behind -->
+                            </ComboBox>
+
+                            <!-- Explanation -->
+                            <TextBlock
+                                x:Name="LanguagePreferencesDescriptionText"
+                                TextWrapping="Wrap"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Margin="0,4,0,0">
+                            <Run Text="When detected language matches your First Language, translation target will be your Second Language, and vice versa."/>
+                            </TextBlock>
+
+                            <!-- Auto-Select Toggle -->
+                            <ToggleSwitch
+                                x:Name="AutoSelectTargetToggle"
+                                Header="Automatically select target language based on detected source"
+                                IsOn="True"/>
                         </StackPanel>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+                    </Border>
 
-            <!-- CJK Font -->
-            <StackPanel x:Name="CjkFontSection" Spacing="12">
-                <TextBlock x:Name="CjkFontHeaderText" Text="CJK Font" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock x:Name="CjkFontDescriptionText"
-                           Text="Download CJK fonts for proper Chinese, Japanese, and Korean text rendering in PDF output."
-                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <Button x:Name="CjkFontDownloadButton" Content="Download CJK Font" Click="OnCjkFontDownloadClick" />
-                            <Button x:Name="CjkFontDeleteButton" Content="Delete" Click="OnCjkFontDeleteClick" />
+                    <!-- Available Languages -->
+                    <Expander x:Name="AvailableLanguagesExpander"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <TextBlock x:Name="AvailableLanguagesHeaderText"
+                                    Text="Available Languages"
+                                    FontWeight="SemiBold"/>
+                        </Expander.Header>
+                        <StackPanel Spacing="8"
+                                Padding="4">
+                            <TextBlock x:Name="AvailableLanguagesDescText"
+                                       Text="Select languages available in source/target pickers. At least 2 required."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <ItemsRepeater x:Name="LanguageCheckboxGrid">
+                                <ItemsRepeater.Layout>
+                                    <UniformGridLayout MinItemWidth="180"
+                                            MinColumnSpacing="8"
+                                            MinRowSpacing="4"
+                                                       ItemsStretch="Fill"
+                                            MaximumRowsOrColumns="4"/>
+                                </ItemsRepeater.Layout>
+                            </ItemsRepeater>
                         </StackPanel>
-                        <ProgressBar x:Name="CjkFontProgressBar" Visibility="Collapsed" Minimum="0" Maximum="100" />
-                        <TextBlock x:Name="CjkFontStatusText" Text="" FontSize="12"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <TextBlock x:Name="CjkFontNoteText"
-                                   Text="Downloads Noto Sans CJK (~16MB per language). Required for CJK text in PDF overlay rendering."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </Expander>
+                </StackPanel>
+
+                <!-- Enabled Services for Each Window -->
+                <StackPanel x:Name="EnabledServicesSection"
+                        Spacing="12">
+                    <StackPanel Orientation="Horizontal"
+                            Spacing="8">
+                        <TextBlock x:Name="EnabledServicesHeaderText"
+                                Text="Enabled Services"
+                                FontSize="18"
+                                FontWeight="SemiBold"/>
+                        <FontIcon x:Name="EnabledServicesHelpIcon"
+                                Glyph="&#xE897;"
+                                FontSize="14"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                VerticalAlignment="Center"/>
                     </StackPanel>
-                </Border>
-            </StackPanel>
+                    <TextBlock x:Name="EnabledServicesDescriptionText"
+                            Text="Select which translation services to display in each window. Multiple services will run in parallel."
+                               FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap"/>
 
-            <!-- Formula Detection -->
-            <StackPanel x:Name="FormulaDetectionSection" Spacing="12">
-                <TextBlock x:Name="FormulaDetectionHeaderText" Text="Formula Detection" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock x:Name="FormulaDetectionDescriptionText"
-                           Text="Advanced formula detection uses font names and Unicode math characters to protect formulas from translation."
-                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <TextBox x:Name="FormulaFontPatternBox" Header="Font Pattern (Regex)"
-                                 Width="450" PlaceholderText="e.g. CMSY|CMMI|Symbol|Mathematica"
-                                 HorizontalAlignment="Left" TextChanged="OnFormulaPatternChanged" />
-                        <TextBox x:Name="FormulaCharPatternBox" Header="Character Pattern (Regex)"
-                                 Width="450" PlaceholderText="e.g. [\u2200-\u22FF\u0370-\u03FF]"
-                                 HorizontalAlignment="Left" TextChanged="OnFormulaPatternChanged" />
-                        <TextBlock x:Name="FormulaDetectionNoteText"
-                                   Text="Leave empty to use built-in patterns. Font pattern matches PDF font names (Level 2). Character pattern matches Unicode ranges (Level 3)."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal"
+                            Spacing="8">
+                        <Button x:Name="ImportMdxDictionaryButton"
+                                Content="Import MDX Dictionary"
+                                Click="OnImportMdxDictionaryClicked"
+                                Padding="10,4"/>
+                        <TextBlock x:Name="ImportedMdxSummaryText"
+                                   Text="No MDX dictionaries imported"
+                                   VerticalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     </StackPanel>
-                </Border>
-            </StackPanel>
 
-            <!-- Translation Cache -->
-            <StackPanel x:Name="TranslationCacheSection" Spacing="12">
-                <TextBlock x:Name="TranslationCacheHeaderText" Text="Translation Cache" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock x:Name="TranslationCacheDescriptionText"
-                           Text="Cache translated segments locally to speed up repeated translations and save API costs."
-                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <ToggleSwitch x:Name="TranslationCacheToggle" Header="Enable Translation Cache"
-                                      Toggled="OnTranslationCacheToggled" />
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <Button x:Name="ClearCacheButton" Content="Clear Cache" Click="OnClearCacheClick" />
-                            <TextBlock x:Name="CacheStatusText" Text="" VerticalAlignment="Center"
-                                       FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                        <TextBlock x:Name="TranslationCacheNoteText"
-                                   Text="Cached translations are stored locally in SQLite. Clear cache if translations become stale."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- Custom LLM Prompt -->
-            <StackPanel x:Name="CustomPromptSection" Spacing="12">
-                <TextBlock x:Name="CustomPromptHeaderText" Text="Custom Translation Prompt" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock x:Name="CustomPromptDescriptionText"
-                           Text="Add custom instructions for LLM-based translation services (OpenAI, DeepSeek, Gemini, etc.)."
-                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <TextBox x:Name="CustomPromptBox" Header="Additional Instructions"
-                                 Width="450" Height="120" AcceptsReturn="True" TextWrapping="Wrap"
-                                 PlaceholderText="e.g. You are translating a medical research paper. Preserve all LaTeX commands and scientific terminology."
-                                 HorizontalAlignment="Left" TextChanged="OnCustomPromptChanged" />
-                        <TextBlock x:Name="CustomPromptNoteText"
-                                   Text="These instructions are appended to the system prompt for LLM services. Has no effect on non-LLM services (Google, DeepL, etc.)."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- HTTP Proxy -->
-            <StackPanel x:Name="HttpProxySection" Spacing="12">
-                <TextBlock x:Name="HttpProxyHeaderText" Text="HTTP Proxy" FontSize="18" FontWeight="SemiBold" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <ToggleSwitch x:Name="ProxyEnabledToggle" Header="Use HTTP Proxy" />
-                        <TextBox x:Name="ProxyUriBox" Header="Proxy URL" Width="300"
-                                 PlaceholderText="http://127.0.0.1:7890" />
-                        <ToggleSwitch x:Name="ProxyBypassLocalToggle" Header="Bypass proxy for localhost" IsOn="True" />
-                        <TextBlock Text="Proxy changes take effect after app restart. Localhost bypass ensures Ollama works without proxy."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- Behavior -->
-            <StackPanel x:Name="BehaviorSection" Spacing="12">
-                <TextBlock x:Uid="BehaviorHeader" Text="Behavior" FontSize="18" FontWeight="SemiBold" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="12">
-                        <!-- App Theme -->
-                        <ComboBox
-                            x:Name="AppThemeCombo"
-                            Header="App Theme"
-                            Width="250"
-                            SelectionChanged="OnAppThemeChanged"
-                            HorizontalAlignment="Left">
-                            <ComboBoxItem Content="System" Tag="System" />
-                            <ComboBoxItem Content="Light" Tag="Light" />
-                            <ComboBoxItem Content="Dark" Tag="Dark" />
-                        </ComboBox>
-                        <TextBlock
-                            x:Name="AppThemeDescriptionText"
-                            Text="Choose how Easydict appears. Select System to follow Windows theme."
-                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                        <!-- UI Language -->
-                        <ComboBox
-                            x:Name="UILanguageCombo"
-                            x:Uid="UILanguageCombo"
-                            Header="UI Language"
-                            Width="250"
-                            SelectionChanged="OnUILanguageChanged"
-                            HorizontalAlignment="Left">
-                            <ComboBoxItem x:Uid="UILangEnglishItem" Content="English" Tag="en-US" />
-                            <ComboBoxItem x:Uid="UILangChineseItem" Content="简体中文" Tag="zh-CN" />
-                            <ComboBoxItem x:Uid="UILangTraditionalChineseItem" Content="繁體中文" Tag="zh-TW" />
-                            <ComboBoxItem x:Uid="UILangJapaneseItem" Content="日本語" Tag="ja-JP" />
-                            <ComboBoxItem x:Uid="UILangKoreanItem" Content="한국어" Tag="ko-KR" />
-                            <ComboBoxItem x:Uid="UILangFrenchItem" Content="Français" Tag="fr-FR" />
-                            <ComboBoxItem x:Uid="UILangGermanItem" Content="Deutsch" Tag="de-DE" />
-                            <ComboBoxItem x:Uid="UILangVietnameseItem" Content="Tiếng Việt" Tag="vi-VN" />
-                            <ComboBoxItem x:Uid="UILangThaiItem" Content="ไทย" Tag="th-TH" />
-                            <ComboBoxItem x:Uid="UILangArabicItem" Content="العربية" Tag="ar-SA" />
-                            <ComboBoxItem x:Uid="UILangIndonesianItem" Content="Bahasa Indonesia" Tag="id-ID" />
-                            <ComboBoxItem x:Uid="UILangItalianItem" Content="Italiano" Tag="it-IT" />
-                            <ComboBoxItem x:Uid="UILangMalayItem" Content="Bahasa Melayu" Tag="ms-MY" />
-                            <ComboBoxItem x:Uid="UILangHindiItem" Content="हिन्दी" Tag="hi-IN" />
-                            <ComboBoxItem x:Uid="UILangDanishItem" Content="Dansk" Tag="da-DK" />
-                        </ComboBox>
-                        <TextBlock x:Uid="UILanguageDescription"
-                                   Text="Select the display language for the application interface. Restart required."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-
-                        <ToggleSwitch x:Name="MinimizeToTrayToggle" x:Uid="MinimizeToTrayToggle" Header="Minimize to system tray" />
-                        <ToggleSwitch x:Name="MinimizeToTrayOnStartupToggle" x:Uid="MinimizeToTrayOnStartupToggle" Header="Start minimized to tray" />
-                        <ToggleSwitch x:Name="ClipboardMonitorToggle" x:Uid="ClipboardMonitorToggle" Header="Monitor clipboard for text" />
-                        <ToggleSwitch x:Name="MouseSelectionTranslateToggle" x:Uid="MouseSelectionTranslateToggle" Header="Mouse selection translate" />
-                        <StackPanel x:Name="MouseSelectionExcludedAppsPanel" Spacing="4" Margin="44,0,0,0"
-                                    Visibility="Collapsed">
-                            <TextBox x:Name="MouseSelectionExcludedAppsBox"
-                                     x:Uid="MouseSelectionExcludedAppsBox"
-                                     Header="Excluded apps"
-                                     PlaceholderText="code, slack, discord"
-                                     Width="350"
-                                     HorizontalAlignment="Left" />
-                            <TextBlock x:Uid="MouseSelectionExcludedAppsDescription"
-                                       Text="Process names to exclude, separated by commas."
+                    <!-- International Services Toggle -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="12,8">
+                        <StackPanel Spacing="4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="EnableInternationalServicesHeaderText"
+                                           Text="Enable International Services"
+                                           FontSize="13"
+                                           VerticalAlignment="Center"/>
+                                <ToggleSwitch x:Name="EnableInternationalServicesToggle"
+                                              Grid.Column="1"
+                                              Toggled="OnEnableInternationalServicesToggled"
+                                              MinWidth="0"
+                                              VerticalAlignment="Center"/>
+                            </Grid>
+                            <TextBlock x:Name="EnableInternationalServicesDescriptionText"
+                                       Text="Some services require international network access."
                                        FontSize="11"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       TextWrapping="Wrap"
-                                       MaxWidth="350"
-                                       HorizontalAlignment="Left" />
+                                       TextWrapping="Wrap"/>
                         </StackPanel>
-                        <ToggleSwitch x:Name="AlwaysOnTopToggle" x:Uid="AlwaysOnTopToggle" Header="Always on top" />
-                        <ToggleSwitch x:Name="LaunchAtStartupToggle" x:Uid="LaunchAtStartupToggle" Header="Launch at Windows startup" />
-                        <ToggleSwitch x:Name="HideEmptyServiceResultsToggle" Header="Hide dictionaries with no result" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+                    </Border>
 
-            <!-- Hotkeys -->
-            <StackPanel x:Name="HotkeysSection" Spacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock x:Name="HotkeysHeaderText" Text="Hotkeys" FontSize="18" FontWeight="SemiBold" />
-                    <FontIcon x:Name="HotkeysHelpIcon" Glyph="&#xE897;" FontSize="14"
-                              Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                    <!-- Main Window Services -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="8">
+                                <TextBlock x:Name="MainWindowHeaderText"
+                                        Text="Main Window"
+                                        FontWeight="SemiBold"
+                                        FontSize="14"
+                                        VerticalAlignment="Center"/>
+                                <Button x:Name="MainWindowReorderModeButton"
+                                        Click="OnToggleMainWindowReorderModeClicked"
+                                        Padding="8,2"
+                                        VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ItemsControl x:Name="MainWindowServicesPanel">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}"
+                                                Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox
+                                                Content="{Binding DisplayName}"
+                                                FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
+                                                FontStyle="{Binding IsUnconfigured, Converter={StaticResource BoolToItalicFontStyleConverter}}"
+                                                Tag="{Binding ServiceId}"
+                                                IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                IsEnabled="{Binding IsAvailable}"/>
+                                            <ToggleSwitch
+                                                Grid.Column="1"
+                                                IsOn="{Binding EnabledQuery, Mode=TwoWay}"
+                                                Loaded="OnServiceToggleSwitchLoaded"
+                                                Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                IsEnabled="{Binding IsAvailable}"
+                                                MinWidth="0"
+                                                Margin="8,0,0,0"/>
+                                            <Button
+                                                Grid.Column="2"
+                                                Click="OnMoveMainServiceUp"
+                                                Tag="{Binding ServiceId}"
+                                                ToolTipService.ToolTip="Move up"
+                                                Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                Width="32"
+                                                    Height="28"
+                                                    Padding="0"
+                                                Margin="4,0,0,0">
+                                                <FontIcon Glyph="&#xE70E;"
+                                                        FontSize="12"/>
+                                            </Button>
+                                            <Button
+                                                Grid.Column="3"
+                                                Click="OnMoveMainServiceDown"
+                                                Tag="{Binding ServiceId}"
+                                                ToolTipService.ToolTip="Move down"
+                                                Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                Width="32"
+                                                    Height="28"
+                                                    Padding="0"
+                                                Margin="2,0,0,0">
+                                                <FontIcon Glyph="&#xE70D;"
+                                                        FontSize="12"/>
+                                            </Button>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Mini Window Services -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="8">
+                                <TextBlock x:Name="MiniWindowHeaderText"
+                                        Text="Mini Window"
+                                        FontWeight="SemiBold"
+                                        FontSize="14"
+                                        VerticalAlignment="Center"/>
+                                <Button x:Name="MiniWindowReorderModeButton"
+                                        Click="OnToggleMiniWindowReorderModeClicked"
+                                        Padding="8,2"
+                                        VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ItemsControl x:Name="MiniWindowServicesPanel">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}"
+                                                Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox
+                                                Content="{Binding DisplayName}"
+                                                FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
+                                                FontStyle="{Binding IsUnconfigured, Converter={StaticResource BoolToItalicFontStyleConverter}}"
+                                                Tag="{Binding ServiceId}"
+                                                IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                IsEnabled="{Binding IsAvailable}"/>
+                                            <ToggleSwitch
+                                                Grid.Column="1"
+                                                IsOn="{Binding EnabledQuery, Mode=TwoWay}"
+                                                Loaded="OnServiceToggleSwitchLoaded"
+                                                Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                IsEnabled="{Binding IsAvailable}"
+                                                MinWidth="0"
+                                                Margin="8,0,0,0"/>
+                                            <Button
+                                                Grid.Column="2"
+                                                Click="OnMoveMiniServiceUp"
+                                                Tag="{Binding ServiceId}"
+                                                ToolTipService.ToolTip="Move up"
+                                                Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                Width="32"
+                                                    Height="28"
+                                                    Padding="0"
+                                                Margin="4,0,0,0">
+                                                <FontIcon Glyph="&#xE70E;"
+                                                        FontSize="12"/>
+                                            </Button>
+                                            <Button
+                                                Grid.Column="3"
+                                                Click="OnMoveMiniServiceDown"
+                                                Tag="{Binding ServiceId}"
+                                                ToolTipService.ToolTip="Move down"
+                                                Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                Width="32"
+                                                    Height="28"
+                                                    Padding="0"
+                                                Margin="2,0,0,0">
+                                                <FontIcon Glyph="&#xE70D;"
+                                                        FontSize="12"/>
+                                            </Button>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Fixed Window Services -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="8">
+                                <TextBlock x:Name="FixedWindowHeaderText"
+                                        Text="Fixed Window"
+                                        FontWeight="SemiBold"
+                                        FontSize="14"
+                                        VerticalAlignment="Center"/>
+                                <Button x:Name="FixedWindowReorderModeButton"
+                                        Click="OnToggleFixedWindowReorderModeClicked"
+                                        Padding="8,2"
+                                        VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ItemsControl x:Name="FixedWindowServicesPanel">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="{Binding IsAvailable, Converter={StaticResource BoolToCompactMarginConverter}}"
+                                                Opacity="{Binding IsAvailable, Converter={StaticResource BoolToOpacityConverter}}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox
+                                                Content="{Binding DisplayName}"
+                                                FontSize="{Binding IsAvailable, Converter={StaticResource BoolToCompactFontSizeConverter}}"
+                                                FontStyle="{Binding IsUnconfigured, Converter={StaticResource BoolToItalicFontStyleConverter}}"
+                                                Tag="{Binding ServiceId}"
+                                                IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                IsEnabled="{Binding IsAvailable}"/>
+                                            <ToggleSwitch
+                                                Grid.Column="1"
+                                                IsOn="{Binding EnabledQuery, Mode=TwoWay}"
+                                                Loaded="OnServiceToggleSwitchLoaded"
+                                                Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                IsEnabled="{Binding IsAvailable}"
+                                                MinWidth="0"
+                                                Margin="8,0,0,0"/>
+                                            <Button
+                                                Grid.Column="2"
+                                                Click="OnMoveFixedServiceUp"
+                                                Tag="{Binding ServiceId}"
+                                                ToolTipService.ToolTip="Move up"
+                                                Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                Width="32"
+                                                    Height="28"
+                                                    Padding="0"
+                                                Margin="4,0,0,0">
+                                                <FontIcon Glyph="&#xE70E;"
+                                                        FontSize="12"/>
+                                            </Button>
+                                            <Button
+                                                Grid.Column="3"
+                                                Click="OnMoveFixedServiceDown"
+                                                Tag="{Binding ServiceId}"
+                                                ToolTipService.ToolTip="Move down"
+                                                Visibility="{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                Width="32"
+                                                    Height="28"
+                                                    Padding="0"
+                                                Margin="2,0,0,0">
+                                                <FontIcon Glyph="&#xE70D;"
+                                                        FontSize="12"/>
+                                            </Button>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Bottom">
-                            <TextBox x:Name="ShowHotkeyBox" Header="Show Window" Width="200" PlaceholderText="Ctrl+Alt+T" />
-                            <ToggleSwitch x:Name="ShowHotkeyEnabledToggle" OnContent="" OffContent="" VerticalAlignment="Bottom" Margin="0,0,0,4" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Bottom">
-                            <TextBox x:Name="TranslateHotkeyBox" Header="Translate Selection" Width="200" PlaceholderText="Ctrl+Alt+D" />
-                            <ToggleSwitch x:Name="TranslateHotkeyEnabledToggle" OnContent="" OffContent="" VerticalAlignment="Bottom" Margin="0,0,0,4" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Bottom">
-                            <TextBox x:Name="ShowMiniHotkeyBox" Header="Show Mini Window" Width="200" PlaceholderText="Ctrl+Alt+M" />
-                            <ToggleSwitch x:Name="ShowMiniHotkeyEnabledToggle" OnContent="" OffContent="" VerticalAlignment="Bottom" Margin="0,0,0,4" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Bottom">
-                            <TextBox x:Name="ShowFixedHotkeyBox" Header="Show Fixed Window" Width="200" PlaceholderText="Ctrl+Alt+F" />
-                            <ToggleSwitch x:Name="ShowFixedHotkeyEnabledToggle" OnContent="" OffContent="" VerticalAlignment="Bottom" Margin="0,0,0,4" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Bottom">
-                            <TextBox x:Name="OcrTranslateHotkeyBox" Header="OCR Screenshot Translate" Width="200" PlaceholderText="Ctrl+Alt+S" />
-                            <ToggleSwitch x:Name="OcrTranslateHotkeyEnabledToggle" OnContent="" OffContent="" VerticalAlignment="Bottom" Margin="0,0,0,4" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Bottom">
-                            <TextBox x:Name="SilentOcrHotkeyBox" Header="Silent OCR" Width="200" PlaceholderText="Ctrl+Alt+Shift+S" />
-                            <ToggleSwitch x:Name="SilentOcrHotkeyEnabledToggle" OnContent="" OffContent="" VerticalAlignment="Bottom" Margin="0,0,0,4" />
-                        </StackPanel>
-                        <TextBlock x:Name="HotkeysDescriptionText" Text="Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M)."
-                                   FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                <!-- Service Configuration -->
+                <StackPanel x:Name="ServiceConfigurationSection"
+                        Spacing="12">
+                    <StackPanel Orientation="Horizontal"
+                            Spacing="8">
+                        <TextBlock x:Name="ServiceConfigurationHeaderText"
+                                Text="Service Configuration"
+                                FontSize="18"
+                                FontWeight="SemiBold"/>
+                        <FontIcon x:Name="ServiceConfigHelpIcon"
+                                Glyph="&#xE897;"
+                                FontSize="14"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                VerticalAlignment="Center"/>
                     </StackPanel>
-                </Border>
-            </StackPanel>
+                    <TextBlock x:Name="ServiceConfigurationDescriptionText"
+                            Text="Configure API keys, endpoints, and models for each translation service."
+                               FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
 
-            <!-- About -->
-            <StackPanel x:Name="AboutSection" Spacing="12">
-                <TextBlock x:Name="AboutHeaderText" Text="About" FontSize="18" FontWeight="SemiBold" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock FontWeight="SemiBold" Text="Easydict for Windows ᵇᵉᵗᵃ" />
-                        <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <HyperlinkButton Content="GitHub Repository" NavigateUri="https://github.com/xiaocang/easydict_win32" />
-                        <HyperlinkButton x:Name="IssueFeedbackLink" Content="Issue Feedback" NavigateUri="https://github.com/xiaocang/easydict_win32/issues/new/choose" />
-
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="Inspired by" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                            <HyperlinkButton Content="Easydict for macOS" NavigateUri="https://github.com/tisfeng/Easydict" FontSize="12" Padding="0" />
+                    <!-- DeepL -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="DeepL"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="DeepLStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="DeepLKeyBox"
+                                    Header="API Key (Optional)"
+                                    Width="350"
+                                    PlaceholderText="Enter your DeepL API key"
+                                    HorizontalAlignment="Left"/>
+                            <CheckBox x:Name="DeepLFreeCheck"
+                                    Content="Use Free API (no API key required for web translation)"/>
+                            <TextBlock Text="Leave API key empty to use free web translation. Pro API key gives higher limits."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <Button x:Name="TestDeepLButton"
+                                    Content="Test"
+                                    Click="OnTestDeepL"
+                                    Padding="8,4"/>
                         </StackPanel>
+                    </Expander>
 
-                        <TextBlock Text="License: GPL-3.0" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <!-- OpenAI -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="OpenAI"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="OpenAIStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="OpenAIKeyBox"
+                                    Header="API Key"
+                                    Width="350"
+                                    PlaceholderText="sk-..."
+                                    HorizontalAlignment="Left"/>
+                            <TextBox x:Name="OpenAIEndpointBox"
+                                    Header="Endpoint (Optional)"
+                                    Width="450"
+                                     PlaceholderText="https://api.openai.com/v1/chat/completions"
+                                    HorizontalAlignment="Left"/>
+                            <ComboBox x:Name="OpenAIModelCombo"
+                                    Header="Model"
+                                    Width="280"
+                                    IsEditable="True">
+                                <ComboBoxItem Content="gpt-4o-mini"
+                                        Tag="gpt-4o-mini"/>
+                                <ComboBoxItem Content="gpt-4o"
+                                        Tag="gpt-4o"/>
+                                <ComboBoxItem Content="gpt-4-turbo"
+                                        Tag="gpt-4-turbo"/>
+                                <ComboBoxItem Content="gpt-3.5-turbo"
+                                        Tag="gpt-3.5-turbo"/>
+                            </ComboBox>
+                            <TextBlock Text="You can type a custom model name directly."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <Button x:Name="TestOpenAIButton"
+                                    Content="Test"
+                                    Click="OnTestOpenAI"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- DeepSeek -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="DeepSeek"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="DeepSeekStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="DeepSeekKeyBox"
+                                    Header="API Key"
+                                    Width="350"
+                                    PlaceholderText="sk-..."
+                                    HorizontalAlignment="Left"/>
+                            <ComboBox x:Name="DeepSeekModelCombo"
+                                    Header="Model"
+                                    Width="280"
+                                    IsEditable="True">
+                                <ComboBoxItem Content="deepseek-chat"
+                                        Tag="deepseek-chat"/>
+                                <ComboBoxItem Content="deepseek-reasoner"
+                                        Tag="deepseek-reasoner"/>
+                            </ComboBox>
+                            <TextBlock Text="Get your API key from platform.deepseek.com. You can type a custom model name."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <Button x:Name="TestDeepSeekButton"
+                                    Content="Test"
+                                    Click="OnTestDeepSeek"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Groq -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="Groq"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="GroqStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="GroqKeyBox"
+                                    Header="API Key"
+                                    Width="350"
+                                    PlaceholderText="gsk_..."
+                                    HorizontalAlignment="Left"/>
+                            <ComboBox x:Name="GroqModelCombo"
+                                    Header="Model"
+                                    Width="280"
+                                    IsEditable="True">
+                                <ComboBoxItem Content="llama-3.3-70b-versatile"
+                                        Tag="llama-3.3-70b-versatile"/>
+                                <ComboBoxItem Content="llama-3.1-8b-instant"
+                                        Tag="llama-3.1-8b-instant"/>
+                                <ComboBoxItem Content="qwen/qwen-3-32b"
+                                        Tag="qwen/qwen-3-32b"/>
+                            </ComboBox>
+                            <TextBlock Text="Groq provides fast inference. Get your API key from console.groq.com. You can type a custom model name."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <Button x:Name="TestGroqButton"
+                                    Content="Test"
+                                    Click="OnTestGroq"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Zhipu (智谱) -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="Zhipu (智谱)"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="ZhipuStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="ZhipuKeyBox"
+                                    Header="API Key"
+                                    Width="350"
+                                    PlaceholderText="Enter your Zhipu API key"
+                                    HorizontalAlignment="Left"/>
+                            <ComboBox x:Name="ZhipuModelCombo"
+                                    Header="Model"
+                                    Width="280"
+                                    IsEditable="True">
+                                <ComboBoxItem Content="glm-4.5-flash"
+                                        Tag="glm-4.5-flash"/>
+                                <ComboBoxItem Content="glm-4-flash-250414"
+                                        Tag="glm-4-flash-250414"/>
+                                <ComboBoxItem Content="glm-4.7"
+                                        Tag="glm-4.7"/>
+                                <ComboBoxItem Content="glm-4.5-air"
+                                        Tag="glm-4.5-air"/>
+                            </ComboBox>
+                            <TextBlock Text="Get your API key from open.bigmodel.cn. You can type a custom model name."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <Button x:Name="TestZhipuButton"
+                                    Content="Test"
+                                    Click="OnTestZhipu"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- GitHub Models -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="GitHub Models"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="GitHubModelsStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="GitHubModelsTokenBox"
+                                    Header="GitHub Token"
+                                    Width="350"
+                                    PlaceholderText="ghp_..."
+                                    HorizontalAlignment="Left"/>
+                            <ComboBox x:Name="GitHubModelsModelCombo"
+                                    Header="Model"
+                                    Width="280"
+                                    IsEditable="True">
+                                <ComboBoxItem Content="gpt-4.1"
+                                        Tag="gpt-4.1"/>
+                                <ComboBoxItem Content="gpt-4.1-mini"
+                                        Tag="gpt-4.1-mini"/>
+                                <ComboBoxItem Content="gpt-4.1-nano"
+                                        Tag="gpt-4.1-nano"/>
+                                <ComboBoxItem Content="gpt-4o"
+                                        Tag="gpt-4o"/>
+                                <ComboBoxItem Content="gpt-4o-mini"
+                                        Tag="gpt-4o-mini"/>
+                                <ComboBoxItem Content="deepseek-v3-0324"
+                                        Tag="deepseek-v3-0324"/>
+                            </ComboBox>
+                            <TextBlock Text="Use your GitHub personal access token. Get one from github.com/settings/tokens. You can type a custom model name."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <Button x:Name="TestGitHubModelsButton"
+                                    Content="Test"
+                                    Click="OnTestGitHubModels"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Gemini -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="Gemini"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="GeminiStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="GeminiKeyBox"
+                                    Header="API Key"
+                                    Width="350"
+                                    PlaceholderText="Enter your Gemini API key"
+                                    HorizontalAlignment="Left"/>
+                            <ComboBox x:Name="GeminiModelCombo"
+                                    Header="Model"
+                                    Width="280"
+                                    IsEditable="True">
+                                <ComboBoxItem Content="gemini-2.5-flash"
+                                        Tag="gemini-2.5-flash"/>
+                                <ComboBoxItem Content="gemini-2.5-flash-lite"
+                                        Tag="gemini-2.5-flash-lite"/>
+                                <ComboBoxItem Content="gemini-2.5-pro"
+                                        Tag="gemini-2.5-pro"/>
+                                <ComboBoxItem Content="gemini-2.0-flash"
+                                        Tag="gemini-2.0-flash"/>
+                                <ComboBoxItem Content="gemini-1.5-flash"
+                                        Tag="gemini-1.5-flash"/>
+                                <ComboBoxItem Content="gemini-1.5-pro"
+                                        Tag="gemini-1.5-pro"/>
+                                <ComboBoxItem Content="gemini-3-flash-preview"
+                                        Tag="gemini-3-flash-preview"/>
+                                <ComboBoxItem Content="gemini-3-pro-preview"
+                                        Tag="gemini-3-pro-preview"/>
+                            </ComboBox>
+                            <TextBlock Text="Get your API key from aistudio.google.com. You can type a custom model name."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <Button x:Name="TestGeminiButton"
+                                    Content="Test"
+                                    Click="OnTestGemini"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Custom OpenAI Compatible -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="Custom OpenAI Compatible"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="CustomOpenAIStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <TextBox x:Name="CustomOpenAIEndpointBox"
+                                    Header="Endpoint (Required)"
+                                    Width="450"
+                                     PlaceholderText="https://your-api.example.com/v1/chat/completions"
+                                    HorizontalAlignment="Left"/>
+                            <PasswordBox x:Name="CustomOpenAIKeyBox"
+                                    Header="API Key (Optional)"
+                                    Width="350"
+                                    PlaceholderText="Enter API key if required"
+                                    HorizontalAlignment="Left"/>
+                            <TextBox x:Name="CustomOpenAIModelBox"
+                                    Header="Model"
+                                    Width="200"
+                                     PlaceholderText="gpt-3.5-turbo"
+                                    HorizontalAlignment="Left"/>
+                            <TextBlock Text="Configure any OpenAI-compatible API endpoint (e.g., local LLM servers, other AI providers)."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <Button x:Name="TestCustomOpenAIButton"
+                                    Content="Test"
+                                    Click="OnTestCustomOpenAI"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Ollama (Local) -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="Ollama (Local LLM)"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="OllamaStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <TextBox x:Name="OllamaEndpointBox"
+                                    Header="Endpoint"
+                                    Width="450"
+                                     PlaceholderText="http://localhost:11434/v1/chat/completions"
+                                    HorizontalAlignment="Left"/>
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="8">
+                                <ComboBox x:Name="OllamaModelCombo"
+                                        Header="Model"
+                                        Width="200"
+                                        IsEditable="True"/>
+                                <Button x:Name="RefreshOllamaButton"
+                                        Content="Refresh"
+                                        Click="OnRefreshOllamaModels"
+                                        VerticalAlignment="Bottom"
+                                        Padding="12,6"/>
+                                <Button x:Name="TestOllamaButton"
+                                        Content="Test"
+                                        Click="OnTestOllama"
+                                        VerticalAlignment="Bottom"
+                                        Padding="8,4"/>
+                            </StackPanel>
+                            <TextBlock Text="Ollama must be running locally. Click Refresh to load available models."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Built-in AI -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="Built-in AI"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="BuiltInStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <InfoBar x:Name="BuiltInAIHintBar"
+                                     IsOpen="True"
+                                    IsClosable="False"
+                                    Severity="Informational"
+                                     Title="Hint"
+                                     Message="The built-in key has limited free quota and is not guaranteed to always be available. For stable use, get your own free API key."/>
+                            <ComboBox x:Name="BuiltInModelCombo"
+                                    Header="Model"
+                                    Width="280"
+                                    IsEditable="True">
+                                <ComboBoxItem Content="glm-4-flash-250414 (GLM)"
+                                        Tag="glm-4-flash-250414"/>
+                                <ComboBoxItem Content="glm-4-flash (GLM)"
+                                        Tag="glm-4-flash"/>
+                                <ComboBoxItem Content="llama-3.3-70b-versatile (Groq)"
+                                        Tag="llama-3.3-70b-versatile"/>
+                                <ComboBoxItem Content="llama-3.1-8b-instant (Groq)"
+                                        Tag="llama-3.1-8b-instant"/>
+                            </ComboBox>
+                            <PasswordBox x:Name="BuiltInApiKeyBox"
+                                    Header="API Key (Optional)"
+                                    Width="350"
+                                         PlaceholderText="Leave empty to use built-in key"
+                                    HorizontalAlignment="Left"/>
+                            <TextBlock x:Name="BuiltInDescriptionText"
+                                       Text="Uses GLM (Zhipu AI) or Groq free models. You can provide your own API key from open.bigmodel.cn (GLM) or console.groq.com (Groq)."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <Button x:Name="TestBuiltInButton"
+                                    Content="Test"
+                                    Click="OnTestBuiltIn"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Doubao (豆包) -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="Doubao (豆包)"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="DoubaoStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="DoubaoKeyBox"
+                                    Header="API Key"
+                                    Width="350"
+                                    PlaceholderText="Enter your Doubao API key"
+                                    HorizontalAlignment="Left"/>
+                            <TextBox x:Name="DoubaoEndpointBox"
+                                    Header="Endpoint"
+                                    Width="450"
+                                     PlaceholderText="https://ark.cn-beijing.volces.com/api/v3/responses"
+                                    HorizontalAlignment="Left"/>
+                            <TextBox x:Name="DoubaoModelBox"
+                                    Header="Model"
+                                    Width="300"
+                                     PlaceholderText="doubao-seed-translation-250915"
+                                    HorizontalAlignment="Left"/>
+                            <TextBlock Text="ByteDance's Doubao translation service. Get your API key from console.volcengine.com"
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <Button x:Name="TestDoubaoButton"
+                                    Content="Test"
+                                    Click="OnTestDoubao"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Caiyun (彩云小译) -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="Caiyun (彩云小译)"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="CaiyunStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="CaiyunKeyBox"
+                                    Header="API Key"
+                                    Width="350"
+                                    PlaceholderText="Enter your Caiyun API key"
+                                    HorizontalAlignment="Left"/>
+                            <TextBlock Text="Get your API key from fanyi.caiyunapp.com"
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <Button x:Name="TestCaiyunButton"
+                                    Content="Test"
+                                    Click="OnTestCaiyun"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- NiuTrans (小牛翻译) -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <Grid>
+                                <TextBlock Text="NiuTrans (小牛翻译)"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="NiuTransStatusText"
+                                        Text="✅"
+                                        FontWeight="SemiBold"
+                                           Foreground="Green"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,0,8,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="NiuTransKeyBox"
+                                    Header="API Key"
+                                    Width="350"
+                                    PlaceholderText="Enter your NiuTrans API key"
+                                    HorizontalAlignment="Left"/>
+                            <TextBlock Text="NiuTrans supports 450+ language pairs. Get your API key from niutrans.com"
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <Button x:Name="TestNiuTransButton"
+                                    Content="Test"
+                                    Click="OnTestNiuTrans"
+                                    Padding="8,4"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Youdao (有道翻译) -->
+                    <Expander HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <TextBlock Text="Youdao (有道翻译)"
+                                    FontWeight="SemiBold"/>
+                        </Expander.Header>
+                        <StackPanel Spacing="12"
+                                Padding="0,8">
+                            <PasswordBox x:Name="YoudaoAppKeyBox"
+                                    Header="App Key"
+                                    Width="350"
+                                    PlaceholderText="Enter your Youdao App Key"
+                                    HorizontalAlignment="Left"/>
+                            <PasswordBox x:Name="YoudaoAppSecretBox"
+                                    Header="App Secret"
+                                    Width="350"
+                                    PlaceholderText="Enter your Youdao App Secret"
+                                    HorizontalAlignment="Left"/>
+                            <ToggleSwitch x:Name="YoudaoUseOfficialApiToggle"
+                                    Header="Use Official API"/>
+                            <TextBlock Text="Youdao provides phonetic transcriptions for English words. Without API keys, uses free web dictionary. With API keys, enables official API for higher limits. Get API keys from ai.youdao.com"
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Imported MDX Dictionaries (dynamically populated) -->
+                    <StackPanel x:Name="ImportedMdxConfigPanel"
+                            Spacing="8"/>
+
+                    <!-- Google Translate & Linguee (No configuration needed) -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock x:Name="FreeServicesHeaderText"
+                                    Text="Free Services (No Configuration Required)"
+                                    FontWeight="SemiBold"/>
+                            <TextBlock x:Name="FreeServicesDescriptionText"
+                                    Text="Google Translate and Linguee Dictionary work out of the box without API keys."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Layout Detection (Long Document) -->
+                <StackPanel x:Name="LayoutDetectionSection"
+                        Spacing="12">
+                    <TextBlock x:Name="LayoutDetectionHeaderText"
+                            Text="Layout Detection"
+                            FontSize="18"
+                            FontWeight="SemiBold"/>
+                    <TextBlock x:Name="LayoutDetectionDescriptionText"
+                               Text="ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas."
+                               FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap"/>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="16">
+                            <ComboBox x:Name="LayoutDetectionModeCombo"
+                                    Header="Detection Mode"
+                                    Width="300">
+                                <ComboBoxItem x:Name="LayoutDetectionAutoItem"
+                                        Content="Auto (Recommended)"
+                                        Tag="Auto"/>
+                                <ComboBoxItem x:Name="LayoutDetectionOnnxItem"
+                                        Content="Local ONNX Model"
+                                        Tag="OnnxLocal"/>
+                                <ComboBoxItem x:Name="LayoutDetectionVisionItem"
+                                        Content="Vision LLM"
+                                        Tag="VisionLLM"/>
+                                <ComboBoxItem x:Name="LayoutDetectionHeuristicItem"
+                                        Content="Heuristic Only"
+                                        Tag="Heuristic"/>
+                            </ComboBox>
+
+                            <!-- ONNX Model Download -->
+                            <StackPanel x:Name="OnnxModelPanel"
+                                    Spacing="8">
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        VerticalAlignment="Center">
+                                    <TextBlock x:Name="OnnxModelStatusText"
+                                            Text="ONNX Model: Not Downloaded"
+                                            VerticalAlignment="Center"/>
+                                    <FontIcon x:Name="OnnxModelStatusIcon"
+                                            Glyph="&#xE946;"
+                                            FontSize="14"
+                                            Visibility="Collapsed"
+                                              Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                            VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                    <Button x:Name="DownloadOnnxModelButton"
+                                            Content="Download Model (~75MB)"
+                                            Click="OnDownloadOnnxModelClick"/>
+                                    <Button x:Name="DeleteOnnxModelButton"
+                                            Content="Delete"
+                                            Click="OnDeleteOnnxModelClick"
+                                            Visibility="Collapsed"/>
+                                </StackPanel>
+                                <ProgressBar x:Name="OnnxDownloadProgress"
+                                        Visibility="Collapsed"
+                                        Minimum="0"
+                                        Maximum="100"/>
+                                <TextBlock x:Name="OnnxDownloadProgressText"
+                                        Visibility="Collapsed"
+                                           FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+
+                            <!-- Vision LLM Service Selection (visible when VisionLLM mode selected) -->
+                            <StackPanel x:Name="VisionLLMPanel"
+                                    Spacing="8"
+                                    Visibility="Collapsed">
+                                <ComboBox x:Name="VisionLayoutServiceCombo"
+                                        Header="Vision Service"
+                                        Width="300">
+                                    <ComboBoxItem Content="OpenAI (GPT-4o)"
+                                            Tag="openai"/>
+                                    <ComboBoxItem Content="Gemini"
+                                            Tag="gemini"/>
+                                    <ComboBoxItem Content="Custom OpenAI"
+                                            Tag="custom_openai"/>
+                                </ComboBox>
+                                <TextBlock Text="Requires a configured API key for the selected service."
+                                           FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- CJK Font -->
+                <StackPanel x:Name="CjkFontSection"
+                        Spacing="12">
+                    <TextBlock x:Name="CjkFontHeaderText"
+                            Text="CJK Font"
+                            FontSize="18"
+                            FontWeight="SemiBold"/>
+                    <TextBlock x:Name="CjkFontDescriptionText"
+                               Text="Download CJK fonts for proper Chinese, Japanese, and Korean text rendering in PDF output."
+                               FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap"/>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="16">
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="12">
+                                <Button x:Name="CjkFontDownloadButton"
+                                        Content="Download CJK Font"
+                                        Click="OnCjkFontDownloadClick"/>
+                                <Button x:Name="CjkFontDeleteButton"
+                                        Content="Delete"
+                                        Click="OnCjkFontDeleteClick"/>
+                            </StackPanel>
+                            <ProgressBar x:Name="CjkFontProgressBar"
+                                    Visibility="Collapsed"
+                                    Minimum="0"
+                                    Maximum="100"/>
+                            <TextBlock x:Name="CjkFontStatusText"
+                                    Text=""
+                                    FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                            <TextBlock x:Name="CjkFontNoteText"
+                                       Text="Downloads Noto Sans CJK (~16MB per language). Required for CJK text in PDF overlay rendering."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Formula Detection -->
+                <StackPanel x:Name="FormulaDetectionSection"
+                        Spacing="12">
+                    <TextBlock x:Name="FormulaDetectionHeaderText"
+                            Text="Formula Detection"
+                            FontSize="18"
+                            FontWeight="SemiBold"/>
+                    <TextBlock x:Name="FormulaDetectionDescriptionText"
+                               Text="Advanced formula detection uses font names and Unicode math characters to protect formulas from translation."
+                               FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap"/>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="16">
+                            <TextBox x:Name="FormulaFontPatternBox"
+                                    Header="Font Pattern (Regex)"
+                                     Width="450"
+                                    PlaceholderText="e.g. CMSY|CMMI|Symbol|Mathematica"
+                                     HorizontalAlignment="Left"
+                                    TextChanged="OnFormulaPatternChanged"/>
+                            <TextBox x:Name="FormulaCharPatternBox"
+                                    Header="Character Pattern (Regex)"
+                                     Width="450"
+                                    PlaceholderText="e.g. [\u2200-\u22FF\u0370-\u03FF]"
+                                     HorizontalAlignment="Left"
+                                    TextChanged="OnFormulaPatternChanged"/>
+                            <TextBlock x:Name="FormulaDetectionNoteText"
+                                       Text="Leave empty to use built-in patterns. Font pattern matches PDF font names (Level 2). Character pattern matches Unicode ranges (Level 3)."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Translation Cache -->
+                <StackPanel x:Name="TranslationCacheSection"
+                        Spacing="12">
+                    <TextBlock x:Name="TranslationCacheHeaderText"
+                            Text="Translation Cache"
+                            FontSize="18"
+                            FontWeight="SemiBold"/>
+                    <TextBlock x:Name="TranslationCacheDescriptionText"
+                               Text="Cache translated segments locally to speed up repeated translations and save API costs."
+                               FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap"/>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="16">
+                            <ToggleSwitch x:Name="TranslationCacheToggle"
+                                    Header="Enable Translation Cache"
+                                          Toggled="OnTranslationCacheToggled"/>
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="12">
+                                <Button x:Name="ClearCacheButton"
+                                        Content="Clear Cache"
+                                        Click="OnClearCacheClick"/>
+                                <TextBlock x:Name="CacheStatusText"
+                                        Text=""
+                                        VerticalAlignment="Center"
+                                           FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TranslationCacheNoteText"
+                                       Text="Cached translations are stored locally in SQLite. Clear cache if translations become stale."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Custom LLM Prompt -->
+                <StackPanel x:Name="CustomPromptSection"
+                        Spacing="12">
+                    <TextBlock x:Name="CustomPromptHeaderText"
+                            Text="Custom Translation Prompt"
+                            FontSize="18"
+                            FontWeight="SemiBold"/>
+                    <TextBlock x:Name="CustomPromptDescriptionText"
+                               Text="Add custom instructions for LLM-based translation services (OpenAI, DeepSeek, Gemini, etc.)."
+                               FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap"/>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="16">
+                            <TextBox x:Name="CustomPromptBox"
+                                    Header="Additional Instructions"
+                                     Width="450"
+                                    Height="120"
+                                    AcceptsReturn="True"
+                                    TextWrapping="Wrap"
+                                     PlaceholderText="e.g. You are translating a medical research paper. Preserve all LaTeX commands and scientific terminology."
+                                     HorizontalAlignment="Left"
+                                    TextChanged="OnCustomPromptChanged"/>
+                            <TextBlock x:Name="CustomPromptNoteText"
+                                       Text="These instructions are appended to the system prompt for LLM services. Has no effect on non-LLM services (Google, DeepL, etc.)."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- HTTP Proxy -->
+                <StackPanel x:Name="HttpProxySection"
+                        Spacing="12">
+                    <TextBlock x:Name="HttpProxyHeaderText"
+                            Text="HTTP Proxy"
+                            FontSize="18"
+                            FontWeight="SemiBold"/>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="16">
+                            <ToggleSwitch x:Name="ProxyEnabledToggle"
+                                    Header="Use HTTP Proxy"/>
+                            <TextBox x:Name="ProxyUriBox"
+                                    Header="Proxy URL"
+                                    Width="300"
+                                     PlaceholderText="http://127.0.0.1:7890"/>
+                            <ToggleSwitch x:Name="ProxyBypassLocalToggle"
+                                    Header="Bypass proxy for localhost"
+                                    IsOn="True"/>
+                            <TextBlock Text="Proxy changes take effect after app restart. Localhost bypass ensures Ollama works without proxy."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Behavior -->
+                <StackPanel x:Name="BehaviorSection"
+                        Spacing="12">
+                    <TextBlock x:Uid="BehaviorHeader"
+                            Text="Behavior"
+                            FontSize="18"
+                            FontWeight="SemiBold"/>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="12">
+                            <!-- App Theme -->
+                            <ComboBox
+                                x:Name="AppThemeCombo"
+                                Header="App Theme"
+                                Width="250"
+                                SelectionChanged="OnAppThemeChanged"
+                                HorizontalAlignment="Left">
+                                <ComboBoxItem Content="System"
+                                        Tag="System"/>
+                                <ComboBoxItem Content="Light"
+                                        Tag="Light"/>
+                                <ComboBoxItem Content="Dark"
+                                        Tag="Dark"/>
+                            </ComboBox>
+                            <TextBlock
+                                x:Name="AppThemeDescriptionText"
+                                Text="Choose how Easydict appears. Select System to follow Windows theme."
+                                FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+
+                            <!-- UI Language -->
+                            <ComboBox
+                                x:Name="UILanguageCombo"
+                                x:Uid="UILanguageCombo"
+                                Header="UI Language"
+                                Width="250"
+                                SelectionChanged="OnUILanguageChanged"
+                                HorizontalAlignment="Left">
+                                <ComboBoxItem x:Uid="UILangEnglishItem"
+                                        Content="English"
+                                        Tag="en-US"/>
+                                <ComboBoxItem x:Uid="UILangChineseItem"
+                                        Content="简体中文"
+                                        Tag="zh-CN"/>
+                                <ComboBoxItem x:Uid="UILangTraditionalChineseItem"
+                                        Content="繁體中文"
+                                        Tag="zh-TW"/>
+                                <ComboBoxItem x:Uid="UILangJapaneseItem"
+                                        Content="日本語"
+                                        Tag="ja-JP"/>
+                                <ComboBoxItem x:Uid="UILangKoreanItem"
+                                        Content="한국어"
+                                        Tag="ko-KR"/>
+                                <ComboBoxItem x:Uid="UILangFrenchItem"
+                                        Content="Français"
+                                        Tag="fr-FR"/>
+                                <ComboBoxItem x:Uid="UILangGermanItem"
+                                        Content="Deutsch"
+                                        Tag="de-DE"/>
+                                <ComboBoxItem x:Uid="UILangVietnameseItem"
+                                        Content="Tiếng Việt"
+                                        Tag="vi-VN"/>
+                                <ComboBoxItem x:Uid="UILangThaiItem"
+                                        Content="ไทย"
+                                        Tag="th-TH"/>
+                                <ComboBoxItem x:Uid="UILangArabicItem"
+                                        Content="العربية"
+                                        Tag="ar-SA"/>
+                                <ComboBoxItem x:Uid="UILangIndonesianItem"
+                                        Content="Bahasa Indonesia"
+                                        Tag="id-ID"/>
+                                <ComboBoxItem x:Uid="UILangItalianItem"
+                                        Content="Italiano"
+                                        Tag="it-IT"/>
+                                <ComboBoxItem x:Uid="UILangMalayItem"
+                                        Content="Bahasa Melayu"
+                                        Tag="ms-MY"/>
+                                <ComboBoxItem x:Uid="UILangHindiItem"
+                                        Content="हिन्दी"
+                                        Tag="hi-IN"/>
+                                <ComboBoxItem x:Uid="UILangDanishItem"
+                                        Content="Dansk"
+                                        Tag="da-DK"/>
+                            </ComboBox>
+                            <TextBlock x:Uid="UILanguageDescription"
+                                       Text="Select the display language for the application interface. Restart required."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+
+                            <ToggleSwitch x:Name="MinimizeToTrayToggle"
+                                    x:Uid="MinimizeToTrayToggle"
+                                    Header="Minimize to system tray"/>
+                            <ToggleSwitch x:Name="MinimizeToTrayOnStartupToggle"
+                                    x:Uid="MinimizeToTrayOnStartupToggle"
+                                    Header="Start minimized to tray"/>
+                            <ToggleSwitch x:Name="ClipboardMonitorToggle"
+                                    x:Uid="ClipboardMonitorToggle"
+                                    Header="Monitor clipboard for text"/>
+                            <ToggleSwitch x:Name="MouseSelectionTranslateToggle"
+                                    x:Uid="MouseSelectionTranslateToggle"
+                                    Header="Mouse selection translate"/>
+                            <StackPanel x:Name="MouseSelectionExcludedAppsPanel"
+                                    Spacing="4"
+                                    Margin="44,0,0,0"
+                                        Visibility="Collapsed">
+                                <TextBox x:Name="MouseSelectionExcludedAppsBox"
+                                         x:Uid="MouseSelectionExcludedAppsBox"
+                                         Header="Excluded apps"
+                                         PlaceholderText="code, slack, discord"
+                                         Width="350"
+                                         HorizontalAlignment="Left"/>
+                                <TextBlock x:Uid="MouseSelectionExcludedAppsDescription"
+                                           Text="Process names to exclude, separated by commas."
+                                           FontSize="11"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           MaxWidth="350"
+                                           HorizontalAlignment="Left"/>
+                            </StackPanel>
+                            <ToggleSwitch x:Name="AlwaysOnTopToggle"
+                                    x:Uid="AlwaysOnTopToggle"
+                                    Header="Always on top"/>
+                            <ToggleSwitch x:Name="LaunchAtStartupToggle"
+                                    x:Uid="LaunchAtStartupToggle"
+                                    Header="Launch at Windows startup"/>
+                            <ToggleSwitch x:Name="HideEmptyServiceResultsToggle"
+                                    Header="Hide dictionaries with no result"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Hotkeys -->
+                <StackPanel x:Name="HotkeysSection"
+                        Spacing="12">
+                    <StackPanel Orientation="Horizontal"
+                            Spacing="8">
+                        <TextBlock x:Name="HotkeysHeaderText"
+                                Text="Hotkeys"
+                                FontSize="18"
+                                FontWeight="SemiBold"/>
+                        <FontIcon x:Name="HotkeysHelpIcon"
+                                Glyph="&#xE897;"
+                                FontSize="14"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                VerticalAlignment="Center"/>
                     </StackPanel>
-                </Border>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="16">
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Bottom">
+                                <TextBox x:Name="ShowHotkeyBox"
+                                        Header="Show Window"
+                                        Width="200"
+                                        PlaceholderText="Ctrl+Alt+T"/>
+                                <ToggleSwitch x:Name="ShowHotkeyEnabledToggle"
+                                        OnContent=""
+                                        OffContent=""
+                                        VerticalAlignment="Bottom"
+                                        Margin="0,0,0,4"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Bottom">
+                                <TextBox x:Name="TranslateHotkeyBox"
+                                        Header="Translate Selection"
+                                        Width="200"
+                                        PlaceholderText="Ctrl+Alt+D"/>
+                                <ToggleSwitch x:Name="TranslateHotkeyEnabledToggle"
+                                        OnContent=""
+                                        OffContent=""
+                                        VerticalAlignment="Bottom"
+                                        Margin="0,0,0,4"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Bottom">
+                                <TextBox x:Name="ShowMiniHotkeyBox"
+                                        Header="Show Mini Window"
+                                        Width="200"
+                                        PlaceholderText="Ctrl+Alt+M"/>
+                                <ToggleSwitch x:Name="ShowMiniHotkeyEnabledToggle"
+                                        OnContent=""
+                                        OffContent=""
+                                        VerticalAlignment="Bottom"
+                                        Margin="0,0,0,4"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Bottom">
+                                <TextBox x:Name="ShowFixedHotkeyBox"
+                                        Header="Show Fixed Window"
+                                        Width="200"
+                                        PlaceholderText="Ctrl+Alt+F"/>
+                                <ToggleSwitch x:Name="ShowFixedHotkeyEnabledToggle"
+                                        OnContent=""
+                                        OffContent=""
+                                        VerticalAlignment="Bottom"
+                                        Margin="0,0,0,4"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Bottom">
+                                <TextBox x:Name="OcrTranslateHotkeyBox"
+                                        Header="OCR Screenshot Translate"
+                                        Width="200"
+                                        PlaceholderText="Ctrl+Alt+S"/>
+                                <ToggleSwitch x:Name="OcrTranslateHotkeyEnabledToggle"
+                                        OnContent=""
+                                        OffContent=""
+                                        VerticalAlignment="Bottom"
+                                        Margin="0,0,0,4"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Bottom">
+                                <TextBox x:Name="SilentOcrHotkeyBox"
+                                        Header="Silent OCR"
+                                        Width="200"
+                                        PlaceholderText="Ctrl+Alt+Shift+S"/>
+                                <ToggleSwitch x:Name="SilentOcrHotkeyEnabledToggle"
+                                        OnContent=""
+                                        OffContent=""
+                                        VerticalAlignment="Bottom"
+                                        Margin="0,0,0,4"/>
+                            </StackPanel>
+                            <TextBlock x:Name="HotkeysDescriptionText"
+                                    Text="Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M)."
+                                       FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- About -->
+                <StackPanel x:Name="AboutSection"
+                        Spacing="12">
+                    <TextBlock x:Name="AboutHeaderText"
+                            Text="About"
+                            FontSize="18"
+                            FontWeight="SemiBold"/>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock FontWeight="SemiBold"
+                                    Text="Easydict for Windows ᵇᵉᵗᵃ"/>
+                            <TextBlock x:Name="VersionText"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <HyperlinkButton Content="GitHub Repository"
+                                    NavigateUri="https://github.com/xiaocang/easydict_win32"/>
+                            <HyperlinkButton x:Name="IssueFeedbackLink"
+                                    Content="Issue Feedback"
+                                    NavigateUri="https://github.com/xiaocang/easydict_win32/issues/new/choose"/>
+
+                            <StackPanel Orientation="Horizontal"
+                                    Spacing="4">
+                                <TextBlock Text="Inspired by"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        VerticalAlignment="Center"/>
+                                <HyperlinkButton Content="Easydict for macOS"
+                                        NavigateUri="https://github.com/tisfeng/Easydict"
+                                        FontSize="12"
+                                        Padding="0"/>
+                            </StackPanel>
+
+                            <TextBlock Text="License: GPL-3.0"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Spacer to make room for floating save button -->
+                <Border Height="80"/>
             </StackPanel>
+        </ScrollViewer>
 
-            <!-- Spacer to make room for floating save button -->
-            <Border Height="80" />
-        </StackPanel>
-    </ScrollViewer>
+        <!-- Floating Save Button (fixed at bottom-right) -->
+        <Button x:Name="SaveButton"
+                Grid.Column="1"
+                Content="Save Settings"
+                Click="OnSaveClick"
+                Style="{StaticResource AccentButtonStyle}"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="0,0,32,32"
+                Padding="24,12"
+                Visibility="Collapsed">
+            <Button.Shadow>
+                <ThemeShadow/>
+            </Button.Shadow>
+        </Button>
 
-    <!-- Floating Save Button (fixed at bottom-right) -->
-    <Button x:Name="SaveButton"
-            Grid.Column="1"
-            Content="Save Settings"
-            Click="OnSaveClick"
-            Style="{StaticResource AccentButtonStyle}"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Bottom"
-            Margin="0,0,32,32"
-            Padding="24,12"
-            Visibility="Collapsed">
-        <Button.Shadow>
-            <ThemeShadow />
-        </Button.Shadow>
-    </Button>
+        <!-- Floating Navigation Sidebar (left side, vertically centered) -->
+        <Border x:Name="NavSidebar"
+                Grid.Column="0"
+                Width="36"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="0"
+                CornerRadius="12"
+                Padding="6,10"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                Opacity="0.9"
+                Visibility="Collapsed">
+            <Border.Shadow>
+                <ThemeShadow/>
+            </Border.Shadow>
+            <StackPanel x:Name="NavIndicators"
+                    Spacing="12">
+                <!-- Nav dots created programmatically -->
+            </StackPanel>
+        </Border>
 
-    <!-- Floating Navigation Sidebar (left side, vertically centered) -->
-    <Border x:Name="NavSidebar"
-            Grid.Column="0"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Margin="0"
-            CornerRadius="12"
-            Padding="6,10"
-            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-            Opacity="0.9"
-            Visibility="Collapsed">
-        <Border.Shadow>
-            <ThemeShadow />
-        </Border.Shadow>
-        <StackPanel x:Name="NavIndicators" Spacing="12">
-            <!-- Nav dots created programmatically -->
-        </StackPanel>
-    </Border>
+        <!-- Floating Back Button (top-left, collapsed by default) -->
+        <Button x:Name="FloatingBackButton"
+                Grid.Column="1"
+                Click="OnBackClick"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Margin="8,8,0,0"
+                Width="36"
+                Height="36"
+                Padding="0"
+                CornerRadius="18"
+                Visibility="Collapsed"
+                ToolTipService.ToolTip="Back">
+            <FontIcon Glyph="&#xE72B;"
+                    FontSize="14"/>
+            <Button.Shadow>
+                <ThemeShadow/>
+            </Button.Shadow>
+        </Button>
 
-    <!-- Floating Back Button (top-left, collapsed by default) -->
-    <Button x:Name="FloatingBackButton"
-            Grid.Column="1"
-            Click="OnBackClick"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Top"
-            Margin="8,8,0,0"
-            Width="36"
-            Height="36"
-            Padding="0"
-            CornerRadius="18"
-            Visibility="Collapsed"
-            ToolTipService.ToolTip="Back">
-        <FontIcon Glyph="&#xE72B;" FontSize="14" />
-        <Button.Shadow>
-            <ThemeShadow />
-        </Button.Shadow>
-    </Button>
-
-    <!-- Back to Top Button (bottom-left, collapsed by default) -->
-    <Button x:Name="BackToTopButton"
-            Grid.Column="1"
-            Click="OnBackToTopClick"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Bottom"
-            Margin="8,0,0,32"
-            Width="32"
-            Height="32"
-            Padding="0"
-            CornerRadius="16"
-            Visibility="Collapsed"
-            ToolTipService.ToolTip="Back to top">
-        <FontIcon Glyph="&#xE70E;" FontSize="14" />
-        <Button.Shadow>
-            <ThemeShadow />
-        </Button.Shadow>
-    </Button>
-</Grid>
+        <!-- Back to Top Button (bottom-left, collapsed by default) -->
+        <Button x:Name="BackToTopButton"
+                Grid.Column="1"
+                Click="OnBackToTopClick"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                Margin="8,0,0,32"
+                Width="32"
+                Height="32"
+                Padding="0"
+                CornerRadius="16"
+                Visibility="Collapsed"
+                ToolTipService.ToolTip="Back to top">
+            <FontIcon Glyph="&#xE70E;"
+                    FontSize="14"/>
+            <Button.Shadow>
+                <ThemeShadow/>
+            </Button.Shadow>
+        </Button>
+    </Grid>
 </Page>

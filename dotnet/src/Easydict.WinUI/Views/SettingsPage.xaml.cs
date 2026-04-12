@@ -2442,8 +2442,9 @@ public sealed partial class SettingsPage : Page
             var icon = new FontIcon
             {
                 Glyph = section.IconGlyph,
-                FontSize = 14,
+                FontSize = 16,
                 Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                Opacity = 0.6,
                 Tag = i
             };
 

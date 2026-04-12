@@ -16,7 +16,7 @@ public class DictionaryWebViewRenderingTests : IDisposable
     private readonly AppLauncher _launcher;
     private readonly ITestOutputHelper _output;
 
-    private const string DictionaryQuery = "draft";
+    private const string DictionaryQuery = "no";
     private const int TranslationWaitMs = 10000;
 
     public DictionaryWebViewRenderingTests(ITestOutputHelper output)
@@ -60,21 +60,33 @@ public class DictionaryWebViewRenderingTests : IDisposable
         _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
         File.Exists(pathAfterTranslate).Should().BeTrue("the post-query screenshot should be written for manual review");
 
-        var dictWebView = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("DictWebView")),
+        var visibleDictWebView = Retry.WhileNull(
+            () =>
+            {
+                var candidate = window.FindFirstDescendant(cf => cf.ByAutomationId("DictWebView"));
+                return candidate != null && !candidate.IsOffscreen ? candidate : null;
+            },
             TimeSpan.FromSeconds(5)).Result;
 
-        if (dictWebView == null)
+        if (visibleDictWebView != null)
         {
-            _output.WriteLine("Dictionary WebView not detected in this environment. Window screenshots were still captured for manual review.");
+            var pathElement = ScreenshotHelper.CaptureElement(visibleDictWebView, "52_dictionary_webview_element");
+            _output.WriteLine($"Element screenshot saved: {pathElement}");
+            File.Exists(pathElement).Should().BeTrue("the dictionary WebView element screenshot should be written when the WebView is present");
         }
         else
         {
-            dictWebView.IsOffscreen.Should().BeFalse("the dictionary WebView should be visible once the word query completes");
+            var visibleResultText = Retry.WhileNull(
+                () =>
+                {
+                    var candidate = window.FindFirstDescendant(cf => cf.ByAutomationId("ResultText"));
+                    return candidate != null && !candidate.IsOffscreen ? candidate : null;
+                },
+                TimeSpan.FromSeconds(5)).Result;
 
-            var pathElement = ScreenshotHelper.CaptureElement(dictWebView, "52_dictionary_webview_element");
-            _output.WriteLine($"Element screenshot saved: {pathElement}");
-            File.Exists(pathElement).Should().BeTrue("the dictionary WebView element screenshot should be written when the WebView is present");
+            visibleResultText.Should().NotBeNull(
+                "when WebView2 cannot render the MDX HTML, the plain-text fallback should still be visible for dictionary entries that exist");
+            _output.WriteLine("Dictionary WebView not visible; plain-text fallback is visible instead.");
         }
 
         var comparison = VisualRegressionHelper.CompareWithBaseline(

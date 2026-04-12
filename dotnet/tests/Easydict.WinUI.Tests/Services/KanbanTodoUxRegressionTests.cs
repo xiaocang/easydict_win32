@@ -256,6 +256,21 @@ public class KanbanTodoUxRegressionTests
     }
 
     [Fact]
+    public void ServiceResultItem_RawHtmlPath_FallsBackToPlainTextWhenWebViewFails()
+    {
+        var code = File.ReadAllText(ServiceResultItemPath);
+
+        code.Should().Contain("private void ShowRawHtmlPlainTextFallback",
+            "MDX dictionary rendering should keep a dedicated plain-text fallback helper");
+        code.Should().Contain("ShowRawHtmlPlainTextFallback(_serviceResult.Result, resultTextBrush);",
+            "the RawHtml branch should seed visible plain text before WebView2 finishes loading");
+        code.Should().Contain("ShowRawHtmlPlainTextFallback(_serviceResult.Result);",
+            "navigation and sizing failures should restore the plain-text fallback instead of leaving the result blank");
+        code.Should().NotContain("if (!args.IsSuccess) return;",
+            "failed WebView2 navigations must not silently exit without restoring visible content");
+    }
+
+    [Fact]
     public void AppAndWindowServices_ImplementForegroundToggleContract()
     {
         var appCode = File.ReadAllText(AppPath);

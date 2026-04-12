@@ -320,7 +320,7 @@ public sealed partial class ServiceResultItem : UserControl
             else if (!string.IsNullOrEmpty(_serviceResult.Result.RawHtml))
             {
                 // Rich HTML from MDX dictionary with MDD resources — render in WebView2
-                ResultText.Visibility = Visibility.Collapsed;
+                ShowRawHtmlPlainTextFallback(_serviceResult.Result, resultTextBrush);
                 PhoneticPanel.Visibility = Visibility.Collapsed;
                 DictionaryPanel.Visibility = Visibility.Collapsed;
                 ErrorText.Visibility = Visibility.Collapsed;
@@ -377,6 +377,22 @@ public sealed partial class ServiceResultItem : UserControl
             DictWebView.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private void ShowRawHtmlPlainTextFallback(TranslationResult result, Brush? foreground = null)
+    {
+        DictWebView.Visibility = Visibility.Collapsed;
+        DictWebView.Height = 0;
+
+        ResultText.Text = result.TranslatedText;
+        if (foreground != null)
+        {
+            ResultText.Foreground = foreground;
+        }
+
+        ResultText.Visibility = string.IsNullOrWhiteSpace(ResultText.Text)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private void UpdateGrammarUI()
@@ -1129,6 +1145,7 @@ public sealed partial class ServiceResultItem : UserControl
     {
         try
         {
+            DictWebView.Height = 1;
             DictWebView.Visibility = Visibility.Visible;
 
             if (!_webViewInitialized)
@@ -1293,9 +1310,10 @@ public sealed partial class ServiceResultItem : UserControl
         catch (Exception ex)
         {
             Debug.WriteLine($"[ServiceResultItem] WebView2 rendering failed: {ex.Message}");
-            // Fallback to plain text
-            DictWebView.Visibility = Visibility.Collapsed;
-            ResultText.Visibility = Visibility.Visible;
+            if (_serviceResult?.Result != null)
+            {
+                ShowRawHtmlPlainTextFallback(_serviceResult.Result);
+            }
         }
     }
 
@@ -1343,7 +1361,15 @@ public sealed partial class ServiceResultItem : UserControl
 
     private async void OnDictWebViewNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
-        if (!args.IsSuccess) return;
+        if (!args.IsSuccess)
+        {
+            Debug.WriteLine($"[ServiceResultItem] WebView2 navigation failed: {args.WebErrorStatus}");
+            if (_serviceResult?.Result != null)
+            {
+                ShowRawHtmlPlainTextFallback(_serviceResult.Result);
+            }
+            return;
+        }
 
         try
         {
@@ -1359,17 +1385,31 @@ public sealed partial class ServiceResultItem : UserControl
                 {
                     sender.DispatcherQueue.TryEnqueue(() =>
                     {
+                        ResultText.Visibility = Visibility.Collapsed;
+                        sender.Visibility = Visibility.Visible;
                         if (Math.Abs(sender.Height - targetHeight) > 1)
                         {
                             sender.Height = targetHeight;
                         }
                     });
                 }
+
+                return;
+            }
+
+            Debug.WriteLine("[ServiceResultItem] WebView2 measured zero height; falling back to plain text");
+            if (_serviceResult?.Result != null)
+            {
+                ShowRawHtmlPlainTextFallback(_serviceResult.Result);
             }
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[ServiceResultItem] Failed to auto-size WebView2: {ex.Message}");
+            if (_serviceResult?.Result != null)
+            {
+                ShowRawHtmlPlainTextFallback(_serviceResult.Result);
+            }
         }
     }
 

@@ -1835,7 +1835,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             // Renumber hard placeholders to be sequential {v0}, {v1}, ...
             var protectedText = string.Join("\n", paragraphTexts);
 
-            return (protectedText, hardTokens.Count > 0 ? hardTokens : null);
+            return (protectedText, hardTokens);
         }
         catch
         {

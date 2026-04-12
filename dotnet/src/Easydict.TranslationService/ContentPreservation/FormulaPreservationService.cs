@@ -45,8 +45,6 @@ public sealed class FormulaPreservationService : IContentPreservationService
     private static readonly Regex MathUnicodeRegex = new(
         MathPatterns.MathUnicodePattern, RegexOptions.Compiled);
 
-    private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
-
     private static readonly Regex NaturalWordRegex = new(@"\b[a-zA-Z]{4,}\b", RegexOptions.Compiled);
 
     private static readonly Regex ResidueSplitRegex = new(@"[\s=(),+\-*/^\[\]{}<>|]+", RegexOptions.Compiled);
@@ -92,6 +90,12 @@ public sealed class FormulaPreservationService : IContentPreservationService
         "our",
         "its",
     };
+
+    // Cache compiled custom Regex instances to avoid recompilation per block.
+    private static string? _cachedFontPattern;
+    private static Regex? _cachedFontRegex;
+    private static string? _cachedCharPattern;
+    private static Regex? _cachedCharRegex;
 
     private readonly FormulaProtector _protector = new();
     private readonly FormulaRestorer _restorer = new();
@@ -193,7 +197,7 @@ public sealed class FormulaPreservationService : IContentPreservationService
         if (context.RetryAttempt == 0 &&
             !hasExactSoftCandidates &&
             context.CharacterLevelProtectedText is not null &&
-            context.CharacterLevelTokens is { Count: > 0 })
+            context.CharacterLevelTokens is not null)
         {
             var formulaOnlyClassification = GetFormulaOnlyClassification(context.CharacterLevelProtectedText);
             LogDebug(
@@ -360,7 +364,7 @@ public sealed class FormulaPreservationService : IContentPreservationService
     {
         if (fontNames is null || fontNames.Count == 0) return false;
         var pattern = !string.IsNullOrWhiteSpace(customPattern)
-            ? new Regex(customPattern, RegexOptions.IgnoreCase)
+            ? GetCachedFontRegex(customPattern!)
             : MathFontRegex;
         var mathFontCount = fontNames.Count(f =>
         {
@@ -377,7 +381,7 @@ public sealed class FormulaPreservationService : IContentPreservationService
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
         var pattern = !string.IsNullOrWhiteSpace(customPattern)
-            ? new Regex(customPattern)
+            ? GetCachedCharRegex(customPattern!)
             : MathUnicodeRegex;
         var mathCharCount = pattern.Matches(text).Count;
         mathCharCount += text.Count(c => c == '\uFFFD');
@@ -462,8 +466,8 @@ public sealed class FormulaPreservationService : IContentPreservationService
             return FormulaOnlyClassification.No;
         }
 
-        var hasPlaceholders = NumericPlaceholderRegex.IsMatch(protectedText);
-        var cleaned = NumericPlaceholderRegex.Replace(protectedText, string.Empty).Trim();
+        var hasPlaceholders = FormulaDetector.NumericPlaceholderRegex.IsMatch(protectedText);
+        var cleaned = FormulaDetector.NumericPlaceholderRegex.Replace(protectedText, string.Empty).Trim();
         if (cleaned.Length == 0)
         {
             return FormulaOnlyClassification.AllPlaceholders;
@@ -495,7 +499,7 @@ public sealed class FormulaPreservationService : IContentPreservationService
 
             var left = protectedText[..i];
             var right = protectedText[(i + 1)..];
-            if (NumericPlaceholderRegex.IsMatch(left) && NumericPlaceholderRegex.IsMatch(right))
+            if (FormulaDetector.NumericPlaceholderRegex.IsMatch(left) && FormulaDetector.NumericPlaceholderRegex.IsMatch(right))
             {
                 return true;
             }
@@ -572,7 +576,7 @@ public sealed class FormulaPreservationService : IContentPreservationService
 
         var hasEquals = protectedText.Contains('=');
         var hasMathFontChars = context.FormulaCharacters?.HasMathFontCharacters == true;
-        var hasPlaceholderEvidence = NumericPlaceholderRegex.IsMatch(protectedText);
+        var hasPlaceholderEvidence = FormulaDetector.NumericPlaceholderRegex.IsMatch(protectedText);
         var nonMathWordCount = CountNonMathFunctionWords(protectedText);
 
         if (!hasEquals)
@@ -634,11 +638,11 @@ public sealed class FormulaPreservationService : IContentPreservationService
         }
 
         side = side.Trim();
-        var hasPlaceholder = NumericPlaceholderRegex.IsMatch(side);
+        var hasPlaceholder = FormulaDetector.NumericPlaceholderRegex.IsMatch(side);
         var hasEquationSyntax = side.IndexOfAny(SuspiciousEquationChars) >= 0;
         var tokens = SideTokenRegex.Matches(side)
             .Select(match => match.Value)
-            .Where(static token => !NumericPlaceholderRegex.IsMatch(token))
+            .Where(static token => !FormulaDetector.NumericPlaceholderRegex.IsMatch(token))
             .ToList();
 
         var hasFunctionName = tokens.Any(MathPatterns.MathFunctionNames.Contains);
@@ -822,6 +826,26 @@ public sealed class FormulaPreservationService : IContentPreservationService
             sb.Append(c);
         }
         return sb.ToString();
+    }
+
+    private static Regex GetCachedFontRegex(string pattern)
+    {
+        if (_cachedFontPattern == pattern && _cachedFontRegex is not null)
+            return _cachedFontRegex;
+        var compiled = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        _cachedFontPattern = pattern;
+        _cachedFontRegex = compiled;
+        return compiled;
+    }
+
+    private static Regex GetCachedCharRegex(string pattern)
+    {
+        if (_cachedCharPattern == pattern && _cachedCharRegex is not null)
+            return _cachedCharRegex;
+        var compiled = new Regex(pattern, RegexOptions.Compiled);
+        _cachedCharPattern = pattern;
+        _cachedCharRegex = compiled;
+        return compiled;
     }
 
     private static int CountOccurrences(string text, string value)

@@ -992,7 +992,7 @@ public sealed class MuPdfExportService : IDocumentExportService
             and not SourceBlockType.TableCell;
     }
 
-    private static double GetUnifiedRetryLayoutGap(TranslatedBlockData block)
+    internal static double GetUnifiedRetryLayoutGap(TranslatedBlockData block)
     {
         var fontSize = block.FontSize > 0
             ? block.FontSize
@@ -1455,14 +1455,9 @@ public sealed class MuPdfExportService : IDocumentExportService
 
         if (fonts.NotoFontId is not null && NeedsNotoFont(ch))
         {
-            var notoFace = new EmbeddedFontFace(
-                fonts.NotoFontId,
-                fonts.NotoGlyphMap,
-                fonts.NotoAdvanceWidths,
-                fonts.NotoUnitsPerEm,
-                fonts.NotoFontXref);
-
-            return TryResolveFaceGlyph(ch, charFontSize, notoFace, 0.6, out glyph);
+            var notoFace = fonts.GetNotoFace();
+            if (notoFace is not null)
+                return TryResolveFaceGlyph(ch, charFontSize, notoFace, 0.6, out glyph);
         }
 
         return TryResolveFaceGlyph(
@@ -2038,7 +2033,14 @@ public sealed class MuPdfExportService : IDocumentExportService
         ushort NotoUnitsPerEm = 1000,
         IReadOnlyDictionary<LatinFontKey, EmbeddedFontFace>? LatinFontFaces = null,
         int PrimaryFontXref = 0,
-        int NotoFontXref = 0);
+        int NotoFontXref = 0)
+    {
+        private EmbeddedFontFace? _notoFace;
+
+        internal EmbeddedFontFace? GetNotoFace() =>
+            NotoFontId is null ? null :
+            _notoFace ??= new EmbeddedFontFace(NotoFontId, NotoGlyphMap, NotoAdvanceWidths, NotoUnitsPerEm, NotoFontXref);
+    }
 
     internal enum LatinFontFamily
     {

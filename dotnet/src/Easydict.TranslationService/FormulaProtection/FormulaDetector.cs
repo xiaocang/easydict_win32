@@ -43,7 +43,7 @@ public static class FormulaDetector
         @"\{v(\d+)\}\s*\(([^()]*)\)",
         RegexOptions.Compiled);
 
-    private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
+    internal static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
 
     // Sequence token: long identifier with underscore (>5 char base) — should not render as subscript
     private static readonly Regex SequenceTokenRegex = new(

@@ -91,7 +91,6 @@ public sealed class FormulaProtector
 
         foreach (var (raw, type, start, length) in matches)
         {
-            // Append text before this match
             sb.Append(text, lastEnd, start - lastEnd);
 
             var isHigh = !splitByConfidence || (FormulaDetector.IsHighConfidence(type) && !IsDemoted(type, demoteLevel));
@@ -126,7 +125,6 @@ public sealed class FormulaProtector
             lastEnd = start + length;
         }
 
-        // Append remaining text
         sb.Append(text, lastEnd, text.Length - lastEnd);
         var protectedText = sb.ToString();
 

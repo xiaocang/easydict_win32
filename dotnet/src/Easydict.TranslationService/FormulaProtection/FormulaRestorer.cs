@@ -9,8 +9,6 @@ namespace Easydict.TranslationService.FormulaProtection;
 /// </summary>
 public sealed class FormulaRestorer
 {
-    private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
-
     /// <summary>
     /// Restores formula placeholders in <paramref name="text"/>.
     /// Uses graduated fallback: all present → full restore, ≥50% present → partial restore,
@@ -49,7 +47,7 @@ public sealed class FormulaRestorer
         }
 
         var presentIndices = new HashSet<int>();
-        foreach (Match m in NumericPlaceholderRegex.Matches(text))
+        foreach (Match m in FormulaDetector.NumericPlaceholderRegex.Matches(text))
         {
             if (int.TryParse(m.Groups[1].Value, out var idx) && idx >= 0 && idx < tokens.Count)
                 presentIndices.Add(idx);
@@ -66,7 +64,7 @@ public sealed class FormulaRestorer
         if (presentIndices.Count == tokens.Count)
         {
             var full = ReplaceTokens(text, tokens, useSimplified);
-            if (NumericPlaceholderRegex.IsMatch(full) || !AreFormulaDelimitersBalanced(full))
+            if (FormulaDetector.NumericPlaceholderRegex.IsMatch(full) || !AreFormulaDelimitersBalanced(full))
             {
                 // Post-restore corruption — treat as full fallback.
                 return new FormulaRestoreResult(
@@ -86,7 +84,7 @@ public sealed class FormulaRestorer
 
         // Partial placeholders present (≥50%) → best-effort restore
         var partial = ReplaceTokens(text, tokens, useSimplified);
-        if (NumericPlaceholderRegex.IsMatch(partial))
+        if (FormulaDetector.NumericPlaceholderRegex.IsMatch(partial))
         {
             // Corruption (e.g. out-of-range index remaining) → fall back.
             return new FormulaRestoreResult(originalText, FormulaRestoreStatus.FallbackToOriginal, droppedCount, missingIndices);
@@ -102,7 +100,7 @@ public sealed class FormulaRestorer
         IReadOnlyList<FormulaToken> tokens,
         bool useSimplified)
     {
-        return NumericPlaceholderRegex.Replace(text, match =>
+        return FormulaDetector.NumericPlaceholderRegex.Replace(text, match =>
         {
             var indexStr = match.Groups[1].Value;
             if (int.TryParse(indexStr, out var index) && index >= 0 && index < tokens.Count)

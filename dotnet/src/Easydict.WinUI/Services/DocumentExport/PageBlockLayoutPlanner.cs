@@ -308,7 +308,7 @@ internal static class PageBlockLayoutPlanner
 
             var preferredTop = Math.Max(currentTop, measurement.PreferredTop);
 
-            var gap = GetLayoutGap(block);
+            var gap = GetUnifiedRetryLayoutGap(block);
             var blockHeight = measurement.Overflows
                 ? measurement.MeasuredHeight
                 : measurement.SourceHeight;
@@ -530,14 +530,6 @@ internal static class PageBlockLayoutPlanner
         return true;
     }
 
-    private static double GetLayoutGap(TranslatedBlockData block)
-    {
-        var fontSize = block.FontSize > 0
-            ? block.FontSize
-            : (block.TextStyle?.FontSize > 0 ? block.TextStyle.FontSize : 10.0);
-        return Math.Clamp(fontSize * 0.15, 1.5, 6);
-    }
-
     #endregion
 
     #region Phase 4: Generate
@@ -566,7 +558,7 @@ internal static class PageBlockLayoutPlanner
             PlannedLinesRendered = 0,
             PlannedWasShrunk = false,
             PlannedWasTruncated = false,
-            RenderableText = PrepareRenderableTextForPdf(block.TranslatedText),
+            RenderableText = null,
             UsedGlyphs = null,
         };
     }

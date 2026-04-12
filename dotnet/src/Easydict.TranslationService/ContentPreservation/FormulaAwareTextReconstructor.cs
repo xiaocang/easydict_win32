@@ -165,7 +165,7 @@ public static class FormulaAwareTextReconstructor
         if (fallbackSpaces <= 2)
             return true;
 
-        var restoresTupleOrEquationAnchors = RestoresTupleOrEquationAnchors(reconstructedText, fallbackText);
+        var restoresTupleOrEquationAnchors = reconstructedAnchors > fallbackAnchors;
 
         // Check 1: overall space density
         var reconstructedSpaces = reconstructedText.Count(c => c == ' ');
@@ -263,13 +263,6 @@ public static class FormulaAwareTextReconstructor
     private static bool LineContainsScriptHint(string text) =>
         !string.IsNullOrWhiteSpace(text) &&
         (text.Contains('_', StringComparison.Ordinal) || text.Contains('^', StringComparison.Ordinal));
-
-    private static bool RestoresTupleOrEquationAnchors(string reconstructedText, string fallbackText)
-    {
-        var reconstructedCompact = CollapseWhitespaceRegex.Replace(reconstructedText, string.Empty);
-        var fallbackCompact = CollapseWhitespaceRegex.Replace(fallbackText, string.Empty);
-        return CountTupleOrEquationAnchors(reconstructedCompact) > CountTupleOrEquationAnchors(fallbackCompact);
-    }
 
     private static int CountTupleOrEquationAnchors(string compactText)
     {

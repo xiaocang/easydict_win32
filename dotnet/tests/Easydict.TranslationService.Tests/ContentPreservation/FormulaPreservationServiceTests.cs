@@ -51,7 +51,7 @@ public class FormulaPreservationServiceTests
     }
 
     [Fact]
-    public void Protect_WithEmptyCharacterLevelTokens_FallsBackToRegex()
+    public void Protect_WithEmptyCharacterLevelTokens_UsesCharacterLevelPath()
     {
         var context = new BlockContext
         {
@@ -64,8 +64,11 @@ public class FormulaPreservationServiceTests
 
         var result = _service.Protect(context, plan);
 
-        result.ProtectedText.Should().Contain("{v0}");
-        result.Tokens.Should().HaveCountGreaterOrEqualTo(1);
+        // Soft-only character-level blocks should stay on the character-level path,
+        // preserving the $...$ soft wrappings rather than falling back to regex.
+        result.ProtectedText.Should().Contain("$\\beta$");
+        result.Tokens.Should().BeEmpty();
+        result.Plan.Mode.Should().Be(PreservationMode.InlineProtected);
     }
 
     [Fact]

@@ -1187,6 +1187,8 @@ public sealed partial class ServiceResultItem : UserControl
                         padding: 0;
                         max-width: 100%;
                         overflow-x: hidden;
+                        overflow-y: hidden;
+                        height: auto;
                     }
                     body {
                         margin: 4px 0;
@@ -1202,6 +1204,9 @@ public sealed partial class ServiceResultItem : UserControl
                         text-rendering: optimizeLegibility;
                         max-width: 100%;
                         overflow-x: hidden;
+                        overflow-y: hidden;
+                        max-height: none;
+                        height: auto;
                     }
                     h1, h2, h3, h4, h5, h6 {
                         margin: 0 0 10px;
@@ -1224,6 +1229,17 @@ public sealed partial class ServiceResultItem : UserControl
                     img, svg, table { max-width: 100% !important; height: auto; }
                     pre { white-space: pre-wrap; overflow-wrap: anywhere; }
                     a { color: {{(isDark ? "#569cd6" : "#0066cc")}}; }
+                    [style*="overflow-y"],
+                    [style*="overflow:"],
+                    [style*="max-height"],
+                    [class*="scroll"],
+                    [class*="Scroll"],
+                    [id*="scroll"],
+                    [id*="Scroll"] {
+                        overflow-y: visible !important;
+                        max-height: none !important;
+                        height: auto !important;
+                    }
                 </style>
                 </head>
                 <body>{{processedHtml}}</body>
@@ -1289,10 +1305,11 @@ public sealed partial class ServiceResultItem : UserControl
 
         try
         {
-            // Let the outer result ScrollViewer own the overflow behavior so wheel
-            // input can chain into the parent results list at the top/bottom edge,
-            // even when dictionary HTML ships with its own nested vertical scrollers.
-            var heightStr = await NormalizeDictionaryVerticalOverflowAsync(sender);
+            // Let the browser settle the CSS-first overflow normalization before
+            // measuring content height for the host ScrollViewer.
+            await Task.Delay(50);
+
+            var heightStr = await MeasureDictionaryHeightAsync(sender);
             if (int.TryParse(heightStr.Trim('"'), out var height) && height > 0)
             {
                 sender.Height = height + 8;
@@ -1340,7 +1357,7 @@ public sealed partial class ServiceResultItem : UserControl
         e.Handled = true;
     }
 
-    private static async Task<string> NormalizeDictionaryVerticalOverflowAsync(WebView2 sender)
+    private static async Task<string> MeasureDictionaryHeightAsync(WebView2 sender)
     {
         return await sender.CoreWebView2.ExecuteScriptAsync(
             """
@@ -1349,26 +1366,6 @@ public sealed partial class ServiceResultItem : UserControl
                 const body = document.body;
                 if (!root || !body) {
                     return "0";
-                }
-
-                root.style.overflowY = 'hidden';
-                root.style.height = 'auto';
-                body.style.overflowY = 'hidden';
-                body.style.maxHeight = 'none';
-                body.style.height = 'auto';
-
-                for (const element of document.querySelectorAll('*')) {
-                    const style = window.getComputedStyle(element);
-                    const hasVerticalScroller =
-                        (style.overflowY === 'auto' || style.overflowY === 'scroll')
-                        && element.scrollHeight > element.clientHeight + 1;
-                    if (!hasVerticalScroller) {
-                        continue;
-                    }
-
-                    element.style.overflowY = 'visible';
-                    element.style.maxHeight = 'none';
-                    element.style.height = 'auto';
                 }
 
                 return Math.max(

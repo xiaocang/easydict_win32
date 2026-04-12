@@ -52,6 +52,10 @@ public class DictionaryWebViewRenderingTests : IDisposable
         _output.WriteLine($"Waiting {TranslationWaitMs}ms for dictionary results...");
         Thread.Sleep(TranslationWaitMs);
 
+        _output.WriteLine($"App has exited after dictionary query: {_launcher.Application.HasExited}");
+        _launcher.Application.HasExited.Should().BeFalse(
+            "triggering a dictionary query should not freeze the UI hard enough to terminate the app");
+
         var pathAfterTranslate = ScreenshotHelper.CaptureWindow(window, "51_dictionary_webview_after_query");
         _output.WriteLine($"Screenshot saved: {pathAfterTranslate}");
         File.Exists(pathAfterTranslate).Should().BeTrue("the post-query screenshot should be written for manual review");

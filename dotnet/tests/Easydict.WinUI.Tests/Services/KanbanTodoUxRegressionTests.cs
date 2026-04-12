@@ -184,12 +184,12 @@ public class KanbanTodoUxRegressionTests
             "edge-wheel forwarding should locate the parent results ScrollViewer");
         code.Should().Contain("outerScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);",
             "the outer results ScrollViewer should continue scrolling once the inner content hits its edge");
-        code.Should().Contain("NormalizeDictionaryVerticalOverflowAsync(sender)",
-            "dictionary WebView results should normalize nested HTML overflow before sizing themselves");
-        code.Should().Contain("element.style.overflowY = 'visible';",
-            "nested vertical scrollers inside dictionary HTML should be flattened so wheel input can escape to the host");
-        code.Should().Contain("body.style.overflowY = 'hidden';",
-            "the dictionary document itself should stop owning a separate vertical scroll layer");
+        code.Should().Contain("MeasureDictionaryHeightAsync(sender)",
+            "dictionary WebView results should keep a lightweight post-navigation sizing pass");
+        code.Should().Contain("await Task.Delay(50);",
+            "dictionary WebView sizing should wait briefly for the CSS normalization/layout pass to settle");
+        code.Should().NotContain("document.querySelectorAll('*')",
+            "dictionary navigation should not walk the entire DOM on the UI thread after every query");
         code.Should().Contain("sender.Height = height + 8;",
             "dictionary WebView content should expand to its full height so the outer chained ScrollViewer owns overflow");
         code.Should().NotContain("Math.Min(height + 8, 800)",
@@ -207,10 +207,14 @@ public class KanbanTodoUxRegressionTests
             "dictionary body text should render with a slightly more readable line height");
         code.Should().Contain("overflow-x: hidden;",
             "dictionary WebView content should avoid accidental horizontal overflow");
+        code.Should().Contain("overflow-y: hidden;",
+            "the dictionary document should yield vertical scrolling to the host result container");
         code.Should().Contain("ol, ul {",
             "dictionary definition lists should get consistent spacing");
         code.Should().Contain("li {",
             "dictionary list items should keep a little vertical separation");
+        code.Should().Contain("[style*=\"overflow-y\"],",
+            "common inline-scroll dictionary containers should be flattened through CSS instead of a DOM-wide JS walk");
         code.Should().Contain("[class*=\"phon\"], [class*=\"pron\"], [class*=\"ipa\"] {",
             "common phonetic markup should get a small readability pass");
         code.Should().Contain("[class*=\"meaning\"], [class*=\"def\"], [class*=\"sense\"], [class*=\"gloss\"] {",

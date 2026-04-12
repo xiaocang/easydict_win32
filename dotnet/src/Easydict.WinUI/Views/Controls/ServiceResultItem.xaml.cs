@@ -1182,17 +1182,29 @@ public sealed partial class ServiceResultItem : UserControl
                 <head>
                 <meta charset="utf-8">
                 <style>
+                    html {
+                        margin: 0;
+                        padding: 0;
+                        max-width: 100%;
+                        overflow-x: hidden;
+                    }
                     body {
                         margin: 4px 0;
-                        padding: 0;
+                        padding: 0 8px 12px;
                         font-family: -apple-system, 'Segoe UI', sans-serif;
                         font-size: 13px;
+                        line-height: 1.45;
                         color: {{textColor}};
                         background-color: {{bgColor}};
                         word-wrap: break-word;
                         overflow-wrap: break-word;
+                        -webkit-font-smoothing: antialiased;
+                        text-rendering: optimizeLegibility;
+                        max-width: 100%;
+                        overflow-x: hidden;
                     }
-                    img { max-width: 100%; height: auto; }
+                    img, svg, table { max-width: 100% !important; height: auto; }
+                    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
                     a { color: {{(isDark ? "#569cd6" : "#0066cc")}}; }
                 </style>
                 </head>

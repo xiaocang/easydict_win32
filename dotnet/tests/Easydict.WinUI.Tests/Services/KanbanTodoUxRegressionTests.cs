@@ -197,6 +197,23 @@ public class KanbanTodoUxRegressionTests
     }
 
     [Fact]
+    public void ServiceResultItem_AppliesReadableDictionaryWebViewStyles()
+    {
+        var code = File.ReadAllText(ServiceResultItemPath);
+
+        code.Should().Contain("padding: 0 8px 12px;",
+            "dictionary HTML should keep a little horizontal and bottom breathing room inside the WebView");
+        code.Should().Contain("line-height: 1.45;",
+            "dictionary body text should render with a slightly more readable line height");
+        code.Should().Contain("overflow-x: hidden;",
+            "dictionary WebView content should avoid accidental horizontal overflow");
+        code.Should().Contain("img, svg, table { max-width: 100% !important; height: auto; }",
+            "media-heavy dictionary content should stay inside the result viewport");
+        code.Should().Contain("pre { white-space: pre-wrap; overflow-wrap: anywhere; }",
+            "long preformatted fragments should wrap instead of forcing awkward horizontal overflow");
+    }
+
+    [Fact]
     public void AppAndWindowServices_ImplementForegroundToggleContract()
     {
         var appCode = File.ReadAllText(AppPath);

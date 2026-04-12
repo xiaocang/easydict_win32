@@ -94,6 +94,25 @@ public class FontFitSolverTests
     }
 
     [Fact]
+    public void Solve_LineRectMode_WithMaxHeight_DoesNotShrinkWithoutLineHeightCeilings()
+    {
+        var request = new FontFitRequest
+        {
+            Text = "Hello world",
+            StartFontSize = 12,
+            LineWidths = [100, 100],
+            MaxLineCount = 2,
+            MaxHeight = 30,
+        };
+
+        var result = FontFitSolver.Solve(request, _engine, ScalingMeasurerFactory());
+
+        result.WasShrunk.Should().BeFalse();
+        result.ChosenFontSize.Should().Be(12);
+        result.WasTruncated.Should().BeFalse();
+    }
+
+    [Fact]
     public void Solve_LineRectMode_WithLineHeights_RespectsHeightConstraint()
     {
         var request = new FontFitRequest

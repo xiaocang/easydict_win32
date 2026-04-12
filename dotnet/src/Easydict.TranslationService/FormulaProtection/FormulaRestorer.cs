@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace Easydict.TranslationService.FormulaProtection;
@@ -8,10 +9,10 @@ namespace Easydict.TranslationService.FormulaProtection;
 /// </summary>
 public sealed class FormulaRestorer
 {
-    private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
-
     /// <summary>
     /// Restores formula placeholders in <paramref name="text"/>.
+    /// Uses graduated fallback: all present → full restore, ≥50% present → partial restore,
+    /// &lt;50% present → fall back to original.
     /// </summary>
     /// <param name="text">Translated text containing {v0}, {v1}, ... placeholders.</param>
     /// <param name="tokens">Ordered token list produced by <see cref="FormulaProtector.Protect"/>.</param>
@@ -26,23 +27,80 @@ public sealed class FormulaRestorer
         IReadOnlyList<FormulaToken> tokens,
         string originalText,
         bool useSimplified = false)
-    {
-        if (string.IsNullOrWhiteSpace(text) || tokens.Count == 0)
-            return text;
+        => RestoreWithDiagnostics(text, tokens, originalText, useSimplified).Text;
 
-        // Guard against the LLM silently dropping formula placeholders.
-        // If any expected {v0}..{v(n-1)} index is absent from the translated text,
-        // the LLM removed a formula — fall back to the original.
+    /// <summary>
+    /// Restores placeholders and reports diagnostics about any dropped tokens.
+    /// Uses the same graduated fallback as <see cref="Restore"/> but returns status + missing indices
+    /// so callers can trigger retry-with-softer-protection on partial results.
+    /// </summary>
+    public FormulaRestoreResult RestoreWithDiagnostics(
+        string text,
+        IReadOnlyList<FormulaToken> tokens,
+        string originalText,
+        bool useSimplified = false)
+    {
+        if (tokens.Count == 0 || string.IsNullOrWhiteSpace(text))
+        {
+            // Preserve legacy behavior: empty/whitespace translation or no tokens → return input unchanged.
+            return new FormulaRestoreResult(text, FormulaRestoreStatus.FullRestore, 0, Array.Empty<int>());
+        }
+
         var presentIndices = new HashSet<int>();
-        foreach (Match m in NumericPlaceholderRegex.Matches(text))
+        foreach (Match m in FormulaDetector.NumericPlaceholderRegex.Matches(text))
         {
             if (int.TryParse(m.Groups[1].Value, out var idx) && idx >= 0 && idx < tokens.Count)
                 presentIndices.Add(idx);
         }
-        if (presentIndices.Count < tokens.Count)
-            return originalText;
 
-        var restored = NumericPlaceholderRegex.Replace(text, match =>
+        var missingIndices = new List<int>();
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            if (!presentIndices.Contains(i)) missingIndices.Add(i);
+        }
+        var droppedCount = missingIndices.Count;
+
+        // All placeholders present → full restore with validation
+        if (presentIndices.Count == tokens.Count)
+        {
+            var full = ReplaceTokens(text, tokens, useSimplified);
+            if (FormulaDetector.NumericPlaceholderRegex.IsMatch(full) || !AreFormulaDelimitersBalanced(full))
+            {
+                // Post-restore corruption — treat as full fallback.
+                return new FormulaRestoreResult(
+                    originalText,
+                    FormulaRestoreStatus.FallbackToOriginal,
+                    tokens.Count,
+                    Enumerable.Range(0, tokens.Count).ToList());
+            }
+            return new FormulaRestoreResult(full, FormulaRestoreStatus.FullRestore, 0, Array.Empty<int>());
+        }
+
+        // No placeholders or fewer than half → full fallback to original
+        if (presentIndices.Count == 0 || presentIndices.Count * 2 < tokens.Count)
+        {
+            return new FormulaRestoreResult(originalText, FormulaRestoreStatus.FallbackToOriginal, droppedCount, missingIndices);
+        }
+
+        // Partial placeholders present (≥50%) → best-effort restore
+        var partial = ReplaceTokens(text, tokens, useSimplified);
+        if (FormulaDetector.NumericPlaceholderRegex.IsMatch(partial))
+        {
+            // Corruption (e.g. out-of-range index remaining) → fall back.
+            return new FormulaRestoreResult(originalText, FormulaRestoreStatus.FallbackToOriginal, droppedCount, missingIndices);
+        }
+        return new FormulaRestoreResult(partial, FormulaRestoreStatus.PartialRestore, droppedCount, missingIndices);
+    }
+
+    /// <summary>
+    /// Replaces all valid {vN} placeholders with their token values.
+    /// </summary>
+    private static string ReplaceTokens(
+        string text,
+        IReadOnlyList<FormulaToken> tokens,
+        bool useSimplified)
+    {
+        return FormulaDetector.NumericPlaceholderRegex.Replace(text, match =>
         {
             var indexStr = match.Groups[1].Value;
             if (int.TryParse(indexStr, out var index) && index >= 0 && index < tokens.Count)
@@ -51,16 +109,6 @@ public sealed class FormulaRestorer
             }
             return match.Value;
         });
-
-        // Fallback: if any placeholder remains unresolved, return original text
-        if (NumericPlaceholderRegex.IsMatch(restored))
-            return originalText;
-
-        // Fallback: if formula delimiters are now unbalanced, return original text
-        if (!AreFormulaDelimitersBalanced(restored))
-            return originalText;
-
-        return restored;
     }
 
     private static bool AreFormulaDelimitersBalanced(string text)

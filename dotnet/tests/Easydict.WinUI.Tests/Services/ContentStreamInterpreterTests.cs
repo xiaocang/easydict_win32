@@ -1,6 +1,8 @@
 using System.Text;
 using Easydict.WinUI.Services;
 using FluentAssertions;
+using UglyToad.PdfPig.Graphics;
+using UglyToad.PdfPig.Graphics.Operations;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
@@ -8,6 +10,21 @@ namespace Easydict.WinUI.Tests.Services;
 [Trait("Category", "WinUI")]
 public class ContentStreamInterpreterTests
 {
+    private sealed class FakeOperation(string text, string op) : IGraphicsStateOperation
+    {
+        public string Operator => op;
+
+        public void Write(Stream stream)
+        {
+            var bytes = Encoding.ASCII.GetBytes(text);
+            stream.Write(bytes, 0, bytes.Length);
+        }
+
+        public void Run(IOperationContext operationContext)
+        {
+        }
+    }
+
     [Theory]
     [InlineData(0x41, false, "41")]         // 'A' in simple font → 2-hex-digit
     [InlineData(0xFF, false, "FF")]         // max 1-byte
@@ -95,6 +112,32 @@ public class ContentStreamInterpreterTests
         content.Should().Contain("q ");
         content.Should().Contain("Q ");
         content.Should().Contain("BT ");
+        content.Should().Contain("ET");
+    }
+
+    [Fact]
+    public void SerializeAllOperations_PreservesTextOperators()
+    {
+        var result = new ContentStreamResult
+        {
+            AllOperations =
+            [
+                new FakeOperation("BT", "BT"),
+                new FakeOperation("(Hello) Tj", "Tj"),
+                new FakeOperation("ET", "ET")
+            ],
+            GraphicsOperations =
+            [
+                new FakeOperation("0 0 m", "m")
+            ],
+            Characters = [],
+            FontMap = new Dictionary<string, UglyToad.PdfPig.PdfFonts.IFont>()
+        };
+
+        var content = Encoding.ASCII.GetString(result.SerializeAllOperations());
+
+        content.Should().Contain("BT");
+        content.Should().Contain("(Hello) Tj");
         content.Should().Contain("ET");
     }
 

@@ -2,6 +2,13 @@ using Easydict.TranslationService.Models;
 
 namespace Easydict.TranslationService.LongDocument;
 
+/// <summary>
+/// Optional annotation metadata for source-fallback blocks: a difficult word paired with
+/// its short translation. The default PDF fallback path no longer renders these inline,
+/// but the model is kept for diagnostics and any future optional UI/export surfaces.
+/// </summary>
+public sealed record WordAnnotation(string Word, string Translation);
+
 public enum SourceBlockType
 {
     Paragraph,
@@ -118,6 +125,22 @@ public sealed record SourceDocumentBlock
     public IReadOnlyList<string>? DetectedFontNames { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
     public BlockFormulaCharacters? FormulaCharacters { get; init; }
+    /// <summary>
+    /// Character-level protected text with formula spans replaced by {v0}, {v1}, ...
+    /// Populated by CharacterParagraphBuilder when character-level analysis is available.
+    /// When set, FormulaPreservationService prefers this over regex-based detection.
+    /// </summary>
+    public string? CharacterLevelProtectedText { get; init; }
+    /// <summary>
+    /// Formula tokens from character-level analysis, paired with CharacterLevelProtectedText.
+    /// </summary>
+    public IReadOnlyList<FormulaProtection.FormulaToken>? CharacterLevelTokens { get; init; }
+    /// <summary>
+    /// PdfPig's original line-joined text without formula-aware reconstruction.
+    /// Used as retry fallback when the primary <see cref="Text"/> causes translation failure.
+    /// Preserves correct word spacing but lacks _/^ script markers.
+    /// </summary>
+    public string? FallbackText { get; init; }
 }
 
 public sealed record SourceDocumentPage
@@ -147,6 +170,38 @@ public sealed record DocumentBlockIr
     public bool TranslationSkipped { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
     public BlockFormulaCharacters? FormulaCharacters { get; init; }
+    /// <summary>
+    /// Formula token map produced during the protection phase.
+    /// Stored here so restoration reuses the same tokens without re-running detection.
+    /// </summary>
+    public IReadOnlyList<FormulaProtection.FormulaToken>? FormulaTokenMap { get; init; }
+    /// <summary>
+    /// Low-confidence inline spans that remain in the translation request and are
+    /// validated after translation.
+    /// </summary>
+    public IReadOnlyList<ContentPreservation.SoftProtectedSpan>? SoftProtectedSpans { get; init; }
+    /// <summary>Character-level protected text from CharacterParagraphBuilder (if available).</summary>
+    public string? CharacterLevelProtectedText { get; init; }
+    /// <summary>Character-level formula tokens from CharacterParagraphBuilder (if available).</summary>
+    public IReadOnlyList<FormulaProtection.FormulaToken>? CharacterLevelTokens { get; init; }
+    /// <summary>
+    /// Preservation context captured during the initial Protect pass. Used by the retry loop
+    /// in <c>TranslateSingleBlockAsync</c> to re-run <see cref="ContentPreservation.IContentPreservationService.Protect"/>
+    /// with <see cref="ContentPreservation.BlockContext.RetryAttempt"/> incremented. Null when the
+    /// block was built from a test harness or non-PDF source that doesn't carry parser signals.
+    /// </summary>
+    public ContentPreservation.BlockContext? PreservationContext { get; init; }
+    /// <summary>
+    /// Fallback text from <see cref="SourceDocumentBlock.FallbackText"/>. Carried through
+    /// IR so the retry loop can re-protect and re-translate with PdfPig's original text
+    /// when the primary text causes translation failure.
+    /// </summary>
+    public string? FallbackText { get; init; }
+    /// <summary>
+    /// True when PDF export should keep the original page text operators for this block
+    /// instead of redrawing translated text. Used for hard-confirmed formulas.
+    /// </summary>
+    public bool PreserveOriginalTextInPdfExport { get; init; }
 }
 
 public sealed record DocumentIr
@@ -176,6 +231,45 @@ public sealed record TranslatedDocumentBlock
     public string? LastError { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
     public BlockFormulaCharacters? FormulaCharacters { get; init; }
+    /// <summary>
+    /// True when PDF export should preserve this block's original PDF text content instead of redrawing it.
+    /// </summary>
+    public bool PreserveOriginalTextInPdfExport { get; init; }
+}
+
+/// <summary>
+/// Result of the optional Pass 1 "document context" extraction. The LLM reads the
+/// whole document page-by-page (no truncation) and produces a glossary, a 1-3 sentence
+/// summary, and a list of source-text snippets that should NOT be translated. Pass 2
+/// then prepends Summary + Glossary to every per-block prompt, and the IR is rewritten
+/// so that any block matching a preservation hint is marked
+/// <c>TranslationSkipped = true, PreserveOriginalTextInPdfExport = true</c>.
+/// </summary>
+public sealed record DocumentContext
+{
+    /// <summary>1-3 sentence overview of topic, domain, terminology style.</summary>
+    public required string Summary { get; init; }
+
+    /// <summary>Source-language term → chosen target-language rendering.</summary>
+    public required IReadOnlyDictionary<string, string> Glossary { get; init; }
+
+    /// <summary>
+    /// LLM-suggested verbatim source snippets that should bypass translation: code,
+    /// commands, URLs, identifiers, table cells, product names, etc.
+    /// </summary>
+    public required IReadOnlyList<string> PreservationHints { get; init; }
+
+    /// <summary>Total wall time in milliseconds spent extracting this context.</summary>
+    public long ExtractionTimeMs { get; init; }
+
+    /// <summary>An empty context — used as the graceful-degradation fallback.</summary>
+    public static DocumentContext Empty { get; } = new()
+    {
+        Summary = string.Empty,
+        Glossary = new Dictionary<string, string>(),
+        PreservationHints = Array.Empty<string>(),
+        ExtractionTimeMs = 0,
+    };
 }
 
 public sealed record LongDocumentTranslationOptions
@@ -184,8 +278,25 @@ public sealed record LongDocumentTranslationOptions
     public Language FromLanguage { get; init; } = Language.Auto;
     public required Language ToLanguage { get; init; }
     public bool EnableFormulaProtection { get; init; } = true;
+    /// <summary>
+    /// When true, run a Pass 1 page-by-page LLM read of the document to extract a
+    /// glossary, summary, and preservation hints, then prepend them to every Pass 2
+    /// translation prompt. Adds latency (one LLM round-trip per page + one reduce
+    /// call) but improves terminology consistency and protects table/code regions
+    /// the ML detector misses. Default false at the core service level so unit tests
+    /// see baseline single-pass behavior; the WinUI wrapper enables it explicitly
+    /// from <c>SettingsService.LongDocEnableDocumentContextPass</c> (default true).
+    /// </summary>
+    public bool EnableDocumentContextPass { get; init; } = false;
     public bool EnableOcrFallback { get; init; } = true;
     public int MaxRetriesPerBlock { get; init; } = 1;
+    /// <summary>
+    /// When true, the retry loop in <c>TranslateSingleBlockAsync</c> detects partial-restore
+    /// (LLM dropped <c>{vN}</c> placeholders) and re-runs the block with softer protection
+    /// (demoted confidence) before giving up. Shares the <see cref="MaxRetriesPerBlock"/> budget
+    /// with exception retries. Default off to preserve existing behavior.
+    /// </summary>
+    public bool EnableQualityFeedbackRetry { get; init; } = false;
     public IReadOnlyDictionary<string, string>? Glossary { get; init; }
     public LayoutDetectionMode LayoutDetection { get; init; } = LayoutDetectionMode.Auto;
     public int MaxConcurrency { get; init; } = 1;
@@ -324,6 +435,7 @@ public enum LongDocumentTranslationStage
     Parsing,
     BuildingIr,
     FormulaProtection,
+    DocumentContext,
     Translating,
     Exporting
 }
@@ -346,6 +458,7 @@ public sealed record LongDocumentTranslationProgress
         LongDocumentTranslationStage.Parsing => "Parsing document",
         LongDocumentTranslationStage.BuildingIr => "Building intermediate representation",
         LongDocumentTranslationStage.FormulaProtection => "Applying formula protection",
+        LongDocumentTranslationStage.DocumentContext => "Analyzing document (glossary + summary)",
         LongDocumentTranslationStage.Translating => "Translating blocks",
         LongDocumentTranslationStage.Exporting => "Exporting document",
         _ => "Processing"

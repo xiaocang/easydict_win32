@@ -637,4 +637,31 @@ public class FormulaDetectionTests
         LongDocumentTranslationService.IsCharacterBasedFormula(text, null).Should().BeFalse(
             because: "a single replacement character in a long text should not trigger formula detection");
     }
+
+    // --- Font false-positive prevention ---
+
+    [Theory]
+    [InlineData("Lato-Regular")]
+    [InlineData("Helvetica-Regular")]
+    [InlineData("NotoSans-Regular")]
+    [InlineData("SourceCodePro-Regular")]
+    [InlineData("Roboto-Medium")]
+    public void IsFontBasedFormula_CommonTextFont_ReturnsFalse(string fontName)
+    {
+        // Common text fonts must NOT trigger math font detection.
+        // Regression test for word-boundary anchoring of BL/RM/EU/LA/RS patterns.
+        var fontNames = new List<string> { fontName };
+        LongDocumentTranslationService.IsFontBasedFormula(fontNames, null).Should().BeFalse(
+            because: $"'{fontName}' is a common text font, not a math font");
+    }
+
+    [Fact]
+    public void IsCharacterBasedFormula_EnSpace_NotFormula()
+    {
+        // U+2002 (en space) is a general space, not a math signal.
+        // Narrowed MathUnicodeRegex should exclude \u2000-\u200A range.
+        var text = "Normal text with\u2002en\u2002spaces";
+        LongDocumentTranslationService.IsCharacterBasedFormula(text, null).Should().BeFalse(
+            because: "en spaces should not count as math characters");
+    }
 }

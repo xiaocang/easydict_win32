@@ -385,6 +385,42 @@ public sealed class TranslationManagerService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Clear translation result caches for all live manager instances.
+    /// </summary>
+    public void ClearTranslationCache()
+    {
+        List<TranslationManager> managersToClear;
+
+        lock (_lock)
+        {
+            managersToClear = [_translationManager];
+
+            foreach (var manager in _handleCounts.Keys)
+            {
+                if (!managersToClear.Contains(manager))
+                {
+                    managersToClear.Add(manager);
+                }
+            }
+
+            foreach (var manager in _disposalQueue)
+            {
+                if (!managersToClear.Contains(manager))
+                {
+                    managersToClear.Add(manager);
+                }
+            }
+        }
+
+        foreach (var manager in managersToClear)
+        {
+            manager.ClearTranslationCache();
+        }
+
+        Debug.WriteLine($"[TranslationManagerService] Cleared translation cache for {managersToClear.Count} manager(s)");
+    }
+
     public bool TryRegisterMdxDictionary(SettingsService.ImportedMdxDictionary dictionary, out string? error)
     {
         error = null;

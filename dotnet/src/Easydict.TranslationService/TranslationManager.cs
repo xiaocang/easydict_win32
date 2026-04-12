@@ -361,6 +361,22 @@ public sealed class TranslationManager : IDisposable
     }
 
     /// <summary>
+    /// Clear cached translation results without affecting service registration or phonetic caches.
+    /// </summary>
+    public void ClearTranslationCache()
+    {
+        try
+        {
+            (_cache as MemoryCache)?.Compact(1.0);
+            System.Diagnostics.Debug.WriteLine("[TranslationManager] Translation cache cleared");
+        }
+        catch (ObjectDisposedException)
+        {
+            // Ignore if cache is already disposed
+        }
+    }
+
+    /// <summary>
     /// Check if a service supports streaming.
     /// </summary>
     public bool IsStreamingService(string serviceId)

@@ -34,7 +34,7 @@ public class LongDocTranslationTests : IDisposable
     public void LongDocTab_ShouldSwitchFromQuickTranslate()
     {
         var window = _launcher.GetMainWindow();
-        WaitForUiReady();
+        WaitForUiReady(window);
 
         // Initial state: Quick Translate tab is active
         CaptureAndCompare(window, "longdoc_01a_initial_quick_tab");
@@ -53,7 +53,7 @@ public class LongDocTranslationTests : IDisposable
     public void LongDocTab_ShouldShowAllControls()
     {
         var window = _launcher.GetMainWindow();
-        WaitForUiReady();
+        WaitForUiReady(window);
         SwitchToLongDocTab(window);
 
         // Verify all expected controls exist
@@ -99,7 +99,7 @@ public class LongDocTranslationTests : IDisposable
     public void LongDocTab_InputModeCombo_ShouldChangeSelection()
     {
         var window = _launcher.GetMainWindow();
-        WaitForUiReady();
+        WaitForUiReady(window);
         SwitchToLongDocTab(window);
 
         var inputModeCombo = FindComboBox(window, "LongDocInputModeCombo");
@@ -128,7 +128,7 @@ public class LongDocTranslationTests : IDisposable
     public void LongDocTab_OutputModeCombo_ShouldChangeSelection()
     {
         var window = _launcher.GetMainWindow();
-        WaitForUiReady();
+        WaitForUiReady(window);
         SwitchToLongDocTab(window);
 
         var outputModeCombo = FindComboBox(window, "LongDocOutputModeCombo");
@@ -156,7 +156,7 @@ public class LongDocTranslationTests : IDisposable
     public void LongDocTab_ConcurrencyBox_ShouldAcceptValue()
     {
         var window = _launcher.GetMainWindow();
-        WaitForUiReady();
+        WaitForUiReady(window);
         SwitchToLongDocTab(window);
 
         var concurrencyBox = FindControl(window, "LongDocConcurrencyBox");
@@ -183,7 +183,7 @@ public class LongDocTranslationTests : IDisposable
     public void LongDocTab_PageRangeBox_ShouldAcceptText()
     {
         var window = _launcher.GetMainWindow();
-        WaitForUiReady();
+        WaitForUiReady(window);
         SwitchToLongDocTab(window);
 
         var pageRangeBox = FindControl(window, "LongDocPageRangeBox");
@@ -206,7 +206,7 @@ public class LongDocTranslationTests : IDisposable
     public void LongDocTab_TranslateButton_ShouldExistAndBeEnabled()
     {
         var window = _launcher.GetMainWindow();
-        WaitForUiReady();
+        WaitForUiReady(window);
         SwitchToLongDocTab(window);
 
         var translateButton = FindControl(window, "LongDocTranslateButton");
@@ -230,7 +230,7 @@ public class LongDocTranslationTests : IDisposable
     public void LongDocTab_SwitchBackToQuickTranslate()
     {
         var window = _launcher.GetMainWindow();
-        WaitForUiReady();
+        WaitForUiReady(window);
         SwitchToLongDocTab(window);
 
         // Verify we're on Long Doc
@@ -254,7 +254,7 @@ public class LongDocTranslationTests : IDisposable
     public void LongDocTab_FullWorkflow_Screenshot()
     {
         var window = _launcher.GetMainWindow();
-        WaitForUiReady();
+        WaitForUiReady(window);
         SwitchToLongDocTab(window);
 
         // 1. Change Input Mode to "Text"
@@ -304,9 +304,13 @@ public class LongDocTranslationTests : IDisposable
 
     #region Helpers
 
-    private static void WaitForUiReady()
+    private void WaitForUiReady(Window window)
     {
-        Thread.Sleep(2000);
+        var sourceLangCombo = Retry.WhileNull(
+            () => FindByAutomationIdOrName(window, "SourceLangCombo"),
+            TimeSpan.FromSeconds(10)).Result;
+
+        sourceLangCombo.Should().NotBeNull("SourceLangCombo should exist once the quick-translate UI is ready");
     }
 
     private void SwitchToLongDocTab(Window window)
@@ -324,34 +328,98 @@ public class LongDocTranslationTests : IDisposable
     /// </summary>
     private void ClickModeMenuItem(Window window, string menuItemAutomationId)
     {
-        // The title dropdown button contains the "Easydict" text; find it by content.
-        // The button's AutomationId is empty, so locate via the Easydict text inside it.
-        var titleButton = Retry.WhileNull(
-            () =>
+        if (menuItemAutomationId == "ModeTranslationItem")
+        {
+            ClickModeMenuItemWithoutVerification(window, menuItemAutomationId);
+            return;
+        }
+
+        var expectedControl = GetModeVerificationControl(menuItemAutomationId);
+
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var titleButton = Retry.WhileNull(
+                () => FindTitleButton(window),
+                TimeSpan.FromSeconds(10)).Result;
+            titleButton.Should().NotBeNull("Title dropdown button should exist");
+
+            titleButton!.Click();
+            Thread.Sleep(1000);
+
+            var menuItem = Retry.WhileNull(
+                () => FindByAutomationIdOrName(window, menuItemAutomationId),
+                TimeSpan.FromSeconds(5)).Result;
+
+            if (menuItem == null)
             {
-                var easydictText = window.FindFirstDescendant(cf => cf.ByName("Easydict"));
-                // Walk up to find the Button parent that hosts the flyout
-                var current = easydictText;
-                while (current != null)
-                {
-                    if (current.ControlType == ControlType.Button)
-                        return current;
-                    current = current.Parent;
-                }
-                return null;
-            },
+                _output.WriteLine($"Attempt {attempt}: {menuItemAutomationId} did not appear in the flyout");
+                Keyboard.Press(VirtualKeyShort.ESCAPE);
+                Thread.Sleep(200);
+                continue;
+            }
+
+            menuItem.Click();
+
+            var switchedControl = Retry.WhileNull(
+                () => FindByAutomationIdOrName(window, expectedControl),
+                TimeSpan.FromSeconds(5)).Result;
+
+            if (switchedControl != null)
+            {
+                _output.WriteLine($"Attempt {attempt}: switched via {menuItemAutomationId} and found {expectedControl}");
+                return;
+            }
+
+            _output.WriteLine($"Attempt {attempt}: clicked {menuItemAutomationId} but did not find {expectedControl}");
+            Keyboard.Press(VirtualKeyShort.ESCAPE);
+            Thread.Sleep(200);
+        }
+
+        FindByAutomationIdOrName(window, expectedControl)
+            .Should().NotBeNull($"{expectedControl} should appear after clicking {menuItemAutomationId}");
+    }
+
+    private void ClickModeMenuItemWithoutVerification(Window window, string menuItemAutomationId)
+    {
+        var titleButton = Retry.WhileNull(
+            () => FindTitleButton(window),
             TimeSpan.FromSeconds(10)).Result;
         titleButton.Should().NotBeNull("Title dropdown button should exist");
-        titleButton!.Click();
-        Thread.Sleep(500);
 
-        // Find and click the menu item in the opened flyout
+        titleButton!.Click();
+        Thread.Sleep(1000);
+
         var menuItem = Retry.WhileNull(
             () => FindByAutomationIdOrName(window, menuItemAutomationId),
             TimeSpan.FromSeconds(5)).Result;
         menuItem.Should().NotBeNull($"{menuItemAutomationId} should exist in flyout");
+
         menuItem!.Click();
         Thread.Sleep(1000);
+    }
+
+    private static AutomationElement? FindTitleButton(Window window)
+    {
+        var easydictText = window.FindFirstDescendant(cf => cf.ByName("Easydict"));
+        var current = easydictText;
+        while (current != null)
+        {
+            if (current.ControlType == ControlType.Button)
+                return current;
+
+            current = current.Parent;
+        }
+
+        return null;
+    }
+
+    private static string GetModeVerificationControl(string menuItemAutomationId)
+    {
+        return menuItemAutomationId switch
+        {
+            "ModeLongDocItem" => "LongDocSourceLangCombo",
+            _ => throw new ArgumentOutOfRangeException(nameof(menuItemAutomationId), menuItemAutomationId, "Unsupported mode menu item"),
+        };
     }
 
     /// <summary>

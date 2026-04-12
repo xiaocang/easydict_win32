@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <MuPdfRuntimeDir Condition="Exists('..\..\publish-msix\x64\MuPDF.NET.dll')">..\..\publish-msix\x64</MuPdfRuntimeDir>
+    <MuPdfRuntimeDir Condition="'$(MuPdfRuntimeDir)' == '' and Exists('..\..\src\Easydict.WinUI\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\MuPDF.NET.dll')">..\..\src\Easydict.WinUI\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64</MuPdfRuntimeDir>
+    <MuPdfRuntimeDir Condition="'$(MuPdfRuntimeDir)' == '' and Exists('..\..\src\Easydict.WinUI\bin\Debug\net8.0-windows10.0.19041.0\win-x64\MuPDF.NET.dll')">..\..\src\Easydict.WinUI\bin\Debug\net8.0-windows10.0.19041.0\win-x64</MuPdfRuntimeDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Easydict.TranslationService\Easydict.TranslationService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MuPDF.NET" Condition="'$(MuPdfRuntimeDir)' != ''">
+      <HintPath>$(MuPdfRuntimeDir)\MuPDF.NET.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+
+    <Content Include="$(MuPdfRuntimeDir)\mupdfcsharp.dll" Condition="'$(MuPdfRuntimeDir)' != ''">
+      <Link>mupdfcsharp.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
+    <Content Include="$(MuPdfRuntimeDir)\mupdfcpp64.dll" Condition="'$(MuPdfRuntimeDir)' != ''">
+      <Link>mupdfcpp64.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <Target Name="EnsureMuPdfRuntimeAvailable" BeforeTargets="ResolveReferences" Condition="'$(MuPdfRuntimeDir)' == ''">
+    <Error Text="MuPDF runtime not found. Build Easydict.WinUI once or place MuPDF.NET.dll under dotnet/publish-msix/x64." />
+  </Target>
+
+</Project>

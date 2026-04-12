@@ -1,12 +1,18 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using Easydict.TranslationService.ContentPreservation;
+using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services.DocumentExport;
-using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using UglyToad.PdfPig.Content;
+using UglyToad.PdfPig.Core;
+using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using PdfPigPage = UglyToad.PdfPig.Content.Page;
 using CoreLongDocumentTranslationService = Easydict.TranslationService.LongDocument.LongDocumentTranslationService;
+using CoreLongDocumentTranslationResult = Easydict.TranslationService.LongDocument.LongDocumentTranslationResult;
+using LetterGeometry = Easydict.TranslationService.ContentPreservation.FormulaAwareTextReconstructor.LetterGeometry;
 
 namespace Easydict.WinUI.Services;
 
@@ -57,10 +63,16 @@ public sealed class LongDocumentTranslationCheckpoint
     public required LongDocumentInputMode InputMode { get; init; }
     public string? SourceFilePath { get; init; }
     public Language? TargetLanguage { get; init; }
+    public string? PageRange { get; init; }
     public required List<string> SourceChunks { get; init; }
     public required List<LongDocumentChunkMetadata> ChunkMetadata { get; init; }
     public required Dictionary<int, string> TranslatedChunks { get; init; }
     public required HashSet<int> FailedChunkIndexes { get; init; }
+    /// <summary>
+    /// Optional per-chunk annotations for source-fallback blocks. The default PDF export
+    /// pipeline does not currently populate or render these.
+    /// </summary>
+    public Dictionary<int, IReadOnlyList<WordAnnotation>>? WordAnnotations { get; set; }
 }
 
 public sealed class LongDocumentChunkMetadata
@@ -78,6 +90,11 @@ public sealed class LongDocumentChunkMetadata
     public BlockRect? BoundingBox { get; init; }
     public BlockTextStyle? TextStyle { get; init; }
     public BlockFormulaCharacters? FormulaCharacters { get; init; }
+    public bool TranslationSkipped { get; init; }
+    public bool PreserveOriginalTextInPdfExport { get; init; }
+    public int RetryCount { get; set; }
+    public string? FallbackText { get; init; }
+    public IReadOnlyList<string>? DetectedFontNames { get; init; }
 }
 
 public sealed class LongDocumentTranslationResult
@@ -106,6 +123,7 @@ public sealed class LongDocumentTranslationService : IDisposable
     // Layout detection services (lazy-initialized)
     private LayoutModelDownloadService? _layoutModelDownloadService;
     private DocLayoutYoloService? _docLayoutYoloService;
+    private TableStructureRecognitionService? _tatrService;
     private HttpClient? _visionHttpClient;
     private VisionLayoutDetectionService? _visionLayoutDetectionService;
     private LayoutDetectionStrategy? _layoutDetectionStrategy;
@@ -121,10 +139,13 @@ public sealed class LongDocumentTranslationService : IDisposable
 
         _layoutModelDownloadService ??= new LayoutModelDownloadService();
         _docLayoutYoloService ??= new DocLayoutYoloService(_layoutModelDownloadService);
+        _tatrService ??= new TableStructureRecognitionService(_layoutModelDownloadService);
         _visionHttpClient ??= new HttpClient();
         _visionLayoutDetectionService ??= new VisionLayoutDetectionService(_visionHttpClient);
         _layoutDetectionStrategy = new LayoutDetectionStrategy(
-            _docLayoutYoloService, _visionLayoutDetectionService, _layoutModelDownloadService);
+            _docLayoutYoloService, _visionLayoutDetectionService, _layoutModelDownloadService,
+            _tatrService,
+            tatrEnabledGetter: () => SettingsService.Instance.EnableTatrTableStructure);
 
         return _layoutDetectionStrategy;
     }
@@ -142,6 +163,8 @@ public sealed class LongDocumentTranslationService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _docLayoutYoloService?.Dispose();
+        _tatrService?.Dispose();
         _layoutModelDownloadService?.Dispose();
         _visionHttpClient?.Dispose();
         _cacheService.Dispose();
@@ -188,90 +211,27 @@ public sealed class LongDocumentTranslationService : IDisposable
         var formulaFontPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaFontPattern) ? null : SettingsService.Instance.FormulaFontPattern;
         var formulaCharPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaCharPattern) ? null : SettingsService.Instance.FormulaCharPattern;
         var customPrompt = string.IsNullOrWhiteSpace(SettingsService.Instance.LongDocCustomPrompt) ? null : SettingsService.Instance.LongDocCustomPrompt;
-        var coreResult = await _coreLongDocumentService.TranslateAsync(sourceDocument, new LongDocumentTranslationOptions
-        {
-            ServiceId = serviceId,
-            FromLanguage = from,
-            ToLanguage = to,
-            EnableFormulaProtection = true,
-            EnableOcrFallback = true,
-            MaxRetriesPerBlock = 1,
-            MaxConcurrency = maxConcurrency,
-            FormulaFontPattern = formulaFontPattern,
-            FormulaCharPattern = formulaCharPattern,
-            CustomPrompt = customPrompt,
-            Progress = progress
-        }, cancellationToken).ConfigureAwait(false);
+        var enableDocumentContextPass = SettingsService.Instance.LongDocEnableDocumentContextPass;
+        var coreOptions = CreateCoreTranslationOptions(
+            serviceId,
+            from,
+            to,
+            enableOcrFallback: true,
+            maxConcurrency,
+            formulaFontPattern,
+            formulaCharPattern,
+            customPrompt,
+            progress,
+            enableDocumentContextPass);
+        var coreResult = await _coreLongDocumentService.TranslateAsync(sourceDocument, coreOptions, cancellationToken).ConfigureAwait(false);
 
-        var allBlocks = coreResult.Pages
-            .SelectMany(page => page.Blocks.Select(block => new
-            {
-                page.PageNumber,
-                Block = block
-            }))
-            .ToList();
-
-        var orderBySourceBlockId = coreResult.Pages
-            .ToDictionary(
-                p => p.PageNumber,
-                p => p.Blocks.Select((b, index) => new { b.SourceBlockId, index })
-                    .ToDictionary(x => x.SourceBlockId, x => x.index, StringComparer.Ordinal));
-        var pageBlockCounts = coreResult.Pages.ToDictionary(p => p.PageNumber, p => Math.Max(1, p.Blocks.Count));
-
-        var checkpoint = new LongDocumentTranslationCheckpoint
-        {
-            InputMode = mode,
-            SourceFilePath = sourceFilePath,
-            TargetLanguage = to,
-            SourceChunks = allBlocks.Select(item => item.Block.OriginalText).ToList(),
-            ChunkMetadata = allBlocks
-                .Select((item, index) =>
-                {
-                    var regionInfo = InferRegionInfoFromBlockId(item.Block.SourceBlockId);
-                    return new LongDocumentChunkMetadata
-                    {
-                        ChunkIndex = index,
-                        PageNumber = item.PageNumber,
-                        SourceBlockId = item.Block.SourceBlockId,
-                        SourceBlockType = item.Block.BlockType switch
-                        {
-                            BlockType.Heading => SourceBlockType.Heading,
-                            BlockType.Caption => SourceBlockType.Caption,
-                            BlockType.Table => SourceBlockType.TableCell,
-                            BlockType.Formula => SourceBlockType.Formula,
-                            BlockType.Unknown => SourceBlockType.Unknown,
-                            _ => SourceBlockType.Paragraph
-                        },
-                        IsFormulaLike = item.Block.TranslationSkipped,
-                        OrderInPage = orderBySourceBlockId.TryGetValue(item.PageNumber, out var orders) &&
-                                      orders.TryGetValue(item.Block.SourceBlockId, out var order)
-                            ? order
-                            : 0,
-                        RegionType = regionInfo.Type,
-                        RegionConfidence = regionInfo.Confidence,
-                        RegionSource = regionInfo.Source,
-                        ReadingOrderScore = CalculateReadingOrderScore(
-                        orderBySourceBlockId.TryGetValue(item.PageNumber, out var scoreOrders) &&
-                        scoreOrders.TryGetValue(item.Block.SourceBlockId, out var scoreOrder)
-                            ? scoreOrder
-                            : 0,
-                        pageBlockCounts.TryGetValue(item.PageNumber, out var pageCount) ? pageCount : 1),
-                        BoundingBox = item.Block.BoundingBox,
-                        TextStyle = item.Block.TextStyle,
-                        FormulaCharacters = item.Block.FormulaCharacters
-                    };
-                })
-                .ToList(),
-            TranslatedChunks = allBlocks
-                .Select((item, index) => new { item.Block, index })
-                .Where(x => string.IsNullOrWhiteSpace(x.Block.LastError))
-                .ToDictionary(x => x.index, x => x.Block.TranslatedText),
-            FailedChunkIndexes = allBlocks
-                .Select((item, index) => new { item.Block, index })
-                .Where(x => !string.IsNullOrWhiteSpace(x.Block.LastError))
-                .Select(x => x.index)
-                .ToHashSet()
-        };
+        var checkpoint = BuildCheckpointFromCoreResult(
+            mode,
+            sourceFilePath,
+            to,
+            sourceDocument,
+            coreResult,
+            pageRange);
 
         // Try to resolve failed chunks from persistent cache before retrying
         if (SettingsService.Instance.EnableTranslationCache && checkpoint.FailedChunkIndexes.Count > 0)
@@ -314,7 +274,107 @@ public sealed class LongDocumentTranslationService : IDisposable
         var retrySummary = await TranslatePendingChunksAsync(_coreLongDocumentService, checkpoint, from, to, serviceId, onProgress, cancellationToken, retryCacheService, progress).ConfigureAwait(false);
         EnforceTerminologyConsistency(checkpoint);
         var qualityReport = BuildQualityReportFromRetry(checkpoint, retrySummary);
+
         return FinalizeResult(checkpoint, outputPath, onProgress, qualityReport, outputMode);
+    }
+
+    internal static LongDocumentTranslationCheckpoint BuildCheckpointFromCoreResult(
+        LongDocumentInputMode mode,
+        string sourceFilePath,
+        Language targetLanguage,
+        SourceDocument sourceDocument,
+        CoreLongDocumentTranslationResult coreResult,
+        string? pageRange = null)
+    {
+        var allBlocks = coreResult.Pages
+            .SelectMany(page => page.Blocks.Select(block => new
+            {
+                page.PageNumber,
+                Block = block
+            }))
+            .ToList();
+
+        var orderBySourceBlockId = coreResult.Pages
+            .ToDictionary(
+                p => p.PageNumber,
+                p => p.Blocks.Select((b, index) => new { b.SourceBlockId, index })
+                    .ToDictionary(x => x.SourceBlockId, x => x.index, StringComparer.Ordinal));
+        var pageBlockCounts = coreResult.Pages.ToDictionary(p => p.PageNumber, p => Math.Max(1, p.Blocks.Count));
+        var sourceBlocksByPageAndId = sourceDocument.Pages
+            .SelectMany(page => page.Blocks.Select(block => new
+            {
+                page.PageNumber,
+                Block = block
+            }))
+            .ToDictionary(
+                x => (x.PageNumber, x.Block.BlockId),
+                x => x.Block);
+
+        return new LongDocumentTranslationCheckpoint
+        {
+            InputMode = mode,
+            SourceFilePath = sourceFilePath,
+            TargetLanguage = targetLanguage,
+            PageRange = pageRange,
+            SourceChunks = allBlocks.Select(item => item.Block.OriginalText).ToList(),
+            ChunkMetadata = allBlocks
+                .Select((item, index) =>
+                {
+                    var regionInfo = InferRegionInfoFromBlockId(item.Block.SourceBlockId);
+                    sourceBlocksByPageAndId.TryGetValue((item.PageNumber, item.Block.SourceBlockId), out var sourceBlock);
+                    var sourceBlockType = item.Block.BlockType switch
+                    {
+                        BlockType.Heading => SourceBlockType.Heading,
+                        BlockType.Caption => SourceBlockType.Caption,
+                        BlockType.Table => SourceBlockType.TableCell,
+                        BlockType.Formula => SourceBlockType.Formula,
+                        BlockType.Unknown => SourceBlockType.Unknown,
+                        _ => SourceBlockType.Paragraph
+                    };
+                    return new LongDocumentChunkMetadata
+                    {
+                        ChunkIndex = index,
+                        PageNumber = item.PageNumber,
+                        SourceBlockId = item.Block.SourceBlockId,
+                        SourceBlockType = sourceBlockType,
+                        IsFormulaLike = sourceBlock?.IsFormulaLike ?? sourceBlockType == SourceBlockType.Formula,
+                        OrderInPage = orderBySourceBlockId.TryGetValue(item.PageNumber, out var orders) &&
+                                      orders.TryGetValue(item.Block.SourceBlockId, out var order)
+                            ? order
+                            : 0,
+                        RegionType = regionInfo.Type,
+                        RegionConfidence = regionInfo.Confidence,
+                        RegionSource = regionInfo.Source,
+                        ReadingOrderScore = CalculateReadingOrderScore(
+                            orderBySourceBlockId.TryGetValue(item.PageNumber, out var scoreOrders) &&
+                            scoreOrders.TryGetValue(item.Block.SourceBlockId, out var scoreOrder)
+                                ? scoreOrder
+                                : 0,
+                            pageBlockCounts.TryGetValue(item.PageNumber, out var pageCount) ? pageCount : 1),
+                        BoundingBox = item.Block.BoundingBox,
+                        TextStyle = item.Block.TextStyle,
+                        FormulaCharacters = item.Block.FormulaCharacters,
+                        TranslationSkipped = item.Block.TranslationSkipped,
+                        PreserveOriginalTextInPdfExport =
+                            item.Block.PreserveOriginalTextInPdfExport ||
+                            sourceBlockType == SourceBlockType.Formula ||
+                            regionInfo.Type is LayoutRegionType.Formula or LayoutRegionType.IsolatedFormula,
+                        RetryCount = item.Block.RetryCount,
+                        FallbackText = sourceBlock?.FallbackText,
+                        DetectedFontNames = sourceBlock?.DetectedFontNames
+                    };
+                })
+                .ToList(),
+            TranslatedChunks = allBlocks
+                .Select((item, index) => new { item.Block, index })
+                .Where(x => string.IsNullOrWhiteSpace(x.Block.LastError))
+                .ToDictionary(x => x.index, x => x.Block.TranslatedText),
+            FailedChunkIndexes = allBlocks
+                .Select((item, index) => new { item.Block, index })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Block.LastError))
+                .Select(x => x.index)
+                .ToHashSet()
+        };
     }
 
     private static async Task<RetryExecutionSummary> TranslatePendingChunksAsync(
@@ -420,20 +480,20 @@ public sealed class LongDocumentTranslationService : IDisposable
         var retryFormulaFontPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaFontPattern) ? null : SettingsService.Instance.FormulaFontPattern;
         var retryFormulaCharPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaCharPattern) ? null : SettingsService.Instance.FormulaCharPattern;
         var retryCustomPrompt = string.IsNullOrWhiteSpace(SettingsService.Instance.LongDocCustomPrompt) ? null : SettingsService.Instance.LongDocCustomPrompt;
-        var retryResult = await coreLongDocumentService.TranslateAsync(retrySource, new LongDocumentTranslationOptions
-        {
-            ServiceId = serviceId,
-            FromLanguage = from,
-            ToLanguage = to,
-            EnableFormulaProtection = true,
-            EnableOcrFallback = false,
-            MaxRetriesPerBlock = 1,
-            MaxConcurrency = retryConcurrency,
-            FormulaFontPattern = retryFormulaFontPattern,
-            FormulaCharPattern = retryFormulaCharPattern,
-            CustomPrompt = retryCustomPrompt,
-            Progress = progress
-        }, cancellationToken).ConfigureAwait(false);
+        var retryOptions = CreateCoreTranslationOptions(
+            serviceId,
+            from,
+            to,
+            enableOcrFallback: false,
+            retryConcurrency,
+            retryFormulaFontPattern,
+            retryFormulaCharPattern,
+            retryCustomPrompt,
+            progress,
+            // Pass 1 already ran on the initial translation; the retry translates only
+            // failed chunks and would just re-do the document-context call wastefully.
+            enableDocumentContextPass: false);
+        var retryResult = await coreLongDocumentService.TranslateAsync(retrySource, retryOptions, cancellationToken).ConfigureAwait(false);
 
         foreach (var translatedBlock in retryResult.Pages.SelectMany(page => page.Blocks))
         {
@@ -445,6 +505,9 @@ public sealed class LongDocumentTranslationService : IDisposable
             }
 
             onProgress?.Invoke($"Translating chunk {chunkIndex + 1}/{checkpoint.SourceChunks.Count}...");
+
+            if (metadataByChunkIndex.TryGetValue(chunkIndex, out var metadata))
+                metadata.RetryCount = Math.Max(metadata.RetryCount, translatedBlock.RetryCount);
 
             if (!string.IsNullOrWhiteSpace(translatedBlock.LastError) || string.IsNullOrWhiteSpace(translatedBlock.TranslatedText))
             {
@@ -464,6 +527,36 @@ public sealed class LongDocumentTranslationService : IDisposable
         }
 
         return new RetryExecutionSummary(retryResult.QualityReport, reusedByCanonical);
+    }
+
+    internal static LongDocumentTranslationOptions CreateCoreTranslationOptions(
+        string serviceId,
+        Language from,
+        Language to,
+        bool enableOcrFallback,
+        int maxConcurrency,
+        string? formulaFontPattern,
+        string? formulaCharPattern,
+        string? customPrompt,
+        System.IProgress<LongDocumentTranslationProgress>? progress = null,
+        bool enableDocumentContextPass = true)
+    {
+        return new LongDocumentTranslationOptions
+        {
+            ServiceId = serviceId,
+            FromLanguage = from,
+            ToLanguage = to,
+            EnableFormulaProtection = true,
+            EnableDocumentContextPass = enableDocumentContextPass,
+            EnableOcrFallback = enableOcrFallback,
+            EnableQualityFeedbackRetry = true,
+            MaxRetriesPerBlock = 1,
+            MaxConcurrency = maxConcurrency,
+            FormulaFontPattern = formulaFontPattern,
+            FormulaCharPattern = formulaCharPattern,
+            CustomPrompt = customPrompt,
+            Progress = progress
+        };
     }
 
     private async Task WriteCacheEntriesAsync(
@@ -602,6 +695,119 @@ public sealed class LongDocumentTranslationService : IDisposable
         };
     }
 
+    /// <summary>
+    /// Legacy helper that calls the LLM to identify difficult words in source-fallback blocks.
+    /// The default PDF export path no longer invokes or renders these annotations.
+    /// </summary>
+    private static async Task AnnotateSourceFallbackBlocksAsync(
+        LongDocumentTranslationCheckpoint checkpoint,
+        string serviceId,
+        Language targetLanguage,
+        CancellationToken ct)
+    {
+        var fallbackChunkIndexes = checkpoint.FailedChunkIndexes
+            .Where(i => !checkpoint.TranslatedChunks.ContainsKey(i)
+                && i >= 0 && i < checkpoint.SourceChunks.Count
+                && !string.IsNullOrWhiteSpace(checkpoint.SourceChunks[i]))
+            .ToList();
+
+        if (fallbackChunkIndexes.Count == 0)
+            return;
+
+        var annotations = new Dictionary<int, IReadOnlyList<WordAnnotation>>();
+
+        // Process each fallback block individually to keep responses focused
+        foreach (var chunkIndex in fallbackChunkIndexes)
+        {
+            ct.ThrowIfCancellationRequested();
+            var sourceText = checkpoint.SourceChunks[chunkIndex];
+            if (sourceText.Length < 10) // Skip very short texts
+                continue;
+
+            try
+            {
+                var prompt = $"For the following English text, identify up to 8 uncommon or technical words " +
+                    $"that a {targetLanguage.GetDisplayName()} reader might not know. " +
+                    $"For each word, provide a very short translation (1-3 characters preferred). " +
+                    $"Return ONLY a JSON array: [{{\"word\": \"example\", \"translation\": \"示例\"}}]. " +
+                    $"Skip common words (the, is, have, with, for, from, etc.). " +
+                    $"If no difficult words, return [].";
+
+                var request = new TranslationRequest
+                {
+                    Text = sourceText,
+                    FromLanguage = Language.English,
+                    ToLanguage = targetLanguage,
+                    CustomPrompt = prompt
+                };
+
+                var result = await TranslationManagerService.Instance.Manager
+                    .TranslateAsync(request, ct, serviceId);
+
+                var parsed = ParseWordAnnotations(result.TranslatedText);
+                if (parsed.Count > 0)
+                {
+                    annotations[chunkIndex] = parsed;
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[LongDoc] Word annotation failed for chunk {chunkIndex}: {ex.Message}");
+                // Non-critical: skip annotation for this block
+            }
+        }
+
+        if (annotations.Count > 0)
+        {
+            checkpoint.WordAnnotations = annotations;
+        }
+    }
+
+    internal static List<WordAnnotation> ParseWordAnnotations(string llmResponse)
+    {
+        var result = new List<WordAnnotation>();
+        if (string.IsNullOrWhiteSpace(llmResponse))
+            return result;
+
+        try
+        {
+            // Extract JSON array from response (LLM might wrap it in markdown code blocks)
+            var text = llmResponse.Trim();
+            var jsonStart = text.IndexOf('[');
+            var jsonEnd = text.LastIndexOf(']');
+            if (jsonStart < 0 || jsonEnd <= jsonStart)
+                return result;
+
+            var json = text[jsonStart..(jsonEnd + 1)];
+            var items = System.Text.Json.JsonSerializer.Deserialize<List<WordAnnotationDto>>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (items is null)
+                return result;
+
+            foreach (var item in items)
+            {
+                if (!string.IsNullOrWhiteSpace(item.Word) && !string.IsNullOrWhiteSpace(item.Translation))
+                {
+                    result.Add(new WordAnnotation(item.Word.Trim(), item.Translation.Trim()));
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            Debug.WriteLine($"[LongDoc] Failed to parse word annotations JSON: {ex.Message}");
+        }
+
+        return result;
+    }
+
+    private sealed record WordAnnotationDto
+    {
+        public string? Word { get; init; }
+        public string? Translation { get; init; }
+    }
+
     private static string ComposeOutputText(LongDocumentTranslationCheckpoint checkpoint)
     {
         var sb = new StringBuilder();
@@ -649,7 +855,8 @@ public sealed class LongDocumentTranslationService : IDisposable
         return sb.ToString().Trim();
     }
 
-    private static readonly Regex FormulaHeuristicRegex = new(@"(\$[^$]+\$|\\([^)]+\\)|\\[[^\]]+\\]|\b\w+\s*=\s*[-+*/^()\w]+)", RegexOptions.Compiled);
+    private static readonly Regex FormulaHeuristicRegex = new(@"(\$[^$]+\$|\\([^)]+\\)|\\[[^\]]+\\]|\b\w+\s*=\s*[-+*/^()\w\u221A]+)", RegexOptions.Compiled);
+    private static readonly Regex NaturalWordRegex = new(@"\b[a-zA-Z]{4,}\b", RegexOptions.Compiled);
 
     private static Task<SourceDocument> BuildSourceDocumentBasicAsync(LongDocumentInputMode mode, string input, string? pageRange = null)
     {
@@ -948,10 +1155,17 @@ public sealed class LongDocumentTranslationService : IDisposable
         foreach (var word in words)
         {
             var box = word.BoundingBox;
-            var line = lines.FirstOrDefault(l => Math.Abs(l.Top - box.Top) <= sameLineThreshold);
+            // Match by SeedBottom (baseline proxy). Matching on Top alone is unreliable
+            // because the word bounding-box Top varies with ascender height — "Here" and
+            // "maps" on the same visual line can differ by 2-3pt, which can exceed the
+            // sameLineThreshold and cause them to land in different logical lines. The
+            // baseline (word.BoundingBox.Bottom) is stable within a single horizontal
+            // visual line but varies dramatically between different visual lines.
+            var line = lines.FirstOrDefault(l =>
+                !double.IsNaN(l.SeedBottom) && Math.Abs(l.SeedBottom - box.Bottom) <= sameLineThreshold);
             if (line is null)
             {
-                line = new PdfTextLine(box.Top);
+                line = new PdfTextLine(box.Top, box.Bottom);
                 lines.Add(line);
             }
 
@@ -975,16 +1189,22 @@ public sealed class LongDocumentTranslationService : IDisposable
         for (var i = 0; i < paragraphs.Count; i++)
         {
             var linesInBlock = paragraphs[i];
-            var blockText = string.Join("\n", linesInBlock.Select(l => l.Text)).Trim();
-            if (string.IsNullOrWhiteSpace(blockText))
-            {
-                continue;
-            }
-
             var left = linesInBlock.Min(l => l.Left);
             var right = linesInBlock.Max(l => l.Right);
             var top = linesInBlock.Max(l => l.Top);
             var bottom = linesInBlock.Min(l => l.Bottom);
+
+            // Combined pass: collect font names, text style, and formula character data from letters
+            var (blockFontNames, textStyle, formulaChars) = ExtractBlockLetterData(page, linesInBlock, left, right, top, bottom);
+
+            // Character-level formula detection via CharacterParagraphBuilder
+            var (charProtectedText, charTokens) = BuildCharacterLevelProtection(page, left, right, top, bottom);
+
+            var (blockText, blockFallbackText) = BuildBlockText(page, linesInBlock, left, right, top, bottom, formulaChars, charProtectedText);
+            if (string.IsNullOrWhiteSpace(blockText))
+            {
+                continue;
+            }
 
             var regionType = InferRegionType(layoutProfile, left, right, top, bottom, blockText);
             var type = regionType == LayoutRegionType.TableLike
@@ -1000,20 +1220,20 @@ public sealed class LongDocumentTranslationService : IDisposable
                 _ => "body"
             };
 
-            // Combined pass: collect font names, text style, and formula character data from letters
-            var (blockFontNames, textStyle, formulaChars) = ExtractBlockLetterData(page, linesInBlock, left, right, top, bottom);
-
             blockIndex++;
             yield return new SourceDocumentBlock
             {
                 BlockId = $"p{page.Number}-{regionTag}-b{blockIndex}",
                 BlockType = type,
                 Text = blockText,
+                FallbackText = blockFallbackText,
                 IsFormulaLike = type == SourceBlockType.Formula,
                 BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
                 DetectedFontNames = blockFontNames.Count > 0 ? blockFontNames : null,
                 TextStyle = textStyle,
-                FormulaCharacters = formulaChars
+                FormulaCharacters = formulaChars,
+                CharacterLevelProtectedText = charProtectedText,
+                CharacterLevelTokens = charTokens
             };
         }
 
@@ -1137,15 +1357,17 @@ public sealed class LongDocumentTranslationService : IDisposable
             .ThenBy(w => w.BoundingBox.Left)
             .ToList();
 
-        // Group words into text lines by Y proximity
+        // Group words into text lines by baseline proximity (see matching note in
+        // ExtractLayoutBlocksFromPage).
         var lines = new List<PdfTextLine>();
         foreach (var word in sorted)
         {
             var box = word.BoundingBox;
-            var line = lines.FirstOrDefault(l => Math.Abs(l.Top - box.Top) <= sameLineThreshold);
+            var line = lines.FirstOrDefault(l =>
+                !double.IsNaN(l.SeedBottom) && Math.Abs(l.SeedBottom - box.Bottom) <= sameLineThreshold);
             if (line is null)
             {
-                line = new PdfTextLine(box.Top);
+                line = new PdfTextLine(box.Top, box.Bottom);
                 lines.Add(line);
             }
             line.Words.Add(word);
@@ -1162,17 +1384,21 @@ public sealed class LongDocumentTranslationService : IDisposable
 
         foreach (var linesInBlock in paragraphs)
         {
-            var blockText = string.Join("\n", linesInBlock.Select(l => l.Text)).Trim();
-            if (string.IsNullOrWhiteSpace(blockText))
-                continue;
-
             var left = linesInBlock.Min(l => l.Left);
             var right = linesInBlock.Max(l => l.Right);
             var top = linesInBlock.Max(l => l.Top);
             var bottom = linesInBlock.Min(l => l.Bottom);
 
-            var type = GuessBlockType(blockText);
             var (blockFontNames, textStyle, formulaChars) = ExtractBlockLetterData(page, linesInBlock, left, right, top, bottom);
+
+            // Character-level formula detection via CharacterParagraphBuilder
+            var (charProtectedText, charTokens) = BuildCharacterLevelProtection(page, left, right, top, bottom);
+
+            var (blockText, blockFallbackText) = BuildBlockText(page, linesInBlock, left, right, top, bottom, formulaChars, charProtectedText);
+            if (string.IsNullOrWhiteSpace(blockText))
+                continue;
+
+            var type = GuessBlockType(blockText);
 
             blockIndex++;
             result.Add(new SourceDocumentBlock
@@ -1180,28 +1406,121 @@ public sealed class LongDocumentTranslationService : IDisposable
                 BlockId = $"p{pageNumber}-{regionTag}-b{blockIndex}",
                 BlockType = type,
                 Text = blockText,
+                FallbackText = blockFallbackText,
                 IsFormulaLike = type == SourceBlockType.Formula,
                 BoundingBox = new BlockRect(left, bottom, Math.Max(1, right - left), Math.Max(1, top - bottom)),
                 DetectedFontNames = blockFontNames.Count > 0 ? blockFontNames : null,
                 TextStyle = textStyle,
-                FormulaCharacters = formulaChars
+                FormulaCharacters = formulaChars,
+                CharacterLevelProtectedText = charProtectedText,
+                CharacterLevelTokens = charTokens
             });
         }
 
         return result;
     }
 
+    internal readonly record struct SyntheticPdfLine(
+        double Top,
+        double Bottom,
+        double Left,
+        double Right,
+        string Text,
+        bool IsColumnSplitFragment = false);
+
+    private static (string blockText, string? fallbackText) BuildBlockText(
+        PdfPigPage page,
+        IReadOnlyList<PdfTextLine> linesInBlock,
+        double left,
+        double right,
+        double top,
+        double bottom,
+        BlockFormulaCharacters? formulaChars,
+        string? characterLevelProtectedText)
+    {
+        var lineTexts = new List<string>(linesInBlock.Count);
+        for (var i = 0; i < linesInBlock.Count; i++)
+        {
+            lineTexts.Add(linesInBlock[i].Text);
+        }
+
+        var fallbackText = string.Join("\n", lineTexts).Trim();
+
+        if (!FormulaAwareTextReconstructor.ShouldUseLetterBasedBlockText(lineTexts, formulaChars, characterLevelProtectedText))
+        {
+            return (fallbackText, null);
+        }
+
+        var letters = ExtractLetterGeometry(page, left, right, top, bottom);
+        if (letters.Count == 0)
+        {
+            return (fallbackText, null);
+        }
+
+        // First attempt: default threshold
+        var reconstructed = FormulaAwareTextReconstructor.Reconstruct(letters);
+        if (!string.IsNullOrWhiteSpace(reconstructed) &&
+            FormulaAwareTextReconstructor.IsReconstructionQualityAcceptable(reconstructed, fallbackText))
+        {
+            var fallback = reconstructed != fallbackText ? fallbackText : null;
+            return (reconstructed, fallback);
+        }
+
+        // Second attempt: lower threshold for tighter word-gap detection (preserves script markers)
+        reconstructed = FormulaAwareTextReconstructor.Reconstruct(letters, wordGapScale: 0.5);
+        if (!string.IsNullOrWhiteSpace(reconstructed) &&
+            FormulaAwareTextReconstructor.IsReconstructionQualityAcceptable(reconstructed, fallbackText))
+        {
+            var fallback = reconstructed != fallbackText ? fallbackText : null;
+            return (reconstructed, fallback);
+        }
+
+        // Final fallback: PdfPig's original text (correct spacing, no script markers)
+        return (fallbackText, null);
+    }
+
+    private static List<LetterGeometry> ExtractLetterGeometry(
+        PdfPigPage page,
+        double left,
+        double right,
+        double top,
+        double bottom)
+    {
+        var letters = new List<LetterGeometry>();
+        foreach (var letter in page.Letters)
+        {
+            if (letter.TextOrientation != TextOrientation.Horizontal)
+            {
+                continue;
+            }
+
+            var box = letter.GlyphRectangle;
+            if (box.Left < left - 1 || box.Right > right + 1 ||
+                box.Bottom < bottom - 1.5 || box.Top > top + 1.5)
+            {
+                continue;
+            }
+
+            letters.Add(new LetterGeometry(
+                Value: letter.Value,
+                Left: box.Left,
+                Right: box.Right,
+                Bottom: box.Bottom,
+                Top: box.Top,
+                BaselineY: letter.StartBaseLine.Y,
+                PointSize: letter.PointSize,
+                FontName: StripSubsetPrefix(letter.FontName ?? string.Empty)));
+        }
+
+        return letters;
+    }
+
+
     /// <summary>
-    /// Regex matching mathematical font names (TeX Computer Modern, MS math fonts, etc.).
-    /// Duplicated from CoreLongDocumentTranslationService for use in extraction.
+    /// Shared regex from MathPatterns — single source of truth.
     /// </summary>
     private static readonly Regex MathFontRegex = new(
-        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX" +
-        @"|BL|RM|EU|LA|RS" +              // pdf2zh: common math font name abbreviations
-        @"|LINE|LCIRCLE" +                 // pdf2zh: LaTeX drawing fonts
-        @"|TeX-|rsfs|txsy|wasy|stmary" +   // pdf2zh: TeX symbol font packages
-        @"|\w+Sym\w*|\w+Math\w*",          // pdf2zh: generic *Sym* / *Math* patterns (safer than .*)
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        MathPatterns.MathFontPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
     /// Combined single-pass extraction of font names, text style, and formula character data
@@ -1403,6 +1722,134 @@ public sealed class LongDocumentTranslationService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Builds character-level formula protection using CharacterParagraphBuilder.
+    /// Converts PdfPig Letters to lightweight CharInfo, runs character-level detection,
+    /// and returns protected text with confidence-based two-tier output:
+    /// - High-confidence groups → {vN} placeholder (hard protection)
+    /// - Low-confidence groups → $reconstructed_latex$ (soft protection, LLM decides)
+    /// </summary>
+    internal static (string? ProtectedText, IReadOnlyList<FormulaToken>? Tokens)
+        BuildCharacterLevelProtection(PdfPigPage page, double left, double right, double top, double bottom)
+    {
+        try
+        {
+            // Build CharInfo array from PdfPig Letters within the block bounds
+            var charInfos = new List<CharInfo>();
+            foreach (var letter in page.Letters)
+            {
+                var lbox = letter.GlyphRectangle;
+                if (lbox.Left < left - 1 || lbox.Right > right + 1 ||
+                    lbox.Bottom < bottom - 1 || lbox.Top > top + 1)
+                    continue;
+
+                var fontName = letter.FontName ?? string.Empty;
+                var plusIdx = fontName.IndexOf('+');
+                if (plusIdx >= 0 && plusIdx < fontName.Length - 1)
+                    fontName = fontName[(plusIdx + 1)..];
+
+                var tm = letter.TextOrientation switch
+                {
+                    TextOrientation.Rotate90 or TextOrientation.Rotate270
+                        => TransformationMatrix.FromValues(0, 1, -1, 0, lbox.Left, lbox.Bottom),
+                    _ => TransformationMatrix.Identity
+                };
+
+                charInfos.Add(new CharInfo
+                {
+                    Text = letter.Value,
+                    CharacterCode = 0,
+                    Cid = 0,
+                    Font = null!,
+                    FontName = fontName,
+                    FontSize = letter.PointSize,
+                    PointSize = letter.PointSize,
+                    TextMatrix = tm,
+                    CurrentTransformationMatrix = TransformationMatrix.Identity,
+                    X0 = lbox.Left,
+                    Y0 = lbox.Bottom,
+                    X1 = lbox.Right,
+                    Y1 = lbox.Top,
+                });
+            }
+
+            if (charInfos.Count == 0)
+                return (null, null);
+
+            var charResult = CharacterParagraphBuilder.Build(charInfos);
+
+            if (charResult.AllFormulaGroups.Count == 0)
+                return (null, null);
+
+            // Determine confidence per FormulaVariableGroup and build two-tier output
+            var hardTokens = new List<FormulaToken>();
+            var hardCounter = 0;
+
+            // Build a mapping from original {vN} → replacement text for each group
+            var groupReplacements = new Dictionary<int, string>();
+
+            foreach (var g in charResult.AllFormulaGroups)
+            {
+                // Min confidence across characters in the group
+                var groupConfidence = CharacterParagraphBuilder.FormulaConfidence.High;
+                foreach (var ch in g.Characters)
+                {
+                    var conf = CharacterParagraphBuilder.GetFormulaConfidence(ch, 0, 1);
+                    if (conf < groupConfidence) groupConfidence = conf;
+                }
+
+                if (groupConfidence == CharacterParagraphBuilder.FormulaConfidence.High)
+                {
+                    // Hard protection: {vN} placeholder
+                    var raw = string.Concat(g.Characters.Select(c => c.Text));
+                    var placeholder = $"{{v{hardCounter}}}";
+                    hardTokens.Add(new FormulaToken(FormulaTokenType.InlineMath, raw, placeholder, raw));
+                    groupReplacements[g.Index] = placeholder;
+                    hardCounter++;
+                }
+                else
+                {
+                    // Soft protection: reconstruct as $latex$
+                    var charTextInfos = g.Characters.Select(c => new CharTextInfo(
+                        c.Text, c.PointSize, c.Y0,
+                        MathFontRegex.IsMatch(StripSubsetPrefix(c.FontName))
+                    )).ToList();
+                    var latex = FormulaLatexReconstructor.ReconstructLatex(charTextInfos);
+                    groupReplacements[g.Index] = $"${latex}$";
+                }
+            }
+
+            // Rebuild paragraph texts with the two-tier replacements
+            var paragraphTexts = new List<string>();
+            foreach (var para in charResult.Paragraphs)
+            {
+                var text = para.ProtectedText;
+                // Replace each {vN} with the appropriate replacement (hard or soft)
+                foreach (var (originalIndex, replacement) in groupReplacements)
+                {
+                    text = text.Replace($"{{v{originalIndex}}}", replacement);
+                }
+                paragraphTexts.Add(text);
+            }
+
+            // Renumber hard placeholders to be sequential {v0}, {v1}, ...
+            var protectedText = string.Join("\n", paragraphTexts);
+
+            return (protectedText, hardTokens);
+        }
+        catch
+        {
+            // Character-level analysis is best-effort — fall back to regex on any error
+            return (null, null);
+        }
+    }
+
+    private static string StripSubsetPrefix(string fontName)
+    {
+        var plusIdx = fontName.IndexOf('+');
+        return plusIdx >= 0 && plusIdx < fontName.Length - 1 ? fontName[(plusIdx + 1)..] : fontName;
+    }
+
     internal static bool FontNameLooksBold(string fontName)
     {
         if (string.IsNullOrWhiteSpace(fontName))
@@ -1536,7 +1983,12 @@ public sealed class LongDocumentTranslationService : IDisposable
         var isTwoColumn = span > pageWidth * 0.22;
 
         var headerTop = Math.Max(pageHeight * 0.88, lines.Max(l => l.Top) - pageHeight * 0.05);
-        var footerBottom = Math.Min(pageHeight * 0.12, lines.Min(l => l.Bottom) + pageHeight * 0.05);
+        // 0.08 rather than 0.12: dense academic layouts (e.g. arXiv two-column papers)
+        // regularly run body text down to the bottom ~10% of the page margin. A 0.12
+        // threshold mis-routes those final body paragraphs into the "footer" region tag,
+        // hiding them from body-only consumers. 0.08 still catches true page-number
+        // footers while leaving dense bodies classified as body.
+        var footerBottom = Math.Min(pageHeight * 0.08, lines.Min(l => l.Bottom) + pageHeight * 0.05);
 
         return new LayoutProfile(
             pageWidth,
@@ -1673,11 +2125,13 @@ public sealed class LongDocumentTranslationService : IDisposable
             var sameRow = Math.Abs(prev.Top - line.Top) <= sameRowThreshold;
             var gap = Math.Abs(prev.Bottom - line.Top);
             var horizontalOffset = Math.Abs(prev.Left - line.Left);
+            var shouldMergeFormulaContinuation = ShouldMergeFormulaContinuation(prev.Text, line.Text, gap, paragraphGapThreshold, sameRow);
             var shouldSplit =
-                sameRow ||
+                !shouldMergeFormulaContinuation &&
+                (sameRow ||
                 (prev.IsColumnSplitFragment && !sameRow) ||
                 gap > paragraphGapThreshold ||
-                horizontalOffset > Math.Max(30, prev.Width * 0.6);
+                horizontalOffset > Math.Max(30, prev.Width * 0.6));
 
             if (shouldSplit)
             {
@@ -1783,8 +2237,88 @@ public sealed class LongDocumentTranslationService : IDisposable
             return false;
         }
 
+        if (!HasStableGridColumnAnchors(candidateRows))
+        {
+            return false;
+        }
+
         endExclusive = index;
         return true;
+    }
+
+    private static bool HasStableGridColumnAnchors(IReadOnlyList<List<PdfTextLine>> candidateRows)
+    {
+        var multiCellRows = candidateRows
+            .Where(row => row.Count >= 2)
+            .Select(row => row.OrderBy(line => line.Left).ToList())
+            .ToList();
+        if (multiCellRows.Count < 2)
+        {
+            return false;
+        }
+
+        var anchorGroup = multiCellRows
+            .GroupBy(row => row.Count)
+            .Where(group => group.Count() >= 2)
+            .OrderByDescending(group => group.Count())
+            .FirstOrDefault();
+        if (anchorGroup is null)
+        {
+            return false;
+        }
+
+        var stableRows = anchorGroup.ToList();
+        var cellWidths = stableRows
+            .SelectMany(row => row.Select(line => Math.Max(1d, line.Width)))
+            .OrderBy(width => width)
+            .ToList();
+        var medianCellWidth = cellWidths.Count > 0 ? cellWidths[cellWidths.Count / 2] : 30d;
+        var anchorTolerance = Math.Max(10d, Math.Min(24d, medianCellWidth * 0.25d));
+
+        var stableColumns = 0;
+        for (var columnIndex = 0; columnIndex < anchorGroup.Key; columnIndex++)
+        {
+            var anchors = stableRows
+                .Select(row => row[columnIndex].Left)
+                .OrderBy(anchor => anchor)
+                .ToList();
+            if (anchors[^1] - anchors[0] <= anchorTolerance)
+            {
+                stableColumns++;
+            }
+        }
+
+        return stableColumns >= 2;
+    }
+
+    private static bool ShouldMergeFormulaContinuation(
+        string previousText,
+        string currentText,
+        double verticalGap,
+        double paragraphGapThreshold,
+        bool sameRow)
+    {
+        if (!sameRow && verticalGap > Math.Max(6d, paragraphGapThreshold * 0.6d))
+        {
+            return false;
+        }
+
+        return FormulaAwareTextReconstructor.LooksLikeFormulaContinuationText(currentText) ||
+            FormulaAwareTextReconstructor.PreviousLineLikelyExpectsFormulaTail(previousText);
+    }
+
+    internal static List<List<string>> BuildParagraphTextsForTesting(
+        IReadOnlyList<SyntheticPdfLine> lines,
+        double paragraphGapThreshold,
+        double sameRowThreshold)
+    {
+        var pdfLines = lines
+            .Select(PdfTextLine.CreateSynthetic)
+            .ToList();
+
+        return BuildParagraphsWithGridCellMerging(pdfLines, paragraphGapThreshold, sameRowThreshold)
+            .Select(paragraph => paragraph.Select(line => line.Text).ToList())
+            .ToList();
     }
 
     private static List<List<PdfTextLine>> BuildGridCellParagraphs(
@@ -1878,7 +2412,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             var start = 0;
             foreach (var splitAfter in splitIndices)
             {
-                var subLine = new PdfTextLine(line.Top);
+                var subLine = new PdfTextLine(line.Top, line.SeedBottom);
                 subLine.IsColumnSplitFragment = true;
                 for (var i = start; i <= splitAfter; i++)
                 {
@@ -1891,7 +2425,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             // Add remaining words as last sub-line
             if (start < sortedWords.Count)
             {
-                var lastSubLine = new PdfTextLine(line.Top);
+                var lastSubLine = new PdfTextLine(line.Top, line.SeedBottom);
                 lastSubLine.IsColumnSplitFragment = true;
                 for (var i = start; i < sortedWords.Count; i++)
                 {
@@ -1948,21 +2482,17 @@ public sealed class LongDocumentTranslationService : IDisposable
         return splitIndices;
     }
 
-    /// <summary>
-    /// Returns true if <paramref name="token"/> looks like a mathematical subscript or
-    /// superscript token: letters, digits, or common operators (+, -, =, ., ,, (, ), /, *).
-    /// Footnote markers (\u2020, \u2021, \u00a7, \u00b6, etc.) return false.
-    /// </summary>
-    private static bool IsMathToken(string token)
-    {
-        if (string.IsNullOrEmpty(token))
-            return false;
-        return token.All(c => char.IsLetterOrDigit(c) || c is '+' or '-' or '=' or '.' or ',' or '(' or ')' or '/' or '*');
-    }
-
-    internal sealed class PdfTextLine(double top)
+    internal sealed class PdfTextLine(double top, double seedBottom = double.NaN)
     {
         public double Top { get; } = top;
+        /// <summary>
+        /// Bottom of the first word added to this line (or NaN if seeded synthetically).
+        /// Used during line grouping to reject matches from spatially distant visual
+        /// lines that happen to share a glyph Top value — the baseline (seed bottom)
+        /// is stable across different ascender heights within one visual line but
+        /// varies dramatically between different visual lines on the same page.
+        /// </summary>
+        public double SeedBottom { get; } = seedBottom;
         public bool IsColumnSplitFragment { get; set; }
         public List<Word> Words { get; } = [];
         public double Left { get; private set; }
@@ -1971,6 +2501,18 @@ public sealed class LongDocumentTranslationService : IDisposable
         public double Width => Right - Left;
         public double CenterX => Left + Width / 2;
         public string Text { get; private set; } = string.Empty;
+
+        internal static PdfTextLine CreateSynthetic(SyntheticPdfLine line)
+        {
+            return new PdfTextLine(line.Top, line.Bottom)
+            {
+                Bottom = line.Bottom,
+                Left = line.Left,
+                Right = line.Right,
+                Text = line.Text,
+                IsColumnSplitFragment = line.IsColumnSplitFragment
+            };
+        }
 
         public PdfTextLine Normalize()
         {
@@ -2094,7 +2636,7 @@ public sealed class LongDocumentTranslationService : IDisposable
                 // Footnote markers (†, ‡, *, §, ¶, etc.) are NOT math tokens — skip annotation
                 // to avoid confusing the LLM with unparseable ^† signals that the formula
                 // protection regex won't protect.
-                if (!IsMathToken(runText))
+                if (!MathPatterns.IsMathToken(runText))
                 {
                     sb.Append(' ').Append(runText);
                     idx = runEnd + 1;
@@ -2174,7 +2716,7 @@ public sealed class LongDocumentTranslationService : IDisposable
                 var runText = string.Concat(
                     Enumerable.Range(idx, runEnd - idx + 1).Select(k => letters[k].Value));
 
-                if (!IsMathToken(runText))
+                if (!MathPatterns.IsMathToken(runText))
                 {
                     sb.Append(runText);
                 }
@@ -2297,12 +2839,25 @@ public sealed class LongDocumentTranslationService : IDisposable
             return SourceBlockType.Unknown;
         }
 
-        if (FormulaHeuristicRegex.IsMatch(text))
+        var trimmed = text.Trim();
+        var formulaMatch = FormulaHeuristicRegex.Match(trimmed);
+        if (formulaMatch.Success)
         {
+            var naturalWordCount = NaturalWordRegex.Matches(trimmed).Count;
+            var proseDominantInlineEquation =
+                trimmed.Length > 80 &&
+                naturalWordCount >= 6 &&
+                formulaMatch.Length < trimmed.Length * 0.45;
+
+            if (proseDominantInlineEquation)
+            {
+                return SourceBlockType.Paragraph;
+            }
+
             return SourceBlockType.Formula;
         }
 
-        if (text.Length < 80 && text.All(c => !char.IsLetter(c) || char.IsUpper(c)))
+        if (trimmed.Length < 80 && trimmed.All(c => !char.IsLetter(c) || char.IsUpper(c)))
         {
             return SourceBlockType.Heading;
         }

@@ -34,6 +34,62 @@ dotnet test tests/Easydict.TranslationService.Tests --filter "FullyQualifiedName
 dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"
 ```
 
+## Local Debug Tools
+
+### PDF -> pics
+- Purpose: render a PDF into per-page images for local inspection/debugging, using the repo's MuPDF-based helper.
+- Tool: `dotnet/tools/PdfToImages/`
+- Typical usage:
+```bash
+dotnet run --project dotnet/tools/PdfToImages -- --input <file.pdf>
+dotnet run --project dotnet/tools/PdfToImages -- --input <file.pdf> --output-dir <dir> --dpi 144 --format png
+dotnet run --project dotnet/tools/PdfToImages -- --input <file.pdf> --page 2
+dotnet run --project dotnet/tools/PdfToImages -- --input <file.pdf> --page-range 2-4,7
+```
+- Notes:
+  - Default output directory is `<pdf-name>_pages` beside the source PDF.
+  - Supported formats are `png` and `jpg`.
+  - `--page` exports a single page; `--page-range` supports comma-separated pages/ranges like `1-3,5`.
+  - This is a developer utility, not a user-facing packaged feature.
+
+### Local Long-Doc Translation CLI
+- Purpose: locally debug the long-document translation pipeline from command line without going through the GUI.
+- Wrapper script: `scripts/translate-long-doc.ps1`
+- Underlying entry: `dotnet/src/Easydict.WinUI/Program.cs` + `Services/LongDocumentCliCommand.cs`
+- Typical usage:
+```powershell
+powershell -File scripts/translate-long-doc.ps1 `
+  -InputFile "C:\path\paper.pdf" `
+  -TargetLanguage zh `
+  -EnvFile ".env"
+```
+```powershell
+powershell -File scripts/translate-long-doc.ps1 `
+  -InputFile "C:\path\paper.pdf" `
+  -TargetLanguage zh `
+  -Page 2
+```
+```powershell
+powershell -File scripts/translate-long-doc.ps1 `
+  -InputFile "C:\path\paper.pdf" `
+  -TargetLanguage zh `
+  -PageRange "2-4,7"
+```
+```bash
+dotnet run --project dotnet/src/Easydict.WinUI -p:WindowsPackageType=None -p:EnableLocalDebugLongDocCli=true -- --translate-long-doc --input <file> --target-language <lang> [options]
+```
+- Useful options:
+  - `--service <id>`: choose translation service
+  - `--output <path>`: override output path
+  - `--page 2`: translate a single PDF page
+  - `--page-range 1-3,5`: limit PDF pages
+  - `--list-services`: list available long-doc-capable services
+- Important packaging rule:
+  - This CLI is local-debug-only.
+  - It is only compiled when `EnableLocalDebugLongDocCli=true` (default only for local `Debug + WindowsPackageType=None`).
+  - It must not be included in packaged `MSIX`, published `.zip`, or installer `.exe` artifacts.
+  - The PowerShell wrapper under `scripts/` is repo-only and is not part of publish outputs.
+
 ## Code Style (match existing)
 - Modern C# conventions already used in repo: nullable enabled, file-scoped namespaces, `required`/`init`, async-first.
 - 4-space indentation, braces on new lines, early returns preferred.

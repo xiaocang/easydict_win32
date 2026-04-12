@@ -2,7 +2,6 @@ using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.AutomationElements;
-using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using System.Diagnostics;
 using Xunit;
@@ -77,22 +76,16 @@ public class SettingsPageTests : IDisposable
             var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
             if (scrollViewer != null)
             {
-                // Scroll down to show more settings
-                Mouse.MoveTo(scrollViewer.GetClickablePoint());
-                Mouse.Scroll(-5); // Scroll down
-                Thread.Sleep(1000);
+                // Scroll to Enabled Services section (~12%)
+                ScrollHelper.ScrollToPercent(scrollViewer, 12, _output.WriteLine);
 
                 var path = ScreenshotHelper.CaptureWindow(window, "06_settings_services");
                 _output.WriteLine($"Screenshot saved: {path}");
-            }
 
-            // Scroll further down for more sections
-            if (scrollViewer != null)
-            {
-                Mouse.Scroll(-10);
-                Thread.Sleep(1000);
+                // Scroll to API keys area (~50%)
+                ScrollHelper.ScrollToPercent(scrollViewer, 50, _output.WriteLine);
 
-                var path = ScreenshotHelper.CaptureWindow(window, "07_settings_api_keys");
+                path = ScreenshotHelper.CaptureWindow(window, "07_settings_api_keys");
                 _output.WriteLine($"Screenshot saved: {path}");
             }
         }

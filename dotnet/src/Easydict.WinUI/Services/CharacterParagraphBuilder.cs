@@ -3,6 +3,7 @@
 // with inline formula grouping, matching pdf2zh's receive_layout() Section A.
 
 using System.Text.RegularExpressions;
+using Easydict.TranslationService.FormulaProtection;
 
 namespace Easydict.WinUI.Services;
 
@@ -116,21 +117,12 @@ public sealed class CharParagraphResult
 /// </summary>
 public static class CharacterParagraphBuilder
 {
-    // Reuse the same math font regex from LongDocumentTranslationService
+    // Shared math font/Unicode regex from MathPatterns — single source of truth
     private static readonly Regex MathFontRegex = new(
-        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX" +
-        @"|BL|RM|EU|LA|RS" +
-        @"|LINE|LCIRCLE" +
-        @"|TeX-|rsfs|txsy|wasy|stmary" +
-        @"|\w+Sym\w*|\w+Math\w*",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        MathPatterns.MathFontPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    // Math Unicode characters for character-level formula detection
     private static readonly Regex MathUnicodeRegex = new(
-        @"[\u2200-\u22FF\u2100-\u214F\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9" +
-        @"\u2150-\u218F\u27C0-\u27EF\u2980-\u29FF" +
-        @"\u02B0-\u02FF\u0300-\u036F\u02C6-\u02CF\u2000-\u200B]",
-        RegexOptions.Compiled);
+        MathPatterns.MathUnicodePattern, RegexOptions.Compiled);
 
     /// <summary>
     /// Subscript/superscript size ratio threshold.
@@ -348,8 +340,10 @@ public static class CharacterParagraphBuilder
 
         // Condition 5: Vertical text matrix detection
         // pdf2zh converter.py:245: child.matrix[0] == 0 and child.matrix[3] == 0
+        // Only classify as formula if the character also has a math font or math Unicode content.
+        // Plain vertical/rotated text (CJK, axis labels) should not be treated as formula.
         var tm = ch.TextMatrix;
-        if (tm.A == 0 && tm.D == 0)
+        if (tm.A == 0 && tm.D == 0 && (MathFontRegex.IsMatch(fontName) || MathUnicodeRegex.IsMatch(ch.Text)))
             return true;
 
         // Condition 6: Unicode replacement character (unmapped CID glyph)
@@ -357,6 +351,39 @@ public static class CharacterParagraphBuilder
             return true;
 
         return false;
+    }
+
+    /// <summary>
+    /// Determines the confidence level of a formula classification.
+    /// High = definite formula signal (math font, math Unicode, layout excluded).
+    /// Low = ambiguous signal (subscript by size only, U+FFFD only).
+    /// None = not a formula character.
+    /// </summary>
+    internal enum FormulaConfidence { None, Low, High }
+
+    internal static FormulaConfidence GetFormulaConfidence(CharInfo ch, double parentFontSize, int layoutClass)
+    {
+        if (layoutClass == 0) return FormulaConfidence.High;
+
+        var fontName = ch.FontName;
+        var plusIdx = fontName.IndexOf('+');
+        if (plusIdx >= 0 && plusIdx < fontName.Length - 1)
+            fontName = fontName[(plusIdx + 1)..];
+
+        if (MathFontRegex.IsMatch(fontName)) return FormulaConfidence.High;
+        if (ch.Text.Length > 0 && MathUnicodeRegex.IsMatch(ch.Text)) return FormulaConfidence.High;
+
+        var tm = ch.TextMatrix;
+        if (tm.A == 0 && tm.D == 0 && (MathFontRegex.IsMatch(fontName) || MathUnicodeRegex.IsMatch(ch.Text)))
+            return FormulaConfidence.High;
+
+        // Weak signals — could be footnotes, encoding issues
+        if (parentFontSize > 0 && ch.PointSize < parentFontSize * SubscriptSizeRatio)
+            return FormulaConfidence.Low;
+        if (ch.Text.Contains('\uFFFD'))
+            return FormulaConfidence.Low;
+
+        return FormulaConfidence.None;
     }
 
     /// <summary>

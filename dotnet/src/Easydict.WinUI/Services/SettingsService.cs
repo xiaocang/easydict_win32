@@ -217,6 +217,20 @@ public sealed class SettingsService
     public bool OnnxModelDownloaded { get; set; }
 
     /// <summary>
+    /// Whether the Microsoft Table Transformer (TATR) model has been downloaded.
+    /// Used for stage-2 cell-level structure recognition inside detected tables.
+    /// </summary>
+    public bool TatrModelDownloaded { get; set; }
+
+    /// <summary>
+    /// Kill switch for TATR stage-2 table structure recognition. When false,
+    /// tables are preserved as single blocks (pre-TATR behavior) even if the
+    /// model is downloaded. Default: true. Exposed as a kill switch so users
+    /// can A/B compare or work around regressions without deleting the model.
+    /// </summary>
+    public bool EnableTatrTableStructure { get; set; } = true;
+
+    /// <summary>
     /// Document output mode for long document translation.
     /// Values: "Monolingual", "Bilingual", "Both".
     /// Monolingual = translated-only (default).
@@ -230,6 +244,15 @@ public sealed class SettingsService
     /// Range: 1-16. Default: 4.
     /// </summary>
     public int LongDocMaxConcurrency { get; set; } = 4;
+
+    /// <summary>
+    /// When enabled, long-document translation runs a Pass 1 LLM read of the
+    /// document (page-by-page, parallel, gated by <see cref="LongDocMaxConcurrency"/>)
+    /// to extract a glossary, summary, and preservation hints, then prepends
+    /// them to every Pass 2 translation prompt for terminology consistency.
+    /// Default: true.
+    /// </summary>
+    public bool LongDocEnableDocumentContextPass { get; set; } = true;
 
     /// <summary>
     /// Custom regex pattern for font-based formula detection (Level 2).
@@ -636,8 +659,11 @@ public sealed class SettingsService
         LayoutDetectionMode = GetValue(nameof(LayoutDetectionMode), "Auto");
         VisionLayoutServiceId = GetValue(nameof(VisionLayoutServiceId), "gemini");
         OnnxModelDownloaded = GetValue(nameof(OnnxModelDownloaded), false);
+        TatrModelDownloaded = GetValue(nameof(TatrModelDownloaded), false);
+        EnableTatrTableStructure = GetValue(nameof(EnableTatrTableStructure), true);
         DocumentOutputMode = GetValue(nameof(DocumentOutputMode), "Monolingual");
         LongDocMaxConcurrency = GetValue(nameof(LongDocMaxConcurrency), 4);
+        LongDocEnableDocumentContextPass = GetValue(nameof(LongDocEnableDocumentContextPass), true);
     }
 
     public void Save()
@@ -781,8 +807,11 @@ public sealed class SettingsService
         _settings[nameof(LayoutDetectionMode)] = LayoutDetectionMode;
         _settings[nameof(VisionLayoutServiceId)] = VisionLayoutServiceId;
         _settings[nameof(OnnxModelDownloaded)] = OnnxModelDownloaded;
+        _settings[nameof(TatrModelDownloaded)] = TatrModelDownloaded;
+        _settings[nameof(EnableTatrTableStructure)] = EnableTatrTableStructure;
         _settings[nameof(DocumentOutputMode)] = DocumentOutputMode;
         _settings[nameof(LongDocMaxConcurrency)] = LongDocMaxConcurrency;
+        _settings[nameof(LongDocEnableDocumentContextPass)] = LongDocEnableDocumentContextPass;
 
         try
         {

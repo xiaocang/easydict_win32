@@ -153,14 +153,41 @@ public class FormulaDetectorTests
     }
 
     [Fact]
-    public void Classify_ImplicitTuple_ReturnsMathSubscript()
+    public void Classify_ImplicitTuple_ReturnsImplicitTuple()
     {
-        FormulaDetector.Classify("(x1, ..., xn)").Should().Be(FormulaTokenType.MathSubscript);
+        FormulaDetector.Classify("(x1, ..., xn)").Should().Be(FormulaTokenType.ImplicitTuple);
+    }
+
+    [Fact]
+    public void IsHighConfidence_ImplicitTuple_ReturnsFalse()
+    {
+        FormulaDetector.IsHighConfidence(FormulaTokenType.ImplicitTuple).Should().BeFalse();
     }
 
     [Fact]
     public void Classify_AssignmentWithTuple_ReturnsInlineEquation()
     {
         FormulaDetector.Classify("z = (z1, ..., zn)").Should().Be(FormulaTokenType.InlineEquation);
+    }
+
+    [Fact]
+    public void RequiresExactSoftPreservation_ImplicitTuple_ReturnsTrue()
+    {
+        FormulaDetector.RequiresExactSoftPreservation("(x1, ..., xn)", FormulaTokenType.ImplicitTuple)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void RequiresExactSoftPreservation_AssignmentWithTuple_ReturnsTrue()
+    {
+        FormulaDetector.RequiresExactSoftPreservation("z = (z1, ..., zn)", FormulaTokenType.InlineEquation)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void RequiresExactSoftPreservation_GenericInlineEquation_ReturnsFalse()
+    {
+        FormulaDetector.RequiresExactSoftPreservation("speed = 5", FormulaTokenType.InlineEquation)
+            .Should().BeFalse();
     }
 }

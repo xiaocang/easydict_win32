@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
+using Easydict.TranslationService.ContentPreservation;
 using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.Models;
 
@@ -10,8 +10,20 @@ namespace Easydict.TranslationService.LongDocument;
 
 public sealed class LongDocumentTranslationService
 {
+    private static readonly HashSet<string> PreserveOriginalFormulaReasons = new(StringComparer.Ordinal)
+    {
+        "MathFontDensity>30%",
+        "MathCharDensity>20%",
+        "SubscriptDensity>25%",
+        "CharLevel:FormulaOnlyText",
+        "FormulaOnlyText",
+        "NumericData",
+        "LlmHint",
+    };
+
     private readonly Func<TranslationRequest, string, CancellationToken, Task<TranslationResult>> _translateWithService;
     private readonly Func<SourceDocumentPage, CancellationToken, Task<string?>> _ocrExtractor;
+    private readonly IContentPreservationService _preservation = new FormulaPreservationService();
 
     public LongDocumentTranslationService(
         TranslationManager? manager = null,
@@ -110,8 +122,68 @@ public sealed class LongDocumentTranslationService
         // Yield control to allow UI thread to process messages
         await Task.Yield();
 
+        // Pass 1: Document context extraction (optional). Reads the whole doc page-by-page,
+        // produces glossary + summary + preservation hints. Hints are applied to the IR
+        // so matched blocks bypass the LLM in pass 2; summary + glossary are prepended to
+        // every per-block prompt for terminology consistency.
+        DocumentContext? documentContext = null;
+        if (options.EnableDocumentContextPass)
+        {
+            progress?.Report(new LongDocumentTranslationProgress
+            {
+                Stage = LongDocumentTranslationStage.DocumentContext,
+                CurrentBlock = 0,
+                TotalBlocks = ir.Blocks.Count,
+                CurrentPage = 0,
+                TotalPages = totalPages,
+                Percentage = 12
+            });
+
+            var ctxSw = Stopwatch.StartNew();
+            try
+            {
+                var extractor = new DocumentContextExtractor(_translateWithService);
+                var ctxProgress = new Progress<DocumentContextProgress>(sub =>
+                {
+                    progress?.Report(new LongDocumentTranslationProgress
+                    {
+                        Stage = LongDocumentTranslationStage.DocumentContext,
+                        CurrentBlock = sub.MappedPages,
+                        TotalBlocks = sub.TotalPages,
+                        CurrentPage = sub.MappedPages,
+                        TotalPages = sub.TotalPages,
+                        Percentage = 12 + (sub.IsReducing ? 6 : (double)sub.MappedPages / Math.Max(1, sub.TotalPages) * 6)
+                    });
+                });
+
+                documentContext = await extractor
+                    .ExtractAsync(ir.Blocks, options, ctxProgress, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Pass 1 must never block pass 2. On any failure, fall back to empty context.
+                documentContext = DocumentContext.Empty;
+                Debug.WriteLine($"[LongDocumentTranslationService] DocumentContextExtractor failed: {ex.Message}");
+            }
+            ctxSw.Stop();
+            timings["document-context"] = ctxSw.ElapsedMilliseconds;
+
+            // Apply preservation hints to the IR (mark matched blocks as skipped+preserved).
+            if (documentContext is { PreservationHints.Count: > 0 })
+            {
+                var hintSw = Stopwatch.StartNew();
+                ir = ApplyPreservationHints(ir, documentContext.PreservationHints);
+                hintSw.Stop();
+                timings["preservation-hints"] = hintSw.ElapsedMilliseconds;
+            }
+
+            // Yield control to allow UI thread to process messages
+            await Task.Yield();
+        }
+
         var translateSw = Stopwatch.StartNew();
-        var translatedBlocks = await TranslateBlocksAsync(ir, options, cancellationToken).ConfigureAwait(false);
+        var translatedBlocks = await TranslateBlocksAsync(ir, options, documentContext, cancellationToken).ConfigureAwait(false);
         translateSw.Stop();
         timings["translate"] = translateSw.ElapsedMilliseconds;
 
@@ -222,7 +294,7 @@ public sealed class LongDocumentTranslationService
         return source with { Pages = pages };
     }
 
-    private static Task<DocumentIr> BuildIrAsync(SourceDocument source, LongDocumentTranslationOptions? options = null, CancellationToken cancellationToken = default)
+    private Task<DocumentIr> BuildIrAsync(SourceDocument source, LongDocumentTranslationOptions? options = null, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
@@ -238,12 +310,23 @@ public sealed class LongDocumentTranslationService
                     var irBlockId = $"ir-{page.PageNumber}-{block.BlockId}";
                     var sourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(blockText)));
 
-                    var translationSkipped = block.BlockType == SourceBlockType.Formula
-                        || block.BlockType == SourceBlockType.TableCell
-                        || block.IsFormulaLike
-                        || IsFontBasedFormula(block.DetectedFontNames, options?.FormulaFontPattern)
-                        || IsCharacterBasedFormula(blockText, options?.FormulaCharPattern)
-                        || IsSubscriptDenseFormula(block.FormulaCharacters);
+                    var blockContext = new BlockContext
+                    {
+                        Text = blockText,
+                        BlockType = block.BlockType,
+                        IsFormulaLike = block.IsFormulaLike,
+                        DetectedFontNames = block.DetectedFontNames,
+                        FormulaCharacters = block.FormulaCharacters,
+                        FormulaFontPattern = options?.FormulaFontPattern,
+                        FormulaCharPattern = options?.FormulaCharPattern,
+                        CharacterLevelProtectedText = block.CharacterLevelProtectedText,
+                        CharacterLevelTokens = block.CharacterLevelTokens,
+                        DebugBlockId = block.BlockId,
+                        DebugPageNumber = page.PageNumber
+                    };
+                    var plan = _preservation.Analyze(blockContext);
+                    var translationSkipped = plan.SkipTranslation;
+                    var preserveOriginalTextInPdfExport = ShouldPreserveOriginalTextInPdfExport(block.BlockType, plan.Reason);
 
                     irBlocks.Add(new DocumentBlockIr
                     {
@@ -258,7 +341,11 @@ public sealed class LongDocumentTranslationService
                         ParentIrBlockId = block.ParentBlockId is null ? null : $"ir-{page.PageNumber}-{block.ParentBlockId}",
                         TranslationSkipped = translationSkipped,
                         TextStyle = block.TextStyle,
-                        FormulaCharacters = block.FormulaCharacters
+                        FormulaCharacters = block.FormulaCharacters,
+                        CharacterLevelProtectedText = block.CharacterLevelProtectedText,
+                        CharacterLevelTokens = block.CharacterLevelTokens,
+                        FallbackText = block.FallbackText,
+                        PreserveOriginalTextInPdfExport = preserveOriginalTextInPdfExport
                     });
                 }
             }
@@ -271,7 +358,7 @@ public sealed class LongDocumentTranslationService
         }, cancellationToken);
     }
 
-    private static Task<DocumentIr> ApplyFormulaProtectionAsync(DocumentIr ir, CancellationToken cancellationToken = default)
+    private Task<DocumentIr> ApplyFormulaProtectionAsync(DocumentIr ir, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
@@ -284,14 +371,35 @@ public sealed class LongDocumentTranslationService
                     return block;
                 }
 
-                var protection = ProtectFormulaSpans(block.ProtectedText);
-                var protectedText = protection.ProtectedText;
-                var shouldSkip = IsFormulaOnlyText(protectedText);
+                var blockContext = new BlockContext
+                {
+                    Text = block.OriginalText,
+                    BlockType = MapToSourceBlockType(block.BlockType),
+                    IsFormulaLike = false,
+                    FormulaCharacters = block.FormulaCharacters,
+                    CharacterLevelProtectedText = block.CharacterLevelProtectedText,
+                    CharacterLevelTokens = block.CharacterLevelTokens,
+                    DebugBlockId = block.SourceBlockId,
+                    DebugPageNumber = block.PageNumber
+                };
+                var plan = new ProtectionPlan
+                {
+                    Mode = PreservationMode.None,
+                    SkipTranslation = false
+                };
+                var protectedBlock = _preservation.Protect(blockContext, plan);
 
                 return block with
                 {
-                    ProtectedText = protectedText,
-                    TranslationSkipped = shouldSkip
+                    ProtectedText = protectedBlock.ProtectedText,
+                    FormulaTokenMap = protectedBlock.Tokens,
+                    SoftProtectedSpans = protectedBlock.SoftSpans,
+                    TranslationSkipped = protectedBlock.Plan.SkipTranslation,
+                    PreservationContext = blockContext,
+                    PreserveOriginalTextInPdfExport = block.PreserveOriginalTextInPdfExport ||
+                        ShouldPreserveOriginalTextInPdfExport(
+                            MapToSourceBlockType(block.BlockType),
+                            protectedBlock.Plan.Reason)
                 };
             }).ToList();
 
@@ -299,9 +407,104 @@ public sealed class LongDocumentTranslationService
         }, cancellationToken);
     }
 
+    /// <summary>
+    /// Rewrites the IR so that any block whose <c>OriginalText</c> matches a Pass 1
+    /// preservation hint becomes <c>TranslationSkipped = true</c> and
+    /// <c>PreserveOriginalTextInPdfExport = true</c>. Match rules (case-sensitive):
+    ///   * exact equality on trimmed text
+    ///   * hint contains the block's text (block is a substring of the hint)
+    ///   * block's text contains the hint AND the hint is ≥ 20 chars
+    /// The 20-char floor on substring matches prevents short hints (e.g. a single
+    /// term like "BLEU") from accidentally swallowing whole paragraphs.
+    /// </summary>
+    internal static DocumentIr ApplyPreservationHints(DocumentIr ir, IReadOnlyList<string> hints)
+    {
+        if (hints is null || hints.Count == 0) return ir;
+
+        // Pre-trim hints once. Discard any < 3 chars (defensive — extractor already filters).
+        var trimmedHints = new List<string>(hints.Count);
+        foreach (var h in hints)
+        {
+            if (string.IsNullOrWhiteSpace(h)) continue;
+            var t = h.Trim();
+            if (t.Length < 3) continue;
+            trimmedHints.Add(t);
+        }
+        if (trimmedHints.Count == 0) return ir;
+
+        var rewritten = new List<DocumentBlockIr>(ir.Blocks.Count);
+        var anyChanged = false;
+        foreach (var block in ir.Blocks)
+        {
+            if (block.TranslationSkipped || block.PreserveOriginalTextInPdfExport)
+            {
+                rewritten.Add(block);
+                continue;
+            }
+
+            var blockText = block.OriginalText?.Trim() ?? string.Empty;
+            if (blockText.Length == 0)
+            {
+                rewritten.Add(block);
+                continue;
+            }
+
+            // Defensive length cap: legitimate preservation targets (table cells, code
+            // lines, captions, citations, identifiers) are short. If the LLM accidentally
+            // dumps a whole paragraph as a hint, do not let rule 1/2 catch it — long blocks
+            // must always go through translation. This is the consumer-side guard against
+            // a regression where the LLM flags entire prose paragraphs as hints.
+            const int MaxPreservedBlockLength = 300;
+            if (blockText.Length > MaxPreservedBlockLength)
+            {
+                rewritten.Add(block);
+                continue;
+            }
+
+            var matched = false;
+            foreach (var hint in trimmedHints)
+            {
+                // Rule 1: block IS the hint (table cell, code line, heading, caption).
+                if (string.Equals(blockText, hint, StringComparison.Ordinal))
+                {
+                    matched = true;
+                    break;
+                }
+                // Rule 2: block is a sub-cell of a longer hint (e.g. one cell of a row
+                // the LLM concatenated into a single hint string).
+                if (hint.Contains(blockText, StringComparison.Ordinal))
+                {
+                    matched = true;
+                    break;
+                }
+                // NOTE: there is intentionally no "hint inside block" rule. A long prose
+                // paragraph that happens to mention a 20+ char identifier or formula
+                // reference must remain translatable — only blocks that ARE the hint
+                // (rule 1) or are sub-cells of a larger row hint (rule 2) are preserved.
+            }
+
+            if (matched)
+            {
+                rewritten.Add(block with
+                {
+                    TranslationSkipped = true,
+                    PreserveOriginalTextInPdfExport = true,
+                });
+                anyChanged = true;
+            }
+            else
+            {
+                rewritten.Add(block);
+            }
+        }
+
+        return anyChanged ? ir with { Blocks = rewritten } : ir;
+    }
+
     private async Task<Dictionary<string, TranslatedDocumentBlock>> TranslateBlocksAsync(
         DocumentIr ir,
         LongDocumentTranslationOptions options,
+        DocumentContext? documentContext,
         CancellationToken cancellationToken)
     {
         var result = new ConcurrentDictionary<string, TranslatedDocumentBlock>(StringComparer.Ordinal);
@@ -325,7 +528,8 @@ public sealed class LongDocumentTranslationService
                     TranslationSkipped = true,
                     RetryCount = 0,
                     TextStyle = block.TextStyle,
-                    FormulaCharacters = block.FormulaCharacters
+                    FormulaCharacters = block.FormulaCharacters,
+                    PreserveOriginalTextInPdfExport = block.PreserveOriginalTextInPdfExport
                 };
             }
             else
@@ -338,6 +542,37 @@ public sealed class LongDocumentTranslationService
         var totalBlocks = blocksToTranslate.Count;
         var completedBlocks = 0;
         var progress = options.Progress;
+
+        // Pre-compute per-page filtered glossary. Cost is paid once up front
+        // (O(pages × terms × avg_page_text)) instead of per block. Each block's
+        // prompt then does a single dictionary lookup keyed by page number.
+        // Filtering at PAGE granularity (not block) so all blocks on a page
+        // share the same glossary prefix — friendlier to provider prompt caches
+        // and gives cross-block consistency within a page.
+        Dictionary<int, IReadOnlyList<KeyValuePair<string, string>>>? glossaryByPage = null;
+        if (documentContext is { Glossary.Count: > 0 })
+        {
+            var terms = documentContext.Glossary
+                .Where(kv => !string.IsNullOrEmpty(kv.Key))
+                .ToList();
+
+            var pageTextByNumber = blocksToTranslate
+                .Where(b => !string.IsNullOrWhiteSpace(b.OriginalText))
+                .GroupBy(b => b.PageNumber)
+                .ToDictionary(g => g.Key, g => string.Join("\n", g.Select(b => b.OriginalText)));
+
+            glossaryByPage = new Dictionary<int, IReadOnlyList<KeyValuePair<string, string>>>(pageTextByNumber.Count);
+            foreach (var (pageNumber, pageText) in pageTextByNumber)
+            {
+                var matched = new List<KeyValuePair<string, string>>(terms.Count);
+                foreach (var kv in terms)
+                {
+                    if (pageText.Contains(kv.Key, StringComparison.Ordinal))
+                        matched.Add(kv);
+                }
+                glossaryByPage[pageNumber] = matched;
+            }
+        }
 
         // Report initial progress
         progress?.Report(new LongDocumentTranslationProgress
@@ -359,7 +594,7 @@ public sealed class LongDocumentTranslationService
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var block = blocksToTranslate[i];
-                var translated = await TranslateSingleBlockAsync(block, options, cancellationToken);
+                var translated = await TranslateSingleBlockAsync(block, options, documentContext, glossaryByPage, cancellationToken);
                 result[block.IrBlockId] = translated;
                 completedBlocks++;
 
@@ -387,7 +622,7 @@ public sealed class LongDocumentTranslationService
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    var translated = await TranslateSingleBlockAsync(block, options, cancellationToken);
+                    var translated = await TranslateSingleBlockAsync(block, options, documentContext, glossaryByPage, cancellationToken);
                     result[block.IrBlockId] = translated;
 
                     // Thread-safe progress reporting in parallel path
@@ -417,35 +652,167 @@ public sealed class LongDocumentTranslationService
         return new Dictionary<string, TranslatedDocumentBlock>(result, StringComparer.Ordinal);
     }
 
+    private static string BuildQualityFeedbackError(RestoreOutcome outcome)
+    {
+        var parts = new List<string>
+        {
+            $"quality-feedback:{outcome.Status}",
+            $"missing={outcome.MissingTokenCount}"
+        };
+
+        if (outcome.SoftValidationStatus != SoftValidationStatus.None)
+        {
+            parts.Add($"soft={outcome.SoftValidationStatus}");
+        }
+
+        if (outcome.SoftFailureCount > 0)
+        {
+            parts.Add($"softFailures={outcome.SoftFailureCount}");
+        }
+
+        if (outcome.SyntheticDelimiterStripCount > 0)
+        {
+            parts.Add($"softStrips={outcome.SyntheticDelimiterStripCount}");
+        }
+
+        return string.Join(' ', parts);
+    }
+
     private async Task<TranslatedDocumentBlock> TranslateSingleBlockAsync(
         DocumentBlockIr block,
         LongDocumentTranslationOptions options,
+        DocumentContext? documentContext,
+        IReadOnlyDictionary<int, IReadOnlyList<KeyValuePair<string, string>>>? glossaryByPage,
         CancellationToken cancellationToken)
     {
         var retryCount = 0;
         string? lastError = null;
         string translatedText = block.ProtectedText;
         var translationSucceeded = false;
+        var usedFallbackText = false;
+
+        // Mutated across retries when quality feedback triggers re-protection at a higher demoteLevel.
+        var currentProtectedText = block.ProtectedText;
+        var currentTokens = block.FormulaTokenMap;
+        var currentSoftSpans = block.SoftProtectedSpans;
+        var currentRetryAttempt = 0;
+        var lastSoftValidationFailed = false;
 
         for (; retryCount <= options.MaxRetriesPerBlock; retryCount++)
         {
             try
             {
-                // If the block contains formula placeholders {v0}, {v1}, ..., inject
-                // a prompt instructing the LLM to preserve them — aligned with
-                // pdf2zh translator.py: "Keep the formula notation {v*} unchanged."
+                // Formula prompt: {vN} = hard, $...$ = soft math, [[EQ_SOFT]] = equation-like exact span.
                 var customPrompt = options.CustomPrompt;
-                if (options.EnableFormulaProtection && NumericPlaceholderRegex.IsMatch(block.ProtectedText))
+
+                // Pass 1 document context (if extracted) goes first so the model has a
+                // shared frame of reference before the per-block formula instructions.
+                // The glossary is filtered per page (by glossaryByPage precompute in
+                // TranslateBlocksAsync) — only entries whose source term appears somewhere
+                // on the current page are injected, keeping prompts short without losing
+                // terminology consistency across blocks that reference the same term.
+                IReadOnlyList<KeyValuePair<string, string>>? pageGlossary = null;
+                glossaryByPage?.TryGetValue(block.PageNumber, out pageGlossary);
+
+                var hasSummary = documentContext is not null && !string.IsNullOrWhiteSpace(documentContext.Summary);
+                var hasPageGlossary = pageGlossary is { Count: > 0 };
+
+                if (hasSummary || hasPageGlossary)
                 {
-                    const string formulaPrompt = "Keep all {v0}, {v1}, ... formula placeholders exactly as-is. Do not translate, remove, or modify them.";
+                    var ctxParts = new List<string>(2);
+                    if (hasSummary)
+                    {
+                        ctxParts.Add($"Document summary: {documentContext!.Summary}");
+                    }
+                    if (hasPageGlossary)
+                    {
+                        var glossaryLines = string.Join(
+                            "\n",
+                            pageGlossary!.Select(kv => $"  {kv.Key} → {kv.Value}"));
+                        ctxParts.Add($"Use these term translations consistently across the document:\n{glossaryLines}");
+                    }
+                    var ctxPrompt = string.Join("\n\n", ctxParts);
                     customPrompt = string.IsNullOrWhiteSpace(customPrompt)
-                        ? formulaPrompt
-                        : $"{customPrompt}\n{formulaPrompt}";
+                        ? ctxPrompt
+                        : $"{ctxPrompt}\n\n{customPrompt}";
+                }
+
+                if (options.EnableFormulaProtection)
+                {
+                    var hasHardTokens = currentTokens is { Count: > 0 };
+                    var hasDollarSoftMath = false;
+                    var hasEquationSoftTags = false;
+                    var hasExactSoftSpans = false;
+                    if (currentSoftSpans is not null)
+                    {
+                        foreach (var span in currentSoftSpans)
+                        {
+                            if (span.WrapperKind == SoftProtectionWrapperKind.DollarMath)
+                            {
+                                hasDollarSoftMath = true;
+                            }
+                            else if (span.WrapperKind == SoftProtectionWrapperKind.EquationSoftTag)
+                            {
+                                hasEquationSoftTags = true;
+                            }
+
+                            if (span.RequiresExactPreservation)
+                            {
+                                hasExactSoftSpans = true;
+                            }
+                        }
+                    }
+
+                    string? formulaPrompt = null;
+                    if (hasHardTokens || hasDollarSoftMath || hasEquationSoftTags)
+                    {
+                        var promptParts = new List<string>();
+                        if (hasHardTokens)
+                        {
+                            promptParts.Add(
+                                "This text has formula placeholders ({v0}, {v1}, ...). " +
+                                "Keep all {vN} placeholders exactly as-is. Do not translate, remove, or modify them.");
+                        }
+
+                        if (hasDollarSoftMath)
+                        {
+                            promptParts.Add(
+                                "Content in $...$ is likely a mathematical formula or technical identifier. " +
+                                "If it is math, keep it unchanged. If it is ordinary text, translate it and remove the $ delimiters.");
+                        }
+
+                        if (hasEquationSoftTags)
+                        {
+                            promptParts.Add(
+                                "Content inside [[EQ_SOFT]]...[[/EQ_SOFT]] is an equation-like technical span. " +
+                                "Copy the inner content verbatim and remove only the wrapper markers in the final output.");
+                        }
+
+                        formulaPrompt = string.Join(' ', promptParts);
+                    }
+
+                    if (currentRetryAttempt >= 1 && formulaPrompt is not null)
+                    {
+                        var retryInstruction = lastSoftValidationFailed && hasExactSoftSpans
+                            ? "The previous translation attempt changed a protected technical span. " +
+                              "Copy every technical symbol sequence inside synthetic $...$ verbatim, do not keep the synthetic $ delimiters in the final output, " +
+                              "Copy everything inside [[EQ_SOFT]]...[[/EQ_SOFT]] verbatim and remove only the wrapper markers in the final output.\n"
+                            : "The previous translation attempt lost some protected content. " +
+                              "Translate carefully and preserve EVERY {vN} placeholder, every $...$ span, and every [[EQ_SOFT]]...[[/EQ_SOFT]] span exactly as written.\n";
+                        formulaPrompt = retryInstruction + formulaPrompt;
+                    }
+
+                    if (formulaPrompt is not null)
+                    {
+                        customPrompt = string.IsNullOrWhiteSpace(customPrompt)
+                            ? formulaPrompt
+                            : $"{customPrompt}\n{formulaPrompt}";
+                    }
                 }
 
                 var request = new TranslationRequest
                 {
-                    Text = block.ProtectedText,
+                    Text = currentProtectedText,
                     FromLanguage = options.FromLanguage,
                     ToLanguage = options.ToLanguage,
                     CustomPrompt = customPrompt
@@ -453,16 +820,81 @@ public sealed class LongDocumentTranslationService
 
                 var translated = await _translateWithService(request, options.ServiceId, cancellationToken);
                 translatedText = ApplyGlossary(translated.TranslatedText, options.Glossary);
-                // Remove Unicode control characters that LLMs occasionally inject —
-                // aligned with pdf2zh translator.py:36 remove_control_characters()
                 translatedText = RemoveControlCharacters(translatedText);
-                // Trim leading spaces on each line — aligned with pdf2zh converter.py:488
                 translatedText = TrimLeadingSpacesPerLine(translatedText);
-                var formulaProtection = options.EnableFormulaProtection
-                    ? ProtectFormulaSpans(block.OriginalText)
-                    : FormulaProtectionResult.Empty;
-                translatedText = RestoreFormulaSpans(translatedText, formulaProtection, block.OriginalText);
+                if (options.EnableFormulaProtection &&
+                    (currentTokens is { Count: > 0 } || currentSoftSpans is { Count: > 0 }))
+                {
+                    var protectedBlock = new ProtectedBlock
+                    {
+                        OriginalText = block.OriginalText,
+                        ProtectedText = currentProtectedText,
+                        Tokens = currentTokens ?? Array.Empty<FormulaToken>(),
+                        SoftSpans = currentSoftSpans ?? Array.Empty<SoftProtectedSpan>(),
+                        Plan = new ProtectionPlan { Mode = PreservationMode.InlineProtected, SkipTranslation = false }
+                    };
+                    var outcome = _preservation.Restore(translatedText, protectedBlock);
+                    translatedText = _preservation.ResolveFallback(outcome, protectedBlock);
+
+                    var hasQualityIssue = outcome.Status != RestoreStatus.FullRestore
+                        || outcome.SoftValidationStatus == SoftValidationStatus.Failed;
+                    var shouldRetryForQuality = options.EnableQualityFeedbackRetry
+                        && retryCount < options.MaxRetriesPerBlock
+                        && hasQualityIssue;
+                    if (shouldRetryForQuality)
+                    {
+                        currentRetryAttempt++;
+                        var preserveEquationSoftProtection = outcome.SoftValidationStatus == SoftValidationStatus.Failed &&
+                            currentSoftSpans?.Any(span => span.WrapperKind == SoftProtectionWrapperKind.EquationSoftTag) == true;
+
+                        if (!preserveEquationSoftProtection)
+                        {
+                            var retryContext = (block.PreservationContext ?? new BlockContext
+                            {
+                                Text = block.OriginalText,
+                                BlockType = MapToSourceBlockType(block.BlockType)
+                            }) with { RetryAttempt = currentRetryAttempt };
+                            var reprotected = _preservation.Protect(retryContext, new ProtectionPlan
+                            {
+                                Mode = PreservationMode.None,
+                                SkipTranslation = false
+                            });
+                            currentProtectedText = reprotected.ProtectedText;
+                            currentTokens = reprotected.Tokens;
+                            currentSoftSpans = reprotected.SoftSpans;
+                        }
+
+                        lastSoftValidationFailed = outcome.SoftValidationStatus == SoftValidationStatus.Failed;
+                        lastError = BuildQualityFeedbackError(outcome);
+                        Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: quality feedback retry #{currentRetryAttempt} " +
+                            $"(status={outcome.Status}, missing={outcome.MissingTokenCount}, " +
+                            $"softStatus={outcome.SoftValidationStatus}, softFailures={outcome.SoftFailureCount})");
+                        continue;
+                    }
+
+                    if (hasQualityIssue)
+                    {
+                        if (!usedFallbackText && TryPrepareFallbackText(block, options,
+                                out var fbText, out var fbTokens, out var fbSoftSpans))
+                        {
+                            usedFallbackText = true;
+                            currentProtectedText = fbText;
+                            currentTokens = fbTokens;
+                            currentSoftSpans = fbSoftSpans;
+                            Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: retrying with FallbackText after quality issue");
+                            continue;
+                        }
+
+                        lastError = BuildQualityFeedbackError(outcome);
+                        lastSoftValidationFailed = outcome.SoftValidationStatus == SoftValidationStatus.Failed;
+                        Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: unresolved quality issue " +
+                            $"(status={outcome.Status}, missing={outcome.MissingTokenCount}, " +
+                            $"softStatus={outcome.SoftValidationStatus}, softFailures={outcome.SoftFailureCount})");
+                        break;
+                    }
+                }
                 lastError = null;
+                lastSoftValidationFailed = false;
                 translationSucceeded = true;
                 break;
             }
@@ -478,6 +910,18 @@ public sealed class LongDocumentTranslationService
                 Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: attempt {retryCount + 1}/{options.MaxRetriesPerBlock + 1} failed ({errorType}): {ex.Message}");
                 if (retryCount >= options.MaxRetriesPerBlock)
                 {
+                    if (!usedFallbackText && TryPrepareFallbackText(block, options,
+                            out var fbText, out var fbTokens, out var fbSoftSpans))
+                    {
+                        usedFallbackText = true;
+                        currentProtectedText = fbText;
+                        currentTokens = fbTokens;
+                        currentSoftSpans = fbSoftSpans;
+                        retryCount--;
+                        Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId}: retrying with FallbackText after exception");
+                        continue;
+                    }
+
                     Debug.WriteLine($"[LongDoc] Block {block.SourceBlockId} permanently failed after {retryCount + 1} attempt(s)");
                     translatedText = block.OriginalText;
                 }
@@ -502,9 +946,51 @@ public sealed class LongDocumentTranslationService
             RetryCount = effectiveRetryCount,
             LastError = lastError,
             TextStyle = block.TextStyle,
-            FormulaCharacters = block.FormulaCharacters
+            FormulaCharacters = block.FormulaCharacters,
+            PreserveOriginalTextInPdfExport = false
         };
     }
+
+    private bool TryPrepareFallbackText(
+        DocumentBlockIr block,
+        LongDocumentTranslationOptions options,
+        out string protectedText,
+        out IReadOnlyList<FormulaProtection.FormulaToken>? tokens,
+        out IReadOnlyList<ContentPreservation.SoftProtectedSpan>? softSpans)
+    {
+        protectedText = string.Empty;
+        tokens = null;
+        softSpans = null;
+
+        if (block.FallbackText is null)
+            return false;
+
+        var fbContext = (block.PreservationContext ?? new ContentPreservation.BlockContext
+        {
+            Text = block.FallbackText,
+            BlockType = MapToSourceBlockType(block.BlockType),
+            FormulaCharacters = block.FormulaCharacters,
+            DebugBlockId = block.SourceBlockId,
+            DebugPageNumber = block.PageNumber
+        }) with { Text = block.FallbackText };
+
+        var plan = _preservation.Analyze(fbContext);
+        if (plan.SkipTranslation)
+            return false;
+
+        var result = _preservation.Protect(fbContext, plan);
+        protectedText = result.ProtectedText;
+        tokens = result.Tokens;
+        softSpans = result.SoftSpans;
+        return true;
+    }
+
+    private static bool ShouldPreserveOriginalTextInPdfExport(
+        SourceBlockType blockType,
+        string? preservationReason) =>
+        blockType == SourceBlockType.Formula ||
+        (!string.IsNullOrWhiteSpace(preservationReason) &&
+         PreserveOriginalFormulaReasons.Contains(preservationReason));
 
     private static IReadOnlyList<TranslatedDocumentPage> BuildStructuredOutput(
         DocumentIr ir,
@@ -533,105 +1019,28 @@ public sealed class LongDocumentTranslationService
         _ => BlockType.Unknown
     };
 
+    private static SourceBlockType MapToSourceBlockType(BlockType blockType) => blockType switch
+    {
+        BlockType.Paragraph => SourceBlockType.Paragraph,
+        BlockType.Heading => SourceBlockType.Heading,
+        BlockType.Caption => SourceBlockType.Caption,
+        BlockType.Table => SourceBlockType.TableCell,
+        BlockType.Formula => SourceBlockType.Formula,
+        _ => SourceBlockType.Unknown
+    };
 
-    // Level 2: Font-based formula detection
-    private static readonly Regex MathFontRegex = new(
-        @"CM[^R]|CMSY|CMMI|CMEX|MS\.M|MSAM|MSBM|XY|MT\w*Math|Symbol|Euclid|Mathematica|MathematicalPi|STIX" +
-        @"|\bBL|\bRM|\bEU|\bLA|\bRS" +     // pdf2zh: math font abbreviations (word-boundary anchored to avoid "la" in "Regular")
-        @"|LINE|LCIRCLE" +                  // pdf2zh: LaTeX drawing fonts
-        @"|TeX-|rsfs|txsy|wasy|stmary" +    // pdf2zh: TeX symbol font packages
-        @"|\w+Sym\w*|\b\w{1,5}Math\w*",    // generic *Sym* / *Math* (prefix ≤5 chars to avoid "MyCustomMathFont")
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // --- Delegating wrappers for backward compatibility with existing tests ---
+    // The real implementations live in FormulaPreservationService (ContentPreservation layer).
 
     internal static bool IsFontBasedFormula(IReadOnlyList<string>? fontNames, string? customPattern)
-    {
-        if (fontNames is null || fontNames.Count == 0) return false;
-        var pattern = !string.IsNullOrWhiteSpace(customPattern)
-            ? new Regex(customPattern, RegexOptions.IgnoreCase)
-            : MathFontRegex;
-        var mathFontCount = fontNames.Count(f =>
-        {
-            // Strip PDF subset prefix (e.g. "ABCDE+CMSY10" → "CMSY10")
-            // Aligned with pdf2zh converter.py:196: font.split("+")[-1]
-            var name = f;
-            var plusIdx = name.IndexOf('+');
-            if (plusIdx >= 0 && plusIdx < name.Length - 1)
-                name = name[(plusIdx + 1)..];
-            return pattern.IsMatch(name);
-        });
-        // Aligned with pdf2zh vflag(): any math font presence is a strong signal.
-        // Lowered from 0.5 to 0.3 to catch blocks with mixed math/text fonts.
-        return mathFontCount > fontNames.Count * 0.3;
-    }
-
-    // Level 3: Character-based formula detection
-    // Expanded to match pdf2zh vflag() Unicode categories:
-    // Sm (Math symbols), Lm (Modifier letters), Mn (Non-spacing marks), Sk (Modifier symbols),
-    // Greek (0370-03FF), superscripts/subscripts, letterlike symbols, misc math
-    private static readonly Regex MathUnicodeRegex = new(
-        @"[\u2200-\u22FF\u2100-\u214F\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9\u2150-\u218F\u27C0-\u27EF\u2980-\u29FF" +
-        @"\u02B0-\u02FF" +  // Modifier letters (Lm) — pdf2zh vflag
-        @"\u0300-\u036F" +  // Combining diacritical marks (Mn) — pdf2zh vflag
-        @"\u02C6-\u02CF" +  // Modifier symbols (Sk subset) — pdf2zh vflag
-        @"\u2000-\u200B]",  // General punctuation / spaces (Zs) — pdf2zh vflag
-        RegexOptions.Compiled);
+        => FormulaPreservationService.IsFontBasedFormula(fontNames, customPattern);
 
     internal static bool IsCharacterBasedFormula(string text, string? customPattern)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return false;
-        var pattern = !string.IsNullOrWhiteSpace(customPattern)
-            ? new Regex(customPattern)
-            : MathUnicodeRegex;
-        var mathCharCount = pattern.Matches(text).Count;
-        // Count Unicode replacement characters (\uFFFD) — these often represent unmapped CID
-        // glyphs in formula fonts. Aligned with pdf2zh converter.py:197 CID detection.
-        mathCharCount += text.Count(c => c == '\uFFFD');
-        // Lowered from 0.3 to 0.2 — pdf2zh flags individual math characters,
-        // so a lower threshold catches more formula-heavy blocks.
-        return text.Length > 0 && (double)mathCharCount / text.Length > 0.2;
-    }
+        => FormulaPreservationService.IsCharacterBasedFormula(text, customPattern);
 
-    // Level 4: Subscript/superscript density formula detection.
-    // If a block contains math font characters and >25% are subscripts/superscripts,
-    // it is likely a formula (e.g. "x_1, x_2, ..., x_n = f(y)").
-    // Aligned with pdf2zh converter.py:243 child.size < pstk[-1].size * 0.79
     internal static bool IsSubscriptDenseFormula(BlockFormulaCharacters? formulaChars)
-    {
-        if (formulaChars?.Characters is not { Count: > 0 } chars) return false;
-        if (!formulaChars.HasMathFontCharacters) return false;
-
-        var scriptCount = chars.Count(c => c.IsSubscript || c.IsSuperscript);
-        return chars.Count >= 3 && (double)scriptCount / chars.Count > 0.25;
-    }
-
-    private sealed record FormulaProtectionResult(string ProtectedText, IReadOnlyList<FormulaToken> TokenMap)
-    {
-        public static FormulaProtectionResult Empty { get; } = new(string.Empty, Array.Empty<FormulaToken>());
-    }
-
-    private static readonly Regex NumericPlaceholderRegex = new(@"\{v(\d+)\}", RegexOptions.Compiled);
-
-    private static FormulaProtectionResult ProtectFormulaSpans(string text)
-    {
-        var protectedText = new FormulaProtector().Protect(text, out var tokens);
-        return new FormulaProtectionResult(protectedText, tokens);
-    }
-
-    private static bool IsFormulaOnlyText(string protectedText)
-    {
-        if (string.IsNullOrWhiteSpace(protectedText))
-        {
-            return false;
-        }
-
-        var cleaned = NumericPlaceholderRegex.Replace(protectedText, string.Empty).Trim();
-        return cleaned.Length == 0;
-    }
-
-    private static string RestoreFormulaSpans(string text, FormulaProtectionResult protection, string originalText)
-    {
-        return new FormulaRestorer().Restore(text, protection.TokenMap, originalText, useSimplified: false);
-    }
+        => FormulaPreservationService.IsSubscriptDenseFormula(formulaChars);
 
     private static string ApplyGlossary(string text, IReadOnlyDictionary<string, string>? glossary)
     {

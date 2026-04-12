@@ -77,15 +77,11 @@ public class DarkModeTests : IDisposable
         var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
         if (scrollViewer != null)
         {
-            Mouse.MoveTo(scrollViewer.GetClickablePoint());
-
-            Mouse.Scroll(-8);
-            Thread.Sleep(1000);
+            ScrollHelper.ScrollToPercent(scrollViewer, 12, _output.WriteLine);
             var pathServices = ScreenshotHelper.CaptureWindow(window, "33_settings_dark_services");
             _output.WriteLine($"Screenshot saved: {pathServices}");
 
-            Mouse.Scroll(-15);
-            Thread.Sleep(1000);
+            ScrollHelper.ScrollToPercent(scrollViewer, 35, _output.WriteLine);
             var pathConfig = ScreenshotHelper.CaptureWindow(window, "34_settings_dark_config");
             _output.WriteLine($"Screenshot saved: {pathConfig}");
         }
@@ -183,20 +179,17 @@ public class DarkModeTests : IDisposable
         settingsButton!.Click();
         Thread.Sleep(2000);
 
-        // Scroll down to Behavior section where AppThemeCombo lives
+        // Scroll to Behavior section (~70%) and scan to find AppThemeCombo
         var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
+        ComboBox? themeCombo = null;
         if (scrollViewer != null)
         {
-            Mouse.MoveTo(scrollViewer.GetClickablePoint());
-            // Scroll far enough to reach behavior/appearance section
-            Mouse.Scroll(-30);
-            Thread.Sleep(1000);
+            var element = ScrollHelper.ScrollToFind(
+                scrollViewer, startPercent: 70,
+                () => window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo")),
+                _output.WriteLine);
+            themeCombo = element?.AsComboBox();
         }
-
-        // Find and interact with AppThemeCombo
-        var themeCombo = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo"))?.AsComboBox(),
-            TimeSpan.FromSeconds(10)).Result;
 
         themeCombo.Should().NotBeNull("AppThemeCombo must exist on settings page");
 

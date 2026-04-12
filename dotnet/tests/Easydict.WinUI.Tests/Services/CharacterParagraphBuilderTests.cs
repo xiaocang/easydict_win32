@@ -198,16 +198,17 @@ public class CharacterParagraphBuilderTests
     }
 
     [Fact]
-    public void Build_VerticalTextMatrix_ClassifiedAsFormula()
+    public void Build_VerticalTextMatrix_MathUnicode_ClassifiedAsFormula()
     {
         // Vertical text matrix: matrix[0]==0 && matrix[3]==0
+        // Now requires math font or math Unicode to classify as formula.
         var verticalMatrix = TransformationMatrix.FromValues(0, 1, -1, 0, 100, 700);
 
         var chars = new[]
         {
             new CharInfo
             {
-                Text = "x",
+                Text = "\u03B1",  // Greek alpha — math Unicode
                 CharacterCode = 0x78,
                 Cid = 0x78,
                 Font = null!,
@@ -378,5 +379,97 @@ public class CharacterParagraphBuilderTests
         result.Paragraphs.Should().HaveCount(1);
         // ProtectedText should equal Text (both contain {v*} placeholders)
         result.Paragraphs[0].ProtectedText.Should().Be(result.Paragraphs[0].Text);
+    }
+
+    // --- False-positive prevention tests ---
+
+    [Theory]
+    [InlineData("Lato-Regular")]
+    [InlineData("Helvetica-Regular")]
+    [InlineData("NotoSans-Regular")]
+    [InlineData("TimesNewRoman")]
+    [InlineData("ArialMT")]
+    public void IsFormulaCharacter_CommonFont_ReturnsFalse(string fontName)
+    {
+        // Common text fonts must NOT trigger math font detection.
+        // Previously, bare BL/RM/EU/LA/RS without word boundaries would
+        // match fragments inside "Lato-Regular" (LA), "TimesNewRoman" (RM), etc.
+        var ch = MakeChar("A", 100, 700, fontName: fontName);
+        CharacterParagraphBuilder.IsFormulaCharacter(ch, 12.0, 1).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Build_VerticalTextMatrix_NormalFont_NotFormula()
+    {
+        // Vertical text with a normal font should NOT be classified as formula.
+        // Only vertical text with math font or math Unicode should be formula.
+        var verticalMatrix = TransformationMatrix.FromValues(0, 1, -1, 0, 100, 700);
+
+        var chars = new[]
+        {
+            new CharInfo
+            {
+                Text = "A",  // Normal Latin character
+                CharacterCode = 0x41,
+                Cid = 0x41,
+                Font = null!,
+                FontName = "Arial",
+                FontSize = 12.0,
+                PointSize = 12.0,
+                TextMatrix = verticalMatrix,
+                CurrentTransformationMatrix = TransformationMatrix.Identity,
+                X0 = 100, Y0 = 700, X1 = 112, Y1 = 706,
+            }
+        };
+
+        var result = CharacterParagraphBuilder.Build(chars);
+
+        // Normal vertical text should NOT be formula
+        result.FormulaCharacters.Should().Be(0);
+    }
+
+    [Fact]
+    public void Build_VerticalTextMatrix_MathFont_StillFormula()
+    {
+        // Vertical text WITH a math font should still be classified as formula.
+        var verticalMatrix = TransformationMatrix.FromValues(0, 1, -1, 0, 100, 700);
+
+        var chars = new[]
+        {
+            new CharInfo
+            {
+                Text = "x",
+                CharacterCode = 0x78,
+                Cid = 0x78,
+                Font = null!,
+                FontName = "CMMI10",  // Math font
+                FontSize = 12.0,
+                PointSize = 12.0,
+                TextMatrix = verticalMatrix,
+                CurrentTransformationMatrix = TransformationMatrix.Identity,
+                X0 = 100, Y0 = 700, X1 = 112, Y1 = 706,
+            }
+        };
+
+        var result = CharacterParagraphBuilder.Build(chars);
+
+        result.FormulaCharacters.Should().Be(1);
+    }
+
+    [Fact]
+    public void IsFormulaCharacter_EnSpace_ReturnsFalse()
+    {
+        // U+2002 (en space) with a normal font should NOT trigger formula detection.
+        // Previously included in MathUnicodeRegex via the \u2000-\u200B range.
+        var ch = MakeChar("\u2002", 100, 700, fontName: "TimesNewRoman");
+        CharacterParagraphBuilder.IsFormulaCharacter(ch, 12.0, 1).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsFormulaCharacter_ZeroWidthSpace_ReturnsTrue()
+    {
+        // U+200B (zero-width space) should still be detected as formula signal.
+        var ch = MakeChar("\u200B", 100, 700, fontName: "TimesNewRoman");
+        CharacterParagraphBuilder.IsFormulaCharacter(ch, 12.0, 1).Should().BeTrue();
     }
 }

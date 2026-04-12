@@ -2,6 +2,7 @@ using Easydict.TranslationService.LongDocument;
 using Easydict.WinUI.Services.DocumentExport;
 using FluentAssertions;
 using PdfSharpCore.Drawing;
+using PdfSharpCore.Pdf;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
@@ -9,6 +10,19 @@ namespace Easydict.WinUI.Tests.Services;
 [Trait("Category", "WinUI")]
 public class PdfExportServiceLayoutTests
 {
+    [Fact]
+    public void WrapTextByWidth_PreservesExplicitSpacesAndHardBreaks()
+    {
+        using var doc = new PdfDocument();
+        var page = doc.AddPage();
+        using var gfx = XGraphics.FromPdfPage(page);
+        var font = new XFont("Arial", 12);
+
+        var lines = PdfExportService.WrapTextByWidth(gfx, "Most  competitive\nneural sequence", font, 1000).ToList();
+
+        lines.Should().Equal("Most  competitive", "neural sequence");
+    }
+
     [Fact]
     public void TryBuildLineRects_WithDistinctBaselines_BuildsRectsTopToBottomAndClampsToBlock()
     {

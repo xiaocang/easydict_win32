@@ -30,6 +30,14 @@ public static class Program
     [STAThread]
     static void Main(string[] args)
     {
+#if LOCAL_DEBUG_LONGDOC_CLI
+        if (LongDocumentCliCommand.IsCommand(args))
+        {
+            Environment.ExitCode = LongDocumentCliCommand.RunAsync(args).GetAwaiter().GetResult();
+            return;
+        }
+#endif
+
         // Unpackaged (Inno/portable) installs rely on HKCU protocol registration.
         // Repair registration early so future easydict:// launches are reliable.
         if (!IsPackaged())

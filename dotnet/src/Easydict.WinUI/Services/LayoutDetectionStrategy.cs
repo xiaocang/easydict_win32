@@ -20,15 +20,23 @@ internal sealed class LayoutDetectionStrategy
     private readonly DocLayoutYoloService _onnxService;
     private readonly VisionLayoutDetectionService _visionService;
     private readonly LayoutModelDownloadService _downloadService;
+    private readonly TableStructureRecognitionService? _tatrService;
+    // Re-read on every page so the user can toggle the kill switch mid-session
+    // without restarting the app. The strategy is cached for the process lifetime.
+    private readonly Func<bool> _tatrEnabledGetter;
 
     public LayoutDetectionStrategy(
         DocLayoutYoloService onnxService,
         VisionLayoutDetectionService visionService,
-        LayoutModelDownloadService downloadService)
+        LayoutModelDownloadService downloadService,
+        TableStructureRecognitionService? tatrService = null,
+        Func<bool>? tatrEnabledGetter = null)
     {
         _onnxService = onnxService;
         _visionService = visionService;
         _downloadService = downloadService;
+        _tatrService = tatrService;
+        _tatrEnabledGetter = tatrEnabledGetter ?? (() => true);
     }
 
     /// <summary>
@@ -65,21 +73,35 @@ internal sealed class LayoutDetectionStrategy
 
         // Try ML detection
         List<LayoutDetection>? mlDetections = null;
+        IReadOnlyDictionary<LayoutDetection, TableStructure>? tableStructures = null;
         LayoutRegionSource mlSource = LayoutRegionSource.Unknown;
+        var imageWidth = 0;
+        var imageHeight = 0;
 
         if (mode is LayoutDetectionMode.OnnxLocal or LayoutDetectionMode.Auto)
         {
-            mlDetections = await TryOnnxDetectionAsync(pdfPath, pageIndex, ct);
-            if (mlDetections is not null)
+            var onnxResult = await TryOnnxDetectionAsync(pdfPath, pageIndex, ct);
+            if (onnxResult is not null)
+            {
+                mlDetections = onnxResult.Value.Detections;
+                tableStructures = onnxResult.Value.TableStructures;
+                imageWidth = onnxResult.Value.ImageWidth;
+                imageHeight = onnxResult.Value.ImageHeight;
                 mlSource = LayoutRegionSource.OnnxModel;
+            }
         }
 
         if (mlDetections is null && mode is LayoutDetectionMode.VisionLLM)
         {
-            mlDetections = await TryVisionDetectionAsync(
+            var visionResult = await TryVisionDetectionAsync(
                 pdfPath, pageIndex, visionEndpoint, visionApiKey, visionModel, ct);
-            if (mlDetections is not null)
+            if (visionResult is not null)
+            {
+                mlDetections = visionResult.Value.Detections;
+                imageWidth = visionResult.Value.ImageWidth;
+                imageHeight = visionResult.Value.ImageHeight;
                 mlSource = LayoutRegionSource.VisionLLM;
+            }
         }
 
         if (mlDetections is null || mlDetections.Count == 0)
@@ -89,7 +111,7 @@ internal sealed class LayoutDetectionStrategy
         }
 
         // ML-driven: assign page words to ML regions by centre point, then group into blocks.
-        return ExtractBlocksByMlRegions(textPage, mlDetections, mlSource);
+        return ExtractBlocksByMlRegions(textPage, mlDetections, mlSource, imageWidth, imageHeight, tableStructures);
     }
 
     /// <summary>
@@ -102,7 +124,7 @@ internal sealed class LayoutDetectionStrategy
     /// </summary>
     public bool IsOnnxDownloaded => _downloadService.IsReady;
 
-    private async Task<List<LayoutDetection>?> TryOnnxDetectionAsync(
+    private async Task<(List<LayoutDetection> Detections, IReadOnlyDictionary<LayoutDetection, TableStructure> TableStructures, int ImageWidth, int ImageHeight)?> TryOnnxDetectionAsync(
         string pdfPath, int pageIndex, CancellationToken ct)
     {
         try
@@ -121,7 +143,62 @@ internal sealed class LayoutDetectionStrategy
             var (pixels, width, height) = await RenderPdfPageAsync(pdfPath, pageIndex, ct);
             var detections = _onnxService.Detect(pixels, width, height);
             Debug.WriteLine($"[LayoutStrategy] ONNX detected {detections.Count} regions on page {pageIndex + 1}");
-            return detections;
+
+            // Stage 2: TATR table-structure recognition per Table detection.
+            // The whole stage is best-effort — any failure falls back to single-block
+            // preservation (handled by ExtractBlocksByMlRegions' existing Table branch).
+            // Keyed by the LayoutDetection record struct itself (value equality) so the
+            // mapping survives the confidence filter in ExtractBlocksByMlRegions.
+            var tableStructures = new Dictionary<LayoutDetection, TableStructure>();
+            var hasTableDetection = detections.Any(d => d.RegionType == LayoutRegionType.Table);
+            if (_tatrEnabledGetter() && _tatrService is not null && hasTableDetection)
+            {
+                try
+                {
+                    // InitializeAsync triggers the model download on first call
+                    // (via EnsureTatrAvailableAsync). Idempotent — subsequent calls
+                    // short-circuit on the existing session. Only gate on table
+                    // presence so we don't pay the ~116 MB download cost for
+                    // PDFs that have no tables at all.
+                    if (!_tatrService.IsInitialized)
+                    {
+                        await _tatrService.InitializeAsync(ct: ct);
+                    }
+
+                    if (_tatrService.IsInitialized)
+                    {
+                        foreach (var det in detections)
+                        {
+                            if (det.RegionType != LayoutRegionType.Table) continue;
+                            try
+                            {
+                                var structure = _tatrService.Recognize(
+                                    pixels, width, height,
+                                    det.X, det.Y, det.Width, det.Height);
+                                if (structure is not null)
+                                {
+                                    tableStructures[det] = structure;
+                                    Debug.WriteLine($"[LayoutStrategy] TATR: table on page {pageIndex + 1} → {structure.Cells.Count} cells ({structure.Rows.Count}r × {structure.Columns.Count}c)");
+                                }
+                                else
+                                {
+                                    Debug.WriteLine($"[LayoutStrategy] TATR: table on page {pageIndex + 1} → no structure (fallback)");
+                                }
+                            }
+                            catch (Exception innerEx)
+                            {
+                                Debug.WriteLine($"[LayoutStrategy] TATR per-table failed: {innerEx.Message}");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[LayoutStrategy] TATR stage failed: {ex.Message}");
+                }
+            }
+
+            return (detections, tableStructures, width, height);
         }
         catch (Exception ex)
         {
@@ -130,7 +207,7 @@ internal sealed class LayoutDetectionStrategy
         }
     }
 
-    private async Task<List<LayoutDetection>?> TryVisionDetectionAsync(
+    private async Task<(List<LayoutDetection> Detections, int ImageWidth, int ImageHeight)?> TryVisionDetectionAsync(
         string pdfPath,
         int pageIndex,
         string? endpoint,
@@ -149,7 +226,7 @@ internal sealed class LayoutDetectionStrategy
             var (pixels, width, height) = await RenderPdfPageAsync(pdfPath, pageIndex, ct);
             var detections = await _visionService.DetectAsync(pixels, width, height, endpoint, apiKey, model, ct);
             Debug.WriteLine($"[LayoutStrategy] Vision LLM detected {detections.Count} regions on page {pageIndex + 1}");
-            return detections;
+            return (detections, width, height);
         }
         catch (Exception ex)
         {
@@ -341,10 +418,19 @@ internal sealed class LayoutDetectionStrategy
     private static IReadOnlyList<EnhancedSourceBlock> ExtractBlocksByMlRegions(
         PdfPigPage page,
         List<LayoutDetection> mlDetections,
-        LayoutRegionSource mlSource)
+        LayoutRegionSource mlSource,
+        int imageWidth,
+        int imageHeight,
+        IReadOnlyDictionary<LayoutDetection, TableStructure>? tableStructures = null)
     {
         var pageWidthPdf = (double)page.Width;
         var pageHeightPdf = (double)page.Height;
+
+        // Actual image-to-PDF scale. Windows.Data.Pdf frequently renders at a
+        // different resolution than the RenderTargetSize hint, so we must use
+        // the ACTUAL rendered image dimensions, not the assumed target.
+        var imageScaleX = imageWidth > 0 ? imageWidth / pageWidthPdf : RenderTargetSize / pageWidthPdf;
+        var imageScaleY = imageHeight > 0 ? imageHeight / pageHeightPdf : RenderTargetSize / pageHeightPdf;
 
         // Filter out low-confidence detections (aligned with pdf2zh confidence threshold).
         var filteredDetections = mlDetections
@@ -358,7 +444,7 @@ internal sealed class LayoutDetectionStrategy
         var pdfRegions = filteredDetections
             .Select(det =>
             {
-                var (rx, ry, rw, rh) = DetectionToPdfCoords(det, pageWidthPdf, pageHeightPdf);
+                var (rx, ry, rw, rh) = DetectionToPdfCoords(det, imageScaleX, imageScaleY, pageHeightPdf);
                 return (Det: det, PdfX: rx, PdfY: ry, PdfW: rw, PdfH: rh);
             })
             .ToList();
@@ -412,8 +498,13 @@ internal sealed class LayoutDetectionStrategy
                 orphanWords.Add(word);
         }
 
-        // Pass 2: Remove words that fall inside exclude regions (Figure/Formula/IsolatedFormula).
-        // These regions take priority — words inside them should NOT be translated.
+        // Pass 2: Re-route words that fall inside exclude regions (Figure/Formula/
+        // IsolatedFormula) FROM their Pass-1 translatable region INTO the exclude
+        // region's bucket. The main emission loop then produces a preservation
+        // block (IsFormulaLike=true for Formula/IsolatedFormula, skipped for
+        // Figure) instead of the words disappearing entirely — without this move,
+        // the export renderer would have no preserved block on the page and
+        // `usesOriginalTextBase` would stay false, dropping display equations.
         var excludedWordCount = 0;
         foreach (var word in allWords)
         {
@@ -430,7 +521,6 @@ internal sealed class LayoutDetectionStrategy
                 if (cx >= r.PdfX && cx <= r.PdfX + r.PdfW &&
                     cy >= r.PdfY && cy <= r.PdfY + r.PdfH)
                 {
-                    // Remove this word from whichever translatable region it was assigned to
                     for (var j = 0; j < wordsByRegion.Length; j++)
                     {
                         if (wordsByRegion[j].Remove(word))
@@ -440,15 +530,15 @@ internal sealed class LayoutDetectionStrategy
                         }
                     }
 
-                    // Also remove from orphans
                     orphanWords.Remove(word);
+                    wordsByRegion[i].Add(word);
                     break;
                 }
             }
         }
 
         if (excludedWordCount > 0)
-            Debug.WriteLine($"[LayoutStrategy] Pass 2: excluded {excludedWordCount} words in Figure/Formula regions");
+            Debug.WriteLine($"[LayoutStrategy] Pass 2: moved {excludedWordCount} words into Figure/Formula regions");
 
         var results = new List<EnhancedSourceBlock>();
         var blockIndex = 0;
@@ -480,10 +570,33 @@ internal sealed class LayoutDetectionStrategy
                 LayoutRegionType.IsolatedFormula;
             var isTable = det.RegionType is LayoutRegionType.Table;
 
+            // TATR two-stage path: when we have cell-level structure for this
+            // table, emit one SourceBlockType.TableCell per non-empty cell instead
+            // of a single monolithic block. Falls back to the single-block branch
+            // below on any miss.
+            if (isTable && tableStructures is not null
+                && tableStructures.TryGetValue(det, out var structure)
+                && structure.Cells.Count > 0)
+            {
+                if (EmitTatrCellBlocks(
+                        page, wordsByRegion[i], structure,
+                        imageScaleX, imageScaleY, pageHeightPdf,
+                        det, mlSource, results, ref blockIndex))
+                {
+                    continue;
+                }
+            }
+
             foreach (var block in LongDocumentTranslationService.GroupWordsIntoBlocks(
                 wordsByRegion[i], page, page.Number, regionTag, ref blockIndex))
             {
-                var finalBlock = skipTranslation ? block with { IsFormulaLike = true }
+                // Formula regions must get BlockType=Formula so downstream
+                // preservation code (FormulaPreservationService, export
+                // `usesOriginalTextBase` check, and checkpoint builders that
+                // trigger on SourceBlockType.Formula) treats them as preserved.
+                // IsFormulaLike alone isn't enough — the checkpoint identity
+                // builder keys preservation off the BlockType enum.
+                var finalBlock = skipTranslation ? block with { BlockType = SourceBlockType.Formula, IsFormulaLike = true }
                                : isTable ? block with { BlockType = SourceBlockType.TableCell }
                                : block;
 
@@ -506,20 +619,127 @@ internal sealed class LayoutDetectionStrategy
     }
 
     /// <summary>
-    /// Converts a <see cref="LayoutDetection"/> bounding box from rendered-image pixel
-    /// coordinates (top-left origin, pixels) to PDF point coordinates (bottom-left origin).
-    /// The scale factor is derived from the same <c>min(1024/w, 1024/h)</c> formula used
-    /// by <c>RenderPdfPageAsync</c> so the two coordinate spaces are always consistent.
+    /// Convert a rectangle from rendered-image pixel coordinates (top-left origin)
+    /// to PDF point coordinates (bottom-left origin). Caller supplies the actual
+    /// image-to-PDF scale derived from the real rendered image dimensions
+    /// (Windows.Data.Pdf often ignores the RenderTargetSize hint).
     /// </summary>
-    private static (double X, double Y, double Width, double Height) DetectionToPdfCoords(
-        LayoutDetection det, double pageWidthPdf, double pageHeightPdf)
+    private static (double X, double Y, double Width, double Height) ImageRectToPdfRect(
+        double imgX, double imgY, double imgW, double imgH,
+        double imageScaleX, double imageScaleY, double pageHeightPdf)
     {
-        var scale = Math.Min(RenderTargetSize / pageWidthPdf, RenderTargetSize / pageHeightPdf);
-        var x = det.X / scale;
-        var y = pageHeightPdf - (det.Y + det.Height) / scale;  // flip to bottom-left origin
-        var w = det.Width / scale;
-        var h = det.Height / scale;
+        var x = imgX / imageScaleX;
+        var y = pageHeightPdf - (imgY + imgH) / imageScaleY;  // flip to bottom-left origin
+        var w = imgW / imageScaleX;
+        var h = imgH / imageScaleY;
         return (Math.Max(0, x), Math.Max(0, y), w, h);
+    }
+
+    private static (double X, double Y, double Width, double Height) DetectionToPdfCoords(
+        LayoutDetection det, double imageScaleX, double imageScaleY, double pageHeightPdf) =>
+        ImageRectToPdfRect(det.X, det.Y, det.Width, det.Height, imageScaleX, imageScaleY, pageHeightPdf);
+
+    /// <summary>
+    /// Emit one <see cref="SourceBlockType.TableCell"/> block per non-empty TATR
+    /// cell. Words are assigned to the smallest containing cell by centre point
+    /// (same pattern as region assignment). Returns <c>true</c> if at least one
+    /// cell block was emitted, in which case the caller should skip the single-
+    /// block fallback. Returns <c>false</c> if no words landed inside any cell,
+    /// in which case the fallback path is still required so we don't drop content.
+    /// </summary>
+    private static bool EmitTatrCellBlocks(
+        PdfPigPage page,
+        List<Word> regionWords,
+        TableStructure structure,
+        double imageScaleX, double imageScaleY, double pageHeightPdf,
+        LayoutDetection det,
+        LayoutRegionSource mlSource,
+        List<EnhancedSourceBlock> results,
+        ref int blockIndex)
+    {
+        // Precompute cell bounds in PDF space. Order preserved: the cell list is
+        // already row-major (top-to-bottom, left-to-right) from BuildCellGrid.
+        var cellCount = structure.Cells.Count;
+        var cellPdf = new (double X, double Y, double Width, double Height)[cellCount];
+        var wordsByCell = new List<Word>[cellCount];
+        for (var c = 0; c < cellCount; c++)
+        {
+            var cell = structure.Cells[c];
+            cellPdf[c] = ImageRectToPdfRect(
+                cell.X, cell.Y, cell.Width, cell.Height,
+                imageScaleX, imageScaleY, pageHeightPdf);
+            wordsByCell[c] = [];
+        }
+
+        // Word-to-cell assignment by centre point containment; tie-break by
+        // smallest enclosing cell (matches the region assignment pattern above).
+        // Words that don't land in any cell are collected as orphans and emitted
+        // as a catch-all TableCell block at the end, so no table text is lost.
+        var orphanTableWords = new List<Word>();
+        foreach (var word in regionWords)
+        {
+            var box = word.BoundingBox;
+            var wx = (box.Left + box.Right) / 2.0;
+            var wy = (box.Bottom + box.Top) / 2.0;
+
+            var bestIdx = -1;
+            var bestArea = double.MaxValue;
+            for (var c = 0; c < cellCount; c++)
+            {
+                var b = cellPdf[c];
+                if (wx >= b.X && wx <= b.X + b.Width && wy >= b.Y && wy <= b.Y + b.Height)
+                {
+                    var area = b.Width * b.Height;
+                    if (area < bestArea)
+                    {
+                        bestArea = area;
+                        bestIdx = c;
+                    }
+                }
+            }
+
+            if (bestIdx >= 0)
+                wordsByCell[bestIdx].Add(word);
+            else
+                orphanTableWords.Add(word);
+        }
+
+        var emitted = 0;
+        for (var c = 0; c < cellCount; c++)
+        {
+            if (wordsByCell[c].Count == 0) continue;
+
+            foreach (var cellBlock in LongDocumentTranslationService.GroupWordsIntoBlocks(
+                wordsByCell[c], page, page.Number, "table", ref blockIndex))
+            {
+                var finalCell = cellBlock with { BlockType = SourceBlockType.TableCell };
+                results.Add(new EnhancedSourceBlock(finalCell, det.RegionType, det.Confidence, mlSource));
+                emitted++;
+            }
+        }
+
+        // Catch-all: any table words outside TATR's cell bboxes still need to be
+        // marked as TableCell so they stay preserved. Without this, orphan table
+        // words would land in no block at all and — worse — could be swept into
+        // the page-level Body fallback at the end of ExtractBlocksByMlRegions,
+        // where they'd be translated.
+        if (orphanTableWords.Count > 0)
+        {
+            foreach (var orphanBlock in LongDocumentTranslationService.GroupWordsIntoBlocks(
+                orphanTableWords, page, page.Number, "table", ref blockIndex))
+            {
+                var finalCell = orphanBlock with { BlockType = SourceBlockType.TableCell };
+                results.Add(new EnhancedSourceBlock(finalCell, det.RegionType, det.Confidence, mlSource));
+                emitted++;
+            }
+        }
+
+        // If no word fell inside any TATR cell AND there were no orphan words
+        // (i.e. regionWords was empty), fall back to the single-block path.
+        if (emitted == 0) return false;
+
+        Debug.WriteLine($"[LayoutStrategy] TATR: emitted {emitted} blocks for table ({cellCount} cells, {orphanTableWords.Count} orphan words)");
+        return true;
     }
 
     /// <summary>Maps a <see cref="LayoutRegionType"/> to the region tag embedded in BlockIds.</summary>

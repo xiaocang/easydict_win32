@@ -1312,7 +1312,17 @@ public sealed partial class ServiceResultItem : UserControl
             var heightStr = await MeasureDictionaryHeightAsync(sender);
             if (int.TryParse(heightStr.Trim('"'), out var height) && height > 0)
             {
-                sender.Height = height + 8;
+                var targetHeight = height + 8;
+                if (Math.Abs(sender.Height - targetHeight) > 1)
+                {
+                    sender.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (Math.Abs(sender.Height - targetHeight) > 1)
+                        {
+                            sender.Height = targetHeight;
+                        }
+                    });
+                }
             }
         }
         catch (Exception ex)

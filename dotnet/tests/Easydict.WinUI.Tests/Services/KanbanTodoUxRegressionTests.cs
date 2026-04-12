@@ -188,10 +188,12 @@ public class KanbanTodoUxRegressionTests
             "dictionary WebView results should keep a lightweight post-navigation sizing pass");
         code.Should().Contain("await Task.Delay(50);",
             "dictionary WebView sizing should wait briefly for the CSS normalization/layout pass to settle");
+        code.Should().Contain("sender.DispatcherQueue.TryEnqueue(() =>",
+            "dictionary WebView height changes should be deferred out of the navigation callback to avoid re-entrant XAML layout cycles");
         code.Should().NotContain("document.querySelectorAll('*')",
             "dictionary navigation should not walk the entire DOM on the UI thread after every query");
-        code.Should().Contain("sender.Height = height + 8;",
-            "dictionary WebView content should expand to its full height so the outer chained ScrollViewer owns overflow");
+        code.Should().Contain("var targetHeight = height + 8;",
+            "dictionary WebView sizing should still derive from measured content height");
         code.Should().NotContain("Math.Min(height + 8, 800)",
             "the WebView should no longer keep its own 800px internal scroll cap");
     }

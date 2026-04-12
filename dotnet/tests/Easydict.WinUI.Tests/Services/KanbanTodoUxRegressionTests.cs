@@ -20,6 +20,7 @@ public class KanbanTodoUxRegressionTests
     private static readonly string SettingsPageXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml");
     private static readonly string SettingsPageCodePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml.cs");
     private static readonly string ServiceCheckItemPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Models", "ServiceCheckItem.cs");
+    private static readonly string ServiceResultItemXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml");
     private static readonly string ServiceResultItemPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml.cs");
     private static readonly string AppPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "App.xaml.cs");
     private static readonly string MiniWindowServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "MiniWindowService.cs");
@@ -161,6 +162,32 @@ public class KanbanTodoUxRegressionTests
             "hide-empty should force the row closed while keeping the service visible in the list");
         snippet.Should().NotContain("this.Visibility = Visibility.Collapsed;",
             "hide-empty should no longer remove the entire service row from the results list");
+    }
+
+    [Fact]
+    public void ServiceResultItem_UsesChainedInnerScrollForLongContent()
+    {
+        var xaml = File.ReadAllText(ServiceResultItemXamlPath);
+        var code = File.ReadAllText(ServiceResultItemPath);
+
+        xaml.Should().Contain("x:Name=\"ResultContentScrollViewer\"",
+            "service results should use an explicit inner scroll container for long content");
+        xaml.Should().Contain("VerticalScrollBarVisibility=\"Auto\"",
+            "the inner result container should expose a scrollbar when the content is long");
+        xaml.Should().Contain("PointerWheelChanged=\"OnResultContentScrollViewerPointerWheelChanged\"",
+            "scrolling at the inner boundary should explicitly hand wheel input to the outer results list");
+        xaml.Should().Contain("MaxHeight=\"800\"",
+            "the inner result container should cap its viewport height before scrolling");
+        code.Should().Contain("private void OnResultContentScrollViewerPointerWheelChanged",
+            "the inner scroll container should forward edge wheel gestures to the outer results list");
+        code.Should().Contain("FindAncestorScrollViewer(innerScrollViewer)",
+            "edge-wheel forwarding should locate the parent results ScrollViewer");
+        code.Should().Contain("outerScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);",
+            "the outer results ScrollViewer should continue scrolling once the inner content hits its edge");
+        code.Should().Contain("sender.Height = height + 8;",
+            "dictionary WebView content should expand to its full height so the outer chained ScrollViewer owns overflow");
+        code.Should().NotContain("Math.Min(height + 8, 800)",
+            "the WebView should no longer keep its own 800px internal scroll cap");
     }
 
     [Fact]

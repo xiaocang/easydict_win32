@@ -1259,17 +1259,70 @@ public sealed partial class ServiceResultItem : UserControl
 
         try
         {
-            // Get content height and resize WebView2 to fit
+            // Let the outer result ScrollViewer own the overflow behavior so wheel
+            // input can chain into the parent results list at the top/bottom edge.
             var heightStr = await sender.CoreWebView2.ExecuteScriptAsync("document.body.scrollHeight.toString()");
             if (int.TryParse(heightStr.Trim('"'), out var height) && height > 0)
             {
-                sender.Height = Math.Min(height + 8, 800); // Cap at 800px
+                sender.Height = height + 8;
             }
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[ServiceResultItem] Failed to auto-size WebView2: {ex.Message}");
         }
+    }
+
+    private void OnResultContentScrollViewerPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not ScrollViewer innerScrollViewer)
+        {
+            return;
+        }
+
+        var delta = e.GetCurrentPoint(innerScrollViewer).Properties.MouseWheelDelta;
+        if (delta == 0)
+        {
+            return;
+        }
+
+        var atTop = innerScrollViewer.VerticalOffset <= 0;
+        var atBottom = innerScrollViewer.VerticalOffset >= innerScrollViewer.ScrollableHeight;
+        var shouldBubbleToOuter = (delta > 0 && atTop) || (delta < 0 && atBottom);
+        if (!shouldBubbleToOuter)
+        {
+            return;
+        }
+
+        var outerScrollViewer = FindAncestorScrollViewer(innerScrollViewer);
+        if (outerScrollViewer == null)
+        {
+            return;
+        }
+
+        var targetOffset = Math.Clamp(
+            outerScrollViewer.VerticalOffset - delta,
+            0,
+            outerScrollViewer.ScrollableHeight);
+
+        outerScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
+        e.Handled = true;
+    }
+
+    private static ScrollViewer? FindAncestorScrollViewer(DependencyObject? start)
+    {
+        var current = VisualTreeHelper.GetParent(start);
+        while (current != null)
+        {
+            if (current is ScrollViewer scrollViewer)
+            {
+                return scrollViewer;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 
     private static string GetMimeType(string path)

@@ -203,10 +203,12 @@ public class KanbanTodoUxRegressionTests
             "the inner result container should cap its viewport height before scrolling");
         code.Should().Contain("private void OnResultContentScrollViewerPointerWheelChanged",
             "the inner scroll container should forward edge wheel gestures to the outer results list");
-        code.Should().Contain("FindAncestorScrollViewer(innerScrollViewer)",
-            "edge-wheel forwarding should locate the parent results ScrollViewer");
-        code.Should().Contain("outerScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);",
-            "the outer results ScrollViewer should continue scrolling once the inner content hits its edge");
+        code.Should().Contain("private static bool TryScrollViewerChain",
+            "nested wheel forwarding should flow through a shared helper instead of duplicating one-hop ChangeView logic");
+        code.Should().Contain("TryScrollViewerChain(FindAncestorScrollViewer(innerScrollViewer), offsetDelta)",
+            "edge-wheel forwarding should continue through the ancestor scroll chain after the inner result viewer hits its boundary");
+        code.Should().NotContain("outerScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);",
+            "the inner result viewer should not stop after a single outer-scroll hop");
         code.Should().Contain("MeasureDictionaryHeightAsync(sender)",
             "dictionary WebView results should keep a lightweight post-navigation sizing pass");
         code.Should().Contain("await Task.Delay(50);",
@@ -227,8 +229,12 @@ public class KanbanTodoUxRegressionTests
             "dictionary HTML should also proxy ordinary wheel input back to the host when there is no true internal scroll container");
         code.Should().Contain("private void OnDictWebViewWebMessageReceived",
             "the host control should translate WebView wheel-boundary messages into outer ScrollViewer movement");
-        code.Should().Contain("ResultContentScrollViewer ?? FindAncestorScrollViewer(DictWebView)",
-            "the WebView relay should target the named result-content scroller first instead of relying only on ancestor lookup");
+        code.Should().Contain("TryScrollViewerChain(hostScrollViewer, deltaY)",
+            "the WebView relay should traverse the scroll chain instead of stopping at the first host ScrollViewer");
+        code.Should().Contain("currentScrollViewer = FindAncestorScrollViewer(currentScrollViewer);",
+            "the shared helper should continue climbing through ancestor ScrollViewers when an intermediate host is already at its boundary");
+        code.Should().NotContain("hostScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);",
+            "the WebView relay should not stop after moving only the first host ScrollViewer");
         code.Should().Contain("typeElement.GetString() is not \"dict-wheel-boundary\" and not \"dict-wheel-passthrough\"",
             "the host should accept both boundary handoff and full passthrough wheel messages from the WebView surface");
         code.Should().NotContain("Math.Min(height + 8, 800)",

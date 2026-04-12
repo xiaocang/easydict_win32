@@ -1442,17 +1442,7 @@ public sealed partial class ServiceResultItem : UserControl
             }
 
             var hostScrollViewer = ResultContentScrollViewer ?? FindAncestorScrollViewer(DictWebView);
-            if (hostScrollViewer == null)
-            {
-                return;
-            }
-
-            var targetOffset = Math.Clamp(
-                hostScrollViewer.VerticalOffset + deltaY,
-                0,
-                hostScrollViewer.ScrollableHeight);
-
-            hostScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
+            TryScrollViewerChain(hostScrollViewer, deltaY);
         }
         catch (Exception ex)
         {
@@ -1481,19 +1471,8 @@ public sealed partial class ServiceResultItem : UserControl
             return;
         }
 
-        var outerScrollViewer = FindAncestorScrollViewer(innerScrollViewer);
-        if (outerScrollViewer == null)
-        {
-            return;
-        }
-
-        var targetOffset = Math.Clamp(
-            outerScrollViewer.VerticalOffset - delta,
-            0,
-            outerScrollViewer.ScrollableHeight);
-
-        outerScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
-        e.Handled = true;
+        var offsetDelta = -delta;
+        e.Handled = TryScrollViewerChain(FindAncestorScrollViewer(innerScrollViewer), offsetDelta);
     }
 
     private static async Task<string> MeasureDictionaryHeightAsync(WebView2 sender)
@@ -1531,6 +1510,33 @@ public sealed partial class ServiceResultItem : UserControl
         }
 
         return null;
+    }
+
+    private static bool TryScrollViewerChain(ScrollViewer? startScrollViewer, double offsetDelta)
+    {
+        if (startScrollViewer == null || Math.Abs(offsetDelta) < double.Epsilon)
+        {
+            return false;
+        }
+
+        var currentScrollViewer = startScrollViewer;
+        while (currentScrollViewer != null)
+        {
+            var targetOffset = Math.Clamp(
+                currentScrollViewer.VerticalOffset + offsetDelta,
+                0,
+                currentScrollViewer.ScrollableHeight);
+
+            if (Math.Abs(targetOffset - currentScrollViewer.VerticalOffset) > 0.5)
+            {
+                currentScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
+                return true;
+            }
+
+            currentScrollViewer = FindAncestorScrollViewer(currentScrollViewer);
+        }
+
+        return false;
     }
 
     private static string GetMimeType(string path)

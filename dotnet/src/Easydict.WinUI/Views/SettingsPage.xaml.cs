@@ -27,6 +27,7 @@ internal sealed record NavSection(string Name, string Tooltip, string IconGlyph,
 public sealed partial class SettingsPage : Page
 {
     private static readonly Regex NonServiceIdCharRegex = new("[^a-z0-9-]", RegexOptions.Compiled);
+    private const string ReorderButtonEmoji = "\u2195\uFE0F";
     private readonly SettingsService _settings = SettingsService.Instance;
     private bool _isLoading = true; // Prevent change detection during initial load
     private bool _isInitialized;
@@ -34,7 +35,9 @@ public sealed partial class SettingsPage : Page
     private bool _isTornDown;
     private bool _changeHandlersRegistered;
     private bool _hasUnsavedChanges; // Track whether any settings have been modified since last save
-    private bool _isServiceReorderModeEnabled;
+    private bool _isMainWindowReorderModeEnabled;
+    private bool _isMiniWindowReorderModeEnabled;
+    private bool _isFixedWindowReorderModeEnabled;
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
     private readonly CancellationTokenSource _lifetimeCts = new();
 
@@ -236,7 +239,6 @@ public sealed partial class SettingsPage : Page
             EnabledServicesHeaderText.Text = loc.GetString("EnabledServices");
         if (EnabledServicesDescriptionText != null)
             EnabledServicesDescriptionText.Text = loc.GetString("EnabledServicesDescription");
-        UpdateServiceReorderModeButtonText();
 
         // International Services toggle
         EnableInternationalServicesHeaderText.Text = loc.GetString("EnableInternationalServices");
@@ -250,6 +252,7 @@ public sealed partial class SettingsPage : Page
             MiniWindowHeaderText.Text = loc.GetString("MiniWindow");
         if (FixedWindowHeaderText != null)
             FixedWindowHeaderText.Text = loc.GetString("FixedWindow");
+        UpdateAllServiceReorderModeButtonText();
 
         // Language Preferences section
         if (LanguagePreferencesHeaderText != null)
@@ -901,18 +904,47 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private void OnToggleServiceReorderModeClicked(object sender, RoutedEventArgs e)
+    private void OnToggleMainWindowReorderModeClicked(object sender, RoutedEventArgs e)
     {
-        SetServiceReorderMode(!_isServiceReorderModeEnabled);
+        SetMainWindowReorderMode(!_isMainWindowReorderModeEnabled);
     }
 
-    private void SetServiceReorderMode(bool isEnabled)
+    private void OnToggleMiniWindowReorderModeClicked(object sender, RoutedEventArgs e)
     {
-        _isServiceReorderModeEnabled = isEnabled;
+        SetMiniWindowReorderMode(!_isMiniWindowReorderModeEnabled);
+    }
+
+    private void OnToggleFixedWindowReorderModeClicked(object sender, RoutedEventArgs e)
+    {
+        SetFixedWindowReorderMode(!_isFixedWindowReorderModeEnabled);
+    }
+
+    private void SetMainWindowReorderMode(bool isEnabled)
+    {
+        _isMainWindowReorderModeEnabled = isEnabled;
         ApplyServiceReorderMode(_mainWindowServices, isEnabled);
+        UpdateServiceReorderModeButtonText(MainWindowReorderModeButton, isEnabled);
+    }
+
+    private void SetMiniWindowReorderMode(bool isEnabled)
+    {
+        _isMiniWindowReorderModeEnabled = isEnabled;
         ApplyServiceReorderMode(_miniWindowServices, isEnabled);
+        UpdateServiceReorderModeButtonText(MiniWindowReorderModeButton, isEnabled);
+    }
+
+    private void SetFixedWindowReorderMode(bool isEnabled)
+    {
+        _isFixedWindowReorderModeEnabled = isEnabled;
         ApplyServiceReorderMode(_fixedWindowServices, isEnabled);
-        UpdateServiceReorderModeButtonText();
+        UpdateServiceReorderModeButtonText(FixedWindowReorderModeButton, isEnabled);
+    }
+
+    private void ResetServiceReorderModes()
+    {
+        SetMainWindowReorderMode(false);
+        SetMiniWindowReorderMode(false);
+        SetFixedWindowReorderMode(false);
     }
 
     private static void ApplyServiceReorderMode(ObservableCollection<ServiceCheckItem> collection, bool isEnabled)
@@ -923,18 +955,25 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private void UpdateServiceReorderModeButtonText()
+    private void UpdateAllServiceReorderModeButtonText()
     {
-        if (ServiceReorderModeButton == null)
+        UpdateServiceReorderModeButtonText(MainWindowReorderModeButton, _isMainWindowReorderModeEnabled);
+        UpdateServiceReorderModeButtonText(MiniWindowReorderModeButton, _isMiniWindowReorderModeEnabled);
+        UpdateServiceReorderModeButtonText(FixedWindowReorderModeButton, _isFixedWindowReorderModeEnabled);
+    }
+
+    private static void UpdateServiceReorderModeButtonText(Button? button, bool isEnabled)
+    {
+        if (button == null)
         {
             return;
         }
 
         var loc = LocalizationService.Instance;
-        ServiceReorderModeButton.Content = loc.GetString(
-            _isServiceReorderModeEnabled
+        button.Content = $"{ReorderButtonEmoji} {loc.GetString(
+            isEnabled
                 ? "EnabledServicesDoneReorderingButton"
-                : "EnabledServicesReorderButton");
+                : "EnabledServicesReorderButton")}";
     }
 
     /// <summary>
@@ -1148,7 +1187,7 @@ public sealed partial class SettingsPage : Page
             PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices, _settings.MiniWindowServiceEnabledQuery, manager);
             PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices, _settings.FixedWindowServiceEnabledQuery, manager);
         }
-        SetServiceReorderMode(false);
+        ResetServiceReorderModes();
         if (_changeHandlersRegistered)
         {
             RegisterServiceCollectionHandlers(_mainWindowServices);
@@ -2222,7 +2261,7 @@ public sealed partial class SettingsPage : Page
 
         // Persist to storage
         _settings.Save();
-        SetServiceReorderMode(false);
+        ResetServiceReorderModes();
 
         // Refresh window service results to pick up new EnabledQuery settings
         MiniWindowService.Instance.RefreshServiceResults();

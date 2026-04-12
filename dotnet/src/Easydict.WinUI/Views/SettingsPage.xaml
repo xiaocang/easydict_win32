@@ -115,12 +115,6 @@
                 <TextBlock x:Name="EnabledServicesDescriptionText" Text="Select which translation services to display in each window. Multiple services will run in parallel."
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
-                <Button x:Name="ServiceReorderModeButton"
-                        Content="Reorder"
-                        Click="OnToggleServiceReorderModeClicked"
-                        HorizontalAlignment="Left"
-                        Padding="10,4" />
-
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="ImportMdxDictionaryButton"
                             Content="Import MDX Dictionary"
@@ -161,7 +155,13 @@
                 <!-- Main Window Services -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock x:Name="MainWindowHeaderText" Text="Main Window" FontWeight="SemiBold" FontSize="14" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="MainWindowReorderModeButton"
+                                    Click="OnToggleMainWindowReorderModeClicked"
+                                    Padding="8,2"
+                                    VerticalAlignment="Center" />
+                            <TextBlock x:Name="MainWindowHeaderText" Text="Main Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+                        </StackPanel>
                         <ItemsControl x:Name="MainWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -217,7 +217,13 @@
                 <!-- Mini Window Services -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock x:Name="MiniWindowHeaderText" Text="Mini Window" FontWeight="SemiBold" FontSize="14" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="MiniWindowReorderModeButton"
+                                    Click="OnToggleMiniWindowReorderModeClicked"
+                                    Padding="8,2"
+                                    VerticalAlignment="Center" />
+                            <TextBlock x:Name="MiniWindowHeaderText" Text="Mini Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+                        </StackPanel>
                         <ItemsControl x:Name="MiniWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -273,7 +279,13 @@
                 <!-- Fixed Window Services -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
-                        <TextBlock x:Name="FixedWindowHeaderText" Text="Fixed Window" FontWeight="SemiBold" FontSize="14" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="FixedWindowReorderModeButton"
+                                    Click="OnToggleFixedWindowReorderModeClicked"
+                                    Padding="8,2"
+                                    VerticalAlignment="Center" />
+                            <TextBlock x:Name="FixedWindowHeaderText" Text="Fixed Window" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+                        </StackPanel>
                         <ItemsControl x:Name="FixedWindowServicesPanel">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>

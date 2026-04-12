@@ -89,20 +89,35 @@ public class KanbanTodoUxRegressionTests
             "service population should honor the persisted enabled-service order");
         code.Should().Contain("var ordered = managerOrder",
             "service population should rebuild the view in persisted order");
-        xaml.Should().Contain("x:Name=\"ServiceReorderModeButton\"",
-            "the Settings page should provide an explicit entry point for reordering instead of always showing move controls");
-        xaml.Should().Contain("Click=\"OnToggleServiceReorderModeClicked\"",
-            "the reorder entry should toggle an explicit reorder mode");
+        xaml.Should().NotContain("x:Name=\"ServiceReorderModeButton\"",
+            "the old single global reorder entry should be replaced by per-window entry points");
+        xaml.Should().Contain("x:Name=\"MainWindowReorderModeButton\"",
+            "main window services should have their own reorder entry point");
+        xaml.Should().Contain("x:Name=\"MiniWindowReorderModeButton\"",
+            "mini window services should have their own reorder entry point");
+        xaml.Should().Contain("x:Name=\"FixedWindowReorderModeButton\"",
+            "fixed window services should have their own reorder entry point");
+        xaml.Should().Contain("Click=\"OnToggleMainWindowReorderModeClicked\"",
+            "the main window reorder entry should toggle that section's reorder mode");
+        xaml.Should().Contain("Click=\"OnToggleMiniWindowReorderModeClicked\"",
+            "the mini window reorder entry should toggle that section's reorder mode");
+        xaml.Should().Contain("Click=\"OnToggleFixedWindowReorderModeClicked\"",
+            "the fixed window reorder entry should toggle that section's reorder mode");
         xaml.Should().Contain("Visibility=\"{Binding IsReorderModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}\"",
             "per-row move buttons should only appear while reorder mode is enabled");
         itemCode.Should().Contain("public bool IsReorderModeEnabled",
             "service items should expose reorder-mode visibility state for the move controls");
-        code.Should().Contain("SetServiceReorderMode(false);",
+        code.Should().Contain("private const string ReorderButtonEmoji = \"\\u2195\\uFE0F\";",
+            "the new per-window reorder entries should include the requested emoji marker");
+        code.Should().Contain("ResetServiceReorderModes();",
             "the page should fall back to the clean default state after load/save");
         code.Should().Contain("EnabledServicesReorderButton",
             "the reorder entry should use localized copy");
         code.Should().Contain("EnabledServicesDoneReorderingButton",
             "the active-state button label should also come from localization");
+        AssertPrecedes(xaml, "MainWindowReorderModeButton", "MainWindowHeaderText");
+        AssertPrecedes(xaml, "MiniWindowReorderModeButton", "MiniWindowHeaderText");
+        AssertPrecedes(xaml, "FixedWindowReorderModeButton", "FixedWindowHeaderText");
     }
 
     [Fact]
@@ -192,5 +207,16 @@ public class KanbanTodoUxRegressionTests
         }
 
         return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..");
+    }
+
+    private static void AssertPrecedes(string content, string firstName, string secondName)
+    {
+        var firstIndex = content.IndexOf($"x:Name=\"{firstName}\"", StringComparison.Ordinal);
+        var secondIndex = content.IndexOf($"x:Name=\"{secondName}\"", StringComparison.Ordinal);
+
+        firstIndex.Should().BeGreaterOrEqualTo(0, $"{firstName} should exist in SettingsPage.xaml");
+        secondIndex.Should().BeGreaterOrEqualTo(0, $"{secondName} should exist in SettingsPage.xaml");
+        firstIndex.Should().BeLessThan(secondIndex,
+            $"{firstName} should be rendered before {secondName} in the section header");
     }
 }

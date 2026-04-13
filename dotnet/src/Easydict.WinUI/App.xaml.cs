@@ -511,6 +511,16 @@ namespace Easydict.WinUI
         {
             try
             {
+                if (MiniWindowService.Instance.IsVisible
+                    && MiniWindowService.Instance.IsForeground)
+                {
+                    _window?.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        MiniWindowService.Instance.Hide();
+                    });
+                    return;
+                }
+
                 // Capture source window before getting text (which may change focus)
                 TextInsertionService.CaptureSourceWindow();
 
@@ -523,12 +533,6 @@ namespace Easydict.WinUI
                     {
                         // Selected text takes precedence — always show with the new text.
                         MiniWindowService.Instance.ShowWithText(text);
-                    }
-                    else if (MiniWindowService.Instance.IsVisible
-                        && MiniWindowService.Instance.IsForeground)
-                    {
-                        // Toggle behavior (issue #123): hotkey re-press hides foreground window.
-                        MiniWindowService.Instance.Hide();
                     }
                     else
                     {
@@ -547,6 +551,16 @@ namespace Easydict.WinUI
         {
             try
             {
+                if (FixedWindowService.Instance.IsVisible
+                    && FixedWindowService.Instance.IsForeground)
+                {
+                    _window?.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        FixedWindowService.Instance.Hide();
+                    });
+                    return;
+                }
+
                 // Capture source window before getting text (which may change focus)
                 TextInsertionService.CaptureSourceWindow();
 
@@ -559,12 +573,6 @@ namespace Easydict.WinUI
                     {
                         // Selected text takes precedence — always show with the new text.
                         FixedWindowService.Instance.ShowWithText(text);
-                    }
-                    else if (FixedWindowService.Instance.IsVisible
-                        && FixedWindowService.Instance.IsForeground)
-                    {
-                        // Toggle behavior (issue #123): hotkey re-press hides foreground window.
-                        FixedWindowService.Instance.Hide();
                     }
                     else
                     {

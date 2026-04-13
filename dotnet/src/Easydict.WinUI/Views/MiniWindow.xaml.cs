@@ -64,6 +64,8 @@ public sealed partial class MiniWindow : Window
     private bool _resizePending;      // resize requested but not yet executed
     private bool _resizeThrottling;   // inside cooldown window
     private const int ResizeThrottleMs = 150;
+    private const int InputFocusRetryDelayMs = 50;
+    private const int InputFocusMaxAttempts = 10;
 
     /// <summary>
     /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -533,6 +535,13 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     private void OnWindowActivated(object sender, WindowActivatedEventArgs args)
     {
+        if (args.WindowActivationState != WindowActivationState.Deactivated)
+        {
+            Debug.WriteLine($"[MiniWindow] Activated: state={args.WindowActivationState}, loaded={_isLoaded}");
+            QueueInputFocusAndSelectAll();
+            return;
+        }
+
         if (args.WindowActivationState == WindowActivationState.Deactivated)
         {
             // Grace period: don't auto-close within 500ms of showing
@@ -1541,12 +1550,66 @@ public sealed partial class MiniWindow : Window
         RequestResize();
     }
 
-    private void QueueInputFocusAndSelectAll()
+    private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts)
     {
-        DispatcherQueue.TryEnqueue(() =>
+        DispatcherQueue.TryEnqueue(async () =>
         {
-            InputTextBox.Focus(FocusState.Programmatic);
-            InputTextBox.SelectAll();
+            var attempt = InputFocusMaxAttempts - attemptsRemaining + 1;
+
+            if (_isClosing)
+            {
+                Debug.WriteLine($"[MiniWindow] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: aborted because window is closing");
+                return;
+            }
+
+            if (!_isLoaded || InputTextBox.XamlRoot is null || !InputTextBox.IsEnabled)
+            {
+                Debug.WriteLine(
+                    $"[MiniWindow] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: " +
+                    $"loaded={_isLoaded}, xamlRootReady={InputTextBox.XamlRoot is not null}, enabled={InputTextBox.IsEnabled}");
+                if (attemptsRemaining > 1)
+                {
+                    await Task.Delay(InputFocusRetryDelayMs);
+                    QueueInputFocusAndSelectAll(attemptsRemaining - 1);
+                }
+                return;
+            }
+
+            if (!IsForeground)
+            {
+                Debug.WriteLine(
+                    $"[MiniWindow] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: " +
+                    "window is not foreground yet");
+                if (attemptsRemaining > 1)
+                {
+                    await Task.Delay(InputFocusRetryDelayMs);
+                    QueueInputFocusAndSelectAll(attemptsRemaining - 1);
+                }
+                return;
+            }
+
+            var focusResult = InputTextBox.Focus(FocusState.Programmatic);
+            if (focusResult)
+            {
+                InputTextBox.SelectAll();
+            }
+
+            var focusedElement = FocusManager.GetFocusedElement(InputTextBox.XamlRoot);
+            var hasInputFocus = ReferenceEquals(focusedElement, InputTextBox);
+            Debug.WriteLine(
+                $"[MiniWindow] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: " +
+                $"focusResult={focusResult}, hasInputFocus={hasInputFocus}, focusedElement={focusedElement?.GetType().Name ?? "<null>"}");
+
+            if (hasInputFocus)
+            {
+                return;
+            }
+
+            if (attemptsRemaining > 1)
+            {
+                await Task.Delay(InputFocusRetryDelayMs);
+                QueueInputFocusAndSelectAll(attemptsRemaining - 1);
+            }
         });
     }
 

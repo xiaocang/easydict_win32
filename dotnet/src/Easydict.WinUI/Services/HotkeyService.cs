@@ -200,6 +200,7 @@ public sealed class HotkeyService : IDisposable
         {
             int hotkeyId = (int)wParam;
             System.Diagnostics.Debug.WriteLine($"[Hotkey] WM_HOTKEY received, id={hotkeyId}");
+            ForegroundWindowHelper.AllowCurrentProcessToSetForeground("Hotkey");
             ProcessHotkeyMessage(hotkeyId);
             return 0;
         }

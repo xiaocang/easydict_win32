@@ -66,6 +66,8 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private const int MaxHistoryItems = 50;
         private const int QueryShutdownTimeoutSeconds = 2;
+        private const int InputFocusRetryDelayMs = 50;
+        private const int InputFocusMaxAttempts = 10;
 
         public MainPage()
         {
@@ -2605,6 +2607,61 @@ namespace Easydict.WinUI.Views
             _targetLanguageSelector.Reset();
             InputTextBox.Text = text;
             _ = StartQueryTrackedAsync();
+        }
+
+        public void QueueInputFocusAndSelectAll()
+        {
+            QueueInputFocusAndSelectAllCore(InputFocusMaxAttempts);
+        }
+
+        private void QueueInputFocusAndSelectAllCore(int attemptsRemaining)
+        {
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                var attempt = InputFocusMaxAttempts - attemptsRemaining + 1;
+
+                if (_isClosing)
+                {
+                    Debug.WriteLine($"[MainPage] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: aborted because page is closing");
+                    return;
+                }
+
+                if (!_isLoaded || InputTextBox.XamlRoot is null || !InputTextBox.IsEnabled)
+                {
+                    Debug.WriteLine(
+                        $"[MainPage] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: " +
+                        $"loaded={_isLoaded}, xamlRootReady={InputTextBox.XamlRoot is not null}, enabled={InputTextBox.IsEnabled}");
+                    if (attemptsRemaining > 1)
+                    {
+                        await Task.Delay(InputFocusRetryDelayMs);
+                        QueueInputFocusAndSelectAllCore(attemptsRemaining - 1);
+                    }
+                    return;
+                }
+
+                var focusResult = InputTextBox.Focus(FocusState.Programmatic);
+                if (focusResult)
+                {
+                    InputTextBox.SelectAll();
+                }
+
+                var focusedElement = FocusManager.GetFocusedElement(InputTextBox.XamlRoot);
+                var hasInputFocus = ReferenceEquals(focusedElement, InputTextBox);
+                Debug.WriteLine(
+                    $"[MainPage] QueueInputFocusAndSelectAll attempt {attempt}/{InputFocusMaxAttempts}: " +
+                    $"focusResult={focusResult}, hasInputFocus={hasInputFocus}, focusedElement={focusedElement?.GetType().Name ?? "<null>"}");
+
+                if (hasInputFocus)
+                {
+                    return;
+                }
+
+                if (attemptsRemaining > 1)
+                {
+                    await Task.Delay(InputFocusRetryDelayMs);
+                    QueueInputFocusAndSelectAllCore(attemptsRemaining - 1);
+                }
+            });
         }
 
         /// <summary>

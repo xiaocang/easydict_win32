@@ -184,10 +184,11 @@ public static class TextSelectionService
         // calls. Previously, GetForegroundWindow was called 3+ times and Process.GetProcessById
         // 2-3 times per selection, each allocating process handles.
         string? processName = null;
+        uint processId = 0;
         try
         {
             var hWnd = GetForegroundWindow();
-            if (hWnd != IntPtr.Zero && GetWindowThreadProcessId(hWnd, out uint processId) != 0)
+            if (hWnd != IntPtr.Zero && GetWindowThreadProcessId(hWnd, out processId) != 0)
             {
                 using var process = Process.GetProcessById((int)processId);
                 processName = process.ProcessName;
@@ -203,6 +204,12 @@ public static class TextSelectionService
         var isTerminal = IsTerminalApp(processName);
         var normalizedProcessName = NormalizeProcessName(processName);
         Debug.WriteLine($"[TextSelectionService] App classification: raw='{processName}', normalized='{normalizedProcessName}', electron={isElectron}, terminal={isTerminal}");
+
+        if (processId == Environment.ProcessId)
+        {
+            Debug.WriteLine("[TextSelectionService] Foreground target belongs to Easydict itself, skipping selection capture");
+            return string.Empty;
+        }
 
         // Track if we already tried clipboard for Electron to avoid double Ctrl+C
         bool clipboardAlreadyAttempted = false;

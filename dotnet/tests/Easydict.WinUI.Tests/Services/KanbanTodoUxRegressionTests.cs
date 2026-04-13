@@ -27,6 +27,7 @@ public class KanbanTodoUxRegressionTests
     private static readonly string ServiceResultItemXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml");
     private static readonly string ServiceResultItemPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml.cs");
     private static readonly string ForegroundWindowHelperPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "ForegroundWindowHelper.cs");
+    private static readonly string HotkeyServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "HotkeyService.cs");
     private static readonly string AppPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "App.xaml.cs");
     private static readonly string MiniWindowServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "MiniWindowService.cs");
     private static readonly string FixedWindowServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "FixedWindowService.cs");
@@ -314,6 +315,7 @@ public class KanbanTodoUxRegressionTests
     {
         var appCode = File.ReadAllText(AppPath);
         var mainPageCode = File.ReadAllText(MainPageCodePath);
+        var hotkeyServiceCode = File.ReadAllText(HotkeyServicePath);
         var miniServiceCode = File.ReadAllText(MiniWindowServicePath);
         var fixedServiceCode = File.ReadAllText(FixedWindowServicePath);
         var miniWindowCode = File.ReadAllText(MiniWindowPath);
@@ -374,6 +376,10 @@ public class KanbanTodoUxRegressionTests
             "the helper should release the synthetic ALT key immediately after priming foreground activation");
         foregroundHelperCode.Should().Contain("SetForegroundWindow(targetHwnd)",
             "the helper should still use a direct Win32 foreground activation call after priming input context");
+        foregroundHelperCode.Should().Contain("AllowSetForegroundWindow(GetCurrentProcessId())",
+            "the helper should expose a way to preserve foreground activation permission while WM_HOTKEY is still active");
+        hotkeyServiceCode.Should().Contain("ForegroundWindowHelper.AllowCurrentProcessToSetForeground(\"Hotkey\")",
+            "the hotkey dispatcher should preserve foreground activation permission before any async hotkey handler yields");
     }
 
     private static string FindProjectRoot()

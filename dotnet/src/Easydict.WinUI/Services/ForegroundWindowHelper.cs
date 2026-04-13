@@ -20,6 +20,19 @@ internal static class ForegroundWindowHelper
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool AllowSetForegroundWindow(uint dwProcessId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentProcessId();
+
+    public static bool AllowCurrentProcessToSetForeground(string owner)
+    {
+        var allowed = AllowSetForegroundWindow(GetCurrentProcessId());
+        Debug.WriteLine($"[{owner}] AllowSetForegroundWindow(currentPid): {allowed}");
+        return allowed;
+    }
+
     public static bool TryBringToFront(Window window, string owner)
     {
         var targetHwnd = WindowNative.GetWindowHandle(window);

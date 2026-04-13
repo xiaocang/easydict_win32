@@ -13,9 +13,6 @@ namespace Easydict.WinUI
     public partial class App : Application
     {
         [DllImport("user32.dll")]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
 
         private Window? _window;
@@ -480,6 +477,7 @@ namespace Easydict.WinUI
                 else
                 {
                     ShowAndActivateWindow();
+                    FocusMainWindowInputForTyping();
                 }
             });
         }
@@ -803,14 +801,23 @@ namespace Easydict.WinUI
 
             // Use Win32 SetForegroundWindow to forcefully bring window to front
             // (Activate() alone does not raise an already-visible-but-background window)
-            var hWnd = WindowNative.GetWindowHandle(_window);
-            var foregroundSet = SetForegroundWindow(hWnd);
+            var foregroundSet = ForegroundWindowHelper.TryBringToFront(_window, "App");
             if (!foregroundSet)
             {
                 System.Diagnostics.Debug.WriteLine("App: SetForegroundWindow failed; relying on Activate()");
             }
 
             _window.Activate();
+        }
+
+        private void FocusMainWindowInputForTyping()
+        {
+            if (_window?.Content is not Frame frame || frame.Content is not MainPage mainPage)
+            {
+                return;
+            }
+
+            mainPage.QueueInputFocusAndSelectAll();
         }
 
         /// <summary>

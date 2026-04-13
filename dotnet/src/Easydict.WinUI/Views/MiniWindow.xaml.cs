@@ -24,9 +24,6 @@ namespace Easydict.WinUI.Views;
 public sealed partial class MiniWindow : Window
 {
     [DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT lpPoint);
 
     [DllImport("user32.dll")]
@@ -1531,18 +1528,26 @@ public sealed partial class MiniWindow : Window
         }
 
         // Use Win32 SetForegroundWindow to forcefully bring window to front
-        var hWnd = WindowNative.GetWindowHandle(this);
-        var foregroundSet = SetForegroundWindow(hWnd);
+        var foregroundSet = ForegroundWindowHelper.TryBringToFront(this, "MiniWindow");
         if (!foregroundSet)
         {
             System.Diagnostics.Debug.WriteLine("MiniWindow: SetForegroundWindow failed; relying on Activate()");
         }
 
         this.Activate();
-        InputTextBox.Focus(FocusState.Programmatic);
+        QueueInputFocusAndSelectAll();
 
         // Resize window to fit existing content (delayed to allow layout to complete)
         RequestResize();
+    }
+
+    private void QueueInputFocusAndSelectAll()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            InputTextBox.Focus(FocusState.Programmatic);
+            InputTextBox.SelectAll();
+        });
     }
 
     /// <summary>

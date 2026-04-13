@@ -2607,6 +2607,15 @@ namespace Easydict.WinUI.Views
             _ = StartQueryTrackedAsync();
         }
 
+        public void QueueInputFocusAndSelectAll()
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                InputTextBox.Focus(FocusState.Programmatic);
+                InputTextBox.SelectAll();
+            });
+        }
+
         /// <summary>
         /// Cancel the current query's CTS without disposing it; disposal happens in StartQueryAsync's finally.
         /// </summary>

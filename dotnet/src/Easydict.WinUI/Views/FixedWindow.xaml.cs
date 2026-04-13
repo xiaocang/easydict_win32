@@ -22,9 +22,6 @@ namespace Easydict.WinUI.Views;
 public sealed partial class FixedWindow : Window
 {
     [DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
     private LanguageDetectionService? _detectionService;
@@ -1134,18 +1131,26 @@ public sealed partial class FixedWindow : Window
         }
 
         // Use Win32 SetForegroundWindow to forcefully bring window to front
-        var hWnd = WindowNative.GetWindowHandle(this);
-        var foregroundSet = SetForegroundWindow(hWnd);
+        var foregroundSet = ForegroundWindowHelper.TryBringToFront(this, "FixedWindow");
         if (!foregroundSet)
         {
             System.Diagnostics.Debug.WriteLine("FixedWindow: SetForegroundWindow failed; relying on Activate()");
         }
 
         this.Activate();
-        InputTextBox.Focus(FocusState.Programmatic);
+        QueueInputFocusAndSelectAll();
 
         // Resize window to fit existing content
         RequestResize();
+    }
+
+    private void QueueInputFocusAndSelectAll()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            InputTextBox.Focus(FocusState.Programmatic);
+            InputTextBox.SelectAll();
+        });
     }
 
     /// <summary>

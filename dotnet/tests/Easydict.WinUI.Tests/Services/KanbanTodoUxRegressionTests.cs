@@ -18,6 +18,7 @@ public class KanbanTodoUxRegressionTests
     private static readonly string ProjectRoot = FindProjectRoot();
     private static readonly string StringsPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Strings");
     private static readonly string MainPageXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MainPage.xaml");
+    private static readonly string MainPageCodePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MainPage.xaml.cs");
     private static readonly string MiniWindowXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MiniWindow.xaml");
     private static readonly string FixedWindowXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "FixedWindow.xaml");
     private static readonly string SettingsPageXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml");
@@ -25,6 +26,7 @@ public class KanbanTodoUxRegressionTests
     private static readonly string ServiceCheckItemPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Models", "ServiceCheckItem.cs");
     private static readonly string ServiceResultItemXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml");
     private static readonly string ServiceResultItemPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml.cs");
+    private static readonly string ForegroundWindowHelperPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "ForegroundWindowHelper.cs");
     private static readonly string AppPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "App.xaml.cs");
     private static readonly string MiniWindowServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "MiniWindowService.cs");
     private static readonly string FixedWindowServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "FixedWindowService.cs");
@@ -311,10 +313,12 @@ public class KanbanTodoUxRegressionTests
     public void AppAndWindowServices_ImplementForegroundToggleContract()
     {
         var appCode = File.ReadAllText(AppPath);
+        var mainPageCode = File.ReadAllText(MainPageCodePath);
         var miniServiceCode = File.ReadAllText(MiniWindowServicePath);
         var fixedServiceCode = File.ReadAllText(FixedWindowServicePath);
         var miniWindowCode = File.ReadAllText(MiniWindowPath);
         var fixedWindowCode = File.ReadAllText(FixedWindowPath);
+        var foregroundHelperCode = File.ReadAllText(ForegroundWindowHelperPath);
 
         appCode.Should().Contain("if (IsMainWindowVisible && IsMainWindowForeground)",
             "the main window hotkey should hide the foreground window on repeated press");
@@ -330,10 +334,46 @@ public class KanbanTodoUxRegressionTests
         fixedServiceCode.Should().Contain("public bool IsForeground => _fixedWindow?.IsForeground ?? false;",
             "the service facade should expose fixed-window foreground state");
 
+        appCode.Should().Contain("FocusMainWindowInputForTyping();",
+            "the show-window hotkey should explicitly request input focus after raising the main window");
+        appCode.Should().Contain("ForegroundWindowHelper.TryBringToFront(_window, \"App\")",
+            "the main window should use the shared foreground helper instead of relying on bare SetForegroundWindow");
+        appCode.Should().Contain("mainPage.QueueInputFocusAndSelectAll();",
+            "main-window hotkey focus should be delegated through a reusable page helper");
+        mainPageCode.Should().Contain("public void QueueInputFocusAndSelectAll()",
+            "the main page should expose a dedicated hotkey-focus helper");
+        mainPageCode.Should().Contain("InputTextBox.Focus(FocusState.Programmatic);",
+            "the main page helper should request programmatic focus for direct typing");
+        mainPageCode.Should().Contain("InputTextBox.SelectAll();",
+            "the main page helper should select existing text so new typing replaces it immediately");
+
         miniWindowCode.Should().Contain("public bool IsForeground",
             "the concrete mini window should expose the foreground check");
+        miniWindowCode.Should().Contain("private void QueueInputFocusAndSelectAll()",
+            "the mini window should delay focus through a reusable helper");
+        miniWindowCode.Should().Contain("ForegroundWindowHelper.TryBringToFront(this, \"MiniWindow\")",
+            "the mini window should use the shared foreground helper before trying to raise itself");
+        miniWindowCode.Should().Contain("DispatcherQueue.TryEnqueue(() =>",
+            "the mini window should request focus on the next UI tick after activation");
+        miniWindowCode.Should().Contain("InputTextBox.SelectAll();",
+            "the mini window should select existing text after focus for direct overwrite typing");
         fixedWindowCode.Should().Contain("public bool IsForeground",
             "the concrete fixed window should expose the foreground check");
+        fixedWindowCode.Should().Contain("private void QueueInputFocusAndSelectAll()",
+            "the fixed window should delay focus through a reusable helper");
+        fixedWindowCode.Should().Contain("ForegroundWindowHelper.TryBringToFront(this, \"FixedWindow\")",
+            "the fixed window should use the shared foreground helper before trying to raise itself");
+        fixedWindowCode.Should().Contain("DispatcherQueue.TryEnqueue(() =>",
+            "the fixed window should request focus on the next UI tick after activation");
+        fixedWindowCode.Should().Contain("InputTextBox.SelectAll();",
+            "the fixed window should select existing text after focus for direct overwrite typing");
+
+        foregroundHelperCode.Should().Contain("keybd_event(VkMenu, 0, KeyeventfExtendedkey, UIntPtr.Zero)",
+            "foreground raising should prime the OS foreground-input context before SetForegroundWindow runs");
+        foregroundHelperCode.Should().Contain("keybd_event(VkMenu, 0, KeyeventfExtendedkey | KeyeventfKeyup, UIntPtr.Zero)",
+            "the helper should release the synthetic ALT key immediately after priming foreground activation");
+        foregroundHelperCode.Should().Contain("SetForegroundWindow(targetHwnd)",
+            "the helper should still use a direct Win32 foreground activation call after priming input context");
     }
 
     private static string FindProjectRoot()

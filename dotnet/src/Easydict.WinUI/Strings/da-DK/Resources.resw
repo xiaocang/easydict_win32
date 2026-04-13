@@ -458,4 +458,10 @@
   <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
     <value>Procesnavne der skal ekskluderes fra musemarkerings-oversættelse, adskilt med kommaer. Eksempel: "code" for VS Code.</value>
   </data>
+  <data name="EnabledServicesReorderButton" xml:space="preserve">
+    <value>Omarranger</value>
+  </data>
+  <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
+    <value>Færdig</value>
+  </data>
 </root>

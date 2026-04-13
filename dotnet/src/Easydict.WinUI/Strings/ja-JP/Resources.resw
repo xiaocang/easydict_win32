@@ -1073,4 +1073,10 @@
   <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
     <value>マウス選択翻訳から除外するプロセス名をカンマ区切りで入力。例：VS Code は "code"。</value>
   </data>
+  <data name="EnabledServicesReorderButton" xml:space="preserve">
+    <value>並べ替え</value>
+  </data>
+  <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
+    <value>完了</value>
+  </data>
 </root>

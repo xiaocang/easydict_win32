@@ -27,6 +27,7 @@ internal sealed record NavSection(string Name, string Tooltip, string IconGlyph,
 public sealed partial class SettingsPage : Page
 {
     private static readonly Regex NonServiceIdCharRegex = new("[^a-z0-9-]", RegexOptions.Compiled);
+    private const string ReorderButtonEmoji = "\u2195\uFE0F";
     private readonly SettingsService _settings = SettingsService.Instance;
     private bool _isLoading = true; // Prevent change detection during initial load
     private bool _isInitialized;
@@ -34,6 +35,9 @@ public sealed partial class SettingsPage : Page
     private bool _isTornDown;
     private bool _changeHandlersRegistered;
     private bool _hasUnsavedChanges; // Track whether any settings have been modified since last save
+    private bool _isMainWindowReorderModeEnabled;
+    private bool _isMiniWindowReorderModeEnabled;
+    private bool _isFixedWindowReorderModeEnabled;
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
     private readonly CancellationTokenSource _lifetimeCts = new();
 
@@ -248,6 +252,7 @@ public sealed partial class SettingsPage : Page
             MiniWindowHeaderText.Text = loc.GetString("MiniWindow");
         if (FixedWindowHeaderText != null)
             FixedWindowHeaderText.Text = loc.GetString("FixedWindow");
+        UpdateAllServiceReorderModeButtonText();
 
         // Language Preferences section
         if (LanguagePreferencesHeaderText != null)
@@ -722,6 +727,7 @@ public sealed partial class SettingsPage : Page
         MouseSelectionExcludedAppsBox.TextChanged += OnSettingChanged;
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
         LaunchAtStartupToggle.Toggled += OnSettingChanged;
+        HideEmptyServiceResultsToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
 
@@ -737,6 +743,12 @@ public sealed partial class SettingsPage : Page
         ShowFixedHotkeyBox.TextChanged += OnSettingChanged;
         OcrTranslateHotkeyBox.TextChanged += OnSettingChanged;
         SilentOcrHotkeyBox.TextChanged += OnSettingChanged;
+        ShowHotkeyEnabledToggle.Toggled += OnSettingChanged;
+        TranslateHotkeyEnabledToggle.Toggled += OnSettingChanged;
+        ShowMiniHotkeyEnabledToggle.Toggled += OnSettingChanged;
+        ShowFixedHotkeyEnabledToggle.Toggled += OnSettingChanged;
+        OcrTranslateHotkeyEnabledToggle.Toggled += OnSettingChanged;
+        SilentOcrHotkeyEnabledToggle.Toggled += OnSettingChanged;
 
         // TextBox/PasswordBox changes - new services
         DeepSeekKeyBox.PasswordChanged += OnSettingChanged;
@@ -799,6 +811,7 @@ public sealed partial class SettingsPage : Page
         MouseSelectionExcludedAppsBox.TextChanged -= OnSettingChanged;
         AlwaysOnTopToggle.Toggled -= OnSettingChanged;
         LaunchAtStartupToggle.Toggled -= OnSettingChanged;
+        HideEmptyServiceResultsToggle.Toggled -= OnSettingChanged;
         ProxyEnabledToggle.Toggled -= OnSettingChanged;
         ProxyBypassLocalToggle.Toggled -= OnSettingChanged;
 
@@ -813,6 +826,12 @@ public sealed partial class SettingsPage : Page
         ShowFixedHotkeyBox.TextChanged -= OnSettingChanged;
         OcrTranslateHotkeyBox.TextChanged -= OnSettingChanged;
         SilentOcrHotkeyBox.TextChanged -= OnSettingChanged;
+        ShowHotkeyEnabledToggle.Toggled -= OnSettingChanged;
+        TranslateHotkeyEnabledToggle.Toggled -= OnSettingChanged;
+        ShowMiniHotkeyEnabledToggle.Toggled -= OnSettingChanged;
+        ShowFixedHotkeyEnabledToggle.Toggled -= OnSettingChanged;
+        OcrTranslateHotkeyEnabledToggle.Toggled -= OnSettingChanged;
+        SilentOcrHotkeyEnabledToggle.Toggled -= OnSettingChanged;
 
         DeepSeekKeyBox.PasswordChanged -= OnSettingChanged;
         GroqKeyBox.PasswordChanged -= OnSettingChanged;
@@ -883,6 +902,146 @@ public sealed partial class SettingsPage : Page
             toggle.OnContent = loc.GetString("Auto");
             toggle.OffContent = loc.GetString("Manual");
         }
+    }
+
+    private void OnToggleMainWindowReorderModeClicked(object sender, RoutedEventArgs e)
+    {
+        SetMainWindowReorderMode(!_isMainWindowReorderModeEnabled);
+    }
+
+    private void OnToggleMiniWindowReorderModeClicked(object sender, RoutedEventArgs e)
+    {
+        SetMiniWindowReorderMode(!_isMiniWindowReorderModeEnabled);
+    }
+
+    private void OnToggleFixedWindowReorderModeClicked(object sender, RoutedEventArgs e)
+    {
+        SetFixedWindowReorderMode(!_isFixedWindowReorderModeEnabled);
+    }
+
+    private void SetMainWindowReorderMode(bool isEnabled)
+    {
+        _isMainWindowReorderModeEnabled = isEnabled;
+        ApplyServiceReorderMode(_mainWindowServices, isEnabled);
+        UpdateServiceReorderModeButtonText(MainWindowReorderModeButton, isEnabled);
+    }
+
+    private void SetMiniWindowReorderMode(bool isEnabled)
+    {
+        _isMiniWindowReorderModeEnabled = isEnabled;
+        ApplyServiceReorderMode(_miniWindowServices, isEnabled);
+        UpdateServiceReorderModeButtonText(MiniWindowReorderModeButton, isEnabled);
+    }
+
+    private void SetFixedWindowReorderMode(bool isEnabled)
+    {
+        _isFixedWindowReorderModeEnabled = isEnabled;
+        ApplyServiceReorderMode(_fixedWindowServices, isEnabled);
+        UpdateServiceReorderModeButtonText(FixedWindowReorderModeButton, isEnabled);
+    }
+
+    private void ResetServiceReorderModes()
+    {
+        SetMainWindowReorderMode(false);
+        SetMiniWindowReorderMode(false);
+        SetFixedWindowReorderMode(false);
+    }
+
+    private static void ApplyServiceReorderMode(ObservableCollection<ServiceCheckItem> collection, bool isEnabled)
+    {
+        foreach (var item in collection)
+        {
+            item.IsReorderModeEnabled = isEnabled;
+        }
+    }
+
+    private void UpdateAllServiceReorderModeButtonText()
+    {
+        UpdateServiceReorderModeButtonText(MainWindowReorderModeButton, _isMainWindowReorderModeEnabled);
+        UpdateServiceReorderModeButtonText(MiniWindowReorderModeButton, _isMiniWindowReorderModeEnabled);
+        UpdateServiceReorderModeButtonText(FixedWindowReorderModeButton, _isFixedWindowReorderModeEnabled);
+    }
+
+    private static void UpdateServiceReorderModeButtonText(Button? button, bool isEnabled)
+    {
+        if (button == null)
+        {
+            return;
+        }
+
+        var loc = LocalizationService.Instance;
+        button.Content = $"{ReorderButtonEmoji} {loc.GetString(
+            isEnabled
+                ? "EnabledServicesDoneReorderingButton"
+                : "EnabledServicesReorderButton")}";
+    }
+
+    /// <summary>
+    /// Move a service one position up in the given collection.
+    /// </summary>
+    private static void MoveServiceUp(ObservableCollection<ServiceCheckItem> collection, string? serviceId)
+    {
+        if (string.IsNullOrEmpty(serviceId)) return;
+        for (int i = 1; i < collection.Count; i++)
+        {
+            if (collection[i].ServiceId == serviceId)
+            {
+                collection.Move(i, i - 1);
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Move a service one position down in the given collection.
+    /// </summary>
+    private static void MoveServiceDown(ObservableCollection<ServiceCheckItem> collection, string? serviceId)
+    {
+        if (string.IsNullOrEmpty(serviceId)) return;
+        for (int i = 0; i < collection.Count - 1; i++)
+        {
+            if (collection[i].ServiceId == serviceId)
+            {
+                collection.Move(i, i + 1);
+                return;
+            }
+        }
+    }
+
+    private void OnMoveMainServiceUp(object sender, RoutedEventArgs e)
+    {
+        MoveServiceUp(_mainWindowServices, (sender as FrameworkElement)?.Tag as string);
+        OnSettingChanged(sender, e);
+    }
+
+    private void OnMoveMainServiceDown(object sender, RoutedEventArgs e)
+    {
+        MoveServiceDown(_mainWindowServices, (sender as FrameworkElement)?.Tag as string);
+        OnSettingChanged(sender, e);
+    }
+
+    private void OnMoveMiniServiceUp(object sender, RoutedEventArgs e)
+    {
+        MoveServiceUp(_miniWindowServices, (sender as FrameworkElement)?.Tag as string);
+        OnSettingChanged(sender, e);
+    }
+
+    private void OnMoveMiniServiceDown(object sender, RoutedEventArgs e)
+    {
+        MoveServiceDown(_miniWindowServices, (sender as FrameworkElement)?.Tag as string);
+        OnSettingChanged(sender, e);
+    }
+
+    private void OnMoveFixedServiceUp(object sender, RoutedEventArgs e)
+    {
+        MoveServiceUp(_fixedWindowServices, (sender as FrameworkElement)?.Tag as string);
+        OnSettingChanged(sender, e);
+    }
+
+    private void OnMoveFixedServiceDown(object sender, RoutedEventArgs e)
+    {
+        MoveServiceDown(_fixedWindowServices, (sender as FrameworkElement)?.Tag as string);
+        OnSettingChanged(sender, e);
     }
 
     /// <summary>
@@ -1000,6 +1159,7 @@ public sealed partial class SettingsPage : Page
             ? Visibility.Visible : Visibility.Collapsed;
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
         LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
+        HideEmptyServiceResultsToggle.IsOn = _settings.HideEmptyServiceResults;
 
         // Hotkeys
         ShowHotkeyBox.Text = _settings.ShowWindowHotkey;
@@ -1008,6 +1168,12 @@ public sealed partial class SettingsPage : Page
         ShowFixedHotkeyBox.Text = _settings.ShowFixedWindowHotkey;
         OcrTranslateHotkeyBox.Text = _settings.OcrTranslateHotkey;
         SilentOcrHotkeyBox.Text = _settings.SilentOcrHotkey;
+        ShowHotkeyEnabledToggle.IsOn = _settings.EnableShowWindowHotkey;
+        TranslateHotkeyEnabledToggle.IsOn = _settings.EnableTranslateSelectionHotkey;
+        ShowMiniHotkeyEnabledToggle.IsOn = _settings.EnableShowMiniWindowHotkey;
+        ShowFixedHotkeyEnabledToggle.IsOn = _settings.EnableShowFixedWindowHotkey;
+        OcrTranslateHotkeyEnabledToggle.IsOn = _settings.EnableOcrTranslateHotkey;
+        SilentOcrHotkeyEnabledToggle.IsOn = _settings.EnableSilentOcrHotkey;
 
         // Enabled services for each window (populate from TranslationManager.Services)
         // Acquire handle once for all three collections to avoid repeated handle acquisition
@@ -1021,6 +1187,7 @@ public sealed partial class SettingsPage : Page
             PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices, _settings.MiniWindowServiceEnabledQuery, manager);
             PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices, _settings.FixedWindowServiceEnabledQuery, manager);
         }
+        ResetServiceReorderModes();
         if (_changeHandlersRegistered)
         {
             RegisterServiceCollectionHandlers(_mainWindowServices);
@@ -1574,8 +1741,26 @@ public sealed partial class SettingsPage : Page
 
         try
         {
-            foreach (var (serviceId, service) in manager.Services)
+            // Sort enabled services to the user's saved order; disabled services follow in
+            // manager registration order. This preserves the up/down reorder UI choice.
+            var orderIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < enabledServices.Count; i++)
             {
+                orderIndex[enabledServices[i]] = i;
+            }
+
+            var managerOrder = manager.Services.Keys.ToList();
+            var ordered = managerOrder
+                .Select((id, idx) => (id, idx))
+                .OrderBy(t => orderIndex.TryGetValue(t.id, out var sortIdx) ? sortIdx : int.MaxValue)
+                .ThenBy(t => t.idx)
+                .Select(t => t.id);
+
+            foreach (var serviceId in ordered)
+            {
+                if (!manager.Services.TryGetValue(serviceId, out var service))
+                    continue;
+
                 // Default EnabledQuery is true (auto-query); use stored setting if available
                 var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var stored) ? stored : true;
 
@@ -2026,6 +2211,7 @@ public sealed partial class SettingsPage : Page
             .ToList();
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
         _settings.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
+        _settings.HideEmptyServiceResults = HideEmptyServiceResultsToggle.IsOn;
 
         // Apply startup setting to Windows registry
         StartupService.SetEnabled(_settings.LaunchAtStartup);
@@ -2037,6 +2223,12 @@ public sealed partial class SettingsPage : Page
         _settings.ShowFixedWindowHotkey = ShowFixedHotkeyBox.Text;
         _settings.OcrTranslateHotkey = OcrTranslateHotkeyBox.Text;
         _settings.SilentOcrHotkey = SilentOcrHotkeyBox.Text;
+        _settings.EnableShowWindowHotkey = ShowHotkeyEnabledToggle.IsOn;
+        _settings.EnableTranslateSelectionHotkey = TranslateHotkeyEnabledToggle.IsOn;
+        _settings.EnableShowMiniWindowHotkey = ShowMiniHotkeyEnabledToggle.IsOn;
+        _settings.EnableShowFixedWindowHotkey = ShowFixedHotkeyEnabledToggle.IsOn;
+        _settings.EnableOcrTranslateHotkey = OcrTranslateHotkeyEnabledToggle.IsOn;
+        _settings.EnableSilentOcrHotkey = SilentOcrHotkeyEnabledToggle.IsOn;
 
         // Save enabled services for each window (from collections)
         _settings.MainWindowEnabledServices = GetEnabledServicesFromCollection(_mainWindowServices);
@@ -2069,6 +2261,7 @@ public sealed partial class SettingsPage : Page
 
         // Persist to storage
         _settings.Save();
+        ResetServiceReorderModes();
 
         // Refresh window service results to pick up new EnabledQuery settings
         MiniWindowService.Instance.RefreshServiceResults();
@@ -2249,8 +2442,9 @@ public sealed partial class SettingsPage : Page
             var icon = new FontIcon
             {
                 Glyph = section.IconGlyph,
-                FontSize = 14,
+                FontSize = 16,
                 Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                Opacity = 0.6,
                 Tag = i
             };
 
@@ -2355,14 +2549,12 @@ public sealed partial class SettingsPage : Page
             {
                 if (i == activeIndex)
                 {
-                    // Active icon: larger + accent color
-                    icon.FontSize = 16;
+                    // Keep the nav rail layout-stable during scroll sync.
                     icon.Foreground = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
                 }
                 else
                 {
-                    // Inactive icon: smaller + secondary color
-                    icon.FontSize = 14;
+                    // Only change non-layout-affecting state for inactive items.
                     icon.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
                 }
             }

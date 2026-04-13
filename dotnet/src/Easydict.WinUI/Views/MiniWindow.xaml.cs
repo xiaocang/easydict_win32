@@ -1560,6 +1560,25 @@ public sealed partial class MiniWindow : Window
     public bool IsVisible => _appWindow?.IsVisible ?? false;
 
     /// <summary>
+    /// Check if this window is currently the foreground window.
+    /// </summary>
+    public bool IsForeground
+    {
+        get
+        {
+            try
+            {
+                var hWnd = WindowNative.GetWindowHandle(this);
+                return GetForegroundWindow() == hWnd;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
     /// Refresh service result controls when settings change.
     /// </summary>
     public void RefreshServiceResults()

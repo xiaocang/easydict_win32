@@ -53,6 +53,11 @@ public sealed class FixedWindowService : IDisposable
     public bool IsVisible => _fixedWindow?.IsVisible ?? false;
 
     /// <summary>
+    /// Gets whether the fixed window is currently the foreground window.
+    /// </summary>
+    public bool IsForeground => _fixedWindow?.IsForeground ?? false;
+
+    /// <summary>
     /// Toggle fixed window visibility (show if hidden, hide if visible).
     /// </summary>
     public void Toggle()

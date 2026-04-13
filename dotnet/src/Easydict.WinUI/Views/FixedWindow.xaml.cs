@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
@@ -20,6 +21,12 @@ namespace Easydict.WinUI.Views;
 /// </summary>
 public sealed partial class FixedWindow : Window
 {
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
     private LanguageDetectionService? _detectionService;
     // Owned by StartQueryAsync() - only that method creates and disposes via its finally block.
     // Other code may Cancel() but must NOT Dispose().
@@ -1115,6 +1122,25 @@ public sealed partial class FixedWindow : Window
     {
         _isClosing = false;
         _appWindow?.Show();
+
+        // Try to bring window to front using multiple methods
+        try
+        {
+            _appWindow?.MoveInZOrderAtTop();
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"FixedWindow: MoveInZOrderAtTop failed: {ex.Message}");
+        }
+
+        // Use Win32 SetForegroundWindow to forcefully bring window to front
+        var hWnd = WindowNative.GetWindowHandle(this);
+        var foregroundSet = SetForegroundWindow(hWnd);
+        if (!foregroundSet)
+        {
+            System.Diagnostics.Debug.WriteLine("FixedWindow: SetForegroundWindow failed; relying on Activate()");
+        }
+
         this.Activate();
         InputTextBox.Focus(FocusState.Programmatic);
 
@@ -1135,6 +1161,25 @@ public sealed partial class FixedWindow : Window
     /// Check if window is currently visible.
     /// </summary>
     public bool IsVisible => _appWindow?.IsVisible ?? false;
+
+    /// <summary>
+    /// Check if this window is currently the foreground window.
+    /// </summary>
+    public bool IsForeground
+    {
+        get
+        {
+            try
+            {
+                var hWnd = WindowNative.GetWindowHandle(this);
+                return GetForegroundWindow() == hWnd;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
 
     /// <summary>
     /// Refresh service result controls when settings change.

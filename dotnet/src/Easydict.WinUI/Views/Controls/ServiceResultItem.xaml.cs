@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
@@ -62,6 +63,7 @@ public sealed partial class ServiceResultItem : UserControl
             if (_webViewInitialized && DictWebView.CoreWebView2 != null)
             {
                 DictWebView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
+                DictWebView.CoreWebView2.WebMessageReceived -= OnDictWebViewWebMessageReceived;
 
                 try
                 {
@@ -194,6 +196,19 @@ public sealed partial class ServiceResultItem : UserControl
             return;
         }
 
+        // Keep the service row visible for no-result dictionary queries, but force
+        // it collapsed so the header can still show the "No result" status without
+        // expanding the full empty payload.
+        var hideEmpty = SettingsService.Instance.HideEmptyServiceResults
+            && !_serviceResult.IsLoading
+            && !_serviceResult.IsStreaming
+            && !_serviceResult.HasError
+            && _serviceResult.Result?.ResultKind == TranslationResultKind.NoResult;
+        if (hideEmpty)
+        {
+            _serviceResult.IsExpanded = false;
+        }
+
         // Service info
         ServiceNameText.Text = _serviceResult.ServiceDisplayName;
 
@@ -305,7 +320,7 @@ public sealed partial class ServiceResultItem : UserControl
             else if (!string.IsNullOrEmpty(_serviceResult.Result.RawHtml))
             {
                 // Rich HTML from MDX dictionary with MDD resources — render in WebView2
-                ResultText.Visibility = Visibility.Collapsed;
+                ShowRawHtmlPlainTextFallback(_serviceResult.Result, resultTextBrush);
                 PhoneticPanel.Visibility = Visibility.Collapsed;
                 DictionaryPanel.Visibility = Visibility.Collapsed;
                 ErrorText.Visibility = Visibility.Collapsed;
@@ -362,6 +377,22 @@ public sealed partial class ServiceResultItem : UserControl
             DictWebView.Visibility = Visibility.Collapsed;
             ActionButtons.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private void ShowRawHtmlPlainTextFallback(TranslationResult result, Brush? foreground = null)
+    {
+        DictWebView.Visibility = Visibility.Collapsed;
+        DictWebView.Height = 0;
+
+        ResultText.Text = result.TranslatedText;
+        if (foreground != null)
+        {
+            ResultText.Foreground = foreground;
+        }
+
+        ResultText.Visibility = string.IsNullOrWhiteSpace(ResultText.Text)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private void UpdateGrammarUI()
@@ -1114,6 +1145,7 @@ public sealed partial class ServiceResultItem : UserControl
     {
         try
         {
+            DictWebView.Height = 1;
             DictWebView.Visibility = Visibility.Visible;
 
             if (!_webViewInitialized)
@@ -1124,10 +1156,12 @@ public sealed partial class ServiceResultItem : UserControl
                 DictWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 DictWebView.CoreWebView2.Settings.IsScriptEnabled = true;
                 DictWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+                DictWebView.CoreWebView2.Settings.IsWebMessageEnabled = true;
 
                 // Register resource request filter for MDD resources
                 DictWebView.CoreWebView2.AddWebResourceRequestedFilter("https://dictassets/*", CoreWebView2WebResourceContext.All);
                 DictWebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
+                DictWebView.CoreWebView2.WebMessageReceived += OnDictWebViewWebMessageReceived;
                 DictWebView.NavigationCompleted += OnDictWebViewNavigationCompleted;
             }
 
@@ -1169,19 +1203,108 @@ public sealed partial class ServiceResultItem : UserControl
                 <head>
                 <meta charset="utf-8">
                 <style>
+                    html {
+                        margin: 0;
+                        padding: 0;
+                        max-width: 100%;
+                        overflow-x: hidden;
+                        overflow-y: hidden;
+                        height: auto;
+                    }
                     body {
                         margin: 4px 0;
-                        padding: 0;
+                        padding: 0 8px 12px;
                         font-family: -apple-system, 'Segoe UI', sans-serif;
                         font-size: 13px;
+                        line-height: 1.45;
                         color: {{textColor}};
                         background-color: {{bgColor}};
                         word-wrap: break-word;
                         overflow-wrap: break-word;
+                        -webkit-font-smoothing: antialiased;
+                        text-rendering: optimizeLegibility;
+                        max-width: 100%;
+                        overflow-x: hidden;
+                        overflow-y: hidden;
+                        max-height: none;
+                        height: auto;
                     }
-                    img { max-width: 100%; height: auto; }
+                    h1, h2, h3, h4, h5, h6 {
+                        margin: 0 0 10px;
+                        line-height: 1.2;
+                    }
+                    ol, ul {
+                        margin: 8px 0 12px;
+                        padding-left: 1.35em;
+                    }
+                    li {
+                        margin: 4px 0;
+                    }
+                    [class*="phon"], [class*="pron"], [class*="ipa"] {
+                        letter-spacing: 0.01em;
+                        line-height: 1.35;
+                    }
+                    [class*="meaning"], [class*="def"], [class*="sense"], [class*="gloss"] {
+                        line-height: 1.55;
+                    }
+                    img, svg, table { max-width: 100% !important; height: auto; }
+                    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
                     a { color: {{(isDark ? "#569cd6" : "#0066cc")}}; }
+                    [style*="overflow-y"],
+                    [style*="overflow:"],
+                    [style*="max-height"],
+                    [class*="scroll"],
+                    [class*="Scroll"],
+                    [id*="scroll"],
+                    [id*="Scroll"] {
+                        overflow-y: visible !important;
+                        max-height: none !important;
+                        height: auto !important;
+                    }
                 </style>
+                <script>
+                    (() => {
+                        const findScrollableContainer = (start) => {
+                            let node = start instanceof Element ? start : null;
+                            while (node && node !== document.body) {
+                                const style = window.getComputedStyle(node);
+                                const overflowY = style.overflowY || style.overflow;
+                                const canScroll =
+                                    (overflowY === 'auto' || overflowY === 'scroll')
+                                    && node.scrollHeight > node.clientHeight + 1;
+                                if (canScroll) {
+                                    return node;
+                                }
+
+                                node = node.parentElement;
+                            }
+
+                            return null;
+                        };
+
+                        window.addEventListener('wheel', event => {
+                            const scrollable = findScrollableContainer(event.target);
+                            if (!scrollable) {
+                                window.chrome?.webview?.postMessage({
+                                    type: 'dict-wheel-passthrough',
+                                    deltaY: event.deltaY
+                                });
+                                event.preventDefault();
+                                return;
+                            }
+
+                            const atTop = scrollable.scrollTop <= 0;
+                            const atBottom = scrollable.scrollTop + scrollable.clientHeight >= scrollable.scrollHeight - 1;
+                            if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
+                                window.chrome?.webview?.postMessage({
+                                    type: 'dict-wheel-boundary',
+                                    deltaY: event.deltaY
+                                });
+                                event.preventDefault();
+                            }
+                        }, { passive: false, capture: true });
+                    })();
+                </script>
                 </head>
                 <body>{{processedHtml}}</body>
                 </html>
@@ -1192,9 +1315,10 @@ public sealed partial class ServiceResultItem : UserControl
         catch (Exception ex)
         {
             Debug.WriteLine($"[ServiceResultItem] WebView2 rendering failed: {ex.Message}");
-            // Fallback to plain text
-            DictWebView.Visibility = Visibility.Collapsed;
-            ResultText.Visibility = Visibility.Visible;
+            if (_serviceResult?.Result != null)
+            {
+                ShowRawHtmlPlainTextFallback(_serviceResult.Result);
+            }
         }
     }
 
@@ -1242,21 +1366,177 @@ public sealed partial class ServiceResultItem : UserControl
 
     private async void OnDictWebViewNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
-        if (!args.IsSuccess) return;
+        if (!args.IsSuccess)
+        {
+            Debug.WriteLine($"[ServiceResultItem] WebView2 navigation failed: {args.WebErrorStatus}");
+            if (_serviceResult?.Result != null)
+            {
+                ShowRawHtmlPlainTextFallback(_serviceResult.Result);
+            }
+            return;
+        }
 
         try
         {
-            // Get content height and resize WebView2 to fit
-            var heightStr = await sender.CoreWebView2.ExecuteScriptAsync("document.body.scrollHeight.toString()");
+            // Let the browser settle the CSS-first overflow normalization before
+            // measuring content height for the host ScrollViewer.
+            await Task.Delay(50);
+
+            var heightStr = await MeasureDictionaryHeightAsync(sender);
             if (int.TryParse(heightStr.Trim('"'), out var height) && height > 0)
             {
-                sender.Height = Math.Min(height + 8, 800); // Cap at 800px
+                var targetHeight = height + 8;
+                if (Math.Abs(sender.Height - targetHeight) > 1)
+                {
+                    sender.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        ResultText.Visibility = Visibility.Collapsed;
+                        sender.Visibility = Visibility.Visible;
+                        if (Math.Abs(sender.Height - targetHeight) > 1)
+                        {
+                            sender.Height = targetHeight;
+                        }
+                    });
+                }
+
+                return;
+            }
+
+            Debug.WriteLine("[ServiceResultItem] WebView2 measured zero height; falling back to plain text");
+            if (_serviceResult?.Result != null)
+            {
+                ShowRawHtmlPlainTextFallback(_serviceResult.Result);
             }
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[ServiceResultItem] Failed to auto-size WebView2: {ex.Message}");
+            if (_serviceResult?.Result != null)
+            {
+                ShowRawHtmlPlainTextFallback(_serviceResult.Result);
+            }
         }
+    }
+
+    private void OnDictWebViewWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(args.WebMessageAsJson);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("type", out var typeElement) ||
+                (typeElement.GetString() is not "dict-wheel-boundary" and not "dict-wheel-passthrough") ||
+                !root.TryGetProperty("deltaY", out var deltaElement))
+            {
+                return;
+            }
+
+            var deltaY = deltaElement.ValueKind switch
+            {
+                JsonValueKind.Number when deltaElement.TryGetDouble(out var value) => value,
+                _ => 0
+            };
+            if (Math.Abs(deltaY) < double.Epsilon)
+            {
+                return;
+            }
+
+            var hostScrollViewer = ResultContentScrollViewer ?? FindAncestorScrollViewer(DictWebView);
+            TryScrollViewerChain(hostScrollViewer, deltaY);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[ServiceResultItem] Failed to relay WebView wheel boundary: {ex.Message}");
+        }
+    }
+
+    private void OnResultContentScrollViewerPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not ScrollViewer innerScrollViewer)
+        {
+            return;
+        }
+
+        var delta = e.GetCurrentPoint(innerScrollViewer).Properties.MouseWheelDelta;
+        if (delta == 0)
+        {
+            return;
+        }
+
+        var atTop = innerScrollViewer.VerticalOffset <= 0;
+        var atBottom = innerScrollViewer.VerticalOffset >= innerScrollViewer.ScrollableHeight;
+        var shouldBubbleToOuter = (delta > 0 && atTop) || (delta < 0 && atBottom);
+        if (!shouldBubbleToOuter)
+        {
+            return;
+        }
+
+        var offsetDelta = -delta;
+        e.Handled = TryScrollViewerChain(FindAncestorScrollViewer(innerScrollViewer), offsetDelta);
+    }
+
+    private static async Task<string> MeasureDictionaryHeightAsync(WebView2 sender)
+    {
+        return await sender.CoreWebView2.ExecuteScriptAsync(
+            """
+            (() => {
+                const root = document.documentElement;
+                const body = document.body;
+                if (!root || !body) {
+                    return "0";
+                }
+
+                return Math.max(
+                    body.scrollHeight,
+                    body.offsetHeight,
+                    root.scrollHeight,
+                    root.offsetHeight
+                ).toString();
+            })()
+            """);
+    }
+
+    private static ScrollViewer? FindAncestorScrollViewer(DependencyObject? start)
+    {
+        var current = VisualTreeHelper.GetParent(start);
+        while (current != null)
+        {
+            if (current is ScrollViewer scrollViewer)
+            {
+                return scrollViewer;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private static bool TryScrollViewerChain(ScrollViewer? startScrollViewer, double offsetDelta)
+    {
+        if (startScrollViewer == null || Math.Abs(offsetDelta) < double.Epsilon)
+        {
+            return false;
+        }
+
+        var currentScrollViewer = startScrollViewer;
+        while (currentScrollViewer != null)
+        {
+            var targetOffset = Math.Clamp(
+                currentScrollViewer.VerticalOffset + offsetDelta,
+                0,
+                currentScrollViewer.ScrollableHeight);
+
+            if (Math.Abs(targetOffset - currentScrollViewer.VerticalOffset) > 0.5)
+            {
+                currentScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
+                return true;
+            }
+
+            currentScrollViewer = FindAncestorScrollViewer(currentScrollViewer);
+        }
+
+        return false;
     }
 
     private static string GetMimeType(string path)

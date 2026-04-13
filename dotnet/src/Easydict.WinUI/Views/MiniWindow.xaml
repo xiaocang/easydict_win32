@@ -9,22 +9,26 @@
     mc:Ignorable="d"
     Title="Easydict ᵇᵉᵗᵃ Mini">
 
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" Padding="8">
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+            Padding="8">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Header with Pin and Close buttons - also serves as drag region -->
-        <Grid x:Name="TitleBarRegion" Grid.Row="0" Margin="0,0,0,4" Background="Transparent">
+        <Grid x:Name="TitleBarRegion"
+                Grid.Row="0"
+                Margin="0,0,0,4"
+                Background="Transparent">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <ToggleButton
@@ -37,7 +41,9 @@
                 Width="28"
                 Height="28"
                 Padding="0">
-                <FontIcon x:Name="PinIcon" Glyph="&#xE718;" FontSize="14" />
+                <FontIcon x:Name="PinIcon"
+                        Glyph="&#xE718;"
+                        FontSize="14"/>
             </ToggleButton>
 
             <TextBlock
@@ -47,7 +53,7 @@
                 FontWeight="SemiBold"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 HorizontalAlignment="Center"
-                VerticalAlignment="Center" />
+                VerticalAlignment="Center"/>
 
             <Button
                 x:Name="CloseButton"
@@ -59,7 +65,8 @@
                 Width="28"
                 Height="28"
                 Padding="0">
-                <FontIcon Glyph="&#xE8BB;" FontSize="14" />
+                <FontIcon Glyph="&#xE8BB;"
+                        FontSize="14"/>
             </Button>
         </Grid>
 
@@ -79,30 +86,38 @@
                 AcceptsReturn="True"
                 TextWrapping="Wrap"
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
-                PreviewKeyDown="OnInputKeyDown" />
+                PreviewKeyDown="OnInputKeyDown"/>
         </Border>
 
         <!-- Mode + Language Bar -->
-        <Grid Grid.Row="2" Margin="0,0,0,4">
+        <Grid Grid.Row="2"
+                Margin="0,0,0,4">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />  <!-- Mode Toggle -->
-                <ColumnDefinition Width="*" />     <!-- Source Language -->
-                <ColumnDefinition Width="Auto" />  <!-- Swap Button -->
-                <ColumnDefinition Width="*" />     <!-- Target Language -->
-                <ColumnDefinition Width="Auto" />  <!-- Translate Button -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Mode Toggle -->
+                <ColumnDefinition Width="*"/>
+                <!-- Source Language -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Swap Button -->
+                <ColumnDefinition Width="*"/>
+                <!-- Target Language -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Translate Button -->
             </Grid.ColumnDefinitions>
 
             <!-- Query Mode Toggle -->
             <Button x:Name="QueryModeButton"
                     Grid.Column="0"
-                    Width="32" Height="32"
+                    Width="32"
+                    Height="32"
                     Padding="0"
                     VerticalAlignment="Center"
                     Click="OnQueryModeButtonClick"
                     Background="Transparent"
                     BorderThickness="0"
                     Margin="0,0,4,0">
-                <TextBlock x:Name="QueryModeEmoji" FontSize="18" />
+                <TextBlock x:Name="QueryModeEmoji"
+                        FontSize="18"/>
             </Button>
 
             <ComboBox
@@ -118,13 +133,15 @@
                 x:Name="SwapButton"
                 Grid.Column="2"
                 Click="OnSwapClicked"
-                Width="28" Height="28"
+                Width="28"
+                    Height="28"
                 Padding="0"
                 Background="Transparent"
                 BorderThickness="0"
                 ToolTipService.ToolTip="Swap languages"
                 Margin="4,0">
-                <FontIcon Glyph="&#xE8AB;" FontSize="12" />
+                <FontIcon Glyph="&#xE8AB;"
+                        FontSize="12"/>
             </Button>
 
             <ComboBox
@@ -151,14 +168,15 @@
                     <ProgressRing
                         x:Name="LoadingRing"
                         IsActive="False"
-                        Width="14" Height="14"
+                        Width="14"
+                            Height="14"
                         Foreground="White"
-                        Visibility="Collapsed" />
+                        Visibility="Collapsed"/>
                     <FontIcon
                         x:Name="TranslateIcon"
                         Glyph="&#xE8C1;"
                         FontSize="14"
-                        Foreground="White" />
+                        Foreground="White"/>
                 </Grid>
             </Button>
         </Grid>
@@ -171,16 +189,16 @@
             FontSize="10"
             Foreground="{ThemeResource BlueAccentBrush}"
             Margin="0,0,0,2"
-            Visibility="Collapsed" />
+            Visibility="Collapsed"/>
 
         <!-- Multi-Service Results -->
         <ScrollViewer
             Grid.Row="4"
-            VerticalScrollBarVisibility="Auto">
+            VerticalScrollBarVisibility="Visible">
             <ItemsControl x:Name="ResultsPanel">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Vertical" />
+                        <StackPanel Orientation="Vertical"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
@@ -194,6 +212,6 @@
             FontSize="10"
             Foreground="{ThemeResource TextFillColorTertiaryBrush}"
             HorizontalAlignment="Right"
-            Margin="0,4,0,0" />
+            Margin="0,4,0,0"/>
     </Grid>
 </Window>

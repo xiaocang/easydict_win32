@@ -12,6 +12,7 @@ public class ServiceCheckItem : INotifyPropertyChanged
     private bool _isChecked;
     private bool _enabledQuery = true;
     private bool _isAvailable = true;
+    private bool _isReorderModeEnabled;
 
     /// <summary>
     /// The service identifier (e.g., "google", "deepl").
@@ -76,6 +77,23 @@ public class ServiceCheckItem : INotifyPropertyChanged
             if (_isAvailable != value)
             {
                 _isAvailable = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether the settings page is currently in explicit reorder mode.
+    /// When false, the per-row move controls stay hidden to keep the list tidy.
+    /// </summary>
+    public bool IsReorderModeEnabled
+    {
+        get => _isReorderModeEnabled;
+        set
+        {
+            if (_isReorderModeEnabled != value)
+            {
+                _isReorderModeEnabled = value;
                 OnPropertyChanged();
             }
         }

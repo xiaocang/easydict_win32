@@ -83,50 +83,92 @@ public sealed class HotkeyService : IDisposable
         var settings = SettingsService.Instance;
 
         // Register Show Window hotkey (default: Ctrl+Alt+T)
-        RegisterHotkeyFromSetting(HOTKEY_ID_SHOW, settings.ShowWindowHotkey, "SHOW");
-
-        // Register Translate Selection hotkey (default: Ctrl+Alt+D)
-        RegisterHotkeyFromSetting(HOTKEY_ID_TRANSLATE_SELECTION, settings.TranslateSelectionHotkey, "TRANSLATE");
-
-        // Register Show Mini Window hotkey (default: Ctrl+Alt+M)
-        var miniResult = HotkeyParser.Parse(settings.ShowMiniWindowHotkey);
-        if (miniResult.IsValid)
+        if (settings.EnableShowWindowHotkey)
         {
-            var result = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_MINI, miniResult.Modifiers | MOD_NOREPEAT, miniResult.VirtualKey);
-            System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey MINI ({settings.ShowMiniWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
-
-            // Register Toggle Mini hotkey (base + Shift)
-            var toggleMini = HotkeyParser.AddShiftModifier(miniResult);
-            var toggleResult = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_MINI, toggleMini.Modifiers | MOD_NOREPEAT, toggleMini.VirtualKey);
-            System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_MINI ({settings.ShowMiniWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
+            RegisterHotkeyFromSetting(HOTKEY_ID_SHOW, settings.ShowWindowHotkey, "SHOW");
         }
         else
         {
-            System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse ShowMiniWindowHotkey '{settings.ShowMiniWindowHotkey}': {miniResult.ErrorMessage}");
+            System.Diagnostics.Debug.WriteLine("[Hotkey] SHOW hotkey skipped (disabled in settings)");
+        }
+
+        // Register Translate Selection hotkey (default: Ctrl+Alt+D)
+        if (settings.EnableTranslateSelectionHotkey)
+        {
+            RegisterHotkeyFromSetting(HOTKEY_ID_TRANSLATE_SELECTION, settings.TranslateSelectionHotkey, "TRANSLATE");
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine("[Hotkey] TRANSLATE hotkey skipped (disabled in settings)");
+        }
+
+        // Register Show Mini Window hotkey (default: Ctrl+Alt+M)
+        if (settings.EnableShowMiniWindowHotkey)
+        {
+            var miniResult = HotkeyParser.Parse(settings.ShowMiniWindowHotkey);
+            if (miniResult.IsValid)
+            {
+                var result = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_MINI, miniResult.Modifiers | MOD_NOREPEAT, miniResult.VirtualKey);
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey MINI ({settings.ShowMiniWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
+
+                // Register Toggle Mini hotkey (base + Shift)
+                var toggleMini = HotkeyParser.AddShiftModifier(miniResult);
+                var toggleResult = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_MINI, toggleMini.Modifiers | MOD_NOREPEAT, toggleMini.VirtualKey);
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_MINI ({settings.ShowMiniWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse ShowMiniWindowHotkey '{settings.ShowMiniWindowHotkey}': {miniResult.ErrorMessage}");
+            }
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine("[Hotkey] MINI hotkey skipped (disabled in settings)");
         }
 
         // Register Show Fixed Window hotkey (default: Ctrl+Alt+F)
-        var fixedResult = HotkeyParser.Parse(settings.ShowFixedWindowHotkey);
-        if (fixedResult.IsValid)
+        if (settings.EnableShowFixedWindowHotkey)
         {
-            var result = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED, fixedResult.Modifiers | MOD_NOREPEAT, fixedResult.VirtualKey);
-            System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey FIXED ({settings.ShowFixedWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
+            var fixedResult = HotkeyParser.Parse(settings.ShowFixedWindowHotkey);
+            if (fixedResult.IsValid)
+            {
+                var result = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED, fixedResult.Modifiers | MOD_NOREPEAT, fixedResult.VirtualKey);
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey FIXED ({settings.ShowFixedWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
 
-            // Register Toggle Fixed hotkey (base + Shift)
-            var toggleFixed = HotkeyParser.AddShiftModifier(fixedResult);
-            var toggleResult = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_FIXED, toggleFixed.Modifiers | MOD_NOREPEAT, toggleFixed.VirtualKey);
-            System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_FIXED ({settings.ShowFixedWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
+                // Register Toggle Fixed hotkey (base + Shift)
+                var toggleFixed = HotkeyParser.AddShiftModifier(fixedResult);
+                var toggleResult = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_FIXED, toggleFixed.Modifiers | MOD_NOREPEAT, toggleFixed.VirtualKey);
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_FIXED ({settings.ShowFixedWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse ShowFixedWindowHotkey '{settings.ShowFixedWindowHotkey}': {fixedResult.ErrorMessage}");
+            }
         }
         else
         {
-            System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse ShowFixedWindowHotkey '{settings.ShowFixedWindowHotkey}': {fixedResult.ErrorMessage}");
+            System.Diagnostics.Debug.WriteLine("[Hotkey] FIXED hotkey skipped (disabled in settings)");
         }
 
         // Register OCR Translate hotkey (default: Ctrl+Alt+S)
-        RegisterHotkeyFromSetting(HOTKEY_ID_OCR_TRANSLATE, settings.OcrTranslateHotkey, "OCR_TRANSLATE");
+        if (settings.EnableOcrTranslateHotkey)
+        {
+            RegisterHotkeyFromSetting(HOTKEY_ID_OCR_TRANSLATE, settings.OcrTranslateHotkey, "OCR_TRANSLATE");
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine("[Hotkey] OCR_TRANSLATE hotkey skipped (disabled in settings)");
+        }
 
         // Register Silent OCR hotkey (default: Ctrl+Alt+Shift+S)
-        RegisterHotkeyFromSetting(HOTKEY_ID_SILENT_OCR, settings.SilentOcrHotkey, "SILENT_OCR");
+        if (settings.EnableSilentOcrHotkey)
+        {
+            RegisterHotkeyFromSetting(HOTKEY_ID_SILENT_OCR, settings.SilentOcrHotkey, "SILENT_OCR");
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine("[Hotkey] SILENT_OCR hotkey skipped (disabled in settings)");
+        }
 
         _isInitialized = true;
         System.Diagnostics.Debug.WriteLine("[Hotkey] Hotkey service initialized.");

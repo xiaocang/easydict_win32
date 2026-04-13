@@ -298,6 +298,27 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
+## Comparison with pdf2zh
+
+[pdf2zh (PDFMathTranslate)](https://github.com/Byaidu/PDFMathTranslate) is a popular open-source PDF translation tool focused on scientific papers. The table below compares the long document translation capabilities of the two.
+
+| Feature | pdf2zh | Easydict Win32 |
+|---------|--------|----------------|
+| Layout Detection | DocLayout-YOLO | ONNX (DocLayout-YOLO) / Vision LLM / Heuristic / Auto |
+| Formula Protection | LaTeX preservation | Three-tier detection, multi-font glyph rendering, subscript/superscript handling |
+| LLM Backends | OpenAI, Ollama, Azure OpenAI, etc. | OpenAI, Gemini, DeepSeek, Groq, Zhipu, GitHub Models, Doubao, Ollama, Custom OpenAI-compatible |
+| Document Context Pass | No | Yes — glossary + summary + preservation hints extracted before block translation for terminology consistency |
+| Translation Cache | No | Yes — SQLite cache keyed by source hash + service + language pair |
+| Parallel Translation | Limited | Configurable concurrency with retry + quality feedback |
+| OCR Fallback (Scanned PDF) | No | Yes — Windows OCR for image-only pages |
+| CJK Font Handling | Basic | Built-in CJK font resolver + TrueType CMAP parser + automatic font download |
+| Page Range Selection | Yes | Yes (`1-3,5,7-10` or `all`) |
+| UI | CLI + minimal GUI | Native WinUI 3 app with progress, preview, cancellation |
+| Integration | Standalone | Part of full translation dictionary app (OCR, selection, hotkeys, streaming, etc.) |
+| Platform | Cross-platform (Python) | Windows 10/11 (native .NET 8) |
+
+<p align="right"><a href="#table-of-contents">Back to Top</a></p>
+
 ## License
 
 GPL-3.0 - For learning and communication purposes only. License and copyright notice must be included when using source code.

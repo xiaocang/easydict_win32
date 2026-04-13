@@ -298,6 +298,27 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 
+## 与 pdf2zh 对比
+
+[pdf2zh (PDFMathTranslate)](https://github.com/Byaidu/PDFMathTranslate) 是一款专注于科学论文 PDF 翻译的热门开源工具。下表对比两者在长文档翻译方面的能力。
+
+| 功能 | pdf2zh | Easydict Win32 |
+|------|--------|----------------|
+| 版面检测 | DocLayout-YOLO | ONNX (DocLayout-YOLO) / Vision LLM / 启发式 / 自动 |
+| 公式保护 | LaTeX 保留 | 三级检测、多字体字形渲染、上下标处理 |
+| LLM 服务 | OpenAI、Ollama、Azure OpenAI 等 | OpenAI、Gemini、DeepSeek、Groq、智谱、GitHub Models、豆包、Ollama、自定义 OpenAI 兼容接口 |
+| 文档上下文预处理 | 不支持 | 支持 — 块级翻译前提取术语表、摘要与保留提示，保证术语一致性 |
+| 翻译缓存 | 不支持 | 支持 — 基于源文本哈希 + 服务 + 语言对的 SQLite 缓存 |
+| 并行翻译 | 有限 | 可配置并发 + 重试 + 质量反馈 |
+| OCR 回退（扫描版 PDF） | 不支持 | 支持 — 使用 Windows OCR 处理纯图片页面 |
+| CJK 字体处理 | 基础 | 内置 CJK 字体解析器 + TrueType CMAP 解析 + 自动字体下载 |
+| 页面范围选择 | 支持 | 支持（`1-3,5,7-10` 或 `all`） |
+| 用户界面 | CLI + 简易 GUI | 原生 WinUI 3，含进度、预览、取消 |
+| 集成度 | 独立工具 | 完整翻译词典应用的一部分（OCR、划词、快捷键、流式翻译等） |
+| 平台 | 跨平台（Python） | Windows 10/11（原生 .NET 8） |
+
+<p align="right"><a href="#目录">回到顶部</a></p>
+
 ## 许可证
 
 GPL-3.0 - 仅供学习和交流使用。使用源代码时必须包含许可证和版权声明。

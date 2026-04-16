@@ -174,6 +174,8 @@ namespace Easydict.WinUI.Views
 
             // Initialize service result controls based on enabled services
             InitializeServiceResults(skipRebuildWhenDebugFlagSet: true, reason: "OnPageLoaded");
+
+            SettingsService.Instance.HideEmptyServiceResultsChanged += OnHideEmptyServiceResultsChanged;
             InitializeLongDocServices();
             InitializeLongDocOutputDefaults();
             OnLongDocInputModeChanged(LongDocInputModeCombo, null!);
@@ -191,6 +193,8 @@ namespace Easydict.WinUI.Views
             LogObjectState("OnPageUnloaded begin");
 #endif
             _isLoaded = false;
+
+            SettingsService.Instance.HideEmptyServiceResultsChanged -= OnHideEmptyServiceResultsChanged;
 
             if (_useMemoryAbVariantB)
             {
@@ -627,6 +631,8 @@ namespace Easydict.WinUI.Views
                 ResultsPanel.Items.Add(control);
             }
 
+            ReorderResultsPanel();
+
             // Hide placeholder since we have services
             PlaceholderText.Text = LocalizationService.Instance.GetString("TranslationPlaceholder");
             PlaceholderText.Visibility = Visibility.Collapsed;
@@ -668,6 +674,52 @@ namespace Easydict.WinUI.Views
         private void OnServiceCollapseToggled(object? sender, ServiceQueryResult result)
         {
             // Optional: could trigger layout update if needed
+        }
+
+        /// <summary>
+        /// Reorder <see cref="ResultsPanel"/> so that rows demoted by
+        /// <see cref="ServiceResultDemotionHelper.IsDemoted"/> (no-result + hide-empty setting)
+        /// appear at the bottom of the list while preserving the configured order within each
+        /// bucket. Idempotent: safe to call on every result completion.
+        /// </summary>
+        private void ReorderResultsPanel()
+        {
+            if (_resultControls.Count == 0) return;
+
+            var hideEmpty = SettingsService.Instance.HideEmptyServiceResults;
+            var order = ServiceResultDemotionHelper.StablePartitionIndices(_serviceResults, hideEmpty);
+
+            // Only rebuild Items if order actually changes (avoid visual-tree churn during streaming).
+            bool orderMatches = ResultsPanel.Items.Count == _resultControls.Count;
+            for (int i = 0; orderMatches && i < order.Count; i++)
+            {
+                if (!ReferenceEquals(ResultsPanel.Items[i], _resultControls[order[i]]))
+                    orderMatches = false;
+            }
+            if (orderMatches) return;
+
+            // Remove+Insert rather than Clear() to preserve WebView2 and streaming state.
+            for (int i = 0; i < order.Count; i++)
+            {
+                var target = _resultControls[order[i]];
+                var currentIndex = ResultsPanel.Items.IndexOf(target);
+                if (currentIndex == i) continue;
+                if (currentIndex >= 0) ResultsPanel.Items.RemoveAt(currentIndex);
+                ResultsPanel.Items.Insert(i, target);
+            }
+        }
+
+        private void OnHideEmptyServiceResultsChanged(object? sender, EventArgs e)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                foreach (var control in _resultControls)
+                {
+                    control.RefreshDemotionState();
+                }
+                ReorderResultsPanel();
+            });
         }
 
         /// <summary>
@@ -748,6 +800,7 @@ namespace Easydict.WinUI.Views
                     serviceResult.IsLoading = false;
                     serviceResult.ApplyAutoCollapseLogic();
                     UpdatePhoneticDeduplication();
+                    ReorderResultsPanel();
                 }
             }
             catch (OperationCanceledException)
@@ -1047,6 +1100,7 @@ namespace Easydict.WinUI.Views
                                 serviceResult.IsLoading = false;
                                 serviceResult.ApplyAutoCollapseLogic();
                                 UpdatePhoneticDeduplication();
+                                ReorderResultsPanel();
                             });
 
                             outcome = result.ResultKind == TranslationResultKind.Success
@@ -1447,6 +1501,7 @@ namespace Easydict.WinUI.Views
                 serviceResult.Result = result;
                 serviceResult.ApplyAutoCollapseLogic();
                 UpdatePhoneticDeduplication();
+                ReorderResultsPanel();
             });
         }
 

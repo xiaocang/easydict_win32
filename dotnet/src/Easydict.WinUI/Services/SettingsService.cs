@@ -199,10 +199,28 @@ public sealed class SettingsService
     public bool EnableOcrTranslateHotkey { get; set; } = true;
     public bool EnableSilentOcrHotkey { get; set; } = true;
 
+    private bool _hideEmptyServiceResults = true;
+
     /// <summary>
-    /// When true, ServiceResultItem panels collapse entirely when the service returned no result.
+    /// When true, ServiceResultItem rows for services that returned no result are demoted
+    /// (grayed out, moved to the bottom of the list, and not expandable).
     /// </summary>
-    public bool HideEmptyServiceResults { get; set; } = true;
+    public bool HideEmptyServiceResults
+    {
+        get => _hideEmptyServiceResults;
+        set
+        {
+            if (_hideEmptyServiceResults == value) return;
+            _hideEmptyServiceResults = value;
+            HideEmptyServiceResultsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Raised when <see cref="HideEmptyServiceResults"/> changes. Subscribers should refresh any
+    /// UI that depends on the demotion state of no-result service rows.
+    /// </summary>
+    public event EventHandler? HideEmptyServiceResultsChanged;
 
     /// <summary>
     /// Preferred OCR recognition language. "auto" uses the system profile languages.

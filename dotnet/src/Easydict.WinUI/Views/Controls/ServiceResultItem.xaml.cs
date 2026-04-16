@@ -46,6 +46,12 @@ public sealed partial class ServiceResultItem : UserControl
         ToolTipService.SetToolTip(ReplaceButton, LocalizationService.Instance.GetString("InsertReplace"));
     }
 
+    /// <summary>
+    /// Re-runs <see cref="UpdateUI"/> to pick up changes in the demotion state (e.g., when
+    /// <see cref="SettingsService.HideEmptyServiceResults"/> is toggled at runtime).
+    /// </summary>
+    public void RefreshDemotionState() => UpdateUI();
+
     public void Cleanup()
     {
         Debug.WriteLine(
@@ -196,9 +202,8 @@ public sealed partial class ServiceResultItem : UserControl
             return;
         }
 
-        // Keep the service row visible for no-result dictionary queries, but force
-        // it collapsed so the header can still show the "No result" status without
-        // expanding the full empty payload.
+        // Demote no-result rows: keep them visible in the list but grayed out, force-collapsed,
+        // and not expandable. MainPage additionally reorders demoted rows to the bottom.
         var hideEmpty = SettingsService.Instance.HideEmptyServiceResults
             && !_serviceResult.IsLoading
             && !_serviceResult.IsStreaming
@@ -208,6 +213,8 @@ public sealed partial class ServiceResultItem : UserControl
         {
             _serviceResult.IsExpanded = false;
         }
+        RootBorder.Opacity = hideEmpty ? 0.5 : 1.0;
+        ArrowIcon.Visibility = hideEmpty ? Visibility.Collapsed : Visibility.Visible;
 
         // Service info
         ServiceNameText.Text = _serviceResult.ServiceDisplayName;
@@ -919,6 +926,13 @@ public sealed partial class ServiceResultItem : UserControl
     {
         if (_serviceResult == null || _serviceResult.IsLoading)
         {
+            return;
+        }
+
+        // Demoted (no-result + hide-empty) rows are not expandable.
+        if (ServiceResultDemotionHelper.IsDemoted(_serviceResult))
+        {
+            e.Handled = true;
             return;
         }
 

@@ -325,12 +325,11 @@ public sealed class ScreenCaptureWindow : IDisposable
                 {
                     if (_detectedRegion.HasValue)
                     {
-                        // Double-click on detected window: select it → Adjusting phase
+                        // Double-click on detected window: select it and confirm
                         _selection = _detectedRegion.Value;
-                        _phase = SelectionPhase.Adjusting;
                         _isMouseDown = false;
                         _ignoreNextMouseUp = true;
-                        InvalidateRect(_hwnd, IntPtr.Zero, false);
+                        ConfirmSelection();
                     }
                     else
                     {
@@ -751,7 +750,7 @@ public sealed class ScreenCaptureWindow : IDisposable
                 _selection = NormalizeRect(_selection);
                 if (_selection.Width >= 3 && _selection.Height >= 3)
                 {
-                    _phase = SelectionPhase.Adjusting;
+                    ConfirmSelection();
                 }
                 else
                 {
@@ -821,7 +820,7 @@ public sealed class ScreenCaptureWindow : IDisposable
             }
             else
             {
-                _phase = SelectionPhase.Adjusting;
+                ConfirmSelection();
             }
             InvalidateRect(_hwnd, IntPtr.Zero, false);
         }
@@ -831,6 +830,7 @@ public sealed class ScreenCaptureWindow : IDisposable
             _isDragging = false;
             _dragMode = DragMode.None;
             _selection = NormalizeRect(_selection);
+            ConfirmSelection();
             InvalidateRect(_hwnd, IntPtr.Zero, false);
         }
     }

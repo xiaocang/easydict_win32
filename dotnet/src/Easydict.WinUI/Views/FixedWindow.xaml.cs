@@ -8,6 +8,7 @@ using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Input;
+using System.Numerics;
 using Windows.Graphics;
 using Windows.System;
 using WinRT.Interop;
@@ -397,6 +398,45 @@ public sealed partial class FixedWindow : Window
             serviceResult.IsStreaming = false;
             serviceResult.ApplyAutoCollapseLogic();
             RequestResize();
+        }
+    }
+
+    private void OnResultsScrollViewerViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (_resultControls == null || _resultControls.Count == 0) return;
+
+        const double margin = 4.0;
+
+        foreach (var control in _resultControls)
+        {
+            if (control.Visibility != Visibility.Visible || control.ActionButtonsPanel == null)
+                continue;
+
+            try
+            {
+                var transform = control.TransformToVisual(ResultsScrollViewer);
+                var point = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+
+                // Y relative to the viewport
+                var y = point.Y;
+
+                double offsetY = 0;
+                if (y < 0)
+                {
+                    offsetY = Math.Abs(y);
+                }
+
+                // Clamp to item height so headers and buttons don't leave the item container
+                var maxOffset = control.ActualHeight - control.HeaderPanel.ActualHeight - margin;
+                offsetY = Math.Clamp(offsetY, 0, Math.Max(0, maxOffset));
+
+                control.HeaderPanel.Translation = new Vector3(0, (float)offsetY, 0);
+                control.ActionButtonsPanel.Translation = new Vector3(0, (float)offsetY, 0);
+            }
+            catch (Exception)
+            {
+                // Ignore transformation errors
+            }
         }
     }
 

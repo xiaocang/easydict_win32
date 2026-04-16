@@ -71,22 +71,65 @@
         </Grid>
 
         <!-- Compact Input -->
-        <Border Grid.Row="1"
+        <Border x:Name="SourceTextContainer"
+                Grid.Row="1"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 CornerRadius="6"
-                Padding="8"
-                Margin="0,0,0,4">
-            <TextBox
-                x:Name="InputTextBox"
-                PlaceholderText="Enter text..."
-                BorderThickness="0"
-                Background="Transparent"
-                MinHeight="40"
-                MaxHeight="120"
-                AcceptsReturn="True"
-                TextWrapping="Wrap"
-                ScrollViewer.VerticalScrollBarVisibility="Auto"
-                PreviewKeyDown="OnInputKeyDown"/>
+                                Padding="8"
+                Margin="0,0,0,4"
+                PointerEntered="OnSourceTextContainerPointerEntered"
+                PointerExited="OnSourceTextContainerPointerExited"
+                Tapped="OnSourceTextContainerTapped">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <!-- Collapsed State TextBlock -->
+                    <TextBlock x:Name="SourceTextCollapsed"
+                               Text="{x:Bind InputTextBox.Text, Mode=OneWay}"
+                               MaxLines="1"
+                               TextTrimming="CharacterEllipsis"
+                               IsTextSelectionEnabled="False"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                               VerticalAlignment="Center"
+                               Visibility="Visible" />
+
+                    <!-- Expanded State TextBox (Original) -->
+                    <TextBox
+                        x:Name="InputTextBox"
+                        PlaceholderText="Enter text..."
+                        BorderThickness="0"
+                        Background="Transparent"
+                        MinHeight="40"
+                        MaxHeight="120"
+                        AcceptsReturn="True"
+                        TextWrapping="Wrap"
+                        ScrollViewer.VerticalScrollBarVisibility="Auto"
+                        PreviewKeyDown="OnInputKeyDown"
+                        LostFocus="OnInputTextBoxLostFocus"
+                        Visibility="Collapsed" />
+                </Grid>
+
+                <Button x:Name="SourcePlayButton"
+                        Grid.Column="1"
+                        Tapped="OnSourcePlayButtonTapped"
+                        ToolTipService.ToolTip="Play source text"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Width="28"
+                        Height="28"
+                        Padding="0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="4,0,0,0">
+                    <FontIcon x:Name="SourcePlayIcon"
+                               Glyph="&#xE768;"
+                               FontSize="14" />
+                </Button>
+            </Grid>
         </Border>
 
         <!-- Mode + Language Bar -->
@@ -193,8 +236,10 @@
 
         <!-- Multi-Service Results -->
         <ScrollViewer
+            x:Name="MainScrollViewer"
             Grid.Row="4"
-            VerticalScrollBarVisibility="Visible">
+            VerticalScrollBarVisibility="Auto"
+            ViewChanged="OnMainScrollViewerViewChanged">
             <ItemsControl x:Name="ResultsPanel">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>

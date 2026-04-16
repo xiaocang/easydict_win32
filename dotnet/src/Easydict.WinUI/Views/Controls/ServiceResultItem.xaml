@@ -24,8 +24,9 @@
             <Border
                 x:Name="HeaderBar"
                 Grid.Row="0"
-                Background="{ThemeResource TitleBarBackgroundBrush}"
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                 CornerRadius="6,6,0,0"
+                Canvas.ZIndex="10"
                 PointerPressed="OnHeaderPointerPressed"
                 PointerEntered="OnHeaderBarPointerEntered"
                 PointerExited="OnHeaderBarPointerExited">
@@ -126,10 +127,9 @@
                 <Grid>
                     <ScrollViewer
                         x:Name="ResultContentScrollViewer"
-                        MaxHeight="800"
-                        VerticalScrollBarVisibility="Visible"
+                        VerticalScrollBarVisibility="Disabled"
                         HorizontalScrollBarVisibility="Disabled"
-                        VerticalScrollMode="Auto"
+                        VerticalScrollMode="Disabled"
                         HorizontalScrollMode="Disabled"
                         PointerWheelChanged="OnResultContentScrollViewerPointerWheelChanged">
                         <Grid>

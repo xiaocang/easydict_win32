@@ -156,8 +156,10 @@
 
         <!-- Multi-Service Results -->
         <ScrollViewer
+            x:Name="ResultsScrollViewer"
             Grid.Row="4"
-            VerticalScrollBarVisibility="Visible">
+            VerticalScrollBarVisibility="Visible"
+            ViewChanged="OnResultsScrollViewerViewChanged">
             <ItemsControl x:Name="ResultsPanel">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>

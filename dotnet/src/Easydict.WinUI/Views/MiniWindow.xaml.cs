@@ -13,6 +13,7 @@ using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using Windows.System;
 using WinRT.Interop;
+using System.Numerics;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 
 namespace Easydict.WinUI.Views;
@@ -59,10 +60,13 @@ public sealed partial class MiniWindow : Window
     private bool _suppressSourceLanguageSelectionChanged;
     private QueryMode _currentMode = QueryMode.Translation;
     private TitleBarDragRegionHelper? _titleBarHelper;
+    private bool _hasAutoPlayedCurrentQuery = false;
     private DateTime _lastShowTime = DateTime.MinValue;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _resizeThrottleTimer;
     private bool _resizePending;      // resize requested but not yet executed
     private bool _resizeThrottling;   // inside cooldown window
+    private bool _isSourceTextExpanded = false;
+
     private const int ResizeThrottleMs = 150;
     private const int InputFocusRetryDelayMs = 50;
     private const int InputFocusMaxAttempts = 10;
@@ -604,6 +608,10 @@ public sealed partial class MiniWindow : Window
         try
         {
             _isClosing = true;
+            
+            // Stop any ongoing TTS audio immediately
+            TextToSpeechService.Instance.Stop();
+            
             SaveWindowPosition();
             await CleanupResourcesAsync();
         }
@@ -622,6 +630,46 @@ public sealed partial class MiniWindow : Window
         RequestResize();
     }
 
+    private void OnMainScrollViewerViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (_resultControls == null || _resultControls.Count == 0) return;
+
+        const double margin = 4.0;
+
+        foreach (var control in _resultControls)
+        {
+            if (control.Visibility != Visibility.Visible || control.ActionButtonsPanel == null)
+                continue;
+
+            try
+            {
+                var transform = control.TransformToVisual(MainScrollViewer);
+                var point = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                
+                // Y relative to the viewport (MainScrollViewer)
+                var y = point.Y;
+                
+                double offsetY = 0;
+                if (y < 0)
+                {
+                    offsetY = Math.Abs(y);
+                }
+
+                // Clamp to item height so headers and buttons don't leave the item container
+                var maxOffset = control.ActualHeight - control.HeaderPanel.ActualHeight - margin;
+                offsetY = Math.Clamp(offsetY, 0, Math.Max(0, maxOffset));
+
+                control.HeaderPanel.Translation = new Vector3(0, (float)offsetY, 0);
+                control.ActionButtonsPanel.Translation = new Vector3(0, (float)offsetY, 0);
+            }
+            catch (Exception)
+            {
+                // Ignore transformation errors if elements are being detached
+            }
+        }
+    }
+
+
     /// <summary>
     /// Resize window to fit content with min/max height constraints.
     /// </summary>
@@ -635,24 +683,29 @@ public sealed partial class MiniWindow : Window
             var hWnd = WindowNative.GetWindowHandle(this);
             var scale = DpiHelper.GetScaleFactorForWindow(hWnd);
 
+            // Get display area for the window to calculate dynamic height limit (80% of work area)
+            var displayArea = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
+            var workAreaHeightPx = displayArea?.WorkArea.Height ?? (int)DpiHelper.DipsToPhysicalPixels(1000, scale);
+            var maxHeightPx = workAreaHeightPx * 0.8;
+
             // Get current window width in DIPs for proper measurement
             var currentSize = _appWindow.Size;
             var currentWidthDips = DpiHelper.PhysicalPixelsToDips(currentSize.Width, scale);
 
             // Measure desired size with actual width constraint (critical for text wrapping)
             content.Measure(new Windows.Foundation.Size(currentWidthDips, double.PositiveInfinity));
-            var desiredHeight = content.DesiredSize.Height;
+            var desiredHeightDips = content.DesiredSize.Height;
 
-            // Calculate new height with limits (200-800 DIPs)
-            var minHeight = DpiHelper.DipsToPhysicalPixels(200, scale);
-            var maxHeight = DpiHelper.DipsToPhysicalPixels(800, scale);
-            var newHeight = DpiHelper.DipsToPhysicalPixels(desiredHeight + 16, scale); // +16 for padding
-            newHeight = Math.Clamp(newHeight, minHeight, maxHeight);
+            // Calculate new height with limits
+            var minHeightPx = DpiHelper.DipsToPhysicalPixels(200, scale);
+            var desiredHeightPx = DpiHelper.DipsToPhysicalPixels(desiredHeightDips + 16, scale); // +16 for padding
+            
+            var newHeightPx = Math.Clamp(desiredHeightPx, minHeightPx, maxHeightPx);
 
             // Resize window (avoid micro-resizes)
-            if (Math.Abs(currentSize.Height - newHeight) > 5)
+            if (Math.Abs(currentSize.Height - newHeightPx) > 5)
             {
-                _appWindow.Resize(new SizeInt32(currentSize.Width, (int)newHeight));
+                _appWindow.Resize(new SizeInt32(currentSize.Width, (int)newHeightPx));
             }
         }
         catch (Exception ex)
@@ -852,6 +905,7 @@ public sealed partial class MiniWindow : Window
         try
         {
             SetLoading(true);
+            _hasAutoPlayedCurrentQuery = false;
 
             // Reset all service results
             foreach (var result in _serviceResults)
@@ -948,6 +1002,18 @@ public sealed partial class MiniWindow : Window
                             serviceResult.IsLoading = false;
                             serviceResult.ApplyAutoCollapseLogic();
                             UpdatePhoneticDeduplication();
+
+                            if (result.ResultKind == TranslationResultKind.Success &&
+                                !_hasAutoPlayedCurrentQuery && SettingsService.Instance.AutoPlayTranslation)
+                            {
+                                var targetText = result.TranslatedText;
+                                if (!string.IsNullOrEmpty(targetText))
+                                {
+                                    _hasAutoPlayedCurrentQuery = true;
+                                    _ = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                                }
+                            }
+
                             // Coalesced resize so ServiceResultItem.UpdateUI() completes first
                             RequestResize();
                         });
@@ -1310,6 +1376,18 @@ public sealed partial class MiniWindow : Window
             serviceResult.Result = result;
             serviceResult.ApplyAutoCollapseLogic();
             UpdatePhoneticDeduplication();
+
+            if (result.ResultKind == TranslationResultKind.Success &&
+                !_hasAutoPlayedCurrentQuery && SettingsService.Instance.AutoPlayTranslation)
+            {
+                var targetText = result.TranslatedText;
+                if (!string.IsNullOrEmpty(targetText))
+                {
+                    _hasAutoPlayedCurrentQuery = true;
+                    _ = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                }
+            }
+
             // RequestResize() enqueues to next tick so ServiceResultItem.UpdateUI() completes first
             RequestResize();
         });
@@ -1401,11 +1479,98 @@ public sealed partial class MiniWindow : Window
         if (shiftState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down) ||
             ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
         {
-            return; // Allow newline
+            return; // Let the TextBox handle it normally (insert newline)
         }
 
+        // Plain Enter: trigger translation
         e.Handled = true;
-        await StartQueryTrackedAsync();
+        await StartQueryAsync();
+    }
+
+    private void OnSourcePlayButtonTapped(object sender, TappedRoutedEventArgs e)
+    {
+        e.Handled = true;
+        OnSourcePlayClicked();
+    }
+
+    private async void OnSourcePlayClicked()
+    {
+        var text = InputTextBox.Text;
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        // Use detected language if available, otherwise default to English
+        var language = _lastDetectedLanguage != TranslationLanguage.Auto
+            ? _lastDetectedLanguage
+            : TranslationLanguage.English;
+
+        var tts = TextToSpeechService.Instance;
+
+        void ResetIcon()
+        {
+            tts.PlaybackEnded -= ResetIcon;
+            DispatcherQueue.TryEnqueue(() => SourcePlayIcon.Glyph = "\uE768");
+        }
+
+        SourcePlayIcon.Glyph = "\uE71A"; // Stop icon
+        tts.PlaybackEnded += ResetIcon;
+        await tts.SpeakAsync(text, language);
+    }
+
+    private void SetSourceTextState(bool expanded)
+    {
+        _isSourceTextExpanded = expanded;
+        
+        if (expanded)
+        {
+            SourceTextCollapsed.Visibility = Visibility.Collapsed;
+            InputTextBox.Visibility = Visibility.Visible;
+            InputTextBox.Focus(FocusState.Programmatic);
+            typeof(UIElement).GetProperty("ProtectedCursor", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.SetValue(SourceTextContainer, null);
+            SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
+        }
+        else
+        {
+            SourceTextCollapsed.Visibility = Visibility.Visible;
+            InputTextBox.Visibility = Visibility.Collapsed;
+            SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
+        }
+    }
+
+    private void OnSourceTextContainerTapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (!_isSourceTextExpanded)
+        {
+            SetSourceTextState(true);
+        }
+    }
+
+    private void OnSourceTextContainerPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isSourceTextExpanded)
+        {
+            var cursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
+            typeof(UIElement).GetProperty("ProtectedCursor", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.SetValue(SourceTextContainer, cursor);
+            SourceTextContainer.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentTextFillColorPrimaryBrush"];
+            SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(1);
+        }
+    }
+
+    private void OnSourceTextContainerPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isSourceTextExpanded)
+        {
+            typeof(UIElement).GetProperty("ProtectedCursor", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.SetValue(SourceTextContainer, null);
+            SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
+        }
+    }
+
+    private void OnInputTextBoxLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
+        {
+            SetSourceTextState(false);
+        }
     }
 
     private void OnSwapClicked(object sender, RoutedEventArgs e)
@@ -1544,6 +1709,7 @@ public sealed partial class MiniWindow : Window
         }
 
         this.Activate();
+        SetSourceTextState(false);
         QueueInputFocusAndSelectAll();
 
         // Resize window to fit existing content (delayed to allow layout to complete)
@@ -1618,6 +1784,9 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     public void HideWindow()
     {
+        // Stop any ongoing TTS audio immediately
+        TextToSpeechService.Instance.Stop();
+        
         SaveWindowPosition();
         _appWindow?.Hide();
     }

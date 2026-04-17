@@ -1484,7 +1484,7 @@ public sealed partial class MiniWindow : Window
 
         // Plain Enter: trigger translation
         e.Handled = true;
-        await StartQueryAsync();
+        await StartQueryTrackedAsync();
     }
 
     private void OnSourcePlayButtonTapped(object sender, TappedRoutedEventArgs e)

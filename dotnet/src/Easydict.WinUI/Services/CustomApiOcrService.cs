@@ -147,8 +147,17 @@ public sealed class CustomApiOcrService : IOcrService
         await encoder.FlushAsync();
 
         // Convert WinRT stream to Base64
-        var bytes = new byte[stream.Size];
-        await stream.ReadAsync(bytes.AsBuffer(), (uint)stream.Size, InputStreamOptions.None);
+        var streamSize = stream.Size;
+        if (streamSize > int.MaxValue)
+        {
+            throw new InvalidOperationException("Encoded image is too large to convert to Base64.");
+        }
+
+        var size = (int)streamSize;
+        stream.Seek(0);
+
+        var bytes = new byte[size];
+        await stream.ReadAsync(bytes.AsBuffer(), (uint)size, InputStreamOptions.None);
         return Convert.ToBase64String(bytes);
     }
 }

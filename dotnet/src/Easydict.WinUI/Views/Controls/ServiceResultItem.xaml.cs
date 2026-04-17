@@ -28,7 +28,6 @@ public sealed partial class ServiceResultItem : UserControl
     private HashSet<string>? _alreadyShownPhonetics;
     private bool _webViewInitialized;
     private MdxDictionaryTranslationService? _currentMdxService;
-    private const double StickyMargin = 4.0;
 
     /// <summary>
     /// Exposes the header panel for sticky calculation in MiniWindow.
@@ -56,9 +55,6 @@ public sealed partial class ServiceResultItem : UserControl
     {
         this.InitializeComponent();
         ToolTipService.SetToolTip(ReplaceButton, LocalizationService.Instance.GetString("InsertReplace"));
-        
-        // Ensure header is on top for sticky behavior
-        Microsoft.UI.Xaml.Controls.Canvas.SetZIndex(HeaderBar, 10);
     }
 
     /// <summary>

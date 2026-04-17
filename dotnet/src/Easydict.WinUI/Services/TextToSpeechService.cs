@@ -72,7 +72,7 @@ public sealed class TextToSpeechService : IDisposable
             }
 
             // Apply selected speaking rate
-            _synthesizer.Options.SpeakingRate = SettingsService.Instance.TtsSpeed;
+            _synthesizer.Options.SpeakingRate = Math.Clamp(SettingsService.Instance.TtsSpeed, 0.5, 3.0);
 
             Debug.WriteLine($"[TTS] Speaking in {language} with voice: {_synthesizer.Voice.DisplayName}");
 

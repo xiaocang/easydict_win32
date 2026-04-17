@@ -1124,8 +1124,7 @@
                         <StackPanel Spacing="16">
                             <ComboBox x:Name="OcrEngineCombo"
                                     Header="OCR Engine"
-                                    Width="300"
-                                    SelectionChanged="OnOcrEngineChanged">
+                                    Width="300">
                                 <ComboBoxItem x:Name="OcrEngineNativeItem"
                                         Content="Default (Windows Native)"
                                         Tag="WindowsNative"/>

@@ -1514,7 +1514,15 @@ public sealed partial class MiniWindow : Window
 
         SourcePlayIcon.Glyph = "\uE71A"; // Stop icon
         tts.PlaybackEnded += ResetIcon;
-        await tts.SpeakAsync(text, language);
+        try
+        {
+            await tts.SpeakAsync(text, language);
+        }
+        catch (Exception ex)
+        {
+            ResetIcon();
+            Debug.WriteLine($"[TTS Error]: {ex.Message}");
+        }
     }
 
     private void SetSourceTextState(bool expanded)

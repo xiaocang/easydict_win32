@@ -89,7 +89,7 @@
                 <Grid Grid.Column="0">
                     <!-- Collapsed State TextBlock -->
                     <TextBlock x:Name="SourceTextCollapsed"
-                               Text="{x:Bind InputTextBox.Text, Mode=OneWay}"
+                               Text="{Binding Text, ElementName=InputTextBox, Mode=OneWay}"
                                MaxLines="1"
                                TextTrimming="CharacterEllipsis"
                                IsTextSelectionEnabled="False"

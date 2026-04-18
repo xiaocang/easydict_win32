@@ -2298,6 +2298,10 @@ public sealed partial class SettingsPage : Page
         _settings.Save();
         ResetServiceReorderModes();
 
+        // Reload hotkeys immediately
+        App.LogToFile("[SettingsPage] Triggering hotkey reload");
+        App.HotkeyService?.ReloadHotkeys();
+
         // Refresh window service results to pick up new EnabledQuery settings
         MiniWindowService.Instance.RefreshServiceResults();
         FixedWindowService.Instance.RefreshServiceResults();

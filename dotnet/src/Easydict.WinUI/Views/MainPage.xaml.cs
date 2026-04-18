@@ -508,6 +508,15 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
+            // Skip clipboard auto-translate if specialized windows (Mini or Fixed) are currently active.
+            // This prevents the Main Window from stealing focus or interfering when the user 
+            // uses a hotkey that simulates Ctrl+C to trigger the specialized windows.
+            if (MiniWindowService.Instance.IsVisible || FixedWindowService.Instance.IsVisible)
+            {
+                Debug.WriteLine("[MainPage] Specialized window is visible, skipping clipboard auto-translate in Main Window");
+                return;
+            }
+
             // Auto-translate clipboard text
             DispatcherQueue.TryEnqueue(async () =>
             {

@@ -1527,6 +1527,7 @@ public sealed partial class MiniWindow : Window
 
     private void SetSourceTextState(bool expanded)
     {
+        if (SourceTextCollapsed == null || InputTextBox == null || SourceTextContainer == null) return;
         _isSourceTextExpanded = expanded;
         
         if (expanded)
@@ -1726,6 +1727,7 @@ public sealed partial class MiniWindow : Window
 
     private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts)
     {
+        if (InputTextBox == null) return;
         DispatcherQueue.TryEnqueue(async () =>
         {
             var attempt = InputFocusMaxAttempts - attemptsRemaining + 1;

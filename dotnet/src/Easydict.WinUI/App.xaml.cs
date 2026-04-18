@@ -934,25 +934,27 @@ namespace Easydict.WinUI
             settings.Save();
         }
 
-        private void CleanupServices()
+        public static void CleanupServices()
         {
+            var app = Instance;
+
             // Dispose OCR signal event first — this unblocks the listener thread's WaitOne()
             // which throws ObjectDisposedException, causing the thread to exit gracefully.
-            _ocrSignalEvent?.Dispose();
-            _ocrSignalEvent = null;
+            app._ocrSignalEvent?.Dispose();
+            app._ocrSignalEvent = null;
 
             // Wait briefly for the signal thread to finish to avoid races during teardown
-            if (_ocrSignalThread?.IsAlive == true)
+            if (app._ocrSignalThread?.IsAlive == true)
             {
-                _ocrSignalThread.Join(TimeSpan.FromSeconds(2));
+                app._ocrSignalThread.Join(TimeSpan.FromSeconds(2));
             }
-            _ocrSignalThread = null;
+            app._ocrSignalThread = null;
 
-            _mouseHookService?.Dispose();
-            _popButtonService?.Dispose();
-            _clipboardService?.Dispose();
-            _hotkeyService?.Dispose();
-            _trayIconService?.Dispose();
+            app._mouseHookService?.Dispose();
+            app._popButtonService?.Dispose();
+            app._clipboardService?.Dispose();
+            app._hotkeyService?.Dispose();
+            app._trayIconService?.Dispose();
             FixedWindowService.Instance.Dispose();
             MiniWindowService.Instance.Dispose();
             TextToSpeechService.Instance.Stop();

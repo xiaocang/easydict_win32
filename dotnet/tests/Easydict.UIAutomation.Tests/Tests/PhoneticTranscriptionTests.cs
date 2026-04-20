@@ -199,6 +199,19 @@ public class PhoneticTranscriptionTests : IDisposable
         miniWindow!.SetForeground();
         Thread.Sleep(500);
 
+        // The mini window's source-text container starts collapsed (showing SourceTextCollapsed
+        // TextBlock instead of InputTextBox). Expand it first so UIA can reach the TextBox.
+        var preliminary = miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox();
+        if (preliminary == null || preliminary.IsOffscreen)
+        {
+            var collapsed = miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("SourceTextCollapsed"));
+            if (collapsed != null)
+            {
+                Mouse.Click(collapsed.GetClickablePoint());
+                Thread.Sleep(300);
+            }
+        }
+
         // Find input text box in mini window
         var inputBox = Retry.WhileNull(
             () => miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),

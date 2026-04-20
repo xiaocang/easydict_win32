@@ -1487,13 +1487,7 @@ public sealed partial class MiniWindow : Window
         await StartQueryTrackedAsync();
     }
 
-    private void OnSourcePlayButtonTapped(object sender, TappedRoutedEventArgs e)
-    {
-        e.Handled = true;
-        OnSourcePlayClicked();
-    }
-
-    private async void OnSourcePlayClicked()
+    private async void OnSourcePlayClicked(object sender, RoutedEventArgs e)
     {
         var text = InputTextBox.Text;
         if (string.IsNullOrWhiteSpace(text))
@@ -1506,22 +1500,32 @@ public sealed partial class MiniWindow : Window
 
         var tts = TextToSpeechService.Instance;
 
-        void ResetIcon()
+        // Reset the icon back to the play glyph on the UI thread.
+        void ResetIconGlyph()
         {
-            tts.PlaybackEnded -= ResetIcon;
             DispatcherQueue.TryEnqueue(() => SourcePlayIcon.Glyph = "\uE768");
         }
 
+        // Handler for playback completion; unsubscribes itself and resets the icon.
+        void OnPlaybackEnded()
+        {
+            tts.PlaybackEnded -= OnPlaybackEnded;
+            ResetIconGlyph();
+        }
+
         SourcePlayIcon.Glyph = "\uE71A"; // Stop icon
-        tts.PlaybackEnded += ResetIcon;
+        tts.PlaybackEnded += OnPlaybackEnded;
+
         try
         {
             await tts.SpeakAsync(text, language);
         }
-        catch (Exception ex)
+        finally
         {
-            ResetIcon();
-            Debug.WriteLine($"[TTS Error]: {ex.Message}");
+            // Ensure we always detach the handler and reset the icon,
+            // even if SpeakAsync fails, is cancelled, or playback ends early.
+            tts.PlaybackEnded -= OnPlaybackEnded;
+            ResetIconGlyph();
         }
     }
 
@@ -1535,7 +1539,7 @@ public sealed partial class MiniWindow : Window
             SourceTextCollapsed.Visibility = Visibility.Collapsed;
             InputTextBox.Visibility = Visibility.Visible;
             InputTextBox.Focus(FocusState.Programmatic);
-            typeof(UIElement).GetProperty("ProtectedCursor", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.SetValue(SourceTextContainer, null);
+            ProtectedCursorHelper.Set(SourceTextContainer, null);
             SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
         }
         else
@@ -1558,8 +1562,7 @@ public sealed partial class MiniWindow : Window
     {
         if (!_isSourceTextExpanded)
         {
-            var cursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
-            typeof(UIElement).GetProperty("ProtectedCursor", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.SetValue(SourceTextContainer, cursor);
+            ProtectedCursorHelper.Set(SourceTextContainer, InputSystemCursor.Create(InputSystemCursorShape.Hand));
             SourceTextContainer.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentTextFillColorPrimaryBrush"];
             SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(1);
         }
@@ -1569,7 +1572,7 @@ public sealed partial class MiniWindow : Window
     {
         if (!_isSourceTextExpanded)
         {
-            typeof(UIElement).GetProperty("ProtectedCursor", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.SetValue(SourceTextContainer, null);
+            ProtectedCursorHelper.Set(SourceTextContainer, null);
             SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
         }
     }

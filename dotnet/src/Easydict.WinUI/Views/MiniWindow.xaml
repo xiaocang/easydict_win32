@@ -115,7 +115,7 @@
 
                 <Button x:Name="SourcePlayButton"
                         Grid.Column="1"
-                        Tapped="OnSourcePlayButtonTapped"
+                        Click="OnSourcePlayClicked"
                         ToolTipService.ToolTip="Play source text"
                         Background="Transparent"
                         BorderThickness="0"

@@ -36,6 +36,12 @@ public sealed class OllamaOcrService : IOcrService
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
 
+        var expectedLength = pixelWidth * pixelHeight * 4; // BGRA8
+        if (pixelData.Length < expectedLength)
+            throw new ArgumentException(
+                $"pixelData length ({pixelData.Length}) is less than expected ({expectedLength}) for {pixelWidth}x{pixelHeight} BGRA8",
+                nameof(pixelData));
+
         var settings = SettingsService.Instance;
         var endpoint = settings.OcrEndpoint;
         var model = settings.OcrModel;
@@ -133,12 +139,9 @@ public sealed class OllamaOcrService : IOcrService
             {
                 var srcIdx = srcRow + x * 4;
                 var dstIdx = dstRow + x * 3;
-                if (srcIdx + 2 < bgra.Length && dstIdx + 2 < bmp.Length)
-                {
-                    bmp[dstIdx] = bgra[srcIdx];         // B
-                    bmp[dstIdx + 1] = bgra[srcIdx + 1]; // G
-                    bmp[dstIdx + 2] = bgra[srcIdx + 2]; // R
-                }
+                bmp[dstIdx] = bgra[srcIdx];         // B
+                bmp[dstIdx + 1] = bgra[srcIdx + 1]; // G
+                bmp[dstIdx + 2] = bgra[srcIdx + 2]; // R
             }
         }
 

@@ -675,9 +675,6 @@
   <data name="ScreenCaptureTipSelecting" xml:space="preserve">
     <value>Klik kanan atau Esc untuk membatalkan</value>
   </data>
-  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
-    <value>Enter atau klik ganda untuk konfirmasi  |  Tombol panah untuk penyesuaian  |  Klik kanan atau Esc untuk memilih ulang</value>
-  </data>
 
   <!-- Grammar Correction Mode -->
   <data name="QueryMode_Translation" xml:space="preserve">

@@ -35,9 +35,7 @@ public class DictionaryWebViewRenderingTests : IDisposable
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
-        var inputBox = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
-            TimeSpan.FromSeconds(10)).Result;
+        var inputBox = UITestHelper.FindInputTextBox(window);
 
         inputBox.Should().NotBeNull("InputTextBox must exist on main window");
 

@@ -57,9 +57,7 @@ public class PhoneticTranscriptionTests : IDisposable
         Thread.Sleep(2000);
 
         // Find the input text box
-        var inputBox = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
-            TimeSpan.FromSeconds(10)).Result;
+        var inputBox = UITestHelper.FindInputTextBox(window);
 
         inputBox.Should().NotBeNull("InputTextBox must exist on main window");
 
@@ -131,9 +129,7 @@ public class PhoneticTranscriptionTests : IDisposable
         Thread.Sleep(2000);
 
         // Find the input text box
-        var inputBox = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
-            TimeSpan.FromSeconds(10)).Result;
+        var inputBox = UITestHelper.FindInputTextBox(window);
 
         inputBox.Should().NotBeNull("InputTextBox must exist on main window");
 
@@ -199,23 +195,8 @@ public class PhoneticTranscriptionTests : IDisposable
         miniWindow!.SetForeground();
         Thread.Sleep(500);
 
-        // The mini window's source-text container starts collapsed (showing SourceTextCollapsed
-        // TextBlock instead of InputTextBox). Expand it first so UIA can reach the TextBox.
-        var preliminary = miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox();
-        if (preliminary == null || preliminary.IsOffscreen)
-        {
-            var collapsed = miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("SourceTextCollapsed"));
-            if (collapsed != null)
-            {
-                Mouse.Click(collapsed.GetClickablePoint());
-                Thread.Sleep(300);
-            }
-        }
-
-        // Find input text box in mini window
-        var inputBox = Retry.WhileNull(
-            () => miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
-            TimeSpan.FromSeconds(10)).Result;
+        // Find input text box in mini window (helper expands the collapsed source text first)
+        var inputBox = UITestHelper.FindInputTextBox(miniWindow);
 
         inputBox.Should().NotBeNull("InputTextBox must exist in mini window");
 

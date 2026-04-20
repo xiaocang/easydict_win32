@@ -249,30 +249,14 @@ public class MiniWindowLongTextTests : IDisposable
     }
 
     /// <summary>
-    /// Find the InputTextBox in the given window.
-    /// The MiniWindow's source-text container starts collapsed (showing SourceTextCollapsed
-    /// TextBlock instead of InputTextBox). Tap the collapsed TextBlock to expand and reveal
-    /// the InputTextBox; if the input is already expanded, the tap is a no-op.
+    /// Find the InputTextBox in the given window. Delegates to
+    /// <see cref="UITestHelper.FindInputTextBox"/>, which expands the collapsed source-text
+    /// container first when the direct UIA lookup fails.
     /// </summary>
     private TextBox FindInputTextBox(Window window)
     {
-        var inputBox = window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox();
-        if (inputBox == null || inputBox.IsOffscreen)
-        {
-            var collapsed = window.FindFirstDescendant(cf => cf.ByAutomationId("SourceTextCollapsed"));
-            if (collapsed != null)
-            {
-                Mouse.Click(collapsed.GetClickablePoint());
-                Thread.Sleep(300);
-            }
-        }
-
-        inputBox = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
-            TimeSpan.FromSeconds(10)).Result;
-
+        var inputBox = UITestHelper.FindInputTextBox(window);
         inputBox.Should().NotBeNull("InputTextBox must exist in mini window");
-
         return inputBox!;
     }
 

@@ -193,7 +193,9 @@
 
         <!-- Multi-Service Results -->
         <ScrollViewer
+            x:Name="ResultsScrollViewer"
             Grid.Row="4"
+            IsTabStop="True"
             VerticalScrollBarVisibility="Visible">
             <ItemsControl x:Name="ResultsPanel">
                 <ItemsControl.ItemsPanel>

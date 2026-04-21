@@ -75,6 +75,8 @@ public sealed partial class FixedWindow : Window
         this.Activated += OnWindowActivated;
         this.Closed += OnWindowClosed;
 
+        SettingsService.Instance.HideEmptyServiceResultsChanged += OnHideEmptyServiceResultsChanged;
+
         // Initialize service result controls
         InitializeServiceResults();
 
@@ -308,6 +310,8 @@ public sealed partial class FixedWindow : Window
             _resultControls.Add(control);
             ResultsPanel.Items.Add(control);
         }
+
+        ReorderResultsPanel();
     }
 
     /// <summary>
@@ -376,6 +380,7 @@ public sealed partial class FixedWindow : Window
                 serviceResult.IsLoading = false;
                 serviceResult.ApplyAutoCollapseLogic();
                 UpdatePhoneticDeduplication();
+                ReorderResultsPanel();
                 RequestResize();
             }
         }
@@ -444,6 +449,8 @@ public sealed partial class FixedWindow : Window
     {
         try
         {
+            SettingsService.Instance.HideEmptyServiceResultsChanged -= OnHideEmptyServiceResultsChanged;
+
             _isClosing = true;
             SaveWindowPosition();
             await CleanupResourcesAsync();
@@ -756,6 +763,7 @@ public sealed partial class FixedWindow : Window
                             serviceResult.IsLoading = false;
                             serviceResult.ApplyAutoCollapseLogic();
                             UpdatePhoneticDeduplication();
+                            ReorderResultsPanel();
                             // Coalesced resize so ServiceResultItem.UpdateUI() completes first
                             RequestResize();
                         });
@@ -954,6 +962,7 @@ public sealed partial class FixedWindow : Window
             serviceResult.Result = result;
             serviceResult.ApplyAutoCollapseLogic();
             UpdatePhoneticDeduplication();
+            ReorderResultsPanel();
             // Delay resize to next tick so ServiceResultItem.UpdateUI() completes first
             DispatcherQueue.TryEnqueue(() => RequestResize());
         });
@@ -1344,6 +1353,53 @@ public sealed partial class FixedWindow : Window
         {
             root.RequestedTheme = theme;
         }
+    }
+
+    /// <summary>
+    /// Reorder <see cref="ResultsPanel"/> so that rows demoted by
+    /// <see cref="ServiceResultDemotionHelper.IsDemoted"/> (no-result + hide-empty setting)
+    /// appear at the bottom of the list while preserving the configured order within each
+    /// bucket. Idempotent: safe to call on every result completion.
+    /// </summary>
+    private void ReorderResultsPanel()
+    {
+        if (_resultControls.Count == 0) return;
+
+        var hideEmpty = SettingsService.Instance.HideEmptyServiceResults;
+        var order = ServiceResultDemotionHelper.StablePartitionIndices(_serviceResults, hideEmpty);
+
+        // Only rebuild Items if order actually changes (avoid visual-tree churn during streaming).
+        bool orderMatches = ResultsPanel.Items.Count == _resultControls.Count;
+        for (int i = 0; orderMatches && i < order.Count; i++)
+        {
+            if (!ReferenceEquals(ResultsPanel.Items[i], _resultControls[order[i]]))
+                orderMatches = false;
+        }
+        if (orderMatches) return;
+
+        // Remove+Insert rather than Clear() to preserve WebView2 and streaming state.
+        for (int i = 0; i < order.Count; i++)
+        {
+            var target = _resultControls[order[i]];
+            var currentIndex = ResultsPanel.Items.IndexOf(target);
+            if (currentIndex == i) continue;
+            if (currentIndex >= 0) ResultsPanel.Items.RemoveAt(currentIndex);
+            ResultsPanel.Items.Insert(i, target);
+        }
+    }
+
+    private void OnHideEmptyServiceResultsChanged(object? sender, EventArgs e)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_isClosing) return;
+            foreach (var control in _resultControls)
+            {
+                control.RefreshDemotionState();
+            }
+            ReorderResultsPanel();
+            RequestResize();
+        });
     }
 
     /// <summary>

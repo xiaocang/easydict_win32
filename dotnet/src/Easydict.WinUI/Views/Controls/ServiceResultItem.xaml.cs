@@ -30,6 +30,17 @@ public sealed partial class ServiceResultItem : UserControl
     private MdxDictionaryTranslationService? _currentMdxService;
 
     /// <summary>
+    /// Exposes the header panel for sticky calculation in MiniWindow.
+    /// </summary>
+    public FrameworkElement HeaderPanel => HeaderBar;
+
+    /// <summary>
+    /// Exposes the action buttons panel for sticky calculation in MiniWindow.
+    /// </summary>
+    public FrameworkElement ActionButtonsPanel => ActionButtons;
+
+
+    /// <summary>
     /// Event raised when the expand/collapse state is toggled.
     /// </summary>
     public event EventHandler<ServiceQueryResult>? CollapseToggled;
@@ -940,23 +951,30 @@ public sealed partial class ServiceResultItem : UserControl
         var point = e.GetCurrentPoint(HeaderBar);
         if (point.Properties.IsLeftButtonPressed)
         {
-            // Check if this is a manual-query service that needs to be queried
-            var wasCollapsed = !_serviceResult.IsExpanded;
-            var needsQuery = !_serviceResult.EnabledQuery && !_serviceResult.HasQueried && wasCollapsed;
-
-            _serviceResult.ToggleExpanded();
-            UpdateUI();
-            CollapseToggled?.Invoke(this, _serviceResult);
-
-            // If expanding a manual-query service that hasn't been queried, request query
-            if (needsQuery && _serviceResult.IsExpanded)
-            {
-                QueryRequested?.Invoke(this, _serviceResult);
-            }
-
+            ToggleCollapse();
             e.Handled = true;
         }
     }
+
+    private void ToggleCollapse()
+    {
+        if (_serviceResult == null) return;
+
+        // Check if this is a manual-query service that needs to be queried
+        var wasCollapsed = !_serviceResult.IsExpanded;
+        var needsQuery = !_serviceResult.EnabledQuery && !_serviceResult.HasQueried && wasCollapsed;
+
+        _serviceResult.ToggleExpanded();
+        UpdateUI();
+        CollapseToggled?.Invoke(this, _serviceResult);
+
+        // If expanding a manual-query service that hasn't been queried, request query
+        if (needsQuery && _serviceResult.IsExpanded)
+        {
+            QueryRequested?.Invoke(this, _serviceResult);
+        }
+    }
+
 
     private void OnRetryClicked(object sender, RoutedEventArgs e)
     {
@@ -989,15 +1007,18 @@ public sealed partial class ServiceResultItem : UserControl
     private void OnControlPointerExited(object sender, PointerRoutedEventArgs e)
     {
         _isHovering = false;
-        HeaderBar.ClearValue(Border.BackgroundProperty);
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         ActionButtons.Visibility = Visibility.Collapsed;
     }
 
     private void OnHeaderBarPointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        if (FindThemeBrush("ButtonHoverBrush") is Brush brush)
+        // Use a more distinct highlight brush for hover
+        if (FindThemeBrush("ControlFillColorSecondaryBrush") is Brush brush)
             HeaderBar.Background = brush;
+        else if (FindThemeBrush("ButtonHoverBrush") is Brush hoverBrush)
+            HeaderBar.Background = hoverBrush;
+
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
     }
 
@@ -1029,7 +1050,13 @@ public sealed partial class ServiceResultItem : UserControl
 
     private void OnHeaderBarPointerExited(object sender, PointerRoutedEventArgs e)
     {
-        HeaderBar.ClearValue(Border.BackgroundProperty);
+        // Restore opaque background instead of clearing it to maintain sticky header visibility
+        // Match the brush used in XAML (SolidBackgroundFillColorBaseBrush is preferred for solid opacity)
+        if (FindThemeBrush("SolidBackgroundFillColorBaseBrush") is Brush brush)
+            HeaderBar.Background = brush;
+        else if (FindThemeBrush("ApplicationPageBackgroundThemeBrush") is Brush appBrush)
+            HeaderBar.Background = appBrush;
+
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     }
 

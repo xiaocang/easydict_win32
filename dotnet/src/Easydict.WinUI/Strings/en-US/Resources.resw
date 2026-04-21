@@ -646,9 +646,6 @@
   <data name="ScreenCaptureTipSelecting" xml:space="preserve">
     <value>Right-click or Esc to cancel</value>
   </data>
-  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
-    <value>Enter or double-click to confirm  |  Arrow keys to fine-tune  |  Right-click or Esc to redo</value>
-  </data>
 
   <!-- Window Titles -->
   <data name="QuickTranslate" xml:space="preserve">

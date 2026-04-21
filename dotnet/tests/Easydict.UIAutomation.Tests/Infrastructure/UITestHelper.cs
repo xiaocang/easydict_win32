@@ -1,6 +1,8 @@
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Conditions;
 using FlaUI.Core.Input;
+using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;
 using Xunit.Abstractions;
 
@@ -61,5 +63,30 @@ public static class UITestHelper
         return allWindows
             .OrderBy(w => w.BoundingRectangle.Width * w.BoundingRectangle.Height)
             .First();
+    }
+
+    /// <summary>
+    /// Find the InputTextBox on a window, expanding the collapsed source-text container
+    /// first if present. The MiniWindow's source-text surface starts collapsed — showing
+    /// <c>SourceTextCollapsed</c> instead of <c>InputTextBox</c> — so a direct UIA lookup
+    /// returns null until the user taps the container. MainPage and FixedWindow expose
+    /// InputTextBox directly and the preflight is a harmless no-op for them.
+    /// </summary>
+    public static TextBox? FindInputTextBox(Window window, TimeSpan? timeout = null)
+    {
+        var inputBox = window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox();
+        if (inputBox == null || inputBox.IsOffscreen)
+        {
+            var collapsed = window.FindFirstDescendant(cf => cf.ByAutomationId("SourceTextCollapsed"));
+            if (collapsed != null)
+            {
+                try { Mouse.Click(collapsed.GetClickablePoint()); } catch { /* ignore */ }
+                Thread.Sleep(300);
+            }
+        }
+
+        return Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
+            timeout ?? TimeSpan.FromSeconds(10)).Result;
     }
 }

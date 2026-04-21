@@ -13,6 +13,7 @@ using Easydict.WinUI.Views.Controls;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI.Xaml.Input;
+using System.Numerics;
 using Windows.System;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 
@@ -58,6 +59,7 @@ namespace Easydict.WinUI.Views
         private readonly ObservableCollection<LongDocHistoryItem> _longDocHistoryItems = new();
         private string _longDocOutputFolder = "";
         private bool _isLongDocTranslating;
+        private bool _hasAutoPlayedCurrentQuery = false;
         private ContentDialog? _currentDialog;
         private readonly bool _useMemoryAbVariantB;
 
@@ -506,6 +508,15 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
+            // Skip clipboard auto-translate if specialized windows (Mini or Fixed) are currently active.
+            // This prevents the Main Window from stealing focus or interfering when the user 
+            // uses a hotkey that simulates Ctrl+C to trigger the specialized windows.
+            if (MiniWindowService.Instance.IsVisible || FixedWindowService.Instance.IsVisible)
+            {
+                Debug.WriteLine("[MainPage] Specialized window is visible, skipping clipboard auto-translate in Main Window");
+                return;
+            }
+
             // Auto-translate clipboard text
             DispatcherQueue.TryEnqueue(async () =>
             {
@@ -666,6 +677,46 @@ namespace Easydict.WinUI.Views
             MemoryDiagnostics.LogSnapshot("MainPage.ReleaseServiceResultControls complete");
             LogObjectState("ReleaseServiceResultControls complete");
 #endif
+        }
+
+        private void OnQuickTranslateContentViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+        {
+            if (_resultControls == null || _resultControls.Count == 0) return;
+
+            const double margin = 4.0;
+
+            foreach (var control in _resultControls)
+            {
+                if (control.Visibility != Visibility.Visible || control.ActionButtonsPanel == null)
+                    continue;
+
+                try
+                {
+                    // Calculate transformation relative to the QuickTranslateContent scroll viewer
+                    var transform = control.TransformToVisual(QuickTranslateContent);
+                    var point = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+
+                    // Y relative to the viewport
+                    var y = point.Y;
+
+                    double offsetY = 0;
+                    if (y < 0)
+                    {
+                        offsetY = Math.Abs(y);
+                    }
+
+                    // Clamp to item height so headers and buttons don't leave the item container
+                    var maxOffset = control.ActualHeight - control.HeaderPanel.ActualHeight - margin;
+                    offsetY = Math.Clamp(offsetY, 0, Math.Max(0, maxOffset));
+
+                    control.HeaderPanel.Translation = new Vector3(0, (float)offsetY, 0);
+                    control.ActionButtonsPanel.Translation = new Vector3(0, (float)offsetY, 0);
+                }
+                catch (Exception)
+                {
+                    // Ignore transformation errors if elements are being detached or not yet loaded
+                }
+            }
         }
 
         /// <summary>
@@ -915,7 +966,15 @@ namespace Easydict.WinUI.Views
 
             SourcePlayIcon.Glyph = "\uE71A"; // Stop icon
             tts.PlaybackEnded += ResetIcon;
-            await tts.SpeakAsync(text, language);
+            try
+            {
+                await tts.SpeakAsync(text, language);
+            }
+            catch (Exception ex)
+            {
+                ResetIcon();
+                Debug.WriteLine($"[TTS Error]: {ex.Message}");
+            }
         }
 
         private async void OnInputTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
@@ -1001,6 +1060,7 @@ namespace Easydict.WinUI.Views
             {
                 if (_isClosing) return;
                 SetLoading(true);
+                _hasAutoPlayedCurrentQuery = false;
 
                 // Reset all service results
                 foreach (var result in _serviceResults)
@@ -1101,6 +1161,17 @@ namespace Easydict.WinUI.Views
                                 serviceResult.ApplyAutoCollapseLogic();
                                 UpdatePhoneticDeduplication();
                                 ReorderResultsPanel();
+
+                                if (result.ResultKind == TranslationResultKind.Success &&
+                                    !_hasAutoPlayedCurrentQuery && SettingsService.Instance.AutoPlayTranslation)
+                                {
+                                    var targetText = result.TranslatedText;
+                                    if (!string.IsNullOrEmpty(targetText))
+                                    {
+                                        _hasAutoPlayedCurrentQuery = true;
+                                        _ = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                                    }
+                                }
                             });
 
                             outcome = result.ResultKind == TranslationResultKind.Success
@@ -1502,6 +1573,17 @@ namespace Easydict.WinUI.Views
                 serviceResult.ApplyAutoCollapseLogic();
                 UpdatePhoneticDeduplication();
                 ReorderResultsPanel();
+
+                if (result.ResultKind == TranslationResultKind.Success &&
+                    !_hasAutoPlayedCurrentQuery && SettingsService.Instance.AutoPlayTranslation)
+                {
+                    var targetText = result.TranslatedText;
+                    if (!string.IsNullOrEmpty(targetText))
+                    {
+                        _hasAutoPlayedCurrentQuery = true;
+                        _ = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                    }
+                }
             });
         }
 

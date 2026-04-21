@@ -1,4 +1,5 @@
 using Easydict.TranslationService;
+using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using FluentAssertions;
 using Xunit;
@@ -638,6 +639,64 @@ public class SettingsServiceTests
             serviceId.Should().Be("bing");
         else
             serviceId.Should().Be("google");
+    }
+
+    #endregion
+
+    #region OCR + TTS Round-Trip
+
+    [Fact]
+    public void OcrSettings_RoundTripThroughSave()
+    {
+        var originalEngine = _settings.OcrEngine;
+        var originalEndpoint = _settings.OcrEndpoint;
+        var originalModel = _settings.OcrModel;
+        var originalPrompt = _settings.OcrSystemPrompt;
+
+        try
+        {
+            _settings.OcrEngine = OcrEngineType.Ollama;
+            _settings.OcrEndpoint = "http://test.local/ocr";
+            _settings.OcrModel = "test-model";
+            _settings.OcrSystemPrompt = "Extract test text.";
+            _settings.Save();
+
+            _settings.OcrEngine.Should().Be(OcrEngineType.Ollama);
+            _settings.OcrEndpoint.Should().Be("http://test.local/ocr");
+            _settings.OcrModel.Should().Be("test-model");
+            _settings.OcrSystemPrompt.Should().Be("Extract test text.");
+        }
+        finally
+        {
+            _settings.OcrEngine = originalEngine;
+            _settings.OcrEndpoint = originalEndpoint;
+            _settings.OcrModel = originalModel;
+            _settings.OcrSystemPrompt = originalPrompt;
+            _settings.Save();
+        }
+    }
+
+    [Fact]
+    public void TtsSettings_RoundTripThroughSave()
+    {
+        var originalSpeed = _settings.TtsSpeed;
+        var originalAutoPlay = _settings.AutoPlayTranslation;
+
+        try
+        {
+            _settings.TtsSpeed = 2.5;
+            _settings.AutoPlayTranslation = true;
+            _settings.Save();
+
+            _settings.TtsSpeed.Should().Be(2.5);
+            _settings.AutoPlayTranslation.Should().BeTrue();
+        }
+        finally
+        {
+            _settings.TtsSpeed = originalSpeed;
+            _settings.AutoPlayTranslation = originalAutoPlay;
+            _settings.Save();
+        }
     }
 
     #endregion

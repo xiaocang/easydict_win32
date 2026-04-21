@@ -371,8 +371,15 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public void ExitApplication()
     {
-        Dispose();
+        // Clean up all services including Win32 hooks before exit
+        App.CleanupServices();
+
+        // Terminate the WinUI message loop
         Application.Current.Exit();
+
+        // Fallback: force process termination if any stubborn threads remain
+        // This ensures the process doesn't become a zombie
+        Environment.Exit(0);
     }
 
     public void Dispose()

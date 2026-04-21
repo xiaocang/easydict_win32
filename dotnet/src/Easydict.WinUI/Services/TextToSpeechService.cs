@@ -71,6 +71,9 @@ public sealed class TextToSpeechService : IDisposable
                 _synthesizer.Voice = voice;
             }
 
+            // Apply selected speaking rate
+            _synthesizer.Options.SpeakingRate = Math.Clamp(SettingsService.Instance.TtsSpeed, 0.5, 3.0);
+
             Debug.WriteLine($"[TTS] Speaking in {language} with voice: {_synthesizer.Voice.DisplayName}");
 
             var stream = await _synthesizer.SynthesizeTextToStreamAsync(text).AsTask(cancellationToken);

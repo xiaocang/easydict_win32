@@ -66,6 +66,10 @@ public static class TextSelectionService
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const ushort VK_CONTROL = 0x11;
     private const ushort VK_C = 0x43;
+    private const ushort VK_SHIFT = 0x10;
+    private const ushort VK_MENU = 0x12; // Alt
+    private const ushort VK_LWIN = 0x5B;
+    private const ushort VK_RWIN = 0x5C;
 
     // Known Electron app process names
     private static readonly HashSet<string> ElectronProcessNames = new(StringComparer.OrdinalIgnoreCase)
@@ -502,7 +506,7 @@ public static class TextSelectionService
                         return null;
                     }
 
-                    await Task.Delay(50, cancellationToken); // Wait for focus to settle
+                    await Task.Delay(100, cancellationToken); // Wait for focus to settle
                 }
 
                 SendCtrlC();
@@ -642,44 +646,100 @@ public static class TextSelectionService
 
     /// <summary>
     /// Sends Ctrl+C keystroke to copy selected text using SendInput API.
-    /// SendInput is the modern replacement for keybd_event and works reliably
-    /// with modern applications including Electron apps like VSCode.
+    /// Flushes physical modifier keys before sending Ctrl+C to avoid modifier bleed.
     /// </summary>
     private static void SendCtrlC()
     {
         Debug.WriteLine("[TextSelectionService] SendCtrlC() called");
 
-        var inputs = new INPUT[4];
+        var inputs = new List<INPUT>();
 
+        // 1. Flush physical modifier keys (KEYUP) to avoid modifier bleed
+        // This ensures the target app sees a pure "Ctrl+C" even if user is holding Alt/Shift/Win.
+        ushort[] modifiersToFlush = { VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN };
+        foreach (var vk in modifiersToFlush)
+        {
+            inputs.Add(new INPUT
+            {
+                type = INPUT_KEYBOARD,
+                U = new InputUnion
+                {
+                    ki = new KEYBDINPUT
+                    {
+                        wVk = vk,
+                        dwFlags = KEYEVENTF_KEYUP,
+                        dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
+                    }
+                }
+            });
+        }
+
+        // 2. Send Ctrl+C sequence
         // Ctrl down
-        inputs[0].type = INPUT_KEYBOARD;
-        inputs[0].U.ki.wVk = VK_CONTROL;
-        inputs[0].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
+        inputs.Add(new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            U = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_CONTROL,
+                    dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
+                }
+            }
+        });
 
         // C down
-        inputs[1].type = INPUT_KEYBOARD;
-        inputs[1].U.ki.wVk = VK_C;
-        inputs[1].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
+        inputs.Add(new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            U = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_C,
+                    dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
+                }
+            }
+        });
 
         // C up
-        inputs[2].type = INPUT_KEYBOARD;
-        inputs[2].U.ki.wVk = VK_C;
-        inputs[2].U.ki.dwFlags = KEYEVENTF_KEYUP;
-        inputs[2].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
+        inputs.Add(new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            U = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_C,
+                    dwFlags = KEYEVENTF_KEYUP,
+                    dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
+                }
+            }
+        });
 
         // Ctrl up
-        inputs[3].type = INPUT_KEYBOARD;
-        inputs[3].U.ki.wVk = VK_CONTROL;
-        inputs[3].U.ki.dwFlags = KEYEVENTF_KEYUP;
-        inputs[3].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
+        inputs.Add(new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            U = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_CONTROL,
+                    dwFlags = KEYEVENTF_KEYUP,
+                    dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY
+                }
+            }
+        });
 
+        var inputArray = inputs.ToArray();
         var inputSize = Marshal.SizeOf<INPUT>();
-        Debug.WriteLine($"[TextSelectionService] INPUT struct size: {inputSize}");
+        uint result = SendInput((uint)inputArray.Length, inputArray, inputSize);
 
-        uint result = SendInput(4, inputs, inputSize);
-        Debug.WriteLine($"[TextSelectionService] SendInput returned: {result} (expected 4)");
+        Debug.WriteLine($"[TextSelectionService] SendInput sent {inputArray.Length} inputs, returned: {result}");
 
-        if (result != 4)
+        if (result != inputArray.Length)
         {
             var error = Marshal.GetLastWin32Error();
             Debug.WriteLine($"[TextSelectionService] SendInput error code: {error}");

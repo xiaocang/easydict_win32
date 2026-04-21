@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Easydict.TranslationService;
+using Easydict.WinUI.Models;
 
 namespace Easydict.WinUI.Services;
 
@@ -228,6 +229,13 @@ public sealed class SettingsService
     /// </summary>
     public string OcrLanguage { get; set; } = "auto";
 
+    // OCR Engine settings
+    public OcrEngineType OcrEngine { get; set; } = OcrEngineType.WindowsNative;
+    public string? OcrApiKey { get; set; }
+    public string OcrEndpoint { get; set; } = OcrServiceOptions.DefaultEndpoint;
+    public string OcrModel { get; set; } = OcrServiceOptions.DefaultModel;
+    public string OcrSystemPrompt { get; set; } = "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.";
+
     // Layout detection settings (long document translation)
 
     /// <summary>
@@ -318,6 +326,10 @@ public sealed class SettingsService
 
     // UI settings
     public bool AlwaysOnTop { get; set; } = false;
+
+    // TTS settings
+    public double TtsSpeed { get; set; } = 1.0;
+    public bool AutoPlayTranslation { get; set; } = false;
 
     // UI Language (for localization)
     public string UILanguage { get; set; } = ""; // Empty means system default
@@ -622,7 +634,17 @@ public sealed class SettingsService
         EnableSilentOcrHotkey = GetValue(nameof(EnableSilentOcrHotkey), true);
         HideEmptyServiceResults = GetValue(nameof(HideEmptyServiceResults), true);
         OcrLanguage = GetValue(nameof(OcrLanguage), "auto");
+
+        // Load OCR Engine settings
+        OcrEngine = (OcrEngineType)GetValue(nameof(OcrEngine), (int)OcrEngineType.WindowsNative);
+        OcrApiKey = GetValue<string?>(nameof(OcrApiKey), null);
+        OcrEndpoint = GetValue(nameof(OcrEndpoint), OcrServiceOptions.DefaultEndpoint);
+        OcrModel = GetValue(nameof(OcrModel), OcrServiceOptions.DefaultModel);
+        OcrSystemPrompt = GetValue(nameof(OcrSystemPrompt), "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.");
+
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
+        TtsSpeed = GetValue(nameof(TtsSpeed), 1.0);
+        AutoPlayTranslation = GetValue(nameof(AutoPlayTranslation), false);
         UILanguage = GetValue(nameof(UILanguage), "");
         AppTheme = GetValue(nameof(AppTheme), "System");
         LaunchAtStartup = GetValue(nameof(LaunchAtStartup), false);
@@ -791,7 +813,17 @@ public sealed class SettingsService
         _settings[nameof(EnableSilentOcrHotkey)] = EnableSilentOcrHotkey;
         _settings[nameof(HideEmptyServiceResults)] = HideEmptyServiceResults;
         _settings[nameof(OcrLanguage)] = OcrLanguage;
+
+        // Save OCR Engine settings
+        _settings[nameof(OcrEngine)] = (int)OcrEngine;
+        _settings[nameof(OcrApiKey)] = OcrApiKey ?? string.Empty;
+        _settings[nameof(OcrEndpoint)] = OcrEndpoint;
+        _settings[nameof(OcrModel)] = OcrModel;
+        _settings[nameof(OcrSystemPrompt)] = OcrSystemPrompt;
+
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;
+        _settings[nameof(TtsSpeed)] = TtsSpeed;
+        _settings[nameof(AutoPlayTranslation)] = AutoPlayTranslation;
         _settings[nameof(UILanguage)] = UILanguage;
         _settings[nameof(AppTheme)] = AppTheme;
         _settings[nameof(LaunchAtStartup)] = LaunchAtStartup;

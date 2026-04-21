@@ -918,6 +918,9 @@ public sealed partial class MiniWindow : Window
                 }
             }
 
+            // Move focus to results so PageUp/PageDown navigates results (issue #137)
+            FocusResultsForNavigation();
+
             // Route based on mode
             if (_currentMode == QueryMode.GrammarCorrection)
             {
@@ -1726,6 +1729,17 @@ public sealed partial class MiniWindow : Window
 
         // Resize window to fit existing content (delayed to allow layout to complete)
         RequestResize();
+    }
+
+    /// <summary>
+    /// Move focus to the results ScrollViewer so PageUp/PageDown/arrow keys
+    /// navigate the translated output (issue #137). Called on query start.
+    /// </summary>
+    private void FocusResultsForNavigation()
+    {
+        if (_isClosing || !_isLoaded) return;
+        if (MainScrollViewer.XamlRoot is null) return;
+        MainScrollViewer.Focus(FocusState.Programmatic);
     }
 
     private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts)

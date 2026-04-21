@@ -12,14 +12,12 @@ namespace Easydict.WinUI.Services.ScreenCapture;
 ///   1. Freeze desktop with BitBlt → show full-screen overlay with dark mask
 ///   2. Mouse hover: auto-detect windows via WindowDetector, highlight region
 ///      (desktop/wallpaper windows are excluded to avoid full-screen selection)
-///   3. Double-click on detected window: select it → Adjusting phase
+///   3. Double-click on detected window: confirm immediately → return result
 ///      Single-click on detected window: no action (double-click required)
-///      Click+drag (anywhere): free-select rectangle (drag threshold = 5px)
-///      Double-click on blank: enter track-mouse selection mode (click to finalize)
-///   4. After selection (Adjusting): 8 resize handles, arrow-key fine-tuning,
-///      cursor changes (move/resize/crosshair) based on position
-///   5. Enter/double-click: confirm → return result
-///      Right-click/Esc in Adjusting/Selecting: go back to Detecting
+///      Click+drag (anywhere): free-select rectangle (drag threshold = 5px),
+///          release mouse → confirm immediately
+///      Double-click on blank: enter track-mouse selection mode; click to confirm
+///   4. Right-click/Esc in Selecting: go back to Detecting
 ///      Right-click/Esc in Detecting: confirmation dialog → cancel
 ///   Tips overlay: each phase shows context-sensitive operation hints (localized)
 ///
@@ -50,13 +48,6 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     // Virtual keys
     private const int VK_ESCAPE = 0x1B;
-    private const int VK_RETURN = 0x0D;
-    private const int VK_LEFT = 0x25;
-    private const int VK_UP = 0x26;
-    private const int VK_RIGHT = 0x27;
-    private const int VK_DOWN = 0x28;
-    private const int VK_CONTROL = 0x11;
-    private const int VK_SHIFT = 0x10;
     private const int VK_TAB = 0x09;
 
     // GDI constants
@@ -68,9 +59,6 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     // Overlay mask alpha (0-255). ~100 = ~40% opacity dark overlay.
     private const byte MaskAlpha = 100;
-
-    // Selection handle size in pixels
-    private const int HandleSize = 8;
 
     // Magnifier size (pixels captured around cursor, then scaled up)
     private const int MagSourceSize = 11; // 11×11 pixels
@@ -103,9 +91,6 @@ public sealed class ScreenCaptureWindow : IDisposable
     private SelectionPhase _phase = SelectionPhase.Detecting;
     private RECT? _detectedRegion;   // auto-detected window region
     private RECT _selection;          // current selection rectangle
-    private POINT _dragStart;         // mouse-down position
-    private bool _isDragging;
-    private DragMode _dragMode = DragMode.None;
     private int _detectionDepth;      // scroll depth for window detection
     private bool _isMouseDown;        // mouse button held in Detecting phase
     private POINT _mouseDownPoint;    // where mouse went down (for drag threshold)
@@ -126,22 +111,11 @@ public sealed class ScreenCaptureWindow : IDisposable
     private nint _tipsOldBitmap;
     private string _tipDetecting = string.Empty;
     private string _tipSelecting = string.Empty;
-    private string _tipAdjusting = string.Empty;
 
     private enum SelectionPhase
     {
         Detecting,   // Mouse hovering, auto-detecting windows
         Selecting,   // Mouse dragging to create selection
-        Adjusting,   // Selection made, can resize/move/confirm
-    }
-
-    private enum DragMode
-    {
-        None,
-        Move,           // Dragging inside selection
-        ResizeTopLeft, ResizeTop, ResizeTopRight,
-        ResizeLeft, ResizeRight,
-        ResizeBottomLeft, ResizeBottom, ResizeBottomRight,
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -325,12 +299,11 @@ public sealed class ScreenCaptureWindow : IDisposable
                 {
                     if (_detectedRegion.HasValue)
                     {
-                        // Double-click on detected window: select it → Adjusting phase
+                        // Double-click on detected window: select it and confirm
                         _selection = _detectedRegion.Value;
-                        _phase = SelectionPhase.Adjusting;
                         _isMouseDown = false;
                         _ignoreNextMouseUp = true;
-                        InvalidateRect(_hwnd, IntPtr.Zero, false);
+                        ConfirmSelection();
                     }
                     else
                     {
@@ -349,22 +322,10 @@ public sealed class ScreenCaptureWindow : IDisposable
                         InvalidateRect(_hwnd, IntPtr.Zero, false);
                     }
                 }
-                else if (_phase == SelectionPhase.Adjusting)
-                {
-                    ConfirmSelection();
-                }
                 return IntPtr.Zero;
 
             case WM_RBUTTONDOWN:
-                if (_phase == SelectionPhase.Adjusting)
-                {
-                    // Go back to Detecting (Snipaste: right-click = step back)
-                    _phase = SelectionPhase.Detecting;
-                    _detectedRegion = null;
-                    _detectionDepth = 0;
-                    InvalidateRect(_hwnd, IntPtr.Zero, false);
-                }
-                else if (_phase == SelectionPhase.Selecting)
+                if (_phase == SelectionPhase.Selecting)
                 {
                     // Cancel current drag, back to Detecting
                     ReleaseCapture();
@@ -427,16 +388,10 @@ public sealed class ScreenCaptureWindow : IDisposable
         {
             DrawSelectionRegion(buf, _detectedRegion.Value);
         }
-        else if (_phase is SelectionPhase.Selecting or SelectionPhase.Adjusting)
+        else if (_phase == SelectionPhase.Selecting)
         {
             var sel = NormalizeRect(_selection);
             DrawSelectionRegion(buf, sel);
-
-            if (_phase == SelectionPhase.Adjusting)
-            {
-                DrawResizeHandles(buf, sel);
-            }
-
             DrawSizeLabel(buf, sel);
         }
 
@@ -474,18 +429,6 @@ public sealed class ScreenCaptureWindow : IDisposable
         SelectObject(hdc, oldPen);
         SelectObject(hdc, oldBrush);
         DeleteObject(pen);
-    }
-
-    private void DrawResizeHandles(nint hdc, RECT sel)
-    {
-        var brush = CreateSolidBrush(0x00FF8C00); // Orange handles
-        var handles = GetHandleRects(sel);
-        foreach (var h in handles)
-        {
-            var r = new RECT { Left = h.Left, Top = h.Top, Right = h.Right, Bottom = h.Bottom };
-            FillRect(hdc, ref r, brush);
-        }
-        DeleteObject(brush);
     }
 
     private void DrawSizeLabel(nint hdc, RECT sel)
@@ -615,7 +558,6 @@ public sealed class ScreenCaptureWindow : IDisposable
         var loc = LocalizationService.Instance;
         _tipDetecting = loc.GetString("ScreenCaptureTipDetecting");
         _tipSelecting = loc.GetString("ScreenCaptureTipSelecting");
-        _tipAdjusting = loc.GetString("ScreenCaptureTipAdjusting");
     }
 
     private void DrawTips(nint hdc)
@@ -624,7 +566,6 @@ public sealed class ScreenCaptureWindow : IDisposable
         {
             SelectionPhase.Detecting => _tipDetecting,
             SelectionPhase.Selecting => _tipSelecting,
-            SelectionPhase.Adjusting => _tipAdjusting,
             _ => string.Empty
         };
 
@@ -724,11 +665,6 @@ public sealed class ScreenCaptureWindow : IDisposable
                 _selection.Bottom = pt.Y;
                 InvalidateRect(_hwnd, IntPtr.Zero, false);
                 break;
-
-            case SelectionPhase.Adjusting when _isDragging:
-                ApplyDrag(pt);
-                InvalidateRect(_hwnd, IntPtr.Zero, false);
-                break;
         }
     }
 
@@ -751,7 +687,7 @@ public sealed class ScreenCaptureWindow : IDisposable
                 _selection = NormalizeRect(_selection);
                 if (_selection.Width >= 3 && _selection.Height >= 3)
                 {
-                    _phase = SelectionPhase.Adjusting;
+                    ConfirmSelection();
                 }
                 else
                 {
@@ -759,32 +695,6 @@ public sealed class ScreenCaptureWindow : IDisposable
                     _detectedRegion = null;
                 }
                 InvalidateRect(_hwnd, IntPtr.Zero, false);
-                break;
-
-            case SelectionPhase.Adjusting:
-                var sel = NormalizeRect(_selection);
-                _dragMode = HitTestHandles(sel, pt);
-                if (_dragMode != DragMode.None)
-                {
-                    _isDragging = true;
-                    _dragStart = pt;
-                    SetCapture(_hwnd);
-                }
-                else if (sel.Contains(pt.X, pt.Y))
-                {
-                    _isDragging = true;
-                    _dragMode = DragMode.Move;
-                    _dragStart = pt;
-                    SetCapture(_hwnd);
-                }
-                else
-                {
-                    // Click outside selection → restart
-                    _phase = SelectionPhase.Detecting;
-                    _detectedRegion = null;
-                    _detectionDepth = 0;
-                    InvalidateRect(_hwnd, IntPtr.Zero, false);
-                }
                 break;
         }
     }
@@ -821,16 +731,8 @@ public sealed class ScreenCaptureWindow : IDisposable
             }
             else
             {
-                _phase = SelectionPhase.Adjusting;
+                ConfirmSelection();
             }
-            InvalidateRect(_hwnd, IntPtr.Zero, false);
-        }
-        else if (_isDragging)
-        {
-            ReleaseCapture();
-            _isDragging = false;
-            _dragMode = DragMode.None;
-            _selection = NormalizeRect(_selection);
             InvalidateRect(_hwnd, IntPtr.Zero, false);
         }
     }
@@ -855,7 +757,7 @@ public sealed class ScreenCaptureWindow : IDisposable
         switch (vk)
         {
             case VK_ESCAPE:
-                if (_phase == SelectionPhase.Adjusting || _phase == SelectionPhase.Selecting)
+                if (_phase == SelectionPhase.Selecting)
                 {
                     // Step back to Detecting (Snipaste behavior)
                     if (_isDragSelecting) ReleaseCapture();
@@ -872,92 +774,7 @@ public sealed class ScreenCaptureWindow : IDisposable
                     RequestCancelWithConfirmation();
                 }
                 break;
-
-            case VK_RETURN:
-                if (_phase == SelectionPhase.Adjusting)
-                    ConfirmSelection();
-                break;
-
-            case VK_LEFT or VK_RIGHT or VK_UP or VK_DOWN when _phase == SelectionPhase.Adjusting:
-                HandleArrowKey(vk);
-                break;
         }
-    }
-
-    private void HandleArrowKey(int vk)
-    {
-        var ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        var shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-
-        int dx = 0, dy = 0;
-        if (vk == VK_LEFT) dx = -1;
-        else if (vk == VK_RIGHT) dx = 1;
-        else if (vk == VK_UP) dy = -1;
-        else if (vk == VK_DOWN) dy = 1;
-
-        if (ctrl)
-        {
-            // Expand: move the relevant edge outward
-            if (dx < 0) _selection.Left += dx;
-            else if (dx > 0) _selection.Right += dx;
-            if (dy < 0) _selection.Top += dy;
-            else if (dy > 0) _selection.Bottom += dy;
-        }
-        else if (shift)
-        {
-            // Shrink: move the relevant edge inward
-            if (dx < 0) _selection.Right += dx;
-            else if (dx > 0) _selection.Left += dx;
-            if (dy < 0) _selection.Bottom += dy;
-            else if (dy > 0) _selection.Top += dy;
-        }
-        else
-        {
-            // Move entire selection
-            _selection.Left += dx;
-            _selection.Right += dx;
-            _selection.Top += dy;
-            _selection.Bottom += dy;
-        }
-
-        _selection = NormalizeRect(_selection);
-        ClampSelectionToBounds();
-        InvalidateRect(_hwnd, IntPtr.Zero, false);
-    }
-
-    /// <summary>
-    /// Clamp the selection rectangle so it stays within the captured desktop area.
-    /// For move operations, shifts the entire selection. For resize, clamps individual edges.
-    /// </summary>
-    private void ClampSelectionToBounds()
-    {
-        // Clamp edges to the desktop bitmap area [0, desktopWidth) x [0, desktopHeight)
-        if (_selection.Left < 0)
-        {
-            _selection.Right -= _selection.Left; // shift right by overshoot
-            _selection.Left = 0;
-        }
-        if (_selection.Top < 0)
-        {
-            _selection.Bottom -= _selection.Top;
-            _selection.Top = 0;
-        }
-        if (_selection.Right > _desktopWidth)
-        {
-            _selection.Left -= _selection.Right - _desktopWidth;
-            _selection.Right = _desktopWidth;
-        }
-        if (_selection.Bottom > _desktopHeight)
-        {
-            _selection.Top -= _selection.Bottom - _desktopHeight;
-            _selection.Bottom = _desktopHeight;
-        }
-
-        // Final clamp in case the selection is larger than the desktop
-        _selection.Left = Math.Clamp(_selection.Left, 0, _desktopWidth);
-        _selection.Top = Math.Clamp(_selection.Top, 0, _desktopHeight);
-        _selection.Right = Math.Clamp(_selection.Right, 0, _desktopWidth);
-        _selection.Bottom = Math.Clamp(_selection.Bottom, 0, _desktopHeight);
     }
 
     private void ConfirmSelection()
@@ -1003,60 +820,10 @@ public sealed class ScreenCaptureWindow : IDisposable
     /// </summary>
     private bool UpdateCursor()
     {
-        GetCursorPos(out var screenPt);
-        var pt = new POINT
-        {
-            X = screenPt.X - _virtualLeft,
-            Y = screenPt.Y - _virtualTop
-        };
-
-        int cursorId;
-
-        if (_phase == SelectionPhase.Adjusting)
-        {
-            var sel = NormalizeRect(_selection);
-
-            if (_isDragging)
-            {
-                // While dragging, keep the cursor matching the drag mode
-                cursorId = GetCursorIdForDragMode(_dragMode);
-            }
-            else
-            {
-                // Hit-test handles first, then interior, then outside
-                var mode = HitTestHandles(sel, pt);
-                if (mode != DragMode.None)
-                {
-                    cursorId = GetCursorIdForDragMode(mode);
-                }
-                else if (sel.Contains(pt.X, pt.Y))
-                {
-                    cursorId = 32646; // IDC_SIZEALL (move)
-                }
-                else
-                {
-                    cursorId = 32515; // IDC_CROSS
-                }
-            }
-        }
-        else
-        {
-            cursorId = 32515; // IDC_CROSS for Detecting and Selecting
-        }
-
-        SetCursor(LoadCursor(IntPtr.Zero, cursorId));
+        // IDC_CROSS for all phases (Detecting and Selecting both use the crosshair)
+        SetCursor(LoadCursor(IntPtr.Zero, 32515));
         return true;
     }
-
-    private static int GetCursorIdForDragMode(DragMode mode) => mode switch
-    {
-        DragMode.Move => 32646,                                             // IDC_SIZEALL
-        DragMode.ResizeTopLeft or DragMode.ResizeBottomRight => 32642,      // IDC_SIZENWSE
-        DragMode.ResizeTopRight or DragMode.ResizeBottomLeft => 32643,      // IDC_SIZENESW
-        DragMode.ResizeTop or DragMode.ResizeBottom => 32645,               // IDC_SIZENS
-        DragMode.ResizeLeft or DragMode.ResizeRight => 32644,               // IDC_SIZEWE
-        _ => 32515,                                                          // IDC_CROSS
-    };
 
     private ScreenCaptureResult ExtractRegion(RECT sel)
     {
@@ -1104,74 +871,6 @@ public sealed class ScreenCaptureWindow : IDisposable
     }
 
     // --- Helper methods ---
-
-    private void ApplyDrag(POINT pt)
-    {
-        var dx = pt.X - _dragStart.X;
-        var dy = pt.Y - _dragStart.Y;
-        _dragStart = pt;
-
-        switch (_dragMode)
-        {
-            case DragMode.Move:
-                _selection.Left += dx; _selection.Right += dx;
-                _selection.Top += dy; _selection.Bottom += dy;
-                break;
-            case DragMode.ResizeTopLeft: _selection.Left += dx; _selection.Top += dy; break;
-            case DragMode.ResizeTop: _selection.Top += dy; break;
-            case DragMode.ResizeTopRight: _selection.Right += dx; _selection.Top += dy; break;
-            case DragMode.ResizeLeft: _selection.Left += dx; break;
-            case DragMode.ResizeRight: _selection.Right += dx; break;
-            case DragMode.ResizeBottomLeft: _selection.Left += dx; _selection.Bottom += dy; break;
-            case DragMode.ResizeBottom: _selection.Bottom += dy; break;
-            case DragMode.ResizeBottomRight: _selection.Right += dx; _selection.Bottom += dy; break;
-        }
-
-        ClampSelectionToBounds();
-    }
-
-    private static DragMode HitTestHandles(RECT sel, POINT pt)
-    {
-        var handles = GetHandleRects(sel);
-        DragMode[] modes =
-        [
-            DragMode.ResizeTopLeft, DragMode.ResizeTop, DragMode.ResizeTopRight,
-            DragMode.ResizeLeft, DragMode.ResizeRight,
-            DragMode.ResizeBottomLeft, DragMode.ResizeBottom, DragMode.ResizeBottomRight
-        ];
-
-        for (int i = 0; i < handles.Length; i++)
-        {
-            if (handles[i].Contains(pt.X, pt.Y))
-                return modes[i];
-        }
-        return DragMode.None;
-    }
-
-    private static RECT[] GetHandleRects(RECT sel)
-    {
-        int hs = HandleSize;
-        int hh = hs / 2;
-        int mx = (sel.Left + sel.Right) / 2;
-        int my = (sel.Top + sel.Bottom) / 2;
-
-        return
-        [
-            MakeHandleRect(sel.Left, sel.Top, hh),         // TopLeft
-            MakeHandleRect(mx, sel.Top, hh),               // Top
-            MakeHandleRect(sel.Right, sel.Top, hh),        // TopRight
-            MakeHandleRect(sel.Left, my, hh),              // Left
-            MakeHandleRect(sel.Right, my, hh),             // Right
-            MakeHandleRect(sel.Left, sel.Bottom, hh),      // BottomLeft
-            MakeHandleRect(mx, sel.Bottom, hh),            // Bottom
-            MakeHandleRect(sel.Right, sel.Bottom, hh),     // BottomRight
-        ];
-    }
-
-    private static RECT MakeHandleRect(int cx, int cy, int hh) => new()
-    {
-        Left = cx - hh, Top = cy - hh, Right = cx + hh, Bottom = cy + hh
-    };
 
     private static RECT NormalizeRect(RECT r) => new()
     {
@@ -1378,7 +1077,6 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("user32.dll")] private static extern nint SetCapture(nint hwnd);
     [DllImport("user32.dll")] private static extern bool ReleaseCapture();
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
-    [DllImport("user32.dll")] private static extern short GetKeyState(int nVirtKey);
     [DllImport("user32.dll")] private static extern bool DestroyWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern void PostQuitMessage(int nExitCode);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hwnd);

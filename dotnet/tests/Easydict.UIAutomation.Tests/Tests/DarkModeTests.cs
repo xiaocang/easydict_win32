@@ -179,17 +179,21 @@ public class DarkModeTests : IDisposable
         settingsButton!.Click();
         Thread.Sleep(2000);
 
-        // Scroll to Behavior section (~70%) and scan to find AppThemeCombo
-        var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
-        ComboBox? themeCombo = null;
-        if (scrollViewer != null)
-        {
-            var element = ScrollHelper.ScrollToFind(
-                scrollViewer, startPercent: 70,
-                () => window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo")),
-                _output.WriteLine);
-            themeCombo = element?.AsComboBox();
-        }
+        // SettingsPage starts with MainScrollViewer Visibility=Collapsed behind a loading
+        // overlay; initialization reveals it asynchronously. Wait for the ScrollViewer to
+        // enter the visual tree before scanning for AppThemeCombo.
+        var scrollViewer = Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer")),
+            TimeSpan.FromSeconds(15)).Result;
+
+        scrollViewer.Should().NotBeNull(
+            "MainScrollViewer must appear on settings page once initialization finishes");
+
+        var element = ScrollHelper.ScrollToFind(
+            scrollViewer!, startPercent: 70,
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo")),
+            _output.WriteLine);
+        var themeCombo = element?.AsComboBox();
 
         themeCombo.Should().NotBeNull("AppThemeCombo must exist on settings page");
 

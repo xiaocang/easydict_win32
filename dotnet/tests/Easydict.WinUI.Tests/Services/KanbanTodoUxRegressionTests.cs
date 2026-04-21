@@ -199,12 +199,12 @@ public class KanbanTodoUxRegressionTests
 
         xaml.Should().Contain("x:Name=\"ResultContentScrollViewer\"",
             "service results should use an explicit inner scroll container for long content");
-        xaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"",
-            "the inner result container should reserve scrollbar width so WebView2 height measurement does not feed back into layout width");
+        // Sticky-header architecture (PR #135): inner scroll is disabled so the header stays
+        // pinned to the outer viewport; wheel input is relayed to the outer host instead.
+        xaml.Should().Contain("VerticalScrollBarVisibility=\"Disabled\"",
+            "the inner scroll viewer defers vertical scrolling to the outer results host so the sticky header stays pinned");
         xaml.Should().Contain("PointerWheelChanged=\"OnResultContentScrollViewerPointerWheelChanged\"",
             "scrolling at the inner boundary should explicitly hand wheel input to the outer results list");
-        xaml.Should().Contain("MaxHeight=\"800\"",
-            "the inner result container should cap its viewport height before scrolling");
         code.Should().Contain("private void OnResultContentScrollViewerPointerWheelChanged",
             "the inner scroll container should forward edge wheel gestures to the outer results list");
         code.Should().Contain("private static bool TryScrollViewerChain",
@@ -246,25 +246,30 @@ public class KanbanTodoUxRegressionTests
     }
 
     [Fact]
-    public void ResultHosts_ReserveScrollbarWidth_ForDictionaryContent()
+    public void ResultHosts_DeclareScrollbarConfiguration_ForDictionaryContent()
     {
         var mainXaml = File.ReadAllText(MainPageXamlPath);
         var miniXaml = File.ReadAllText(MiniWindowXamlPath);
         var fixedXaml = File.ReadAllText(FixedWindowXamlPath);
         var itemXaml = File.ReadAllText(ServiceResultItemXamlPath);
 
+        // Sticky-header architecture (PR #135): the outer results host owns vertical scroll so
+        // the service header can stay pinned; the inner result container disables vertical scroll
+        // and relays wheel input to the outer host instead.
         mainXaml.Should().Contain("x:Name=\"QuickTranslateContent\"");
         mainXaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"",
-            "the main results surface should reserve scrollbar width so dictionary WebView sizing does not feed back into page width");
+            "the main results surface keeps a visible scrollbar so dictionary WebView sizing stays stable under width changes");
         miniXaml.Should().Contain("Grid.Row=\"4\"");
-        miniXaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"",
-            "the mini-window results host should reserve scrollbar width for the same reason");
+        miniXaml.Should().Contain("x:Name=\"MainScrollViewer\"",
+            "the mini-window results host should expose a named outer scroll viewer for the sticky-header layout");
+        miniXaml.Should().Contain("VerticalScrollBarVisibility=\"Auto\"",
+            "the mini-window outer scroll viewer uses Auto scrollbars so empty results do not reserve unused rail width");
         fixedXaml.Should().Contain("Grid.Row=\"4\"");
         fixedXaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"",
-            "the fixed-window results host should reserve scrollbar width for the same reason");
+            "the fixed-window results host keeps a visible scrollbar for the same reason as the main surface");
         itemXaml.Should().Contain("x:Name=\"ResultContentScrollViewer\"");
-        itemXaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"",
-            "the inner result container should keep a stable viewport width while the dictionary WebView height is being applied");
+        itemXaml.Should().Contain("VerticalScrollBarVisibility=\"Disabled\"",
+            "the inner scroll viewer defers vertical scrolling to the outer results host so the sticky header stays pinned");
     }
 
     [Fact]

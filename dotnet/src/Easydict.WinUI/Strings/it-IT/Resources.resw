@@ -721,9 +721,6 @@
   <data name="ScreenCaptureTipSelecting" xml:space="preserve">
     <value>Clic destro o Esc per annullare</value>
   </data>
-  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
-    <value>Invio o doppio clic per confermare  |  Frecce per regolare  |  Clic destro o Esc per ripetere</value>
-  </data>
 
   <!-- Grammar Correction Mode -->
   <data name="QueryMode_Translation" xml:space="preserve">

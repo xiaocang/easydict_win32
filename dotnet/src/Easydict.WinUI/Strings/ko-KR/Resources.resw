@@ -846,9 +846,6 @@
   <data name="ScreenCaptureTipSelecting" xml:space="preserve">
     <value>우클릭 또는 Esc로 취소</value>
   </data>
-  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
-    <value>Enter 또는 더블클릭으로 확인  |  방향키로 미세 조정  |  우클릭 또는 Esc로 다시 선택</value>
-  </data>
 
   <!-- Grammar Correction Mode -->
   <data name="QueryMode_Translation" xml:space="preserve">

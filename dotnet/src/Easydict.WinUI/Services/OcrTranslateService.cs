@@ -10,7 +10,6 @@ namespace Easydict.WinUI.Services;
 public sealed class OcrTranslateService
 {
     private readonly ScreenCaptureService _captureService = new();
-    private readonly IOcrService _ocrService;
     private readonly DispatcherQueue _dispatcherQueue;
 
     // Concurrency guard: only one OCR operation can run at a time.
@@ -19,13 +18,7 @@ public sealed class OcrTranslateService
     private CancellationTokenSource? _currentCts;
 
     public OcrTranslateService(DispatcherQueue dispatcherQueue)
-        : this(new WindowsOcrService(), dispatcherQueue)
     {
-    }
-
-    public OcrTranslateService(IOcrService ocrService, DispatcherQueue dispatcherQueue)
-    {
-        _ocrService = ocrService;
         _dispatcherQueue = dispatcherQueue;
     }
 
@@ -50,8 +43,9 @@ public sealed class OcrTranslateService
 
             using (capture)
             {
+                var ocrEngine = OcrServiceFactory.Create();
                 var preferredLanguage = GetPreferredOcrLanguage();
-                var ocrResult = await _ocrService.RecognizeAsync(
+                var ocrResult = await ocrEngine.RecognizeAsync(
                     capture, preferredLanguage, cts.Token);
 
                 if (string.IsNullOrWhiteSpace(ocrResult.Text))
@@ -107,8 +101,9 @@ public sealed class OcrTranslateService
 
             using (capture)
             {
+                var ocrEngine = OcrServiceFactory.Create();
                 var preferredLanguage = GetPreferredOcrLanguage();
-                var ocrResult = await _ocrService.RecognizeAsync(
+                var ocrResult = await ocrEngine.RecognizeAsync(
                     capture, preferredLanguage, cts.Token);
 
                 if (string.IsNullOrWhiteSpace(ocrResult.Text))
@@ -157,7 +152,7 @@ public sealed class OcrTranslateService
     /// </summary>
     public IReadOnlyList<Models.OcrLanguage> GetAvailableLanguages()
     {
-        return _ocrService.GetAvailableLanguages();
+        return OcrServiceFactory.Create().GetAvailableLanguages();
     }
 
     private static string? GetPreferredOcrLanguage()

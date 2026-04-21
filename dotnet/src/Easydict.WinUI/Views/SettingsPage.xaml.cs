@@ -730,6 +730,8 @@ public sealed partial class SettingsPage : Page
         HideEmptyServiceResultsToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
+        TtsSpeedSlider.ValueChanged += OnSettingChanged;
+        AutoPlayTranslationToggle.Toggled += OnSettingChanged;
 
         // TextBox/PasswordBox changes - existing
         DeepLKeyBox.PasswordChanged += OnSettingChanged;
@@ -749,6 +751,11 @@ public sealed partial class SettingsPage : Page
         ShowFixedHotkeyEnabledToggle.Toggled += OnSettingChanged;
         OcrTranslateHotkeyEnabledToggle.Toggled += OnSettingChanged;
         SilentOcrHotkeyEnabledToggle.Toggled += OnSettingChanged;
+        OcrEngineCombo.SelectionChanged += OnOcrEngineChanged;
+        OcrApiKeyBox.TextChanged += OnSettingChanged;
+        OcrEndpointBox.TextChanged += OnSettingChanged;
+        OcrModelBox.TextChanged += OnSettingChanged;
+        OcrSystemPromptBox.TextChanged += OnSettingChanged;
 
         // TextBox/PasswordBox changes - new services
         DeepSeekKeyBox.PasswordChanged += OnSettingChanged;
@@ -814,6 +821,8 @@ public sealed partial class SettingsPage : Page
         HideEmptyServiceResultsToggle.Toggled -= OnSettingChanged;
         ProxyEnabledToggle.Toggled -= OnSettingChanged;
         ProxyBypassLocalToggle.Toggled -= OnSettingChanged;
+        TtsSpeedSlider.ValueChanged -= OnSettingChanged;
+        AutoPlayTranslationToggle.Toggled -= OnSettingChanged;
 
         DeepLKeyBox.PasswordChanged -= OnSettingChanged;
         OpenAIKeyBox.PasswordChanged -= OnSettingChanged;
@@ -832,6 +841,11 @@ public sealed partial class SettingsPage : Page
         ShowFixedHotkeyEnabledToggle.Toggled -= OnSettingChanged;
         OcrTranslateHotkeyEnabledToggle.Toggled -= OnSettingChanged;
         SilentOcrHotkeyEnabledToggle.Toggled -= OnSettingChanged;
+        OcrEngineCombo.SelectionChanged -= OnOcrEngineChanged;
+        OcrApiKeyBox.TextChanged -= OnSettingChanged;
+        OcrEndpointBox.TextChanged -= OnSettingChanged;
+        OcrModelBox.TextChanged -= OnSettingChanged;
+        OcrSystemPromptBox.TextChanged -= OnSettingChanged;
 
         DeepSeekKeyBox.PasswordChanged -= OnSettingChanged;
         GroqKeyBox.PasswordChanged -= OnSettingChanged;
@@ -1059,6 +1073,10 @@ public sealed partial class SettingsPage : Page
         // International services toggle
         EnableInternationalServicesToggle.IsOn = _settings.EnableInternationalServices;
 
+        // TTS settings
+        TtsSpeedSlider.Value = _settings.TtsSpeed;
+        AutoPlayTranslationToggle.IsOn = _settings.AutoPlayTranslation;
+
         // Language preferences
         SelectComboByTag(FirstLanguageCombo, _settings.FirstLanguage);
         SelectComboByTag(SecondLanguageCombo, _settings.SecondLanguage);
@@ -1101,6 +1119,14 @@ public sealed partial class SettingsPage : Page
         // Ollama settings
         OllamaEndpointBox.Text = _settings.OllamaEndpoint;
         OllamaModelCombo.Text = _settings.OllamaModel;
+
+        // OCR Engine settings
+        SelectComboByTag(OcrEngineCombo, _settings.OcrEngine.ToString());
+        OcrApiKeyBox.Text = _settings.OcrApiKey ?? string.Empty;
+        OcrEndpointBox.Text = _settings.OcrEndpoint;
+        OcrModelBox.Text = _settings.OcrModel;
+        OcrSystemPromptBox.Text = _settings.OcrSystemPrompt;
+        UpdateOcrEngineUI();
 
         // Built-in AI settings
         SetEditableComboValue(BuiltInModelCombo, _settings.BuiltInAIModel);
@@ -1919,6 +1945,20 @@ public sealed partial class SettingsPage : Page
         return null;
     }
 
+    private OcrServiceOptions GetCurrentOcrServiceOptions()
+    {
+        var engine = Enum.TryParse<OcrEngineType>(GetSelectedTag(OcrEngineCombo), out var parsedEngine)
+            ? parsedEngine
+            : OcrEngineType.WindowsNative;
+
+        return new OcrServiceOptions(
+            engine,
+            OcrApiKeyBox.Text,
+            OcrEndpointBox.Text,
+            OcrModelBox.Text,
+            OcrSystemPromptBox.Text);
+    }
+
     /// <summary>
     /// Gets the value from an editable ComboBox. Returns the typed text if available,
     /// otherwise returns the selected item's tag.
@@ -2160,6 +2200,14 @@ public sealed partial class SettingsPage : Page
             : ollamaEndpoint;
         _settings.OllamaModel = OllamaModelCombo.Text?.Trim() ?? "llama3.2";
 
+        // Save OCR Engine settings
+        var ocrOptions = GetCurrentOcrServiceOptions();
+        _settings.OcrEngine = ocrOptions.Engine;
+        _settings.OcrApiKey = ocrOptions.ApiKey;
+        _settings.OcrEndpoint = ocrOptions.Endpoint;
+        _settings.OcrModel = ocrOptions.Model;
+        _settings.OcrSystemPrompt = ocrOptions.SystemPrompt;
+
         // Save Built-in AI settings
         _settings.BuiltInAIModel = GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414");
         var builtInKey = BuiltInApiKeyBox.Password;
@@ -2211,6 +2259,8 @@ public sealed partial class SettingsPage : Page
             .ToList();
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
         _settings.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
+        _settings.TtsSpeed = TtsSpeedSlider.Value;
+        _settings.AutoPlayTranslation = AutoPlayTranslationToggle.IsOn;
         _settings.HideEmptyServiceResults = HideEmptyServiceResultsToggle.IsOn;
 
         // Apply startup setting to Windows registry
@@ -2263,6 +2313,10 @@ public sealed partial class SettingsPage : Page
         _settings.Save();
         ResetServiceReorderModes();
 
+        // Reload hotkeys immediately
+        App.LogToFile("[SettingsPage] Triggering hotkey reload");
+        App.HotkeyService?.ReloadHotkeys();
+
         // Refresh window service results to pick up new EnabledQuery settings
         MiniWindowService.Instance.RefreshServiceResults();
         FixedWindowService.Instance.RefreshServiceResults();
@@ -2303,6 +2357,77 @@ public sealed partial class SettingsPage : Page
     {
         MouseSelectionExcludedAppsPanel.Visibility = MouseSelectionTranslateToggle.IsOn
             ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnOcrEngineChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateOcrEngineUI();
+        OnSettingChanged(sender, e);
+    }
+
+    private void UpdateOcrEngineUI()
+    {
+        var selectedEngine = GetSelectedTag(OcrEngineCombo);
+        var isAdvanced = selectedEngine == "Ollama" || selectedEngine == "CustomApi";
+        AdvancedOcrPanel.Visibility = isAdvanced ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void OnTestOcrConnection(object sender, RoutedEventArgs e)
+    {
+        OcrTestStatusBox.Text = "Select a region on your screen to test OCR...";
+        TestOcrConnectionButton.IsEnabled = false;
+
+        try
+        {
+            var captureService = new ScreenCaptureService();
+            var capture = await captureService.CaptureRegionAsync();
+
+            if (capture == null)
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    OcrTestStatusBox.Text = "Test cancelled.";
+                });
+                return;
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                OcrTestStatusBox.Text = "Processing image with AI...";
+            });
+
+            using (capture)
+            {
+                var ocrEngine = OcrServiceFactory.Create(GetCurrentOcrServiceOptions());
+                var result = await ocrEngine.RecognizeAsync(capture, null, CancellationToken.None);
+
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (string.IsNullOrWhiteSpace(result.Text))
+                    {
+                        OcrTestStatusBox.Text = "Success: Image processed, but no text was recognized.";
+                    }
+                    else
+                    {
+                        OcrTestStatusBox.Text = result.Text;
+                    }
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                OcrTestStatusBox.Text = $"[Error] {ex.Message}";
+            });
+        }
+        finally
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                TestOcrConnectionButton.IsEnabled = true;
+            });
+        }
     }
 
     /// <summary>
@@ -2421,6 +2546,8 @@ public sealed partial class SettingsPage : Page
             new NavSection("LanguagePreferencesSection", "Language Preferences", "\uE774", LanguagePreferencesSection), // Globe
             new NavSection("EnabledServicesSection", "Enabled Services", "\uE73E", EnabledServicesSection),           // Checkmark
             new NavSection("ServiceConfigurationSection", "Service Configuration", "\uE90F", ServiceConfigurationSection), // Key
+            new NavSection("TtsSettingsSection", "TTS Settings", "\uE767", TtsSettingsSection), // Volume
+            new NavSection("OcrSettingsSection", "OCR Settings", "\uEE6F", OcrSettingsSection), // Scan
             new NavSection("LayoutDetectionSection", "Layout Detection", "\uE8A1", LayoutDetectionSection),  // Page
             new NavSection("CjkFontSection", "CJK Font", "\uE8D2", CjkFontSection),  // Font
             new NavSection("FormulaDetectionSection", "Formula Detection", "\uE8EF", FormulaDetectionSection),  // Calculator
@@ -2478,19 +2605,24 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private static void OnNavIconPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void OnNavIconPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
-        if (sender is FontIcon icon)
+        if (sender is FontIcon icon && icon.Tag is int index)
         {
-            icon.Opacity = 0.7;
+            // Hover state: 1.0 for non-active icons. Active icon is already 1.0.
+            if (index != _currentSectionIndex)
+            {
+                icon.Opacity = 1.0;
+            }
         }
     }
 
-    private static void OnNavIconPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void OnNavIconPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
-        if (sender is FontIcon icon)
+        if (sender is FontIcon icon && icon.Tag is int index)
         {
-            icon.Opacity = 1.0;
+            // Restore state: 0.6 for inactive, keep 1.0 for active.
+            icon.Opacity = (index == _currentSectionIndex) ? 1.0 : 0.6;
         }
     }
 
@@ -2551,11 +2683,13 @@ public sealed partial class SettingsPage : Page
                 {
                     // Keep the nav rail layout-stable during scroll sync.
                     icon.Foreground = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+                    icon.Opacity = 1.0;
                 }
                 else
                 {
                     // Only change non-layout-affecting state for inactive items.
                     icon.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+                    icon.Opacity = 0.6;
                 }
             }
         }

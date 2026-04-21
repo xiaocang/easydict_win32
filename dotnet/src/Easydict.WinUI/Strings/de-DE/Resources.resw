@@ -846,9 +846,6 @@
   <data name="ScreenCaptureTipSelecting" xml:space="preserve">
     <value>Rechtsklick oder Esc zum Abbrechen</value>
   </data>
-  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
-    <value>Enter oder Doppelklick best&#228;tigen  |  Pfeiltasten anpassen  |  Rechtsklick oder Esc wiederholen</value>
-  </data>
 
   <!-- Grammar Correction Mode -->
   <data name="QueryMode_Translation" xml:space="preserve">

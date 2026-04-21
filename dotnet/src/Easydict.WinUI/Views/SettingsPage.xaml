@@ -1594,6 +1594,8 @@
                                     Header="Launch at Windows startup"/>
                             <ToggleSwitch x:Name="HideEmptyServiceResultsToggle"
                                     Header="Hide dictionaries with no result"/>
+                            <ToggleSwitch x:Name="EnableLocalDictionarySuggestionsToggle"
+                                    Header="Enable local dictionary suggestions"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

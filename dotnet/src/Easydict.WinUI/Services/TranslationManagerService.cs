@@ -355,6 +355,7 @@ public sealed class TranslationManagerService : IDisposable
                 }
 
                 _translationManager.RegisterService(service);
+                QueueMdxIndexBuild(dictionary, service);
             }
             catch (Exception ex)
             {
@@ -372,6 +373,8 @@ public sealed class TranslationManagerService : IDisposable
         {
             _translationManager.UnregisterService(serviceId);
         }
+
+        LocalDictionaryIndexService.Instance.RemoveDictionary(serviceId);
     }
 
     /// <summary>
@@ -433,6 +436,8 @@ public sealed class TranslationManagerService : IDisposable
             {
                 _translationManager.RegisterService(service);
             }
+
+            QueueMdxIndexBuild(dictionary, service);
             return true;
         }
         catch (Exception ex)
@@ -569,5 +574,25 @@ public sealed class TranslationManagerService : IDisposable
     {
         _translationManager.Dispose();
         Debug.WriteLine("[TranslationManagerService] Disposed");
+    }
+
+    private static void QueueMdxIndexBuild(
+        SettingsService.ImportedMdxDictionary dictionary,
+        MdxDictionaryTranslationService service)
+    {
+        _ = LocalDictionaryIndexService.Instance
+            .EnsureIndexAsync(dictionary, service)
+            .ContinueWith(
+                task =>
+                {
+                    if (task.Exception is not null)
+                    {
+                        Debug.WriteLine(
+                            $"[TranslationManagerService] Failed to build MDX index for '{dictionary.ServiceId}': {task.Exception.GetBaseException().Message}");
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
     }
 }

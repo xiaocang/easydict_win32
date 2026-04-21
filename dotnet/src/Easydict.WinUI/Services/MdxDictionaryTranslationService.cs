@@ -17,6 +17,7 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
     private static readonly Regex TagRegex = new("<[^>]+>", RegexOptions.Compiled);
     private static readonly Regex LinkRedirectRegex = new(@"^@@@LINK=(.+)", RegexOptions.Compiled);
     private Func<string, (string KeyText, string? Definition)>? _lookup;
+    private Func<IEnumerable<string>>? _enumerateKeys;
     private readonly List<MddDict> _mddDicts = [];
 
     /// <summary>
@@ -46,12 +47,14 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
 
             var dict = new MdxDict(filePath, options);
             _lookup = dict.Lookup;
+            _enumerateKeys = dict.EnumerateKeys;
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("credentials required", StringComparison.OrdinalIgnoreCase))
         {
             // Encrypted dictionary without valid credentials — register in unconfigured state
             IsEncrypted = true;
             _lookup = null;
+            _enumerateKeys = null;
         }
         catch (Exception ex) when (
             !string.IsNullOrEmpty(regcode) &&
@@ -60,6 +63,7 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
             // Encrypted dictionary with invalid credentials
             IsEncrypted = true;
             _lookup = null;
+            _enumerateKeys = null;
         }
     }
 
@@ -67,12 +71,14 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
         string serviceId,
         string displayName,
         string filePath,
-        Func<string, (string KeyText, string? Definition)> lookup)
+        Func<string, (string KeyText, string? Definition)> lookup,
+        Func<IEnumerable<string>>? enumerateKeys = null)
     {
         ServiceId = serviceId;
         DisplayName = displayName;
         FilePath = filePath;
         _lookup = lookup ?? throw new ArgumentNullException(nameof(lookup));
+        _enumerateKeys = enumerateKeys;
     }
 
     /// <summary>
@@ -89,6 +95,7 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
         FilePath = filePath;
         IsEncrypted = isEncrypted;
         _lookup = isEncrypted ? null : throw new ArgumentException("Use other constructor for non-encrypted dicts");
+        _enumerateKeys = null;
     }
 
     public string FilePath { get; }
@@ -105,6 +112,8 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
     public bool RequiresApiKey => IsEncrypted;
 
     public bool IsConfigured => _lookup != null;
+
+    public bool CanEnumerateKeys => _enumerateKeys != null;
 
     public IReadOnlyList<Language> SupportedLanguages { get; } = Enum.GetValues<Language>();
 
@@ -222,6 +231,17 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
         };
         var dict = new MdxDict(FilePath, options);
         _lookup = dict.Lookup;
+        _enumerateKeys = dict.EnumerateKeys;
+    }
+
+    public IEnumerable<string> EnumerateKeys()
+    {
+        if (_enumerateKeys is null)
+        {
+            throw new InvalidOperationException("Dictionary keys are not available until the dictionary is configured.");
+        }
+
+        return _enumerateKeys();
     }
 
     public async Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default)

@@ -728,6 +728,7 @@ public sealed partial class SettingsPage : Page
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
         LaunchAtStartupToggle.Toggled += OnSettingChanged;
         HideEmptyServiceResultsToggle.Toggled += OnSettingChanged;
+        EnableLocalDictionarySuggestionsToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
         TtsSpeedSlider.ValueChanged += OnSettingChanged;
@@ -819,6 +820,7 @@ public sealed partial class SettingsPage : Page
         AlwaysOnTopToggle.Toggled -= OnSettingChanged;
         LaunchAtStartupToggle.Toggled -= OnSettingChanged;
         HideEmptyServiceResultsToggle.Toggled -= OnSettingChanged;
+        EnableLocalDictionarySuggestionsToggle.Toggled -= OnSettingChanged;
         ProxyEnabledToggle.Toggled -= OnSettingChanged;
         ProxyBypassLocalToggle.Toggled -= OnSettingChanged;
         TtsSpeedSlider.ValueChanged -= OnSettingChanged;
@@ -1186,6 +1188,7 @@ public sealed partial class SettingsPage : Page
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
         LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
         HideEmptyServiceResultsToggle.IsOn = _settings.HideEmptyServiceResults;
+        EnableLocalDictionarySuggestionsToggle.IsOn = _settings.EnableLocalDictionarySuggestions;
 
         // Hotkeys
         ShowHotkeyBox.Text = _settings.ShowWindowHotkey;
@@ -2262,6 +2265,7 @@ public sealed partial class SettingsPage : Page
         _settings.TtsSpeed = TtsSpeedSlider.Value;
         _settings.AutoPlayTranslation = AutoPlayTranslationToggle.IsOn;
         _settings.HideEmptyServiceResults = HideEmptyServiceResultsToggle.IsOn;
+        _settings.EnableLocalDictionarySuggestions = EnableLocalDictionarySuggestionsToggle.IsOn;
 
         // Apply startup setting to Windows registry
         StartupService.SetEnabled(_settings.LaunchAtStartup);

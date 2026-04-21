@@ -179,6 +179,8 @@
       <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0" />
       <!-- SQLite for persistent translation cache -->
       <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
+      <!-- LexIndex: local DAWG-based key index for autocomplete and wildcard lookup -->
+      <ProjectReference Include="..\..\lib\LexIndex\src\LexIndex\LexIndex.csproj" />
       <!-- MDict.CSharp: forked from Jack251970/MDict.CSharp with type-2 encryption support (Salsa20/8) -->
       <ProjectReference Include="..\..\lib\MDict.CSharp\MDict.Csharp\MDict.Csharp.csproj" />
       <!-- MuPDF.NET: Official C# bindings for MuPDF — content stream replacement, font embedding,

@@ -57,11 +57,15 @@ namespace Easydict.WinUI.Views
         private Task? _longDocQueueTask;
         private readonly ObservableCollection<LongDocFileItem> _longDocFileItems = new();
         private readonly ObservableCollection<LongDocHistoryItem> _longDocHistoryItems = new();
+        private readonly ObservableCollection<SuggestionItem> _suggestionItems = new();
         private string _longDocOutputFolder = "";
         private bool _isLongDocTranslating;
         private bool _hasAutoPlayedCurrentQuery = false;
         private ContentDialog? _currentDialog;
         private readonly bool _useMemoryAbVariantB;
+        private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _suggestionDebounceTimer;
+        private bool _suppressSuggestionTextChanged;
+        private int _suggestionRequestId;
 
         /// <summary>
         /// Maximum history items to keep.
@@ -118,6 +122,17 @@ namespace Easydict.WinUI.Views
             TargetLangComboNarrow.SelectionChanged += (s, e) => SyncComboSelection(TargetLangComboNarrow, TargetLangCombo);
             // Subscribe to clipboard events from App
             App.ClipboardTextReceived += OnClipboardTextReceived;
+
+            _suggestionDebounceTimer = DispatcherQueue.CreateTimer();
+            _suggestionDebounceTimer.IsRepeating = false;
+            _suggestionDebounceTimer.Interval = TimeSpan.FromMilliseconds(150);
+            _suggestionDebounceTimer.Tick += OnSuggestionDebounceTick;
+
+            InputTextBox.TextChanged += OnInputTextChanged;
+            InputTextBox.SizeChanged += OnInputTextBoxSizeChanged;
+            RootGrid.SizeChanged += OnRootGridSizeChanged;
+            SuggestionPopup.Closed += OnSuggestionPopupClosed;
+            SuggestionListView.ItemsSource = _suggestionItems;
         }
 
         private static bool IsDebugEnvFlagEnabled(string name)
@@ -195,6 +210,8 @@ namespace Easydict.WinUI.Views
             LogObjectState("OnPageUnloaded begin");
 #endif
             _isLoaded = false;
+            HideSuggestionPopup();
+            _suggestionDebounceTimer.Stop();
 
             SettingsService.Instance.HideEmptyServiceResultsChanged -= OnHideEmptyServiceResultsChanged;
 
@@ -421,6 +438,7 @@ namespace Easydict.WinUI.Views
         private void ApplyModeState(bool reinitializeServiceResults = true)
         {
             var loc = LocalizationService.Instance;
+            HideSuggestionPopup();
 
             // Update header emoji
             ModeEmojiIcon.Text = _currentMode switch
@@ -681,6 +699,11 @@ namespace Easydict.WinUI.Views
 
         private void OnQuickTranslateContentViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
         {
+            if (SuggestionPopup.IsOpen)
+            {
+                HideSuggestionPopup();
+            }
+
             if (_resultControls == null || _resultControls.Count == 0) return;
 
             const double margin = 4.0;
@@ -979,6 +1002,30 @@ namespace Easydict.WinUI.Views
 
         private async void OnInputTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
         {
+            if (SuggestionPopup.IsOpen)
+            {
+                if (e.Key == VirtualKey.Down)
+                {
+                    MoveSuggestionSelection(1);
+                    e.Handled = true;
+                    return;
+                }
+
+                if (e.Key == VirtualKey.Up)
+                {
+                    MoveSuggestionSelection(-1);
+                    e.Handled = true;
+                    return;
+                }
+
+                if (e.Key == VirtualKey.Escape)
+                {
+                    HideSuggestionPopup();
+                    e.Handled = true;
+                    return;
+                }
+            }
+
             if (e.Key != VirtualKey.Enter)
             {
                 return;
@@ -996,6 +1043,21 @@ namespace Easydict.WinUI.Views
 
             // Plain Enter: trigger translation
             e.Handled = true;
+
+            if (SuggestionPopup.IsOpen && SuggestionListView.SelectedItem is SuggestionItem selectedSuggestion)
+            {
+                await ApplySuggestionAsync(selectedSuggestion);
+                return;
+            }
+
+            var inputText = InputTextBox.Text?.Trim();
+            if (!string.IsNullOrWhiteSpace(inputText) && ContainsWildcard(inputText))
+            {
+                await ShowWildcardSuggestionsAsync(inputText);
+                return;
+            }
+
+            HideSuggestionPopup();
             await StartQueryTrackedAsync();
         }
 
@@ -1009,6 +1071,8 @@ namespace Easydict.WinUI.Views
             {
                 return;
             }
+
+            HideSuggestionPopup();
 
             if (_detectionService is null)
             {
@@ -2742,6 +2806,7 @@ namespace Easydict.WinUI.Views
                 ApplyModeState();
             }
             _targetLanguageSelector.Reset();
+            HideSuggestionPopup();
             InputTextBox.Text = text;
             _ = StartQueryTrackedAsync();
         }
@@ -2822,6 +2887,242 @@ namespace Easydict.WinUI.Views
             }
             // Don't dispose - let the query's finally block dispose it
         }
+
+        private void OnInputTextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressSuggestionTextChanged)
+            {
+                return;
+            }
+
+            _suggestionRequestId++;
+
+            if (!ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode: true))
+            {
+                _suggestionDebounceTimer.Stop();
+                HideSuggestionPopup();
+                return;
+            }
+
+            _suggestionDebounceTimer.Stop();
+            _suggestionDebounceTimer.Start();
+        }
+
+        private async void OnSuggestionDebounceTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+        {
+            await RunSuggestionQueryAsync(
+                InputTextBox.Text,
+                useWildcard: false,
+                limit: 20,
+                requestIdSnapshot: _suggestionRequestId);
+        }
+
+        private Task ShowWildcardSuggestionsAsync(string inputText)
+            => RunSuggestionQueryAsync(inputText, useWildcard: true, limit: 100, requestIdSnapshot: null);
+
+        private async Task RunSuggestionQueryAsync(
+            string? text,
+            bool useWildcard,
+            int limit,
+            int? requestIdSnapshot)
+        {
+            var requirePrefixMode = !useWildcard;
+            if (!ShouldShowSuggestions(text, requirePrefixMode))
+            {
+                HideSuggestionPopup();
+                return;
+            }
+
+            var serviceIds = GetActiveLocalDictionaryServiceIds();
+            if (serviceIds.Count == 0)
+            {
+                HideSuggestionPopup();
+                return;
+            }
+
+            try
+            {
+                var service = LocalDictionaryIndexService.Instance;
+                var suggestions = useWildcard
+                    ? await service.MatchAsync(text!, serviceIds, limit).ConfigureAwait(true)
+                    : await service.CompleteAsync(text!, serviceIds, limit).ConfigureAwait(true);
+
+                if (requestIdSnapshot is int snapshot && snapshot != _suggestionRequestId)
+                {
+                    return;
+                }
+
+                if (!ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode))
+                {
+                    return;
+                }
+
+                ShowSuggestions(suggestions);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainPage] Suggestion query failed (wildcard={useWildcard}): {ex.Message}");
+                HideSuggestionPopup();
+            }
+        }
+
+        private async Task ApplySuggestionAsync(SuggestionItem suggestion)
+        {
+            HideSuggestionPopup();
+            _suppressSuggestionTextChanged = true;
+            try
+            {
+                InputTextBox.Text = suggestion.Key;
+            }
+            finally
+            {
+                _suppressSuggestionTextChanged = false;
+            }
+
+            await StartQueryTrackedAsync();
+        }
+
+        private void ShowSuggestions(IReadOnlyList<SuggestionItem> suggestions)
+        {
+            _suggestionItems.Clear();
+            foreach (var suggestion in suggestions)
+            {
+                _suggestionItems.Add(suggestion);
+            }
+
+            if (_suggestionItems.Count == 0)
+            {
+                HideSuggestionPopup();
+                return;
+            }
+
+            SuggestionListView.SelectedItem = null;
+            UpdateSuggestionPopupPlacement();
+            SuggestionPopup.IsOpen = true;
+        }
+
+        private void HideSuggestionPopup()
+        {
+            if (SuggestionPopup.IsOpen)
+            {
+                SuggestionPopup.IsOpen = false;
+            }
+
+            SuggestionListView.SelectedItem = null;
+            _suggestionItems.Clear();
+        }
+
+        private void MoveSuggestionSelection(int delta)
+        {
+            if (_suggestionItems.Count == 0)
+            {
+                return;
+            }
+
+            var selectedIndex = SuggestionListView.SelectedIndex;
+            if (selectedIndex < 0)
+            {
+                selectedIndex = delta > 0 ? 0 : _suggestionItems.Count - 1;
+            }
+            else
+            {
+                selectedIndex = Math.Clamp(selectedIndex + delta, 0, _suggestionItems.Count - 1);
+            }
+
+            SuggestionListView.SelectedIndex = selectedIndex;
+            SuggestionListView.ScrollIntoView(SuggestionListView.SelectedItem);
+        }
+
+        private void UpdateSuggestionPopupPlacement()
+        {
+            if (_suggestionItems.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                var transform = InputTextBox.TransformToVisual(RootGrid);
+                var topLeft = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                SuggestionPopup.HorizontalOffset = topLeft.X;
+                SuggestionPopup.VerticalOffset = topLeft.Y + InputTextBox.ActualHeight + 4;
+                SuggestionPopupBorder.Width = Math.Max(240, InputTextBox.ActualWidth);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainPage] Failed to update suggestion popup placement: {ex.Message}");
+            }
+        }
+
+        private void OnInputTextBoxSizeChanged(object sender, SizeChangedEventArgs e)
+            => UpdateSuggestionPopupPlacement();
+
+        private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
+            => UpdateSuggestionPopupPlacement();
+
+        private void OnSuggestionPopupClosed(object? sender, object e)
+        {
+            SuggestionListView.SelectedItem = null;
+        }
+
+        private async void OnSuggestionItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is SuggestionItem suggestion)
+            {
+                await ApplySuggestionAsync(suggestion);
+            }
+        }
+
+        private bool ShouldShowSuggestions(string? text, bool requirePrefixMode)
+        {
+            if (!_isLoaded ||
+                _isClosing ||
+                !_settings.EnableLocalDictionarySuggestions ||
+                _currentMode != QueryMode.Translation ||
+                string.IsNullOrWhiteSpace(text) ||
+                text.Length > 120 ||
+                text.Contains('\n') ||
+                text.Contains('\r'))
+            {
+                return false;
+            }
+
+            if (requirePrefixMode && ContainsWildcard(text))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private List<string> GetActiveLocalDictionaryServiceIds()
+        {
+            if (_serviceResults.Count == 0)
+            {
+                return [];
+            }
+
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            var manager = handle.Manager;
+            var serviceIds = new List<string>();
+
+            foreach (var result in _serviceResults)
+            {
+                if (!manager.Services.TryGetValue(result.ServiceId, out var service) ||
+                    service is not MdxDictionaryTranslationService mdxService ||
+                    !mdxService.IsConfigured)
+                {
+                    continue;
+                }
+
+                serviceIds.Add(result.ServiceId);
+            }
+
+            return serviceIds;
+        }
+
+        private static bool ContainsWildcard(string text)
+            => text.Contains('*') || text.Contains('?');
 
         /// <summary>
         /// Updates phonetic deduplication across all service result controls.

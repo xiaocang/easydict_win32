@@ -59,6 +59,12 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void EnableLocalDictionarySuggestions_DefaultsToTrue()
+    {
+        _settings.EnableLocalDictionarySuggestions.Should().BeTrue();
+    }
+
+    [Fact]
     public void DeepLUseFreeApi_HasDefaultValue()
     {
         // Default should be true (use free API)

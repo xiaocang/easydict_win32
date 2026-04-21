@@ -37,9 +37,7 @@ public class TranslationTests : IDisposable
         Thread.Sleep(2000);
 
         // Find the input text box
-        var inputBox = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
-            TimeSpan.FromSeconds(10)).Result;
+        var inputBox = UITestHelper.FindInputTextBox(window);
 
         inputBox.Should().NotBeNull("InputTextBox must exist on main window");
 
@@ -90,10 +88,8 @@ public class TranslationTests : IDisposable
         var pathInitial = ScreenshotHelper.CaptureWindow(miniWindow, "23_mini_window_initial");
         _output.WriteLine($"Screenshot saved: {pathInitial}");
 
-        // Find input text box in mini window
-        var inputBox = Retry.WhileNull(
-            () => miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
-            TimeSpan.FromSeconds(10)).Result;
+        // Find input text box in mini window (helper expands the collapsed source text first)
+        var inputBox = UITestHelper.FindInputTextBox(miniWindow);
 
         inputBox.Should().NotBeNull("InputTextBox must exist in mini window");
 
@@ -137,9 +133,7 @@ public class TranslationTests : IDisposable
         _output.WriteLine($"Screenshot saved: {pathInitial}");
 
         // Find input text box in fixed window
-        var inputBox = Retry.WhileNull(
-            () => fixedWindow.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
-            TimeSpan.FromSeconds(10)).Result;
+        var inputBox = UITestHelper.FindInputTextBox(fixedWindow);
 
         inputBox.Should().NotBeNull("InputTextBox must exist in fixed window");
 

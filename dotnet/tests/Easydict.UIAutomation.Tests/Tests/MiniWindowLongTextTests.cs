@@ -249,16 +249,14 @@ public class MiniWindowLongTextTests : IDisposable
     }
 
     /// <summary>
-    /// Find the InputTextBox in the given window.
+    /// Find the InputTextBox in the given window. Delegates to
+    /// <see cref="UITestHelper.FindInputTextBox"/>, which expands the collapsed source-text
+    /// container first when the direct UIA lookup fails.
     /// </summary>
     private TextBox FindInputTextBox(Window window)
     {
-        var inputBox = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
-            TimeSpan.FromSeconds(10)).Result;
-
+        var inputBox = UITestHelper.FindInputTextBox(window);
         inputBox.Should().NotBeNull("InputTextBox must exist in mini window");
-
         return inputBox!;
     }
 

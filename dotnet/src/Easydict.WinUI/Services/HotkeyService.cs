@@ -60,8 +60,15 @@ public sealed class HotkeyService : IDisposable
 
     public HotkeyService(Window window)
     {
+        App.LogToFile("[Hotkey] Constructor entered");
         _window = window;
         _hwnd = WindowNative.GetWindowHandle(window);
+        App.LogToFile($"[Hotkey] HWND obtained: {_hwnd}");
+        
+        if (_hwnd == IntPtr.Zero)
+        {
+            App.LogToFile("[Hotkey] CRITICAL: HWND is zero in constructor!");
+        }
     }
 
     /// <summary>
@@ -73,13 +80,60 @@ public sealed class HotkeyService : IDisposable
     {
         if (_isInitialized) return;
 
-        System.Diagnostics.Debug.WriteLine("[Hotkey] Initializing hotkey service...");
+        App.LogToFile("[Hotkey] Initializing hotkey service...");
+        
+        if (_hwnd == IntPtr.Zero)
+        {
+            App.LogToFile("[Hotkey] ABORTING: Cannot initialize with zero HWND");
+            return;
+        }
 
         // Set up window subclass to intercept WM_HOTKEY messages
         _subclassProc = SubclassWndProc;
         var subclassResult = SetWindowSubclass(_hwnd, _subclassProc, 1, 0);
-        System.Diagnostics.Debug.WriteLine($"[Hotkey] SetWindowSubclass: {subclassResult}");
+        App.LogToFile($"[Hotkey] SetWindowSubclass: {subclassResult}");
 
+        RegisterAllHotkeys();
+
+        _isInitialized = true;
+        App.LogToFile("[Hotkey] Hotkey service initialized.");
+    }
+
+    /// <summary>
+    /// Unregisters all current hotkeys and re-registers them from current settings.
+    /// Call this when hotkey settings are changed in the UI.
+    /// </summary>
+    public void ReloadHotkeys()
+    {
+        if (!_isInitialized || _hwnd == IntPtr.Zero)
+        {
+            App.LogToFile("[Hotkey] Reload requested but service is not initialized or HWND is zero");
+            return;
+        }
+
+        App.LogToFile("[Hotkey] Reloading hotkeys...");
+
+        // Unregister all current hotkeys
+        UnregisterHotKey(_hwnd, HOTKEY_ID_SHOW);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_TRANSLATE_SELECTION);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_SHOW_MINI);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_MINI);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_FIXED);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_OCR_TRANSLATE);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_SILENT_OCR);
+
+        // Re-register with current settings
+        RegisterAllHotkeys();
+
+        App.LogToFile("[Hotkey] Hotkey reload complete.");
+    }
+
+    /// <summary>
+    /// Register all hotkeys defined in settings.
+    /// </summary>
+    private void RegisterAllHotkeys()
+    {
         var settings = SettingsService.Instance;
 
         // Register Show Window hotkey (default: Ctrl+Alt+T)
@@ -89,7 +143,7 @@ public sealed class HotkeyService : IDisposable
         }
         else
         {
-            System.Diagnostics.Debug.WriteLine("[Hotkey] SHOW hotkey skipped (disabled in settings)");
+            App.LogToFile("[Hotkey] SHOW hotkey skipped (disabled in settings)");
         }
 
         // Register Translate Selection hotkey (default: Ctrl+Alt+D)
@@ -99,7 +153,7 @@ public sealed class HotkeyService : IDisposable
         }
         else
         {
-            System.Diagnostics.Debug.WriteLine("[Hotkey] TRANSLATE hotkey skipped (disabled in settings)");
+            App.LogToFile("[Hotkey] TRANSLATE hotkey skipped (disabled in settings)");
         }
 
         // Register Show Mini Window hotkey (default: Ctrl+Alt+M)
@@ -109,21 +163,21 @@ public sealed class HotkeyService : IDisposable
             if (miniResult.IsValid)
             {
                 var result = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_MINI, miniResult.Modifiers | MOD_NOREPEAT, miniResult.VirtualKey);
-                System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey MINI ({settings.ShowMiniWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
+                App.LogToFile($"[Hotkey] RegisterHotKey MINI ({settings.ShowMiniWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
 
                 // Register Toggle Mini hotkey (base + Shift)
                 var toggleMini = HotkeyParser.AddShiftModifier(miniResult);
                 var toggleResult = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_MINI, toggleMini.Modifiers | MOD_NOREPEAT, toggleMini.VirtualKey);
-                System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_MINI ({settings.ShowMiniWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
+                App.LogToFile($"[Hotkey] RegisterHotKey TOGGLE_MINI ({settings.ShowMiniWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse ShowMiniWindowHotkey '{settings.ShowMiniWindowHotkey}': {miniResult.ErrorMessage}");
+                App.LogToFile($"[Hotkey] Failed to parse ShowMiniWindowHotkey '{settings.ShowMiniWindowHotkey}': {miniResult.ErrorMessage}");
             }
         }
         else
         {
-            System.Diagnostics.Debug.WriteLine("[Hotkey] MINI hotkey skipped (disabled in settings)");
+            App.LogToFile("[Hotkey] MINI hotkey skipped (disabled in settings)");
         }
 
         // Register Show Fixed Window hotkey (default: Ctrl+Alt+F)
@@ -133,21 +187,21 @@ public sealed class HotkeyService : IDisposable
             if (fixedResult.IsValid)
             {
                 var result = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED, fixedResult.Modifiers | MOD_NOREPEAT, fixedResult.VirtualKey);
-                System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey FIXED ({settings.ShowFixedWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
+                App.LogToFile($"[Hotkey] RegisterHotKey FIXED ({settings.ShowFixedWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
 
                 // Register Toggle Fixed hotkey (base + Shift)
                 var toggleFixed = HotkeyParser.AddShiftModifier(fixedResult);
                 var toggleResult = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_FIXED, toggleFixed.Modifiers | MOD_NOREPEAT, toggleFixed.VirtualKey);
-                System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey TOGGLE_FIXED ({settings.ShowFixedWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
+                App.LogToFile($"[Hotkey] RegisterHotKey TOGGLE_FIXED ({settings.ShowFixedWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse ShowFixedWindowHotkey '{settings.ShowFixedWindowHotkey}': {fixedResult.ErrorMessage}");
+                App.LogToFile($"[Hotkey] Failed to parse ShowFixedWindowHotkey '{settings.ShowFixedWindowHotkey}': {fixedResult.ErrorMessage}");
             }
         }
         else
         {
-            System.Diagnostics.Debug.WriteLine("[Hotkey] FIXED hotkey skipped (disabled in settings)");
+            App.LogToFile("[Hotkey] FIXED hotkey skipped (disabled in settings)");
         }
 
         // Register OCR Translate hotkey (default: Ctrl+Alt+S)
@@ -157,7 +211,7 @@ public sealed class HotkeyService : IDisposable
         }
         else
         {
-            System.Diagnostics.Debug.WriteLine("[Hotkey] OCR_TRANSLATE hotkey skipped (disabled in settings)");
+            App.LogToFile("[Hotkey] OCR_TRANSLATE hotkey skipped (disabled in settings)");
         }
 
         // Register Silent OCR hotkey (default: Ctrl+Alt+Shift+S)
@@ -167,11 +221,8 @@ public sealed class HotkeyService : IDisposable
         }
         else
         {
-            System.Diagnostics.Debug.WriteLine("[Hotkey] SILENT_OCR hotkey skipped (disabled in settings)");
+            App.LogToFile("[Hotkey] SILENT_OCR hotkey skipped (disabled in settings)");
         }
-
-        _isInitialized = true;
-        System.Diagnostics.Debug.WriteLine("[Hotkey] Hotkey service initialized.");
     }
 
     /// <summary>
@@ -183,11 +234,11 @@ public sealed class HotkeyService : IDisposable
         if (parseResult.IsValid)
         {
             var result = RegisterHotKey(_hwnd, hotkeyId, parseResult.Modifiers | MOD_NOREPEAT, parseResult.VirtualKey);
-            System.Diagnostics.Debug.WriteLine($"[Hotkey] RegisterHotKey {debugName} ({hotkeyString}): {result}, Error: {Marshal.GetLastWin32Error()}");
+            App.LogToFile($"[Hotkey] RegisterHotKey {debugName} ({hotkeyString}): {result}, Error: {Marshal.GetLastWin32Error()}");
         }
         else
         {
-            System.Diagnostics.Debug.WriteLine($"[Hotkey] Failed to parse {debugName} hotkey '{hotkeyString}': {parseResult.ErrorMessage}");
+            App.LogToFile($"[Hotkey] Failed to parse {debugName} hotkey '{hotkeyString}': {parseResult.ErrorMessage}");
         }
     }
 
@@ -199,7 +250,7 @@ public sealed class HotkeyService : IDisposable
         if (uMsg == WM_HOTKEY)
         {
             int hotkeyId = (int)wParam;
-            System.Diagnostics.Debug.WriteLine($"[Hotkey] WM_HOTKEY received, id={hotkeyId}");
+            App.LogToFile($"[Hotkey] HOTKEY DETECTED: WM_HOTKEY received, id={hotkeyId}");
             ForegroundWindowHelper.AllowCurrentProcessToSetForeground("Hotkey");
             ProcessHotkeyMessage(hotkeyId);
             return 0;

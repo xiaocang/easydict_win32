@@ -67,18 +67,19 @@
                             FontSize="18"
                             FontWeight="SemiBold"/>
 
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            CornerRadius="8"
-                            Padding="16">
-                        <StackPanel Spacing="16">
-                            <!-- First Language -->
-                            <ComboBox
-                                x:Name="FirstLanguageCombo"
-                                Header="First Language"
-                                Width="250"
-                                HorizontalAlignment="Left">
-                                <!-- Populated dynamically in code-behind -->
-                            </ComboBox>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    CornerRadius="8"
+                    Padding="16">
+                <StackPanel Spacing="16">
+                    <!-- First Language -->
+                    <ComboBox
+                        x:Name="FirstLanguageCombo"
+                        Header="First Language"
+                        Width="250"
+                        HorizontalAlignment="Left">
+                        <!-- Populated dynamically in code-behind -->
+                    </ComboBox>
 
                             <!-- Second Language -->
                             <ComboBox
@@ -1087,6 +1088,98 @@
                                        FontSize="12"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- TTS Settings -->
+                <StackPanel x:Name="TtsSettingsSection" Spacing="12">
+                    <TextBlock x:Name="TtsSettingsHeaderText" Text="TTS Output Settings" FontSize="18" FontWeight="SemiBold" />
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="16">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="TTS Reading Speed (0.5x - 3.0x)" />
+                                <Slider x:Name="TtsSpeedSlider"
+                                        Minimum="0.5" Maximum="3.0" StepFrequency="0.5"
+                                        Value="1.0" Width="250" HorizontalAlignment="Left" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="AutoPlayTranslationToggle"
+                                          Header="Auto-play translation"
+                                          IsOn="False" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- OCR (Text Recognition) Settings -->
+                <StackPanel x:Name="OcrSettingsSection"
+                        Spacing="12">
+                    <TextBlock x:Name="OcrSettingsHeaderText"
+                            Text="OCR (Text Recognition) Settings"
+                            FontSize="18"
+                            FontWeight="SemiBold"/>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel Spacing="16">
+                            <ComboBox x:Name="OcrEngineCombo"
+                                    Header="OCR Engine"
+                                    Width="300">
+                                <ComboBoxItem x:Name="OcrEngineNativeItem"
+                                        Content="Default (Windows Native)"
+                                        Tag="WindowsNative"/>
+                                <ComboBoxItem x:Name="OcrEngineOllamaItem"
+                                        Content="Ollama (Local VLM)"
+                                        Tag="Ollama"/>
+                                <ComboBoxItem x:Name="OcrEngineCustomApiItem"
+                                        Content="Custom API"
+                                        Tag="CustomApi"/>
+                            </ComboBox>
+
+                            <!-- Advanced OCR Settings -->
+                            <StackPanel x:Name="AdvancedOcrPanel"
+                                    Spacing="12"
+                                    Visibility="Collapsed">
+                                <TextBox x:Name="OcrApiKeyBox"
+                                        Header="API Key (Optional)"
+                                        Width="450"
+                                        HorizontalAlignment="Left"
+                                        PlaceholderText="Enter API key if required"/>
+
+                                <TextBox x:Name="OcrEndpointBox"
+                                        Header="Endpoint"
+                                        Width="450"
+                                        HorizontalAlignment="Left"
+                                        PlaceholderText="http://localhost:11434/api/generate"/>
+
+                                <TextBox x:Name="OcrModelBox"
+                                        Header="Model"
+                                        Width="450"
+                                        HorizontalAlignment="Left"
+                                        PlaceholderText="glm-ocr"/>
+
+                                <TextBox x:Name="OcrSystemPromptBox"
+                                        Header="System Prompt"
+                                        Width="450"
+                                        Height="100"
+                                        AcceptsReturn="True"
+                                        TextWrapping="Wrap"
+                                        HorizontalAlignment="Left"
+                                        PlaceholderText="Enter system prompt for OCR..."/>
+
+                                <Button x:Name="TestOcrConnectionButton"
+                                        Content="Test OCR Connection"
+                                        Click="OnTestOcrConnection"/>
+
+                                <TextBox x:Name="OcrTestStatusBox"
+                                        Header="Test Result"
+                                        IsReadOnly="True"
+                                        Width="450"
+                                        MinHeight="32"
+                                        AcceptsReturn="True"
+                                        TextWrapping="Wrap"
+                                        HorizontalAlignment="Left"/>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>

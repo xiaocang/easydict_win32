@@ -50,6 +50,11 @@ namespace Easydict.WinUI
         public static Window? MainWindow => Instance._window;
 
         /// <summary>
+        /// Gets the HotkeyService instance for dynamic reloading.
+        /// </summary>
+        internal static HotkeyService? HotkeyService => Instance._hotkeyService;
+
+        /// <summary>
         /// Event fired when clipboard text is received (for auto-translate).
         /// </summary>
         public static event Action<string>? ClipboardTextReceived;
@@ -66,7 +71,7 @@ namespace Easydict.WinUI
         /// <summary>
         /// Diagnostic logging with fallback locations for MSIX troubleshooting.
         /// </summary>
-        private static void LogToFile(string message)
+        internal static void LogToFile(string message)
         {
             var timestamp = DateTime.UtcNow.ToString("O");
             var entry = $"[{timestamp}] {message}\n";
@@ -292,6 +297,9 @@ namespace Easydict.WinUI
             // Initialize hotkey service
             try
             {
+                LogToFile($"[App] Starting HotkeyService initialization... HWND: {WindowNative.GetWindowHandle(_window)}");
+                LogToFile($"[App] Hotkey settings: Show={settings.EnableShowWindowHotkey}, Translate={settings.EnableTranslateSelectionHotkey}, Mini={settings.EnableShowMiniWindowHotkey}, Fixed={settings.EnableShowFixedWindowHotkey}, OCR={settings.EnableOcrTranslateHotkey}, Silent={settings.EnableSilentOcrHotkey}");
+                
                 _hotkeyService = new HotkeyService(_window);
                 _hotkeyService.OnShowWindow += OnShowWindowHotkey;
                 _hotkeyService.OnTranslateSelection += OnTranslateSelectionHotkey;
@@ -302,9 +310,11 @@ namespace Easydict.WinUI
                 _hotkeyService.OnOcrTranslate += OnOcrTranslateHotkey;
                 _hotkeyService.OnSilentOcr += OnSilentOcrHotkey;
                 _hotkeyService.Initialize();
+                LogToFile("[App] HotkeyService initialization call completed.");
             }
             catch (Exception ex)
             {
+                LogToFile($"[App] HotkeyService initialization CRITICAL FAILURE: {ex}");
                 System.Diagnostics.Debug.WriteLine($"[App] HotkeyService initialization failed: {ex}");
             }
 
@@ -486,6 +496,9 @@ namespace Easydict.WinUI
         {
             try
             {
+                // Wait briefly for the user to release physical keys and for the mouse drag selection to finalize in the OS.
+                await Task.Delay(150);
+
                 TextInsertionService.CaptureSourceWindow();
 
                 var text = await TextSelectionService.GetSelectedTextAsync();
@@ -543,7 +556,7 @@ namespace Easydict.WinUI
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Hotkey] OnShowMiniWindowHotkey error: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[Hotkey] OnShowMiniWindowHotkey error: {ex}");
             }
         }
 
@@ -613,6 +626,9 @@ namespace Easydict.WinUI
 
             try
             {
+                // Wait briefly for the user to release physical keys and for the mouse drag selection to finalize in the OS.
+                await Task.Delay(150);
+
                 await _ocrTranslateService.OcrTranslateAsync();
             }
             catch (Exception ex)
@@ -631,6 +647,9 @@ namespace Easydict.WinUI
 
             try
             {
+                // Wait briefly for the user to release physical keys and for the mouse drag selection to finalize in the OS.
+                await Task.Delay(150);
+
                 await _ocrTranslateService.SilentOcrAsync();
             }
             catch (Exception ex)
@@ -848,6 +867,7 @@ namespace Easydict.WinUI
 
         private void HideWindow()
         {
+            TextToSpeechService.Instance.Stop();
             _appWindow?.Hide();
         }
 
@@ -914,27 +934,30 @@ namespace Easydict.WinUI
             settings.Save();
         }
 
-        private void CleanupServices()
+        public static void CleanupServices()
         {
+            var app = Instance;
+
             // Dispose OCR signal event first — this unblocks the listener thread's WaitOne()
             // which throws ObjectDisposedException, causing the thread to exit gracefully.
-            _ocrSignalEvent?.Dispose();
-            _ocrSignalEvent = null;
+            app._ocrSignalEvent?.Dispose();
+            app._ocrSignalEvent = null;
 
             // Wait briefly for the signal thread to finish to avoid races during teardown
-            if (_ocrSignalThread?.IsAlive == true)
+            if (app._ocrSignalThread?.IsAlive == true)
             {
-                _ocrSignalThread.Join(TimeSpan.FromSeconds(2));
+                app._ocrSignalThread.Join(TimeSpan.FromSeconds(2));
             }
-            _ocrSignalThread = null;
+            app._ocrSignalThread = null;
 
-            _mouseHookService?.Dispose();
-            _popButtonService?.Dispose();
-            _clipboardService?.Dispose();
-            _hotkeyService?.Dispose();
-            _trayIconService?.Dispose();
+            app._mouseHookService?.Dispose();
+            app._popButtonService?.Dispose();
+            app._clipboardService?.Dispose();
+            app._hotkeyService?.Dispose();
+            app._trayIconService?.Dispose();
             FixedWindowService.Instance.Dispose();
             MiniWindowService.Instance.Dispose();
+            TextToSpeechService.Instance.Stop();
         }
 
         /// <summary>

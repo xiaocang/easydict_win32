@@ -132,7 +132,8 @@
         <ScrollViewer x:Name="QuickTranslateContent"
                       Grid.Row="1"
                       VerticalScrollBarVisibility="Visible"
-                      HorizontalScrollBarVisibility="Disabled">
+                      HorizontalScrollBarVisibility="Disabled"
+                      ViewChanged="OnQuickTranslateContentViewChanged">
             <Grid Padding="4">
                 <VisualStateManager.VisualStateGroups>
                     <VisualStateGroup x:Name="LayoutStates">

@@ -273,9 +273,6 @@
   <data name="ScreenCaptureTipSelecting" xml:space="preserve">
     <value>H&#248;jreklik eller Esc for at annullere</value>
   </data>
-  <data name="ScreenCaptureTipAdjusting" xml:space="preserve">
-    <value>Enter eller dobbeltklik for at bekr&#230;fte  |  Piletaster for at finjustere  |  H&#248;jreklik eller Esc for at lave om</value>
-  </data>
 
   <!-- Grammar Correction Mode -->
   <data name="QueryMode_Translation" xml:space="preserve">

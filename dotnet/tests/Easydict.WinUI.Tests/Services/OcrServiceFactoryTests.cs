@@ -56,4 +56,37 @@ public class OcrServiceFactoryTests
             _settings.OcrEngine = original;
         }
     }
+
+    [Theory]
+    [InlineData(OcrEngineType.WindowsNative, typeof(WindowsOcrService))]
+    [InlineData(OcrEngineType.Ollama, typeof(OllamaOcrService))]
+    [InlineData(OcrEngineType.CustomApi, typeof(CustomApiOcrService))]
+    public void Create_WithOptions_UsesProvidedEngineIndependentOfSavedSetting(
+        OcrEngineType engine, System.Type expected)
+    {
+        var original = _settings.OcrEngine;
+        try
+        {
+            _settings.OcrEngine = OcrEngineType.WindowsNative;
+            var options = new OcrServiceOptions(engine, null, null, null, null);
+
+            var svc = OcrServiceFactory.Create(options);
+
+            svc.Should().BeOfType(expected);
+        }
+        finally
+        {
+            _settings.OcrEngine = original;
+        }
+    }
+
+    [Fact]
+    public void Create_WithOptions_DefaultsToWindowsNative_ForUnknownEngine()
+    {
+        var options = new OcrServiceOptions((OcrEngineType)99, null, null, null, null);
+
+        var svc = OcrServiceFactory.Create(options);
+
+        svc.Should().BeOfType<WindowsOcrService>();
+    }
 }

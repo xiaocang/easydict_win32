@@ -232,8 +232,8 @@ public sealed class SettingsService
     // OCR Engine settings
     public OcrEngineType OcrEngine { get; set; } = OcrEngineType.WindowsNative;
     public string? OcrApiKey { get; set; }
-    public string OcrEndpoint { get; set; } = "http://localhost:11434/api/generate";
-    public string OcrModel { get; set; } = "glm-ocr";
+    public string OcrEndpoint { get; set; } = OcrServiceOptions.DefaultEndpoint;
+    public string OcrModel { get; set; } = OcrServiceOptions.DefaultModel;
     public string OcrSystemPrompt { get; set; } = "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.";
 
     // Layout detection settings (long document translation)
@@ -638,8 +638,8 @@ public sealed class SettingsService
         // Load OCR Engine settings
         OcrEngine = (OcrEngineType)GetValue(nameof(OcrEngine), (int)OcrEngineType.WindowsNative);
         OcrApiKey = GetValue<string?>(nameof(OcrApiKey), null);
-        OcrEndpoint = GetValue(nameof(OcrEndpoint), "http://localhost:11434/api/generate");
-        OcrModel = GetValue(nameof(OcrModel), "glm-ocr");
+        OcrEndpoint = GetValue(nameof(OcrEndpoint), OcrServiceOptions.DefaultEndpoint);
+        OcrModel = GetValue(nameof(OcrModel), OcrServiceOptions.DefaultModel);
         OcrSystemPrompt = GetValue(nameof(OcrSystemPrompt), "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.");
 
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);

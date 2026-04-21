@@ -4,29 +4,31 @@ namespace Easydict.WinUI.Services;
 
 /// <summary>
 /// Factory that creates the appropriate <see cref="IOcrService"/> implementation
-/// based on the user's <see cref="SettingsService.OcrEngine"/> setting.
+/// for the provided (or currently persisted) OCR configuration.
 /// </summary>
 public static class OcrServiceFactory
 {
     private static readonly HttpClient _sharedHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
 
     /// <summary>
-    /// Creates an <see cref="IOcrService"/> for the currently configured OCR engine.
+    /// Creates an <see cref="IOcrService"/> for the given options.
+    /// When <paramref name="options"/> is null, a fresh snapshot of persisted OCR settings is used.
     /// </summary>
+    /// <param name="options">OCR engine and request options to use for this service instance.</param>
     /// <param name="httpClient">
     /// Optional shared <see cref="HttpClient"/> for API-based engines.
     /// If null, a shared client with a 60-second timeout is used.
     /// </param>
     /// <returns>An <see cref="IOcrService"/> ready to recognize text.</returns>
-    public static IOcrService Create(HttpClient? httpClient = null)
+    public static IOcrService Create(OcrServiceOptions? options = null, HttpClient? httpClient = null)
     {
-        var engine = SettingsService.Instance.OcrEngine;
+        var resolved = options ?? OcrServiceOptions.FromSettings(SettingsService.Instance);
         var client = httpClient ?? _sharedHttpClient;
 
-        return engine switch
+        return resolved.Engine switch
         {
-            OcrEngineType.Ollama => new OllamaOcrService(client),
-            OcrEngineType.CustomApi => new CustomApiOcrService(client),
+            OcrEngineType.Ollama => new OllamaOcrService(client, resolved),
+            OcrEngineType.CustomApi => new CustomApiOcrService(client, resolved),
             _ => new WindowsOcrService()
         };
     }

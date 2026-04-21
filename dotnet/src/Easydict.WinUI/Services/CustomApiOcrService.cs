@@ -17,6 +17,7 @@ namespace Easydict.WinUI.Services;
 public sealed class CustomApiOcrService : IOcrService
 {
     private readonly HttpClient _httpClient;
+    private readonly OcrServiceOptions _options;
 
     public string ServiceId => "custom_api_ocr";
 
@@ -25,8 +26,14 @@ public sealed class CustomApiOcrService : IOcrService
     public bool IsAvailable => true;
 
     public CustomApiOcrService(HttpClient httpClient)
+        : this(httpClient, OcrServiceOptions.FromSettings(SettingsService.Instance))
+    {
+    }
+
+    public CustomApiOcrService(HttpClient httpClient, OcrServiceOptions options)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
     /// <inheritdoc />
@@ -41,11 +48,10 @@ public sealed class CustomApiOcrService : IOcrService
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
 
-        var settings = SettingsService.Instance;
-        var endpoint = settings.OcrEndpoint;
-        var model = settings.OcrModel;
-        var apiKey = settings.OcrApiKey;
-        var systemPrompt = settings.OcrSystemPrompt;
+        var endpoint = _options.Endpoint;
+        var model = _options.Model;
+        var apiKey = _options.ApiKey;
+        var systemPrompt = _options.SystemPrompt;
 
         Debug.WriteLine($"[CustomApiOcr] Sending {pixelWidth}x{pixelHeight} image to {endpoint} (model: {model})");
 

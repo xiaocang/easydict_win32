@@ -137,24 +137,6 @@
                     </Expander>
                 </StackPanel>
 
-                <!-- TTS Settings -->
-                <StackPanel x:Name="TtsSettingsSection" Spacing="12">
-                    <TextBlock x:Name="TtsSettingsHeaderText" Text="TTS Output Settings" FontSize="18" FontWeight="SemiBold" />
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
-                        <StackPanel Spacing="16">
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="TTS Reading Speed (0.5x - 3.0x)" />
-                                <Slider x:Name="TtsSpeedSlider"
-                                        Minimum="0.5" Maximum="3.0" StepFrequency="0.5"
-                                        Value="1.0" Width="250" HorizontalAlignment="Left" />
-                            </StackPanel>
-                            <ToggleSwitch x:Name="AutoPlayTranslationToggle"
-                                          Header="Auto-play translation"
-                                          IsOn="False" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
                 <!-- Enabled Services for Each Window -->
                 <StackPanel x:Name="EnabledServicesSection"
                         Spacing="12">
@@ -1106,6 +1088,24 @@
                                        FontSize="12"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- TTS Settings -->
+                <StackPanel x:Name="TtsSettingsSection" Spacing="12">
+                    <TextBlock x:Name="TtsSettingsHeaderText" Text="TTS Output Settings" FontSize="18" FontWeight="SemiBold" />
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="16">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="TTS Reading Speed (0.5x - 3.0x)" />
+                                <Slider x:Name="TtsSpeedSlider"
+                                        Minimum="0.5" Maximum="3.0" StepFrequency="0.5"
+                                        Value="1.0" Width="250" HorizontalAlignment="Left" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="AutoPlayTranslationToggle"
+                                          Header="Auto-play translation"
+                                          IsOn="False" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

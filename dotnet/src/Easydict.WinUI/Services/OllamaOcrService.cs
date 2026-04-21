@@ -12,6 +12,7 @@ namespace Easydict.WinUI.Services;
 public sealed class OllamaOcrService : IOcrService
 {
     private readonly HttpClient _httpClient;
+    private readonly OcrServiceOptions _options;
 
     public string ServiceId => "ollama_ocr";
 
@@ -20,8 +21,14 @@ public sealed class OllamaOcrService : IOcrService
     public bool IsAvailable => true;
 
     public OllamaOcrService(HttpClient httpClient)
+        : this(httpClient, OcrServiceOptions.FromSettings(SettingsService.Instance))
+    {
+    }
+
+    public OllamaOcrService(HttpClient httpClient, OcrServiceOptions options)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
     /// <inheritdoc />
@@ -42,10 +49,9 @@ public sealed class OllamaOcrService : IOcrService
                 $"pixelData length ({pixelData.Length}) is less than expected ({expectedLength}) for {pixelWidth}x{pixelHeight} BGRA8",
                 nameof(pixelData));
 
-        var settings = SettingsService.Instance;
-        var endpoint = settings.OcrEndpoint;
-        var model = settings.OcrModel;
-        var prompt = settings.OcrSystemPrompt;
+        var endpoint = _options.Endpoint;
+        var model = _options.Model;
+        var prompt = _options.SystemPrompt;
 
         Debug.WriteLine($"[OllamaOcr] Sending {pixelWidth}x{pixelHeight} image to {endpoint} (model: {model})");
 

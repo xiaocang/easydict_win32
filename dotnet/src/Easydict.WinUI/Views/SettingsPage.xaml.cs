@@ -1945,6 +1945,20 @@ public sealed partial class SettingsPage : Page
         return null;
     }
 
+    private OcrServiceOptions GetCurrentOcrServiceOptions()
+    {
+        var engine = Enum.TryParse<OcrEngineType>(GetSelectedTag(OcrEngineCombo), out var parsedEngine)
+            ? parsedEngine
+            : OcrEngineType.WindowsNative;
+
+        return new OcrServiceOptions(
+            engine,
+            OcrApiKeyBox.Text,
+            OcrEndpointBox.Text,
+            OcrModelBox.Text,
+            OcrSystemPromptBox.Text);
+    }
+
     /// <summary>
     /// Gets the value from an editable ComboBox. Returns the typed text if available,
     /// otherwise returns the selected item's tag.
@@ -2187,11 +2201,12 @@ public sealed partial class SettingsPage : Page
         _settings.OllamaModel = OllamaModelCombo.Text?.Trim() ?? "llama3.2";
 
         // Save OCR Engine settings
-        _settings.OcrEngine = Enum.TryParse<OcrEngineType>(GetSelectedTag(OcrEngineCombo), out var engine) ? engine : OcrEngineType.WindowsNative;
-        _settings.OcrApiKey = OcrApiKeyBox.Text?.Trim();
-        _settings.OcrEndpoint = OcrEndpointBox.Text?.Trim() ?? "http://localhost:11434/api/generate";
-        _settings.OcrModel = OcrModelBox.Text?.Trim() ?? "glm-ocr";
-        _settings.OcrSystemPrompt = OcrSystemPromptBox.Text?.Trim() ?? "";
+        var ocrOptions = GetCurrentOcrServiceOptions();
+        _settings.OcrEngine = ocrOptions.Engine;
+        _settings.OcrApiKey = ocrOptions.ApiKey;
+        _settings.OcrEndpoint = ocrOptions.Endpoint;
+        _settings.OcrModel = ocrOptions.Model;
+        _settings.OcrSystemPrompt = ocrOptions.SystemPrompt;
 
         // Save Built-in AI settings
         _settings.BuiltInAIModel = GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414");
@@ -2383,7 +2398,7 @@ public sealed partial class SettingsPage : Page
 
             using (capture)
             {
-                var ocrEngine = OcrServiceFactory.Create();
+                var ocrEngine = OcrServiceFactory.Create(GetCurrentOcrServiceOptions());
                 var result = await ocrEngine.RecognizeAsync(capture, null, CancellationToken.None);
 
                 DispatcherQueue.TryEnqueue(() =>
@@ -2529,9 +2544,9 @@ public sealed partial class SettingsPage : Page
         [
             new NavSection("HeaderSection", "Settings", "\uE713", HeaderSection),              // Settings gear
             new NavSection("LanguagePreferencesSection", "Language Preferences", "\uE774", LanguagePreferencesSection), // Globe
-            new NavSection("TtsSettingsSection", "TTS Settings", "\uE767", TtsSettingsSection), // Volume
             new NavSection("EnabledServicesSection", "Enabled Services", "\uE73E", EnabledServicesSection),           // Checkmark
             new NavSection("ServiceConfigurationSection", "Service Configuration", "\uE90F", ServiceConfigurationSection), // Key
+            new NavSection("TtsSettingsSection", "TTS Settings", "\uE767", TtsSettingsSection), // Volume
             new NavSection("OcrSettingsSection", "OCR Settings", "\uEE6F", OcrSettingsSection), // Scan
             new NavSection("LayoutDetectionSection", "Layout Detection", "\uE8A1", LayoutDetectionSection),  // Page
             new NavSection("CjkFontSection", "CJK Font", "\uE8D2", CjkFontSection),  // Font

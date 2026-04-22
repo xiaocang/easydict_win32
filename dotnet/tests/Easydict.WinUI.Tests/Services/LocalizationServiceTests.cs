@@ -295,6 +295,22 @@ public class LocalizationServiceTests
         }
     }
 
+    [Fact]
+    public void VscodeTasks_EnsureBuildSubmodulesBeforeWinUiBuilds()
+    {
+        var tasksPath = Path.Combine(ProjectRoot, "..", ".vscode", "tasks.json");
+        if (File.Exists(tasksPath))
+        {
+            var content = File.ReadAllText(tasksPath);
+            content.Should().Contain("\"label\": \"ensure-build-submodules\"",
+                "tasks.json should define a task that prepares build-only submodules");
+            content.Should().Contain("ensure-build-submodules.ps1",
+                "the submodule bootstrap task should call the dedicated PowerShell script");
+            content.Should().Contain("\"dependsOn\": \"ensure-build-submodules\"",
+                "WinUI build-related tasks should bootstrap required submodules before running");
+        }
+    }
+
     #endregion
 
     #region Helper Methods

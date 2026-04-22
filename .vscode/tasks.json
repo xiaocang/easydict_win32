@@ -5,9 +5,30 @@
         // Build Tasks
         // ============================================
         {
+            "label": "ensure-build-submodules",
+            "command": "powershell.exe",
+            "type": "shell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/dotnet/scripts/ensure-build-submodules.ps1",
+                "-WorkspaceRoot",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
             "label": "build",
             "command": "dotnet",
             "type": "shell",
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
             "args": [
                 "build",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
@@ -30,6 +51,8 @@
             "label": "build-debug",
             "command": "dotnet",
             "type": "shell",
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
             "args": [
                 "build",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
@@ -51,6 +74,8 @@
             "label": "build-release",
             "command": "dotnet",
             "type": "shell",
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
             "args": [
                 "build",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
@@ -72,6 +97,8 @@
             "label": "clean",
             "command": "dotnet",
             "type": "shell",
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
             "args": [
                 "clean",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
@@ -149,6 +176,8 @@
             "label": "run-debug",
             "command": "dotnet",
             "type": "shell",
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
             "args": [
                 "run",
                 "--project",
@@ -169,6 +198,8 @@
             "label": "run-release",
             "command": "dotnet",
             "type": "shell",
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
             "args": [
                 "run",
                 "--project",
@@ -260,6 +291,8 @@
             "label": "publish-x64",
             "command": "dotnet",
             "type": "shell",
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
             "args": [
                 "publish",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
@@ -281,6 +314,8 @@
             "label": "publish-x86",
             "command": "dotnet",
             "type": "shell",
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
             "args": [
                 "publish",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
@@ -302,6 +337,8 @@
             "label": "publish-arm64",
             "command": "dotnet",
             "type": "shell",
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
             "args": [
                 "publish",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
@@ -326,6 +363,8 @@
             "label": "restore",
             "command": "dotnet",
             "type": "shell",
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
             "args": [
                 "restore",
                 "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj"

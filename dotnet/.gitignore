@@ -33,6 +33,10 @@ src/Easydict.WinUI/Assets/Square150x150Logo*.png
 src/Easydict.WinUI/Assets/Wide310x150Logo*.png
 src/Easydict.WinUI/Assets/SplashScreen*.png
 src/Easydict.WinUI/Assets/StoreLogo*.png
+src/Easydict.WinUI/Assets/icon_unplated_1024.png
+
+# Auto-generated service icon variants
+src/Easydict.WinUI/Assets/ServiceIcons/*.scale-*.png
 
 temp_*/
 test-extracted/

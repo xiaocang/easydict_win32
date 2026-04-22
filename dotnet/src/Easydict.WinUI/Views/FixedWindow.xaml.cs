@@ -1036,6 +1036,14 @@ public sealed partial class FixedWindow : Window
 
     private async void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // PageUp/PageDown/Up/Down scroll the results (issue #137) while the
+        // input TextBox keeps keyboard focus so typing continues uninterrupted.
+        if (TryScrollResults(e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key != VirtualKey.Enter)
         {
             return;
@@ -1194,6 +1202,38 @@ public sealed partial class FixedWindow : Window
 
         // Resize window to fit existing content
         RequestResize();
+    }
+
+    /// <summary>
+    /// Scroll the results ScrollViewer programmatically. Lets the user press
+    /// PageUp/PageDown/Up/Down on the input TextBox to navigate results (issue
+    /// #137) without losing the ability to keep typing into the same TextBox.
+    /// Returns true when the key was consumed for scrolling.
+    /// </summary>
+    private bool TryScrollResults(VirtualKey key)
+    {
+        if (!ResultsInputRouter.IsScrollNavigationKey(key)) return false;
+        if (ResultsScrollViewer?.XamlRoot is null) return false;
+
+        var viewport = ResultsScrollViewer.ViewportHeight;
+        const double lineHeight = 48;
+
+        double delta = key switch
+        {
+            VirtualKey.PageDown => viewport,
+            VirtualKey.PageUp => -viewport,
+            VirtualKey.Down => lineHeight,
+            VirtualKey.Up => -lineHeight,
+            _ => 0
+        };
+        if (delta == 0) return false;
+
+        var newOffset = Math.Clamp(
+            ResultsScrollViewer.VerticalOffset + delta,
+            0,
+            ResultsScrollViewer.ScrollableHeight);
+        ResultsScrollViewer.ChangeView(null, newOffset, null);
+        return true;
     }
 
     private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts)

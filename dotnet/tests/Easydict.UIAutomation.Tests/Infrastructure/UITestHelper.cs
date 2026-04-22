@@ -67,10 +67,11 @@ public static class UITestHelper
 
     /// <summary>
     /// Find the InputTextBox on a window, expanding the collapsed source-text container
-    /// first if present. The MiniWindow's source-text surface starts collapsed — showing
-    /// <c>SourceTextCollapsed</c> instead of <c>InputTextBox</c> — so a direct UIA lookup
-    /// returns null until the user taps the container. MainPage and FixedWindow expose
-    /// InputTextBox directly and the preflight is a harmless no-op for them.
+    /// first if present. Since <see cref="MiniWindow.ShowAndActivate"/> now calls
+    /// <c>SetSourceTextState(true)</c>, the <c>InputTextBox</c> is visible the moment the
+    /// window appears and the preflight click is a harmless no-op in normal usage. It is
+    /// kept as a fallback for any path that leaves the container collapsed.
+    /// MainPage and FixedWindow expose InputTextBox directly.
     /// </summary>
     public static TextBox? FindInputTextBox(Window window, TimeSpan? timeout = null)
     {

@@ -925,9 +925,6 @@ public sealed partial class MiniWindow : Window
                 }
             }
 
-            // Move focus to results so PageUp/PageDown navigates results (issue #137)
-            FocusResultsForNavigation();
-
             // Route based on mode
             if (_currentMode == QueryMode.GrammarCorrection)
             {
@@ -1479,6 +1476,14 @@ public sealed partial class MiniWindow : Window
 
     private async void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // PageUp/PageDown/Up/Down scroll the results (issue #137) while the
+        // input TextBox keeps keyboard focus so typing continues uninterrupted.
+        if (TryScrollResults(e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key != VirtualKey.Enter)
         {
             return;
@@ -1733,7 +1738,7 @@ public sealed partial class MiniWindow : Window
         }
 
         this.Activate();
-        SetSourceTextState(false);
+        SetSourceTextState(true);
         QueueInputFocusAndSelectAll();
 
         // Resize window to fit existing content (delayed to allow layout to complete)
@@ -1741,14 +1746,35 @@ public sealed partial class MiniWindow : Window
     }
 
     /// <summary>
-    /// Move focus to the results ScrollViewer so PageUp/PageDown/arrow keys
-    /// navigate the translated output (issue #137). Called on query start.
+    /// Scroll the results ScrollViewer programmatically. Lets the user press
+    /// PageUp/PageDown/Up/Down on the input TextBox to navigate results (issue
+    /// #137) without losing the ability to keep typing into the same TextBox.
+    /// Returns true when the key was consumed for scrolling.
     /// </summary>
-    private void FocusResultsForNavigation()
+    private bool TryScrollResults(VirtualKey key)
     {
-        if (_isClosing || !_isLoaded) return;
-        if (MainScrollViewer.XamlRoot is null) return;
-        MainScrollViewer.Focus(FocusState.Programmatic);
+        if (!ResultsInputRouter.IsScrollNavigationKey(key)) return false;
+        if (MainScrollViewer?.XamlRoot is null) return false;
+
+        var viewport = MainScrollViewer.ViewportHeight;
+        const double lineHeight = 48;
+
+        double delta = key switch
+        {
+            VirtualKey.PageDown => viewport,
+            VirtualKey.PageUp => -viewport,
+            VirtualKey.Down => lineHeight,
+            VirtualKey.Up => -lineHeight,
+            _ => 0
+        };
+        if (delta == 0) return false;
+
+        var newOffset = Math.Clamp(
+            MainScrollViewer.VerticalOffset + delta,
+            0,
+            MainScrollViewer.ScrollableHeight);
+        MainScrollViewer.ChangeView(null, newOffset, null);
+        return true;
     }
 
     private void QueueInputFocusAndSelectAll(int attemptsRemaining = InputFocusMaxAttempts)

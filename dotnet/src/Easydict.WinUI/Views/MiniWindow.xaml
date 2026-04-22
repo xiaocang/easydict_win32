@@ -238,7 +238,6 @@
         <ScrollViewer
             x:Name="MainScrollViewer"
             Grid.Row="4"
-            IsTabStop="True"
             VerticalScrollBarVisibility="Auto"
             ViewChanged="OnMainScrollViewerViewChanged">
             <ItemsControl x:Name="ResultsPanel">

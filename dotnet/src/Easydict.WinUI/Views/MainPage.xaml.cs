@@ -66,6 +66,8 @@ namespace Easydict.WinUI.Views
         private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _suggestionDebounceTimer;
         private bool _suppressSuggestionTextChanged;
         private int _suggestionRequestId;
+        private bool _isSuggestionNavigationActive;
+        private SuggestionTokenContext? _activeSuggestionToken;
 
         /// <summary>
         /// Maximum history items to keep.
@@ -74,6 +76,19 @@ namespace Easydict.WinUI.Views
         private const int QueryShutdownTimeoutSeconds = 2;
         private const int InputFocusRetryDelayMs = 50;
         private const int InputFocusMaxAttempts = 10;
+
+        internal readonly record struct SuggestionTokenContext(string QueryText, int StartIndex, int Length);
+
+        internal enum SuggestionNavigationCommand
+        {
+            None,
+            EnterNavigation,
+            ExitNavigation,
+            MoveNext,
+            MovePrevious,
+            ApplySelection,
+            HidePopup
+        }
 
         public MainPage()
         {
@@ -131,7 +146,9 @@ namespace Easydict.WinUI.Views
             InputTextBox.TextChanged += OnInputTextChanged;
             InputTextBox.SizeChanged += OnInputTextBoxSizeChanged;
             RootGrid.SizeChanged += OnRootGridSizeChanged;
+            SuggestionPopup.Opened += OnSuggestionPopupOpened;
             SuggestionPopup.Closed += OnSuggestionPopupClosed;
+            SuggestionListView.GettingFocus += OnSuggestionListViewGettingFocus;
             SuggestionListView.ItemsSource = _suggestionItems;
         }
 
@@ -1002,28 +1019,45 @@ namespace Easydict.WinUI.Views
 
         private async void OnInputTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
         {
-            if (SuggestionPopup.IsOpen)
+            var shiftState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift);
+            var ctrlState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
+            var isShiftDown = shiftState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+            var isCtrlDown = ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+
+            var suggestionCommand = ResolveSuggestionNavigationCommand(
+                e.Key,
+                SuggestionPopup.IsOpen,
+                _isSuggestionNavigationActive,
+                _suggestionItems.Count > 0,
+                SuggestionListView.SelectedItem is SuggestionItem,
+                isShiftDown);
+
+            switch (suggestionCommand)
             {
-                if (e.Key == VirtualKey.Down)
-                {
+                case SuggestionNavigationCommand.EnterNavigation:
+                    EnterSuggestionNavigationMode();
+                    e.Handled = true;
+                    return;
+                case SuggestionNavigationCommand.ExitNavigation:
+                    ExitSuggestionNavigationMode();
+                    e.Handled = true;
+                    return;
+                case SuggestionNavigationCommand.MoveNext:
                     MoveSuggestionSelection(1);
                     e.Handled = true;
                     return;
-                }
-
-                if (e.Key == VirtualKey.Up)
-                {
+                case SuggestionNavigationCommand.MovePrevious:
                     MoveSuggestionSelection(-1);
                     e.Handled = true;
                     return;
-                }
-
-                if (e.Key == VirtualKey.Escape)
-                {
+                case SuggestionNavigationCommand.ApplySelection:
+                    e.Handled = true;
+                    await ApplySuggestionAsync((SuggestionItem)SuggestionListView.SelectedItem!);
+                    return;
+                case SuggestionNavigationCommand.HidePopup:
                     HideSuggestionPopup();
                     e.Handled = true;
                     return;
-                }
             }
 
             if (e.Key != VirtualKey.Enter)
@@ -1032,11 +1066,7 @@ namespace Easydict.WinUI.Views
             }
 
             // Check if Shift or Ctrl is held — allow newline insertion
-            var shiftState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift);
-            var ctrlState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
-
-            if (shiftState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down) ||
-                ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
+            if (isShiftDown || isCtrlDown)
             {
                 return; // Let the TextBox handle it normally (insert newline)
             }
@@ -1044,15 +1074,11 @@ namespace Easydict.WinUI.Views
             // Plain Enter: trigger translation
             e.Handled = true;
 
-            if (SuggestionPopup.IsOpen && SuggestionListView.SelectedItem is SuggestionItem selectedSuggestion)
+            var inputText = InputTextBox.Text;
+            if (!string.IsNullOrWhiteSpace(inputText) && TryGetWildcardSuggestionToken(inputText, out _))
             {
-                await ApplySuggestionAsync(selectedSuggestion);
-                return;
-            }
-
-            var inputText = InputTextBox.Text?.Trim();
-            if (!string.IsNullOrWhiteSpace(inputText) && ContainsWildcard(inputText))
-            {
+                _suggestionRequestId++;
+                _suggestionDebounceTimer.Stop();
                 await ShowWildcardSuggestionsAsync(inputText);
                 return;
             }
@@ -2895,9 +2921,11 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
+            ExitSuggestionNavigationMode();
             _suggestionRequestId++;
 
-            if (!ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode: true))
+            if (!ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode: true) ||
+                !TryGetActiveSuggestionToken(InputTextBox.Text, InputTextBox.SelectionStart, out _))
             {
                 _suggestionDebounceTimer.Stop();
                 HideSuggestionPopup();
@@ -2910,24 +2938,38 @@ namespace Easydict.WinUI.Views
 
         private async void OnSuggestionDebounceTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
         {
+            if (!TryGetActiveSuggestionToken(InputTextBox.Text, InputTextBox.SelectionStart, out var token))
+            {
+                HideSuggestionPopup();
+                return;
+            }
+
             await RunSuggestionQueryAsync(
-                InputTextBox.Text,
+                token,
                 useWildcard: false,
-                limit: 20,
+                limit: 5,
                 requestIdSnapshot: _suggestionRequestId);
         }
 
         private Task ShowWildcardSuggestionsAsync(string inputText)
-            => RunSuggestionQueryAsync(inputText, useWildcard: true, limit: 100, requestIdSnapshot: null);
+        {
+            if (!TryGetWildcardSuggestionToken(inputText, out var token))
+            {
+                HideSuggestionPopup();
+                return Task.CompletedTask;
+            }
+
+            return RunSuggestionQueryAsync(token, useWildcard: true, limit: 5, requestIdSnapshot: _suggestionRequestId);
+        }
 
         private async Task RunSuggestionQueryAsync(
-            string? text,
+            SuggestionTokenContext token,
             bool useWildcard,
             int limit,
-            int? requestIdSnapshot)
+            int requestIdSnapshot)
         {
             var requirePrefixMode = !useWildcard;
-            if (!ShouldShowSuggestions(text, requirePrefixMode))
+            if (!ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode))
             {
                 HideSuggestionPopup();
                 return;
@@ -2944,20 +2986,25 @@ namespace Easydict.WinUI.Views
             {
                 var service = LocalDictionaryIndexService.Instance;
                 var suggestions = useWildcard
-                    ? await service.MatchAsync(text!, serviceIds, limit).ConfigureAwait(true)
-                    : await service.CompleteAsync(text!, serviceIds, limit).ConfigureAwait(true);
+                    ? await service.MatchAsync(token.QueryText, serviceIds, limit).ConfigureAwait(true)
+                    : await service.CompleteAsync(token.QueryText, serviceIds, limit).ConfigureAwait(true);
 
-                if (requestIdSnapshot is int snapshot && snapshot != _suggestionRequestId)
+                if (requestIdSnapshot != _suggestionRequestId)
                 {
                     return;
                 }
 
-                if (!ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode))
+                var currentTokenIsValid = useWildcard
+                    ? TryGetWildcardSuggestionToken(InputTextBox.Text, out var currentWildcardToken) && currentWildcardToken == token
+                    : TryGetActiveSuggestionToken(InputTextBox.Text, InputTextBox.SelectionStart, out var currentPrefixToken) && currentPrefixToken == token;
+
+                if (!currentTokenIsValid || !ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode))
                 {
+                    HideSuggestionPopup();
                     return;
                 }
 
-                ShowSuggestions(suggestions);
+                ShowSuggestions(suggestions, token);
             }
             catch (Exception ex)
             {
@@ -2966,24 +3013,43 @@ namespace Easydict.WinUI.Views
             }
         }
 
-        private async Task ApplySuggestionAsync(SuggestionItem suggestion)
+        private Task ApplySuggestionAsync(SuggestionItem suggestion)
         {
+            var token = _activeSuggestionToken;
             HideSuggestionPopup();
             _suppressSuggestionTextChanged = true;
             try
             {
-                InputTextBox.Text = suggestion.Key;
+                if (token is SuggestionTokenContext activeToken)
+                {
+                    InputTextBox.Text = ReplaceSuggestionToken(InputTextBox.Text, activeToken, suggestion.Key, out var caretIndex);
+                    InputTextBox.SelectionStart = caretIndex;
+                    InputTextBox.SelectionLength = 0;
+                }
+                else
+                {
+                    InputTextBox.Text = suggestion.Key;
+                    InputTextBox.SelectionStart = suggestion.Key.Length;
+                    InputTextBox.SelectionLength = 0;
+                }
             }
             finally
             {
                 _suppressSuggestionTextChanged = false;
             }
 
-            await StartQueryTrackedAsync();
+            QueueRestoreInputFocusFromSuggestionPopup();
+            return Task.CompletedTask;
         }
 
-        private void ShowSuggestions(IReadOnlyList<SuggestionItem> suggestions)
+        private void ShowSuggestions(IReadOnlyList<SuggestionItem> suggestions, SuggestionTokenContext token)
         {
+            if (!IsInputTextBoxFocused())
+            {
+                HideSuggestionPopup();
+                return;
+            }
+
             _suggestionItems.Clear();
             foreach (var suggestion in suggestions)
             {
@@ -2996,7 +3062,8 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            SuggestionListView.SelectedItem = null;
+            _activeSuggestionToken = token;
+            ExitSuggestionNavigationMode();
             UpdateSuggestionPopupPlacement();
             SuggestionPopup.IsOpen = true;
         }
@@ -3008,7 +3075,8 @@ namespace Easydict.WinUI.Views
                 SuggestionPopup.IsOpen = false;
             }
 
-            SuggestionListView.SelectedItem = null;
+            _activeSuggestionToken = null;
+            ExitSuggestionNavigationMode();
             _suggestionItems.Clear();
         }
 
@@ -3044,9 +3112,17 @@ namespace Easydict.WinUI.Views
             {
                 var transform = InputTextBox.TransformToVisual(RootGrid);
                 var topLeft = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-                SuggestionPopup.HorizontalOffset = topLeft.X;
-                SuggestionPopup.VerticalOffset = topLeft.Y + InputTextBox.ActualHeight + 4;
-                SuggestionPopupBorder.Width = Math.Max(240, InputTextBox.ActualWidth);
+                var popupWidth = Math.Clamp(Math.Max(220d, InputTextBox.ActualWidth * 0.4d), 220d, 320d);
+                var anchorRectAvailable = TryGetSuggestionAnchorRect(out var anchorRect);
+                var anchorX = anchorRectAvailable ? topLeft.X + anchorRect.X : topLeft.X;
+                var anchorY = anchorRectAvailable
+                    ? topLeft.Y + anchorRect.Y + Math.Max(anchorRect.Height, 18d) + 4d
+                    : topLeft.Y + InputTextBox.ActualHeight + 4d;
+                var maxHorizontalOffset = Math.Max(0d, RootGrid.ActualWidth - popupWidth - 8d);
+
+                SuggestionPopup.HorizontalOffset = Math.Clamp(anchorX, 0d, maxHorizontalOffset);
+                SuggestionPopup.VerticalOffset = Math.Max(0d, anchorY);
+                SuggestionPopupBorder.Width = popupWidth;
             }
             catch (Exception ex)
             {
@@ -3060,9 +3136,20 @@ namespace Easydict.WinUI.Views
         private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
             => UpdateSuggestionPopupPlacement();
 
+        private void OnSuggestionPopupOpened(object? sender, object e)
+            => QueueRestoreInputFocusFromSuggestionPopup();
+
         private void OnSuggestionPopupClosed(object? sender, object e)
         {
-            SuggestionListView.SelectedItem = null;
+            _activeSuggestionToken = null;
+            ExitSuggestionNavigationMode();
+            _suggestionItems.Clear();
+        }
+
+        private void OnSuggestionListViewGettingFocus(UIElement sender, GettingFocusEventArgs args)
+        {
+            args.Cancel = true;
+            QueueRestoreInputFocusFromSuggestionPopup();
         }
 
         private async void OnSuggestionItemClick(object sender, ItemClickEventArgs e)
@@ -3087,12 +3174,7 @@ namespace Easydict.WinUI.Views
                 return false;
             }
 
-            if (requirePrefixMode && ContainsWildcard(text))
-            {
-                return false;
-            }
-
-            return true;
+            return GetActiveLocalDictionaryServiceIds().Count > 0;
         }
 
         private List<string> GetActiveLocalDictionaryServiceIds()
@@ -3123,6 +3205,288 @@ namespace Easydict.WinUI.Views
 
         private static bool ContainsWildcard(string text)
             => text.Contains('*') || text.Contains('?');
+
+        private void EnterSuggestionNavigationMode()
+        {
+            if (!SuggestionPopup.IsOpen || _suggestionItems.Count == 0)
+            {
+                return;
+            }
+
+            _isSuggestionNavigationActive = true;
+            SuggestionListView.SelectedIndex = 0;
+            SuggestionListView.ScrollIntoView(SuggestionListView.SelectedItem);
+        }
+
+        private void ExitSuggestionNavigationMode()
+        {
+            _isSuggestionNavigationActive = false;
+            SuggestionListView.SelectedItem = null;
+        }
+
+        private bool IsInputTextBoxFocused()
+        {
+            if (InputTextBox.XamlRoot is null)
+            {
+                return false;
+            }
+
+            return ReferenceEquals(FocusManager.GetFocusedElement(InputTextBox.XamlRoot), InputTextBox);
+        }
+
+        private void QueueRestoreInputFocusFromSuggestionPopup()
+        {
+            if (_isClosing || !_isLoaded || InputTextBox.XamlRoot is null)
+            {
+                return;
+            }
+
+            var textLength = InputTextBox.Text?.Length ?? 0;
+            var selectionStart = Math.Clamp(InputTextBox.SelectionStart, 0, textLength);
+            var selectionLength = Math.Clamp(InputTextBox.SelectionLength, 0, textLength - selectionStart);
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing || !_isLoaded || InputTextBox.XamlRoot is null)
+                {
+                    return;
+                }
+
+                if (ReferenceEquals(FocusManager.GetFocusedElement(InputTextBox.XamlRoot), InputTextBox))
+                {
+                    return;
+                }
+
+                if (!InputTextBox.Focus(FocusState.Programmatic))
+                {
+                    return;
+                }
+
+                var currentTextLength = InputTextBox.Text?.Length ?? 0;
+                var safeSelectionStart = Math.Clamp(selectionStart, 0, currentTextLength);
+                var safeSelectionLength = Math.Clamp(selectionLength, 0, currentTextLength - safeSelectionStart);
+                InputTextBox.SelectionStart = safeSelectionStart;
+                InputTextBox.SelectionLength = safeSelectionLength;
+            });
+        }
+
+        private bool TryGetSuggestionAnchorRect(out Windows.Foundation.Rect anchorRect)
+        {
+            anchorRect = default;
+            var text = InputTextBox.Text;
+            if (string.IsNullOrEmpty(text))
+            {
+                return false;
+            }
+
+            var selectionStart = Math.Clamp(InputTextBox.SelectionStart, 0, text.Length);
+            var characterIndex = selectionStart == 0 ? 0 : Math.Min(selectionStart - 1, text.Length - 1);
+            var trailingEdge = selectionStart != 0;
+
+            try
+            {
+                anchorRect = InputTextBox.GetRectFromCharacterIndex(characterIndex, trailingEdge);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainPage] Failed to resolve suggestion anchor rect: {ex.Message}");
+                return false;
+            }
+        }
+
+        internal static SuggestionNavigationCommand ResolveSuggestionNavigationCommand(
+            VirtualKey key,
+            bool popupOpen,
+            bool navigationActive,
+            bool hasSuggestions,
+            bool hasSelectedSuggestion,
+            bool isShiftDown)
+        {
+            if (!popupOpen)
+            {
+                return SuggestionNavigationCommand.None;
+            }
+
+            if (key == VirtualKey.Escape)
+            {
+                return SuggestionNavigationCommand.HidePopup;
+            }
+
+            if (key == VirtualKey.Tab)
+            {
+                if (navigationActive)
+                {
+                    return SuggestionNavigationCommand.ExitNavigation;
+                }
+
+                return hasSuggestions && !isShiftDown
+                    ? SuggestionNavigationCommand.EnterNavigation
+                    : SuggestionNavigationCommand.None;
+            }
+
+            if (!navigationActive)
+            {
+                return SuggestionNavigationCommand.None;
+            }
+
+            return key switch
+            {
+                VirtualKey.Down when hasSuggestions => SuggestionNavigationCommand.MoveNext,
+                VirtualKey.Up when hasSuggestions => SuggestionNavigationCommand.MovePrevious,
+                VirtualKey.Enter when hasSelectedSuggestion => SuggestionNavigationCommand.ApplySelection,
+                _ => SuggestionNavigationCommand.None
+            };
+        }
+
+        internal static bool TryGetActiveSuggestionToken(
+            string? text,
+            int selectionStart,
+            out SuggestionTokenContext token)
+        {
+            token = default;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            selectionStart = Math.Clamp(selectionStart, 0, text.Length);
+            int probeIndex;
+            if (selectionStart == text.Length)
+            {
+                probeIndex = text.Length - 1;
+            }
+            else if (!IsSuggestionWordChar(text[selectionStart]) && selectionStart > 0)
+            {
+                probeIndex = selectionStart - 1;
+            }
+            else
+            {
+                probeIndex = selectionStart;
+            }
+
+            while (probeIndex >= 0 &&
+                   !char.IsWhiteSpace(text[probeIndex]) &&
+                   !IsSuggestionWordChar(text[probeIndex]))
+            {
+                probeIndex--;
+            }
+
+            if (probeIndex < 0 || char.IsWhiteSpace(text[probeIndex]))
+            {
+                return false;
+            }
+
+            var rawStart = probeIndex;
+            while (rawStart > 0 && !char.IsWhiteSpace(text[rawStart - 1]))
+            {
+                rawStart--;
+            }
+
+            var rawEnd = probeIndex + 1;
+            while (rawEnd < text.Length && !char.IsWhiteSpace(text[rawEnd]))
+            {
+                rawEnd++;
+            }
+
+            for (var i = rawStart; i < rawEnd; i++)
+            {
+                if (text[i] is '*' or '?')
+                {
+                    return false;
+                }
+            }
+
+            var start = rawStart;
+            while (start < rawEnd && !IsSuggestionWordChar(text[start]))
+            {
+                start++;
+            }
+
+            var end = rawEnd;
+            while (end > start && !IsSuggestionWordChar(text[end - 1]))
+            {
+                end--;
+            }
+
+            if (start >= end)
+            {
+                return false;
+            }
+
+            for (var i = start; i < end; i++)
+            {
+                if (!IsSuggestionWordChar(text[i]))
+                {
+                    return false;
+                }
+            }
+
+            token = new SuggestionTokenContext(text[start..end], start, end - start);
+            return true;
+        }
+
+        internal static bool TryGetWildcardSuggestionToken(
+            string? text,
+            out SuggestionTokenContext token)
+        {
+            token = default;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            var start = 0;
+            while (start < text.Length && char.IsWhiteSpace(text[start]))
+            {
+                start++;
+            }
+
+            var end = text.Length;
+            while (end > start && char.IsWhiteSpace(text[end - 1]))
+            {
+                end--;
+            }
+
+            if (start >= end)
+            {
+                return false;
+            }
+
+            for (var i = start; i < end; i++)
+            {
+                var current = text[i];
+                if (char.IsWhiteSpace(current) || (!IsSuggestionWordChar(current) && current is not '*' and not '?'))
+                {
+                    return false;
+                }
+            }
+
+            var candidate = text[start..end];
+            if (!ContainsWildcard(candidate))
+            {
+                return false;
+            }
+
+            token = new SuggestionTokenContext(candidate, start, end - start);
+            return true;
+        }
+
+        internal static string ReplaceSuggestionToken(
+            string? text,
+            SuggestionTokenContext token,
+            string replacement,
+            out int caretIndex)
+        {
+            var source = text ?? string.Empty;
+            var start = Math.Clamp(token.StartIndex, 0, source.Length);
+            var length = Math.Clamp(token.Length, 0, source.Length - start);
+            caretIndex = start + replacement.Length;
+            return source[..start] + replacement + source[(start + length)..];
+        }
+
+        internal static bool IsSuggestionWordChar(char value)
+            => char.IsLetterOrDigit(value) || value is '\'' or '-';
 
         /// <summary>
         /// Updates phonetic deduplication across all service result controls.

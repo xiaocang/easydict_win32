@@ -470,7 +470,7 @@ public sealed class SettingsService
     /// <summary>
     /// Whether local MDX dictionaries should provide input suggestions in the main page.
     /// </summary>
-    public bool EnableLocalDictionarySuggestions { get; set; } = true;
+    public bool EnableLocalDictionarySuggestions { get; set; } = false;
 
     /// <summary>
     /// Window width stored in DIPs (Device-Independent Pixels).
@@ -709,7 +709,7 @@ public sealed class SettingsService
         ProxyUri = GetValue(nameof(ProxyUri), "");
         ProxyBypassLocal = GetValue(nameof(ProxyBypassLocal), true);
         GrammarIncludeExplanations = GetValue(nameof(GrammarIncludeExplanations), true);
-        EnableLocalDictionarySuggestions = GetValue(nameof(EnableLocalDictionarySuggestions), true);
+        EnableLocalDictionarySuggestions = GetValue(nameof(EnableLocalDictionarySuggestions), false);
 
         // Formula detection patterns
         FormulaFontPattern = GetValue(nameof(FormulaFontPattern), "");

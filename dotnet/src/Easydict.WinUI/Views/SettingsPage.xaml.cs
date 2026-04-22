@@ -1189,6 +1189,12 @@ public sealed partial class SettingsPage : Page
         LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
         HideEmptyServiceResultsToggle.IsOn = _settings.HideEmptyServiceResults;
         EnableLocalDictionarySuggestionsToggle.IsOn = _settings.EnableLocalDictionarySuggestions;
+        var localDictionarySuggestionsState = GetLocalDictionarySuggestionsToggleState(_settings.ImportedMdxDictionaries.Count);
+        EnableLocalDictionarySuggestionsToggle.IsEnabled = localDictionarySuggestionsState.IsEnabled;
+        EnableLocalDictionarySuggestionsHintText.Text = localDictionarySuggestionsState.HintText;
+        EnableLocalDictionarySuggestionsHintText.Visibility = string.IsNullOrEmpty(localDictionarySuggestionsState.HintText)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
 
         // Hotkeys
         ShowHotkeyBox.Text = _settings.ShowWindowHotkey;
@@ -1274,6 +1280,16 @@ public sealed partial class SettingsPage : Page
             1 => "1 MDX dictionary imported",
             var c => $"{c} MDX dictionaries imported"
         };
+    }
+
+    internal static (bool IsEnabled, string HintText) GetLocalDictionarySuggestionsToggleState(int importedDictionaryCount)
+    {
+        if (importedDictionaryCount > 0)
+        {
+            return (true, string.Empty);
+        }
+
+        return (false, "Import a custom MDX dictionary to enable input suggestions.");
     }
 
     /// <summary>

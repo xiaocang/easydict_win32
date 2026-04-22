@@ -59,9 +59,19 @@ public class SettingsServiceTests
     }
 
     [Fact]
-    public void EnableLocalDictionarySuggestions_DefaultsToTrue()
+    public void EnableLocalDictionarySuggestions_DefaultsToFalse()
     {
-        _settings.EnableLocalDictionarySuggestions.Should().BeTrue();
+        var current = AppDomain.CurrentDomain.BaseDirectory;
+        while (!string.IsNullOrEmpty(current) &&
+               !File.Exists(Path.Combine(current, "Easydict.Win32.sln")))
+        {
+            current = Path.GetDirectoryName(current);
+        }
+
+        current.Should().NotBeNullOrEmpty();
+        var source = File.ReadAllText(Path.Combine(current!, "src", "Easydict.WinUI", "Services", "SettingsService.cs"));
+        source.Should().Contain("public bool EnableLocalDictionarySuggestions { get; set; } = false;");
+        source.Should().Contain("EnableLocalDictionarySuggestions = GetValue(nameof(EnableLocalDictionarySuggestions), false);");
     }
 
     [Fact]

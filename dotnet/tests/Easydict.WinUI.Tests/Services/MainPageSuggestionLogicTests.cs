@@ -62,20 +62,56 @@ public sealed class MainPageSuggestionLogicTests
     }
 
     [Fact]
-    public void TryGetWildcardSuggestionToken_RequiresSinglePatternToken()
+    public void TryGetWildcardSuggestionToken_ExtractsWildcardWordAtCaret()
     {
-        MainPage.TryGetWildcardSuggestionToken("  tea*  ", out var token).Should().BeTrue();
+        MainPage.TryGetWildcardSuggestionToken("  tea*  ", 6, out var token).Should().BeTrue();
         token.QueryText.Should().Be("tea*");
         token.StartIndex.Should().Be(2);
         token.Length.Should().Be(4);
 
-        MainPage.TryGetWildcardSuggestionToken("find tea*", out _).Should().BeFalse();
-        MainPage.TryGetWildcardSuggestionToken("tea*/tray", out _).Should().BeFalse();
+        // Caret inside the wildcard word in a multi-word input — now supported
+        MainPage.TryGetWildcardSuggestionToken("find tea*", "find tea*".Length, out var wildcardAfterFind).Should().BeTrue();
+        wildcardAfterFind.QueryText.Should().Be("tea*");
+        wildcardAfterFind.StartIndex.Should().Be(5);
+        wildcardAfterFind.Length.Should().Be(4);
+
+        MainPage.TryGetWildcardSuggestionToken("hello te*m", "hello te*m".Length, out var wildcardAtEnd).Should().BeTrue();
+        wildcardAtEnd.QueryText.Should().Be("te*m");
+        wildcardAtEnd.StartIndex.Should().Be(6);
+        wildcardAtEnd.Length.Should().Be(4);
+
+        MainPage.TryGetWildcardSuggestionToken("te*m hello", 4, out var wildcardBeforeSpace).Should().BeTrue();
+        wildcardBeforeSpace.QueryText.Should().Be("te*m");
+        wildcardBeforeSpace.StartIndex.Should().Be(0);
+        wildcardBeforeSpace.Length.Should().Be(4);
+    }
+
+    [Fact]
+    public void TryGetWildcardSuggestionToken_RejectsWordsWithoutWildcards()
+    {
+        // Caret inside a plain word in a multi-word input
+        MainPage.TryGetWildcardSuggestionToken("hello te*m", 4, out _).Should().BeFalse();
+        MainPage.TryGetWildcardSuggestionToken("te*m hello", "te*m hello".Length, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryGetWildcardSuggestionToken_RejectsPureWildcardTokens()
+    {
+        // Token with no literal characters — matches entire dictionary, intentionally rejected
+        MainPage.TryGetWildcardSuggestionToken("hello *", "hello *".Length, out _).Should().BeFalse();
+        MainPage.TryGetWildcardSuggestionToken("**", 2, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryGetWildcardSuggestionToken_RejectsTokenWithInternalDelimiter()
+    {
+        // Slash is neither whitespace nor a word/wildcard char — token extraction fails.
+        MainPage.TryGetWildcardSuggestionToken("tea*/tray", 4, out _).Should().BeFalse();
     }
 
     [Theory]
     [InlineData(VirtualKey.Tab, true, false, true, false, false, (int)MainPage.SuggestionNavigationCommand.EnterNavigation)]
-    [InlineData(VirtualKey.Down, true, false, true, false, false, (int)MainPage.SuggestionNavigationCommand.None)]
+    [InlineData(VirtualKey.Down, true, false, true, false, false, (int)MainPage.SuggestionNavigationCommand.EnterNavigation)]
     [InlineData(VirtualKey.Down, true, true, true, true, false, (int)MainPage.SuggestionNavigationCommand.MoveNext)]
     [InlineData(VirtualKey.Up, true, true, true, true, false, (int)MainPage.SuggestionNavigationCommand.MovePrevious)]
     [InlineData(VirtualKey.Enter, true, true, true, true, false, (int)MainPage.SuggestionNavigationCommand.ApplySelection)]

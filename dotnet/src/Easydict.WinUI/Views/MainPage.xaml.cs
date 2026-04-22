@@ -68,6 +68,7 @@ namespace Easydict.WinUI.Views
         private int _suggestionRequestId;
         private bool _isSuggestionNavigationActive;
         private SuggestionTokenContext? _activeSuggestionToken;
+        private (int StartIndex, string Replacement)? _lastAcceptedSuggestion;
 
         /// <summary>
         /// Maximum history items to keep.
@@ -1075,11 +1076,12 @@ namespace Easydict.WinUI.Views
             e.Handled = true;
 
             var inputText = InputTextBox.Text;
-            if (!string.IsNullOrWhiteSpace(inputText) && TryGetWildcardSuggestionToken(inputText, out _))
+            var caretIndex = InputTextBox.SelectionStart;
+            if (!string.IsNullOrWhiteSpace(inputText) && TryGetWildcardSuggestionToken(inputText, caretIndex, out _))
             {
                 _suggestionRequestId++;
                 _suggestionDebounceTimer.Stop();
-                await ShowWildcardSuggestionsAsync(inputText);
+                await ShowWildcardSuggestionsAsync(inputText, caretIndex);
                 return;
             }
 
@@ -2924,6 +2926,13 @@ namespace Easydict.WinUI.Views
             ExitSuggestionNavigationMode();
             _suggestionRequestId++;
 
+            if (IsCurrentWordJustAccepted())
+            {
+                _suggestionDebounceTimer.Stop();
+                HideSuggestionPopup();
+                return;
+            }
+
             if (!ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode: true) ||
                 !TryGetActiveSuggestionToken(InputTextBox.Text, InputTextBox.SelectionStart, out _))
             {
@@ -2934,6 +2943,31 @@ namespace Easydict.WinUI.Views
 
             _suggestionDebounceTimer.Stop();
             _suggestionDebounceTimer.Start();
+        }
+
+        private bool IsCurrentWordJustAccepted()
+        {
+            if (_lastAcceptedSuggestion is not (int acceptedStart, string acceptedText))
+            {
+                return false;
+            }
+
+            var text = InputTextBox.Text ?? string.Empty;
+            if (text.Length < acceptedStart + acceptedText.Length ||
+                !text.AsSpan(acceptedStart, acceptedText.Length).SequenceEqual(acceptedText))
+            {
+                _lastAcceptedSuggestion = null;
+                return false;
+            }
+
+            if (!TryGetActiveSuggestionToken(text, InputTextBox.SelectionStart, out var currentToken) ||
+                currentToken.StartIndex != acceptedStart)
+            {
+                _lastAcceptedSuggestion = null;
+                return false;
+            }
+
+            return true;
         }
 
         private async void OnSuggestionDebounceTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
@@ -2951,9 +2985,9 @@ namespace Easydict.WinUI.Views
                 requestIdSnapshot: _suggestionRequestId);
         }
 
-        private Task ShowWildcardSuggestionsAsync(string inputText)
+        private Task ShowWildcardSuggestionsAsync(string inputText, int selectionStart)
         {
-            if (!TryGetWildcardSuggestionToken(inputText, out var token))
+            if (!TryGetWildcardSuggestionToken(inputText, selectionStart, out var token))
             {
                 HideSuggestionPopup();
                 return Task.CompletedTask;
@@ -2995,7 +3029,7 @@ namespace Easydict.WinUI.Views
                 }
 
                 var currentTokenIsValid = useWildcard
-                    ? TryGetWildcardSuggestionToken(InputTextBox.Text, out var currentWildcardToken) && currentWildcardToken == token
+                    ? TryGetWildcardSuggestionToken(InputTextBox.Text, InputTextBox.SelectionStart, out var currentWildcardToken) && currentWildcardToken == token
                     : TryGetActiveSuggestionToken(InputTextBox.Text, InputTextBox.SelectionStart, out var currentPrefixToken) && currentPrefixToken == token;
 
                 if (!currentTokenIsValid || !ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode))
@@ -3016,6 +3050,8 @@ namespace Easydict.WinUI.Views
         private Task ApplySuggestionAsync(SuggestionItem suggestion)
         {
             var token = _activeSuggestionToken;
+            _suggestionRequestId++;
+            _suggestionDebounceTimer.Stop();
             HideSuggestionPopup();
             _suppressSuggestionTextChanged = true;
             try
@@ -3025,12 +3061,14 @@ namespace Easydict.WinUI.Views
                     InputTextBox.Text = ReplaceSuggestionToken(InputTextBox.Text, activeToken, suggestion.Key, out var caretIndex);
                     InputTextBox.SelectionStart = caretIndex;
                     InputTextBox.SelectionLength = 0;
+                    _lastAcceptedSuggestion = (activeToken.StartIndex, suggestion.Key);
                 }
                 else
                 {
                     InputTextBox.Text = suggestion.Key;
                     InputTextBox.SelectionStart = suggestion.Key.Length;
                     InputTextBox.SelectionLength = 0;
+                    _lastAcceptedSuggestion = (0, suggestion.Key);
                 }
             }
             finally
@@ -3325,6 +3363,13 @@ namespace Easydict.WinUI.Views
                     : SuggestionNavigationCommand.None;
             }
 
+            if (key == VirtualKey.Down && hasSuggestions)
+            {
+                return navigationActive
+                    ? SuggestionNavigationCommand.MoveNext
+                    : SuggestionNavigationCommand.EnterNavigation;
+            }
+
             if (!navigationActive)
             {
                 return SuggestionNavigationCommand.None;
@@ -3332,7 +3377,6 @@ namespace Easydict.WinUI.Views
 
             return key switch
             {
-                VirtualKey.Down when hasSuggestions => SuggestionNavigationCommand.MoveNext,
                 VirtualKey.Up when hasSuggestions => SuggestionNavigationCommand.MovePrevious,
                 VirtualKey.Enter when hasSelectedSuggestion => SuggestionNavigationCommand.ApplySelection,
                 _ => SuggestionNavigationCommand.None
@@ -3428,6 +3472,7 @@ namespace Easydict.WinUI.Views
 
         internal static bool TryGetWildcardSuggestionToken(
             string? text,
+            int selectionStart,
             out SuggestionTokenContext token)
         {
             token = default;
@@ -3436,14 +3481,53 @@ namespace Easydict.WinUI.Views
                 return false;
             }
 
-            var start = 0;
-            while (start < text.Length && char.IsWhiteSpace(text[start]))
+            selectionStart = Math.Clamp(selectionStart, 0, text.Length);
+            int probeIndex;
+            if (selectionStart == text.Length)
+            {
+                probeIndex = text.Length - 1;
+            }
+            else if (!IsWildcardTokenChar(text[selectionStart]) && selectionStart > 0)
+            {
+                probeIndex = selectionStart - 1;
+            }
+            else
+            {
+                probeIndex = selectionStart;
+            }
+
+            while (probeIndex >= 0 &&
+                   !char.IsWhiteSpace(text[probeIndex]) &&
+                   !IsWildcardTokenChar(text[probeIndex]))
+            {
+                probeIndex--;
+            }
+
+            if (probeIndex < 0 || char.IsWhiteSpace(text[probeIndex]))
+            {
+                return false;
+            }
+
+            var rawStart = probeIndex;
+            while (rawStart > 0 && !char.IsWhiteSpace(text[rawStart - 1]))
+            {
+                rawStart--;
+            }
+
+            var rawEnd = probeIndex + 1;
+            while (rawEnd < text.Length && !char.IsWhiteSpace(text[rawEnd]))
+            {
+                rawEnd++;
+            }
+
+            var start = rawStart;
+            while (start < rawEnd && !IsWildcardTokenChar(text[start]))
             {
                 start++;
             }
 
-            var end = text.Length;
-            while (end > start && char.IsWhiteSpace(text[end - 1]))
+            var end = rawEnd;
+            while (end > start && !IsWildcardTokenChar(text[end - 1]))
             {
                 end--;
             }
@@ -3453,24 +3537,36 @@ namespace Easydict.WinUI.Views
                 return false;
             }
 
+            var hasWildcard = false;
+            var hasLiteral = false;
             for (var i = start; i < end; i++)
             {
-                var current = text[i];
-                if (char.IsWhiteSpace(current) || (!IsSuggestionWordChar(current) && current is not '*' and not '?'))
+                var c = text[i];
+                if (!IsWildcardTokenChar(c))
                 {
                     return false;
                 }
+                if (c is '*' or '?')
+                {
+                    hasWildcard = true;
+                }
+                else
+                {
+                    hasLiteral = true;
+                }
             }
 
-            var candidate = text[start..end];
-            if (!ContainsWildcard(candidate))
+            if (!hasWildcard || !hasLiteral)
             {
                 return false;
             }
 
-            token = new SuggestionTokenContext(candidate, start, end - start);
+            token = new SuggestionTokenContext(text[start..end], start, end - start);
             return true;
         }
+
+        internal static bool IsWildcardTokenChar(char value)
+            => IsSuggestionWordChar(value) || value is '*' or '?';
 
         internal static string ReplaceSuggestionToken(
             string? text,

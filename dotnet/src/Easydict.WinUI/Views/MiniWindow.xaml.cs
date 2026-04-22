@@ -1733,7 +1733,7 @@ public sealed partial class MiniWindow : Window
         }
 
         this.Activate();
-        SetSourceTextState(false);
+        SetSourceTextState(true);
         QueueInputFocusAndSelectAll();
 
         // Resize window to fit existing content (delayed to allow layout to complete)

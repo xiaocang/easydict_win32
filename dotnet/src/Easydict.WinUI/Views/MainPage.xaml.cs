@@ -2933,7 +2933,8 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            if (!ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode: true) ||
+            if (!ShouldShowSuggestions(InputTextBox.Text) ||
+                GetActiveLocalDictionaryServiceIds().Count == 0 ||
                 !TryGetActiveSuggestionToken(InputTextBox.Text, InputTextBox.SelectionStart, out _))
             {
                 _suggestionDebounceTimer.Stop();
@@ -2993,7 +2994,7 @@ namespace Easydict.WinUI.Views
                 return Task.CompletedTask;
             }
 
-            return RunSuggestionQueryAsync(token, useWildcard: true, limit: 5, requestIdSnapshot: _suggestionRequestId);
+            return RunSuggestionQueryAsync(token, useWildcard: true, limit: 10, requestIdSnapshot: _suggestionRequestId);
         }
 
         private async Task RunSuggestionQueryAsync(
@@ -3002,8 +3003,7 @@ namespace Easydict.WinUI.Views
             int limit,
             int requestIdSnapshot)
         {
-            var requirePrefixMode = !useWildcard;
-            if (!ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode))
+            if (!ShouldShowSuggestions(InputTextBox.Text))
             {
                 HideSuggestionPopup();
                 return;
@@ -3032,7 +3032,7 @@ namespace Easydict.WinUI.Views
                     ? TryGetWildcardSuggestionToken(InputTextBox.Text, InputTextBox.SelectionStart, out var currentWildcardToken) && currentWildcardToken == token
                     : TryGetActiveSuggestionToken(InputTextBox.Text, InputTextBox.SelectionStart, out var currentPrefixToken) && currentPrefixToken == token;
 
-                if (!currentTokenIsValid || !ShouldShowSuggestions(InputTextBox.Text, requirePrefixMode))
+                if (!currentTokenIsValid || !ShouldShowSuggestions(InputTextBox.Text))
                 {
                     HideSuggestionPopup();
                     return;
@@ -3198,7 +3198,7 @@ namespace Easydict.WinUI.Views
             }
         }
 
-        private bool ShouldShowSuggestions(string? text, bool requirePrefixMode)
+        private bool ShouldShowSuggestions(string? text)
         {
             if (!_isLoaded ||
                 _isClosing ||
@@ -3212,7 +3212,7 @@ namespace Easydict.WinUI.Views
                 return false;
             }
 
-            return GetActiveLocalDictionaryServiceIds().Count > 0;
+            return true;
         }
 
         private List<string> GetActiveLocalDictionaryServiceIds()
@@ -3240,9 +3240,6 @@ namespace Easydict.WinUI.Views
 
             return serviceIds;
         }
-
-        private static bool ContainsWildcard(string text)
-            => text.Contains('*') || text.Contains('?');
 
         private void EnterSuggestionNavigationMode()
         {

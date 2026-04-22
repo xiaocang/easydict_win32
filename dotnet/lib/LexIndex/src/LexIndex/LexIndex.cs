@@ -93,11 +93,10 @@ public sealed class LexIndex : ILexIndex
         var runes = normalized.EnumerateRunes().ToArray();
         var results = new HashSet<string>(StringComparer.Ordinal);
         var deadEnds = new HashSet<(int StateId, int PatternPosition)>();
-        MatchCore(0, runes, 0, results, deadEnds);
+        MatchCore(0, runes, 0, results, deadEnds, limit);
         return results
             .OrderBy(value => LexIndexBuilder.NormalizeKey(value), StringComparer.Ordinal)
             .ThenBy(value => value, StringComparer.Ordinal)
-            .Take(limit)
             .ToArray();
     }
 
@@ -312,8 +311,14 @@ public sealed class LexIndex : ILexIndex
         ReadOnlySpan<Rune> pattern,
         int patternPosition,
         HashSet<string> results,
-        HashSet<(int StateId, int PatternPosition)> deadEnds)
+        HashSet<(int StateId, int PatternPosition)> deadEnds,
+        int limit)
     {
+        if (results.Count >= limit)
+        {
+            return false;
+        }
+
         if (deadEnds.Contains((stateId, patternPosition)))
         {
             return false;
@@ -326,7 +331,7 @@ public sealed class LexIndex : ILexIndex
         {
             if (state.PayloadIndex >= 0)
             {
-                AddPayloadValues(state.PayloadIndex, results);
+                AddPayloadValues(state.PayloadIndex, results, limit);
                 foundAny = true;
             }
 
@@ -341,17 +346,27 @@ public sealed class LexIndex : ILexIndex
         var current = pattern[patternPosition];
         if (current.Value == '*')
         {
-            foundAny |= MatchCore(stateId, pattern, patternPosition + 1, results, deadEnds);
+            foundAny |= MatchCore(stateId, pattern, patternPosition + 1, results, deadEnds, limit);
             for (int i = state.FirstEdgeIndex; i < state.FirstEdgeIndex + state.EdgeCount; i++)
             {
-                foundAny |= MatchCore(_edges[i].TargetStateId, pattern, patternPosition, results, deadEnds);
+                if (results.Count >= limit)
+                {
+                    break;
+                }
+
+                foundAny |= MatchCore(_edges[i].TargetStateId, pattern, patternPosition, results, deadEnds, limit);
             }
         }
         else if (current.Value == '?')
         {
             for (int i = state.FirstEdgeIndex; i < state.FirstEdgeIndex + state.EdgeCount; i++)
             {
-                foundAny |= MatchCore(_edges[i].TargetStateId, pattern, patternPosition + 1, results, deadEnds);
+                if (results.Count >= limit)
+                {
+                    break;
+                }
+
+                foundAny |= MatchCore(_edges[i].TargetStateId, pattern, patternPosition + 1, results, deadEnds, limit);
             }
         }
         else
@@ -359,11 +374,11 @@ public sealed class LexIndex : ILexIndex
             var nextStateId = FindTransition(stateId, current.Value);
             if (nextStateId >= 0)
             {
-                foundAny = MatchCore(nextStateId, pattern, patternPosition + 1, results, deadEnds);
+                foundAny = MatchCore(nextStateId, pattern, patternPosition + 1, results, deadEnds, limit);
             }
         }
 
-        if (!foundAny)
+        if (!foundAny && results.Count < limit)
         {
             deadEnds.Add((stateId, patternPosition));
         }
@@ -412,12 +427,16 @@ public sealed class LexIndex : ILexIndex
         }
     }
 
-    private void AddPayloadValues(int payloadIndex, HashSet<string> results)
+    private void AddPayloadValues(int payloadIndex, HashSet<string> results, int limit)
     {
         var payload = _payloads[payloadIndex];
         for (int i = payload.FirstValueRefIndex; i < payload.FirstValueRefIndex + payload.ValueCount; i++)
         {
             results.Add(ReadString(_valueRefs[i]));
+            if (results.Count >= limit)
+            {
+                return;
+            }
         }
     }
 

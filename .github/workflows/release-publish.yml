@@ -1,15 +1,14 @@
 name: Release and Publish
 
-# This workflow triggers when a GitHub Release is published.
+# This workflow triggers automatically when a version tag is pushed.
 # Release process:
-#   1. Create a new tag: git tag v1.0.0 && git push origin v1.0.0
-#   2. Go to GitHub > Releases > "Draft a new release"
-#   3. Select the tag and publish the release
-#   4. This workflow builds and uploads artifacts automatically
+#   1. Bump version in Easydict.WinUI.csproj and Package.appxmanifest
+#   2. Commit, then: git tag vX.Y.Z && git push origin vX.Y.Z
+#   3. This workflow builds artifacts, creates a GitHub Release, submits to WinGet
 #
-# For pre-release versions (v1.0.0-beta.1):
-#   - Check "Set as a pre-release" when publishing
-#   - WinGet submission will be skipped automatically
+# Tag conventions:
+#   - vX.Y.Z           → formal release (e.g. v1.2.3), submitted to WinGet
+#   - vX.Y.Z-<suffix>  → pre-release (e.g. v1.2.3-rc1, v1.2.3-beta.1), WinGet skipped
 #
 # MSIX for Windows Store:
 #   - MSIX packages are created unsigned for Windows Store submission
@@ -17,8 +16,9 @@ name: Release and Publish
 #   - For sideloading, users can install the unsigned MSIX after enabling Developer Mode
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -30,15 +30,63 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
+  # Parse and validate the version tag once; downstream jobs consume these outputs.
+  prepare:
+    name: Parse version tag
+    runs-on: ubuntu-latest
+    outputs:
+      VERSION: ${{ steps.version.outputs.VERSION }}
+      BASE_VERSION: ${{ steps.version.outputs.BASE_VERSION }}
+      MSIX_VERSION: ${{ steps.version.outputs.MSIX_VERSION }}
+      IS_PRERELEASE: ${{ steps.version.outputs.IS_PRERELEASE }}
+    steps:
+      - name: Validate and extract version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # Validate tag format (must be v followed by semver)
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Tag '$TAG' does not match expected format (vX.Y.Z or vX.Y.Z-suffix)"
+            exit 1
+          fi
+
+          # Remove 'v' prefix (v1.2.3 -> 1.2.3)
+          VERSION="${TAG#v}"
+
+          # MSIX version must be X.Y.Z.0 (Windows Store requires 4 parts, revision = 0).
+          # Strip any prerelease suffix before appending .0.
+          BASE_VERSION="${VERSION%%-*}"
+          MSIX_VERSION="${BASE_VERSION}.0"
+
+          # Any suffix after `-` (e.g. -rc1, -beta.1) marks a pre-release.
+          if [[ "$VERSION" == *-* ]]; then
+            IS_PRERELEASE=true
+          else
+            IS_PRERELEASE=false
+          fi
+
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "MSIX_VERSION=$MSIX_VERSION" >> $GITHUB_OUTPUT
+          echo "IS_PRERELEASE=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+
+          echo "Tag:         $TAG"
+          echo "Version:     $VERSION"
+          echo "MSIX:        $MSIX_VERSION"
+          echo "Prerelease:  $IS_PRERELEASE"
+
   # Run integration tests before packaging (reusable workflow)
   integration-tests:
+    needs: prepare
     uses: ./.github/workflows/integration-tests.yml
     secrets: inherit
 
   # Build and package MSIX using winapp CLI
   publish-msix:
     name: Build MSIX Package
-    needs: integration-tests
+    needs: [prepare, integration-tests]
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -59,33 +107,6 @@ jobs:
       - name: Setup WinApp CLI
         uses: microsoft/setup-WinAppCli@v0.1
 
-      - name: Validate and extract version from tag
-        id: version
-        shell: bash
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-
-          # Validate tag format (must be v followed by semver)
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "Error: Tag '$TAG' does not match expected format (vX.Y.Z or vX.Y.Z-suffix)"
-            exit 1
-          fi
-
-          # Remove 'v' prefix from tag (v1.0.0 -> 1.0.0)
-          VERSION="${TAG#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
-
-          # Create MSIX-compatible version (must be X.Y.Z.0 format for Windows Store)
-          # Extract base version (without prerelease suffix) and append .0
-          # Windows Store requires the 4th part (revision) to always be 0
-          BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
-          echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
-          MSIX_VERSION="${BASE_VERSION}.0"
-
-          echo "MSIX_VERSION=$MSIX_VERSION" >> $GITHUB_OUTPUT
-          echo "MSIX version: $MSIX_VERSION"
-
       - name: Restore dependencies
         working-directory: dotnet
         run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }}
@@ -100,7 +121,7 @@ jobs:
             --self-contained true `
             --no-restore `
             --output ./publish/${{ matrix.platform }} `
-            -p:Version=${{ steps.version.outputs.BASE_VERSION }} `
+            -p:Version=${{ needs.prepare.outputs.BASE_VERSION }} `
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
@@ -138,7 +159,7 @@ jobs:
             --self-contained true `
             --no-restore `
             --output ./publish-msix/${{ matrix.platform }} `
-            -p:Version=${{ steps.version.outputs.BASE_VERSION }} `
+            -p:Version=${{ needs.prepare.outputs.BASE_VERSION }} `
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
@@ -173,7 +194,7 @@ jobs:
             -PublishDir "dotnet/publish-msix/${{ matrix.platform }}" `
             -ManifestPath "dotnet/src/Easydict.WinUI/Package.appxmanifest" `
             -OutputMsixPath "dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix" `
-            -MsixVersion "${{ steps.version.outputs.MSIX_VERSION }}" `
+            -MsixVersion "${{ needs.prepare.outputs.MSIX_VERSION }}" `
             -VerifyTargetsizeIcons
 
       # Also create ZIP archive for portable distribution
@@ -218,8 +239,8 @@ jobs:
           Get-ChildItem -Path $publishDir -Filter "*.pdb" -Recurse | Remove-Item -Force
 
           & $iscc `
-            /DAppVersion=${{ steps.version.outputs.BASE_VERSION }} `
-            /DTag=${{ steps.version.outputs.VERSION }} `
+            /DAppVersion=${{ needs.prepare.outputs.BASE_VERSION }} `
+            /DTag=${{ needs.prepare.outputs.VERSION }} `
             /DPlatform=${{ matrix.platform }} `
             "/DPublishDir=$publishDir" `
             $issFile
@@ -229,7 +250,7 @@ jobs:
             exit 1
           }
 
-          $outputFile = "dotnet/installer-output/Easydict-v${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-setup.unsigned.exe"
+          $outputFile = "dotnet/installer-output/Easydict-v${{ needs.prepare.outputs.VERSION }}-${{ matrix.platform }}-setup.unsigned.exe"
           if (Test-Path $outputFile) {
             $sizeMB = [math]::Round((Get-Item $outputFile).Length / 1MB, 2)
             Write-Host "EXE installer created: $outputFile ($sizeMB MB)"
@@ -249,7 +270,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: easydict-installer-${{ matrix.platform }}
-          path: dotnet/installer-output/Easydict-v${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-setup.unsigned.exe
+          path: dotnet/installer-output/Easydict-v${{ needs.prepare.outputs.VERSION }}-${{ matrix.platform }}-setup.unsigned.exe
           retention-days: 7
 
       - name: Upload MSIX as artifact
@@ -263,7 +284,7 @@ jobs:
   create-bundle:
     name: Create MSIX Bundle
     runs-on: windows-latest
-    needs: publish-msix
+    needs: [prepare, publish-msix]
 
     steps:
       - name: Download all MSIX artifacts
@@ -374,6 +395,9 @@ jobs:
       - name: Upload all release assets
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          prerelease: ${{ needs.prepare.outputs.IS_PRERELEASE == 'true' }}
           files: |
             Easydict-${{ github.ref_name }}.unsigned.msixbundle
             zip-packages/*.zip
@@ -383,10 +407,9 @@ jobs:
   publish-winget:
     name: Publish to WinGet
     runs-on: windows-latest
-    needs: create-bundle
-    # Skip WinGet submission for pre-release versions
-    # Uses GitHub's release.prerelease flag for reliable detection
-    if: ${{ !github.event.release.prerelease }}
+    needs: [prepare, create-bundle]
+    # Skip WinGet submission for pre-release tags (vX.Y.Z-<suffix>).
+    if: ${{ needs.prepare.outputs.IS_PRERELEASE == 'false' }}
 
     steps:
       # Note: WinGet submission targets the x64 EXE installer.

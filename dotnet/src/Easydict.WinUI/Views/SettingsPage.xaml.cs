@@ -728,6 +728,7 @@ public sealed partial class SettingsPage : Page
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
         LaunchAtStartupToggle.Toggled += OnSettingChanged;
         HideEmptyServiceResultsToggle.Toggled += OnSettingChanged;
+        EnableLocalDictionarySuggestionsToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
         TtsSpeedSlider.ValueChanged += OnSettingChanged;
@@ -819,6 +820,7 @@ public sealed partial class SettingsPage : Page
         AlwaysOnTopToggle.Toggled -= OnSettingChanged;
         LaunchAtStartupToggle.Toggled -= OnSettingChanged;
         HideEmptyServiceResultsToggle.Toggled -= OnSettingChanged;
+        EnableLocalDictionarySuggestionsToggle.Toggled -= OnSettingChanged;
         ProxyEnabledToggle.Toggled -= OnSettingChanged;
         ProxyBypassLocalToggle.Toggled -= OnSettingChanged;
         TtsSpeedSlider.ValueChanged -= OnSettingChanged;
@@ -1186,6 +1188,13 @@ public sealed partial class SettingsPage : Page
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
         LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
         HideEmptyServiceResultsToggle.IsOn = _settings.HideEmptyServiceResults;
+        EnableLocalDictionarySuggestionsToggle.IsOn = _settings.EnableLocalDictionarySuggestions;
+        var localDictionarySuggestionsState = GetLocalDictionarySuggestionsToggleState(_settings.ImportedMdxDictionaries.Count);
+        EnableLocalDictionarySuggestionsToggle.IsEnabled = localDictionarySuggestionsState.IsEnabled;
+        EnableLocalDictionarySuggestionsHintText.Text = localDictionarySuggestionsState.HintText;
+        EnableLocalDictionarySuggestionsHintText.Visibility = string.IsNullOrEmpty(localDictionarySuggestionsState.HintText)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
 
         // Hotkeys
         ShowHotkeyBox.Text = _settings.ShowWindowHotkey;
@@ -1271,6 +1280,16 @@ public sealed partial class SettingsPage : Page
             1 => "1 MDX dictionary imported",
             var c => $"{c} MDX dictionaries imported"
         };
+    }
+
+    internal static (bool IsEnabled, string HintText) GetLocalDictionarySuggestionsToggleState(int importedDictionaryCount)
+    {
+        if (importedDictionaryCount > 0)
+        {
+            return (true, string.Empty);
+        }
+
+        return (false, "Import a custom MDX dictionary to enable input suggestions.");
     }
 
     /// <summary>
@@ -2262,6 +2281,7 @@ public sealed partial class SettingsPage : Page
         _settings.TtsSpeed = TtsSpeedSlider.Value;
         _settings.AutoPlayTranslation = AutoPlayTranslationToggle.IsOn;
         _settings.HideEmptyServiceResults = HideEmptyServiceResultsToggle.IsOn;
+        _settings.EnableLocalDictionarySuggestions = EnableLocalDictionarySuggestionsToggle.IsOn;
 
         // Apply startup setting to Windows registry
         StartupService.SetEnabled(_settings.LaunchAtStartup);

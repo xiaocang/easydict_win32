@@ -16,7 +16,7 @@
         <views:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </Page.Resources>
 
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -972,5 +972,48 @@
                 </Expander>
             </Grid>
         </ScrollViewer>
+
+        <Popup x:Name="SuggestionPopup"
+               IsLightDismissEnabled="True">
+            <Border x:Name="SuggestionPopupBorder"
+                    MinWidth="180"
+                    MaxWidth="320"
+                    MaxHeight="200"
+                    Padding="4"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <ListView x:Name="SuggestionListView"
+                          IsTabStop="False"
+                          AllowFocusOnInteraction="False"
+                          SelectionMode="Single"
+                          IsItemClickEnabled="True"
+                          ItemClick="OnSuggestionItemClick">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="IsTabStop"
+                                    Value="False"/>
+                            <Setter Property="AllowFocusOnInteraction"
+                                    Value="False"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Spacing="2"
+                                        Padding="4,2">
+                                <TextBlock Text="{Binding Key}"
+                                           FontSize="14"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding DictDisplayName}"
+                                           FontSize="11"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Border>
+        </Popup>
     </Grid>
 </Page>

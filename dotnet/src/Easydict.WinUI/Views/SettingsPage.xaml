@@ -1594,6 +1594,27 @@
                                     Header="Launch at Windows startup"/>
                             <ToggleSwitch x:Name="HideEmptyServiceResultsToggle"
                                     Header="Hide dictionaries with no result"/>
+                            <ToggleSwitch x:Name="EnableLocalDictionarySuggestionsToggle">
+                                <ToggleSwitch.Header>
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="6">
+                                        <TextBlock Text="Enable custom dictionary input suggestions"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="Experimental"
+                                                   FontSize="11"
+                                                   FontStyle="Italic"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,1,0,0"/>
+                                    </StackPanel>
+                                </ToggleSwitch.Header>
+                            </ToggleSwitch>
+                            <TextBlock x:Name="EnableLocalDictionarySuggestionsHintText"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Margin="44,0,0,0"
+                                       TextWrapping="Wrap"
+                                       Visibility="Collapsed"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

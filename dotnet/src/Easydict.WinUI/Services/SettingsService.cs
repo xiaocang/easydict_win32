@@ -468,6 +468,11 @@ public sealed class SettingsService
     public bool GrammarIncludeExplanations { get; set; } = true;
 
     /// <summary>
+    /// Whether local MDX dictionaries should provide input suggestions in the main page.
+    /// </summary>
+    public bool EnableLocalDictionarySuggestions { get; set; } = false;
+
+    /// <summary>
     /// Window width stored in DIPs (Device-Independent Pixels).
     /// Ensures consistent sizing across different DPI monitors.
     /// </summary>
@@ -704,6 +709,7 @@ public sealed class SettingsService
         ProxyUri = GetValue(nameof(ProxyUri), "");
         ProxyBypassLocal = GetValue(nameof(ProxyBypassLocal), true);
         GrammarIncludeExplanations = GetValue(nameof(GrammarIncludeExplanations), true);
+        EnableLocalDictionarySuggestions = GetValue(nameof(EnableLocalDictionarySuggestions), false);
 
         // Formula detection patterns
         FormulaFontPattern = GetValue(nameof(FormulaFontPattern), "");
@@ -869,6 +875,7 @@ public sealed class SettingsService
         _settings[nameof(ProxyUri)] = ProxyUri;
         _settings[nameof(ProxyBypassLocal)] = ProxyBypassLocal;
         _settings[nameof(GrammarIncludeExplanations)] = GrammarIncludeExplanations;
+        _settings[nameof(EnableLocalDictionarySuggestions)] = EnableLocalDictionarySuggestions;
 
         // Formula detection patterns
         _settings[nameof(FormulaFontPattern)] = FormulaFontPattern;

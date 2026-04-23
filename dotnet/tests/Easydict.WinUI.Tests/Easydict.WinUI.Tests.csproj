@@ -37,6 +37,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Easydict.WinUI\Easydict.WinUI.csproj" />
+    <ProjectReference Include="..\..\lib\LexIndex\src\LexIndex\LexIndex.csproj" />
     <ProjectReference Include="..\..\lib\MDict.CSharp\MDict.Csharp\MDict.Csharp.csproj" />
   </ItemGroup>
 

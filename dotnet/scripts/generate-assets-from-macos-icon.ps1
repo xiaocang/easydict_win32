@@ -69,7 +69,12 @@ $sourceImage = [System.Drawing.Image]::FromFile($sourceFull)
 try {
     $targets = Get-ChildItem -Path $assetsFull -Filter *.png -File | Where-Object {
         # Exclude copied macOS assets folder (keep them as source/materials)
-        $_.FullName -notmatch ([Regex]::Escape([System.IO.Path]::Combine($assetsFull, 'macos')))
+        $_.FullName -notmatch ([Regex]::Escape([System.IO.Path]::Combine($assetsFull, 'macos'))) -and
+        # Exclude the unplated source master — it is produced by generate-unplated-icon.py
+        # (flood-fills the white squircle to transparency). A plain resize would re-plate it.
+        $_.Name -ne 'icon_unplated_1024.png' -and
+        # Exclude unplated derivatives — these must keep transparent backgrounds.
+        $_.Name -notlike '*_altform-unplated.png'
     }
 
     foreach ($file in $targets) {

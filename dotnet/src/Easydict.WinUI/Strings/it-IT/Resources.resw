@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:element name="root" msdata:IsDataSet="true">
@@ -537,78 +537,6 @@
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
-  <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>Comportamento</value>
-  </data>
-  <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>Lingua dell'interfaccia</value>
-  </data>
-  <data name="UILangEnglishItem.Content" xml:space="preserve">
-    <value>English</value>
-  </data>
-  <data name="UILangChineseItem.Content" xml:space="preserve">
-    <value>&#31616;&#20307;&#20013;&#25991;</value>
-  </data>
-  <data name="UILangJapaneseItem.Content" xml:space="preserve">
-    <value>&#26085;&#26412;&#35486;</value>
-  </data>
-  <data name="UILangKoreanItem.Content" xml:space="preserve">
-    <value>&#54620;&#44397;&#50612;</value>
-  </data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
-    <value>&#32321;&#39636;&#20013;&#25991;</value>
-  </data>
-  <data name="UILangFrenchItem.Content" xml:space="preserve">
-    <value>Fran&#231;ais</value>
-  </data>
-  <data name="UILangGermanItem.Content" xml:space="preserve">
-    <value>Deutsch</value>
-  </data>
-  <data name="UILangVietnameseItem.Content" xml:space="preserve">
-    <value>Ti&#7871;ng Vi&#7879;t</value>
-  </data>
-  <data name="UILangThaiItem.Content" xml:space="preserve">
-    <value>&#3652;&#3607;&#3618;</value>
-  </data>
-  <data name="UILangArabicItem.Content" xml:space="preserve">
-    <value>&#1575;&#1604;&#1593;&#1585;&#1576;&#1610;&#1577;</value>
-  </data>
-  <data name="UILangIndonesianItem.Content" xml:space="preserve">
-    <value>Bahasa Indonesia</value>
-  </data>
-  <data name="UILangItalianItem.Content" xml:space="preserve">
-    <value>Italiano</value>
-  </data>
-  <data name="UILangMalayItem.Content" xml:space="preserve">
-    <value>Bahasa Melayu</value>
-  </data>
-  <data name="UILangHindiItem.Content" xml:space="preserve">
-    <value>&#2361;&#2367;&#2344;&#2381;&#2342;&#2368;</value>
-  </data>
-  <data name="UILangDanishItem.Content" xml:space="preserve">
-    <value>Dansk</value>
-  </data>
-  <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>Seleziona la lingua di visualizzazione per l'interfaccia dell'applicazione. Riavvio necessario.</value>
-  </data>
-  <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>Minimizza nella barra di sistema</value>
-  </data>
-  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
-    <value>Avvia minimizzato nella barra di sistema</value>
-  </data>
-  <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>Monitora gli appunti per il testo</value>
-  </data>
-  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
-    <value>Traduci con selezione mouse (seleziona testo &#8594; clicca icona fluttuante)</value>
-  </data>
-  <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>Sempre in primo piano</value>
-  </data>
-  <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>Avvia all'avvio di Windows</value>
-  </data>
   <data name="Close" xml:space="preserve">
     <value>Chiudi</value>
   </data>
@@ -894,19 +822,118 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Salta</value>
   </data>
-  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
-    <value>App escluse</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
-    <value>code, slack, discord</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
-    <value>Nomi dei processi da escludere dalla traduzione con selezione mouse, separati da virgole. Esempio: "code" per VS Code.</value>
-  </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>Riordina</value>
   </data>
   <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
     <value>Fine</value>
   </data>
+  <data name="SettingsTab_Services" xml:space="preserve">
+    <value>Servizi</value>
+  </data>
+  <data name="SettingsTab_About_Tooltip" xml:space="preserve">
+    <value>Versione, collegamenti, feedback e licenza.</value>
+  </data>
+  <data name="SettingsTab_General_Tooltip" xml:space="preserve">
+    <value>Tema, avvio, area di notifica, appunti, TTS e comportamento.</value>
+  </data>
+  <data name="SettingsTab_Advanced_Tooltip" xml:space="preserve">
+    <value>OCR, rilevamento del layout, cache, proxy e prompt.</value>
+  </data>
+  <data name="SettingsTab_Advanced" xml:space="preserve">
+    <value>Avanzate</value>
+  </data>
+  <data name="SettingsTab_General" xml:space="preserve">
+    <value>Generale</value>
+  </data>
+  <data name="WindowResults" xml:space="preserve">
+    <value>Risultati nella finestra</value>
+  </data>
+  <data name="SettingsTab_Language" xml:space="preserve">
+    <value>Lingua</value>
+  </data>
+  <data name="SettingsTab_Language_Tooltip" xml:space="preserve">
+    <value>Lingue di traduzione, lingue disponibili e lingua dell'interfaccia.</value>
+  </data>
+  <data name="WindowResultsDescription" xml:space="preserve">
+    <value>Scegli quali risultati appaiono in ogni finestra e se ogni risultato viene avviato automaticamente.</value>
+  </data>
+  <data name="SettingsTab_About" xml:space="preserve">
+    <value>Informazioni</value>
+  </data>
+  <data name="SettingsTab_Hotkeys_Tooltip" xml:space="preserve">
+    <value>Configura le scorciatoie dell'app e i relativi interruttori.</value>
+  </data>
+  <data name="SettingsTab_Hotkeys" xml:space="preserve">
+    <value>Scorciatoie</value>
+  </data>
+  <data name="SettingsTab_Services_Tooltip" xml:space="preserve">
+    <value>Servizi predefiniti, configurazione API, test e dizionari.</value>
+  </data>
+  <data name="SettingsTab_Views" xml:space="preserve">
+    <value>Viste</value>
+  </data>
+  <data name="SettingsTab_Views_Tooltip" xml:space="preserve">
+    <value>Scegli i risultati visibili e la modalità di interrogazione per ogni vista.</value>
+  </data>
+  <data name="TtsSettingsHeader" xml:space="preserve">
+    <value>Impostazioni di output TTS</value>
+  </data>
+  <data name="TtsSpeedLabel" xml:space="preserve">
+    <value>Velocità di lettura TTS (0,5× – 3,0×)</value>
+  </data>
+  <data name="AutoPlayTranslation" xml:space="preserve">
+    <value>Riproduci automaticamente la traduzione</value>
+  </data>
+  <data name="HideEmptyServiceResults" xml:space="preserve">
+    <value>Nascondi dizionari senza risultati</value>
+  </data>
+  <data name="EnableLocalDictionarySuggestions" xml:space="preserve">
+    <value>Abilita suggerimenti di input dei dizionari personalizzati</value>
+  </data>
+  <data name="Experimental" xml:space="preserve">
+    <value>Sperimentale</value>
+  </data>
+  <data name="OcrSettingsHeader" xml:space="preserve">
+    <value>Impostazioni OCR (riconoscimento testo)</value>
+  </data>
+  <data name="OcrEngine" xml:space="preserve">
+    <value>Motore OCR</value>
+  </data>
+  <data name="OcrEngineNative" xml:space="preserve">
+    <value>Predefinito (Windows nativo)</value>
+  </data>
+  <data name="OcrEngineCustomApi" xml:space="preserve">
+    <value>API personalizzata</value>
+  </data>
+  <data name="OcrApiKey" xml:space="preserve">
+    <value>Chiave API (facoltativa)</value>
+  </data>
+  <data name="OcrEndpoint" xml:space="preserve">
+    <value>Endpoint</value>
+  </data>
+  <data name="OcrModel" xml:space="preserve">
+    <value>Modello</value>
+  </data>
+  <data name="OcrSystemPrompt" xml:space="preserve">
+    <value>Prompt di sistema</value>
+  </data>
+  <data name="TestOcrConnection" xml:space="preserve">
+    <value>Test connessione OCR</value>
+  </data>
+  <data name="OcrTestResult" xml:space="preserve">
+    <value>Risultato del test</value>
+  </data>
+  <data name="DeleteOnnxModel" xml:space="preserve">
+    <value>Elimina</value>
+  </data>
+  <data name="VisionLLMDescription" xml:space="preserve">
+    <value>Richiede una chiave API configurata per il servizio selezionato.</value>
+  </data>
+  <data name="MinimizeToTrayOnStartup" xml:space="preserve"><value>Avvia minimizzato nella barra di sistema</value></data>
+  <data name="MouseSelectionTranslate" xml:space="preserve"><value>Traduci con selezione mouse (seleziona testo &#8594; clicca icona fluttuante)</value></data>
+  <data name="UILanguageDescription" xml:space="preserve"><value>Seleziona la lingua di visualizzazione per l'interfaccia dell'applicazione. Riavvio necessario.</value></data>
+  <data name="ExcludedApps" xml:space="preserve"><value>App escluse</value></data>
+  <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
+  <data name="ExcludedAppsDescription" xml:space="preserve"><value>Nomi dei processi da escludere dalla traduzione con selezione mouse, separati da virgole. Esempio: "code" per VS Code.</value></data>
 </root>

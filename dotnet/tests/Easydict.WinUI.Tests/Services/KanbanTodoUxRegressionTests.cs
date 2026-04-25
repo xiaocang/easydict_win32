@@ -152,23 +152,28 @@ public class KanbanTodoUxRegressionTests
     }
 
     [Fact]
-    public void SettingsPage_ScrollNavSync_DoesNotMutateFontSize()
+    public void SettingsPage_TopTabSelection_DoesNotMutateTileSize()
     {
         var code = File.ReadAllText(SettingsPageCodePath);
-        var marker = "private void UpdateActiveNavIcon(int activeIndex)";
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+        var marker = "private void SelectSettingsTab(SettingsTabId tabId, bool resetScroll)";
         var start = code.IndexOf(marker, StringComparison.Ordinal);
 
-        start.Should().BeGreaterOrEqualTo(0, "the settings nav rail should still have an active-state update helper");
+        start.Should().BeGreaterOrEqualTo(0, "top settings tabs should have a single active-state update helper");
         var snippet = code.Substring(start, Math.Min(900, code.Length - start));
 
-        snippet.Should().Contain("AccentFillColorDefaultBrush",
-            "the active nav item should still stand out visually");
-        snippet.Should().Contain("TextFillColorSecondaryBrush",
-            "inactive nav items should still use the secondary styling");
-        snippet.Should().NotContain("icon.FontSize = 16",
-            "scroll-driven nav highlighting must not resize the Auto-column icon rail and trigger a layout feedback loop");
-        snippet.Should().NotContain("icon.FontSize = 14",
-            "scroll-driven nav highlighting should keep icon size stable once the rail is created");
+        xaml.Should().Contain("Width=\"86\"",
+            "tab tiles should keep a stable square width instead of resizing on active-state changes");
+        xaml.Should().Contain("Height=\"76\"",
+            "tab tiles should keep a stable square height instead of resizing on active-state changes");
+        xaml.Should().Contain("FontSize=\"22\"",
+            "tab icons should have a fixed size in XAML");
+        snippet.Should().NotContain("Width =",
+            "tab selection should only change state/visibility, not tile dimensions");
+        snippet.Should().NotContain("Height =",
+            "tab selection should only change state/visibility, not tile dimensions");
+        snippet.Should().NotContain("FontSize =",
+            "tab selection should not resize icon text and trigger layout feedback");
     }
 
     [Fact]

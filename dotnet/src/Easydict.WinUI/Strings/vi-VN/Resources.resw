@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:element name="root" msdata:IsDataSet="true">
@@ -545,78 +545,6 @@
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
-  <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>H&#xE0;nh vi</value>
-  </data>
-  <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>Ng&#xF4;n ng&#x1EEF; giao di&#x1EC7;n</value>
-  </data>
-  <data name="UILangEnglishItem.Content" xml:space="preserve">
-    <value>English</value>
-  </data>
-  <data name="UILangChineseItem.Content" xml:space="preserve">
-    <value>&#x7B80;&#x4F53;&#x4E2D;&#x6587;</value>
-  </data>
-  <data name="UILangJapaneseItem.Content" xml:space="preserve">
-    <value>&#x65E5;&#x672C;&#x8A9E;</value>
-  </data>
-  <data name="UILangKoreanItem.Content" xml:space="preserve">
-    <value>&#xD55C;&#xAD6D;&#xC5B4;</value>
-  </data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
-    <value>&#x7E41;&#x9AD4;&#x4E2D;&#x6587;</value>
-  </data>
-  <data name="UILangFrenchItem.Content" xml:space="preserve">
-    <value>Fran&#xE7;ais</value>
-  </data>
-  <data name="UILangGermanItem.Content" xml:space="preserve">
-    <value>Deutsch</value>
-  </data>
-  <data name="UILangVietnameseItem.Content" xml:space="preserve">
-    <value>Ti&#x1EBF;ng Vi&#x1EC7;t</value>
-  </data>
-  <data name="UILangThaiItem.Content" xml:space="preserve">
-    <value>&#xE44;&#xE17;&#xE22;</value>
-  </data>
-  <data name="UILangArabicItem.Content" xml:space="preserve">
-    <value>&#x627;&#x644;&#x639;&#x631;&#x628;&#x64A;&#x629;</value>
-  </data>
-  <data name="UILangIndonesianItem.Content" xml:space="preserve">
-    <value>Bahasa Indonesia</value>
-  </data>
-  <data name="UILangItalianItem.Content" xml:space="preserve">
-    <value>Italiano</value>
-  </data>
-  <data name="UILangMalayItem.Content" xml:space="preserve">
-    <value>Bahasa Melayu</value>
-  </data>
-  <data name="UILangHindiItem.Content" xml:space="preserve">
-    <value>&#x939;&#x93F;&#x928;&#x94D;&#x926;&#x940;</value>
-  </data>
-  <data name="UILangDanishItem.Content" xml:space="preserve">
-    <value>Dansk</value>
-  </data>
-  <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>Ch&#x1ECD;n ng&#xF4;n ng&#x1EEF; hi&#x1EC3;n th&#x1ECB; cho giao di&#x1EC7;n &#x1EE9;ng d&#x1EE5;ng. C&#x1EA7;n kh&#x1EDF;i &#x111;&#x1ED9;ng l&#x1EA1;i.</value>
-  </data>
-  <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>Thu nh&#x1ECF; v&#xE0;o khay h&#x1EC7; th&#x1ED1;ng</value>
-  </data>
-  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
-    <value>Kh&#x1EDF;i &#x111;&#x1ED9;ng thu nh&#x1ECF; v&#xE0;o khay h&#x1EC7; th&#x1ED1;ng</value>
-  </data>
-  <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>Theo d&#xF5;i clipboard</value>
-  </data>
-  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
-    <value>D&#x1ECB;ch b&#x1EB1;ng ch&#x1ECD;n chu&#x1ED9;t (ch&#x1ECD;n v&#x103;n b&#x1EA3;n &#x2192; nh&#x1EA5;n bi&#x1EC3;u t&#x1B0;&#x1EE3;ng n&#x1ED5;i)</value>
-  </data>
-  <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>Lu&#xF4;n hi&#x1EC3;n th&#x1ECB; tr&#xEA;n c&#xF9;ng</value>
-  </data>
-  <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>Kh&#x1EDF;i ch&#x1EA1;y c&#xF9;ng Windows</value>
-  </data>
   <data name="Close" xml:space="preserve">
     <value>&#x110;&#xF3;ng</value>
   </data>
@@ -902,19 +830,118 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Bỏ qua</value>
   </data>
-  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
-    <value>Ứng dụng loại trừ</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
-    <value>code, slack, discord</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
-    <value>Tên tiến trình cần loại trừ khỏi dịch chọn chuột, phân cách bằng dấu phẩy. Ví dụ: "code" cho VS Code.</value>
-  </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>Sắp xếp lại</value>
   </data>
   <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
     <value>Xong</value>
   </data>
+  <data name="SettingsTab_Services" xml:space="preserve">
+    <value>Dịch vụ</value>
+  </data>
+  <data name="SettingsTab_About_Tooltip" xml:space="preserve">
+    <value>Phiên bản, liên kết, phản hồi và giấy phép.</value>
+  </data>
+  <data name="SettingsTab_General_Tooltip" xml:space="preserve">
+    <value>Chủ đề, khởi động, khay hệ thống, bộ nhớ tạm, TTS và hành vi.</value>
+  </data>
+  <data name="SettingsTab_Advanced_Tooltip" xml:space="preserve">
+    <value>OCR, phát hiện bố cục, bộ nhớ đệm, proxy và lời nhắc.</value>
+  </data>
+  <data name="SettingsTab_Advanced" xml:space="preserve">
+    <value>Nâng cao</value>
+  </data>
+  <data name="SettingsTab_General" xml:space="preserve">
+    <value>Chung</value>
+  </data>
+  <data name="WindowResults" xml:space="preserve">
+    <value>Kết quả cửa sổ</value>
+  </data>
+  <data name="SettingsTab_Language" xml:space="preserve">
+    <value>Ngôn ngữ</value>
+  </data>
+  <data name="SettingsTab_Language_Tooltip" xml:space="preserve">
+    <value>Ngôn ngữ dịch, ngôn ngữ khả dụng và ngôn ngữ giao diện.</value>
+  </data>
+  <data name="WindowResultsDescription" xml:space="preserve">
+    <value>Chọn kết quả hiển thị trong mỗi cửa sổ và việc mỗi kết quả có tự truy vấn hay không.</value>
+  </data>
+  <data name="SettingsTab_About" xml:space="preserve">
+    <value>Giới thiệu</value>
+  </data>
+  <data name="SettingsTab_Hotkeys_Tooltip" xml:space="preserve">
+    <value>Cấu hình phím tắt và công tắc phím tắt của ứng dụng.</value>
+  </data>
+  <data name="SettingsTab_Hotkeys" xml:space="preserve">
+    <value>Phím tắt</value>
+  </data>
+  <data name="SettingsTab_Services_Tooltip" xml:space="preserve">
+    <value>Dịch vụ mặc định, cấu hình API, kiểm thử và từ điển.</value>
+  </data>
+  <data name="SettingsTab_Views" xml:space="preserve">
+    <value>Chế độ xem</value>
+  </data>
+  <data name="SettingsTab_Views_Tooltip" xml:space="preserve">
+    <value>Chọn các kết quả hiển thị và chế độ truy vấn cho từng chế độ xem.</value>
+  </data>
+  <data name="TtsSettingsHeader" xml:space="preserve">
+    <value>Cài đặt đầu ra TTS</value>
+  </data>
+  <data name="TtsSpeedLabel" xml:space="preserve">
+    <value>Tốc độ đọc TTS (0,5× – 3,0×)</value>
+  </data>
+  <data name="AutoPlayTranslation" xml:space="preserve">
+    <value>Tự động phát bản dịch</value>
+  </data>
+  <data name="HideEmptyServiceResults" xml:space="preserve">
+    <value>Ẩn từ điển không có kết quả</value>
+  </data>
+  <data name="EnableLocalDictionarySuggestions" xml:space="preserve">
+    <value>Bật gợi ý nhập từ điển tùy chỉnh</value>
+  </data>
+  <data name="Experimental" xml:space="preserve">
+    <value>Thử nghiệm</value>
+  </data>
+  <data name="OcrSettingsHeader" xml:space="preserve">
+    <value>Cài đặt OCR (nhận dạng văn bản)</value>
+  </data>
+  <data name="OcrEngine" xml:space="preserve">
+    <value>Công cụ OCR</value>
+  </data>
+  <data name="OcrEngineNative" xml:space="preserve">
+    <value>Mặc định (Windows Native)</value>
+  </data>
+  <data name="OcrEngineCustomApi" xml:space="preserve">
+    <value>API Tùy chỉnh</value>
+  </data>
+  <data name="OcrApiKey" xml:space="preserve">
+    <value>Khóa API (Tùy chọn)</value>
+  </data>
+  <data name="OcrEndpoint" xml:space="preserve">
+    <value>Điểm cuối</value>
+  </data>
+  <data name="OcrModel" xml:space="preserve">
+    <value>Mô hình</value>
+  </data>
+  <data name="OcrSystemPrompt" xml:space="preserve">
+    <value>Lời nhắc hệ thống</value>
+  </data>
+  <data name="TestOcrConnection" xml:space="preserve">
+    <value>Kiểm tra kết nối OCR</value>
+  </data>
+  <data name="OcrTestResult" xml:space="preserve">
+    <value>Kết quả kiểm tra</value>
+  </data>
+  <data name="DeleteOnnxModel" xml:space="preserve">
+    <value>Xóa</value>
+  </data>
+  <data name="VisionLLMDescription" xml:space="preserve">
+    <value>Yêu cầu một khóa API được cấu hình cho dịch vụ đã chọn.</value>
+  </data>
+  <data name="MinimizeToTrayOnStartup" xml:space="preserve"><value>Kh&#x1EDF;i &#x111;&#x1ED9;ng thu nh&#x1ECF; v&#xE0;o khay h&#x1EC7; th&#x1ED1;ng</value></data>
+  <data name="MouseSelectionTranslate" xml:space="preserve"><value>D&#x1ECB;ch b&#x1EB1;ng ch&#x1ECD;n chu&#x1ED9;t (ch&#x1ECD;n v&#x103;n b&#x1EA3;n &#x2192; nh&#x1EA5;n bi&#x1EC3;u t&#x1B0;&#x1EE3;ng n&#x1ED5;i)</value></data>
+  <data name="UILanguageDescription" xml:space="preserve"><value>Ch&#x1ECD;n ng&#xF4;n ng&#x1EEF; hi&#x1EC3;n th&#x1ECB; cho giao di&#x1EC7;n &#x1EE9;ng d&#x1EE5;ng. C&#x1EA7;n kh&#x1EDF;i &#x111;&#x1ED9;ng l&#x1EA1;i.</value></data>
+  <data name="ExcludedApps" xml:space="preserve"><value>Ứng dụng loại trừ</value></data>
+  <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
+  <data name="ExcludedAppsDescription" xml:space="preserve"><value>Tên tiến trình cần loại trừ khỏi dịch chọn chuột, phân cách bằng dấu phẩy. Ví dụ: "code" cho VS Code.</value></data>
 </root>

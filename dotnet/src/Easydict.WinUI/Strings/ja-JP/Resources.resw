@@ -609,79 +609,6 @@
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
-  <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>動作</value>
-  </data>
-  <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>UI言語</value>
-  </data>
-  <data name="UILangEnglishItem.Content" xml:space="preserve">
-    <value>English</value>
-  </data>
-  <data name="UILangChineseItem.Content" xml:space="preserve">
-    <value>简体中文</value>
-  </data>
-  <data name="UILangJapaneseItem.Content" xml:space="preserve">
-    <value>日本語</value>
-  </data>
-  <data name="UILangKoreanItem.Content" xml:space="preserve">
-    <value>한국어</value>
-  </data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
-    <value>繁體中文</value>
-  </data>
-  <data name="UILangFrenchItem.Content" xml:space="preserve">
-    <value>Français</value>
-  </data>
-  <data name="UILangGermanItem.Content" xml:space="preserve">
-    <value>Deutsch</value>
-  </data>
-  <data name="UILangVietnameseItem.Content" xml:space="preserve">
-    <value>Tiếng Việt</value>
-  </data>
-  <data name="UILangThaiItem.Content" xml:space="preserve">
-    <value>ไทย</value>
-  </data>
-  <data name="UILangArabicItem.Content" xml:space="preserve">
-    <value>العربية</value>
-  </data>
-  <data name="UILangIndonesianItem.Content" xml:space="preserve">
-    <value>Bahasa Indonesia</value>
-  </data>
-  <data name="UILangItalianItem.Content" xml:space="preserve">
-    <value>Italiano</value>
-  </data>
-  <data name="UILangMalayItem.Content" xml:space="preserve">
-    <value>Bahasa Melayu</value>
-  </data>
-  <data name="UILangHindiItem.Content" xml:space="preserve">
-    <value>हिन्दी</value>
-  </data>
-  <data name="UILangDanishItem.Content" xml:space="preserve">
-    <value>Dansk</value>
-  </data>
-  <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>アプリケーションインターフェースの表示言語を選択します。再起動が必要です。</value>
-  </data>
-  <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>システムトレイに最小化</value>
-  </data>
-  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
-    <value>起動時にトレイに最小化</value>
-  </data>
-  <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>クリップボードのテキストを監視</value>
-  </data>
-  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
-    <value>マウス選択翻訳（テキスト選択 → フローティングアイコンをクリック）</value>
-  </data>
-  <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>常に最前面</value>
-  </data>
-  <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>Windows起動時に起動</value>
-  </data>
-
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">
     <value>国際サービスを有効にする</value>
@@ -1061,19 +988,118 @@
   <data name="MddAssociatedFiles" xml:space="preserve">
     <value>リソースファイル</value>
   </data>
-  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
-    <value>除外アプリ</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
-    <value>code, slack, discord</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
-    <value>マウス選択翻訳から除外するプロセス名をカンマ区切りで入力。例：VS Code は "code"。</value>
-  </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>並べ替え</value>
   </data>
   <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
     <value>完了</value>
   </data>
+  <data name="SettingsTab_Services" xml:space="preserve">
+    <value>Services</value>
+  </data>
+  <data name="SettingsTab_About_Tooltip" xml:space="preserve">
+    <value>Version, links, feedback, and license.</value>
+  </data>
+  <data name="SettingsTab_General_Tooltip" xml:space="preserve">
+    <value>Theme, startup, tray, clipboard, TTS, and behavior.</value>
+  </data>
+  <data name="SettingsTab_Advanced_Tooltip" xml:space="preserve">
+    <value>OCR, layout detection, cache, proxy, and prompts.</value>
+  </data>
+  <data name="SettingsTab_Advanced" xml:space="preserve">
+    <value>Advanced</value>
+  </data>
+  <data name="SettingsTab_General" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="WindowResults" xml:space="preserve">
+    <value>Window Results</value>
+  </data>
+  <data name="SettingsTab_Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="SettingsTab_Language_Tooltip" xml:space="preserve">
+    <value>Translation languages, available languages, and UI language.</value>
+  </data>
+  <data name="WindowResultsDescription" xml:space="preserve">
+    <value>Choose which results appear in each window and whether each result queries automatically.</value>
+  </data>
+  <data name="SettingsTab_About" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="SettingsTab_Hotkeys_Tooltip" xml:space="preserve">
+    <value>Configure app shortcuts and hotkey switches.</value>
+  </data>
+  <data name="SettingsTab_Hotkeys" xml:space="preserve">
+    <value>Hotkeys</value>
+  </data>
+  <data name="SettingsTab_Services_Tooltip" xml:space="preserve">
+    <value>Default services, API configuration, tests, and dictionaries.</value>
+  </data>
+  <data name="SettingsTab_Views" xml:space="preserve">
+    <value>Views</value>
+  </data>
+  <data name="SettingsTab_Views_Tooltip" xml:space="preserve">
+    <value>Choose visible results and query mode for each app view.</value>
+  </data>
+  <data name="TtsSettingsHeader" xml:space="preserve">
+    <value>TTS 出力設定</value>
+  </data>
+  <data name="TtsSpeedLabel" xml:space="preserve">
+    <value>TTS 読み上げ速度 (0.5x - 3.0x)</value>
+  </data>
+  <data name="AutoPlayTranslation" xml:space="preserve">
+    <value>翻訳結果を自動再生</value>
+  </data>
+  <data name="HideEmptyServiceResults" xml:space="preserve">
+    <value>結果のない辞書を非表示</value>
+  </data>
+  <data name="EnableLocalDictionarySuggestions" xml:space="preserve">
+    <value>カスタム辞書の入力候補を有効化</value>
+  </data>
+  <data name="Experimental" xml:space="preserve">
+    <value>実験的</value>
+  </data>
+  <data name="OcrSettingsHeader" xml:space="preserve">
+    <value>OCR（文字認識）設定</value>
+  </data>
+  <data name="OcrEngine" xml:space="preserve">
+    <value>OCR エンジン</value>
+  </data>
+  <data name="OcrEngineNative" xml:space="preserve">
+    <value>既定（Windows ネイティブ）</value>
+  </data>
+  <data name="OcrEngineCustomApi" xml:space="preserve">
+    <value>カスタム API</value>
+  </data>
+  <data name="OcrApiKey" xml:space="preserve">
+    <value>API キー（任意）</value>
+  </data>
+  <data name="OcrEndpoint" xml:space="preserve">
+    <value>エンドポイント</value>
+  </data>
+  <data name="OcrModel" xml:space="preserve">
+    <value>モデル</value>
+  </data>
+  <data name="OcrSystemPrompt" xml:space="preserve">
+    <value>システムプロンプト</value>
+  </data>
+  <data name="TestOcrConnection" xml:space="preserve">
+    <value>OCR 接続をテスト</value>
+  </data>
+  <data name="OcrTestResult" xml:space="preserve">
+    <value>テスト結果</value>
+  </data>
+  <data name="DeleteOnnxModel" xml:space="preserve">
+    <value>削除</value>
+  </data>
+  <data name="VisionLLMDescription" xml:space="preserve">
+    <value>選択したサービスに API キーの設定が必要です。</value>
+  </data>
+  <data name="MinimizeToTrayOnStartup" xml:space="preserve"><value>起動時にトレイに最小化</value></data>
+  <data name="MouseSelectionTranslate" xml:space="preserve"><value>マウス選択翻訳（テキスト選択 → フローティングアイコンをクリック）</value></data>
+  <data name="UILanguageDescription" xml:space="preserve"><value>アプリケーションインターフェースの表示言語を選択します。再起動が必要です。</value></data>
+  <data name="ExcludedApps" xml:space="preserve"><value>除外アプリ</value></data>
+  <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
+  <data name="ExcludedAppsDescription" xml:space="preserve"><value>マウス選択翻訳から除外するプロセス名をカンマ区切りで入力。例：VS Code は "code"。</value></data>
 </root>

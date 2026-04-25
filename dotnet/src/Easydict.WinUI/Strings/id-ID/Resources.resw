@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:element name="root" msdata:IsDataSet="true">
@@ -499,78 +499,6 @@
   <data name="UILangChineseSimplified" xml:space="preserve">
     <value>Tionghoa (Sederhana)</value>
   </data>
-  <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>Perilaku</value>
-  </data>
-  <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>Bahasa Antarmuka</value>
-  </data>
-  <data name="UILangEnglishItem.Content" xml:space="preserve">
-    <value>English</value>
-  </data>
-  <data name="UILangChineseItem.Content" xml:space="preserve">
-    <value>&#x7B80;&#x4F53;&#x4E2D;&#x6587;</value>
-  </data>
-  <data name="UILangJapaneseItem.Content" xml:space="preserve">
-    <value>&#x65E5;&#x672C;&#x8A9E;</value>
-  </data>
-  <data name="UILangKoreanItem.Content" xml:space="preserve">
-    <value>&#xD55C;&#xAD6D;&#xC5B4;</value>
-  </data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
-    <value>&#x7E41;&#x9AD4;&#x4E2D;&#x6587;</value>
-  </data>
-  <data name="UILangFrenchItem.Content" xml:space="preserve">
-    <value>Fran&#xE7;ais</value>
-  </data>
-  <data name="UILangGermanItem.Content" xml:space="preserve">
-    <value>Deutsch</value>
-  </data>
-  <data name="UILangVietnameseItem.Content" xml:space="preserve">
-    <value>Ti&#x1EBF;ng Vi&#x1EC7;t</value>
-  </data>
-  <data name="UILangThaiItem.Content" xml:space="preserve">
-    <value>&#xE44;&#xE17;&#xE22;</value>
-  </data>
-  <data name="UILangArabicItem.Content" xml:space="preserve">
-    <value>&#x627;&#x644;&#x639;&#x631;&#x628;&#x64A;&#x629;</value>
-  </data>
-  <data name="UILangIndonesianItem.Content" xml:space="preserve">
-    <value>Bahasa Indonesia</value>
-  </data>
-  <data name="UILangItalianItem.Content" xml:space="preserve">
-    <value>Italiano</value>
-  </data>
-  <data name="UILangMalayItem.Content" xml:space="preserve">
-    <value>Bahasa Melayu</value>
-  </data>
-  <data name="UILangHindiItem.Content" xml:space="preserve">
-    <value>&#x939;&#x93F;&#x928;&#x94D;&#x926;&#x940;</value>
-  </data>
-  <data name="UILangDanishItem.Content" xml:space="preserve">
-    <value>Dansk</value>
-  </data>
-  <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>Pilih bahasa tampilan untuk antarmuka aplikasi. Perlu dimulai ulang.</value>
-  </data>
-  <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>Minimalkan ke baki sistem</value>
-  </data>
-  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
-    <value>Mulai diminimalkan ke baki sistem</value>
-  </data>
-  <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>Pantau papan klip untuk teks</value>
-  </data>
-  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
-    <value>Terjemahkan dengan seleksi mouse (pilih teks &#x2192; klik ikon mengambang)</value>
-  </data>
-  <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>Selalu di atas</value>
-  </data>
-  <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>Jalankan saat Windows dimulai</value>
-  </data>
   <data name="Close" xml:space="preserve">
     <value>Tutup</value>
   </data>
@@ -848,19 +776,118 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Lewati</value>
   </data>
-  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
-    <value>Aplikasi dikecualikan</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
-    <value>code, slack, discord</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
-    <value>Nama proses yang dikecualikan dari terjemahan pilihan mouse, dipisahkan dengan koma. Contoh: "code" untuk VS Code.</value>
-  </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>Urutkan Ulang</value>
   </data>
   <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
     <value>Selesai</value>
   </data>
+  <data name="SettingsTab_Services" xml:space="preserve">
+    <value>Layanan</value>
+  </data>
+  <data name="SettingsTab_About_Tooltip" xml:space="preserve">
+    <value>Versi, tautan, masukan, dan lisensi.</value>
+  </data>
+  <data name="SettingsTab_General_Tooltip" xml:space="preserve">
+    <value>Tema, mulai otomatis, baki, papan klip, TTS, dan perilaku.</value>
+  </data>
+  <data name="SettingsTab_Advanced_Tooltip" xml:space="preserve">
+    <value>OCR, deteksi tata letak, cache, proxy, dan perintah.</value>
+  </data>
+  <data name="SettingsTab_Advanced" xml:space="preserve">
+    <value>Lanjutan</value>
+  </data>
+  <data name="SettingsTab_General" xml:space="preserve">
+    <value>Umum</value>
+  </data>
+  <data name="WindowResults" xml:space="preserve">
+    <value>Hasil Jendela</value>
+  </data>
+  <data name="SettingsTab_Language" xml:space="preserve">
+    <value>Bahasa</value>
+  </data>
+  <data name="SettingsTab_Language_Tooltip" xml:space="preserve">
+    <value>Bahasa terjemahan, bahasa yang tersedia, dan bahasa UI.</value>
+  </data>
+  <data name="WindowResultsDescription" xml:space="preserve">
+    <value>Pilih hasil yang muncul di setiap jendela dan apakah setiap hasil dijalankan otomatis.</value>
+  </data>
+  <data name="SettingsTab_About" xml:space="preserve">
+    <value>Tentang</value>
+  </data>
+  <data name="SettingsTab_Hotkeys_Tooltip" xml:space="preserve">
+    <value>Konfigurasikan pintasan aplikasi dan saklar pintasan.</value>
+  </data>
+  <data name="SettingsTab_Hotkeys" xml:space="preserve">
+    <value>Pintasan</value>
+  </data>
+  <data name="SettingsTab_Services_Tooltip" xml:space="preserve">
+    <value>Layanan default, konfigurasi API, pengujian, dan kamus.</value>
+  </data>
+  <data name="SettingsTab_Views" xml:space="preserve">
+    <value>Tampilan</value>
+  </data>
+  <data name="SettingsTab_Views_Tooltip" xml:space="preserve">
+    <value>Pilih hasil yang ditampilkan dan mode kueri untuk setiap tampilan aplikasi.</value>
+  </data>
+  <data name="TtsSettingsHeader" xml:space="preserve">
+    <value>Pengaturan Output TTS</value>
+  </data>
+  <data name="TtsSpeedLabel" xml:space="preserve">
+    <value>Kecepatan Pembacaan TTS (0,5× – 3,0×)</value>
+  </data>
+  <data name="AutoPlayTranslation" xml:space="preserve">
+    <value>Putar terjemahan otomatis</value>
+  </data>
+  <data name="HideEmptyServiceResults" xml:space="preserve">
+    <value>Sembunyikan kamus tanpa hasil</value>
+  </data>
+  <data name="EnableLocalDictionarySuggestions" xml:space="preserve">
+    <value>Aktifkan saran masukan kamus kustom</value>
+  </data>
+  <data name="Experimental" xml:space="preserve">
+    <value>Eksperimental</value>
+  </data>
+  <data name="OcrSettingsHeader" xml:space="preserve">
+    <value>Pengaturan OCR (Pengenalan Teks)</value>
+  </data>
+  <data name="OcrEngine" xml:space="preserve">
+    <value>Mesin OCR</value>
+  </data>
+  <data name="OcrEngineNative" xml:space="preserve">
+    <value>Default (Windows Native)</value>
+  </data>
+  <data name="OcrEngineCustomApi" xml:space="preserve">
+    <value>API Kustom</value>
+  </data>
+  <data name="OcrApiKey" xml:space="preserve">
+    <value>Kunci API (Opsional)</value>
+  </data>
+  <data name="OcrEndpoint" xml:space="preserve">
+    <value>Endpoint</value>
+  </data>
+  <data name="OcrModel" xml:space="preserve">
+    <value>Model</value>
+  </data>
+  <data name="OcrSystemPrompt" xml:space="preserve">
+    <value>Prompt Sistem</value>
+  </data>
+  <data name="TestOcrConnection" xml:space="preserve">
+    <value>Uji Koneksi OCR</value>
+  </data>
+  <data name="OcrTestResult" xml:space="preserve">
+    <value>Hasil Pengujian</value>
+  </data>
+  <data name="DeleteOnnxModel" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="VisionLLMDescription" xml:space="preserve">
+    <value>Memerlukan kunci API yang dikonfigurasi untuk layanan yang dipilih.</value>
+  </data>
+  <data name="MinimizeToTrayOnStartup" xml:space="preserve"><value>Mulai diminimalkan ke baki sistem</value></data>
+  <data name="MouseSelectionTranslate" xml:space="preserve"><value>Terjemahkan dengan seleksi mouse (pilih teks &#x2192; klik ikon mengambang)</value></data>
+  <data name="UILanguageDescription" xml:space="preserve"><value>Pilih bahasa tampilan untuk antarmuka aplikasi. Perlu dimulai ulang.</value></data>
+  <data name="ExcludedApps" xml:space="preserve"><value>Aplikasi dikecualikan</value></data>
+  <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
+  <data name="ExcludedAppsDescription" xml:space="preserve"><value>Nama proses yang dikecualikan dari terjemahan pilihan mouse, dipisahkan dengan koma. Contoh: "code" untuk VS Code.</value></data>
 </root>

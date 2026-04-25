@@ -16,10 +16,76 @@ using Microsoft.UI.Xaml.Media;
 
 namespace Easydict.WinUI.Views;
 
-/// <summary>
-/// Represents a navigation section for the floating sidebar.
-/// </summary>
-internal sealed record NavSection(string Name, string Tooltip, string IconGlyph, FrameworkElement Element);
+internal enum SettingsTabId
+{
+    General,
+    Services,
+    Views,
+    Hotkeys,
+    Advanced,
+    Language,
+    About
+}
+
+internal sealed class SettingsTabItem : INotifyPropertyChanged
+{
+    private bool _isSelected;
+    private string _label = string.Empty;
+    private string _tooltip = string.Empty;
+
+    public required SettingsTabId Id { get; init; }
+    public required string IconGlyph { get; init; }
+
+    public string Label
+    {
+        get => _label;
+        set
+        {
+            if (_label == value)
+            {
+                return;
+            }
+
+            _label = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string Tooltip
+    {
+        get => _tooltip;
+        set
+        {
+            if (_tooltip == value)
+            {
+                return;
+            }
+
+            _tooltip = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value)
+            {
+                return;
+            }
+
+            _isSelected = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
 
 /// <summary>
 /// Settings page for configuring translation services, hotkeys, and behavior.
@@ -55,9 +121,16 @@ public sealed partial class SettingsPage : Page
     // Dynamic UI references for encrypted MDX dictionary credential fields
     private readonly Dictionary<string, (TextBox EmailBox, PasswordBox RegcodeBox)> _mdxCredentialFields = new();
 
-    // Navigation sections for the floating sidebar
-    private List<NavSection> _navSections = [];
-    private int _currentSectionIndex = -1;
+    private readonly ObservableCollection<SettingsTabItem> _settingsTabs =
+    [
+        new() { Id = SettingsTabId.General, IconGlyph = "\uE713", IsSelected = true },
+        new() { Id = SettingsTabId.Services, IconGlyph = "\uE90F" },
+        new() { Id = SettingsTabId.Views, IconGlyph = "\uE8A7" },
+        new() { Id = SettingsTabId.Hotkeys, IconGlyph = "\uE765" },
+        new() { Id = SettingsTabId.Advanced, IconGlyph = "\uE771" },
+        new() { Id = SettingsTabId.Language, IconGlyph = "\uE774" },
+        new() { Id = SettingsTabId.About, IconGlyph = "\uE946" }
+    ];
 
 
 #if DEBUG
@@ -139,11 +212,10 @@ public sealed partial class SettingsPage : Page
     [Conditional("DEBUG")]
     private void LogObjectState(string label)
     {
-        var navIconCount = NavIndicators?.Children.Count ?? -1;
         var mdxPanelCount = ImportedMdxConfigPanel?.Children.Count ?? -1;
         var backStackDepth = Frame?.BackStackDepth ?? -1;
         Debug.WriteLine(
-            $"[SettingsPage][Objects] #{_debugInstanceId} {label} | services={_mainWindowServices.Count}/{_miniWindowServices.Count}/{_fixedWindowServices.Count} | languages={_languageItems.Count} | navIcons={navIconCount} | mdxPanels={mdxPanelCount} | mdxCredentialFields={_mdxCredentialFields.Count} | backStack={backStackDepth} | deferredIo={_debugDeferredIoState}");
+            $"[SettingsPage][Objects] #{_debugInstanceId} {label} | services={_mainWindowServices.Count}/{_miniWindowServices.Count}/{_fixedWindowServices.Count} | languages={_languageItems.Count} | activeTab={_settingsTabs.FirstOrDefault(t => t.IsSelected)?.Id} | mdxPanels={mdxPanelCount} | mdxCredentialFields={_mdxCredentialFields.Count} | backStack={backStackDepth} | deferredIo={_debugDeferredIoState}");
     }
 
     [Conditional("DEBUG")]
@@ -222,6 +294,78 @@ public sealed partial class SettingsPage : Page
         return await cacheService.GetEntryCountAsync().ConfigureAwait(false);
     }
 
+    private void InitializeSettingsTabs()
+    {
+        SettingsTabsHost.ItemsSource = _settingsTabs;
+        SelectSettingsTab(SettingsTabId.General, resetScroll: false);
+    }
+
+    private void OnSettingsTabClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: SettingsTabId tabId })
+        {
+            return;
+        }
+
+        SelectSettingsTab(tabId, resetScroll: true);
+    }
+
+    private void SelectSettingsTab(SettingsTabId tabId, bool resetScroll)
+    {
+        EnsureTabContentLoaded(tabId);
+
+        foreach (var item in _settingsTabs)
+        {
+            item.IsSelected = item.Id == tabId;
+        }
+
+        GeneralTabContent.Visibility = tabId == SettingsTabId.General ? Visibility.Visible : Visibility.Collapsed;
+        ServicesTabContent.Visibility = tabId == SettingsTabId.Services ? Visibility.Visible : Visibility.Collapsed;
+        if (ViewsTabContent != null)
+        {
+            ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;
+        }
+        HotkeysTabContent.Visibility = tabId == SettingsTabId.Hotkeys ? Visibility.Visible : Visibility.Collapsed;
+        AdvancedTabContent.Visibility = tabId == SettingsTabId.Advanced ? Visibility.Visible : Visibility.Collapsed;
+        LanguageTabContent.Visibility = tabId == SettingsTabId.Language ? Visibility.Visible : Visibility.Collapsed;
+        AboutTabContent.Visibility = tabId == SettingsTabId.About ? Visibility.Visible : Visibility.Collapsed;
+
+        if (resetScroll)
+        {
+            MainScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
+        }
+    }
+
+    private void EnsureTabContentLoaded(SettingsTabId tabId)
+    {
+        switch (tabId)
+        {
+            case SettingsTabId.Views when ViewsTabContent == null:
+                FindName(nameof(ViewsTabContent));
+                BindWindowServicePanels();
+                ApplyWindowResultsLocalization(LocalizationService.Instance);
+                break;
+        }
+    }
+
+    private void BindWindowServicePanels()
+    {
+        if (MainWindowServicesPanel != null)
+        {
+            MainWindowServicesPanel.ItemsSource = _mainWindowServices;
+        }
+
+        if (MiniWindowServicesPanel != null)
+        {
+            MiniWindowServicesPanel.ItemsSource = _miniWindowServices;
+        }
+
+        if (FixedWindowServicesPanel != null)
+        {
+            FixedWindowServicesPanel.ItemsSource = _fixedWindowServices;
+        }
+    }
+
     /// <summary>
     /// Apply localization to all UI elements using LocalizationService.
     /// NOTE: Service names (Google Translate, DeepL, etc.) remain in English.
@@ -245,14 +389,7 @@ public sealed partial class SettingsPage : Page
         if (EnableInternationalServicesDescriptionText != null)
             EnableInternationalServicesDescriptionText.Text = loc.GetString("EnableInternationalServicesDescription");
 
-        // Window headers
-        if (MainWindowHeaderText != null)
-            MainWindowHeaderText.Text = loc.GetString("MainWindow");
-        if (MiniWindowHeaderText != null)
-            MiniWindowHeaderText.Text = loc.GetString("MiniWindow");
-        if (FixedWindowHeaderText != null)
-            FixedWindowHeaderText.Text = loc.GetString("FixedWindow");
-        UpdateAllServiceReorderModeButtonText();
+        ApplyWindowResultsLocalization(loc);
 
         // Language Preferences section
         if (LanguagePreferencesHeaderText != null)
@@ -436,6 +573,8 @@ public sealed partial class SettingsPage : Page
         // Save Settings button
         SaveButton.Content = loc.GetString("SaveSettings");
 
+        UpdateSettingsTabLabels(loc);
+
         // App Theme
         AppThemeCombo.Header = loc.GetString("AppTheme");
         if (AppThemeDescriptionText != null)
@@ -449,14 +588,99 @@ public sealed partial class SettingsPage : Page
             ((ComboBoxItem)AppThemeCombo.Items[2]).Content = loc.GetString("ThemeDark");
         }
 
-        // Tooltips
-        ToolTipService.SetToolTip(FloatingBackButton, loc.GetString("Back"));
-        ToolTipService.SetToolTip(BackToTopButton, loc.GetString("BackToTop"));
-
         // Help icon tooltips
         ToolTipService.SetToolTip(EnabledServicesHelpIcon, loc.GetString("EnabledServicesHelpTip"));
         ToolTipService.SetToolTip(ServiceConfigHelpIcon, loc.GetString("ServiceConfigHelpTip"));
         ToolTipService.SetToolTip(HotkeysHelpIcon, loc.GetString("HotkeysHelpTip"));
+
+        // Behavior, TTS, UI Language (General tab); OCR + Layout Detection (Advanced tab)
+        ApplyBehaviorLocalization(loc);
+        ApplyTtsLocalization(loc);
+        ApplyUILanguageLocalization(loc);
+        ApplyOcrLocalization(loc);
+        ApplyLayoutDetectionLocalization(loc);
+    }
+
+    private void ApplyTtsLocalization(LocalizationService loc)
+    {
+        TtsSettingsHeaderText.Text = loc.GetString("TtsSettingsHeader");
+        TtsSpeedLabelText.Text = loc.GetString("TtsSpeedLabel");
+        AutoPlayTranslationToggle.Header = loc.GetString("AutoPlayTranslation");
+    }
+
+    private void ApplyBehaviorLocalization(LocalizationService loc)
+    {
+        BehaviorHeaderText.Text = loc.GetString("Behavior");
+        MinimizeToTrayToggle.Header = loc.GetString("MinimizeToTray");
+        MinimizeToTrayOnStartupToggle.Header = loc.GetString("MinimizeToTrayOnStartup");
+        ClipboardMonitorToggle.Header = loc.GetString("MonitorClipboard");
+        MouseSelectionTranslateToggle.Header = loc.GetString("MouseSelectionTranslate");
+        MouseSelectionExcludedAppsBox.Header = loc.GetString("ExcludedApps");
+        MouseSelectionExcludedAppsBox.PlaceholderText = loc.GetString("ExcludedAppsPlaceholder");
+        MouseSelectionExcludedAppsDescriptionText.Text = loc.GetString("ExcludedAppsDescription");
+        AlwaysOnTopToggle.Header = loc.GetString("AlwaysOnTop");
+        LaunchAtStartupToggle.Header = loc.GetString("LaunchAtStartup");
+        HideEmptyServiceResultsToggle.Header = loc.GetString("HideEmptyServiceResults");
+        EnableLocalDictionarySuggestionsLabelText.Text = loc.GetString("EnableLocalDictionarySuggestions");
+        ExperimentalLabelText.Text = loc.GetString("Experimental");
+    }
+
+    private void ApplyUILanguageLocalization(LocalizationService loc)
+    {
+        UILanguageCombo.Header = loc.GetString("UILanguage");
+        UILanguageDescriptionText.Text = loc.GetString("UILanguageDescription");
+    }
+
+    private void ApplyOcrLocalization(LocalizationService loc)
+    {
+        OcrSettingsHeaderText.Text = loc.GetString("OcrSettingsHeader");
+        OcrEngineCombo.Header = loc.GetString("OcrEngine");
+        OcrEngineNativeItem.Content = loc.GetString("OcrEngineNative");
+        OcrEngineCustomApiItem.Content = loc.GetString("OcrEngineCustomApi");
+        OcrApiKeyBox.Header = loc.GetString("OcrApiKey");
+        OcrEndpointBox.Header = loc.GetString("OcrEndpoint");
+        OcrModelBox.Header = loc.GetString("OcrModel");
+        OcrSystemPromptBox.Header = loc.GetString("OcrSystemPrompt");
+        TestOcrConnectionButton.Content = loc.GetString("TestOcrConnection");
+        OcrTestStatusBox.Header = loc.GetString("OcrTestResult");
+    }
+
+    private void ApplyLayoutDetectionLocalization(LocalizationService loc)
+    {
+        LayoutDetectionHeaderText.Text = loc.GetString("LayoutDetection_Title");
+        LayoutDetectionDescriptionText.Text = loc.GetString("LayoutDetection_Description");
+        LayoutDetectionModeCombo.Header = loc.GetString("LayoutDetection_DetectionMode");
+        LayoutDetectionAutoItem.Content = loc.GetString("LayoutDetection_Auto");
+        LayoutDetectionOnnxItem.Content = loc.GetString("LayoutDetection_OnnxLocal");
+        LayoutDetectionHeuristicItem.Content = loc.GetString("LayoutDetection_Heuristic");
+        DownloadOnnxModelButton.Content = loc.GetString("LayoutDetection_DownloadModel");
+        DeleteOnnxModelButton.Content = loc.GetString("DeleteOnnxModel");
+        VisionLayoutServiceCombo.Header = loc.GetString("LayoutDetection_VisionService");
+        VisionLLMDescriptionText.Text = loc.GetString("VisionLLMDescription");
+    }
+
+    private void UpdateSettingsTabLabels(LocalizationService loc)
+    {
+        foreach (var tab in _settingsTabs)
+        {
+            tab.Label = loc.GetString($"SettingsTab_{tab.Id}");
+            tab.Tooltip = loc.GetString($"SettingsTab_{tab.Id}_Tooltip");
+        }
+    }
+
+    private void ApplyWindowResultsLocalization(LocalizationService loc)
+    {
+        if (WindowResultsHeaderText != null)
+            WindowResultsHeaderText.Text = loc.GetString("WindowResults");
+        if (WindowResultsDescriptionText != null)
+            WindowResultsDescriptionText.Text = loc.GetString("WindowResultsDescription");
+        if (MainWindowHeaderText != null)
+            MainWindowHeaderText.Text = loc.GetString("MainWindow");
+        if (MiniWindowHeaderText != null)
+            MiniWindowHeaderText.Text = loc.GetString("MiniWindow");
+        if (FixedWindowHeaderText != null)
+            FixedWindowHeaderText.Text = loc.GetString("FixedWindow");
+        UpdateAllServiceReorderModeButtonText();
     }
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
@@ -507,11 +731,7 @@ public sealed partial class SettingsPage : Page
         LogObjectState("InitializeSettingsContent begin");
 #endif
         _isLoading = true;
-
-        // Bind ItemsControls to collections
-        MainWindowServicesPanel.ItemsSource = _mainWindowServices;
-        MiniWindowServicesPanel.ItemsSource = _miniWindowServices;
-        FixedWindowServicesPanel.ItemsSource = _fixedWindowServices;
+        InitializeSettingsTabs();
 
         // Snapshot original SelectedLanguages for discard/restore
         _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
@@ -540,13 +760,6 @@ public sealed partial class SettingsPage : Page
         PerfLog("LoadSettings: end");
         MemoryDiagnostics.LogSnapshot("SettingsPage.LoadSettings complete");
         LogObjectState("LoadSettings complete");
-        PerfLog("InitializeNavigation: begin");
-#endif
-        InitializeNavigation();
-#if DEBUG
-        PerfLog("InitializeNavigation: end");
-        MemoryDiagnostics.LogSnapshot("SettingsPage.InitializeNavigation complete");
-        LogObjectState("InitializeNavigation complete");
         PerfLog("ApplyLocalization: begin");
 #endif
 
@@ -569,7 +782,6 @@ public sealed partial class SettingsPage : Page
         // Reveal content, hide loading overlay
         LoadingOverlay.Visibility = Visibility.Collapsed;
         MainScrollViewer.Visibility = Visibility.Visible;
-        NavSidebar.Visibility = Visibility.Visible;
 #if DEBUG
         PerfLog("Content revealed");
         MemoryDiagnostics.LogDelta("SettingsPage.InitializeSettingsContent retained after init", initializeBaseline);
@@ -670,23 +882,29 @@ public sealed partial class SettingsPage : Page
         try { _currentDialog?.Hide(); } catch (COMException) { }
         _currentDialog = null;
 
-        MainWindowServicesPanel.ItemsSource = null;
-        MiniWindowServicesPanel.ItemsSource = null;
-        FixedWindowServicesPanel.ItemsSource = null;
+        if (MainWindowServicesPanel != null)
+        {
+            MainWindowServicesPanel.ItemsSource = null;
+        }
+        if (MiniWindowServicesPanel != null)
+        {
+            MiniWindowServicesPanel.ItemsSource = null;
+        }
+        if (FixedWindowServicesPanel != null)
+        {
+            FixedWindowServicesPanel.ItemsSource = null;
+        }
         LanguageCheckboxGrid.ItemsSource = null;
+        SettingsTabsHost.ItemsSource = null;
 
         ImportedMdxConfigPanel.Children.Clear();
         _mdxCredentialFields.Clear();
-
-        DetachNavigationIconHandlers();
-        NavIndicators.Children.Clear();
-        _navSections.Clear();
-        _currentSectionIndex = -1;
 
         _mainWindowServices.Clear();
         _miniWindowServices.Clear();
         _fixedWindowServices.Clear();
         _languageItems.Clear();
+        _settingsTabs.Clear();
 
         _isInitialized = false;
 
@@ -2554,204 +2772,6 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
-    /// Initialize the floating navigation sidebar with section dots.
-    /// </summary>
-    private void InitializeNavigation()
-    {
-        // Define navigation sections
-        // Define navigation sections with icons (Segoe Fluent Icons)
-        _navSections =
-        [
-            new NavSection("HeaderSection", "Settings", "\uE713", HeaderSection),              // Settings gear
-            new NavSection("LanguagePreferencesSection", "Language Preferences", "\uE774", LanguagePreferencesSection), // Globe
-            new NavSection("EnabledServicesSection", "Enabled Services", "\uE73E", EnabledServicesSection),           // Checkmark
-            new NavSection("ServiceConfigurationSection", "Service Configuration", "\uE90F", ServiceConfigurationSection), // Key
-            new NavSection("TtsSettingsSection", "TTS Settings", "\uE767", TtsSettingsSection), // Volume
-            new NavSection("OcrSettingsSection", "OCR Settings", "\uEE6F", OcrSettingsSection), // Scan
-            new NavSection("LayoutDetectionSection", "Layout Detection", "\uE8A1", LayoutDetectionSection),  // Page
-            new NavSection("CjkFontSection", "CJK Font", "\uE8D2", CjkFontSection),  // Font
-            new NavSection("FormulaDetectionSection", "Formula Detection", "\uE8EF", FormulaDetectionSection),  // Calculator
-            new NavSection("TranslationCacheSection", "Translation Cache", "\uE74E", TranslationCacheSection),  // Save
-            new NavSection("CustomPromptSection", "Custom Prompt", "\uE8BD", CustomPromptSection),  // Comment
-            new NavSection("HttpProxySection", "HTTP Proxy", "\uE968", HttpProxySection),      // Network
-            new NavSection("BehaviorSection", "Behavior", "\uE771", BehaviorSection),          // Touch
-            new NavSection("HotkeysSection", "Hotkeys", "\uE765", HotkeysSection),             // Keyboard
-            new NavSection("AboutSection", "About", "\uE946", AboutSection)                    // Info
-        ];
-
-        // Clear existing icons and create new ones
-        DetachNavigationIconHandlers();
-        NavIndicators.Children.Clear();
-
-        for (int i = 0; i < _navSections.Count; i++)
-        {
-            var section = _navSections[i];
-            var icon = new FontIcon
-            {
-                Glyph = section.IconGlyph,
-                FontSize = 16,
-                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-                Opacity = 0.6,
-                Tag = i
-            };
-
-            // Add tooltip
-            ToolTipService.SetToolTip(icon, section.Tooltip);
-
-            // Add click handler
-            icon.PointerPressed += OnNavIconClick;
-            icon.PointerEntered += OnNavIconPointerEntered;
-            icon.PointerExited += OnNavIconPointerExited;
-
-            NavIndicators.Children.Add(icon);
-        }
-
-        // Set initial active icon
-        UpdateActiveNavIcon(0);
-    }
-
-    private void DetachNavigationIconHandlers()
-    {
-        foreach (var child in NavIndicators.Children)
-        {
-            if (child is not FontIcon icon)
-            {
-                continue;
-            }
-
-            icon.PointerPressed -= OnNavIconClick;
-            icon.PointerEntered -= OnNavIconPointerEntered;
-            icon.PointerExited -= OnNavIconPointerExited;
-        }
-    }
-
-    private void OnNavIconPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-    {
-        if (sender is FontIcon icon && icon.Tag is int index)
-        {
-            // Hover state: 1.0 for non-active icons. Active icon is already 1.0.
-            if (index != _currentSectionIndex)
-            {
-                icon.Opacity = 1.0;
-            }
-        }
-    }
-
-    private void OnNavIconPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-    {
-        if (sender is FontIcon icon && icon.Tag is int index)
-        {
-            // Restore state: 0.6 for inactive, keep 1.0 for active.
-            icon.Opacity = (index == _currentSectionIndex) ? 1.0 : 0.6;
-        }
-    }
-
-    /// <summary>
-    /// Handle scroll view changes to detect current section and show/hide back-to-top button.
-    /// </summary>
-    private void OnScrollViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
-    {
-        if (_navSections.Count == 0) return;
-
-        var scrollViewer = MainScrollViewer;
-        var verticalOffset = scrollViewer.VerticalOffset;
-
-        // Show/hide floating back button (show after 60px scroll - when header is out of view)
-        FloatingBackButton.Visibility = verticalOffset > 60 ? Visibility.Visible : Visibility.Collapsed;
-
-        // Show/hide back-to-top button (show after 200px scroll)
-        BackToTopButton.Visibility = verticalOffset > 200 ? Visibility.Visible : Visibility.Collapsed;
-
-        // Find current section by checking element positions relative to viewport
-        int currentIndex = 0;
-        double viewportTop = verticalOffset + 50; // Add small offset for better UX
-
-        for (int i = 0; i < _navSections.Count; i++)
-        {
-            var section = _navSections[i];
-            var transform = section.Element.TransformToVisual(scrollViewer);
-            var position = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-
-            // Element position relative to scroll content
-            var elementTop = position.Y + verticalOffset;
-
-            if (elementTop <= viewportTop)
-            {
-                currentIndex = i;
-            }
-        }
-
-        // Update active nav icon if section changed
-        if (currentIndex != _currentSectionIndex)
-        {
-            UpdateActiveNavIcon(currentIndex);
-        }
-    }
-
-    /// <summary>
-    /// Update the active navigation icon styling.
-    /// </summary>
-    private void UpdateActiveNavIcon(int activeIndex)
-    {
-        _currentSectionIndex = activeIndex;
-
-        for (int i = 0; i < NavIndicators.Children.Count; i++)
-        {
-            if (NavIndicators.Children[i] is FontIcon icon)
-            {
-                if (i == activeIndex)
-                {
-                    // Keep the nav rail layout-stable during scroll sync.
-                    icon.Foreground = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
-                    icon.Opacity = 1.0;
-                }
-                else
-                {
-                    // Only change non-layout-affecting state for inactive items.
-                    icon.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
-                    icon.Opacity = 0.6;
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Handle navigation icon click to scroll to the corresponding section.
-    /// </summary>
-    private void OnNavIconClick(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-    {
-        if (sender is not FontIcon icon || icon.Tag is not int index) return;
-        if (index < 0 || index >= _navSections.Count) return;
-
-        var section = _navSections[index];
-        ScrollToElement(section.Element);
-    }
-
-    /// <summary>
-    /// Scroll to a specific element with smooth animation.
-    /// </summary>
-    private void ScrollToElement(FrameworkElement element)
-    {
-        var transform = element.TransformToVisual(MainScrollViewer);
-        var position = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-        var targetOffset = MainScrollViewer.VerticalOffset + position.Y - 24; // 24px padding
-
-        // Ensure we don't scroll past the content
-        targetOffset = Math.Max(0, Math.Min(targetOffset, MainScrollViewer.ScrollableHeight));
-
-        // Use ChangeView for smooth scrolling animation
-        MainScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: false);
-    }
-
-    /// <summary>
-    /// Handle back-to-top button click.
-    /// </summary>
-    private void OnBackToTopClick(object sender, RoutedEventArgs e)
-    {
-        MainScrollViewer.ChangeView(null, 0, null, disableAnimation: false);
-    }
-
-    /// <summary>
     /// Handle Enable International Services toggle change.
     /// Updates IsAvailable on all service items and unchecks unavailable services.
     /// </summary>
@@ -3878,6 +3898,31 @@ public class BoolToItalicFontStyleConverter : Microsoft.UI.Xaml.Data.IValueConve
 {
     public object Convert(object value, Type targetType, object parameter, string language)
         => value is true ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal;
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+        => throw new NotImplementedException();
+}
+
+public class SettingsTabBrushConverter : Microsoft.UI.Xaml.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+    {
+        bool selected = value is true;
+        var res = Application.Current.Resources;
+        return (parameter as string) switch
+        {
+            "Background" => selected
+                ? res["AccentFillColorTertiaryBrush"]
+                : res["SubtleFillColorTransparentBrush"],
+            "Border" => selected
+                ? res["AccentFillColorDefaultBrush"]
+                : res["ControlStrokeColorDefaultBrush"],
+            "Foreground" => selected
+                ? res["AccentTextFillColorPrimaryBrush"]
+                : res["TextFillColorPrimaryBrush"],
+            _ => throw new ArgumentException($"Unknown parameter: {parameter}", nameof(parameter)),
+        };
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new NotImplementedException();

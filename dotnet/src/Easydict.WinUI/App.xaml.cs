@@ -61,8 +61,9 @@ namespace Easydict.WinUI
 
         public App()
         {
-            // NOTE: Language is managed by LocalizationService using ResourceContext.
-            // No early initialization needed - ResourceContext can be updated at runtime.
+            // Language is managed by LocalizationService. SettingsPage.ApplyLocalization()
+            // explicitly assigns each user-visible string from LocalizationService at runtime,
+            // so x:Uid is intentionally not used in this codebase for app strings.
             this.InitializeComponent();
 
             this.UnhandledException += OnUnhandledException;

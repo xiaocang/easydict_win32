@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:element name="root" msdata:IsDataSet="true">
@@ -187,30 +187,6 @@
   <data name="RestartRequiredMessage" xml:space="preserve"><value>Genstart venligst applikationen for at sprogændringen træder i kraft.</value></data>
   <data name="UILangEnglish" xml:space="preserve"><value>Engelsk</value></data>
   <data name="UILangChineseSimplified" xml:space="preserve"><value>Kinesisk (forenklet)</value></data>
-  <data name="BehaviorHeader.Text" xml:space="preserve"><value>Adfærd</value></data>
-  <data name="UILanguageCombo.Header" xml:space="preserve"><value>Grænsefladesprog</value></data>
-  <data name="UILangEnglishItem.Content" xml:space="preserve"><value>English</value></data>
-  <data name="UILangChineseItem.Content" xml:space="preserve"><value>简体中文</value></data>
-  <data name="UILangJapaneseItem.Content" xml:space="preserve"><value>日本語</value></data>
-  <data name="UILangKoreanItem.Content" xml:space="preserve"><value>한국어</value></data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve"><value>繁體中文</value></data>
-  <data name="UILangFrenchItem.Content" xml:space="preserve"><value>Français</value></data>
-  <data name="UILangGermanItem.Content" xml:space="preserve"><value>Deutsch</value></data>
-  <data name="UILangVietnameseItem.Content" xml:space="preserve"><value>Tiếng Việt</value></data>
-  <data name="UILangThaiItem.Content" xml:space="preserve"><value>ไทย</value></data>
-  <data name="UILangArabicItem.Content" xml:space="preserve"><value>العربية</value></data>
-  <data name="UILangIndonesianItem.Content" xml:space="preserve"><value>Bahasa Indonesia</value></data>
-  <data name="UILangItalianItem.Content" xml:space="preserve"><value>Italiano</value></data>
-  <data name="UILangMalayItem.Content" xml:space="preserve"><value>Bahasa Melayu</value></data>
-  <data name="UILangHindiItem.Content" xml:space="preserve"><value>हिन्दी</value></data>
-  <data name="UILangDanishItem.Content" xml:space="preserve"><value>Dansk</value></data>
-  <data name="UILanguageDescription.Text" xml:space="preserve"><value>Vælg visningssprog for applikationens grænseflade. Genstart påkrævet.</value></data>
-  <data name="MinimizeToTrayToggle.Header" xml:space="preserve"><value>Minimer til systembakke</value></data>
-  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve"><value>Start minimeret i systembakke</value></data>
-  <data name="ClipboardMonitorToggle.Header" xml:space="preserve"><value>Overvåg udklipsholder for tekst</value></data>
-  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve"><value>Oversæt med musemarkering (vælg tekst → klik svæveikon)</value></data>
-  <data name="AlwaysOnTopToggle.Header" xml:space="preserve"><value>Altid øverst</value></data>
-  <data name="LaunchAtStartupToggle.Header" xml:space="preserve"><value>Start ved Windows-opstart</value></data>
   <data name="Close" xml:space="preserve"><value>Luk</value></data>
   <data name="HideWindow" xml:space="preserve"><value>Skjul (Ctrl+Alt+F for at vise igen)</value></data>
   <data name="EnableInternationalServices" xml:space="preserve"><value>Aktiver internationale tjenester</value></data>
@@ -446,19 +422,118 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>Spring over</value>
   </data>
-  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
-    <value>Ekskluderede apps</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
-    <value>code, slack, discord</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
-    <value>Procesnavne der skal ekskluderes fra musemarkerings-oversættelse, adskilt med kommaer. Eksempel: "code" for VS Code.</value>
-  </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>Omarranger</value>
   </data>
   <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
     <value>Færdig</value>
   </data>
+  <data name="SettingsTab_Services" xml:space="preserve">
+    <value>Tjenester</value>
+  </data>
+  <data name="SettingsTab_About_Tooltip" xml:space="preserve">
+    <value>Version, links, feedback og licens.</value>
+  </data>
+  <data name="SettingsTab_General_Tooltip" xml:space="preserve">
+    <value>Tema, opstart, proceslinje, udklipsholder, TTS og adfærd.</value>
+  </data>
+  <data name="SettingsTab_Advanced_Tooltip" xml:space="preserve">
+    <value>OCR, layoutgenkendelse, cache, proxy og prompts.</value>
+  </data>
+  <data name="SettingsTab_Advanced" xml:space="preserve">
+    <value>Avanceret</value>
+  </data>
+  <data name="SettingsTab_General" xml:space="preserve">
+    <value>Generelt</value>
+  </data>
+  <data name="WindowResults" xml:space="preserve">
+    <value>Vinduesresultater</value>
+  </data>
+  <data name="SettingsTab_Language" xml:space="preserve">
+    <value>Sprog</value>
+  </data>
+  <data name="SettingsTab_Language_Tooltip" xml:space="preserve">
+    <value>Oversættelsessprog, tilgængelige sprog og brugergrænsefladesprog.</value>
+  </data>
+  <data name="WindowResultsDescription" xml:space="preserve">
+    <value>Vælg hvilke resultater der vises i hvert vindue, og om hvert resultat søges automatisk.</value>
+  </data>
+  <data name="SettingsTab_About" xml:space="preserve">
+    <value>Om</value>
+  </data>
+  <data name="SettingsTab_Hotkeys_Tooltip" xml:space="preserve">
+    <value>Konfigurer app-genveje og genvejskontakter.</value>
+  </data>
+  <data name="SettingsTab_Hotkeys" xml:space="preserve">
+    <value>Genvejstaster</value>
+  </data>
+  <data name="SettingsTab_Services_Tooltip" xml:space="preserve">
+    <value>Standardtjenester, API-konfiguration, tests og ordbøger.</value>
+  </data>
+  <data name="SettingsTab_Views" xml:space="preserve">
+    <value>Visninger</value>
+  </data>
+  <data name="SettingsTab_Views_Tooltip" xml:space="preserve">
+    <value>Vælg synlige resultater og forespørgselstilstand for hver app-visning.</value>
+  </data>
+  <data name="TtsSettingsHeader" xml:space="preserve">
+    <value>TTS-outputindstillinger</value>
+  </data>
+  <data name="TtsSpeedLabel" xml:space="preserve">
+    <value>TTS-læsehastighed (0,5× – 3,0×)</value>
+  </data>
+  <data name="AutoPlayTranslation" xml:space="preserve">
+    <value>Afspil oversættelse automatisk</value>
+  </data>
+  <data name="HideEmptyServiceResults" xml:space="preserve">
+    <value>Skjul ordbøger uden resultater</value>
+  </data>
+  <data name="EnableLocalDictionarySuggestions" xml:space="preserve">
+    <value>Aktivér inputforslag fra brugerdefinerede ordbøger</value>
+  </data>
+  <data name="Experimental" xml:space="preserve">
+    <value>Eksperimentel</value>
+  </data>
+  <data name="OcrSettingsHeader" xml:space="preserve">
+    <value>OCR-indstillinger (tekstgenkendelse)</value>
+  </data>
+  <data name="OcrEngine" xml:space="preserve">
+    <value>OCR-motor</value>
+  </data>
+  <data name="OcrEngineNative" xml:space="preserve">
+    <value>Standard (Windows-native)</value>
+  </data>
+  <data name="OcrEngineCustomApi" xml:space="preserve">
+    <value>Brugerdefineret API</value>
+  </data>
+  <data name="OcrApiKey" xml:space="preserve">
+    <value>API-nøgle (valgfri)</value>
+  </data>
+  <data name="OcrEndpoint" xml:space="preserve">
+    <value>Endpoint</value>
+  </data>
+  <data name="OcrModel" xml:space="preserve">
+    <value>Model</value>
+  </data>
+  <data name="OcrSystemPrompt" xml:space="preserve">
+    <value>Systemprompt</value>
+  </data>
+  <data name="TestOcrConnection" xml:space="preserve">
+    <value>Test OCR-forbindelse</value>
+  </data>
+  <data name="OcrTestResult" xml:space="preserve">
+    <value>Testresultat</value>
+  </data>
+  <data name="DeleteOnnxModel" xml:space="preserve">
+    <value>Slet</value>
+  </data>
+  <data name="VisionLLMDescription" xml:space="preserve">
+    <value>Kræver en konfigureret API-nøgle til den valgte tjeneste.</value>
+  </data>
+  <data name="MinimizeToTrayOnStartup" xml:space="preserve"><value>Start minimeret i systembakke</value></data>
+  <data name="MouseSelectionTranslate" xml:space="preserve"><value>Oversæt med musemarkering (vælg tekst → klik svæveikon)</value></data>
+  <data name="UILanguageDescription" xml:space="preserve"><value>Vælg visningssprog for applikationens grænseflade. Genstart påkrævet.</value></data>
+  <data name="ExcludedApps" xml:space="preserve"><value>Ekskluderede apps</value></data>
+  <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
+  <data name="ExcludedAppsDescription" xml:space="preserve"><value>Procesnavne der skal ekskluderes fra musemarkerings-oversættelse, adskilt med kommaer. Eksempel: "code" for VS Code.</value></data>
 </root>

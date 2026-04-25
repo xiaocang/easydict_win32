@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:element name="root" msdata:IsDataSet="true">
@@ -507,78 +507,6 @@
   <data name="UILangChineseSimplified" xml:space="preserve">
     <value>&#xE08;&#xE35;&#xE19; (&#xE15;&#xE31;&#xE27;&#xE22;&#xE48;&#xE2D;)</value>
   </data>
-  <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>&#xE1E;&#xE24;&#xE15;&#xE34;&#xE01;&#xE23;&#xE23;&#xE21;</value>
-  </data>
-  <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>&#xE20;&#xE32;&#xE29;&#xE32;&#xE02;&#xE2D;&#xE07;&#xE2B;&#xE19;&#xE49;&#xE32;&#xE08;&#xE2D;</value>
-  </data>
-  <data name="UILangEnglishItem.Content" xml:space="preserve">
-    <value>English</value>
-  </data>
-  <data name="UILangChineseItem.Content" xml:space="preserve">
-    <value>&#x7B80;&#x4F53;&#x4E2D;&#x6587;</value>
-  </data>
-  <data name="UILangJapaneseItem.Content" xml:space="preserve">
-    <value>&#x65E5;&#x672C;&#x8A9E;</value>
-  </data>
-  <data name="UILangKoreanItem.Content" xml:space="preserve">
-    <value>&#xD55C;&#xAD6D;&#xC5B4;</value>
-  </data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
-    <value>&#x7E41;&#x9AD4;&#x4E2D;&#x6587;</value>
-  </data>
-  <data name="UILangFrenchItem.Content" xml:space="preserve">
-    <value>Fran&#xE7;ais</value>
-  </data>
-  <data name="UILangGermanItem.Content" xml:space="preserve">
-    <value>Deutsch</value>
-  </data>
-  <data name="UILangVietnameseItem.Content" xml:space="preserve">
-    <value>Ti&#x1EBF;ng Vi&#x1EC7;t</value>
-  </data>
-  <data name="UILangThaiItem.Content" xml:space="preserve">
-    <value>&#xE44;&#xE17;&#xE22;</value>
-  </data>
-  <data name="UILangArabicItem.Content" xml:space="preserve">
-    <value>&#x627;&#x644;&#x639;&#x631;&#x628;&#x64A;&#x629;</value>
-  </data>
-  <data name="UILangIndonesianItem.Content" xml:space="preserve">
-    <value>Bahasa Indonesia</value>
-  </data>
-  <data name="UILangItalianItem.Content" xml:space="preserve">
-    <value>Italiano</value>
-  </data>
-  <data name="UILangMalayItem.Content" xml:space="preserve">
-    <value>Bahasa Melayu</value>
-  </data>
-  <data name="UILangHindiItem.Content" xml:space="preserve">
-    <value>&#x939;&#x93F;&#x928;&#x94D;&#x926;&#x940;</value>
-  </data>
-  <data name="UILangDanishItem.Content" xml:space="preserve">
-    <value>Dansk</value>
-  </data>
-  <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE41;&#xE2A;&#xE14;&#xE07;&#xE2A;&#xE33;&#xE2B;&#xE23;&#xE31;&#xE1A;&#xE2D;&#xE34;&#xE19;&#xE40;&#xE17;&#xE2D;&#xE23;&#xE4C;&#xE40;&#xE1F;&#xE2A;&#xE41;&#xE2D;&#xE1B;&#xE1E;&#xE25;&#xE34;&#xE40;&#xE04;&#xE0A;&#xE31;&#xE19; &#xE15;&#xE49;&#xE2D;&#xE07;&#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;</value>
-  </data>
-  <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>&#xE22;&#xE48;&#xE2D;&#xE25;&#xE07;&#xE43;&#xE19;&#xE16;&#xE32;&#xE14;&#xE23;&#xE30;&#xE1A;&#xE1A;</value>
-  </data>
-  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
-    <value>&#xE40;&#xE23;&#xE34;&#xE48;&#xE21;&#xE15;&#xE49;&#xE19;&#xE22;&#xE48;&#xE2D;&#xE25;&#xE07;&#xE43;&#xE19;&#xE16;&#xE32;&#xE14;&#xE23;&#xE30;&#xE1A;&#xE1A;</value>
-  </data>
-  <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>&#xE15;&#xE23;&#xE27;&#xE08;&#xE2A;&#xE2D;&#xE1A;&#xE04;&#xE25;&#xE34;&#xE1B;&#xE1A;&#xE2D;&#xE23;&#xE4C;&#xE14;</value>
-  </data>
-  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
-    <value>&#xE41;&#xE1B;&#xE25;&#xE14;&#xE49;&#xE27;&#xE22;&#xE01;&#xE32;&#xE23;&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE40;&#xE21;&#xE32;&#xE2A;&#xE4C; (&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE02;&#xE49;&#xE2D;&#xE04;&#xE27;&#xE32;&#xE21; &#x2192; &#xE04;&#xE25;&#xE34;&#xE01;&#xE44;&#xE2D;&#xE04;&#xE2D;&#xE19;&#xE25;&#xE2D;&#xE22;)</value>
-  </data>
-  <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>&#xE41;&#xE2A;&#xE14;&#xE07;&#xE14;&#xE49;&#xE32;&#xE19;&#xE1A;&#xE19;&#xE40;&#xE2A;&#xE21;&#xE2D;</value>
-  </data>
-  <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>&#xE40;&#xE1B;&#xE34;&#xE14;&#xE40;&#xE21;&#xE37;&#xE48;&#xE2D;&#xE40;&#xE23;&#xE34;&#xE48;&#xE21;&#xE15;&#xE49;&#xE19; Windows</value>
-  </data>
   <data name="Close" xml:space="preserve">
     <value>&#xE1B;&#xE34;&#xE14;</value>
   </data>
@@ -856,19 +784,118 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>ข้าม</value>
   </data>
-  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
-    <value>แอปที่ยกเว้น</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
-    <value>code, slack, discord</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
-    <value>ชื่อโปรเซสที่ต้องการยกเว้นจากการแปลเมื่อเลือกข้อความ คั่นด้วยเครื่องหมายจุลภาค ตัวอย่าง: "code" สำหรับ VS Code</value>
-  </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>จัดลำดับ</value>
   </data>
   <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
     <value>เสร็จสิ้น</value>
   </data>
+  <data name="SettingsTab_Services" xml:space="preserve">
+    <value>บริการ</value>
+  </data>
+  <data name="SettingsTab_About_Tooltip" xml:space="preserve">
+    <value>เวอร์ชัน ลิงก์ ข้อเสนอแนะ และสัญญาอนุญาต</value>
+  </data>
+  <data name="SettingsTab_General_Tooltip" xml:space="preserve">
+    <value>ธีม การเริ่มต้น ถาดระบบ คลิปบอร์ด TTS และพฤติกรรม</value>
+  </data>
+  <data name="SettingsTab_Advanced_Tooltip" xml:space="preserve">
+    <value>OCR การตรวจจับเค้าโครง แคช พร็อกซี และพรอมต์</value>
+  </data>
+  <data name="SettingsTab_Advanced" xml:space="preserve">
+    <value>ขั้นสูง</value>
+  </data>
+  <data name="SettingsTab_General" xml:space="preserve">
+    <value>ทั่วไป</value>
+  </data>
+  <data name="WindowResults" xml:space="preserve">
+    <value>ผลลัพธ์ในหน้าต่าง</value>
+  </data>
+  <data name="SettingsTab_Language" xml:space="preserve">
+    <value>ภาษา</value>
+  </data>
+  <data name="SettingsTab_Language_Tooltip" xml:space="preserve">
+    <value>ภาษาที่ใช้แปล ภาษาที่ใช้ได้ และภาษาของอินเทอร์เฟซ</value>
+  </data>
+  <data name="WindowResultsDescription" xml:space="preserve">
+    <value>เลือกผลลัพธ์ที่จะแสดงในแต่ละหน้าต่างและกำหนดว่าแต่ละผลลัพธ์จะค้นหาโดยอัตโนมัติหรือไม่</value>
+  </data>
+  <data name="SettingsTab_About" xml:space="preserve">
+    <value>เกี่ยวกับ</value>
+  </data>
+  <data name="SettingsTab_Hotkeys_Tooltip" xml:space="preserve">
+    <value>กำหนดค่าทางลัดของแอปและสวิตช์ปุ่มลัด</value>
+  </data>
+  <data name="SettingsTab_Hotkeys" xml:space="preserve">
+    <value>ปุ่มลัด</value>
+  </data>
+  <data name="SettingsTab_Services_Tooltip" xml:space="preserve">
+    <value>บริการเริ่มต้น การตั้งค่า API การทดสอบ และพจนานุกรม</value>
+  </data>
+  <data name="SettingsTab_Views" xml:space="preserve">
+    <value>มุมมอง</value>
+  </data>
+  <data name="SettingsTab_Views_Tooltip" xml:space="preserve">
+    <value>เลือกผลลัพธ์ที่แสดงและโหมดการค้นหาสำหรับแต่ละมุมมอง</value>
+  </data>
+  <data name="TtsSettingsHeader" xml:space="preserve">
+    <value>การตั้งค่าเอาต์พุต TTS</value>
+  </data>
+  <data name="TtsSpeedLabel" xml:space="preserve">
+    <value>ความเร็วในการอ่าน TTS (0.5× – 3.0×)</value>
+  </data>
+  <data name="AutoPlayTranslation" xml:space="preserve">
+    <value>เล่นคำแปลอัตโนมัติ</value>
+  </data>
+  <data name="HideEmptyServiceResults" xml:space="preserve">
+    <value>ซ่อนพจนานุกรมที่ไม่มีผลลัพธ์</value>
+  </data>
+  <data name="EnableLocalDictionarySuggestions" xml:space="preserve">
+    <value>เปิดใช้คำแนะนำจากพจนานุกรมที่กำหนดเอง</value>
+  </data>
+  <data name="Experimental" xml:space="preserve">
+    <value>ทดลอง</value>
+  </data>
+  <data name="OcrSettingsHeader" xml:space="preserve">
+    <value>การตั้งค่า OCR (การรู้จำข้อความ)</value>
+  </data>
+  <data name="OcrEngine" xml:space="preserve">
+    <value>เครื่องมือ OCR</value>
+  </data>
+  <data name="OcrEngineNative" xml:space="preserve">
+    <value>ค่าเริ่มต้น (Windows Native)</value>
+  </data>
+  <data name="OcrEngineCustomApi" xml:space="preserve">
+    <value>API ที่กำหนดเอง</value>
+  </data>
+  <data name="OcrApiKey" xml:space="preserve">
+    <value>คีย์ API (ไม่บังคับ)</value>
+  </data>
+  <data name="OcrEndpoint" xml:space="preserve">
+    <value>ปลายทาง</value>
+  </data>
+  <data name="OcrModel" xml:space="preserve">
+    <value>โมเดล</value>
+  </data>
+  <data name="OcrSystemPrompt" xml:space="preserve">
+    <value>พรอมต์ระบบ</value>
+  </data>
+  <data name="TestOcrConnection" xml:space="preserve">
+    <value>ทดสอบการเชื่อมต่อ OCR</value>
+  </data>
+  <data name="OcrTestResult" xml:space="preserve">
+    <value>ผลการทดสอบ</value>
+  </data>
+  <data name="DeleteOnnxModel" xml:space="preserve">
+    <value>ลบ</value>
+  </data>
+  <data name="VisionLLMDescription" xml:space="preserve">
+    <value>ต้องมีคีย์ API ที่กำหนดค่าไว้สำหรับบริการที่เลือก</value>
+  </data>
+  <data name="MinimizeToTrayOnStartup" xml:space="preserve"><value>&#xE40;&#xE23;&#xE34;&#xE48;&#xE21;&#xE15;&#xE49;&#xE19;&#xE22;&#xE48;&#xE2D;&#xE25;&#xE07;&#xE43;&#xE19;&#xE16;&#xE32;&#xE14;&#xE23;&#xE30;&#xE1A;&#xE1A;</value></data>
+  <data name="MouseSelectionTranslate" xml:space="preserve"><value>&#xE41;&#xE1B;&#xE25;&#xE14;&#xE49;&#xE27;&#xE22;&#xE01;&#xE32;&#xE23;&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE40;&#xE21;&#xE32;&#xE2A;&#xE4C; (&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE02;&#xE49;&#xE2D;&#xE04;&#xE27;&#xE32;&#xE21; &#x2192; &#xE04;&#xE25;&#xE34;&#xE01;&#xE44;&#xE2D;&#xE04;&#xE2D;&#xE19;&#xE25;&#xE2D;&#xE22;)</value></data>
+  <data name="UILanguageDescription" xml:space="preserve"><value>&#xE40;&#xE25;&#xE37;&#xE2D;&#xE01;&#xE20;&#xE32;&#xE29;&#xE32;&#xE17;&#xE35;&#xE48;&#xE41;&#xE2A;&#xE14;&#xE07;&#xE2A;&#xE33;&#xE2B;&#xE23;&#xE31;&#xE1A;&#xE2D;&#xE34;&#xE19;&#xE40;&#xE17;&#xE2D;&#xE23;&#xE4C;&#xE40;&#xE1F;&#xE2A;&#xE41;&#xE2D;&#xE1B;&#xE1E;&#xE25;&#xE34;&#xE40;&#xE04;&#xE0A;&#xE31;&#xE19; &#xE15;&#xE49;&#xE2D;&#xE07;&#xE23;&#xE35;&#xE2A;&#xE15;&#xE32;&#xE23;&#xE4C;&#xE17;</value></data>
+  <data name="ExcludedApps" xml:space="preserve"><value>แอปที่ยกเว้น</value></data>
+  <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
+  <data name="ExcludedAppsDescription" xml:space="preserve"><value>ชื่อโปรเซสที่ต้องการยกเว้นจากการแปลเมื่อเลือกข้อความ คั่นด้วยเครื่องหมายจุลภาค ตัวอย่าง: "code" สำหรับ VS Code</value></data>
 </root>

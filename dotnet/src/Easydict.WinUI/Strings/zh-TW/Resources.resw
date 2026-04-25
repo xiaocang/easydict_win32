@@ -609,79 +609,6 @@
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
-  <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>行為</value>
-  </data>
-  <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>介面語言</value>
-  </data>
-  <data name="UILangEnglishItem.Content" xml:space="preserve">
-    <value>English</value>
-  </data>
-  <data name="UILangChineseItem.Content" xml:space="preserve">
-    <value>简体中文</value>
-  </data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
-    <value>繁體中文</value>
-  </data>
-  <data name="UILangJapaneseItem.Content" xml:space="preserve">
-    <value>日本語</value>
-  </data>
-  <data name="UILangKoreanItem.Content" xml:space="preserve">
-    <value>한국어</value>
-  </data>
-  <data name="UILangFrenchItem.Content" xml:space="preserve">
-    <value>Français</value>
-  </data>
-  <data name="UILangGermanItem.Content" xml:space="preserve">
-    <value>Deutsch</value>
-  </data>
-  <data name="UILangVietnameseItem.Content" xml:space="preserve">
-    <value>Tiếng Việt</value>
-  </data>
-  <data name="UILangThaiItem.Content" xml:space="preserve">
-    <value>ไทย</value>
-  </data>
-  <data name="UILangArabicItem.Content" xml:space="preserve">
-    <value>العربية</value>
-  </data>
-  <data name="UILangIndonesianItem.Content" xml:space="preserve">
-    <value>Bahasa Indonesia</value>
-  </data>
-  <data name="UILangItalianItem.Content" xml:space="preserve">
-    <value>Italiano</value>
-  </data>
-  <data name="UILangMalayItem.Content" xml:space="preserve">
-    <value>Bahasa Melayu</value>
-  </data>
-  <data name="UILangHindiItem.Content" xml:space="preserve">
-    <value>हिन्दी</value>
-  </data>
-  <data name="UILangDanishItem.Content" xml:space="preserve">
-    <value>Dansk</value>
-  </data>
-  <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>選擇應用程式介面的顯示語言。需要重新啟動生效。</value>
-  </data>
-  <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>最小化到系統匣</value>
-  </data>
-  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
-    <value>啟動後最小化到系統匣</value>
-  </data>
-  <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>監控剪貼簿文字</value>
-  </data>
-  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
-    <value>劃詞翻譯（選取文字 → 點擊浮動圖示）</value>
-  </data>
-  <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>始終置頂</value>
-  </data>
-  <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>開機自動啟動</value>
-  </data>
-
   <!-- International Services -->
   <data name="EnableInternationalServices" xml:space="preserve">
     <value>啟用國際服務</value>
@@ -1061,19 +988,118 @@
   <data name="MddAssociatedFiles" xml:space="preserve">
     <value>資源檔案</value>
   </data>
-  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
-    <value>排除應用</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
-    <value>code, slack, discord</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
-    <value>排除劃詞翻譯的程序名稱，用逗號分隔。範例："code" 代表 VS Code。</value>
-  </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>排序</value>
   </data>
   <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
     <value>完成排序</value>
   </data>
+  <data name="SettingsTab_Services" xml:space="preserve">
+    <value>服務</value>
+  </data>
+  <data name="SettingsTab_About_Tooltip" xml:space="preserve">
+    <value>查看版本、連結、回饋和授權。</value>
+  </data>
+  <data name="SettingsTab_General_Tooltip" xml:space="preserve">
+    <value>設定主題、啟動、系統匣、剪貼簿、TTS 和一般行為。</value>
+  </data>
+  <data name="SettingsTab_Advanced_Tooltip" xml:space="preserve">
+    <value>設定 OCR、版面偵測、快取、代理和提示詞。</value>
+  </data>
+  <data name="SettingsTab_Advanced" xml:space="preserve">
+    <value>進階</value>
+  </data>
+  <data name="SettingsTab_General" xml:space="preserve">
+    <value>一般</value>
+  </data>
+  <data name="WindowResults" xml:space="preserve">
+    <value>視窗結果顯示</value>
+  </data>
+  <data name="SettingsTab_Language" xml:space="preserve">
+    <value>語言</value>
+  </data>
+  <data name="SettingsTab_Language_Tooltip" xml:space="preserve">
+    <value>設定翻譯語言、可用語言和介面語言。</value>
+  </data>
+  <data name="WindowResultsDescription" xml:space="preserve">
+    <value>選擇每個視窗顯示哪些結果，以及這些結果是否自動查詢。</value>
+  </data>
+  <data name="SettingsTab_About" xml:space="preserve">
+    <value>關於</value>
+  </data>
+  <data name="SettingsTab_Hotkeys_Tooltip" xml:space="preserve">
+    <value>設定應用程式快捷鍵和快捷鍵開關。</value>
+  </data>
+  <data name="SettingsTab_Hotkeys" xml:space="preserve">
+    <value>快捷鍵</value>
+  </data>
+  <data name="SettingsTab_Services_Tooltip" xml:space="preserve">
+    <value>設定預設服務、API、服務測試和詞典。</value>
+  </data>
+  <data name="SettingsTab_Views" xml:space="preserve">
+    <value>視圖</value>
+  </data>
+  <data name="SettingsTab_Views_Tooltip" xml:space="preserve">
+    <value>設定每個應用視圖顯示哪些結果，以及是否自動查詢。</value>
+  </data>
+  <data name="TtsSettingsHeader" xml:space="preserve">
+    <value>TTS 輸出設定</value>
+  </data>
+  <data name="TtsSpeedLabel" xml:space="preserve">
+    <value>TTS 朗讀速度 (0.5x - 3.0x)</value>
+  </data>
+  <data name="AutoPlayTranslation" xml:space="preserve">
+    <value>自動朗讀譯文</value>
+  </data>
+  <data name="HideEmptyServiceResults" xml:space="preserve">
+    <value>隱藏無結果的字典</value>
+  </data>
+  <data name="EnableLocalDictionarySuggestions" xml:space="preserve">
+    <value>啟用自訂字典輸入建議</value>
+  </data>
+  <data name="Experimental" xml:space="preserve">
+    <value>實驗性</value>
+  </data>
+  <data name="OcrSettingsHeader" xml:space="preserve">
+    <value>OCR（文字辨識）設定</value>
+  </data>
+  <data name="OcrEngine" xml:space="preserve">
+    <value>OCR 引擎</value>
+  </data>
+  <data name="OcrEngineNative" xml:space="preserve">
+    <value>預設（Windows 原生）</value>
+  </data>
+  <data name="OcrEngineCustomApi" xml:space="preserve">
+    <value>自訂 API</value>
+  </data>
+  <data name="OcrApiKey" xml:space="preserve">
+    <value>API 金鑰（選填）</value>
+  </data>
+  <data name="OcrEndpoint" xml:space="preserve">
+    <value>端點</value>
+  </data>
+  <data name="OcrModel" xml:space="preserve">
+    <value>模型</value>
+  </data>
+  <data name="OcrSystemPrompt" xml:space="preserve">
+    <value>系統提示詞</value>
+  </data>
+  <data name="TestOcrConnection" xml:space="preserve">
+    <value>測試 OCR 連線</value>
+  </data>
+  <data name="OcrTestResult" xml:space="preserve">
+    <value>測試結果</value>
+  </data>
+  <data name="DeleteOnnxModel" xml:space="preserve">
+    <value>刪除</value>
+  </data>
+  <data name="VisionLLMDescription" xml:space="preserve">
+    <value>需要為所選服務設定 API 金鑰。</value>
+  </data>
+  <data name="MinimizeToTrayOnStartup" xml:space="preserve"><value>啟動後最小化到系統匣</value></data>
+  <data name="MouseSelectionTranslate" xml:space="preserve"><value>劃詞翻譯（選取文字 → 點擊浮動圖示）</value></data>
+  <data name="UILanguageDescription" xml:space="preserve"><value>選擇應用程式介面的顯示語言。需要重新啟動生效。</value></data>
+  <data name="ExcludedApps" xml:space="preserve"><value>排除應用</value></data>
+  <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
+  <data name="ExcludedAppsDescription" xml:space="preserve"><value>排除劃詞翻譯的程序名稱，用逗號分隔。範例："code" 代表 VS Code。</value></data>
 </root>

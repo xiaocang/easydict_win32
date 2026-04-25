@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:element name="root" msdata:IsDataSet="true">
@@ -187,30 +187,6 @@
   <data name="RestartRequiredMessage" xml:space="preserve"><value>भाषा परिवर्तन लागू करने के लिए कृपया एप्लिकेशन पुनः आरंभ करें।</value></data>
   <data name="UILangEnglish" xml:space="preserve"><value>अंग्रेज़ी</value></data>
   <data name="UILangChineseSimplified" xml:space="preserve"><value>चीनी (सरलीकृत)</value></data>
-  <data name="BehaviorHeader.Text" xml:space="preserve"><value>व्यवहार</value></data>
-  <data name="UILanguageCombo.Header" xml:space="preserve"><value>इंटरफ़ेस भाषा</value></data>
-  <data name="UILangEnglishItem.Content" xml:space="preserve"><value>English</value></data>
-  <data name="UILangChineseItem.Content" xml:space="preserve"><value>简体中文</value></data>
-  <data name="UILangJapaneseItem.Content" xml:space="preserve"><value>日本語</value></data>
-  <data name="UILangKoreanItem.Content" xml:space="preserve"><value>한국어</value></data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve"><value>繁體中文</value></data>
-  <data name="UILangFrenchItem.Content" xml:space="preserve"><value>Français</value></data>
-  <data name="UILangGermanItem.Content" xml:space="preserve"><value>Deutsch</value></data>
-  <data name="UILangVietnameseItem.Content" xml:space="preserve"><value>Tiếng Việt</value></data>
-  <data name="UILangThaiItem.Content" xml:space="preserve"><value>ไทย</value></data>
-  <data name="UILangArabicItem.Content" xml:space="preserve"><value>العربية</value></data>
-  <data name="UILangIndonesianItem.Content" xml:space="preserve"><value>Bahasa Indonesia</value></data>
-  <data name="UILangItalianItem.Content" xml:space="preserve"><value>Italiano</value></data>
-  <data name="UILangMalayItem.Content" xml:space="preserve"><value>Bahasa Melayu</value></data>
-  <data name="UILangHindiItem.Content" xml:space="preserve"><value>हिन्दी</value></data>
-  <data name="UILangDanishItem.Content" xml:space="preserve"><value>Dansk</value></data>
-  <data name="UILanguageDescription.Text" xml:space="preserve"><value>एप्लिकेशन इंटरफ़ेस के लिए प्रदर्शन भाषा चुनें। पुनः आरंभ आवश्यक।</value></data>
-  <data name="MinimizeToTrayToggle.Header" xml:space="preserve"><value>सिस्टम ट्रे में छोटा करें</value></data>
-  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve"><value>सिस्टम ट्रे में छोटा करके शुरू करें</value></data>
-  <data name="ClipboardMonitorToggle.Header" xml:space="preserve"><value>क्लिपबोर्ड पर नज़र रखें</value></data>
-  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve"><value>माउस चयन से अनुवाद (पाठ चुनें → फ़्लोटिंग आइकन पर क्लिक करें)</value></data>
-  <data name="AlwaysOnTopToggle.Header" xml:space="preserve"><value>हमेशा ऊपर</value></data>
-  <data name="LaunchAtStartupToggle.Header" xml:space="preserve"><value>Windows शुरू होने पर लॉन्च करें</value></data>
   <data name="Close" xml:space="preserve"><value>बंद करें</value></data>
   <data name="HideWindow" xml:space="preserve"><value>छुपाएँ (Ctrl+Alt+F से फिर दिखाएँ)</value></data>
   <data name="EnableInternationalServices" xml:space="preserve"><value>अंतर्राष्ट्रीय सेवाएँ सक्रिय करें</value></data>
@@ -446,19 +422,118 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>छोड़ें</value>
   </data>
-  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
-    <value>बहिष्कृत ऐप्स</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
-    <value>code, slack, discord</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
-    <value>माउस चयन अनुवाद से बाहर रखने के लिए प्रक्रिया नाम, अल्पविराम से अलग करें। उदाहरण: VS Code के लिए "code"।</value>
-  </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>पुन: क्रमित करें</value>
   </data>
   <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
     <value>पूर्ण</value>
   </data>
+  <data name="SettingsTab_Services" xml:space="preserve">
+    <value>सेवाएं</value>
+  </data>
+  <data name="SettingsTab_About_Tooltip" xml:space="preserve">
+    <value>संस्करण, लिंक, फ़ीडबैक और लाइसेंस।</value>
+  </data>
+  <data name="SettingsTab_General_Tooltip" xml:space="preserve">
+    <value>थीम, स्टार्टअप, ट्रे, क्लिपबोर्ड, TTS और व्यवहार।</value>
+  </data>
+  <data name="SettingsTab_Advanced_Tooltip" xml:space="preserve">
+    <value>OCR, लेआउट पहचान, कैश, प्रॉक्सी और प्रॉम्प्ट।</value>
+  </data>
+  <data name="SettingsTab_Advanced" xml:space="preserve">
+    <value>उन्नत</value>
+  </data>
+  <data name="SettingsTab_General" xml:space="preserve">
+    <value>सामान्य</value>
+  </data>
+  <data name="WindowResults" xml:space="preserve">
+    <value>विंडो परिणाम</value>
+  </data>
+  <data name="SettingsTab_Language" xml:space="preserve">
+    <value>भाषा</value>
+  </data>
+  <data name="SettingsTab_Language_Tooltip" xml:space="preserve">
+    <value>अनुवाद भाषाएँ, उपलब्ध भाषाएँ और UI भाषा।</value>
+  </data>
+  <data name="WindowResultsDescription" xml:space="preserve">
+    <value>चुनें कि प्रत्येक विंडो में कौन से परिणाम दिखें और क्या प्रत्येक परिणाम स्वतः क्वेरी करे।</value>
+  </data>
+  <data name="SettingsTab_About" xml:space="preserve">
+    <value>के बारे में</value>
+  </data>
+  <data name="SettingsTab_Hotkeys_Tooltip" xml:space="preserve">
+    <value>ऐप शॉर्टकट और शॉर्टकट स्विच कॉन्फ़िगर करें।</value>
+  </data>
+  <data name="SettingsTab_Hotkeys" xml:space="preserve">
+    <value>शॉर्टकट</value>
+  </data>
+  <data name="SettingsTab_Services_Tooltip" xml:space="preserve">
+    <value>डिफ़ॉल्ट सेवाएं, API कॉन्फ़िगरेशन, परीक्षण और शब्दकोश।</value>
+  </data>
+  <data name="SettingsTab_Views" xml:space="preserve">
+    <value>दृश्य</value>
+  </data>
+  <data name="SettingsTab_Views_Tooltip" xml:space="preserve">
+    <value>प्रत्येक ऐप दृश्य के लिए दिखाई देने वाले परिणाम और क्वेरी मोड चुनें।</value>
+  </data>
+  <data name="TtsSettingsHeader" xml:space="preserve">
+    <value>TTS आउटपुट सेटिंग्स</value>
+  </data>
+  <data name="TtsSpeedLabel" xml:space="preserve">
+    <value>TTS पठन गति (0.5× – 3.0×)</value>
+  </data>
+  <data name="AutoPlayTranslation" xml:space="preserve">
+    <value>अनुवाद स्वचालित रूप से चलाएँ</value>
+  </data>
+  <data name="HideEmptyServiceResults" xml:space="preserve">
+    <value>परिणाम रहित शब्दकोश छिपाएँ</value>
+  </data>
+  <data name="EnableLocalDictionarySuggestions" xml:space="preserve">
+    <value>कस्टम शब्दकोश इनपुट सुझाव सक्षम करें</value>
+  </data>
+  <data name="Experimental" xml:space="preserve">
+    <value>प्रायोगिक</value>
+  </data>
+  <data name="OcrSettingsHeader" xml:space="preserve">
+    <value>OCR (पाठ पहचान) सेटिंग्स</value>
+  </data>
+  <data name="OcrEngine" xml:space="preserve">
+    <value>OCR इंजन</value>
+  </data>
+  <data name="OcrEngineNative" xml:space="preserve">
+    <value>डिफ़ॉल्ट (Windows नेटिव)</value>
+  </data>
+  <data name="OcrEngineCustomApi" xml:space="preserve">
+    <value>कस्टम API</value>
+  </data>
+  <data name="OcrApiKey" xml:space="preserve">
+    <value>API कुंजी (वैकल्पिक)</value>
+  </data>
+  <data name="OcrEndpoint" xml:space="preserve">
+    <value>एंडपॉइंट</value>
+  </data>
+  <data name="OcrModel" xml:space="preserve">
+    <value>मॉडल</value>
+  </data>
+  <data name="OcrSystemPrompt" xml:space="preserve">
+    <value>सिस्टम प्रॉम्प्ट</value>
+  </data>
+  <data name="TestOcrConnection" xml:space="preserve">
+    <value>OCR कनेक्शन परीक्षण करें</value>
+  </data>
+  <data name="OcrTestResult" xml:space="preserve">
+    <value>परीक्षण परिणाम</value>
+  </data>
+  <data name="DeleteOnnxModel" xml:space="preserve">
+    <value>हटाएँ</value>
+  </data>
+  <data name="VisionLLMDescription" xml:space="preserve">
+    <value>चयनित सेवा के लिए कॉन्फ़िगर की गई API कुंजी आवश्यक है।</value>
+  </data>
+  <data name="MinimizeToTrayOnStartup" xml:space="preserve"><value>सिस्टम ट्रे में छोटा करके शुरू करें</value></data>
+  <data name="MouseSelectionTranslate" xml:space="preserve"><value>माउस चयन से अनुवाद (पाठ चुनें → फ़्लोटिंग आइकन पर क्लिक करें)</value></data>
+  <data name="UILanguageDescription" xml:space="preserve"><value>एप्लिकेशन इंटरफ़ेस के लिए प्रदर्शन भाषा चुनें। पुनः आरंभ आवश्यक।</value></data>
+  <data name="ExcludedApps" xml:space="preserve"><value>बहिष्कृत ऐप्स</value></data>
+  <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
+  <data name="ExcludedAppsDescription" xml:space="preserve"><value>माउस चयन अनुवाद से बाहर रखने के लिए प्रक्रिया नाम, अल्पविराम से अलग करें। उदाहरण: VS Code के लिए "code"।</value></data>
 </root>

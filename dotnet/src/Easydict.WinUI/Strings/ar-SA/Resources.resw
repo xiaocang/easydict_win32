@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:element name="root" msdata:IsDataSet="true">
@@ -545,78 +545,6 @@
   </data>
 
   <!-- x:Uid entries for Settings Page XAML -->
-  <data name="BehaviorHeader.Text" xml:space="preserve">
-    <value>السلوك</value>
-  </data>
-  <data name="UILanguageCombo.Header" xml:space="preserve">
-    <value>لغة الواجهة</value>
-  </data>
-  <data name="UILangEnglishItem.Content" xml:space="preserve">
-    <value>English</value>
-  </data>
-  <data name="UILangChineseItem.Content" xml:space="preserve">
-    <value>简体中文</value>
-  </data>
-  <data name="UILangJapaneseItem.Content" xml:space="preserve">
-    <value>日本語</value>
-  </data>
-  <data name="UILangKoreanItem.Content" xml:space="preserve">
-    <value>한국어</value>
-  </data>
-  <data name="UILangTraditionalChineseItem.Content" xml:space="preserve">
-    <value>繁體中文</value>
-  </data>
-  <data name="UILangFrenchItem.Content" xml:space="preserve">
-    <value>Français</value>
-  </data>
-  <data name="UILangGermanItem.Content" xml:space="preserve">
-    <value>Deutsch</value>
-  </data>
-  <data name="UILangVietnameseItem.Content" xml:space="preserve">
-    <value>Tiếng Việt</value>
-  </data>
-  <data name="UILangThaiItem.Content" xml:space="preserve">
-    <value>ไทย</value>
-  </data>
-  <data name="UILangArabicItem.Content" xml:space="preserve">
-    <value>العربية</value>
-  </data>
-  <data name="UILangIndonesianItem.Content" xml:space="preserve">
-    <value>Bahasa Indonesia</value>
-  </data>
-  <data name="UILangItalianItem.Content" xml:space="preserve">
-    <value>Italiano</value>
-  </data>
-  <data name="UILangMalayItem.Content" xml:space="preserve">
-    <value>Bahasa Melayu</value>
-  </data>
-  <data name="UILangHindiItem.Content" xml:space="preserve">
-    <value>हिन्दी</value>
-  </data>
-  <data name="UILangDanishItem.Content" xml:space="preserve">
-    <value>Dansk</value>
-  </data>
-  <data name="UILanguageDescription.Text" xml:space="preserve">
-    <value>اختر لغة العرض لواجهة التطبيق. يلزم إعادة التشغيل.</value>
-  </data>
-  <data name="MinimizeToTrayToggle.Header" xml:space="preserve">
-    <value>تصغير إلى علبة النظام</value>
-  </data>
-  <data name="MinimizeToTrayOnStartupToggle.Header" xml:space="preserve">
-    <value>بدء التشغيل مصغراً في علبة النظام</value>
-  </data>
-  <data name="ClipboardMonitorToggle.Header" xml:space="preserve">
-    <value>مراقبة الحافظة للنصوص</value>
-  </data>
-  <data name="MouseSelectionTranslateToggle.Header" xml:space="preserve">
-    <value>ترجمة بتحديد الماوس (حدد النص ← انقر على الأيقونة العائمة)</value>
-  </data>
-  <data name="AlwaysOnTopToggle.Header" xml:space="preserve">
-    <value>دائماً في المقدمة</value>
-  </data>
-  <data name="LaunchAtStartupToggle.Header" xml:space="preserve">
-    <value>التشغيل عند بدء Windows</value>
-  </data>
   <data name="Close" xml:space="preserve">
     <value>إغلاق</value>
   </data>
@@ -902,19 +830,118 @@
   <data name="LongDoc_Skip" xml:space="preserve">
     <value>تخطي</value>
   </data>
-  <data name="MouseSelectionExcludedAppsBox.Header" xml:space="preserve">
-    <value>التطبيقات المستثناة</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsBox.PlaceholderText" xml:space="preserve">
-    <value>code, slack, discord</value>
-  </data>
-  <data name="MouseSelectionExcludedAppsDescription.Text" xml:space="preserve">
-    <value>أسماء العمليات المراد استثناؤها من ترجمة تحديد الماوس، مفصولة بفواصل. مثال: "code" لـ VS Code.</value>
-  </data>
   <data name="EnabledServicesReorderButton" xml:space="preserve">
     <value>إعادة الترتيب</value>
   </data>
   <data name="EnabledServicesDoneReorderingButton" xml:space="preserve">
     <value>تم</value>
   </data>
+  <data name="SettingsTab_Services" xml:space="preserve">
+    <value>الخدمات</value>
+  </data>
+  <data name="SettingsTab_About_Tooltip" xml:space="preserve">
+    <value>الإصدار والروابط والملاحظات والترخيص.</value>
+  </data>
+  <data name="SettingsTab_General_Tooltip" xml:space="preserve">
+    <value>المظهر وبدء التشغيل وعلبة النظام والحافظة والنطق والسلوك.</value>
+  </data>
+  <data name="SettingsTab_Advanced_Tooltip" xml:space="preserve">
+    <value>التعرف الضوئي على الحروف وكشف التخطيط والذاكرة المؤقتة والوكيل والمطالبات.</value>
+  </data>
+  <data name="SettingsTab_Advanced" xml:space="preserve">
+    <value>متقدم</value>
+  </data>
+  <data name="SettingsTab_General" xml:space="preserve">
+    <value>عام</value>
+  </data>
+  <data name="WindowResults" xml:space="preserve">
+    <value>نتائج النافذة</value>
+  </data>
+  <data name="SettingsTab_Language" xml:space="preserve">
+    <value>اللغة</value>
+  </data>
+  <data name="SettingsTab_Language_Tooltip" xml:space="preserve">
+    <value>لغات الترجمة واللغات المتاحة ولغة الواجهة.</value>
+  </data>
+  <data name="WindowResultsDescription" xml:space="preserve">
+    <value>اختر النتائج التي تظهر في كل نافذة وما إذا كانت كل نتيجة تستعلم تلقائياً.</value>
+  </data>
+  <data name="SettingsTab_About" xml:space="preserve">
+    <value>حول</value>
+  </data>
+  <data name="SettingsTab_Hotkeys_Tooltip" xml:space="preserve">
+    <value>تكوين اختصارات التطبيق ومفاتيحها.</value>
+  </data>
+  <data name="SettingsTab_Hotkeys" xml:space="preserve">
+    <value>اختصارات لوحة المفاتيح</value>
+  </data>
+  <data name="SettingsTab_Services_Tooltip" xml:space="preserve">
+    <value>الخدمات الافتراضية وإعدادات API والاختبارات والقواميس.</value>
+  </data>
+  <data name="SettingsTab_Views" xml:space="preserve">
+    <value>طرق العرض</value>
+  </data>
+  <data name="SettingsTab_Views_Tooltip" xml:space="preserve">
+    <value>اختر النتائج المعروضة ووضع الاستعلام لكل طريقة عرض.</value>
+  </data>
+  <data name="TtsSettingsHeader" xml:space="preserve">
+    <value>إعدادات إخراج TTS</value>
+  </data>
+  <data name="TtsSpeedLabel" xml:space="preserve">
+    <value>سرعة قراءة TTS (0.5× – 3.0×)</value>
+  </data>
+  <data name="AutoPlayTranslation" xml:space="preserve">
+    <value>تشغيل الترجمة تلقائياً</value>
+  </data>
+  <data name="HideEmptyServiceResults" xml:space="preserve">
+    <value>إخفاء القواميس بدون نتائج</value>
+  </data>
+  <data name="EnableLocalDictionarySuggestions" xml:space="preserve">
+    <value>تمكين اقتراحات إدخال القواميس المخصصة</value>
+  </data>
+  <data name="Experimental" xml:space="preserve">
+    <value>تجريبي</value>
+  </data>
+  <data name="OcrSettingsHeader" xml:space="preserve">
+    <value>إعدادات OCR (التعرف على النص)</value>
+  </data>
+  <data name="OcrEngine" xml:space="preserve">
+    <value>محرك OCR</value>
+  </data>
+  <data name="OcrEngineNative" xml:space="preserve">
+    <value>افتراضي (Windows Native)</value>
+  </data>
+  <data name="OcrEngineCustomApi" xml:space="preserve">
+    <value>API مخصص</value>
+  </data>
+  <data name="OcrApiKey" xml:space="preserve">
+    <value>مفتاح API (اختياري)</value>
+  </data>
+  <data name="OcrEndpoint" xml:space="preserve">
+    <value>نقطة النهاية</value>
+  </data>
+  <data name="OcrModel" xml:space="preserve">
+    <value>النموذج</value>
+  </data>
+  <data name="OcrSystemPrompt" xml:space="preserve">
+    <value>مطالبة النظام</value>
+  </data>
+  <data name="TestOcrConnection" xml:space="preserve">
+    <value>اختبار اتصال OCR</value>
+  </data>
+  <data name="OcrTestResult" xml:space="preserve">
+    <value>نتيجة الاختبار</value>
+  </data>
+  <data name="DeleteOnnxModel" xml:space="preserve">
+    <value>حذف</value>
+  </data>
+  <data name="VisionLLMDescription" xml:space="preserve">
+    <value>يتطلب مفتاح API مُهيأ للخدمة المختارة.</value>
+  </data>
+  <data name="MinimizeToTrayOnStartup" xml:space="preserve"><value>بدء التشغيل مصغراً في علبة النظام</value></data>
+  <data name="MouseSelectionTranslate" xml:space="preserve"><value>ترجمة بتحديد الماوس (حدد النص ← انقر على الأيقونة العائمة)</value></data>
+  <data name="UILanguageDescription" xml:space="preserve"><value>اختر لغة العرض لواجهة التطبيق. يلزم إعادة التشغيل.</value></data>
+  <data name="ExcludedApps" xml:space="preserve"><value>التطبيقات المستثناة</value></data>
+  <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
+  <data name="ExcludedAppsDescription" xml:space="preserve"><value>أسماء العمليات المراد استثناؤها من ترجمة تحديد الماوس، مفصولة بفواصل. مثال: "code" لـ VS Code.</value></data>
 </root>

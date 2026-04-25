@@ -80,15 +80,17 @@ public class SettingsPageLifecycleLeakTests
     }
 
     [Fact]
-    public void SettingsPage_UsesNamedNavigationPointerHandlers()
+    public void SettingsPage_UsesNamedTopTabClickHandler()
     {
         var content = File.ReadAllText(SettingsPagePath);
-        content.Should().Contain("DetachNavigationIconHandlers();",
-            "Navigation icon handlers should be detached before clearing icon visuals");
-        content.Should().Contain("icon.PointerEntered += OnNavIconPointerEntered;",
-            "PointerEntered should use a named handler so teardown and heap analysis stay auditable");
-        content.Should().Contain("icon.PointerExited += OnNavIconPointerExited;",
-            "PointerExited should use a named handler so teardown and heap analysis stay auditable");
+        content.Should().Contain("private void OnSettingsTabClick",
+            "top settings tabs should use a named handler so tab selection remains auditable");
+        content.Should().Contain("SelectSettingsTab(tabId, resetScroll: true);",
+            "the named click handler should delegate selection to a single tab state updater");
+        content.Should().NotContain("PointerEntered += OnNavIconPointerEntered;",
+            "the old floating nav rail pointer handlers should stay removed");
+        content.Should().NotContain("PointerExited += OnNavIconPointerExited;",
+            "the old floating nav rail pointer handlers should stay removed");
     }
 
     [Fact]

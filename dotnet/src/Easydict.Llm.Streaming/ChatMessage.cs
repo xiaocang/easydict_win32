@@ -5,8 +5,11 @@ namespace Easydict.Llm.Streaming;
 /// </summary>
 public enum ChatRole
 {
+    /// <summary>System / instruction role.</summary>
     System,
+    /// <summary>End-user role.</summary>
     User,
+    /// <summary>Assistant (model) role.</summary>
     Assistant
 }
 

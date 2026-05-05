@@ -197,6 +197,14 @@ jobs:
             -MsixVersion "${{ needs.prepare.outputs.MSIX_VERSION }}" `
             -VerifyTargetsizeIcons
 
+      - name: Validate MSIX (identity, MinVersion)
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          dotnet run --project tools/MsixValidate -- `
+            "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix" `
+            --allow-unsigned
+
       # Also create ZIP archive for portable distribution
       - name: Create ZIP archive
         shell: pwsh

@@ -2396,36 +2396,27 @@ namespace Easydict.WinUI.Views
         {
             try
             {
-                var picker = new Windows.Storage.Pickers.FileOpenPicker();
-
-                // WinUI 3 requires HWND initialization
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                // Set file filter based on current mode
                 var modeTag = (LongDocInputModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pdf";
-                switch (modeTag)
+                var filter = modeTag switch
                 {
-                    case "plaintext":
-                        picker.FileTypeFilter.Add(".txt");
-                        break;
-                    case "markdown":
-                        picker.FileTypeFilter.Add(".md");
-                        break;
-                    default:
-                        picker.FileTypeFilter.Add(".pdf");
-                        break;
-                }
+                    "plaintext" => new[] { ".txt" },
+                    "markdown" => new[] { ".md" },
+                    _ => new[] { ".pdf" },
+                };
 
-                var files = await picker.PickMultipleFilesAsync();
-                if (files == null || files.Count == 0) return;
+                var paths = await Services.Storage.PickerFactory.PickMultipleFilesAsync(
+                    App.MainWindow,
+                    Services.Storage.PickerFactory.SettingsIdentifiers.LongDocImport,
+                    filter);
+
+                if (paths == null || paths.Count == 0) return;
 
                 _longDocFileItems.Clear();
-                foreach (var file in files)
+                foreach (var path in paths)
                 {
                     _longDocFileItems.Add(new LongDocFileItem
                     {
-                        FilePath = file.Path,
+                        FilePath = path,
                         Status = LongDocItemStatus.Pending
                     });
                 }
@@ -2486,16 +2477,13 @@ namespace Easydict.WinUI.Views
         {
             try
             {
-                var picker = new Windows.Storage.Pickers.FolderPicker();
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-                picker.FileTypeFilter.Add("*");
+                var path = await Services.Storage.PickerFactory.PickFolderAsync(
+                    App.MainWindow,
+                    Services.Storage.PickerFactory.SettingsIdentifiers.LongDocOutput);
+                if (string.IsNullOrEmpty(path)) return;
 
-                var folder = await picker.PickSingleFolderAsync();
-                if (folder == null) return;
-
-                _longDocOutputFolder = folder.Path;
-                LongDocOutputFolderDisplay.Text = folder.Path;
+                _longDocOutputFolder = path;
+                LongDocOutputFolderDisplay.Text = path;
             }
             catch (Exception ex)
             {

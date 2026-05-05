@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Easydict.TranslationService;
@@ -64,6 +65,10 @@ public sealed partial class FixedWindow : Window
         var hWnd = WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
         _appWindow = AppWindow.GetFromWindowId(windowId);
+
+        // Mica gives the persistent floating window a Fluent-native look. Falls through
+        // gracefully on hosts that don't support it.
+        TryApplyMicaBackdrop();
 
         // Configure window appearance
         ConfigureWindow();
@@ -141,6 +146,23 @@ public sealed partial class FixedWindow : Window
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
         ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
         ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
+    }
+
+    /// <summary>
+    /// Apply a Mica system backdrop. Mica respects ElementTheme automatically and is
+    /// supported on Windows 11 (Win10 and unsupported configurations silently keep
+    /// the solid theme background).
+    /// </summary>
+    private void TryApplyMicaBackdrop()
+    {
+        try
+        {
+            this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.WriteLine($"[FixedWindow] Mica backdrop unavailable: {ex.Message}");
+        }
     }
 
     /// <summary>

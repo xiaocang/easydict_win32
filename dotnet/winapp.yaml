@@ -16,9 +16,11 @@ identity:
   publisher: CN=33FC47D7-8283-45FC-BB5D-297D1476BB29
 
 # SDK dependencies
+# Microsoft.WindowsAppSDK 2.x adopts SemVer (NuGet package version aligns with runtime).
+# CI/MSIX must be deterministic, so pin exact here while csproj floats 2.0.*.
 packages:
   - name: Microsoft.WindowsAppSDK
-    version: 1.6.250108002
+    version: 2.0.1
   - name: Microsoft.Windows.SDK.BuildTools
     version: 10.0.26100.1742
 

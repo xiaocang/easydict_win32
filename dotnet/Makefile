@@ -241,6 +241,14 @@ ifndef MSIX
 endif
 	@pwsh -ExecutionPolicy Bypass -File scripts/Fix-MsixMinVersion.ps1 -MsixPath "$(MSIX)"
 
+# Validate MSIX identity, MinVersion, and signature presence.
+# Usage: make validate-msix MSIX=./msix/Easydict-x64.msix
+validate-msix:
+ifndef MSIX
+	$(error MSIX is required. Usage: make validate-msix MSIX=./msix/Easydict-x64.msix)
+endif
+	@dotnet run --project tools/MsixValidate -- "$(MSIX)"
+
 # ============================================================
 # EXE Installer (requires Inno Setup 6: https://jrsoftware.org/isinfo.php)
 # ============================================================

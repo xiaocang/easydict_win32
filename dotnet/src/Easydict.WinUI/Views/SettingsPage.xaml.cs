@@ -1713,18 +1713,15 @@ public sealed partial class SettingsPage : Page
             {
                 try
                 {
-                    var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-                    picker.FileTypeFilter.Add(".mdd");
+                    var path = await Services.Storage.PickerFactory.PickSingleFileAsync(
+                        App.MainWindow,
+                        Services.Storage.PickerFactory.SettingsIdentifiers.MddAdd,
+                        new[] { ".mdd" });
+                    if (string.IsNullOrWhiteSpace(path)) return;
 
-                    var file = await picker.PickSingleFileAsync();
-                    if (file == null || string.IsNullOrWhiteSpace(file.Path))
-                        return;
-
-                    if (!capturedDictForMdd.MddFilePaths.Contains(file.Path, StringComparer.OrdinalIgnoreCase))
+                    if (!capturedDictForMdd.MddFilePaths.Contains(path, StringComparer.OrdinalIgnoreCase))
                     {
-                        capturedDictForMdd.MddFilePaths.Add(file.Path);
+                        capturedDictForMdd.MddFilePaths.Add(path);
                         _settings.Save();
 
                         // Load into live service
@@ -1732,7 +1729,7 @@ public sealed partial class SettingsPage : Page
                         if (h.Manager.Services.TryGetValue(capturedDictForMdd.ServiceId, out var svc)
                             && svc is MdxDictionaryTranslationService mdxSvc)
                         {
-                            mdxSvc.LoadMddFiles([file.Path]);
+                            mdxSvc.LoadMddFiles([path]);
                         }
 
                         BuildImportedMdxConfigUI();
@@ -2053,28 +2050,26 @@ public sealed partial class SettingsPage : Page
     {
         try
         {
-            var picker = new Windows.Storage.Pickers.FileOpenPicker();
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-            picker.FileTypeFilter.Add(".mdx");
-
-            var file = await picker.PickSingleFileAsync();
-            if (file == null || string.IsNullOrWhiteSpace(file.Path))
+            var path = await Services.Storage.PickerFactory.PickSingleFileAsync(
+                App.MainWindow,
+                Services.Storage.PickerFactory.SettingsIdentifiers.MdxImport,
+                new[] { ".mdx" });
+            if (string.IsNullOrWhiteSpace(path))
             {
                 return;
             }
 
-            var displayName = Path.GetFileNameWithoutExtension(file.Path);
-            var serviceId = BuildMdxServiceId(displayName, file.Path);
+            var displayName = Path.GetFileNameWithoutExtension(path);
+            var serviceId = BuildMdxServiceId(displayName, path);
 
             // Discover companion MDD resource files
-            var mddFiles = MdxDictionaryTranslationService.DiscoverMddFiles(file.Path);
+            var mddFiles = MdxDictionaryTranslationService.DiscoverMddFiles(path);
 
             var imported = new SettingsService.ImportedMdxDictionary
             {
                 ServiceId = serviceId,
                 DisplayName = $"📚 {displayName}",
-                FilePath = file.Path,
+                FilePath = path,
                 MddFilePaths = mddFiles
             };
 
@@ -2096,7 +2091,7 @@ public sealed partial class SettingsPage : Page
                     mdxService.LoadMddFiles(mddFiles);
             }
 
-            _settings.ImportedMdxDictionaries.RemoveAll(d => string.Equals(d.FilePath, file.Path, StringComparison.OrdinalIgnoreCase));
+            _settings.ImportedMdxDictionaries.RemoveAll(d => string.Equals(d.FilePath, path, StringComparison.OrdinalIgnoreCase));
             _settings.ImportedMdxDictionaries.Add(imported);
 
             // Enable imported service by default in all windows.

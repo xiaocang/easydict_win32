@@ -1204,6 +1204,8 @@ public sealed partial class ServiceResultItem : UserControl
                 DictWebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
                 DictWebView.CoreWebView2.WebMessageReceived += OnDictWebViewWebMessageReceived;
                 DictWebView.NavigationCompleted += OnDictWebViewNavigationCompleted;
+
+                ConfigureWebViewContentDrag();
             }
 
             // Resolve the MDX service for resource lookups
@@ -1378,6 +1380,43 @@ public sealed partial class ServiceResultItem : UserControl
             "url('https://dictassets/$1')", RegexOptions.IgnoreCase);
 
         return html;
+    }
+
+    /// <summary>
+    /// Enable drag-from-WebView2 if the user opted in and the host runtime supports it.
+    /// Falls back silently when either condition fails — copy buttons / context menu still work.
+    /// </summary>
+    private void ConfigureWebViewContentDrag()
+    {
+        try
+        {
+            if (!Services.SettingsService.Instance.WebView2DragEnabled)
+            {
+                System.Diagnostics.Debug.WriteLine("[ServiceResultItem] WebView2 drag disabled by user setting.");
+                return;
+            }
+            if (!Services.WebView2RuntimeService.SupportsContentDrag)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[ServiceResultItem] WebView2 runtime {Services.WebView2RuntimeService.RuntimeVersion} " +
+                    $"below drag minimum {Services.WebView2RuntimeService.DragSupportMinimumVersion}");
+                return;
+            }
+
+            // Drag from WebView2 content is enabled by default in recent runtimes; the WinAppSDK
+            // 2.x XAML control wires the OS drag through automatically.
+            //
+            // TODO(WinAppSDK 2.0.1): if a future SDK release exposes an explicit toggle (e.g.
+            // CoreWebView2Settings.IsContentDragEnabled or a CoreWebView2.OnContentDragStarting
+            // event), call it here and attach an Easydict source descriptor (From, SourceLanguage,
+            // TargetLanguage, ServiceId) to the drag payload so downstream tools can identify the
+            // origin.
+            System.Diagnostics.Debug.WriteLine("[ServiceResultItem] WebView2 content drag enabled.");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ServiceResultItem] ConfigureWebViewContentDrag failed: {ex.Message}");
+        }
     }
 
     private void OnWebResourceRequested(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)

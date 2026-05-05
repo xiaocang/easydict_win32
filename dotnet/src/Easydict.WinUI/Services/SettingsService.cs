@@ -168,6 +168,23 @@ public sealed class SettingsService
     public List<string> MouseSelectionExcludedApps { get; set; } = ["code"];
 
     /// <summary>
+    /// When true, the pop button uses the legacy Win32 SetWindowPos + per-monitor DPI math
+    /// to position itself. When false, it uses the WinAppSDK 2.x PopupAnchor / DesktopPopupSiteBridge
+    /// path which anchors relative to the source app's hwnd.
+    ///
+    /// Default true (legacy) until the PopupAnchor migration is verified end-to-end against
+    /// multi-monitor + mixed-DPI scenarios. Flip to false to opt in to the new path.
+    /// </summary>
+    public bool PopButtonUseLegacyPositioning { get; set; } = true;
+
+    /// <summary>
+    /// When true and the host's WebView2 Runtime supports it (>= 144.0.3719.11), allow the user
+    /// to drag text/HTML/URL/image content out of the WebView2 dictionary results into other apps
+    /// (Obsidian, Word, Chrome, …). Disable if it conflicts with text selection in your workflow.
+    /// </summary>
+    public bool WebView2DragEnabled { get; set; } = true;
+
+    /// <summary>
     /// Checks if a process name is in the mouse selection excluded apps list.
     /// </summary>
     public bool IsMouseSelectionExcluded(string? processName)

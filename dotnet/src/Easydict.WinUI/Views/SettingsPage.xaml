@@ -605,6 +605,44 @@
                             </StackPanel>
                         </Expander>
 
+                        <!-- Windows Local AI (Phi Silica, Copilot+ PC only) -->
+                        <Expander x:Name="WindowsLocalAIExpander"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch">
+                            <Expander.Header>
+                                <Grid>
+                                    <TextBlock x:Name="WindowsLocalAITitleText"
+                                               Text="Windows Local AI"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="WindowsLocalAIStatusBadge"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Right"
+                                               Margin="0,0,8,0"
+                                               Visibility="Collapsed"/>
+                                </Grid>
+                            </Expander.Header>
+                            <StackPanel Spacing="12"
+                                    Padding="0,8">
+                                <InfoBar x:Name="WindowsLocalAIStatusBar"
+                                         IsOpen="True"
+                                         IsClosable="False"
+                                         Severity="Informational"
+                                         Title="Status"
+                                         Message=""/>
+                                <Button x:Name="WindowsLocalAIPrepareButton"
+                                        Content="Prepare model"
+                                        Click="OnPrepareWindowsLocalAIModel"
+                                        Padding="8,4"
+                                        Visibility="Collapsed"/>
+                                <TextBlock x:Name="WindowsLocalAIDescriptionText"
+                                           Text="On-device translation via Windows AI APIs (Phi Silica). Requires a Copilot+ PC with a compatible NPU. No API key, no network."
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Expander>
+
                         <!-- Built-in AI -->
                         <Expander HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch">

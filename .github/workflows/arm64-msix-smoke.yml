@@ -126,7 +126,7 @@ jobs:
       - name: Install Windows App Runtime (arm64)
         shell: pwsh
         run: |
-          $url = "https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-arm64.exe"
+          $url = "https://aka.ms/windowsappsdk/2.0/latest/windowsappruntimeinstall-arm64.exe"
           $installer = Join-Path $env:TEMP "windowsappruntimeinstall-arm64.exe"
           Invoke-WebRequest -Uri $url -OutFile $installer
           Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow

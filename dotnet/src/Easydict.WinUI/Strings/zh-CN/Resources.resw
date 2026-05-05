@@ -1144,4 +1144,16 @@
   <data name="ExcludedApps" xml:space="preserve"><value>排除应用</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>排除划词翻译的进程名称，用逗号分隔。示例："code" 代表 VS Code。</value></data>
+
+  <!-- Windows Local AI (Phi Silica) -->
+  <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>已就绪</value></data>
+  <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>不可用</value></data>
+  <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>正在准备…</value></data>
+  <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>本机语言模型已就绪。翻译完全在本机进行，不会发送任何文本到外部服务。</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>当前设备支持本机语言模型，但模型尚未准备。点击"准备模型"以下载并安装。</value></data>
+  <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>应用包缺少 systemAIModels 能力声明。该状态通常出现在便携版/未打包版本中，请安装 MSIX 或 Microsoft Store 版本。</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>当前设备没有兼容的 NPU 硬件。Windows 本机 AI 仅在 Copilot+ PC 上运行。可改用 Ollama 或云端服务作为替代方案。</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows 本机 AI 需要更新的 Windows 版本。请安装最新的 Windows 更新后重试。</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows 本机 AI 已被禁用或卸载。请在系统设置中重新启用 Windows AI 功能。</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>当前系统或地区不支持 Windows 本机 AI。可改用 Ollama 或云端服务作为替代方案。</value></data>
 </root>

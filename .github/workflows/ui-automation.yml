@@ -164,7 +164,7 @@ jobs:
       - name: Install Windows App Runtime
         shell: pwsh
         run: |
-          $url = "https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-x64.exe"
+          $url = "https://aka.ms/windowsappsdk/2.0/latest/windowsappruntimeinstall-x64.exe"
           $installer = Join-Path $env:TEMP "windowsappruntimeinstall-x64.exe"
           Invoke-WebRequest -Uri $url -OutFile $installer
           Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow
@@ -247,7 +247,7 @@ jobs:
       - name: Install Windows App Runtime
         shell: pwsh
         run: |
-          $url = "https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-x64.exe"
+          $url = "https://aka.ms/windowsappsdk/2.0/latest/windowsappruntimeinstall-x64.exe"
           $installer = Join-Path $env:TEMP "windowsappruntimeinstall-x64.exe"
           Invoke-WebRequest -Uri $url -OutFile $installer
           Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow

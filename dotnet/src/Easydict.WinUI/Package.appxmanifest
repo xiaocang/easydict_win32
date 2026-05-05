@@ -22,9 +22,13 @@
   </Properties>
 
   <Dependencies>
-    <!-- MinVersion bumped to 10.0.22621.0 (Windows 11 22H2) — required by WindowsAppSDK 2.x
-         and by Microsoft.Windows.AI.Text.LanguageModel (Phi Silica). -->
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22621.0" MaxVersionTested="10.0.26226.0" />
+    <!-- MinVersion 10.0.19041.0 (Windows 10 2004) for broad install compatibility.
+         Compile-time TargetPlatformMinVersion in the csproj is 22621 so the
+         Easydict.WindowsAI assembly can reference Microsoft.Windows.AI.Text.LanguageModel,
+         but those APIs are guarded at runtime via try/catch + AIFeatureReadyState
+         checks so the MSIX still deploys and runs (with that one provider showing
+         "Not supported") on older Windows / Server SKUs. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26226.0" />
     <!-- Windows App SDK 2.0 runtime framework dependency (required for WinRT activation in packaged mode) -->
     <PackageDependency Name="Microsoft.WindowsAppRuntime.2.0"
                        MinVersion="2000.0.0.0"

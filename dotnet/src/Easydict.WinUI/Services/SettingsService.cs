@@ -178,6 +178,13 @@ public sealed class SettingsService
     public bool PopButtonUseLegacyPositioning { get; set; } = true;
 
     /// <summary>
+    /// When true and the host's WebView2 Runtime supports it (>= 144.0.3719.11), allow the user
+    /// to drag text/HTML/URL/image content out of the WebView2 dictionary results into other apps
+    /// (Obsidian, Word, Chrome, …). Disable if it conflicts with text selection in your workflow.
+    /// </summary>
+    public bool WebView2DragEnabled { get; set; } = true;
+
+    /// <summary>
     /// Checks if a process name is in the mouse selection excluded apps list.
     /// </summary>
     public bool IsMouseSelectionExcluded(string? processName)

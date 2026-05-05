@@ -62,8 +62,9 @@ public sealed record WindowsAIResponse(
 /// Generation options for Phi Silica. Defaults are tuned for translation
 /// (Microsoft's defaults of 0.9/40/0.9 are too creative; their best-practices doc
 /// recommends lowering Temperature/TopK for deterministic output).
+/// TopK is uint to match <c>Microsoft.Windows.AI.Text.LanguageModelOptions.TopK</c>.
 /// </summary>
 public sealed record WindowsAIGenerationOptions(
     float Temperature = 0.1f,
-    int TopK = 1,
+    uint TopK = 1,
     float TopP = 0.9f);

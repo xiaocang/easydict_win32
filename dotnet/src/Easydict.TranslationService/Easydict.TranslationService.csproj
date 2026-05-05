@@ -24,6 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Easydict.Llm.Streaming\Easydict.Llm.Streaming.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="Resources\EncryptedSecrets.json" />
   </ItemGroup>
 

@@ -165,7 +165,7 @@
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
-      <ProjectReference Include="..\Easydict.TextLayout\Easydict.TextLayout.csproj" />
+      <ProjectReference Include="..\Polyglot.TextLayout\Polyglot.TextLayout.csproj" />
       <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
     </ItemGroup>
 

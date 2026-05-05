@@ -4,6 +4,8 @@
 
 .PHONY: all build build-release build-debug test clean restore run help
 .PHONY: test-translation test-winui test-ui test-integration test-verbose run-release
+.PHONY: test-streaming test-textlayout
+.PHONY: pack pack-streaming pack-textlayout
 .PHONY: publish publish-x64 publish-x86 publish-arm64
 .PHONY: publish-msix-x64 publish-msix-x86 publish-msix-arm64
 .PHONY: msix msix-x64 msix-x86 msix-arm64 msix-all
@@ -42,6 +44,7 @@ build-debug: restore
 
 # Run all tests
 test: restore
+	dotnet test tests/Easydict.Llm.Streaming.Tests --logger "console;verbosity=minimal"
 	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=minimal"
 	dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"
 
@@ -52,6 +55,14 @@ test-translation:
 # Run WinUI tests only
 test-winui:
 	dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"
+
+# Run Easydict.Llm.Streaming tests only
+test-streaming:
+	dotnet test tests/Easydict.Llm.Streaming.Tests --logger "console;verbosity=minimal"
+
+# Run Polyglot.TextLayout tests only
+test-textlayout:
+	dotnet test tests/Polyglot.TextLayout.Tests --logger "console;verbosity=minimal"
 
 # Run UI automation tests (requires app to be installed or EASYDICT_EXE_PATH set)
 test-ui:
@@ -76,6 +87,21 @@ endif
 # Run tests with verbose output
 test-verbose:
 	dotnet test --logger "console;verbosity=detailed"
+
+# ============================================================
+# NuGet Packaging (for libraries published to NuGet)
+# ============================================================
+
+# Pack Easydict.Llm.Streaming
+pack-streaming: restore
+	dotnet pack src/Easydict.Llm.Streaming/Easydict.Llm.Streaming.csproj --configuration Release --output ./nupkg
+
+# Pack Polyglot.TextLayout
+pack-textlayout: restore
+	dotnet pack src/Polyglot.TextLayout/Polyglot.TextLayout.csproj --configuration Release --output ./nupkg
+
+# Pack all NuGet libraries
+pack: pack-streaming pack-textlayout
 
 # Clean build artifacts
 clean:

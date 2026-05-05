@@ -1,5 +1,5 @@
-using Easydict.TextLayout;
-using Easydict.TextLayout.Segmentation;
+using Polyglot.TextLayout;
+using Polyglot.TextLayout.Segmentation;
 using Easydict.TranslationService.FormulaProtection;
 
 namespace Easydict.WinUI.Services.DocumentExport;

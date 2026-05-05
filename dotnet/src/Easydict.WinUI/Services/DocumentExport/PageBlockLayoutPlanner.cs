@@ -1,6 +1,6 @@
-using Easydict.TextLayout;
-using Easydict.TextLayout.FontFitting;
-using Easydict.TextLayout.Layout;
+using Polyglot.TextLayout;
+using Polyglot.TextLayout.FontFitting;
+using Polyglot.TextLayout.Layout;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
 using PdfSharpCore.Drawing;

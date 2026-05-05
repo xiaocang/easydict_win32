@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Easydict.Llm.Streaming</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>Easydict.Llm.Streaming</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Easydict contributors</Authors>
+    <Description>Lightweight Server-Sent Events (SSE) parser for OpenAI-compatible LLM chat completion streams. Parses `data:` lines, handles `[DONE]` markers, and yields delta content chunks as IAsyncEnumerable&lt;string&gt;.</Description>
+    <PackageTags>sse;llm;openai;streaming;async</PackageTags>
+    <RepositoryUrl>https://github.com/xiaocang/easydict_win32</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="9.*" />
+  </ItemGroup>
+
+</Project>

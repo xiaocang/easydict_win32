@@ -9,6 +9,11 @@
 
     This script extracts the MSIX, checks MinVersion, and re-packs if needed.
 
+    Note: WindowsAppSDK 2.0.1 may emit a correct MinVersion. The detection guard
+    below short-circuits with a "no fix required" log when the bundled MinVersion
+    already meets the requirement, so this script can be removed once 2.0.x is
+    confirmed correct across all our build paths.
+
 .PARAMETER MsixPath
     Path to the MSIX file to verify/fix.
 
@@ -70,7 +75,7 @@ try {
     Write-Host "Required MinVersion: $MinVersion"
 
     if ([version]$currentMin -ge [version]$MinVersion) {
-        Write-Host "MinVersion is OK: $currentMin >= $MinVersion"
+        Write-Host "MinVersion is OK: $currentMin >= $MinVersion (no fix required — winapp emitted the correct value, candidate for removing this workaround)"
         exit 0
     }
 

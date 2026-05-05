@@ -168,6 +168,16 @@ public sealed class SettingsService
     public List<string> MouseSelectionExcludedApps { get; set; } = ["code"];
 
     /// <summary>
+    /// When true, the pop button uses the legacy Win32 SetWindowPos + per-monitor DPI math
+    /// to position itself. When false, it uses the WinAppSDK 2.x PopupAnchor / DesktopPopupSiteBridge
+    /// path which anchors relative to the source app's hwnd.
+    ///
+    /// Default true (legacy) until the PopupAnchor migration is verified end-to-end against
+    /// multi-monitor + mixed-DPI scenarios. Flip to false to opt in to the new path.
+    /// </summary>
+    public bool PopButtonUseLegacyPositioning { get; set; } = true;
+
+    /// <summary>
     /// Checks if a process name is in the mouse selection excluded apps list.
     /// </summary>
     public bool IsMouseSelectionExcluded(string? processName)

@@ -161,6 +161,29 @@ public sealed partial class PopButtonWindow : Window
         _isPressed = false;
         RootGrid.Opacity = BaseOpacity;
 
+        var useLegacy = SettingsService.Instance.PopButtonUseLegacyPositioning;
+        if (useLegacy)
+        {
+            ShowAtUsingWin32(screenX, screenY);
+        }
+        else
+        {
+            // PopupAnchor opt-in path. If the new positioning fails (e.g. host runtime is older
+            // than 2.0.1), fall back to the Win32 path so selection translate keeps working.
+            try
+            {
+                ShowAtUsingPopupAnchor(screenX, screenY);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[PopButton] PopupAnchor path failed, falling back to Win32: {ex.Message}");
+                ShowAtUsingWin32(screenX, screenY);
+            }
+        }
+    }
+
+    private void ShowAtUsingWin32(int screenX, int screenY)
+    {
         var dpi = GetDpiForWindow(_hwnd);
         var scale = dpi / 96.0;
         var physicalSize = (int)(30 * scale);
@@ -197,6 +220,27 @@ public sealed partial class PopButtonWindow : Window
         _isVisible = true;
 
         Debug.WriteLine($"[PopButton] Shown at ({x}, {y}), size={physicalSize}, dpi={dpi}");
+    }
+
+    /// <summary>
+    /// PopupAnchor / DesktopPopupSiteBridge positioning path (WinAppSDK 2.x).
+    ///
+    /// TODO(WinAppSDK 2.0.1 PopupAnchor): re-architect this Window as a
+    /// <c>DesktopPopupSiteBridge</c> hosted via <c>PopupAnchor</c> anchored to the
+    /// source app's hwnd at the cursor offset. Benefits: relative-to-owner positioning
+    /// (no manual DPI math), automatic multi-monitor edge-clamp, no SetWindowPos.
+    ///
+    /// The activation hardening (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST)
+    /// stays — PopupAnchor positions, it does not control activation.
+    ///
+    /// Until that work lands and is verified, fall through to the Win32 path so the
+    /// feature remains functional when the user opts in.
+    /// </summary>
+    private void ShowAtUsingPopupAnchor(int screenX, int screenY)
+    {
+        // Stub: PopupAnchor migration is tracked separately. Defer to Win32 for now so
+        // the opt-in flag does not silently break selection translate.
+        ShowAtUsingWin32(screenX, screenY);
     }
 
     /// <summary>

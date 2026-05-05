@@ -5,7 +5,8 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap desktop rescap">
+  xmlns:systemai="http://schemas.microsoft.com/appx/manifest/systemai/windows10"
+  IgnorableNamespaces="uap desktop rescap systemai">
 
   <Identity
     Name="xiaocang.EasydictforWindows"
@@ -84,5 +85,8 @@
     <rescap:Capability Name="runFullTrust" />
     <!-- Internet access for translation services -->
     <Capability Name="internetClient" />
+    <!-- Required to call Microsoft.Windows.AI.Text.LanguageModel (Phi Silica).
+         Limited Access Feature; only takes effect in packaged builds. -->
+    <systemai:Capability Name="systemAIModels" />
   </Capabilities>
 </Package>

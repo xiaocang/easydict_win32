@@ -1517,6 +1517,10 @@ public sealed partial class SettingsPage : Page
 
             // Restore test status indicators
             RestoreTestStatusIndicators();
+
+            // Probe Windows Local AI (Phi Silica) availability so the Expander shows
+            // the correct status badge / "Prepare model" button on first paint.
+            RefreshWindowsLocalAIStatus();
         }
 
         if (ShouldLoadSettingsTab(SettingsTabId.General, deferLazyTabData))

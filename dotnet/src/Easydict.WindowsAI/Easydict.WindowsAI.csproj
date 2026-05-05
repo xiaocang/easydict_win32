@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22621.0</TargetPlatformMinVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Easydict.WindowsAI</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Microsoft.WindowsAppSDK 2.0.1 ships the in-box Microsoft.Windows.AI.Text.LanguageModel
+      WinRT API surface (Phi Silica). Limited to Copilot+ PCs with NPUs at runtime;
+      the service degrades gracefully on incompatible hardware via AIFeatureReadyState checks.
+    -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Easydict.WinUI.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -7,15 +7,26 @@ namespace Polyglot.TextLayout.Segmentation;
 /// </summary>
 public static class ScriptClassifier
 {
+    /// <summary>
+    /// Layout-relevant classification for a single character.
+    /// </summary>
     public enum CharCategory
     {
+        /// <summary>CJK ideograph, kana, hangul, or fullwidth form.</summary>
         Cjk,
+        /// <summary>Latin script or any non-CJK / non-special character.</summary>
         Latin,
+        /// <summary>Whitespace that allows a soft break (space, tab, CR).</summary>
         Space,
+        /// <summary>Mandatory line terminator (LF).</summary>
         HardBreak,
+        /// <summary>Opening bracket / quote that groups with the following segment.</summary>
         OpenPunctuation,
+        /// <summary>Closing bracket / quote / terminal punctuation that groups with the preceding segment.</summary>
         ClosePunctuation,
+        /// <summary>Soft hyphen (U+00AD): hidden break opportunity.</summary>
         SoftHyphen,
+        /// <summary>Anything that does not fit the other categories.</summary>
         Other,
     }
 

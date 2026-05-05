@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using Easydict.Llm.Streaming;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Streaming;
 

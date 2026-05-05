@@ -243,7 +243,7 @@
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
-      <ProjectReference Include="..\Easydict.TextLayout\Easydict.TextLayout.csproj" />
+      <ProjectReference Include="..\Polyglot.TextLayout\Polyglot.TextLayout.csproj" />
       <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
       <!-- Windows AI APIs / Phi Silica provider (windows-local-ai). Compile-only;
            runtime availability is checked dynamically and the service degrades gracefully

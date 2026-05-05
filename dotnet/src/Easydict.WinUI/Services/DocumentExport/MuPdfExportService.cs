@@ -4,10 +4,10 @@
 
 using System.Diagnostics;
 using System.Text;
-using Easydict.TextLayout;
-using Easydict.TextLayout.FontFitting;
-using Easydict.TextLayout.Layout;
-using Easydict.TextLayout.Preparation;
+using Polyglot.TextLayout;
+using Polyglot.TextLayout.FontFitting;
+using Polyglot.TextLayout.Layout;
+using Polyglot.TextLayout.Preparation;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.Models;

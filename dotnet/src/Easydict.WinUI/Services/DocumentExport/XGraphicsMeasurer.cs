@@ -1,4 +1,4 @@
-using Easydict.TextLayout;
+using Polyglot.TextLayout;
 using PdfSharpCore.Drawing;
 
 namespace Easydict.WinUI.Services.DocumentExport;

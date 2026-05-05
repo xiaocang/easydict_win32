@@ -1,3 +1,4 @@
+using Easydict.Llm.Streaming;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 

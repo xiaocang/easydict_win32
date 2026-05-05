@@ -1144,4 +1144,16 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Excluded apps</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Process names to exclude from mouse selection translate, separated by commas. Example: "code" for VS Code.</value></data>
+
+  <!-- Windows Local AI (Phi Silica) -->
+  <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>Ready</value></data>
+  <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>Preparing…</value></data>
+  <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>The on-device language model is ready. Translation runs locally without sending text to any external service.</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>The on-device language model is supported but has not been prepared yet. Click "Prepare model" to install it.</value></data>
+  <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>The app package is missing the systemAIModels capability. This typically affects unpackaged or portable builds; install the MSIX/Store version instead.</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>This device does not have a compatible NPU. Windows Local AI only runs on Copilot+ PCs. Use Ollama or a cloud provider as a fallback.</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI requires a newer Windows build. Install the latest Windows updates and try again.</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI has been disabled or removed. Re-enable Windows AI features in system settings.</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI is not supported on this system or in this region. Use Ollama or a cloud provider as a fallback.</value></data>
 </root>

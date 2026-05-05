@@ -5,7 +5,8 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap desktop rescap">
+  xmlns:systemai="http://schemas.microsoft.com/appx/manifest/systemai/windows10"
+  IgnorableNamespaces="uap desktop rescap systemai">
 
   <Identity
     Name="xiaocang.EasydictforWindows"
@@ -21,11 +22,12 @@
   </Properties>
 
   <Dependencies>
-    <!-- MinVersion 10.0.19041.0 (Windows 10 2004) required for .msix bundle support -->
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
-    <!-- Windows App SDK runtime framework dependency (required for WinRT activation in packaged mode) -->
-    <PackageDependency Name="Microsoft.WindowsAppRuntime.1.8"
-                       MinVersion="8000.731.1532.0"
+    <!-- MinVersion bumped to 10.0.22621.0 (Windows 11 22H2) — required by WindowsAppSDK 2.x
+         and by Microsoft.Windows.AI.Text.LanguageModel (Phi Silica). -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22621.0" MaxVersionTested="10.0.26226.0" />
+    <!-- Windows App SDK 2.0 runtime framework dependency (required for WinRT activation in packaged mode) -->
+    <PackageDependency Name="Microsoft.WindowsAppRuntime.2.0"
+                       MinVersion="2000.0.0.0"
                        Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
   </Dependencies>
 
@@ -80,5 +82,8 @@
     <rescap:Capability Name="runFullTrust" />
     <!-- Internet access for translation services -->
     <Capability Name="internetClient" />
+    <!-- Required to call Microsoft.Windows.AI.Text.LanguageModel (Phi Silica).
+         Limited Access Feature; only takes effect in packaged builds. -->
+    <systemai:Capability Name="systemAIModels" />
   </Capabilities>
 </Package>

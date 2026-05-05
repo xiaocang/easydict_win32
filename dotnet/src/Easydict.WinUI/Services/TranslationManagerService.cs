@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Services;
+using Easydict.WindowsAI.Services;
 
 namespace Easydict.WinUI.Services;
 
@@ -182,6 +183,13 @@ public sealed class TranslationManagerService : IDisposable
                     _settings.OllamaModel);
             }
         });
+
+        // Register the Windows Local AI (Phi Silica) provider lazily from the WinUI layer
+        // so the platform-agnostic Easydict.TranslationService core does not pull in
+        // WindowsAppSDK 2.x. RegisterService is idempotent (keyed on ServiceId), so it's
+        // safe to call on both initial configuration and after ReconfigureProxy() rebuilds
+        // the TranslationManager.
+        _translationManager.RegisterService(new WindowsLocalAIService());
 
         // Configure BuiltIn AI
         _translationManager.ConfigureService("builtin", service =>

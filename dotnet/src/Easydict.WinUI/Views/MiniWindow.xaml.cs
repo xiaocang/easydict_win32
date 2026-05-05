@@ -86,6 +86,10 @@ public sealed partial class MiniWindow : Window
         var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
         _appWindow = AppWindow.GetFromWindowId(windowId);
 
+        // Mica gives the small floating window a Fluent-native look. Falls through
+        // gracefully on hosts that don't support it (Win10 with no Mica, etc.).
+        TryApplyMicaBackdrop();
+
         // Configure window appearance
         ConfigureWindow();
 
@@ -214,6 +218,23 @@ public sealed partial class MiniWindow : Window
         }
 
         InitializeServiceResults();
+    }
+
+    /// <summary>
+    /// Apply a Mica system backdrop. Mica respects ElementTheme automatically and is
+    /// supported on Windows 11 (Win10 and unsupported configurations silently keep
+    /// the solid theme background).
+    /// </summary>
+    private void TryApplyMicaBackdrop()
+    {
+        try
+        {
+            this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.WriteLine($"[MiniWindow] Mica backdrop unavailable: {ex.Message}");
+        }
     }
 
     /// <summary>

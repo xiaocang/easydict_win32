@@ -9,7 +9,9 @@
     mc:Ignorable="d"
     Title="Easydict ᵇᵉᵗᵃ Mini">
 
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    <!-- Background bound to a non-themed transparent brush so the window-level Mica
+         backdrop applied in MiniWindow.xaml.cs is actually visible. -->
+    <Grid Background="Transparent"
             Padding="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>

@@ -45,9 +45,10 @@ internal static class PickerFactory
         string? title = null)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
         try
         {
-            var picker = new NewPickers.FileOpenPicker(hwnd)
+            var picker = new NewPickers.FileOpenPicker(windowId)
             {
                 SettingsIdentifier = settingsIdentifier,
                 CommitButtonText = title ?? string.Empty,
@@ -72,9 +73,10 @@ internal static class PickerFactory
         string? title = null)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
         try
         {
-            var picker = new NewPickers.FileOpenPicker(hwnd)
+            var picker = new NewPickers.FileOpenPicker(windowId)
             {
                 SettingsIdentifier = settingsIdentifier,
                 CommitButtonText = title ?? string.Empty,
@@ -103,9 +105,10 @@ internal static class PickerFactory
         int initialFileTypeIndex = 0)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
         try
         {
-            var picker = new NewPickers.FileSavePicker(hwnd)
+            var picker = new NewPickers.FileSavePicker(windowId)
             {
                 SettingsIdentifier = settingsIdentifier,
                 SuggestedFileName = suggestedFileName ?? string.Empty,
@@ -134,9 +137,10 @@ internal static class PickerFactory
     public static async Task<string?> PickFolderAsync(Window window, string settingsIdentifier)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
         try
         {
-            var picker = new NewPickers.FolderPicker(hwnd)
+            var picker = new NewPickers.FolderPicker(windowId)
             {
                 SettingsIdentifier = settingsIdentifier,
             };

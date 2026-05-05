@@ -53,14 +53,13 @@ internal static class WebView2RuntimeService
             Debug.WriteLine($"[WebView2RuntimeService] Unparseable version string: {versionString}");
             return new RuntimeInfo(true, null);
         }
-        catch (WebView2RuntimeNotFoundException ex)
-        {
-            Debug.WriteLine($"[WebView2RuntimeService] Runtime not found: {ex.Message}");
-            return new RuntimeInfo(false, null);
-        }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[WebView2RuntimeService] Detection failed: {ex.Message}");
+            // CoreWebView2Environment.GetAvailableBrowserVersionString throws when the WebView2
+            // Runtime is not installed. The exception type has changed across SDK versions
+            // (WebView2RuntimeNotFoundException in some, plain Exception in others), so catch
+            // broadly and treat any failure as "no runtime available".
+            Debug.WriteLine($"[WebView2RuntimeService] Runtime detection failed: {ex.GetType().Name}: {ex.Message}");
             return new RuntimeInfo(false, null);
         }
     }

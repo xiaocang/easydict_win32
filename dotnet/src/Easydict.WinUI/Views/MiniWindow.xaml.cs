@@ -291,7 +291,9 @@ public sealed partial class MiniWindow : Window
 
         // Try saved position first; fall through to the default if it's off-screen
         // (e.g. saved on a now-disconnected external monitor — issue #148).
-        if (_settings.MiniWindowXDips > 0 || _settings.MiniWindowYDips > 0)
+        // Use the explicit "saved" flag rather than `> 0` so monitors with negative
+        // virtual-screen coordinates (placed left/above primary) still restore.
+        if (_settings.MiniWindowPositionSaved)
         {
             var savedX = (int)DpiHelper.DipsToPhysicalPixels(_settings.MiniWindowXDips, scale);
             var savedY = (int)DpiHelper.DipsToPhysicalPixels(_settings.MiniWindowYDips, scale);
@@ -346,6 +348,7 @@ public sealed partial class MiniWindow : Window
 
         _settings.MiniWindowXDips = DpiHelper.PhysicalPixelsToDips(position.X, scale);
         _settings.MiniWindowYDips = DpiHelper.PhysicalPixelsToDips(position.Y, scale);
+        _settings.MiniWindowPositionSaved = true;
         _settings.MiniWindowIsPinned = _isPinned;
         _settings.Save();
     }

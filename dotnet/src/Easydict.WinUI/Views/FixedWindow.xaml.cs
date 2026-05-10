@@ -216,7 +216,9 @@ public sealed partial class FixedWindow : Window
 
         // Try saved position first; fall through to the default if it's off-screen
         // (e.g. saved on a now-disconnected external monitor — issue #148).
-        if (_settings.FixedWindowXDips > 0 || _settings.FixedWindowYDips > 0)
+        // Use the explicit "saved" flag rather than `> 0` so monitors with negative
+        // virtual-screen coordinates (placed left/above primary) still restore.
+        if (_settings.FixedWindowPositionSaved)
         {
             var savedX = (int)DpiHelper.DipsToPhysicalPixels(_settings.FixedWindowXDips, scale);
             var savedY = (int)DpiHelper.DipsToPhysicalPixels(_settings.FixedWindowYDips, scale);
@@ -253,6 +255,7 @@ public sealed partial class FixedWindow : Window
 
         _settings.FixedWindowXDips = DpiHelper.PhysicalPixelsToDips(position.X, scale);
         _settings.FixedWindowYDips = DpiHelper.PhysicalPixelsToDips(position.Y, scale);
+        _settings.FixedWindowPositionSaved = true;
         _settings.Save();
     }
 

@@ -368,6 +368,9 @@ public sealed class SettingsService
     public bool MiniWindowAutoClose { get; set; } = true;
     public double MiniWindowXDips { get; set; } = 0;
     public double MiniWindowYDips { get; set; } = 0;
+    // Distinguishes "never saved" from "saved at (0, 0)" or saved to a monitor whose
+    // virtual-screen coordinates are negative (monitor placed left/above primary).
+    public bool MiniWindowPositionSaved { get; set; } = false;
     public double MiniWindowWidthDips { get; set; } = 320;
     public double MiniWindowHeightDips { get; set; } = 200;
     public bool MiniWindowIsPinned { get; set; } = false;
@@ -393,6 +396,8 @@ public sealed class SettingsService
     public string ShowFixedWindowHotkey { get; set; } = "Ctrl+Alt+F";
     public double FixedWindowXDips { get; set; } = 0;
     public double FixedWindowYDips { get; set; } = 0;
+    // See MiniWindowPositionSaved.
+    public bool FixedWindowPositionSaved { get; set; } = false;
     public double FixedWindowWidthDips { get; set; } = 320;
     public double FixedWindowHeightDips { get; set; } = 280;
 
@@ -682,6 +687,11 @@ public sealed class SettingsService
         MiniWindowAutoClose = GetValue(nameof(MiniWindowAutoClose), true);
         MiniWindowXDips = GetValue(nameof(MiniWindowXDips), 0.0);
         MiniWindowYDips = GetValue(nameof(MiniWindowYDips), 0.0);
+        // Migration: pre-flag versions only stored coords. If either is non-zero, treat
+        // as previously saved so the user's position survives the upgrade.
+        MiniWindowPositionSaved = GetValue(
+            nameof(MiniWindowPositionSaved),
+            MiniWindowXDips != 0.0 || MiniWindowYDips != 0.0);
         MiniWindowWidthDips = GetValue(nameof(MiniWindowWidthDips), 320.0);
         MiniWindowHeightDips = GetValue(nameof(MiniWindowHeightDips), 200.0);
         MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
@@ -693,6 +703,10 @@ public sealed class SettingsService
         ShowFixedWindowHotkey = GetValue(nameof(ShowFixedWindowHotkey), "Ctrl+Alt+F");
         FixedWindowXDips = GetValue(nameof(FixedWindowXDips), 0.0);
         FixedWindowYDips = GetValue(nameof(FixedWindowYDips), 0.0);
+        // See MiniWindowPositionSaved migration note.
+        FixedWindowPositionSaved = GetValue(
+            nameof(FixedWindowPositionSaved),
+            FixedWindowXDips != 0.0 || FixedWindowYDips != 0.0);
         FixedWindowWidthDips = GetValue(nameof(FixedWindowWidthDips), 320.0);
         FixedWindowHeightDips = GetValue(nameof(FixedWindowHeightDips), 280.0);
         FixedWindowEnabledServices = GetStringList(nameof(FixedWindowEnabledServices), ["google"]);
@@ -860,6 +874,7 @@ public sealed class SettingsService
         _settings[nameof(MiniWindowAutoClose)] = MiniWindowAutoClose;
         _settings[nameof(MiniWindowXDips)] = MiniWindowXDips;
         _settings[nameof(MiniWindowYDips)] = MiniWindowYDips;
+        _settings[nameof(MiniWindowPositionSaved)] = MiniWindowPositionSaved;
         _settings[nameof(MiniWindowWidthDips)] = MiniWindowWidthDips;
         _settings[nameof(MiniWindowHeightDips)] = MiniWindowHeightDips;
         _settings[nameof(MiniWindowIsPinned)] = MiniWindowIsPinned;
@@ -871,6 +886,7 @@ public sealed class SettingsService
         _settings[nameof(ShowFixedWindowHotkey)] = ShowFixedWindowHotkey;
         _settings[nameof(FixedWindowXDips)] = FixedWindowXDips;
         _settings[nameof(FixedWindowYDips)] = FixedWindowYDips;
+        _settings[nameof(FixedWindowPositionSaved)] = FixedWindowPositionSaved;
         _settings[nameof(FixedWindowWidthDips)] = FixedWindowWidthDips;
         _settings[nameof(FixedWindowHeightDips)] = FixedWindowHeightDips;
         _settings[nameof(FixedWindowEnabledServices)] = FixedWindowEnabledServices;

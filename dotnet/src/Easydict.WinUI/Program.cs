@@ -68,15 +68,12 @@ public static class Program
             }
         }
 
-        // WinAppSDK 2.0 changed the unpackaged-launch contract: with the 2.0 runtime, the
-        // module-init bootstrap can fail silently for unpackaged self-contained apps that use
-        // a custom Main (DISABLE_XAML_GENERATED_MAIN) — `new Window()` then trips a fail-fast
-        // (STATUS_FAIL_FAST_EXCEPTION / 0xc000027b) before any managed exception can be caught.
-        // Calling TryInitialize explicitly is harmless when self-contained (no framework
-        // package needed) and recovers the framework-dependent unpackaged path.
-        TryBootstrapWindowsAppSdk();
-
         // Normal WinUI 3 startup (replicates the auto-generated Main).
+        // The WinAppSDK auto-init module constructor handles Bootstrap.Initialize on first
+        // type touch. For unpackaged dev runs, this requires the Microsoft.WindowsAppRuntime.2.x
+        // framework package to be installed system-wide (see CLAUDE.md / Prerequisites). For
+        // packaged installs the framework dependency declared in Package.appxmanifest pulls
+        // it in. For published portable EXEs WindowsAppSDKSelfContained=true bundles it.
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(p =>
         {
@@ -85,28 +82,6 @@ public static class Program
             SynchronizationContext.SetSynchronizationContext(context);
             new App();
         });
-    }
-
-    private static void TryBootstrapWindowsAppSdk()
-    {
-        try
-        {
-            // 0x00020000 = major 2, minor 0 (WinAppSDK 2.0 line)
-            const uint majorMinorVersion = 0x00020000;
-            bool ok = Microsoft.Windows.ApplicationModel.DynamicDependency.Bootstrap.TryInitialize(
-                majorMinorVersion, out int hresult);
-            App.LogToFile($"[Bootstrap] TryInitialize ok={ok} HRESULT=0x{hresult:X8}");
-        }
-        catch (DllNotFoundException ex)
-        {
-            // Bootstrap.Net.dll not bundled (would only happen if WindowsAppSDKSelfContained
-            // were false and the framework package weren't installed).
-            App.LogToFile($"[Bootstrap] DllNotFoundException: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            App.LogToFile($"[Bootstrap] {ex.GetType().Name}: {ex.Message}");
-        }
     }
 
     /// <summary>

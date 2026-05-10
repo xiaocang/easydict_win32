@@ -37,10 +37,18 @@
         <SelfContained>true</SelfContained>
         <!-- Self-Contained Windows App SDK: Bundle native runtime DLLs so the
              portable ZIP/EXE works without a system-installed Windows App SDK runtime.
-             For MSIX builds, override with -p:WindowsAppSDKSelfContained=false so the
-             framework package dependency (Microsoft.WindowsAppRuntime) is used instead;
-             bundled DLLs conflict with the framework package and cause launch failures. -->
-        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+             - Debug F5 (unpackaged dev iteration): MUST be false. Bundled DLLs conflict
+               with the installed Microsoft.WindowsAppRuntime.2.x framework package and
+               trip a STATUS_FAIL_FAST_EXCEPTION (0xc000027b) inside `new Window()`.
+               Dev machines are expected to have the framework installed; if missing, run
+               `Add-AppxPackage` on the MSIX files under
+               $env:USERPROFILE\.nuget\packages\microsoft.windowsappsdk.runtime\<ver>\tools\MSIX\win10-x64\.
+             - Release / publish (portable EXE): true so end-users don't need the framework.
+               The release script (`release.ps1`) and `make publish-x64` use Configuration=Release.
+             - MSIX builds: override with -p:WindowsAppSDKSelfContained=false so the framework
+               package dependency declared in Package.appxmanifest is used instead. -->
+        <WindowsAppSDKSelfContained Condition="'$(Configuration)' == 'Release'">true</WindowsAppSDKSelfContained>
+        <WindowsAppSDKSelfContained Condition="'$(Configuration)' != 'Release'">false</WindowsAppSDKSelfContained>
         <!-- Trim unused code to reduce size -->
         <PublishTrimmed>false</PublishTrimmed>
         <!-- Single file output (optional, can be enabled for simpler distribution) -->

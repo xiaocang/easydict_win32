@@ -1,5 +1,6 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.Windows.AppLifecycle;
+using System.Runtime.InteropServices;
 using Easydict.WinUI.Services;
 
 namespace Easydict.WinUI;
@@ -84,6 +85,13 @@ public static class Program
     /// </summary>
     private static bool IsOcrProtocolActivation()
     {
+        // AppInstance.GetActivatedEventArgs throws InvalidOperationException when there is
+        // no activation context (i.e. plain command-line launch, or unpackaged). Gate the
+        // call on IsPackaged so we never enter that throwing path during a normal launch —
+        // unpackaged builds receive easydict:// via argv, which is handled in Main directly.
+        if (!IsPackaged())
+            return false;
+
         try
         {
             var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
@@ -97,31 +105,27 @@ public static class Program
                     StringComparison.OrdinalIgnoreCase);
             }
         }
-        catch (InvalidOperationException)
-        {
-            // AppInstance API may not be available in all scenarios (e.g., unpackaged).
-        }
-        catch (System.Runtime.InteropServices.COMException)
+        catch (COMException)
         {
             // WinRT activation infrastructure not available.
         }
         return false;
     }
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetCurrentPackageFullName(ref int packageFullNameLength, char[]? packageFullName);
+
+    private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
+
+    /// <summary>
+    /// Returns true if the process is running inside an MSIX/AppX package.
+    /// Uses the kernel32 query so unpackaged builds don't trip the
+    /// InvalidOperationException that <c>Package.Current</c> throws — that exception
+    /// surfaces as noisy first-chance output in the debugger on every launch.
+    /// </summary>
     private static bool IsPackaged()
     {
-        try
-        {
-            _ = Windows.ApplicationModel.Package.Current;
-            return true;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-        catch (System.Runtime.InteropServices.COMException)
-        {
-            return false;
-        }
+        int length = 0;
+        return GetCurrentPackageFullName(ref length, null) != APPMODEL_ERROR_NO_PACKAGE;
     }
 }

@@ -214,25 +214,29 @@ public sealed partial class FixedWindow : Window
         var hWnd = WindowNative.GetWindowHandle(this);
         var scale = DpiHelper.GetScaleFactorForWindow(hWnd);
 
-        // Check if we have a saved position
+        // Try saved position first; fall through to the default if it's off-screen
+        // (e.g. saved on a now-disconnected external monitor — issue #148).
         if (_settings.FixedWindowXDips > 0 || _settings.FixedWindowYDips > 0)
         {
-            var x = DpiHelper.DipsToPhysicalPixels(_settings.FixedWindowXDips, scale);
-            var y = DpiHelper.DipsToPhysicalPixels(_settings.FixedWindowYDips, scale);
-            _appWindow.Move(new PointInt32((int)x, (int)y));
-        }
-        else
-        {
-            // Center on primary display
-            var displayArea = DisplayArea.Primary;
-            if (displayArea != null)
+            var savedX = (int)DpiHelper.DipsToPhysicalPixels(_settings.FixedWindowXDips, scale);
+            var savedY = (int)DpiHelper.DipsToPhysicalPixels(_settings.FixedWindowYDips, scale);
+            if (WindowPositionHelper.TryGetVisiblePosition(
+                    new PointInt32(savedX, savedY), _appWindow.Size, out var safe))
             {
-                var workArea = displayArea.WorkArea;
-                var windowSize = _appWindow.Size;
-                var x = (workArea.Width - windowSize.Width) / 2 + workArea.X;
-                var y = (workArea.Height - windowSize.Height) / 2 + workArea.Y;
-                _appWindow.Move(new PointInt32(x, y));
+                _appWindow.Move(safe);
+                return;
             }
+        }
+
+        // Default: center on primary display
+        var primary = DisplayArea.Primary;
+        if (primary != null)
+        {
+            var workArea = primary.WorkArea;
+            var windowSize = _appWindow.Size;
+            var x = (workArea.Width - windowSize.Width) / 2 + workArea.X;
+            var y = (workArea.Height - windowSize.Height) / 2 + workArea.Y;
+            _appWindow.Move(new PointInt32(x, y));
         }
     }
 

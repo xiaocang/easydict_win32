@@ -289,43 +289,47 @@ public sealed partial class MiniWindow : Window
         var hWnd = WindowNative.GetWindowHandle(this);
         var scale = DpiHelper.GetScaleFactorForWindow(hWnd);
 
-        // Check if we have a saved position
+        // Try saved position first; fall through to the default if it's off-screen
+        // (e.g. saved on a now-disconnected external monitor — issue #148).
         if (_settings.MiniWindowXDips > 0 || _settings.MiniWindowYDips > 0)
         {
-            var x = DpiHelper.DipsToPhysicalPixels(_settings.MiniWindowXDips, scale);
-            var y = DpiHelper.DipsToPhysicalPixels(_settings.MiniWindowYDips, scale);
-            _appWindow.Move(new PointInt32((int)x, (int)y));
-        }
-        else
-        {
-            // Position at top-right corner of the screen where cursor is located
-            var gotCursorPos = GetCursorPos(out var cursorPos);
-
-            // Use cursor position when available; otherwise fall back to display containing current window
-            var displayArea = gotCursorPos
-                ? DisplayArea.GetFromPoint(
-                    new PointInt32(cursorPos.X, cursorPos.Y),
-                    DisplayAreaFallback.Primary)
-                : DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
-
-            if (displayArea != null)
+            var savedX = (int)DpiHelper.DipsToPhysicalPixels(_settings.MiniWindowXDips, scale);
+            var savedY = (int)DpiHelper.DipsToPhysicalPixels(_settings.MiniWindowYDips, scale);
+            if (WindowPositionHelper.TryGetVisiblePosition(
+                    new PointInt32(savedX, savedY), _appWindow.Size, out var safe))
             {
-                var workArea = displayArea.WorkArea;
-                var windowSize = _appWindow.Size;
-
-                // Use DIP-aware margin (20 DIPs) for consistent appearance across DPI settings
-                const int marginDips = 20;
-                var margin = (int)DpiHelper.DipsToPhysicalPixels(marginDips, scale);
-
-                var x = workArea.X + workArea.Width - windowSize.Width - margin;
-                var y = workArea.Y + margin;
-
-                // Clamp to keep window within display work area
-                x = Math.Max(workArea.X, Math.Min(x, workArea.X + workArea.Width - windowSize.Width));
-                y = Math.Max(workArea.Y, Math.Min(y, workArea.Y + workArea.Height - windowSize.Height));
-
-                _appWindow.Move(new PointInt32(x, y));
+                _appWindow.Move(safe);
+                return;
             }
+        }
+
+        // Default: top-right corner of the display where the cursor lives
+        var gotCursorPos = GetCursorPos(out var cursorPos);
+
+        // Use cursor position when available; otherwise fall back to display containing current window
+        var displayArea = gotCursorPos
+            ? DisplayArea.GetFromPoint(
+                new PointInt32(cursorPos.X, cursorPos.Y),
+                DisplayAreaFallback.Primary)
+            : DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
+
+        if (displayArea != null)
+        {
+            var workArea = displayArea.WorkArea;
+            var windowSize = _appWindow.Size;
+
+            // Use DIP-aware margin (20 DIPs) for consistent appearance across DPI settings
+            const int marginDips = 20;
+            var margin = (int)DpiHelper.DipsToPhysicalPixels(marginDips, scale);
+
+            var x = workArea.X + workArea.Width - windowSize.Width - margin;
+            var y = workArea.Y + margin;
+
+            // Clamp to keep window within display work area
+            x = Math.Max(workArea.X, Math.Min(x, workArea.X + workArea.Width - windowSize.Width));
+            y = Math.Max(workArea.Y, Math.Min(y, workArea.Y + workArea.Height - windowSize.Height));
+
+            _appWindow.Move(new PointInt32(x, y));
         }
     }
 

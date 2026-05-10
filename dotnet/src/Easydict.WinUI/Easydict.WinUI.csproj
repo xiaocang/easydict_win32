@@ -47,6 +47,16 @@
                overrides take precedence). -->
         <WindowsAppSDKSelfContained Condition="'$(Configuration)' == 'Release'">true</WindowsAppSDKSelfContained>
         <WindowsAppSDKSelfContained Condition="'$(Configuration)' != 'Release'">false</WindowsAppSDKSelfContained>
+        <!-- Disable WinAppSDK 2.x DeploymentManager auto-initializer.
+             The auto-init runs in the assembly's <Module>.cctor and instantiates a
+             DeploymentInitializeOptions WinRT object; on hosts without the WinAppSDK runtime
+             registered (CI runners), this throws COMException (REGDB_E_CLASSNOTREG) and any
+             test that touches a type from this assembly fails to load. Bootstrap is already
+             initialized explicitly in Program.cs (Bootstrap.TryInitialize), and DeploymentManager
+             is only meaningful for packaged framework-dependent runs — those code paths exit on
+             user machines that have the framework provisioned, so skipping the module-load-time
+             init is safe here. -->
+        <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
         <!-- Trim unused code to reduce size -->
         <PublishTrimmed>false</PublishTrimmed>
         <!-- Single file output (optional, can be enabled for simpler distribution) -->

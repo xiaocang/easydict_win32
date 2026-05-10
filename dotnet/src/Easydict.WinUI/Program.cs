@@ -122,8 +122,10 @@ public static class Program
     /// Uses the kernel32 query so unpackaged builds don't trip the
     /// InvalidOperationException that <c>Package.Current</c> throws — that exception
     /// surfaces as noisy first-chance output in the debugger on every launch.
+    /// Other modules (e.g. App.xaml.cs diagnostic logging) should call this before
+    /// touching <c>Windows.ApplicationModel.Package.Current</c>.
     /// </summary>
-    private static bool IsPackaged()
+    internal static bool IsPackaged()
     {
         int length = 0;
         return GetCurrentPackageFullName(ref length, null) != APPMODEL_ERROR_NO_PACKAGE;

@@ -167,11 +167,20 @@ namespace Easydict.WinUI
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
             LogToFile($"[OnLaunched] Starting - Args: {e.Arguments}");
-            try
+            // Gate Package.Current on Program.IsPackaged() so unpackaged debug builds
+            // don't emit a noisy first-chance InvalidOperationException on every launch.
+            if (Program.IsPackaged())
             {
-                LogToFile($"[OnLaunched] Package: {Windows.ApplicationModel.Package.Current.Id.FullName}");
+                try
+                {
+                    LogToFile($"[OnLaunched] Package: {Windows.ApplicationModel.Package.Current.Id.FullName}");
+                }
+                catch (Exception ex)
+                {
+                    LogToFile($"[OnLaunched] Package: (read failed: {ex.Message})");
+                }
             }
-            catch
+            else
             {
                 LogToFile("[OnLaunched] Package: (unpackaged)");
             }

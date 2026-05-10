@@ -173,22 +173,8 @@ public sealed class LocalizationService
     private static bool IsSupported(string lang) =>
         SupportedLanguages.Contains(lang, StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Detects if the application is running as a packaged (MSIX) app.
-    /// </summary>
-    private static bool IsRunningAsPackaged()
-    {
-        try
-        {
-            // Windows.ApplicationModel.Package.Current throws if not packaged
-            var package = Windows.ApplicationModel.Package.Current;
-            return package != null;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    /// <summary>Detects if the application is running as a packaged (MSIX) app.</summary>
+    private static bool IsRunningAsPackaged() => EasydictConditions.IsPackaged;
 
     /// <summary>
     /// Gets the system's preferred language, mapped to our supported languages.

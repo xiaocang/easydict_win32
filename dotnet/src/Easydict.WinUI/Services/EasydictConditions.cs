@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace Easydict.WinUI.Services;
 
@@ -48,23 +49,18 @@ internal static class EasydictConditions
         false;
 #endif
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetCurrentPackageFullName(ref int packageFullNameLength, char[]? packageFullName);
+
+    private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
+
+    // Use the kernel32 query rather than catching InvalidOperationException from
+    // Package.Current — the latter throws on every unpackaged launch and shows up
+    // as noisy first-chance output in the debugger.
     private static bool DetectPackaged()
     {
-        try
-        {
-            // Package.Current throws InvalidOperationException for unpackaged Win32 apps.
-            _ = Windows.ApplicationModel.Package.Current;
-            return true;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[EasydictConditions] IsPackaged probe failed: {ex.Message}");
-            return false;
-        }
+        int length = 0;
+        return GetCurrentPackageFullName(ref length, null) != APPMODEL_ERROR_NO_PACKAGE;
     }
 
     // TODO(WinAppSDK 2.0.1 IXamlCondition): expose these predicates to the XAML parser by

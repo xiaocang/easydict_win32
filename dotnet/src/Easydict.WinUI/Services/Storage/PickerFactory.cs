@@ -42,43 +42,52 @@ internal static class PickerFactory
     /// Optional text for the picker's confirm button (e.g. "Import"). Pass null to use the
     /// system default ("Open"). The dialog title is derived by the OS from picker type.
     /// </param>
-    public static async Task<string?> PickSingleFileAsync(
+    public static Task<string?> PickSingleFileAsync(
         Window window,
         string settingsIdentifier,
         IReadOnlyList<string> fileTypeFilter,
         string? commitButtonText = null)
-    {
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
-        try
-        {
-            var picker = new NewPickers.FileOpenPicker(windowId)
+        => OpenPickerAsync(
+            window, settingsIdentifier, fileTypeFilter, commitButtonText,
+            async picker => (await picker.PickSingleFileAsync())?.Path,
+            async hwnd =>
             {
-                SettingsIdentifier = settingsIdentifier,
-            };
-            if (!string.IsNullOrEmpty(commitButtonText)) picker.CommitButtonText = commitButtonText;
-            foreach (var ext in fileTypeFilter) picker.FileTypeFilter.Add(ext);
-
-            var result = await picker.PickSingleFileAsync();
-            return result?.Path;
-        }
-        catch (Exception ex) when (IsApiNotAvailable(ex))
-        {
-            Debug.WriteLine($"[PickerFactory] New picker API unavailable, falling back: {ex.Message}");
-            return await LegacyPickSingleFileAsync(hwnd, fileTypeFilter);
-        }
-    }
+                var picker = new LegacyPickers.FileOpenPicker();
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                foreach (var ext in fileTypeFilter) picker.FileTypeFilter.Add(ext);
+                return (await picker.PickSingleFileAsync())?.Path;
+            });
 
     /// <summary>Pick multiple files. Returns paths or empty list if cancelled.</summary>
     /// <param name="commitButtonText">
     /// Optional text for the picker's confirm button (e.g. "Import"). Pass null to use the
     /// system default ("Open"). The dialog title is derived by the OS from picker type.
     /// </param>
-    public static async Task<IReadOnlyList<string>> PickMultipleFilesAsync(
+    public static Task<IReadOnlyList<string>> PickMultipleFilesAsync(
         Window window,
         string settingsIdentifier,
         IReadOnlyList<string> fileTypeFilter,
         string? commitButtonText = null)
+        => OpenPickerAsync<IReadOnlyList<string>>(
+            window, settingsIdentifier, fileTypeFilter, commitButtonText,
+            async picker =>
+            {
+                var results = await picker.PickMultipleFilesAsync();
+                return results == null ? Array.Empty<string>() : results.Select(r => r.Path).ToList();
+            },
+            hwnd => LegacyPickMultipleFilesAsync(hwnd, fileTypeFilter));
+
+    /// <summary>
+    /// Shared body for FileOpenPicker scenarios — handles handle/WindowId resolution,
+    /// SettingsIdentifier + filter wiring, and the new→legacy API fallback.
+    /// </summary>
+    private static async Task<TResult> OpenPickerAsync<TResult>(
+        Window window,
+        string settingsIdentifier,
+        IReadOnlyList<string> fileTypeFilter,
+        string? commitButtonText,
+        Func<NewPickers.FileOpenPicker, Task<TResult>> pickWithNew,
+        Func<IntPtr, Task<TResult>> pickWithLegacy)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
@@ -90,14 +99,12 @@ internal static class PickerFactory
             };
             if (!string.IsNullOrEmpty(commitButtonText)) picker.CommitButtonText = commitButtonText;
             foreach (var ext in fileTypeFilter) picker.FileTypeFilter.Add(ext);
-
-            var results = await picker.PickMultipleFilesAsync();
-            return results == null ? Array.Empty<string>() : results.Select(r => r.Path).ToList();
+            return await pickWithNew(picker);
         }
         catch (Exception ex) when (IsApiNotAvailable(ex))
         {
             Debug.WriteLine($"[PickerFactory] New picker API unavailable, falling back: {ex.Message}");
-            return await LegacyPickMultipleFilesAsync(hwnd, fileTypeFilter);
+            return await pickWithLegacy(hwnd);
         }
     }
 
@@ -130,11 +137,11 @@ internal static class PickerFactory
             foreach (var kvp in fileTypeChoices) picker.FileTypeChoices.Add(kvp.Key, kvp.Value);
             if (!string.IsNullOrEmpty(defaultFileExtension))
             {
-                // FileSavePicker on the new namespace exposes DefaultFileExtension; if the
-                // property name differs across point releases, the catch below preserves the
-                // picker (with no preselection) rather than failing the whole save flow.
+                // FileSavePicker on the new namespace exposes DefaultFileExtension; tolerate
+                // SDK point releases where the surface differs by skipping preselection
+                // rather than failing the whole save flow.
                 try { picker.DefaultFileExtension = defaultFileExtension; }
-                catch { /* surface absent in this build — ignore */ }
+                catch (Exception ex) when (IsApiNotAvailable(ex) || ex is ArgumentException) { }
             }
 
             var result = await picker.PickSaveFileAsync();
@@ -168,24 +175,16 @@ internal static class PickerFactory
         }
     }
 
+    // Returned by WinRT activation when the requested type isn't registered (host
+    // WinAppRuntime older than what the app was built against).
+    private const int E_NOINTERFACE = unchecked((int)0x80040154);
+
     private static bool IsApiNotAvailable(Exception ex)
     {
-        // The runtime throws TypeLoadException/MissingMethodException when the WinAppRuntime
-        // installed on the host is older than what the app was built against. This is the
-        // failure shape that justifies the legacy fallback below.
         return ex is TypeLoadException
             || ex is MissingMethodException
             || ex is MissingMemberException
-            || ex is System.Runtime.InteropServices.COMException { HResult: unchecked((int)0x80040154) };
-    }
-
-    private static async Task<string?> LegacyPickSingleFileAsync(IntPtr hwnd, IReadOnlyList<string> fileTypeFilter)
-    {
-        var picker = new LegacyPickers.FileOpenPicker();
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-        foreach (var ext in fileTypeFilter) picker.FileTypeFilter.Add(ext);
-        var file = await picker.PickSingleFileAsync();
-        return file?.Path;
+            || ex is System.Runtime.InteropServices.COMException { HResult: E_NOINTERFACE };
     }
 
     private static async Task<IReadOnlyList<string>> LegacyPickMultipleFilesAsync(IntPtr hwnd, IReadOnlyList<string> fileTypeFilter)

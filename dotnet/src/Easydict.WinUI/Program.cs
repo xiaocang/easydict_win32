@@ -1,6 +1,5 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.Windows.AppLifecycle;
-using System.Runtime.InteropServices;
 using Easydict.WinUI.Services;
 
 namespace Easydict.WinUI;
@@ -41,7 +40,7 @@ public static class Program
 
         // Unpackaged (Inno/portable) installs rely on HKCU protocol registration.
         // Repair registration early so future easydict:// launches are reliable.
-        if (!IsPackaged())
+        if (!EasydictConditions.IsPackaged)
         {
             ProtocolRegistrationService.EnsureRegistered();
         }
@@ -68,12 +67,7 @@ public static class Program
             }
         }
 
-        // Normal WinUI 3 startup (replicates the auto-generated Main).
-        // The WinAppSDK auto-init module constructor handles Bootstrap.Initialize on first
-        // type touch. For unpackaged dev runs, this requires the Microsoft.WindowsAppRuntime.2.x
-        // framework package to be installed system-wide (see CLAUDE.md / Prerequisites). For
-        // packaged installs the framework dependency declared in Package.appxmanifest pulls
-        // it in. For published portable EXEs WindowsAppSDKSelfContained=true bundles it.
+        // Replicates the auto-generated Main suppressed by DISABLE_XAML_GENERATED_MAIN.
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(p =>
         {
@@ -90,11 +84,10 @@ public static class Program
     /// </summary>
     private static bool IsOcrProtocolActivation()
     {
-        // AppInstance.GetActivatedEventArgs throws InvalidOperationException when there is
-        // no activation context (i.e. plain command-line launch, or unpackaged). Gate the
-        // call on IsPackaged so we never enter that throwing path during a normal launch —
-        // unpackaged builds receive easydict:// via argv, which is handled in Main directly.
-        if (!IsPackaged())
+        // AppInstance.GetActivatedEventArgs throws when there is no activation context
+        // (plain command-line launch or unpackaged). Unpackaged builds receive
+        // easydict:// via argv, which Main handles directly.
+        if (!EasydictConditions.IsPackaged)
             return false;
 
         try
@@ -110,29 +103,10 @@ public static class Program
                     StringComparison.OrdinalIgnoreCase);
             }
         }
-        catch (COMException)
+        catch (System.Runtime.InteropServices.COMException)
         {
             // WinRT activation infrastructure not available.
         }
         return false;
-    }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetCurrentPackageFullName(ref int packageFullNameLength, char[]? packageFullName);
-
-    private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
-
-    /// <summary>
-    /// Returns true if the process is running inside an MSIX/AppX package.
-    /// Uses the kernel32 query so unpackaged builds don't trip the
-    /// InvalidOperationException that <c>Package.Current</c> throws — that exception
-    /// surfaces as noisy first-chance output in the debugger on every launch.
-    /// Other modules (e.g. App.xaml.cs diagnostic logging) should call this before
-    /// touching <c>Windows.ApplicationModel.Package.Current</c>.
-    /// </summary>
-    internal static bool IsPackaged()
-    {
-        int length = 0;
-        return GetCurrentPackageFullName(ref length, null) != APPMODEL_ERROR_NO_PACKAGE;
     }
 }

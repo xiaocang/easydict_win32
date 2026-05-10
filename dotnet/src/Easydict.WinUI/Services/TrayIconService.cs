@@ -143,7 +143,7 @@ public sealed class TrayIconService : IDisposable
         }
 
         // Fallback 1: Try Assets folder with ms-appx URI (packaged builds)
-        if (IsPackagedApp())
+        if (EasydictConditions.IsPackaged)
         {
             try
             {
@@ -181,19 +181,6 @@ public sealed class TrayIconService : IDisposable
 
         // Return a simple bitmap to avoid null reference - it will show as a default icon
         return new BitmapImage();
-    }
-
-    private static bool IsPackagedApp()
-    {
-        try
-        {
-            _ = Windows.ApplicationModel.Package.Current;
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private static string L(string key) => LocalizationService.Instance.GetString(key);

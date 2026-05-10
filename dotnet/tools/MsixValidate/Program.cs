@@ -51,13 +51,13 @@ internal static class Program
             switch (args[i])
             {
                 case "--expected-name":
-                    if (!TryReadValue(args, ref i, out expectedName!)) return UsageError($"--expected-name requires a value");
+                    if (!TryReadValue(args, ref i, out expectedName)) return UsageError("--expected-name requires a value");
                     break;
                 case "--expected-publisher":
-                    if (!TryReadValue(args, ref i, out expectedPublisher!)) return UsageError($"--expected-publisher requires a value");
+                    if (!TryReadValue(args, ref i, out expectedPublisher)) return UsageError("--expected-publisher requires a value");
                     break;
                 case "--min-version":
-                    if (!TryReadValue(args, ref i, out minVersion!)) return UsageError($"--min-version requires a value");
+                    if (!TryReadValue(args, ref i, out minVersion)) return UsageError("--min-version requires a value");
                     break;
                 case "--allow-unsigned":
                     allowUnsigned = true;
@@ -75,7 +75,8 @@ internal static class Program
 
         try
         {
-            var manifest = ReadAppxManifest(msixPath);
+            using var archive = ZipFile.OpenRead(msixPath);
+            var manifest = ReadAppxManifest(archive);
             var failures = 0;
 
             failures += Check("PackageFamilyNameValidator", () => ValidateIdentity(manifest, expectedName, expectedPublisher));
@@ -86,7 +87,7 @@ internal static class Program
             }
             else
             {
-                failures += Check("PackageCertificateEkuValidator", () => ValidateSignature(msixPath));
+                failures += Check("PackageCertificateEkuValidator", () => ValidateSignature(archive));
             }
 
             if (failures > 0)
@@ -105,11 +106,11 @@ internal static class Program
         }
     }
 
-    private static bool TryReadValue(string[] args, ref int i, out string? value)
+    private static bool TryReadValue(string[] args, ref int i, out string value)
     {
         if (i + 1 >= args.Length)
         {
-            value = null;
+            value = string.Empty;
             return false;
         }
         value = args[++i];
@@ -138,23 +139,17 @@ internal static class Program
             Console.WriteLine($"  [pass] {name}");
             return 0;
         }
-        catch (ValidationException ex)
+        catch (InvalidDataException ex)
         {
             Console.Error.WriteLine($"  [FAIL] {name}: {ex.Message}");
             return 1;
         }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"  [FAIL] {name}: unexpected {ex.GetType().Name}: {ex.Message}");
-            return 1;
-        }
     }
 
-    private static XDocument ReadAppxManifest(string msixPath)
+    private static XDocument ReadAppxManifest(ZipArchive archive)
     {
-        using var archive = ZipFile.OpenRead(msixPath);
         var entry = archive.GetEntry("AppxManifest.xml")
-            ?? throw new ValidationException("AppxManifest.xml not found inside MSIX");
+            ?? throw new InvalidDataException("AppxManifest.xml not found inside MSIX");
         using var stream = entry.Open();
         return XDocument.Load(stream);
     }
@@ -164,51 +159,48 @@ internal static class Program
         var identity = manifest.Root!
             .Elements()
             .FirstOrDefault(e => e.Name.LocalName == "Identity")
-            ?? throw new ValidationException("<Identity> element missing");
+            ?? throw new InvalidDataException("<Identity> element missing");
 
         var name = identity.Attribute("Name")?.Value ?? string.Empty;
         var publisher = identity.Attribute("Publisher")?.Value ?? string.Empty;
 
         if (!string.Equals(name, expectedName, StringComparison.Ordinal))
-            throw new ValidationException($"Identity Name '{name}' != expected '{expectedName}'");
+            throw new InvalidDataException($"Identity Name '{name}' != expected '{expectedName}'");
         if (!string.Equals(publisher, expectedPublisher, StringComparison.Ordinal))
-            throw new ValidationException($"Identity Publisher '{publisher}' != expected '{expectedPublisher}'");
+            throw new InvalidDataException($"Identity Publisher '{publisher}' != expected '{expectedPublisher}'");
     }
 
     private static void ValidateMinVersion(XDocument manifest, string minVersion)
     {
         var tdf = manifest.Descendants()
             .FirstOrDefault(e => e.Name.LocalName == "TargetDeviceFamily")
-            ?? throw new ValidationException("<TargetDeviceFamily> element missing");
+            ?? throw new InvalidDataException("<TargetDeviceFamily> element missing");
 
         var actualStr = tdf.Attribute("MinVersion")?.Value
-            ?? throw new ValidationException("TargetDeviceFamily MinVersion attribute missing");
+            ?? throw new InvalidDataException("TargetDeviceFamily MinVersion attribute missing");
 
         if (!Version.TryParse(actualStr, out var actual))
-            throw new ValidationException($"TargetDeviceFamily MinVersion '{actualStr}' is unparseable");
+            throw new InvalidDataException($"TargetDeviceFamily MinVersion '{actualStr}' is unparseable");
         if (!Version.TryParse(minVersion, out var expected))
-            throw new ValidationException($"--min-version '{minVersion}' is unparseable");
+            throw new InvalidDataException($"--min-version '{minVersion}' is unparseable");
 
         if (actual < expected)
-            throw new ValidationException($"TargetDeviceFamily MinVersion '{actual}' < required '{expected}' (catches Fix-MsixMinVersion regressions)");
+            throw new InvalidDataException($"TargetDeviceFamily MinVersion '{actual}' < required '{expected}' (catches Fix-MsixMinVersion regressions)");
     }
 
-    private static void ValidateSignature(string msixPath)
+    private static void ValidateSignature(ZipArchive archive)
     {
         // The MSIX zip contains an `AppxSignature.p7x` blob when signed; verifying the EKU
         // (1.3.6.1.5.5.7.3.3 = code signing) requires platform-specific PE/CMS parsing that
         // is out of scope for this cross-platform tool. We assert presence here so an
         // unsigned bundle never reaches release.
-        using var archive = ZipFile.OpenRead(msixPath);
         var sig = archive.GetEntry("AppxSignature.p7x")
-            ?? throw new ValidationException("AppxSignature.p7x not present — bundle is unsigned");
+            ?? throw new InvalidDataException("AppxSignature.p7x not present — bundle is unsigned");
         if (sig.Length == 0)
-            throw new ValidationException("AppxSignature.p7x is empty");
+            throw new InvalidDataException("AppxSignature.p7x is empty");
 
         // TODO(WinAppSDK 2.0.1): when running on Windows, switch to
         // Microsoft.Windows.Management.Deployment.PackageCertificateEkuValidator and assert
         // 1.3.6.1.5.5.7.3.3 (code signing) is present.
     }
-
-    private sealed class ValidationException(string message) : Exception(message);
 }

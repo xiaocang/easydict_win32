@@ -140,8 +140,12 @@ public static class WindowPositionHelper
         {
             workAreas.Add(primary.WorkArea);
         }
-        foreach (var display in displays)
+        // Index-based iteration: foreach on the WinRT-projected IReadOnlyList<DisplayArea>
+        // throws InvalidCastException because the underlying WinRT object can't be QI'd
+        // for IEnumerable<DisplayArea>. Indexing goes through a different code path.
+        for (var i = 0; i < displays.Count; i++)
         {
+            var display = displays[i];
             if (primary != null && display.DisplayId.Value == primary.DisplayId.Value)
             {
                 continue;

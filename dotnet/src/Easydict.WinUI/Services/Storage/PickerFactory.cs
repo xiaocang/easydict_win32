@@ -38,11 +38,15 @@ internal static class PickerFactory
     }
 
     /// <summary>Pick a single file. Returns the absolute path or null if cancelled.</summary>
+    /// <param name="commitButtonText">
+    /// Optional text for the picker's confirm button (e.g. "Import"). Pass null to use the
+    /// system default ("Open"). The dialog title is derived by the OS from picker type.
+    /// </param>
     public static async Task<string?> PickSingleFileAsync(
         Window window,
         string settingsIdentifier,
         IReadOnlyList<string> fileTypeFilter,
-        string? title = null)
+        string? commitButtonText = null)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
@@ -51,8 +55,8 @@ internal static class PickerFactory
             var picker = new NewPickers.FileOpenPicker(windowId)
             {
                 SettingsIdentifier = settingsIdentifier,
-                CommitButtonText = title ?? string.Empty,
             };
+            if (!string.IsNullOrEmpty(commitButtonText)) picker.CommitButtonText = commitButtonText;
             foreach (var ext in fileTypeFilter) picker.FileTypeFilter.Add(ext);
 
             var result = await picker.PickSingleFileAsync();
@@ -66,11 +70,15 @@ internal static class PickerFactory
     }
 
     /// <summary>Pick multiple files. Returns paths or empty list if cancelled.</summary>
+    /// <param name="commitButtonText">
+    /// Optional text for the picker's confirm button (e.g. "Import"). Pass null to use the
+    /// system default ("Open"). The dialog title is derived by the OS from picker type.
+    /// </param>
     public static async Task<IReadOnlyList<string>> PickMultipleFilesAsync(
         Window window,
         string settingsIdentifier,
         IReadOnlyList<string> fileTypeFilter,
-        string? title = null)
+        string? commitButtonText = null)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
@@ -79,8 +87,8 @@ internal static class PickerFactory
             var picker = new NewPickers.FileOpenPicker(windowId)
             {
                 SettingsIdentifier = settingsIdentifier,
-                CommitButtonText = title ?? string.Empty,
             };
+            if (!string.IsNullOrEmpty(commitButtonText)) picker.CommitButtonText = commitButtonText;
             foreach (var ext in fileTypeFilter) picker.FileTypeFilter.Add(ext);
 
             var results = await picker.PickMultipleFilesAsync();
@@ -97,12 +105,18 @@ internal static class PickerFactory
     /// Pick a save target. <paramref name="fileTypeChoices"/> maps display names
     /// (e.g. "Bilingual Markdown") to extension lists (e.g. [".md"]).
     /// </summary>
+    /// <param name="defaultFileExtension">
+    /// Optional preselected extension (e.g. ".md"). Must include the leading dot.
+    /// Pass null to let the picker use its own default. We take an explicit string
+    /// rather than an index because <see cref="IReadOnlyDictionary{TKey,TValue}"/>
+    /// does not guarantee enumeration order, so an index would be non-deterministic.
+    /// </param>
     public static async Task<string?> PickSaveFileAsync(
         Window window,
         string settingsIdentifier,
         IReadOnlyDictionary<string, IList<string>> fileTypeChoices,
         string? suggestedFileName = null,
-        int initialFileTypeIndex = 0)
+        string? defaultFileExtension = null)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
@@ -114,12 +128,12 @@ internal static class PickerFactory
                 SuggestedFileName = suggestedFileName ?? string.Empty,
             };
             foreach (var kvp in fileTypeChoices) picker.FileTypeChoices.Add(kvp.Key, kvp.Value);
-            if (initialFileTypeIndex > 0 && initialFileTypeIndex < fileTypeChoices.Count)
+            if (!string.IsNullOrEmpty(defaultFileExtension))
             {
-                // FileSavePicker on the new namespace exposes a default-selected file type; if
-                // the property name differs across point releases, the catch below preserves
-                // the picker (with no preselection) rather than failing the whole save flow.
-                try { picker.DefaultFileExtension = fileTypeChoices.ElementAt(initialFileTypeIndex).Value.FirstOrDefault() ?? string.Empty; }
+                // FileSavePicker on the new namespace exposes DefaultFileExtension; if the
+                // property name differs across point releases, the catch below preserves the
+                // picker (with no preselection) rather than failing the whole save flow.
+                try { picker.DefaultFileExtension = defaultFileExtension; }
                 catch { /* surface absent in this build — ignore */ }
             }
 

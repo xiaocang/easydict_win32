@@ -50,10 +50,20 @@ internal static class Program
         {
             switch (args[i])
             {
-                case "--expected-name": expectedName = args[++i]; break;
-                case "--expected-publisher": expectedPublisher = args[++i]; break;
-                case "--min-version": minVersion = args[++i]; break;
-                case "--allow-unsigned": allowUnsigned = true; break;
+                case "--expected-name":
+                    if (!TryReadValue(args, ref i, out expectedName!)) return UsageError($"--expected-name requires a value");
+                    break;
+                case "--expected-publisher":
+                    if (!TryReadValue(args, ref i, out expectedPublisher!)) return UsageError($"--expected-publisher requires a value");
+                    break;
+                case "--min-version":
+                    if (!TryReadValue(args, ref i, out minVersion!)) return UsageError($"--min-version requires a value");
+                    break;
+                case "--allow-unsigned":
+                    allowUnsigned = true;
+                    break;
+                default:
+                    return UsageError($"unknown argument: {args[i]}");
             }
         }
 
@@ -93,6 +103,24 @@ internal static class Program
             Console.Error.WriteLine($"error: {ex.Message}");
             return 2;
         }
+    }
+
+    private static bool TryReadValue(string[] args, ref int i, out string? value)
+    {
+        if (i + 1 >= args.Length)
+        {
+            value = null;
+            return false;
+        }
+        value = args[++i];
+        return true;
+    }
+
+    private static int UsageError(string message)
+    {
+        Console.Error.WriteLine($"error: {message}");
+        PrintUsage();
+        return 2;
     }
 
     private static void PrintUsage()

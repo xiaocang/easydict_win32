@@ -944,4 +944,25 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Ứng dụng loại trừ</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Tên tiến trình cần loại trừ khỏi dịch chọn chuột, phân cách bằng dấu phẩy. Ví dụ: "code" cho VS Code.</value></data>
+
+  <!-- Windows Local AI (Phi Silica) -->
+  <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>Sẵn sàng</value></data>
+  <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>Không khả dụng</value></data>
+  <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>Đang chuẩn bị…</value></data>
+  <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>Đang chuẩn bị mô hình ngôn ngữ trên thiết bị…</value></data>
+  <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>Mô hình ngôn ngữ trên thiết bị đã sẵn sàng. Bản dịch chạy cục bộ mà không gửi văn bản đến bất kỳ dịch vụ bên ngoài nào.</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>Mô hình ngôn ngữ trên thiết bị được hỗ trợ nhưng chưa được chuẩn bị. Nhấp "Chuẩn bị mô hình" để cài đặt.</value></data>
+  <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>Gói ứng dụng thiếu khả năng systemAIModels. Điều này thường ảnh hưởng đến các bản dựng di động/chưa đóng gói; hãy cài đặt phiên bản MSIX/Store thay thế.</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>Thiết bị này không có NPU tương thích. Windows Local AI chỉ chạy trên Copilot+ PC. Hãy dùng Ollama hoặc nhà cung cấp đám mây để thay thế.</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI yêu cầu phiên bản Windows mới hơn. Cài đặt các bản cập nhật Windows mới nhất và thử lại.</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI đã bị tắt hoặc xóa. Bật lại tính năng Windows AI trong cài đặt hệ thống.</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI không được hỗ trợ trên hệ thống hoặc khu vực này. Hãy dùng Ollama hoặc nhà cung cấp đám mây để thay thế.</value></data>
+
+  <!-- OpenVINO NPU (NLLB-200) -->
+  <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>Sẵn sàng</value></data>
+  <data name="OpenVINO_Title_Unavailable" xml:space="preserve"><value>Chưa tải xuống</value></data>
+  <data name="OpenVINO_Status_Ready" xml:space="preserve"><value>Mô hình NLLB-200 đã được cài đặt và sẵn sàng. Bản dịch chạy trên thiết bị thông qua ONNX Runtime + OpenVINO.</value></data>
+  <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>Mô hình NLLB-200 chưa được tải xuống (~360 MB). Nhấp "Tải xuống mô hình" để tải về %LOCALAPPDATA%\Easydict\models.</value></data>
+  <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>Đang tải xuống các tệp mô hình NLLB-200…</value></data>
+  <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>Tải xuống thất bại. Kiểm tra kết nối mạng và thử lại.</value></data>
 </root>

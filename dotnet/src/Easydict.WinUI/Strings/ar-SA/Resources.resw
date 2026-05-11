@@ -944,4 +944,25 @@
   <data name="ExcludedApps" xml:space="preserve"><value>التطبيقات المستثناة</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>أسماء العمليات المراد استثناؤها من ترجمة تحديد الماوس، مفصولة بفواصل. مثال: "code" لـ VS Code.</value></data>
+
+  <!-- Windows Local AI (Phi Silica) -->
+  <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>جاهز</value></data>
+  <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>غير متاح</value></data>
+  <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>جاري التحضير…</value></data>
+  <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>جاري تحضير نموذج اللغة على الجهاز…</value></data>
+  <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>نموذج اللغة على الجهاز جاهز. تتم الترجمة محليًا دون إرسال أي نص إلى خدمات خارجية.</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>نموذج اللغة على الجهاز مدعوم ولكن لم يتم تحضيره بعد. انقر "تحضير النموذج" للتثبيت.</value></data>
+  <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>حزمة التطبيق تفتقد إلى إمكانية systemAIModels. يحدث هذا عادة في الإصدارات المحمولة/غير المعبأة؛ يرجى تثبيت إصدار MSIX/Store بدلاً من ذلك.</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>هذا الجهاز لا يحتوي على NPU متوافق. يعمل Windows Local AI فقط على أجهزة Copilot+ PCs. استخدم Ollama أو موفر سحابي كبديل.</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>يتطلب Windows Local AI إصدار Windows أحدث. ثبّت آخر تحديثات Windows ثم حاول مرة أخرى.</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>تم تعطيل Windows Local AI أو إزالته. أعد تمكين ميزات Windows AI من إعدادات النظام.</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI غير مدعوم على هذا النظام أو في هذه المنطقة. استخدم Ollama أو موفر سحابي كبديل.</value></data>
+
+  <!-- OpenVINO NPU (NLLB-200) -->
+  <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>جاهز</value></data>
+  <data name="OpenVINO_Title_Unavailable" xml:space="preserve"><value>غير منزل</value></data>
+  <data name="OpenVINO_Status_Ready" xml:space="preserve"><value>نموذج NLLB-200 مثبت وجاهز. تعمل الترجمة على الجهاز عبر ONNX Runtime + OpenVINO.</value></data>
+  <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>لم يتم تنزيل نموذج NLLB-200 بعد (~360 ميغابايت). انقر "تنزيل النموذج" لجلبه إلى %LOCALAPPDATA%\Easydict\models.</value></data>
+  <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>جاري تنزيل ملفات نموذج NLLB-200…</value></data>
+  <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>فشل التنزيل. تحقق من اتصال الشبكة وحاول مرة أخرى.</value></data>
 </root>

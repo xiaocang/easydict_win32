@@ -1060,4 +1060,25 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Ausgeschlossene Apps</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Prozessnamen, die von der Mausauswahl-Übersetzung ausgeschlossen werden sollen, durch Kommas getrennt. Beispiel: "code" für VS Code.</value></data>
+
+  <!-- Windows Local AI (Phi Silica) -->
+  <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>Bereit</value></data>
+  <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>Nicht verfügbar</value></data>
+  <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>Wird vorbereitet…</value></data>
+  <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>Das lokale Sprachmodell wird vorbereitet…</value></data>
+  <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>Das lokale Sprachmodell ist bereit. Die Übersetzung läuft lokal, ohne Text an externe Dienste zu senden.</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>Das lokale Sprachmodell wird unterstützt, wurde aber noch nicht vorbereitet. Klicken Sie auf „Modell vorbereiten" zur Installation.</value></data>
+  <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>Dem App-Paket fehlt die Funktion systemAIModels. Dies betrifft normalerweise tragbare/nicht gepackte Builds; installieren Sie stattdessen die MSIX/Store-Version.</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>Dieses Gerät verfügt nicht über eine kompatible NPU. Windows Local AI läuft nur auf Copilot+ PCs. Verwenden Sie Ollama oder einen Cloud-Anbieter als Alternative.</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI erfordert einen neueren Windows-Build. Installieren Sie die neuesten Windows-Updates und versuchen Sie es erneut.</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI wurde deaktiviert oder entfernt. Aktivieren Sie die Windows-AI-Funktionen in den Systemeinstellungen.</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI wird auf diesem System oder in dieser Region nicht unterstützt. Verwenden Sie Ollama oder einen Cloud-Anbieter als Alternative.</value></data>
+
+  <!-- OpenVINO NPU (NLLB-200) -->
+  <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>Bereit</value></data>
+  <data name="OpenVINO_Title_Unavailable" xml:space="preserve"><value>Nicht heruntergeladen</value></data>
+  <data name="OpenVINO_Status_Ready" xml:space="preserve"><value>NLLB-200-Modell ist installiert und bereit. Die Übersetzung läuft lokal über ONNX Runtime + OpenVINO.</value></data>
+  <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>NLLB-200-Modell wurde noch nicht heruntergeladen (~360 MB). Klicken Sie auf „Modell herunterladen", um es nach %LOCALAPPDATA%\Easydict\models zu laden.</value></data>
+  <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>NLLB-200-Modelldateien werden heruntergeladen…</value></data>
+  <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>Download fehlgeschlagen. Überprüfen Sie Ihre Netzwerkverbindung und versuchen Sie es erneut.</value></data>
 </root>

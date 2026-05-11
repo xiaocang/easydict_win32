@@ -1102,4 +1102,25 @@
   <data name="ExcludedApps" xml:space="preserve"><value>排除應用</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>排除劃詞翻譯的程序名稱，用逗號分隔。範例："code" 代表 VS Code。</value></data>
+
+  <!-- Windows Local AI (Phi Silica) -->
+  <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>已就緒</value></data>
+  <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>不可用</value></data>
+  <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>正在準備…</value></data>
+  <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>正在準備本機語言模型…</value></data>
+  <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>本機語言模型已就緒。翻譯完全在本機進行，不會傳送任何文字到外部服務。</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>當前裝置支援本機語言模型，但模型尚未準備。點擊「準備模型」以下載並安裝。</value></data>
+  <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>應用程式套件缺少 systemAIModels 能力宣告。此狀態通常出現在可攜版/未封裝版本中，請改安裝 MSIX 或 Microsoft Store 版本。</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>當前裝置沒有相容的 NPU 硬體。Windows 本機 AI 僅在 Copilot+ PC 上執行。可改用 Ollama 或雲端服務作為替代方案。</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows 本機 AI 需要更新的 Windows 版本。請安裝最新的 Windows 更新後重試。</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows 本機 AI 已被停用或解除安裝。請在系統設定中重新啟用 Windows AI 功能。</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>當前系統或地區不支援 Windows 本機 AI。可改用 Ollama 或雲端服務作為替代方案。</value></data>
+
+  <!-- OpenVINO NPU (NLLB-200) -->
+  <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>已就緒</value></data>
+  <data name="OpenVINO_Title_Unavailable" xml:space="preserve"><value>未下載</value></data>
+  <data name="OpenVINO_Status_Ready" xml:space="preserve"><value>NLLB-200 模型已安裝並就緒。翻譯完全在本機透過 ONNX Runtime + OpenVINO 進行。</value></data>
+  <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>NLLB-200 模型尚未下載（約 360 MB）。點擊「下載模型」將檔案儲存到 %LOCALAPPDATA%\Easydict\models。</value></data>
+  <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>正在下載 NLLB-200 模型檔案…</value></data>
+  <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>下載失敗。請檢查網路連線後重試。</value></data>
 </root>

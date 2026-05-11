@@ -1102,4 +1102,25 @@
   <data name="ExcludedApps" xml:space="preserve"><value>除外アプリ</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>マウス選択翻訳から除外するプロセス名をカンマ区切りで入力。例：VS Code は "code"。</value></data>
+
+  <!-- Windows Local AI (Phi Silica) -->
+  <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>準備完了</value></data>
+  <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>利用不可</value></data>
+  <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>準備中…</value></data>
+  <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>デバイス上の言語モデルを準備しています…</value></data>
+  <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>デバイス上の言語モデルの準備が完了しました。翻訳は外部サービスにテキストを送信せず、ローカルで実行されます。</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>デバイス上の言語モデルはサポートされていますが、まだ準備されていません。「モデルを準備」をクリックしてインストールしてください。</value></data>
+  <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>アプリパッケージに systemAIModels 機能がありません。これは通常、ポータブル/未パッケージ版に影響します。代わりに MSIX/Store 版をインストールしてください。</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>このデバイスには互換性のある NPU がありません。Windows Local AI は Copilot+ PC でのみ動作します。代替として Ollama またはクラウドプロバイダーを使用してください。</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI には、より新しい Windows ビルドが必要です。最新の Windows 更新プログラムをインストールしてから、もう一度お試しください。</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI が無効化または削除されました。システム設定で Windows AI 機能を再度有効にしてください。</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI はこのシステムまたは地域ではサポートされていません。代替として Ollama またはクラウドプロバイダーを使用してください。</value></data>
+
+  <!-- OpenVINO NPU (NLLB-200) -->
+  <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>準備完了</value></data>
+  <data name="OpenVINO_Title_Unavailable" xml:space="preserve"><value>未ダウンロード</value></data>
+  <data name="OpenVINO_Status_Ready" xml:space="preserve"><value>NLLB-200 モデルがインストールされ、準備完了です。翻訳は ONNX Runtime + OpenVINO を介してデバイス上で実行されます。</value></data>
+  <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>NLLB-200 モデルはまだダウンロードされていません（約 360 MB）。「モデルをダウンロード」をクリックすると %LOCALAPPDATA%\Easydict\models に取得します。</value></data>
+  <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>NLLB-200 モデルファイルをダウンロード中…</value></data>
+  <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>ダウンロードに失敗しました。ネットワーク接続を確認してもう一度お試しください。</value></data>
 </root>

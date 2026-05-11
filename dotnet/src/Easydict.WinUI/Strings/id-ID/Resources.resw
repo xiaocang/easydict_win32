@@ -890,4 +890,25 @@
   <data name="ExcludedApps" xml:space="preserve"><value>Aplikasi dikecualikan</value></data>
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Nama proses yang dikecualikan dari terjemahan pilihan mouse, dipisahkan dengan koma. Contoh: "code" untuk VS Code.</value></data>
+
+  <!-- Windows Local AI (Phi Silica) -->
+  <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>Siap</value></data>
+  <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>Tidak tersedia</value></data>
+  <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>Mempersiapkan…</value></data>
+  <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>Mempersiapkan model bahasa di perangkat…</value></data>
+  <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>Model bahasa di perangkat siap. Terjemahan berjalan secara lokal tanpa mengirim teks ke layanan eksternal.</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>Model bahasa di perangkat didukung tetapi belum dipersiapkan. Klik "Persiapkan model" untuk menginstalnya.</value></data>
+  <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>Paket aplikasi kehilangan kemampuan systemAIModels. Ini biasanya memengaruhi build portabel/tidak dikemas; instal versi MSIX/Store sebagai gantinya.</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>Perangkat ini tidak memiliki NPU yang kompatibel. Windows Local AI hanya berjalan di PC Copilot+. Gunakan Ollama atau penyedia cloud sebagai alternatif.</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI memerlukan build Windows yang lebih baru. Instal pembaruan Windows terbaru dan coba lagi.</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI telah dinonaktifkan atau dihapus. Aktifkan kembali fitur Windows AI di pengaturan sistem.</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI tidak didukung pada sistem atau wilayah ini. Gunakan Ollama atau penyedia cloud sebagai alternatif.</value></data>
+
+  <!-- OpenVINO NPU (NLLB-200) -->
+  <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>Siap</value></data>
+  <data name="OpenVINO_Title_Unavailable" xml:space="preserve"><value>Belum diunduh</value></data>
+  <data name="OpenVINO_Status_Ready" xml:space="preserve"><value>Model NLLB-200 terinstal dan siap. Terjemahan berjalan di perangkat melalui ONNX Runtime + OpenVINO.</value></data>
+  <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>Model NLLB-200 belum diunduh (~360 MB). Klik "Unduh model" untuk mengambilnya ke %LOCALAPPDATA%\Easydict\models.</value></data>
+  <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>Mengunduh file model NLLB-200…</value></data>
+  <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>Unduhan gagal. Periksa koneksi jaringan Anda dan coba lagi.</value></data>
 </root>

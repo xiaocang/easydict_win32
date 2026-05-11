@@ -36,6 +36,14 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         new(Microsoft.UI.ColorHelper.FromArgb(255, 242, 244, 248));
     private static readonly SolidColorBrush _onDarkHeaderSecondaryForegroundBrush =
         new(Microsoft.UI.ColorHelper.FromArgb(255, 200, 206, 216));
+    private static readonly SolidColorBrush _darkResultBackgroundBrush =
+        new(Microsoft.UI.ColorHelper.FromArgb(255, 34, 38, 46));
+    private static readonly SolidColorBrush _darkHeaderBackgroundBrush =
+        new(Microsoft.UI.ColorHelper.FromArgb(255, 42, 46, 56));
+    private static readonly SolidColorBrush _darkHeaderHoverBackgroundBrush =
+        new(Microsoft.UI.ColorHelper.FromArgb(255, 50, 55, 68));
+    private static readonly SolidColorBrush _darkBorderBrush =
+        new(Microsoft.UI.ColorHelper.FromArgb(255, 55, 61, 73));
 
     /// <summary>
     /// Exposes the control instance for parent item hosting.
@@ -82,6 +90,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// <see cref="SettingsService.HideEmptyServiceResults"/> is toggled at runtime).
     /// </summary>
     public void RefreshDemotionState() => UpdateUI();
+
+    public void RefreshThemeChrome() => RefreshHeaderChromeForCurrentTheme();
 
     public void Cleanup()
     {
@@ -332,12 +342,20 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
 
         ApplyMinimalChrome();
-        ApplyHeaderForegroundForBackground(HeaderBar.Background);
+        if (!minimal && !_isHovering)
+        {
+            RefreshHeaderChromeForCurrentTheme();
+        }
+        else
+        {
+            ApplyHeaderForegroundForBackground(HeaderBar.Background);
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         RefreshHeaderChromeForCurrentTheme();
+        DispatcherQueue.TryEnqueue(RefreshHeaderChromeForCurrentTheme);
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
@@ -1092,12 +1110,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             return;
         }
 
-        Brush? background = null;
-        if (FindThemeBrush("ServiceResultHeaderHoverBackgroundBrush") is Brush brush)
-            background = brush;
-        else if (FindThemeBrush("ButtonHoverBrush") is Brush hoverBrush)
-            background = hoverBrush;
-
+        var background = ShouldUseDarkServiceChrome()
+            ? _darkHeaderHoverBackgroundBrush
+            : FindThemeBrush("ServiceResultHeaderHoverBackgroundBrush")
+                ?? FindThemeBrush("ButtonHoverBrush");
         if (background is not null)
         {
             HeaderBar.Background = background;
@@ -1110,34 +1126,34 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private Brush? FindThemeBrush(string key)
     {
-        var themeName = MinimalThemeService.TryGetExplicitThemeDictionaryName()
-            ?? (ActualTheme == ElementTheme.Dark ? "Dark" : "Light");
-
-        // Check top-level ThemeDictionaries first
-        if (Application.Current.Resources.ThemeDictionaries.TryGetValue(themeName, out var topObj))
-        {
-            var topDict = (ResourceDictionary)topObj;
-            if (topDict.ContainsKey(key))
-                return (Brush)topDict[key];
-        }
-
-        // Check merged dictionaries (Colors.xaml lives here)
-        var merged = Application.Current.Resources.MergedDictionaries;
-        for (int i = merged.Count - 1; i >= 0; i--)
-        {
-            if (merged[i].ThemeDictionaries.TryGetValue(themeName, out var obj))
-            {
-                var dict = (ResourceDictionary)obj;
-                if (dict.ContainsKey(key))
-                    return (Brush)dict[key];
-            }
-        }
-
-        return null;
+        return MinimalThemeService.TryGetResource<Brush>(key, this, out var brush)
+            ? brush
+            : null;
     }
 
     private void RefreshHeaderChromeForCurrentTheme()
     {
+        if (!MinimalThemeService.IsActive && ShouldUseDarkServiceChrome())
+        {
+            RootBorder.Background = _darkResultBackgroundBrush;
+            RootBorder.BorderBrush = _darkBorderBrush;
+            HeaderBar.Background = _darkHeaderBackgroundBrush;
+            HeaderBar.BorderBrush = _darkBorderBrush;
+            ApplyHeaderForegroundForBackground(HeaderBar.Background);
+            return;
+        }
+
+        if (FindThemeBrush("ResultViewBackgroundBrush") is Brush rootBackground)
+        {
+            RootBorder.Background = rootBackground;
+        }
+
+        if (FindThemeBrush("CardStrokeColorDefaultBrush") is Brush borderBrush)
+        {
+            RootBorder.BorderBrush = borderBrush;
+            HeaderBar.BorderBrush = borderBrush;
+        }
+
         if (FindThemeBrush("ServiceResultHeaderBackgroundBrush") is Brush brush)
         {
             HeaderBar.Background = brush;
@@ -1187,6 +1203,74 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         return luminance >= 0.72;
     }
 
+    private bool ShouldUseDarkServiceChrome()
+    {
+        if (MinimalThemeService.IsActive)
+        {
+            return false;
+        }
+
+        var explicitTheme = MinimalThemeService.TryGetExplicitThemeDictionaryName();
+        if (string.Equals(explicitTheme, "Dark", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(explicitTheme, "Light", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (HasDarkAncestorBackground())
+        {
+            return true;
+        }
+
+        if (XamlRoot?.Content is FrameworkElement root && root.ActualTheme == ElementTheme.Dark)
+        {
+            return true;
+        }
+
+        if (ActualTheme == ElementTheme.Dark)
+        {
+            return true;
+        }
+
+        try
+        {
+            var systemBackground = new Windows.UI.ViewManagement.UISettings()
+                .GetColorValue(Windows.UI.ViewManagement.UIColorType.Background);
+            return !IsLightColor(systemBackground.R, systemBackground.G, systemBackground.B);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool HasDarkAncestorBackground()
+    {
+        DependencyObject? current = this;
+        while ((current = VisualTreeHelper.GetParent(current)) is not null)
+        {
+            var background = current switch
+            {
+                Border border => border.Background,
+                Panel panel => panel.Background,
+                Control control => control.Background,
+                _ => null
+            };
+
+            if (background is SolidColorBrush solidBrush &&
+                !IsLightColor(solidBrush.Color.R, solidBrush.Color.G, solidBrush.Color.B))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private void OnHeaderBarPointerExited(object sender, PointerRoutedEventArgs e)
     {
         if (MinimalThemeService.IsActive)
@@ -1196,12 +1280,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
 
         // Restore opaque background instead of clearing it to maintain sticky header visibility.
-        if (FindThemeBrush("ServiceResultHeaderBackgroundBrush") is Brush brush)
-            HeaderBar.Background = brush;
-        else if (FindThemeBrush("SolidBackgroundFillColorBaseBrush") is Brush appBrush)
-            HeaderBar.Background = appBrush;
-
-        ApplyHeaderForegroundForBackground(HeaderBar.Background);
+        RefreshHeaderChromeForCurrentTheme();
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     }
 

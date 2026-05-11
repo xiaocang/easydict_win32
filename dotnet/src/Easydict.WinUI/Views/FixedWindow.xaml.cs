@@ -1417,15 +1417,21 @@ public sealed partial class FixedWindow : Window
     /// <summary>
     /// Apply theme to the window content.
     /// </summary>
-    public void ApplyTheme(ElementTheme theme)
+    public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
         if (this.Content is FrameworkElement root)
         {
-            root.RequestedTheme = theme;
+            MinimalThemeService.ApplyRequestedTheme(root, theme, forceResourceRefresh);
             MinimalThemeService.ApplyFloatingWindowRootBackground(root);
         }
 
         var minimal = MinimalThemeService.IsActive;
+        MinimalThemeService.ApplyFloatingChrome(
+            Content as Grid,
+            WindowSurface,
+            SourceTextContainer,
+            minimal,
+            Content as FrameworkElement);
         DetectedLangText.Visibility = minimal ? Visibility.Collapsed : DetectedLangText.Visibility;
         StatusText.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
         MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing);
@@ -1433,6 +1439,10 @@ public sealed partial class FixedWindow : Window
         if (ServiceResultViewHost.NeedsThemeRebuild(_resultControls, minimal))
         {
             RebuildServiceResultControlsForCurrentTheme();
+        }
+        else
+        {
+            ServiceResultViewHost.RefreshThemeChrome(_resultControls);
         }
 
         if (minimal)

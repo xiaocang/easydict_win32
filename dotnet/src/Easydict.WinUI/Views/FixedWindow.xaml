@@ -12,18 +12,26 @@
     <!-- Background bound to a non-themed transparent brush so the window-level Mica
          backdrop applied in FixedWindow.xaml.cs is actually visible. -->
     <Grid Background="Transparent"
-            Padding="8">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+          Padding="0">
+        <Border
+            x:Name="WindowSurface"
+            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+            BorderBrush="{ThemeResource MainBorderBrush}"
+            BorderThickness="0"
+            CornerRadius="0"
+            Padding="16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-        <!-- Header with Close button (no Pin - always on top) - also serves as drag region -->
-        <Grid x:Name="TitleBarRegion"
+                <!-- Header with Close button (no Pin - always on top) - also serves as drag region -->
+                <Grid x:Name="TitleBarRegion"
                 Grid.Row="0"
                 Margin="0,0,0,4"
                 Background="Transparent">
@@ -48,22 +56,25 @@
                 ToolTipService.ToolTip="Hide (Ctrl+Alt+F to show again)"
                 Background="Transparent"
                 BorderThickness="0"
+                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                 Width="28"
                 Height="28"
                 Padding="0">
                 <FontIcon Glyph="&#xE8BB;"
-                        FontSize="14"/>
+                        FontSize="14"
+                        Foreground="{ThemeResource ButtonForeground}"/>
             </Button>
         </Grid>
 
         <!-- Compact Input -->
-        <Border Grid.Row="1"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        <Border x:Name="SourceTextContainer"
+                Grid.Row="1"
+                Background="{ThemeResource TextControlBackground}"
+                BorderBrush="{ThemeResource TextControlBorderBrush}"
                 BorderThickness="{ThemeResource EasydictCardBorderThickness}"
-                CornerRadius="{ThemeResource EasydictCardCornerRadius}"
-                Padding="8"
-                Margin="0,0,0,4">
+                CornerRadius="{ThemeResource ControlCornerRadius}"
+                Padding="10,9"
+                Margin="0,2,0,6">
             <TextBox
                 x:Name="InputTextBox"
                 PlaceholderText="Enter text..."
@@ -74,7 +85,18 @@
                 AcceptsReturn="True"
                 TextWrapping="Wrap"
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
-                PreviewKeyDown="OnInputKeyDown"/>
+                PreviewKeyDown="OnInputKeyDown">
+                <TextBox.Resources>
+                    <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                    <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                    <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                </TextBox.Resources>
+            </TextBox>
         </Border>
 
         <!-- Language Bar -->
@@ -105,10 +127,12 @@
                 Padding="0"
                 Background="Transparent"
                 BorderThickness="0"
+                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                 ToolTipService.ToolTip="Swap languages"
                 Margin="4,0">
                 <FontIcon Glyph="&#xE8AB;"
-                        FontSize="12"/>
+                        FontSize="12"
+                        Foreground="{ThemeResource ButtonForeground}"/>
             </Button>
 
             <ComboBox
@@ -184,5 +208,7 @@
             Foreground="{ThemeResource TextFillColorTertiaryBrush}"
             HorizontalAlignment="Right"
             Margin="0,4,0,0"/>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

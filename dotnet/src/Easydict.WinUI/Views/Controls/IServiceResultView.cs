@@ -23,6 +23,10 @@ public interface IServiceResultView
 
     void RefreshDemotionState();
 
+    void RefreshThemeChrome()
+    {
+    }
+
     IEnumerable<string> GetDisplayedPhoneticKeys();
 
     void Cleanup();

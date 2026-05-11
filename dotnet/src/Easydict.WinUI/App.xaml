@@ -37,6 +37,7 @@
                 <Setter Property="CornerRadius" Value="{ThemeResource EasydictControlCornerRadius}" />
                 <Setter Property="MinHeight" Value="80" />
             </Style>
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>

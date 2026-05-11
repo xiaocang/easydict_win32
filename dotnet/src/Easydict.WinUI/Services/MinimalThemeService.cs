@@ -74,6 +74,26 @@ internal static class MinimalThemeService
         }
     }
 
+    public static void ApplyRequestedTheme(
+        FrameworkElement root,
+        ElementTheme theme,
+        bool forceResourceRefresh = false)
+    {
+        if (forceResourceRefresh)
+        {
+            // Minimal mode pins the app to ElementTheme.Light but also swaps in a
+            // resource dictionary. Switching Minimal -> Light does not otherwise
+            // change RequestedTheme, so existing ThemeResource bindings can keep
+            // resolving to the removed Minimal resources. Pulse the theme first so
+            // already-loaded controls requery their resources.
+            root.RequestedTheme = theme == ElementTheme.Dark
+                ? ElementTheme.Light
+                : ElementTheme.Dark;
+        }
+
+        root.RequestedTheme = theme;
+    }
+
     public static void ApplyWindowBackdrop(Window window)
     {
         if (IsActive)
@@ -102,34 +122,132 @@ internal static class MinimalThemeService
 
     public static Brush? GetBrush(string key)
     {
+        return TryGetResource<Brush>(key, null, out var brush)
+            ? brush
+            : null;
+    }
+
+    public static Brush? GetBrush(string key, FrameworkElement? root)
+    {
+        return TryGetResource<Brush>(key, root, out var brush)
+            ? brush
+            : null;
+    }
+
+    public static T GetResourceOrDefault<T>(string key, FrameworkElement? root, T fallback)
+    {
+        return TryGetResource<T>(key, root, out var value) ? value : fallback;
+    }
+
+    public static bool TryGetResource<T>(string key, FrameworkElement? root, out T resource)
+    {
+        if (TryGetResourceValue(key, root, out var value) && value is T typed)
+        {
+            resource = typed;
+            return true;
+        }
+
+        resource = default!;
+        return false;
+    }
+
+    private static bool TryGetResourceValue(string key, FrameworkElement? root, out object? value)
+    {
         var resources = Application.Current.Resources;
+        var themeName = GetThemeDictionaryName(root);
 
-        if (resources.TryGetValue(key, out var value) && value is Brush brush)
+        if (themeName is not null)
         {
-            return brush;
-        }
-
-        var merged = resources.MergedDictionaries;
-        var themeName = IsActive ? "Light" : null;
-        for (int i = merged.Count - 1; i >= 0; i--)
-        {
-            var dict = merged[i];
-            if (dict.TryGetValue(key, out value) && value is Brush mergedBrush)
+            if (resources.ThemeDictionaries.TryGetValue(themeName, out var topObj) &&
+                topObj is ResourceDictionary topThemeDictionary &&
+                topThemeDictionary.TryGetValue(key, out value))
             {
-                return mergedBrush;
+                return true;
             }
 
-            if (themeName is not null &&
-                dict.ThemeDictionaries.TryGetValue(themeName, out var themeObj) &&
-                themeObj is ResourceDictionary themeDictionary &&
-                themeDictionary.TryGetValue(key, out value) &&
-                value is Brush themeBrush)
+            var merged = resources.MergedDictionaries;
+            for (var i = merged.Count - 1; i >= 0; i--)
             {
-                return themeBrush;
+                if (merged[i].ThemeDictionaries.TryGetValue(themeName, out var themeObj) &&
+                    themeObj is ResourceDictionary themeDictionary &&
+                    themeDictionary.TryGetValue(key, out value))
+                {
+                    return true;
+                }
             }
         }
 
-        return null;
+        for (var i = resources.MergedDictionaries.Count - 1; i >= 0; i--)
+        {
+            if (resources.MergedDictionaries[i].TryGetValue(key, out value))
+            {
+                return true;
+            }
+        }
+
+        return resources.TryGetValue(key, out value);
+    }
+
+    private static string? GetThemeDictionaryName(FrameworkElement? root)
+    {
+        var explicitTheme = TryGetExplicitThemeDictionaryName();
+        if (explicitTheme is not null)
+        {
+            return explicitTheme;
+        }
+
+        return root?.ActualTheme switch
+        {
+            ElementTheme.Dark => "Dark",
+            ElementTheme.Light => "Light",
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Apply chrome for the floating MiniWindow / FixedWindow surfaces. Both windows share
+    /// the same root-padding, surface-clear, and source-input container layout.
+    /// </summary>
+    public static void ApplyFloatingChrome(
+        Grid? rootGrid,
+        Border surface,
+        Border sourceContainer,
+        bool minimal,
+        FrameworkElement? themeRoot)
+    {
+        if (rootGrid is not null)
+        {
+            rootGrid.Padding = minimal
+                ? new Thickness(8)
+                : new Thickness(0);
+        }
+
+        surface.BorderThickness = new Thickness(0);
+        surface.CornerRadius = new CornerRadius(0);
+        surface.Padding = minimal ? new Thickness(0) : new Thickness(16);
+
+        if (minimal)
+        {
+            surface.Background = GetBrush("ApplicationPageBackgroundThemeBrush");
+            sourceContainer.Background = GetBrush("CardBackgroundFillColorDefaultBrush");
+            sourceContainer.BorderBrush = GetBrush("CardStrokeColorDefaultBrush");
+            sourceContainer.BorderThickness = new Thickness(1);
+            sourceContainer.CornerRadius = new CornerRadius(0);
+            sourceContainer.Padding = new Thickness(8);
+            sourceContainer.Margin = new Thickness(0, 0, 0, 4);
+            return;
+        }
+
+        surface.Background = GetBrush("ApplicationPageBackgroundThemeBrush", themeRoot);
+        sourceContainer.Background = GetBrush("TextControlBackground", themeRoot);
+        sourceContainer.BorderBrush = GetBrush("TextControlBorderBrush", themeRoot);
+        sourceContainer.BorderThickness = new Thickness(1);
+        sourceContainer.CornerRadius = GetResourceOrDefault(
+            "ControlCornerRadius",
+            themeRoot,
+            new CornerRadius(8));
+        sourceContainer.Padding = new Thickness(10, 9, 10, 9);
+        sourceContainer.Margin = new Thickness(0, 2, 0, 6);
     }
 
     public static void ApplyAccentIconForeground(FontIcon icon, ProgressRing? progressRing = null)

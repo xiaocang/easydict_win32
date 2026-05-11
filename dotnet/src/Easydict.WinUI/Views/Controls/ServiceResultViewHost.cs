@@ -174,6 +174,14 @@ internal static class ServiceResultViewHost
         }
     }
 
+    public static void RefreshThemeChrome(IEnumerable<IServiceResultView> controls)
+    {
+        foreach (var control in controls)
+        {
+            control.RefreshThemeChrome();
+        }
+    }
+
     public static void Refresh(
         IReadOnlyList<IServiceResultView> controls,
         ServiceQueryResult result)

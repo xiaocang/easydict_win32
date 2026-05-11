@@ -7,16 +7,16 @@
         <ResourceDictionary x:Key="Light">
             <!-- Main Colors -->
             <Color x:Key="MainViewBackgroundColor">#FFFFFF</Color>
-            <Color x:Key="MainBorderColor">#FFFFFF</Color>
-            <Color x:Key="QueryViewBackgroundColor">#F4F4F4</Color>
+            <Color x:Key="MainBorderColor">#D9DDE5</Color>
+            <Color x:Key="QueryViewBackgroundColor">#F4F4F2</Color>
             <Color x:Key="QueryTextColor">#262626</Color>
             <Color x:Key="TitleBarBackgroundColor">#F1F1F1</Color>
-            <Color x:Key="ResultViewBackgroundColor">#F6F6F6</Color>
+            <Color x:Key="ResultViewBackgroundColor">#FFFFFF</Color>
             <Color x:Key="ServiceResultHeaderBackgroundColor">#FFFFFF</Color>
-            <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#ECEFF3</Color>
+            <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#F4F4F2</Color>
             <Color x:Key="ServiceResultHeaderForegroundColor">#1F2328</Color>
             <Color x:Key="ServiceResultHeaderSecondaryForegroundColor">#5F6670</Color>
-            <Color x:Key="ButtonHoverColor">#E2E2E2</Color>
+            <Color x:Key="ButtonHoverColor">#F1F1EF</Color>
 
             <!-- Accent Colors -->
             <Color x:Key="BlueAccentColor">#007AFF</Color>
@@ -42,7 +42,7 @@
             <!-- Settings UI -->
             <Color x:Key="AddMinusBackgroundColor">#EAEAE9</Color>
             <Color x:Key="ListBorderColor">#DEDEDE</Color>
-            <Color x:Key="ActionButtonIconColor">#999999</Color>
+            <Color x:Key="ActionButtonIconColor">#5E636B</Color>
             <Color x:Key="SettingsTabBackgroundColor">#00FFFFFF</Color>
             <Color x:Key="SettingsTabBorderColor">#D6DDE8</Color>
             <Color x:Key="SettingsTabForegroundColor">#2A2F36</Color>
@@ -52,13 +52,30 @@
             <Color x:Key="PopButtonBackgroundColor">#F7FBFF</Color>
             <Color x:Key="PopButtonBorderColor">#7AA7D9</Color>
             <Color x:Key="PopButtonForegroundColor">#1F5F9F</Color>
+            <Color x:Key="FloatingWindowBackgroundColor">#FCFCFB</Color>
+            <Color x:Key="FloatingWindowBorderColor">#D9DDE5</Color>
+            <Color x:Key="FloatingInputBackgroundColor">#F4F4F2</Color>
+            <Color x:Key="FloatingInputBorderColor">#E9E9E6</Color>
+            <Color x:Key="FloatingIconForegroundColor">#303236</Color>
+            <Color x:Key="EasydictCardBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="EasydictCardBorderColor">#D9DDE5</Color>
 
+            <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
+            <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
             <CornerRadius x:Key="EasydictCardCornerRadius">8</CornerRadius>
             <CornerRadius x:Key="EasydictControlCornerRadius">8</CornerRadius>
             <CornerRadius x:Key="EasydictRoundButtonCornerRadius">20</CornerRadius>
             <CornerRadius x:Key="EasydictStatusCornerRadius">12</CornerRadius>
+            <CornerRadius x:Key="FloatingWindowCornerRadius">0</CornerRadius>
+            <CornerRadius x:Key="FloatingInputCornerRadius">18</CornerRadius>
             <Thickness x:Key="EasydictCardBorderThickness">1</Thickness>
             <Thickness x:Key="EasydictIconButtonBorderThickness">0</Thickness>
+            <Thickness x:Key="FloatingWindowOuterPadding">0</Thickness>
+            <Thickness x:Key="FloatingWindowContentPadding">16</Thickness>
+            <Thickness x:Key="FloatingWindowBorderThickness">0</Thickness>
+            <Thickness x:Key="FloatingInputPadding">10,9</Thickness>
+            <Thickness x:Key="FloatingInputMargin">0,2,0,6</Thickness>
+            <Thickness x:Key="EasydictCardPadding">10</Thickness>
 
             <!-- Brushes -->
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
@@ -72,6 +89,29 @@
             <SolidColorBrush x:Key="ServiceResultHeaderForegroundBrush" Color="{StaticResource ServiceResultHeaderForegroundColor}" />
             <SolidColorBrush x:Key="ServiceResultHeaderSecondaryForegroundBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
             <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHoverColor}" />
+            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="{StaticResource FloatingWindowBackgroundColor}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{StaticResource EasydictCardBorderColor}" />
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{StaticResource MainBorderColor}" />
+            <SolidColorBrush x:Key="ButtonBackground" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#ECECE9" />
+            <SolidColorBrush x:Key="ButtonForeground" Color="{StaticResource FloatingIconForegroundColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{StaticResource MainBorderColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{StaticResource MainBorderColor}" />
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="ComboBoxForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TextControlBackground" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="TextControlForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#8A8D92" />
             <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource BlueAccentColor}" />
             <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
@@ -97,19 +137,26 @@
             <SolidColorBrush x:Key="PopButtonBackgroundBrush" Color="{StaticResource PopButtonBackgroundColor}" />
             <SolidColorBrush x:Key="PopButtonBorderBrush" Color="{StaticResource PopButtonBorderColor}" />
             <SolidColorBrush x:Key="PopButtonForegroundBrush" Color="{StaticResource PopButtonForegroundColor}" />
+            <SolidColorBrush x:Key="FloatingWindowBackgroundBrush" Color="{StaticResource FloatingWindowBackgroundColor}" />
+            <SolidColorBrush x:Key="FloatingWindowBorderBrush" Color="{StaticResource FloatingWindowBorderColor}" />
+            <SolidColorBrush x:Key="FloatingInputBackgroundBrush" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="FloatingInputBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="FloatingIconForegroundBrush" Color="{StaticResource FloatingIconForegroundColor}" />
+            <SolidColorBrush x:Key="EasydictCardBackgroundBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="EasydictCardBorderBrush" Color="{StaticResource EasydictCardBorderColor}" />
         </ResourceDictionary>
 
         <!-- Dark Theme Colors -->
         <ResourceDictionary x:Key="Dark">
             <!-- Main Colors — subtle blue-tinted grays for depth and visual warmth -->
-            <Color x:Key="MainViewBackgroundColor">#1C1E26</Color>
-            <Color x:Key="MainBorderColor">#3A3D4A</Color>
-            <Color x:Key="QueryViewBackgroundColor">#252830</Color>
+            <Color x:Key="MainViewBackgroundColor">#1F2229</Color>
+            <Color x:Key="MainBorderColor">#373D49</Color>
+            <Color x:Key="QueryViewBackgroundColor">#272B34</Color>
             <Color x:Key="QueryTextColor">#E2E4E9</Color>
-            <Color x:Key="TitleBarBackgroundColor">#21242C</Color>
-            <Color x:Key="ResultViewBackgroundColor">#252830</Color>
-            <Color x:Key="ServiceResultHeaderBackgroundColor">#252830</Color>
-            <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#323642</Color>
+            <Color x:Key="TitleBarBackgroundColor">#1F2229</Color>
+            <Color x:Key="ResultViewBackgroundColor">#22262E</Color>
+            <Color x:Key="ServiceResultHeaderBackgroundColor">#2A2E38</Color>
+            <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#323744</Color>
             <Color x:Key="ServiceResultHeaderForegroundColor">#F2F4F8</Color>
             <Color x:Key="ServiceResultHeaderSecondaryForegroundColor">#C8CED8</Color>
             <Color x:Key="ButtonHoverColor">#3A3D4A</Color>
@@ -138,9 +185,9 @@
             <Color x:Key="ExampleTextColor">#9CA3AF</Color>
 
             <!-- Settings UI -->
-            <Color x:Key="AddMinusBackgroundColor">#2E3140</Color>
-            <Color x:Key="ListBorderColor">#3A3D4A</Color>
-            <Color x:Key="ActionButtonIconColor">#9096A3</Color>
+            <Color x:Key="AddMinusBackgroundColor">#2B303A</Color>
+            <Color x:Key="ListBorderColor">#373D49</Color>
+            <Color x:Key="ActionButtonIconColor">#A3ABB7</Color>
             <Color x:Key="SettingsTabBackgroundColor">#202127</Color>
             <Color x:Key="SettingsTabBorderColor">#3A3D4A</Color>
             <Color x:Key="SettingsTabForegroundColor">#E6EBF2</Color>
@@ -150,13 +197,30 @@
             <Color x:Key="PopButtonBackgroundColor">#252A33</Color>
             <Color x:Key="PopButtonBorderColor">#6B7584</Color>
             <Color x:Key="PopButtonForegroundColor">#E6EBF2</Color>
+            <Color x:Key="FloatingWindowBackgroundColor">#1F2229</Color>
+            <Color x:Key="FloatingWindowBorderColor">#373D49</Color>
+            <Color x:Key="FloatingInputBackgroundColor">#2B2F38</Color>
+            <Color x:Key="FloatingInputBorderColor">#3B414D</Color>
+            <Color x:Key="FloatingIconForegroundColor">#E2E6ED</Color>
+            <Color x:Key="EasydictCardBackgroundColor">#22262E</Color>
+            <Color x:Key="EasydictCardBorderColor">#373D49</Color>
 
+            <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
+            <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
             <CornerRadius x:Key="EasydictCardCornerRadius">8</CornerRadius>
             <CornerRadius x:Key="EasydictControlCornerRadius">8</CornerRadius>
             <CornerRadius x:Key="EasydictRoundButtonCornerRadius">20</CornerRadius>
             <CornerRadius x:Key="EasydictStatusCornerRadius">12</CornerRadius>
+            <CornerRadius x:Key="FloatingWindowCornerRadius">0</CornerRadius>
+            <CornerRadius x:Key="FloatingInputCornerRadius">18</CornerRadius>
             <Thickness x:Key="EasydictCardBorderThickness">1</Thickness>
             <Thickness x:Key="EasydictIconButtonBorderThickness">0</Thickness>
+            <Thickness x:Key="FloatingWindowOuterPadding">0</Thickness>
+            <Thickness x:Key="FloatingWindowContentPadding">16</Thickness>
+            <Thickness x:Key="FloatingWindowBorderThickness">0</Thickness>
+            <Thickness x:Key="FloatingInputPadding">10,9</Thickness>
+            <Thickness x:Key="FloatingInputMargin">0,2,0,6</Thickness>
+            <Thickness x:Key="EasydictCardPadding">10</Thickness>
 
             <!-- Brushes -->
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
@@ -170,6 +234,29 @@
             <SolidColorBrush x:Key="ServiceResultHeaderForegroundBrush" Color="{StaticResource ServiceResultHeaderForegroundColor}" />
             <SolidColorBrush x:Key="ServiceResultHeaderSecondaryForegroundBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
             <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHoverColor}" />
+            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="{StaticResource FloatingWindowBackgroundColor}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{StaticResource EasydictCardBorderColor}" />
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="{StaticResource ServiceResultHeaderHoverBackgroundColor}" />
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{StaticResource MainBorderColor}" />
+            <SolidColorBrush x:Key="ButtonBackground" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{StaticResource ServiceResultHeaderHoverBackgroundColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#383C48" />
+            <SolidColorBrush x:Key="ButtonForeground" Color="{StaticResource FloatingIconForegroundColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{StaticResource MainBorderColor}" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{StaticResource MainBorderColor}" />
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="{StaticResource ServiceResultHeaderHoverBackgroundColor}" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="ComboBoxForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TextControlBackground" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="TextControlForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#9CA4B0" />
             <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource BlueAccentColor}" />
             <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
@@ -195,6 +282,13 @@
             <SolidColorBrush x:Key="PopButtonBackgroundBrush" Color="{StaticResource PopButtonBackgroundColor}" />
             <SolidColorBrush x:Key="PopButtonBorderBrush" Color="{StaticResource PopButtonBorderColor}" />
             <SolidColorBrush x:Key="PopButtonForegroundBrush" Color="{StaticResource PopButtonForegroundColor}" />
+            <SolidColorBrush x:Key="FloatingWindowBackgroundBrush" Color="{StaticResource FloatingWindowBackgroundColor}" />
+            <SolidColorBrush x:Key="FloatingWindowBorderBrush" Color="{StaticResource FloatingWindowBorderColor}" />
+            <SolidColorBrush x:Key="FloatingInputBackgroundBrush" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="FloatingInputBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="FloatingIconForegroundBrush" Color="{StaticResource FloatingIconForegroundColor}" />
+            <SolidColorBrush x:Key="EasydictCardBackgroundBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="EasydictCardBorderBrush" Color="{StaticResource EasydictCardBorderColor}" />
         </ResourceDictionary>
 
         <!-- HighContrast Theme (fallback to Light theme values) -->
@@ -233,13 +327,30 @@
             <Color x:Key="PopButtonBackgroundColor">#FFFFFF</Color>
             <Color x:Key="PopButtonBorderColor">#000000</Color>
             <Color x:Key="PopButtonForegroundColor">#000000</Color>
+            <Color x:Key="FloatingWindowBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="FloatingWindowBorderColor">#000000</Color>
+            <Color x:Key="FloatingInputBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="FloatingInputBorderColor">#000000</Color>
+            <Color x:Key="FloatingIconForegroundColor">#000000</Color>
+            <Color x:Key="EasydictCardBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="EasydictCardBorderColor">#000000</Color>
 
+            <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
+            <CornerRadius x:Key="OverlayCornerRadius">0</CornerRadius>
             <CornerRadius x:Key="EasydictCardCornerRadius">0</CornerRadius>
             <CornerRadius x:Key="EasydictControlCornerRadius">0</CornerRadius>
             <CornerRadius x:Key="EasydictRoundButtonCornerRadius">0</CornerRadius>
             <CornerRadius x:Key="EasydictStatusCornerRadius">0</CornerRadius>
+            <CornerRadius x:Key="FloatingWindowCornerRadius">0</CornerRadius>
+            <CornerRadius x:Key="FloatingInputCornerRadius">0</CornerRadius>
             <Thickness x:Key="EasydictCardBorderThickness">1</Thickness>
             <Thickness x:Key="EasydictIconButtonBorderThickness">1</Thickness>
+            <Thickness x:Key="FloatingWindowOuterPadding">0</Thickness>
+            <Thickness x:Key="FloatingWindowContentPadding">8</Thickness>
+            <Thickness x:Key="FloatingWindowBorderThickness">1</Thickness>
+            <Thickness x:Key="FloatingInputPadding">8</Thickness>
+            <Thickness x:Key="FloatingInputMargin">0,0,0,4</Thickness>
+            <Thickness x:Key="EasydictCardPadding">8</Thickness>
 
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
             <SolidColorBrush x:Key="MainBorderBrush" Color="{StaticResource MainBorderColor}" />
@@ -252,6 +363,29 @@
             <SolidColorBrush x:Key="ServiceResultHeaderForegroundBrush" Color="{StaticResource ServiceResultHeaderForegroundColor}" />
             <SolidColorBrush x:Key="ServiceResultHeaderSecondaryForegroundBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
             <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHoverColor}" />
+            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="{StaticResource FloatingWindowBackgroundColor}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{StaticResource EasydictCardBorderColor}" />
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="#000000" />
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#000000" />
+            <SolidColorBrush x:Key="ButtonBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ButtonForeground" Color="#000000" />
+            <SolidColorBrush x:Key="ButtonBorderBrush" Color="#000000" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#000000" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#000000" />
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#000000" />
+            <SolidColorBrush x:Key="ComboBoxForeground" Color="#000000" />
+            <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#000000" />
+            <SolidColorBrush x:Key="TextControlForeground" Color="#000000" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#000000" />
             <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource BlueAccentColor}" />
             <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
@@ -277,6 +411,13 @@
             <SolidColorBrush x:Key="PopButtonBackgroundBrush" Color="{StaticResource PopButtonBackgroundColor}" />
             <SolidColorBrush x:Key="PopButtonBorderBrush" Color="{StaticResource PopButtonBorderColor}" />
             <SolidColorBrush x:Key="PopButtonForegroundBrush" Color="{StaticResource PopButtonForegroundColor}" />
+            <SolidColorBrush x:Key="FloatingWindowBackgroundBrush" Color="{StaticResource FloatingWindowBackgroundColor}" />
+            <SolidColorBrush x:Key="FloatingWindowBorderBrush" Color="{StaticResource FloatingWindowBorderColor}" />
+            <SolidColorBrush x:Key="FloatingInputBackgroundBrush" Color="{StaticResource FloatingInputBackgroundColor}" />
+            <SolidColorBrush x:Key="FloatingInputBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
+            <SolidColorBrush x:Key="FloatingIconForegroundBrush" Color="{StaticResource FloatingIconForegroundColor}" />
+            <SolidColorBrush x:Key="EasydictCardBackgroundBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
+            <SolidColorBrush x:Key="EasydictCardBorderBrush" Color="{StaticResource EasydictCardBorderColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

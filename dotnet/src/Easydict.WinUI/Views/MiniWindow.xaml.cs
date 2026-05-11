@@ -1609,7 +1609,9 @@ public sealed partial class MiniWindow : Window
         if (!_isSourceTextExpanded)
         {
             ProtectedCursorHelper.Set(SourceTextContainer, InputSystemCursor.Create(InputSystemCursorShape.Hand));
-            SourceTextContainer.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentTextFillColorPrimaryBrush"];
+            var themeRoot = Content as FrameworkElement;
+            SourceTextContainer.BorderBrush = MinimalThemeService.GetBrush("AccentTextFillColorPrimaryBrush", themeRoot)
+                ?? MinimalThemeService.GetBrush("AccentBrush", themeRoot);
             SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(1);
         }
     }
@@ -1950,15 +1952,21 @@ public sealed partial class MiniWindow : Window
     /// <summary>
     /// Apply theme to the window content.
     /// </summary>
-    public void ApplyTheme(ElementTheme theme)
+    public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
         if (this.Content is FrameworkElement root)
         {
-            root.RequestedTheme = theme;
+            MinimalThemeService.ApplyRequestedTheme(root, theme, forceResourceRefresh);
             MinimalThemeService.ApplyFloatingWindowRootBackground(root);
         }
 
         var minimal = MinimalThemeService.IsActive;
+        MinimalThemeService.ApplyFloatingChrome(
+            Content as Grid,
+            WindowSurface,
+            SourceTextContainer,
+            minimal,
+            Content as FrameworkElement);
         SourcePlayButton.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
         DetectedLangText.Visibility = minimal ? Visibility.Collapsed : DetectedLangText.Visibility;
         StatusText.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
@@ -1967,6 +1975,10 @@ public sealed partial class MiniWindow : Window
         if (ServiceResultViewHost.NeedsThemeRebuild(_resultControls, minimal))
         {
             RebuildServiceResultControlsForCurrentTheme();
+        }
+        else
+        {
+            ServiceResultViewHost.RefreshThemeChrome(_resultControls);
         }
 
         if (minimal)

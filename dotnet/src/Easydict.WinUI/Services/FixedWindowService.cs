@@ -118,9 +118,9 @@ public sealed class FixedWindowService : IDisposable
     /// <summary>
     /// Apply theme to the fixed window.
     /// </summary>
-    public void ApplyTheme(ElementTheme theme)
+    public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
-        _fixedWindow?.ApplyTheme(theme);
+        _fixedWindow?.ApplyTheme(theme, forceResourceRefresh);
     }
 
     /// <summary>

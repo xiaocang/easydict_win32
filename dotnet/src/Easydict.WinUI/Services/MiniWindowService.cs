@@ -139,9 +139,9 @@ public sealed class MiniWindowService : IDisposable
     /// <summary>
     /// Apply theme to the mini window.
     /// </summary>
-    public void ApplyTheme(ElementTheme theme)
+    public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
-        _miniWindow?.ApplyTheme(theme);
+        _miniWindow?.ApplyTheme(theme, forceResourceRefresh);
     }
 
     /// <summary>

@@ -56,8 +56,11 @@
 
         <ScrollViewer x:Name="MainScrollViewer"
                 Padding="24"
+                HorizontalScrollBarVisibility="Disabled"
                 Visibility="Collapsed">
-            <StackPanel Spacing="24"
+            <StackPanel x:Name="SettingsContentRoot"
+                    Spacing="24"
+                    Width="{Binding ViewportWidth, ElementName=MainScrollViewer}"
                     MaxWidth="1040"
                     HorizontalAlignment="Center">
                 <!-- Header -->

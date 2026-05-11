@@ -1061,19 +1061,27 @@ namespace Easydict.WinUI
 
         public static void ApplyTheme(string theme)
         {
-            if (string.Equals(_lastAppliedTheme, theme, StringComparison.OrdinalIgnoreCase))
+            var isMinimal = MinimalThemeService.IsMinimal(theme);
+            var resourceStateNeedsChange = MinimalThemeService.ResourcesApplied != isMinimal;
+            if (!resourceStateNeedsChange &&
+                string.Equals(_lastAppliedTheme, theme, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
             _lastAppliedTheme = theme;
 
-            var isMinimal = MinimalThemeService.IsMinimal(theme);
+            var wasMinimalResourcesApplied = MinimalThemeService.ResourcesApplied;
             MinimalThemeService.ApplyResources(isMinimal);
+            var forceThemeResourceRefresh = wasMinimalResourcesApplied != isMinimal;
             var elementTheme = MinimalThemeService.ToElementTheme(theme);
+            ApplyMainWindowTitleBarChrome(theme, elementTheme);
 
             if (Instance._window?.Content is FrameworkElement mainRoot)
             {
-                mainRoot.RequestedTheme = elementTheme;
+                MinimalThemeService.ApplyRequestedTheme(
+                    mainRoot,
+                    elementTheme,
+                    forceThemeResourceRefresh);
 
                 if (mainRoot is Frame frame)
                 {
@@ -1088,11 +1096,79 @@ namespace Easydict.WinUI
                 }
             }
 
-            MiniWindowService.Instance.ApplyTheme(elementTheme);
-            FixedWindowService.Instance.ApplyTheme(elementTheme);
-            Instance._popButtonService?.ApplyTheme(elementTheme);
+            MiniWindowService.Instance.ApplyTheme(elementTheme, forceThemeResourceRefresh);
+            FixedWindowService.Instance.ApplyTheme(elementTheme, forceThemeResourceRefresh);
+            Instance._popButtonService?.ApplyTheme(elementTheme, forceThemeResourceRefresh);
 
             System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {theme} (ElementTheme.{elementTheme})");
+        }
+
+        private static void ApplyMainWindowTitleBarChrome(string theme, ElementTheme elementTheme)
+        {
+            if (Instance._appWindow is null)
+            {
+                return;
+            }
+
+            try
+            {
+                var titleBar = Instance._appWindow.TitleBar;
+                if (MinimalThemeService.IsMinimal(theme) || elementTheme == ElementTheme.Default)
+                {
+                    ResetTitleBarColors(titleBar);
+                    return;
+                }
+
+                var dark = elementTheme == ElementTheme.Dark;
+                var background = dark
+                    ? Windows.UI.Color.FromArgb(255, 31, 34, 41)
+                    : Windows.UI.Color.FromArgb(255, 252, 252, 251);
+                var foreground = dark
+                    ? Windows.UI.Color.FromArgb(255, 226, 230, 237)
+                    : Windows.UI.Color.FromArgb(255, 48, 50, 54);
+                var inactiveForeground = dark
+                    ? Windows.UI.Color.FromArgb(255, 143, 150, 163)
+                    : Windows.UI.Color.FromArgb(255, 121, 124, 130);
+                var buttonHoverBackground = dark
+                    ? Windows.UI.Color.FromArgb(255, 43, 47, 56)
+                    : Windows.UI.Color.FromArgb(255, 244, 244, 242);
+                var buttonPressedBackground = dark
+                    ? Windows.UI.Color.FromArgb(255, 50, 55, 68)
+                    : Windows.UI.Color.FromArgb(255, 236, 236, 233);
+
+                titleBar.BackgroundColor = background;
+                titleBar.ForegroundColor = foreground;
+                titleBar.InactiveBackgroundColor = background;
+                titleBar.InactiveForegroundColor = inactiveForeground;
+                titleBar.ButtonBackgroundColor = background;
+                titleBar.ButtonForegroundColor = foreground;
+                titleBar.ButtonHoverBackgroundColor = buttonHoverBackground;
+                titleBar.ButtonHoverForegroundColor = foreground;
+                titleBar.ButtonPressedBackgroundColor = buttonPressedBackground;
+                titleBar.ButtonPressedForegroundColor = foreground;
+                titleBar.ButtonInactiveBackgroundColor = background;
+                titleBar.ButtonInactiveForegroundColor = inactiveForeground;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] Apply title bar theme failed: {ex.Message}");
+            }
+        }
+
+        private static void ResetTitleBarColors(AppWindowTitleBar titleBar)
+        {
+            titleBar.BackgroundColor = null;
+            titleBar.ForegroundColor = null;
+            titleBar.InactiveBackgroundColor = null;
+            titleBar.InactiveForegroundColor = null;
+            titleBar.ButtonBackgroundColor = null;
+            titleBar.ButtonForegroundColor = null;
+            titleBar.ButtonHoverBackgroundColor = null;
+            titleBar.ButtonHoverForegroundColor = null;
+            titleBar.ButtonPressedBackgroundColor = null;
+            titleBar.ButtonPressedForegroundColor = null;
+            titleBar.ButtonInactiveBackgroundColor = null;
+            titleBar.ButtonInactiveForegroundColor = null;
         }
 
         private static AppWindow ConfigureWindow(Window window)

@@ -86,6 +86,11 @@ public sealed class SettingsService
     public string OllamaEndpoint { get; set; } = "http://localhost:11434/v1/chat/completions";
     public string OllamaModel { get; set; } = "llama3.2";
 
+    // OpenVINO NPU translation provider settings.
+    // Stored as the enum name ("Auto", "NPU", "GPU", "CPU"); parsed in
+    // TranslationManagerService when configuring the service.
+    public string OpenVinoDevice { get; set; } = "Auto";
+
     // Built-in AI settings
     public string BuiltInAIModel { get; set; } = "glm-4-flash-250414";
     public string? BuiltInAIApiKey { get; set; }
@@ -584,6 +589,9 @@ public sealed class SettingsService
         OllamaEndpoint = GetValue(nameof(OllamaEndpoint), "http://localhost:11434/v1/chat/completions");
         OllamaModel = GetValue(nameof(OllamaModel), "llama3.2");
 
+        // OpenVINO NPU settings
+        OpenVinoDevice = GetValue(nameof(OpenVinoDevice), "Auto");
+
         // Built-in AI settings
         BuiltInAIModel = GetValue(nameof(BuiltInAIModel), "glm-4-flash-250414");
         BuiltInAIApiKey = GetValue<string?>(nameof(BuiltInAIApiKey), null);
@@ -785,6 +793,9 @@ public sealed class SettingsService
         // Ollama settings
         _settings[nameof(OllamaEndpoint)] = OllamaEndpoint;
         _settings[nameof(OllamaModel)] = OllamaModel;
+
+        // OpenVINO NPU settings
+        _settings[nameof(OpenVinoDevice)] = OpenVinoDevice;
 
         // Built-in AI settings
         _settings[nameof(BuiltInAIModel)] = BuiltInAIModel;

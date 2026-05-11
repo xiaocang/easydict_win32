@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Easydict.TranslationService;
+using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
 
 namespace Easydict.WindowsAI.Services;
@@ -11,7 +12,7 @@ namespace Easydict.WindowsAI.Services;
 /// Available only on Copilot+ PCs that meet the model's hardware requirements;
 /// surfaces a friendly state via <see cref="WindowsAIReadyState"/> on others.
 /// </summary>
-public sealed class WindowsLocalAIService : IStreamTranslationService
+public sealed class WindowsLocalAIService : IStreamTranslationService, ILocalModelProvider
 {
     private static readonly IReadOnlyList<Language> _allLanguages =
         Enum.GetValues<Language>().Where(l => l != Language.Auto).ToArray();
@@ -131,6 +132,76 @@ public sealed class WindowsLocalAIService : IStreamTranslationService
             }
         }
     }
+
+    // ── ILocalModelProvider ─────────────────────────────────────────────
+
+    public event EventHandler<LocalModelStatus>? StatusChanged;
+
+    public LocalModelStatus GetStatus()
+    {
+        return MapStatus(_client.GetReadyState());
+    }
+
+    public async Task<LocalModelStatus> PrepareAsync(CancellationToken cancellationToken)
+    {
+        RaiseStatusChanged(new LocalModelStatus(
+            LocalModelState.Preparing,
+            "WindowsLocalAI_Status_Preparing"));
+
+        try
+        {
+            var newState = await _client.EnsureReadyAsync(cancellationToken);
+            var status = MapStatus(newState);
+            RaiseStatusChanged(status);
+            return status;
+        }
+        catch (OperationCanceledException)
+        {
+            var status = MapStatus(_client.GetReadyState());
+            RaiseStatusChanged(status);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var status = new LocalModelStatus(
+                LocalModelState.Failed,
+                "WindowsLocalAI_Status_NotReady",
+                DetailMessage: ex.Message);
+            RaiseStatusChanged(status);
+            return status;
+        }
+    }
+
+    private void RaiseStatusChanged(LocalModelStatus status)
+    {
+        StatusChanged?.Invoke(this, status);
+    }
+
+    private static LocalModelStatus MapStatus(WindowsAIReadyState state) => state switch
+    {
+        WindowsAIReadyState.Ready =>
+            new LocalModelStatus(LocalModelState.Ready, "WindowsLocalAI_Status_Ready"),
+
+        WindowsAIReadyState.NotReady =>
+            new LocalModelStatus(LocalModelState.NeedsPreparation, "WindowsLocalAI_Status_NotReady"),
+
+        WindowsAIReadyState.CapabilityMissing =>
+            new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_CapabilityMissing"),
+
+        WindowsAIReadyState.NotCompatibleWithSystemHardware =>
+            new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_NotCompatibleHardware"),
+
+        WindowsAIReadyState.OSUpdateNeeded =>
+            new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_OSUpdateNeeded"),
+
+        WindowsAIReadyState.DisabledByUser =>
+            new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_DisabledByUser"),
+
+        _ =>
+            new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_NotSupported"),
+    };
+
+    // ── Internal helpers ────────────────────────────────────────────────
 
     private static WindowsAIGenerationOptions DefaultGenerationOptions =>
         new(Temperature: 0.1f, TopK: 1, TopP: 0.9f);

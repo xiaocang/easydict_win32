@@ -703,6 +703,59 @@
                             </StackPanel>
                         </Expander>
 
+                        <!-- OpenVINO NPU (NLLB-200) -->
+                        <Expander x:Name="OpenVinoExpander"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch">
+                            <Expander.Header>
+                                <Grid>
+                                    <TextBlock x:Name="OpenVinoTitleText"
+                                               Text="OpenVINO NPU (NLLB-200)"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="OpenVinoStatusBadge"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Right"
+                                               Margin="0,0,8,0"
+                                               Visibility="Collapsed"/>
+                                </Grid>
+                            </Expander.Header>
+                            <StackPanel Spacing="12"
+                                    Padding="0,8">
+                                <InfoBar x:Name="OpenVinoStatusBar"
+                                         IsOpen="True"
+                                         IsClosable="False"
+                                         Severity="Informational"
+                                         Title="Status"
+                                         Message=""/>
+                                <ProgressBar x:Name="OpenVinoDownloadProgress"
+                                             Minimum="0"
+                                             Maximum="100"
+                                             Visibility="Collapsed"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="OpenVinoDownloadButton"
+                                            Content="Download model"
+                                            Click="OnDownloadOpenVinoModel"
+                                            Padding="8,4"
+                                            Visibility="Collapsed"/>
+                                    <ComboBox x:Name="OpenVinoDeviceCombo"
+                                              Header="Device"
+                                              Width="160"
+                                              SelectionChanged="OnOpenVinoDeviceChanged">
+                                        <ComboBoxItem Content="Auto (NPU → GPU → CPU)" Tag="Auto"/>
+                                        <ComboBoxItem Content="NPU" Tag="NPU"/>
+                                        <ComboBoxItem Content="GPU" Tag="GPU"/>
+                                        <ComboBoxItem Content="CPU" Tag="CPU"/>
+                                    </ComboBox>
+                                </StackPanel>
+                                <TextBlock x:Name="OpenVinoDescriptionText"
+                                           Text="Translates via NLLB-200-distilled (~360 MB) using ONNX Runtime + OpenVINO Execution Provider. Targets Intel/AMD NPU when available. Model downloaded on first use to %LOCALAPPDATA%\Easydict\models."
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Expander>
+
                         <!-- Built-in AI -->
                         <Expander HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch">

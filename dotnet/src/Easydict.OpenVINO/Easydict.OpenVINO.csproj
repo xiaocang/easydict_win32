@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Easydict.OpenVINO</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Managed C# wrapper for ONNX Runtime. The native runtime DLLs come from
+         Intel.ML.OnnxRuntime.OpenVino below, which is the OpenVINO-EP-enabled build. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0" />
+    <!-- ORT native build with OpenVINO Execution Provider compiled in. Bundles the
+         OpenVINO 2024 runtime so the EP can be selected at session creation with
+         device_type=NPU/GPU/CPU. Intel publishes this package; version pinned to
+         match the Managed wrapper. -->
+    <PackageReference Include="Intel.ML.OnnxRuntime.OpenVino" Version="1.21.0" />
+    <!-- SentencePiece tokenizer support. NLLB-200 ships a SentencePiece BPE model
+         (sentencepiece.bpe.model) plus a tokenizer.json that adds the FLORES-200
+         language-code special tokens. -->
+    <PackageReference Include="Microsoft.ML.Tokenizers" Version="1.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Easydict.WinUI.Tests" />
+  </ItemGroup>
+
+</Project>

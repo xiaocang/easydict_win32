@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Easydict.OpenVINO.Inference;
+using Easydict.OpenVINO.Services;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Services;
 using Easydict.WindowsAI.Services;
@@ -22,6 +24,11 @@ public sealed class TranslationManagerService : IDisposable
     // Reference counting for safe disposal during streaming operations
     private readonly Dictionary<TranslationManager, int> _handleCounts = new();
     private readonly List<TranslationManager> _disposalQueue = new();
+
+    // OpenVINO provider is stateful (lazy-loaded ONNX sessions); reuse one
+    // instance across ConfigureServices/ReconfigureProxy so a warmed model
+    // isn't discarded when the user toggles unrelated settings.
+    private OpenVINOTranslationService? _openVinoService;
 
     public static TranslationManagerService Instance => _instance.Value;
 
@@ -190,6 +197,13 @@ public sealed class TranslationManagerService : IDisposable
         // safe to call on both initial configuration and after ReconfigureProxy() rebuilds
         // the TranslationManager.
         _translationManager.RegisterService(new WindowsLocalAIService());
+
+        // Register the OpenVINO + NLLB-200 provider. The service caches its ONNX sessions
+        // after first translate, so we reuse one instance across ReconfigureServices /
+        // ReconfigureProxy calls — re-instantiating would discard the warmed-up model.
+        _openVinoService ??= new OpenVINOTranslationService();
+        _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
+        _translationManager.RegisterService(_openVinoService);
 
         // Configure BuiltIn AI
         _translationManager.ConfigureService("builtin", service =>
@@ -582,6 +596,13 @@ public sealed class TranslationManagerService : IDisposable
     {
         _translationManager.Dispose();
         Debug.WriteLine("[TranslationManagerService] Disposed");
+    }
+
+    private static OpenVINODevice ParseOpenVinoDevice(string? value)
+    {
+        return Enum.TryParse<OpenVINODevice>(value, ignoreCase: true, out var parsed)
+            ? parsed
+            : OpenVINODevice.Auto;
     }
 
     private static void QueueMdxIndexBuild(

@@ -1521,6 +1521,11 @@ public sealed partial class SettingsPage : Page
             // Probe Windows Local AI (Phi Silica) availability so the Expander shows
             // the correct status badge / "Prepare model" button on first paint.
             RefreshWindowsLocalAIStatus();
+
+            // Same for the OpenVINO NPU provider — reads cache status, populates the
+            // device combo from settings, and subscribes to status-change events for
+            // download progress.
+            InitializeOpenVinoExpander();
         }
 
         if (ShouldLoadSettingsTab(SettingsTabId.General, deferLazyTabData))

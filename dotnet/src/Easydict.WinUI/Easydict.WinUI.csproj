@@ -191,6 +191,10 @@
            runtime availability is checked dynamically and the service degrades gracefully
            on non-Copilot+ devices. -->
       <ProjectReference Include="..\Easydict.WindowsAI\Easydict.WindowsAI.csproj" />
+      <!-- OpenVINO + NLLB-200 provider (openvino-local-ai). Targets Intel NPU/GPU/CPU
+           via ONNX Runtime's OpenVINO Execution Provider. Model files are downloaded
+           on first use into %LOCALAPPDATA%\Easydict\models, not bundled. -->
+      <ProjectReference Include="..\Easydict.OpenVINO\Easydict.OpenVINO.csproj" />
     </ItemGroup>
 
     <!-- FlaUI for proper UI Automation text selection -->

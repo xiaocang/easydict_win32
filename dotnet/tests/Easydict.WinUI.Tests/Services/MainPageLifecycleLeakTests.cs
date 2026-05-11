@@ -11,27 +11,30 @@ public class MainPageLifecycleLeakTests
 {
     private static readonly string ProjectRoot = FindProjectRoot();
     private static readonly string MainPagePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MainPage.xaml.cs");
+    private static readonly string ServiceResultViewHostPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultViewHost.cs");
 
     [Fact]
     public void MainPage_ReleasesServiceResultControlsBeforeRebuild()
     {
         var content = File.ReadAllText(MainPagePath);
-        content.Should().Contain("private void ReleaseServiceResultControls()",
+        content.Should().Contain("private void ReleaseServiceResultControls(",
             "MainPage should centralize result-control cleanup before rebuilding the panel");
         content.Should().Contain("ReleaseServiceResultControls();",
             "InitializeServiceResults and cleanup paths should release previous result controls");
+        content.Should().Contain("ServiceResultViewHost.Release(",
+            "ReleaseServiceResultControls should delegate to the ServiceResultViewHost helper");
     }
 
     [Fact]
     public void MainPage_UnsubscribesResultControlEventsDuringRelease()
     {
-        var content = File.ReadAllText(MainPagePath);
-        content.Should().Contain("control.CollapseToggled -= OnServiceCollapseToggled;",
+        var content = File.ReadAllText(ServiceResultViewHostPath);
+        content.Should().Contain("control.CollapseToggled -= collapseToggled;",
             "old result controls should detach collapse event handlers before being discarded");
-        content.Should().Contain("control.QueryRequested -= OnServiceQueryRequested;",
+        content.Should().Contain("control.QueryRequested -= queryRequested;",
             "old result controls should detach query-request event handlers before being discarded");
         content.Should().Contain("control.Cleanup();",
-            "MainPage should delegate native and binding cleanup to each result control");
+            "ServiceResultViewHost.Release should delegate native and binding cleanup to each result control");
     }
 
     [Fact]

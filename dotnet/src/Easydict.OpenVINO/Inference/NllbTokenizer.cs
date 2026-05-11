@@ -6,8 +6,9 @@ namespace Easydict.OpenVINO.Inference;
 
 /// <summary>
 /// NLLB-200 tokenizer that combines:
-///  1. <see cref="SentencePieceTokenizer"/> for the base BPE vocabulary
-///     (256 000 tokens, stored in <c>sentencepiece.bpe.model</c>);
+///  1. A SentencePiece tokenizer (loaded via <see cref="LlamaTokenizer.Create(Stream, bool, bool, IReadOnlyDictionary{string, int}?)"/>,
+///     which transparently handles both BPE and Unigram SentencePiece models)
+///     for the base 256 000-token vocabulary stored in <c>sentencepiece.bpe.model</c>;
 ///  2. an "added tokens" table parsed from <c>tokenizer.json</c> — these are the
 ///     202 language-code tokens (e.g. <c>eng_Latn</c>, <c>zho_Hans</c>) and a
 ///     handful of special tokens (<c>&lt;s&gt;</c>, <c>&lt;pad&gt;</c>, <c>&lt;/s&gt;</c>,
@@ -15,7 +16,7 @@ namespace Easydict.OpenVINO.Inference;
 /// </summary>
 public sealed class NllbTokenizer : INllbTokenizer
 {
-    private readonly SentencePieceTokenizer _spm;
+    private readonly Tokenizer _spm;
     private readonly IReadOnlyDictionary<string, int> _addedTokens;
     private readonly IReadOnlyDictionary<int, string> _addedTokensReverse;
     private readonly HashSet<int> _specialTokenIds;
@@ -47,13 +48,19 @@ public sealed class NllbTokenizer : INllbTokenizer
         }
 
         using var spmStream = File.OpenRead(spmPath);
-        var spm = SentencePieceTokenizer.Create(spmStream);
+        // LlamaTokenizer.Create reads a SentencePiece .model file regardless of
+        // BPE vs Unigram model type — the name is historical (Llama uses Unigram,
+        // NLLB uses BPE; the same factory handles both).
+        Tokenizer spm = LlamaTokenizer.Create(
+            spmStream,
+            addBeginOfSentence: false,
+            addEndOfSentence: false);
 
         var addedTokens = ParseAddedTokens(tokenizerJsonPath);
         return new NllbTokenizer(spm, addedTokens);
     }
 
-    public NllbTokenizer(SentencePieceTokenizer spm, IReadOnlyDictionary<string, int> addedTokens)
+    public NllbTokenizer(Tokenizer spm, IReadOnlyDictionary<string, int> addedTokens)
     {
         _spm = spm ?? throw new ArgumentNullException(nameof(spm));
         _addedTokens = addedTokens ?? throw new ArgumentNullException(nameof(addedTokens));
@@ -83,7 +90,7 @@ public sealed class NllbTokenizer : INllbTokenizer
     {
         // Strip language-code / control tokens and pass the rest to SPM.
         var content = tokenIds.Where(id => !_specialTokenIds.Contains(id)).ToArray();
-        return _spm.Decode(content);
+        return _spm.Decode(content) ?? string.Empty;
     }
 
     public string? DecodeSingle(int tokenId)

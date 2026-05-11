@@ -2,7 +2,8 @@ namespace Easydict.OpenVINO.Models;
 
 /// <summary>
 /// Static metadata describing what to download for the OpenVINO NLLB-200
-/// provider. Pinned to a specific HuggingFace revision so updates are explicit.
+/// provider. <see cref="Revision"/> controls how reproducible installs are —
+/// see the field-level XML doc for the trade-off.
 /// </summary>
 public static class ModelManifest
 {
@@ -11,7 +12,17 @@ public static class ModelManifest
     /// <summary>HuggingFace repo with ONNX + quantized variants of NLLB-200-distilled-600M.</summary>
     public const string HuggingFaceRepo = "Xenova/nllb-200-distilled-600M";
 
-    /// <summary>Pinned revision so file hashes don't drift unexpectedly.</summary>
+    /// <summary>
+    /// HuggingFace ref (branch, tag, or commit SHA) used to resolve file URLs.
+    /// Currently <c>main</c>, which is mutable — if the upstream repo retags
+    /// or re-uploads, existing installs see no diff but fresh downloads pick up
+    /// the new content. That's acceptable for the initial rollout because we
+    /// don't yet have a way to migrate users whose cache is from an older
+    /// revision. TODO: before declaring this provider stable, replace with an
+    /// immutable 40-char commit SHA from
+    /// https://huggingface.co/Xenova/nllb-200-distilled-600M/commits/main and
+    /// add an integrity check (SHA-256 per file) to <see cref="Services.ModelDownloadService"/>.
+    /// </summary>
     public const string Revision = "main";
 
     /// <summary>Subdirectory under <c>%LOCALAPPDATA%\Easydict\models</c>.</summary>

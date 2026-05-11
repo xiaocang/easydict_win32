@@ -48,10 +48,11 @@ public sealed partial class SettingsPage
             _ => InfoBarSeverity.Warning,
         };
 
-        WindowsLocalAIStatusBadge.Text = state == WindowsAIReadyState.Ready ? "✅" : "⚠";
-        WindowsLocalAIStatusBadge.Foreground = state == WindowsAIReadyState.Ready
-            ? new SolidColorBrush(Colors.Green)
-            : new SolidColorBrush(Colors.DarkOrange);
+        // Plain Unicode glyphs (✓ = ✓, ⚠ = ⚠) instead of the colored
+        // ✅/⚠ emoji so the foreground brush actually applies. Brushes resolved
+        // from theme resources so the badge follows light/dark/high-contrast.
+        WindowsLocalAIStatusBadge.Text = state == WindowsAIReadyState.Ready ? "✓" : "⚠";
+        WindowsLocalAIStatusBadge.Foreground = GetLocalAiStatusBrush(state == WindowsAIReadyState.Ready);
         WindowsLocalAIStatusBadge.Visibility = Visibility.Visible;
 
         WindowsLocalAIPrepareButton.Visibility = state == WindowsAIReadyState.NotReady && !_windowsLocalAIPreparing
@@ -92,5 +93,26 @@ public sealed partial class SettingsPage
             WindowsLocalAIPrepareButton.Content = originalContent;
             WindowsLocalAIPrepareButton.IsEnabled = true;
         }
+    }
+
+    /// <summary>
+    /// Resolves the appropriate Fluent system brush for a local-model status
+    /// badge. Shared between the WindowsLocalAI and OpenVINO partials. Uses
+    /// theme resources so the badge tracks light/dark/high-contrast instead of
+    /// hard-coded ARGB.
+    /// </summary>
+    private static Brush GetLocalAiStatusBrush(bool isReady)
+    {
+        var key = isReady ? "SystemFillColorSuccessBrush" : "SystemFillColorCautionBrush";
+        if (Application.Current.Resources.TryGetValue(key, out var value) && value is Brush brush)
+        {
+            return brush;
+        }
+        // Fall back to the foreground brush so the glyph remains visible even
+        // if the theme resource isn't available (e.g. unloaded ResourceDictionary).
+        return Application.Current.Resources.TryGetValue("TextFillColorPrimaryBrush", out var fb)
+                && fb is Brush fallback
+            ? fallback
+            : new SolidColorBrush(Colors.Gray);
     }
 }

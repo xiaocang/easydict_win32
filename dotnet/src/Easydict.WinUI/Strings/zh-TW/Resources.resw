@@ -1115,6 +1115,7 @@
   <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows 本機 AI 需要更新的 Windows 版本。請安裝最新的 Windows 更新後重試。</value></data>
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows 本機 AI 已被停用或解除安裝。請在系統設定中重新啟用 Windows AI 功能。</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>當前系統或地區不支援 Windows 本機 AI。可改用 Ollama 或雲端服務作為替代方案。</value></data>
+  <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>本機語言模型準備失敗。請檢查 Windows Update 與 AI 功能可用性後重試。</value></data>
 
   <!-- OpenVINO NPU (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>已就緒</value></data>

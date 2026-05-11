@@ -1160,6 +1160,7 @@
   <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI requires a newer Windows build. Install the latest Windows updates and try again.</value></data>
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI has been disabled or removed. Re-enable Windows AI features in system settings.</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI is not supported on this system or in this region. Use Ollama or a cloud provider as a fallback.</value></data>
+  <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>Preparing the on-device language model failed. Check Windows Update and AI feature availability, then try again.</value></data>
 
   <!-- OpenVINO NPU (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>Ready</value></data>

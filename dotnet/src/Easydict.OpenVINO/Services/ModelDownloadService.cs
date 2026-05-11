@@ -144,29 +144,46 @@ public sealed class ModelDownloadService
 
         var fileTotalBytes = response.Content.Headers.ContentLength;
         var tmpPath = localPath + ".part";
+        var moved = false;
 
-        await using (var network = await response.Content.ReadAsStreamAsync(cancellationToken))
-        await using (var file_ = File.Create(tmpPath))
+        try
         {
-            var buffer = new byte[81_920];
-            long fileBytesDone = 0;
-            int read;
-            while ((read = await network.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
+            await using (var network = await response.Content.ReadAsStreamAsync(cancellationToken))
+            await using (var file_ = File.Create(tmpPath))
             {
-                await file_.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-                fileBytesDone += read;
+                var buffer = new byte[81_920];
+                long fileBytesDone = 0;
+                int read;
+                while ((read = await network.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
+                {
+                    await file_.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    fileBytesDone += read;
 
-                progress?.Report(new ModelDownloadProgress(
-                    file.LocalFileName,
-                    fileBytesDone,
-                    fileTotalBytes,
-                    Percent(bytesDoneAcrossFiles + fileBytesDone, totalBytes)));
+                    progress?.Report(new ModelDownloadProgress(
+                        file.LocalFileName,
+                        fileBytesDone,
+                        fileTotalBytes,
+                        Percent(bytesDoneAcrossFiles + fileBytesDone, totalBytes)));
+                }
+            }
+
+            // Atomic publish so a crash mid-write doesn't leave a half-file that
+            // IsModelInstalled would treat as valid.
+            File.Move(tmpPath, localPath, overwrite: true);
+            moved = true;
+        }
+        finally
+        {
+            // On cancel / network failure / disk-full, remove the partial file so
+            // the cache directory doesn't accumulate ".part" debris across retries.
+            // We only delete when File.Move didn't run (otherwise the .part is gone).
+            if (!moved && File.Exists(tmpPath))
+            {
+                try { File.Delete(tmpPath); }
+                catch (IOException) { /* file may be locked by AV scanner; best-effort */ }
+                catch (UnauthorizedAccessException) { /* same */ }
             }
         }
-
-        // Atomic publish so a crash mid-write doesn't leave a half-file that
-        // IsModelInstalled would treat as valid.
-        File.Move(tmpPath, localPath, overwrite: true);
     }
 
     private static double Percent(long done, long total)

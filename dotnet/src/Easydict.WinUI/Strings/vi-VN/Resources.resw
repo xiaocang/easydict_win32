@@ -957,6 +957,7 @@
   <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI yêu cầu phiên bản Windows mới hơn. Cài đặt các bản cập nhật Windows mới nhất và thử lại.</value></data>
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI đã bị tắt hoặc xóa. Bật lại tính năng Windows AI trong cài đặt hệ thống.</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI không được hỗ trợ trên hệ thống hoặc khu vực này. Hãy dùng Ollama hoặc nhà cung cấp đám mây để thay thế.</value></data>
+  <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>Chuẩn bị mô hình ngôn ngữ trên thiết bị thất bại. Kiểm tra Windows Update và tính khả dụng của tính năng AI rồi thử lại.</value></data>
 
   <!-- OpenVINO NPU (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>Sẵn sàng</value></data>

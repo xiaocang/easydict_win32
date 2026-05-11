@@ -594,6 +594,12 @@ public sealed class TranslationManagerService : IDisposable
 
     public void Dispose()
     {
+        // TranslationManager.Dispose() doesn't dispose registered services, and
+        // OpenVINOTranslationService owns native ORT sessions plus a SemaphoreSlim.
+        // Dispose it explicitly so we don't leak the warmed model on app shutdown.
+        _openVinoService?.Dispose();
+        _openVinoService = null;
+
         _translationManager.Dispose();
         Debug.WriteLine("[TranslationManagerService] Disposed");
     }

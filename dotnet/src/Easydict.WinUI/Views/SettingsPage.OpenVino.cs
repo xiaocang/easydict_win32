@@ -104,12 +104,12 @@ public sealed partial class SettingsPage
             _ => InfoBarSeverity.Informational,
         };
 
-        // Status badge in the header.
-        var badgeText = status.State == LocalModelState.Ready ? "✅" : "⚠";
-        OpenVinoStatusBadge.Text = badgeText;
-        OpenVinoStatusBadge.Foreground = status.State == LocalModelState.Ready
-            ? new SolidColorBrush(Colors.Green)
-            : new SolidColorBrush(Colors.DarkOrange);
+        // Status badge in the header. Plain Unicode glyphs (✓/⚠) so the
+        // foreground brush actually applies; brush comes from theme resources
+        // so light/dark/high-contrast all render correctly.
+        var isReady = status.State == LocalModelState.Ready;
+        OpenVinoStatusBadge.Text = isReady ? "✓" : "⚠";
+        OpenVinoStatusBadge.Foreground = GetLocalAiStatusBrush(isReady);
         OpenVinoStatusBadge.Visibility = Visibility.Visible;
 
         // Progress bar — only meaningful during download.
@@ -175,5 +175,24 @@ public sealed partial class SettingsPage
                 svc.Configure(device);
             }
         }
+    }
+
+    /// <summary>
+    /// Detach the StatusChanged subscription so the singleton
+    /// <see cref="OpenVINOTranslationService"/> doesn't retain this page after
+    /// navigation/unload (which would also keep enqueuing UI updates to a dead
+    /// dispatcher). Called from <c>SettingsPage.TeardownOnUnload</c>.
+    /// </summary>
+    private void TeardownOpenVinoExpander()
+    {
+        if (!_openVinoSubscribed) return;
+
+        var svc = _openVinoServiceCached ?? GetOpenVinoService();
+        if (svc is not null)
+        {
+            svc.StatusChanged -= OnOpenVinoStatusChanged;
+        }
+        _openVinoSubscribed = false;
+        _openVinoServiceCached = null;
     }
 }

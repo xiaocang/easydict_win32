@@ -549,6 +549,7 @@
   <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI kræver en nyere Windows-version. Installer de seneste Windows-opdateringer og prøv igen.</value></data>
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI er deaktiveret eller fjernet. Aktiver Windows AI-funktioner i systemindstillingerne.</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI understøttes ikke på dette system eller i denne region. Brug Ollama eller en cloud-udbyder som alternativ.</value></data>
+  <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>Forberedelse af den lokale sprogmodel mislykkedes. Tjek Windows-opdateringer og tilgængeligheden af AI-funktioner, og prøv igen.</value></data>
 
   <!-- OpenVINO NPU (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>Klar</value></data>

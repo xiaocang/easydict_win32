@@ -957,6 +957,7 @@
   <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>يتطلب Windows Local AI إصدار Windows أحدث. ثبّت آخر تحديثات Windows ثم حاول مرة أخرى.</value></data>
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>تم تعطيل Windows Local AI أو إزالته. أعد تمكين ميزات Windows AI من إعدادات النظام.</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI غير مدعوم على هذا النظام أو في هذه المنطقة. استخدم Ollama أو موفر سحابي كبديل.</value></data>
+  <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>فشل تحضير نموذج اللغة على الجهاز. تحقق من تحديث Windows ومن توفر ميزات AI ثم حاول مرة أخرى.</value></data>
 
   <!-- OpenVINO NPU (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>جاهز</value></data>

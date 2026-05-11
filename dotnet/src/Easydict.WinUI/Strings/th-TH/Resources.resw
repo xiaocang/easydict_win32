@@ -911,6 +911,7 @@
   <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI ต้องการ Windows รุ่นใหม่กว่า ติดตั้งการอัปเดต Windows ล่าสุดและลองอีกครั้ง</value></data>
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI ถูกปิดใช้งานหรือลบออก เปิดใช้งานคุณสมบัติ Windows AI ในการตั้งค่าระบบอีกครั้ง</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI ไม่รองรับในระบบหรือภูมิภาคนี้ ใช้ Ollama หรือผู้ให้บริการคลาวด์เป็นทางเลือก</value></data>
+  <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>การเตรียมโมเดลภาษาในอุปกรณ์ล้มเหลว ตรวจสอบ Windows Update และความพร้อมใช้งานของคุณสมบัติ AI แล้วลองอีกครั้ง</value></data>
 
   <!-- OpenVINO NPU (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>พร้อม</value></data>

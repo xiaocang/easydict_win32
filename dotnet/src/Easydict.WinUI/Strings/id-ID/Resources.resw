@@ -903,6 +903,7 @@
   <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI memerlukan build Windows yang lebih baru. Instal pembaruan Windows terbaru dan coba lagi.</value></data>
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI telah dinonaktifkan atau dihapus. Aktifkan kembali fitur Windows AI di pengaturan sistem.</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI tidak didukung pada sistem atau wilayah ini. Gunakan Ollama atau penyedia cloud sebagai alternatif.</value></data>
+  <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>Persiapan model bahasa di perangkat gagal. Periksa Windows Update dan ketersediaan fitur AI, lalu coba lagi.</value></data>
 
   <!-- OpenVINO NPU (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>Siap</value></data>

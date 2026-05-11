@@ -1040,6 +1040,7 @@ public sealed partial class SettingsPage : Page
 
         UnregisterChangeHandlers();
         UnregisterLanguageCheckboxHandlers();
+        TeardownOpenVinoExpander();
 
         try { _currentDialog?.Hide(); } catch (COMException) { }
         _currentDialog = null;

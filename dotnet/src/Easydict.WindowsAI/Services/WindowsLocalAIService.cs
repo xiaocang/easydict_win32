@@ -163,9 +163,13 @@ public sealed class WindowsLocalAIService : IStreamTranslationService, ILocalMod
         }
         catch (Exception ex)
         {
+            // Distinct resource key from NotReady — the UI should be able to
+            // tell users "we tried and it failed" vs. "you haven't tried yet".
+            // The original exception message is forwarded as DetailMessage for
+            // diagnostics (e.g. surfaced via InfoBar's secondary content).
             var status = new LocalModelStatus(
                 LocalModelState.Failed,
-                "WindowsLocalAI_Status_NotReady",
+                "WindowsLocalAI_Status_PrepareFailed",
                 DetailMessage: ex.Message);
             RaiseStatusChanged(status);
             return status;

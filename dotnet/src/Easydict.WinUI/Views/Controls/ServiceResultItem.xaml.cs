@@ -19,7 +19,7 @@ namespace Easydict.WinUI.Views.Controls;
 /// A collapsible result item for a single translation service.
 /// Mirrors macOS EZResultView behavior with expand/collapse functionality.
 /// </summary>
-public sealed partial class ServiceResultItem : UserControl
+public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 {
     private ServiceQueryResult? _serviceResult;
     private bool _isHovering;
@@ -28,6 +28,24 @@ public sealed partial class ServiceResultItem : UserControl
     private HashSet<string>? _alreadyShownPhonetics;
     private bool _webViewInitialized;
     private MdxDictionaryTranslationService? _currentMdxService;
+    private static readonly SolidColorBrush _onLightHeaderForegroundBrush =
+        new(Microsoft.UI.ColorHelper.FromArgb(255, 31, 35, 40));
+    private static readonly SolidColorBrush _onLightHeaderSecondaryForegroundBrush =
+        new(Microsoft.UI.ColorHelper.FromArgb(255, 95, 102, 112));
+    private static readonly SolidColorBrush _onDarkHeaderForegroundBrush =
+        new(Microsoft.UI.ColorHelper.FromArgb(255, 242, 244, 248));
+    private static readonly SolidColorBrush _onDarkHeaderSecondaryForegroundBrush =
+        new(Microsoft.UI.ColorHelper.FromArgb(255, 200, 206, 216));
+
+    /// <summary>
+    /// Exposes the control instance for parent item hosting.
+    /// </summary>
+    public FrameworkElement Element => this;
+
+    /// <summary>
+    /// The full renderer includes icons, dictionary panels, actions, and optional WebView output.
+    /// </summary>
+    public bool IsMinimalRenderer => false;
 
     /// <summary>
     /// Exposes the header panel for sticky calculation in MiniWindow.
@@ -54,6 +72,8 @@ public sealed partial class ServiceResultItem : UserControl
     public ServiceResultItem()
     {
         this.InitializeComponent();
+        Loaded += OnLoaded;
+        ActualThemeChanged += OnActualThemeChanged;
         ToolTipService.SetToolTip(ReplaceButton, LocalizationService.Instance.GetString("InsertReplace"));
     }
 
@@ -67,6 +87,9 @@ public sealed partial class ServiceResultItem : UserControl
     {
         Debug.WriteLine(
             $"[ServiceResultItem] Cleanup serviceId={_cachedServiceId ?? _serviceResult?.ServiceId ?? "<none>"} webViewInitialized={_webViewInitialized}");
+
+        Loaded -= OnLoaded;
+        ActualThemeChanged -= OnActualThemeChanged;
 
         if (_serviceResult != null)
         {
@@ -174,10 +197,10 @@ public sealed partial class ServiceResultItem : UserControl
     /// </summary>
     public IEnumerable<string> GetDisplayedPhoneticKeys()
     {
-        if (_serviceResult?.Result == null) return Enumerable.Empty<string>();
+        if (_serviceResult?.Result == null) return Array.Empty<string>();
 
         var result = _serviceResult.Result;
-        if (result.TargetLanguage != TranslationLanguage.English) return Enumerable.Empty<string>();
+        if (result.TargetLanguage != TranslationLanguage.English) return Array.Empty<string>();
 
         var phonetics = PhoneticDisplayHelper.GetTargetPhonetics(result)
             .Where(p => p.Accent == "US" || p.Accent == "UK")
@@ -226,12 +249,20 @@ public sealed partial class ServiceResultItem : UserControl
         }
         RootBorder.Opacity = hideEmpty ? 0.5 : 1.0;
         ArrowIcon.Visibility = hideEmpty ? Visibility.Collapsed : Visibility.Visible;
+        var minimal = MinimalThemeService.IsActive;
 
         // Service info
         ServiceNameText.Text = _serviceResult.ServiceDisplayName;
 
         // Load service icon only when ServiceId changes (avoid repeated allocations during streaming)
-        if (_cachedServiceId != _serviceResult.ServiceId)
+        if (minimal)
+        {
+            _cachedServiceId = null;
+            _cachedIcon = null;
+            ServiceIcon.Source = null;
+            ServiceIcon.Visibility = Visibility.Collapsed;
+        }
+        else if (_cachedServiceId != _serviceResult.ServiceId || _cachedIcon is null)
         {
             _cachedServiceId = _serviceResult.ServiceId;
             try
@@ -250,8 +281,8 @@ public sealed partial class ServiceResultItem : UserControl
         }
 
         // Loading state
-        LoadingIndicator.IsActive = _serviceResult.IsLoading;
-        LoadingIndicator.Visibility = _serviceResult.IsLoading ? Visibility.Visible : Visibility.Collapsed;
+        LoadingIndicator.IsActive = !minimal && _serviceResult.IsLoading;
+        LoadingIndicator.Visibility = !minimal && _serviceResult.IsLoading ? Visibility.Visible : Visibility.Collapsed;
 
         // Error state
         var hasError = _serviceResult.HasError && !_serviceResult.IsLoading;
@@ -263,6 +294,10 @@ public sealed partial class ServiceResultItem : UserControl
         if (_serviceResult.ShowPendingQueryHint)
         {
             StatusText.Text = "Click to query";
+        }
+        else if (minimal && _serviceResult.IsLoading)
+        {
+            StatusText.Text = "Loading";
         }
         else
         {
@@ -279,7 +314,9 @@ public sealed partial class ServiceResultItem : UserControl
         ContentArea.Visibility = showContent ? Visibility.Visible : Visibility.Collapsed;
 
         // Update header corner radius based on expand state
-        HeaderBar.CornerRadius = showContent ? new CornerRadius(6, 6, 0, 0) : new CornerRadius(6);
+        HeaderBar.CornerRadius = minimal
+            ? new CornerRadius(0)
+            : showContent ? new CornerRadius(6, 6, 0, 0) : new CornerRadius(6);
 
         // Pending query hint visibility
         PendingQueryText.Visibility = showPendingHint ? Visibility.Visible : Visibility.Collapsed;
@@ -293,6 +330,37 @@ public sealed partial class ServiceResultItem : UserControl
         {
             UpdateTranslationUI();
         }
+
+        ApplyMinimalChrome();
+        ApplyHeaderForegroundForBackground(HeaderBar.Background);
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        RefreshHeaderChromeForCurrentTheme();
+    }
+
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        RefreshHeaderChromeForCurrentTheme();
+    }
+
+    private void ApplyMinimalChrome()
+    {
+        if (!MinimalThemeService.IsActive || _serviceResult is null)
+        {
+            return;
+        }
+
+        var hasActionableStatus =
+            _serviceResult.IsLoading ||
+            _serviceResult.ShowPendingQueryHint ||
+            _serviceResult.HasError;
+        StatusText.Visibility = hasActionableStatus ? Visibility.Visible : Visibility.Collapsed;
+        ActionButtons.Visibility = Visibility.Collapsed;
+        ReplaceButton.Visibility = Visibility.Collapsed;
+        PlayButton.Visibility = Visibility.Collapsed;
+        CopyButton.Visibility = Visibility.Collapsed;
     }
 
     private void UpdateTranslationUI()
@@ -736,7 +804,7 @@ public sealed partial class ServiceResultItem : UserControl
             {
                 Background = FindThemeBrush("PosTagBackgroundBrush")
                     ?? new SolidColorBrush(Microsoft.UI.Colors.LightBlue),
-                CornerRadius = new CornerRadius(3),
+                CornerRadius = MinimalThemeService.IsActive ? new CornerRadius(0) : new CornerRadius(3),
                 Padding = new Thickness(5, 1, 5, 1),
                 VerticalAlignment = VerticalAlignment.Center
             };
@@ -800,7 +868,7 @@ public sealed partial class ServiceResultItem : UserControl
         {
             Background = FindThemeBrush("PhoneticBadgeBackgroundBrush")
                 ?? new SolidColorBrush(Microsoft.UI.Colors.LightGray),
-            CornerRadius = new CornerRadius(4),
+            CornerRadius = MinimalThemeService.IsActive ? new CornerRadius(0) : new CornerRadius(4),
             Padding = new Thickness(6, 2, 4, 2)
         };
 
@@ -988,6 +1056,11 @@ public sealed partial class ServiceResultItem : UserControl
 
     private void OnControlPointerEntered(object sender, PointerRoutedEventArgs e)
     {
+        if (MinimalThemeService.IsActive)
+        {
+            return;
+        }
+
         _isHovering = true;
 
         if (_serviceResult?.IsExpanded == true &&
@@ -1013,18 +1086,32 @@ public sealed partial class ServiceResultItem : UserControl
 
     private void OnHeaderBarPointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        // Use a more distinct highlight brush for hover
-        if (FindThemeBrush("ControlFillColorSecondaryBrush") is Brush brush)
-            HeaderBar.Background = brush;
+        if (MinimalThemeService.IsActive)
+        {
+            ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
+            return;
+        }
+
+        Brush? background = null;
+        if (FindThemeBrush("ServiceResultHeaderHoverBackgroundBrush") is Brush brush)
+            background = brush;
         else if (FindThemeBrush("ButtonHoverBrush") is Brush hoverBrush)
-            HeaderBar.Background = hoverBrush;
+            background = hoverBrush;
+
+        if (background is not null)
+        {
+            HeaderBar.Background = background;
+        }
+
+        ApplyHeaderForegroundForBackground(HeaderBar.Background);
 
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
     }
 
     private Brush? FindThemeBrush(string key)
     {
-        var themeName = ActualTheme == ElementTheme.Dark ? "Dark" : "Light";
+        var themeName = MinimalThemeService.TryGetExplicitThemeDictionaryName()
+            ?? (ActualTheme == ElementTheme.Dark ? "Dark" : "Light");
 
         // Check top-level ThemeDictionaries first
         if (Application.Current.Resources.ThemeDictionaries.TryGetValue(themeName, out var topObj))
@@ -1035,9 +1122,10 @@ public sealed partial class ServiceResultItem : UserControl
         }
 
         // Check merged dictionaries (Colors.xaml lives here)
-        foreach (var merged in Application.Current.Resources.MergedDictionaries)
+        var merged = Application.Current.Resources.MergedDictionaries;
+        for (int i = merged.Count - 1; i >= 0; i--)
         {
-            if (merged.ThemeDictionaries.TryGetValue(themeName, out var obj))
+            if (merged[i].ThemeDictionaries.TryGetValue(themeName, out var obj))
             {
                 var dict = (ResourceDictionary)obj;
                 if (dict.ContainsKey(key))
@@ -1048,15 +1136,72 @@ public sealed partial class ServiceResultItem : UserControl
         return null;
     }
 
+    private void RefreshHeaderChromeForCurrentTheme()
+    {
+        if (FindThemeBrush("ServiceResultHeaderBackgroundBrush") is Brush brush)
+        {
+            HeaderBar.Background = brush;
+        }
+
+        ApplyHeaderForegroundForBackground(HeaderBar.Background);
+    }
+
+    private void ApplyHeaderForegroundForBackground(Brush? background)
+    {
+        Brush? primaryBrush;
+        Brush? secondaryBrush;
+
+        if (background is SolidColorBrush solidBrush)
+        {
+            var isLightBackground = IsLightColor(solidBrush.Color.R, solidBrush.Color.G, solidBrush.Color.B);
+            primaryBrush = isLightBackground
+                ? _onLightHeaderForegroundBrush
+                : _onDarkHeaderForegroundBrush;
+            secondaryBrush = isLightBackground
+                ? _onLightHeaderSecondaryForegroundBrush
+                : _onDarkHeaderSecondaryForegroundBrush;
+        }
+        else
+        {
+            primaryBrush = FindThemeBrush("ServiceResultHeaderForegroundBrush")
+                ?? FindThemeBrush("TextFillColorPrimaryBrush");
+            secondaryBrush = FindThemeBrush("ServiceResultHeaderSecondaryForegroundBrush")
+                ?? FindThemeBrush("TextFillColorSecondaryBrush");
+        }
+
+        if (primaryBrush is not null)
+        {
+            ServiceNameText.Foreground = primaryBrush;
+        }
+
+        if (secondaryBrush is not null)
+        {
+            StatusText.Foreground = secondaryBrush;
+            ArrowIcon.Foreground = secondaryBrush;
+        }
+    }
+
+    private static bool IsLightColor(byte red, byte green, byte blue)
+    {
+        var luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+        return luminance >= 0.72;
+    }
+
     private void OnHeaderBarPointerExited(object sender, PointerRoutedEventArgs e)
     {
-        // Restore opaque background instead of clearing it to maintain sticky header visibility
-        // Match the brush used in XAML (SolidBackgroundFillColorBaseBrush is preferred for solid opacity)
-        if (FindThemeBrush("SolidBackgroundFillColorBaseBrush") is Brush brush)
+        if (MinimalThemeService.IsActive)
+        {
+            ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+            return;
+        }
+
+        // Restore opaque background instead of clearing it to maintain sticky header visibility.
+        if (FindThemeBrush("ServiceResultHeaderBackgroundBrush") is Brush brush)
             HeaderBar.Background = brush;
-        else if (FindThemeBrush("ApplicationPageBackgroundThemeBrush") is Brush appBrush)
+        else if (FindThemeBrush("SolidBackgroundFillColorBaseBrush") is Brush appBrush)
             HeaderBar.Background = appBrush;
 
+        ApplyHeaderForegroundForBackground(HeaderBar.Background);
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     }
 

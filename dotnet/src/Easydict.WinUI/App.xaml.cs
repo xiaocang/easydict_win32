@@ -1056,29 +1056,40 @@ namespace Easydict.WinUI
         /// <summary>
         /// Apply app theme setting to all windows.
         /// </summary>
-        /// <param name="theme">Theme name: "System", "Light", or "Dark"</param>
+        /// <param name="theme">Theme name: "System", "Light", "Dark", or "Minimal"</param>
+        private static string? _lastAppliedTheme;
+
         public static void ApplyTheme(string theme)
         {
-            var elementTheme = theme switch
+            if (string.Equals(_lastAppliedTheme, theme, StringComparison.OrdinalIgnoreCase))
             {
-                "Light" => ElementTheme.Light,
-                "Dark" => ElementTheme.Dark,
-                _ => ElementTheme.Default // "System" follows system theme
-            };
+                return;
+            }
+            _lastAppliedTheme = theme;
 
-            // Apply to main window
+            var isMinimal = MinimalThemeService.IsMinimal(theme);
+            MinimalThemeService.ApplyResources(isMinimal);
+            var elementTheme = MinimalThemeService.ToElementTheme(theme);
+
             if (Instance._window?.Content is FrameworkElement mainRoot)
             {
                 mainRoot.RequestedTheme = elementTheme;
+
+                if (mainRoot is Frame frame)
+                {
+                    if (frame.Content is MainPage mainPage)
+                    {
+                        mainPage.ApplyThemeChrome();
+                    }
+                    else if (frame.Content is SettingsPage settingsPage)
+                    {
+                        settingsPage.ApplyThemeChrome();
+                    }
+                }
             }
 
-            // Apply to mini window
             MiniWindowService.Instance.ApplyTheme(elementTheme);
-
-            // Apply to fixed window
             FixedWindowService.Instance.ApplyTheme(elementTheme);
-
-            // Apply to pop button
             Instance._popButtonService?.ApplyTheme(elementTheme);
 
             System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {theme} (ElementTheme.{elementTheme})");

@@ -21,8 +21,8 @@
             <Style x:Key="CardStyle" TargetType="Border">
                 <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="BorderThickness" Value="{ThemeResource EasydictCardBorderThickness}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource EasydictCardCornerRadius}" />
                 <Setter Property="Padding" Value="8" />
             </Style>
 
@@ -34,7 +34,7 @@
                 <Setter Property="AcceptsReturn" Value="True" />
                 <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
                 <Setter Property="Padding" Value="8" />
-                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="CornerRadius" Value="{ThemeResource EasydictControlCornerRadius}" />
                 <Setter Property="MinHeight" Value="80" />
             </Style>
         </ResourceDictionary>

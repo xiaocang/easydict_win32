@@ -10,7 +10,9 @@
     <Border
         x:Name="RootBorder"
         Background="{ThemeResource ResultViewBackgroundBrush}"
-        CornerRadius="6"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        BorderThickness="{ThemeResource EasydictCardBorderThickness}"
+        CornerRadius="{ThemeResource EasydictCardCornerRadius}"
         Margin="0,0,0,4"
         PointerEntered="OnControlPointerEntered"
         PointerExited="OnControlPointerExited">
@@ -24,8 +26,10 @@
             <Border
                 x:Name="HeaderBar"
                 Grid.Row="0"
-                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                CornerRadius="6,6,0,0"
+                Background="{ThemeResource ServiceResultHeaderBackgroundBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,0,0,1"
+                CornerRadius="{ThemeResource EasydictCardCornerRadius}"
                 Canvas.ZIndex="10"
                 PointerPressed="OnHeaderPointerPressed"
                 PointerEntered="OnHeaderBarPointerEntered"
@@ -56,14 +60,14 @@
                         FontSize="12"
                         FontWeight="SemiBold"
                         VerticalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        Foreground="{ThemeResource ServiceResultHeaderForegroundBrush}"/>
 
                     <!-- Status Text (timing/error) -->
                     <TextBlock
                         x:Name="StatusText"
                         Grid.Column="2"
                         FontSize="10"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Foreground="{ThemeResource ServiceResultHeaderSecondaryForegroundBrush}"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Margin="8,0"/>
@@ -113,7 +117,7 @@
                         Grid.Column="5"
                         Glyph="&#xE70D;"
                         FontSize="10"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Foreground="{ThemeResource ServiceResultHeaderSecondaryForegroundBrush}"
                         VerticalAlignment="Center"/>
                 </Grid>
             </Border>

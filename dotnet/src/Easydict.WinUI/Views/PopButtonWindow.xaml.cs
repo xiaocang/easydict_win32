@@ -78,8 +78,22 @@ public sealed partial class PopButtonWindow : Window
 
     // Hover/pressed interaction state
     private const double BaseOpacity = 0.75;
+    private const double DarkBaseOpacity = 0.94;
     private const double HoverOpacity = 1.0;
     private const double PressedOpacity = 0.85;
+
+    private double CurrentBaseOpacity
+    {
+        get
+        {
+            if (MinimalThemeService.IsActive)
+            {
+                return 1.0;
+            }
+
+            return RootGrid.ActualTheme == ElementTheme.Dark ? DarkBaseOpacity : BaseOpacity;
+        }
+    }
     private bool _isPointerOver;
     private bool _isPressed;
 
@@ -159,7 +173,7 @@ public sealed partial class PopButtonWindow : Window
         // Reset interaction state when showing
         _isPointerOver = false;
         _isPressed = false;
-        RootGrid.Opacity = BaseOpacity;
+        RootGrid.Opacity = CurrentBaseOpacity;
 
         var useLegacy = SettingsService.Instance.PopButtonUseLegacyPositioning;
         if (useLegacy)
@@ -257,7 +271,7 @@ public sealed partial class PopButtonWindow : Window
         // Reset interaction state when hiding to avoid stale visuals
         _isPointerOver = false;
         _isPressed = false;
-        RootGrid.Opacity = BaseOpacity;
+        RootGrid.Opacity = CurrentBaseOpacity;
 
         Debug.WriteLine("[PopButton] Hidden");
     }
@@ -271,6 +285,8 @@ public sealed partial class PopButtonWindow : Window
         {
             root.RequestedTheme = theme;
         }
+
+        RootGrid.Opacity = CurrentBaseOpacity;
     }
 
     /// <summary>
@@ -357,7 +373,7 @@ public sealed partial class PopButtonWindow : Window
         else
         {
             // Default state: semi-transparent with arrow cursor
-            RootGrid.Opacity = BaseOpacity;
+            RootGrid.Opacity = CurrentBaseOpacity;
             SetCursor(_arrowCursor);
         }
     }

@@ -132,13 +132,7 @@ public sealed class FixedWindowService : IDisposable
         {
             _fixedWindow = new FixedWindow();
             _fixedWindow.Closed += (_, _) => _fixedWindow = null;
-            var theme = SettingsService.Instance.AppTheme switch
-            {
-                "Light" => ElementTheme.Light,
-                "Dark" => ElementTheme.Dark,
-                _ => ElementTheme.Default
-            };
-            _fixedWindow.ApplyTheme(theme);
+            _fixedWindow.ApplyTheme(MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme));
         }
     }
 

@@ -351,7 +351,7 @@ public sealed class SettingsService
     // UI Language (for localization)
     public string UILanguage { get; set; } = ""; // Empty means system default
 
-    // App Theme (System, Light, Dark)
+    // App Theme (System, Light, Dark, Minimal)
     public string AppTheme { get; set; } = "System"; // Default to system theme
 
     // Startup settings

@@ -9,9 +9,9 @@
     Title="">
 
     <Grid x:Name="RootGrid"
-          Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-          CornerRadius="6"
-          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+          Background="{ThemeResource PopButtonBackgroundBrush}"
+          CornerRadius="{ThemeResource EasydictCardCornerRadius}"
+          BorderBrush="{ThemeResource PopButtonBorderBrush}"
           BorderThickness="1"
           Padding="0"
           Opacity="0.75">
@@ -22,8 +22,9 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 Background="Transparent"
-                BorderThickness="0"
-                CornerRadius="6"
+                BorderBrush="{ThemeResource PopButtonBorderBrush}"
+                BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
+                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                 Click="OnTranslateButtonClick"
                 PointerEntered="OnTranslateButtonPointerEntered"
                 PointerExited="OnTranslateButtonPointerExited"
@@ -34,7 +35,7 @@
             <FontIcon x:Name="ModeIcon"
                       Glyph="&#xE8C1;"
                       FontSize="14"
-                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                      Foreground="{ThemeResource PopButtonForegroundBrush}" />
         </Button>
     </Grid>
 </Window>

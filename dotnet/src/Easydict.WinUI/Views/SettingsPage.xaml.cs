@@ -83,6 +83,11 @@ internal sealed class SettingsTabItem : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    public void RefreshThemeBindings()
+    {
+        OnPropertyChanged(nameof(IsSelected));
+    }
+
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }
@@ -131,6 +136,7 @@ public sealed partial class SettingsPage : Page
         new() { Id = SettingsTabId.Language, IconGlyph = "\uE774" },
         new() { Id = SettingsTabId.About, IconGlyph = "\uE946" }
     ];
+    private readonly HashSet<SettingsTabId> _initializedSettingsTabData = [];
 
 
 #if DEBUG
@@ -257,6 +263,7 @@ public sealed partial class SettingsPage : Page
         PerfLog("ctor: begin InitializeComponent");
 #endif
         this.InitializeComponent();
+        ApplyThemeChrome();
 #if DEBUG
         PerfLog("ctor: end InitializeComponent");
         MemoryDiagnostics.LogSnapshot("SettingsPage.ctor after InitializeComponent");
@@ -264,6 +271,22 @@ public sealed partial class SettingsPage : Page
 #endif
         this.Loaded += OnPageLoaded;
         this.Unloaded += OnPageUnloaded;
+    }
+
+    public void ApplyThemeChrome()
+    {
+        var minimal = MinimalThemeService.IsActive;
+        SaveButton.Shadow = minimal ? null : new ThemeShadow();
+        if (LoadingOverlayRing is not null)
+        {
+            LoadingOverlayRing.IsActive = !minimal;
+            LoadingOverlayRing.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        foreach (var tab in _settingsTabs)
+        {
+            tab.RefreshThemeBindings();
+        }
     }
 
     private static bool IsDeferredIoDisabledForDebug()
@@ -313,6 +336,10 @@ public sealed partial class SettingsPage : Page
     private void SelectSettingsTab(SettingsTabId tabId, bool resetScroll)
     {
         EnsureTabContentLoaded(tabId);
+        if (_isInitialized)
+        {
+            EnsureSettingsTabDataInitialized(tabId);
+        }
 
         foreach (var item in _settingsTabs)
         {
@@ -345,6 +372,77 @@ public sealed partial class SettingsPage : Page
                 BindWindowServicePanels();
                 ApplyWindowResultsLocalization(LocalizationService.Instance);
                 break;
+        }
+    }
+
+    private bool ShouldLoadSettingsTab(SettingsTabId tabId, bool deferLazyTabData)
+    {
+        return !deferLazyTabData || _initializedSettingsTabData.Contains(tabId);
+    }
+
+    private void EnsureSettingsTabDataInitialized(SettingsTabId tabId)
+    {
+        if (!_initializedSettingsTabData.Add(tabId))
+        {
+            return;
+        }
+
+        var wasLoading = _isLoading;
+        _isLoading = true;
+        try
+        {
+            if (tabId == SettingsTabId.Language)
+            {
+                PopulateLanguageCheckboxGrid();
+                var loc = LocalizationService.Instance;
+                PopulateSettingsLanguageCombo(FirstLanguageCombo, loc);
+                PopulateSettingsLanguageCombo(SecondLanguageCombo, loc);
+            }
+
+            LoadSettingsForTab(tabId);
+            ApplyLocalization();
+
+            if (tabId == SettingsTabId.Views)
+            {
+                BindWindowServicePanels();
+                ApplyWindowResultsLocalization(LocalizationService.Instance);
+            }
+
+            if (tabId == SettingsTabId.Advanced)
+            {
+                QueueDeferredSettingsIo(_lifetimeCts.Token);
+            }
+        }
+        finally
+        {
+            _isLoading = wasLoading;
+        }
+    }
+
+    private void LoadSettingsForTab(SettingsTabId tabId)
+    {
+        var initializedTabs = _initializedSettingsTabData.ToArray();
+        _initializedSettingsTabData.Clear();
+        _initializedSettingsTabData.Add(tabId);
+        try
+        {
+            LoadSettings(deferLazyTabData: true);
+        }
+        finally
+        {
+            _initializedSettingsTabData.Clear();
+            foreach (var initializedTab in initializedTabs)
+            {
+                _initializedSettingsTabData.Add(initializedTab);
+            }
+        }
+    }
+
+    private void EnsureAllSettingsTabDataInitialized()
+    {
+        foreach (var tabId in Enum.GetValues<SettingsTabId>())
+        {
+            EnsureSettingsTabDataInitialized(tabId);
         }
     }
 
@@ -586,6 +684,14 @@ public sealed partial class SettingsPage : Page
             ((ComboBoxItem)AppThemeCombo.Items[0]).Content = loc.GetString("ThemeSystem");
             ((ComboBoxItem)AppThemeCombo.Items[1]).Content = loc.GetString("ThemeLight");
             ((ComboBoxItem)AppThemeCombo.Items[2]).Content = loc.GetString("ThemeDark");
+            if (AppThemeCombo.Items.Count >= 4)
+            {
+                var minimalText = loc.GetString("ThemeMinimal");
+                ((ComboBoxItem)AppThemeCombo.Items[3]).Content =
+                    string.IsNullOrWhiteSpace(minimalText) || minimalText == "ThemeMinimal"
+                        ? "Minimal"
+                        : minimalText;
+            }
         }
 
         // Help icon tooltips
@@ -732,6 +838,16 @@ public sealed partial class SettingsPage : Page
 #endif
         _isLoading = true;
         InitializeSettingsTabs();
+        var deferLazyTabData = MinimalThemeService.IsActive;
+        _initializedSettingsTabData.Clear();
+        _initializedSettingsTabData.Add(SettingsTabId.General);
+        if (!deferLazyTabData)
+        {
+            foreach (var tabId in Enum.GetValues<SettingsTabId>())
+            {
+                _initializedSettingsTabData.Add(tabId);
+            }
+        }
 
         // Snapshot original SelectedLanguages for discard/restore
         _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
@@ -740,7 +856,10 @@ public sealed partial class SettingsPage : Page
         PerfLog("PopulateLanguageCheckboxGrid: begin");
 #endif
         // Populate available languages checkbox grid
-        PopulateLanguageCheckboxGrid();
+        if (ShouldLoadSettingsTab(SettingsTabId.Language, deferLazyTabData))
+        {
+            PopulateLanguageCheckboxGrid();
+        }
 #if DEBUG
         PerfLog("PopulateLanguageCheckboxGrid: end");
         MemoryDiagnostics.LogSnapshot("SettingsPage.PopulateLanguageCheckboxGrid complete");
@@ -749,13 +868,16 @@ public sealed partial class SettingsPage : Page
 
         // Populate First/Second Language combos dynamically
         var loc = LocalizationService.Instance;
-        PopulateSettingsLanguageCombo(FirstLanguageCombo, loc);
-        PopulateSettingsLanguageCombo(SecondLanguageCombo, loc);
+        if (ShouldLoadSettingsTab(SettingsTabId.Language, deferLazyTabData))
+        {
+            PopulateSettingsLanguageCombo(FirstLanguageCombo, loc);
+            PopulateSettingsLanguageCombo(SecondLanguageCombo, loc);
+        }
 
 #if DEBUG
         PerfLog("LoadSettings: begin");
 #endif
-        LoadSettings();
+        LoadSettings(deferLazyTabData);
 #if DEBUG
         PerfLog("LoadSettings: end");
         MemoryDiagnostics.LogSnapshot("SettingsPage.LoadSettings complete");
@@ -802,6 +924,15 @@ public sealed partial class SettingsPage : Page
                     return;
                 }
 
+                if (deferLazyTabData && !ShouldLoadSettingsTab(SettingsTabId.Advanced, deferLazyTabData))
+                {
+#if DEBUG
+                    UpdateDeferredIoState("deferred-until-advanced-tab");
+                    PerfLog("Deferred I/O: waiting for Advanced tab in minimal theme");
+#endif
+                    return;
+                }
+
                 if (IsDeferredIoDisabledForDebug())
                 {
 #if DEBUG
@@ -817,18 +948,42 @@ public sealed partial class SettingsPage : Page
                 UpdateDeferredIoState("onnx-running");
                 PerfLog("Deferred I/O: begin UpdateOnnxModelStatus");
 #endif
-                UpdateOnnxModelStatus();
-#if DEBUG
-                UpdateDeferredIoState("onnx-complete");
-                PerfLog("Deferred I/O: end UpdateOnnxModelStatus");
-                UpdateDeferredIoState("cache-dispatched");
-                PerfLog("Deferred I/O: begin UpdateCacheStatusAsync");
-#endif
-                _ = UpdateCacheStatusAsync(new WeakReference<SettingsPage>(this), DispatcherQueue, cancellationToken);
-#if DEBUG
-                PerfLog("Deferred I/O: end (UpdateCacheStatusAsync dispatched)");
-#endif
+                RunDeferredSettingsIo(cancellationToken);
             });
+    }
+
+    private void QueueDeferredSettingsIo(CancellationToken cancellationToken)
+    {
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () =>
+            {
+                if (_isUnloaded || cancellationToken.IsCancellationRequested || IsDeferredIoDisabledForDebug())
+                {
+                    return;
+                }
+
+                RunDeferredSettingsIo(cancellationToken);
+            });
+    }
+
+    private void RunDeferredSettingsIo(CancellationToken cancellationToken)
+    {
+#if DEBUG
+        UpdateDeferredIoState("onnx-running");
+        PerfLog("Deferred I/O: begin UpdateOnnxModelStatus");
+#endif
+        UpdateOnnxModelStatus();
+#if DEBUG
+        UpdateDeferredIoState("onnx-complete");
+        PerfLog("Deferred I/O: end UpdateOnnxModelStatus");
+        UpdateDeferredIoState("cache-dispatched");
+        PerfLog("Deferred I/O: begin UpdateCacheStatusAsync");
+#endif
+        _ = UpdateCacheStatusAsync(new WeakReference<SettingsPage>(this), DispatcherQueue, cancellationToken);
+#if DEBUG
+        PerfLog("Deferred I/O: end (UpdateCacheStatusAsync dispatched)");
+#endif
     }
 
     private void OnPageUnloaded(object sender, RoutedEventArgs e)
@@ -1288,172 +1443,191 @@ public sealed partial class SettingsPage : Page
         SaveButton.Visibility = Visibility.Visible;
     }
 
-    private void LoadSettings()
+    private void LoadSettings(bool deferLazyTabData = false)
     {
-        // International services toggle
-        EnableInternationalServicesToggle.IsOn = _settings.EnableInternationalServices;
-
-        // TTS settings
-        TtsSpeedSlider.Value = _settings.TtsSpeed;
-        AutoPlayTranslationToggle.IsOn = _settings.AutoPlayTranslation;
-
-        // Language preferences
-        SelectComboByTag(FirstLanguageCombo, _settings.FirstLanguage);
-        SelectComboByTag(SecondLanguageCombo, _settings.SecondLanguage);
-        AutoSelectTargetToggle.IsOn = _settings.AutoSelectTargetLanguage;
-
-        // DeepL settings
-        DeepLKeyBox.Password = _settings.DeepLApiKey ?? string.Empty;
-        DeepLFreeCheck.IsChecked = _settings.DeepLUseFreeApi;
-
-        // OpenAI settings
-        OpenAIKeyBox.Password = _settings.OpenAIApiKey ?? string.Empty;
-        OpenAIEndpointBox.Text = _settings.OpenAIEndpoint;
-        SetEditableComboValue(OpenAIModelCombo, _settings.OpenAIModel);
-
-        // DeepSeek settings
-        DeepSeekKeyBox.Password = _settings.DeepSeekApiKey ?? string.Empty;
-        SetEditableComboValue(DeepSeekModelCombo, _settings.DeepSeekModel);
-
-        // Groq settings
-        GroqKeyBox.Password = _settings.GroqApiKey ?? string.Empty;
-        SetEditableComboValue(GroqModelCombo, _settings.GroqModel);
-
-        // Zhipu settings
-        ZhipuKeyBox.Password = _settings.ZhipuApiKey ?? string.Empty;
-        SetEditableComboValue(ZhipuModelCombo, _settings.ZhipuModel);
-
-        // GitHub Models settings
-        GitHubModelsTokenBox.Password = _settings.GitHubModelsToken ?? string.Empty;
-        SetEditableComboValue(GitHubModelsModelCombo, _settings.GitHubModelsModel);
-
-        // Gemini settings
-        GeminiKeyBox.Password = _settings.GeminiApiKey ?? string.Empty;
-        SetEditableComboValue(GeminiModelCombo, _settings.GeminiModel);
-
-        // Custom OpenAI settings
-        CustomOpenAIEndpointBox.Text = _settings.CustomOpenAIEndpoint;
-        CustomOpenAIKeyBox.Password = _settings.CustomOpenAIApiKey ?? string.Empty;
-        CustomOpenAIModelBox.Text = _settings.CustomOpenAIModel;
-
-        // Ollama settings
-        OllamaEndpointBox.Text = _settings.OllamaEndpoint;
-        OllamaModelCombo.Text = _settings.OllamaModel;
-
-        // OCR Engine settings
-        SelectComboByTag(OcrEngineCombo, _settings.OcrEngine.ToString());
-        OcrApiKeyBox.Text = _settings.OcrApiKey ?? string.Empty;
-        OcrEndpointBox.Text = _settings.OcrEndpoint;
-        OcrModelBox.Text = _settings.OcrModel;
-        OcrSystemPromptBox.Text = _settings.OcrSystemPrompt;
-        UpdateOcrEngineUI();
-
-        // Built-in AI settings
-        SetEditableComboValue(BuiltInModelCombo, _settings.BuiltInAIModel);
-        BuiltInApiKeyBox.Password = _settings.BuiltInAIApiKey ?? string.Empty;
-
-        // Doubao settings
-        DoubaoKeyBox.Password = _settings.DoubaoApiKey ?? string.Empty;
-        DoubaoEndpointBox.Text = _settings.DoubaoEndpoint;
-        DoubaoModelBox.Text = _settings.DoubaoModel;
-
-        // Caiyun settings
-        CaiyunKeyBox.Password = _settings.CaiyunApiKey ?? string.Empty;
-
-        // NiuTrans settings
-        NiuTransKeyBox.Password = _settings.NiuTransApiKey ?? string.Empty;
-
-        // Youdao settings
-        YoudaoAppKeyBox.Password = _settings.YoudaoAppKey ?? string.Empty;
-        YoudaoAppSecretBox.Password = _settings.YoudaoAppSecret ?? string.Empty;
-        YoudaoUseOfficialApiToggle.IsOn = _settings.YoudaoUseOfficialApi;
-
-        // HTTP Proxy settings
-        ProxyEnabledToggle.IsOn = _settings.ProxyEnabled;
-        ProxyUriBox.Text = _settings.ProxyUri;
-        ProxyBypassLocalToggle.IsOn = _settings.ProxyBypassLocal;
-
-        // Layout Detection settings
-        SelectComboByTag(LayoutDetectionModeCombo, _settings.LayoutDetectionMode);
-        SelectComboByTag(VisionLayoutServiceCombo, _settings.VisionLayoutServiceId);
-        UpdateLayoutDetectionUI();
-
-        // Formula Detection
-        FormulaFontPatternBox.Text = _settings.FormulaFontPattern;
-        FormulaCharPatternBox.Text = _settings.FormulaCharPattern;
-
-        // Translation Cache
-        TranslationCacheToggle.IsOn = _settings.EnableTranslationCache;
-
-        // Custom Prompt
-        CustomPromptBox.Text = _settings.LongDocCustomPrompt;
-
-        // Behavior
-        // App Theme - select based on current setting
-        SelectComboByTag(AppThemeCombo, _settings.AppTheme);
-
-        // UI Language - select based on current setting or system default
-        var currentLanguage = LocalizationService.Instance.CurrentLanguage;
-        SelectComboByTag(UILanguageCombo, currentLanguage);
-
-        MinimizeToTrayToggle.IsOn = _settings.MinimizeToTray;
-        MinimizeToTrayOnStartupToggle.IsOn = _settings.MinimizeToTrayOnStartup;
-        ClipboardMonitorToggle.IsOn = _settings.ClipboardMonitoring;
-        MouseSelectionTranslateToggle.IsOn = _settings.MouseSelectionTranslate;
-        MouseSelectionExcludedAppsBox.Text = string.Join(", ", _settings.MouseSelectionExcludedApps);
-        MouseSelectionExcludedAppsPanel.Visibility = _settings.MouseSelectionTranslate
-            ? Visibility.Visible : Visibility.Collapsed;
-        AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
-        LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
-        HideEmptyServiceResultsToggle.IsOn = _settings.HideEmptyServiceResults;
-        EnableLocalDictionarySuggestionsToggle.IsOn = _settings.EnableLocalDictionarySuggestions;
-        var localDictionarySuggestionsState = GetLocalDictionarySuggestionsToggleState(_settings.ImportedMdxDictionaries.Count);
-        EnableLocalDictionarySuggestionsToggle.IsEnabled = localDictionarySuggestionsState.IsEnabled;
-        EnableLocalDictionarySuggestionsHintText.Text = localDictionarySuggestionsState.HintText;
-        EnableLocalDictionarySuggestionsHintText.Visibility = string.IsNullOrEmpty(localDictionarySuggestionsState.HintText)
-            ? Visibility.Collapsed
-            : Visibility.Visible;
-
-        // Hotkeys
-        ShowHotkeyBox.Text = _settings.ShowWindowHotkey;
-        TranslateHotkeyBox.Text = _settings.TranslateSelectionHotkey;
-        ShowMiniHotkeyBox.Text = _settings.ShowMiniWindowHotkey;
-        ShowFixedHotkeyBox.Text = _settings.ShowFixedWindowHotkey;
-        OcrTranslateHotkeyBox.Text = _settings.OcrTranslateHotkey;
-        SilentOcrHotkeyBox.Text = _settings.SilentOcrHotkey;
-        ShowHotkeyEnabledToggle.IsOn = _settings.EnableShowWindowHotkey;
-        TranslateHotkeyEnabledToggle.IsOn = _settings.EnableTranslateSelectionHotkey;
-        ShowMiniHotkeyEnabledToggle.IsOn = _settings.EnableShowMiniWindowHotkey;
-        ShowFixedHotkeyEnabledToggle.IsOn = _settings.EnableShowFixedWindowHotkey;
-        OcrTranslateHotkeyEnabledToggle.IsOn = _settings.EnableOcrTranslateHotkey;
-        SilentOcrHotkeyEnabledToggle.IsOn = _settings.EnableSilentOcrHotkey;
-
-        // Enabled services for each window (populate from TranslationManager.Services)
-        // Acquire handle once for all three collections to avoid repeated handle acquisition
-        UnregisterServiceCollectionHandlers(_mainWindowServices);
-        UnregisterServiceCollectionHandlers(_miniWindowServices);
-        UnregisterServiceCollectionHandlers(_fixedWindowServices);
-        using (var handle = TranslationManagerService.Instance.AcquireHandle())
+        if (ShouldLoadSettingsTab(SettingsTabId.Services, deferLazyTabData))
         {
-            var manager = handle.Manager;
-            PopulateServiceCollection(_mainWindowServices, _settings.MainWindowEnabledServices, _settings.MainWindowServiceEnabledQuery, manager);
-            PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices, _settings.MiniWindowServiceEnabledQuery, manager);
-            PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices, _settings.FixedWindowServiceEnabledQuery, manager);
-        }
-        ResetServiceReorderModes();
-        if (_changeHandlersRegistered)
-        {
-            RegisterServiceCollectionHandlers(_mainWindowServices);
-            RegisterServiceCollectionHandlers(_miniWindowServices);
-            RegisterServiceCollectionHandlers(_fixedWindowServices);
+            // International services toggle
+            EnableInternationalServicesToggle.IsOn = _settings.EnableInternationalServices;
+
+            // DeepL settings
+            DeepLKeyBox.Password = _settings.DeepLApiKey ?? string.Empty;
+            DeepLFreeCheck.IsChecked = _settings.DeepLUseFreeApi;
+
+            // OpenAI settings
+            OpenAIKeyBox.Password = _settings.OpenAIApiKey ?? string.Empty;
+            OpenAIEndpointBox.Text = _settings.OpenAIEndpoint;
+            SetEditableComboValue(OpenAIModelCombo, _settings.OpenAIModel);
+
+            // DeepSeek settings
+            DeepSeekKeyBox.Password = _settings.DeepSeekApiKey ?? string.Empty;
+            SetEditableComboValue(DeepSeekModelCombo, _settings.DeepSeekModel);
+
+            // Groq settings
+            GroqKeyBox.Password = _settings.GroqApiKey ?? string.Empty;
+            SetEditableComboValue(GroqModelCombo, _settings.GroqModel);
+
+            // Zhipu settings
+            ZhipuKeyBox.Password = _settings.ZhipuApiKey ?? string.Empty;
+            SetEditableComboValue(ZhipuModelCombo, _settings.ZhipuModel);
+
+            // GitHub Models settings
+            GitHubModelsTokenBox.Password = _settings.GitHubModelsToken ?? string.Empty;
+            SetEditableComboValue(GitHubModelsModelCombo, _settings.GitHubModelsModel);
+
+            // Gemini settings
+            GeminiKeyBox.Password = _settings.GeminiApiKey ?? string.Empty;
+            SetEditableComboValue(GeminiModelCombo, _settings.GeminiModel);
+
+            // Custom OpenAI settings
+            CustomOpenAIEndpointBox.Text = _settings.CustomOpenAIEndpoint;
+            CustomOpenAIKeyBox.Password = _settings.CustomOpenAIApiKey ?? string.Empty;
+            CustomOpenAIModelBox.Text = _settings.CustomOpenAIModel;
+
+            // Ollama settings
+            OllamaEndpointBox.Text = _settings.OllamaEndpoint;
+            OllamaModelCombo.Text = _settings.OllamaModel;
+
+            // Built-in AI settings
+            SetEditableComboValue(BuiltInModelCombo, _settings.BuiltInAIModel);
+            BuiltInApiKeyBox.Password = _settings.BuiltInAIApiKey ?? string.Empty;
+
+            // Doubao settings
+            DoubaoKeyBox.Password = _settings.DoubaoApiKey ?? string.Empty;
+            DoubaoEndpointBox.Text = _settings.DoubaoEndpoint;
+            DoubaoModelBox.Text = _settings.DoubaoModel;
+
+            // Caiyun settings
+            CaiyunKeyBox.Password = _settings.CaiyunApiKey ?? string.Empty;
+
+            // NiuTrans settings
+            NiuTransKeyBox.Password = _settings.NiuTransApiKey ?? string.Empty;
+
+            // Youdao settings
+            YoudaoAppKeyBox.Password = _settings.YoudaoAppKey ?? string.Empty;
+            YoudaoAppSecretBox.Password = _settings.YoudaoAppSecret ?? string.Empty;
+            YoudaoUseOfficialApiToggle.IsOn = _settings.YoudaoUseOfficialApi;
+
+            // Restore test status indicators
+            RestoreTestStatusIndicators();
         }
 
-        // Set version from assembly metadata
-        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-        VersionText.Text = $"Version {version?.ToString(3) ?? "Unknown"}";
+        if (ShouldLoadSettingsTab(SettingsTabId.General, deferLazyTabData))
+        {
+            // TTS settings
+            TtsSpeedSlider.Value = _settings.TtsSpeed;
+            AutoPlayTranslationToggle.IsOn = _settings.AutoPlayTranslation;
 
-        // Restore test status indicators
-        RestoreTestStatusIndicators();
+            // App Theme - select based on current setting
+            SelectComboByTag(AppThemeCombo, _settings.AppTheme);
+
+            MinimizeToTrayToggle.IsOn = _settings.MinimizeToTray;
+            MinimizeToTrayOnStartupToggle.IsOn = _settings.MinimizeToTrayOnStartup;
+            ClipboardMonitorToggle.IsOn = _settings.ClipboardMonitoring;
+            MouseSelectionTranslateToggle.IsOn = _settings.MouseSelectionTranslate;
+            MouseSelectionExcludedAppsBox.Text = string.Join(", ", _settings.MouseSelectionExcludedApps);
+            MouseSelectionExcludedAppsPanel.Visibility = _settings.MouseSelectionTranslate
+                ? Visibility.Visible : Visibility.Collapsed;
+            AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
+            LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
+            HideEmptyServiceResultsToggle.IsOn = _settings.HideEmptyServiceResults;
+            EnableLocalDictionarySuggestionsToggle.IsOn = _settings.EnableLocalDictionarySuggestions;
+            var localDictionarySuggestionsState = GetLocalDictionarySuggestionsToggleState(_settings.ImportedMdxDictionaries.Count);
+            EnableLocalDictionarySuggestionsToggle.IsEnabled = localDictionarySuggestionsState.IsEnabled;
+            EnableLocalDictionarySuggestionsHintText.Text = localDictionarySuggestionsState.HintText;
+            EnableLocalDictionarySuggestionsHintText.Visibility = string.IsNullOrEmpty(localDictionarySuggestionsState.HintText)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
+
+        if (ShouldLoadSettingsTab(SettingsTabId.Language, deferLazyTabData))
+        {
+            // Language preferences
+            SelectComboByTag(FirstLanguageCombo, _settings.FirstLanguage);
+            SelectComboByTag(SecondLanguageCombo, _settings.SecondLanguage);
+            AutoSelectTargetToggle.IsOn = _settings.AutoSelectTargetLanguage;
+
+            // UI Language - select based on current setting or system default
+            var currentLanguage = LocalizationService.Instance.CurrentLanguage;
+            SelectComboByTag(UILanguageCombo, currentLanguage);
+        }
+
+        if (ShouldLoadSettingsTab(SettingsTabId.Hotkeys, deferLazyTabData))
+        {
+            ShowHotkeyBox.Text = _settings.ShowWindowHotkey;
+            TranslateHotkeyBox.Text = _settings.TranslateSelectionHotkey;
+            ShowMiniHotkeyBox.Text = _settings.ShowMiniWindowHotkey;
+            ShowFixedHotkeyBox.Text = _settings.ShowFixedWindowHotkey;
+            OcrTranslateHotkeyBox.Text = _settings.OcrTranslateHotkey;
+            SilentOcrHotkeyBox.Text = _settings.SilentOcrHotkey;
+            ShowHotkeyEnabledToggle.IsOn = _settings.EnableShowWindowHotkey;
+            TranslateHotkeyEnabledToggle.IsOn = _settings.EnableTranslateSelectionHotkey;
+            ShowMiniHotkeyEnabledToggle.IsOn = _settings.EnableShowMiniWindowHotkey;
+            ShowFixedHotkeyEnabledToggle.IsOn = _settings.EnableShowFixedWindowHotkey;
+            OcrTranslateHotkeyEnabledToggle.IsOn = _settings.EnableOcrTranslateHotkey;
+            SilentOcrHotkeyEnabledToggle.IsOn = _settings.EnableSilentOcrHotkey;
+        }
+
+        if (ShouldLoadSettingsTab(SettingsTabId.Advanced, deferLazyTabData))
+        {
+            // OCR Engine settings
+            SelectComboByTag(OcrEngineCombo, _settings.OcrEngine.ToString());
+            OcrApiKeyBox.Text = _settings.OcrApiKey ?? string.Empty;
+            OcrEndpointBox.Text = _settings.OcrEndpoint;
+            OcrModelBox.Text = _settings.OcrModel;
+            OcrSystemPromptBox.Text = _settings.OcrSystemPrompt;
+            UpdateOcrEngineUI();
+
+            // HTTP Proxy settings
+            ProxyEnabledToggle.IsOn = _settings.ProxyEnabled;
+            ProxyUriBox.Text = _settings.ProxyUri;
+            ProxyBypassLocalToggle.IsOn = _settings.ProxyBypassLocal;
+
+            // Layout Detection settings
+            SelectComboByTag(LayoutDetectionModeCombo, _settings.LayoutDetectionMode);
+            SelectComboByTag(VisionLayoutServiceCombo, _settings.VisionLayoutServiceId);
+            UpdateLayoutDetectionUI();
+
+            // Formula Detection
+            FormulaFontPatternBox.Text = _settings.FormulaFontPattern;
+            FormulaCharPatternBox.Text = _settings.FormulaCharPattern;
+
+            // Translation Cache
+            TranslationCacheToggle.IsOn = _settings.EnableTranslationCache;
+
+            // Custom Prompt
+            CustomPromptBox.Text = _settings.LongDocCustomPrompt;
+        }
+
+        if (ShouldLoadSettingsTab(SettingsTabId.Views, deferLazyTabData))
+        {
+            // Enabled services for each window (populate from TranslationManager.Services)
+            // Acquire handle once for all three collections to avoid repeated handle acquisition
+            UnregisterServiceCollectionHandlers(_mainWindowServices);
+            UnregisterServiceCollectionHandlers(_miniWindowServices);
+            UnregisterServiceCollectionHandlers(_fixedWindowServices);
+            using (var handle = TranslationManagerService.Instance.AcquireHandle())
+            {
+                var manager = handle.Manager;
+                PopulateServiceCollection(_mainWindowServices, _settings.MainWindowEnabledServices, _settings.MainWindowServiceEnabledQuery, manager);
+                PopulateServiceCollection(_miniWindowServices, _settings.MiniWindowEnabledServices, _settings.MiniWindowServiceEnabledQuery, manager);
+                PopulateServiceCollection(_fixedWindowServices, _settings.FixedWindowEnabledServices, _settings.FixedWindowServiceEnabledQuery, manager);
+            }
+            ResetServiceReorderModes();
+            if (_changeHandlersRegistered)
+            {
+                RegisterServiceCollectionHandlers(_mainWindowServices);
+                RegisterServiceCollectionHandlers(_miniWindowServices);
+                RegisterServiceCollectionHandlers(_fixedWindowServices);
+            }
+        }
+
+        if (ShouldLoadSettingsTab(SettingsTabId.About, deferLazyTabData))
+        {
+            // Set version from assembly metadata
+            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            VersionText.Text = $"Version {version?.ToString(3) ?? "Unknown"}";
+        }
     }
 
     /// <summary>
@@ -1570,9 +1744,9 @@ public sealed partial class SettingsPage : Page
             };
             var statusText = new TextBlock
             {
-                Text = "\u2705",
+                Text = "\u2713",
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Microsoft.UI.Colors.Green),
+                Foreground = (SolidColorBrush)Application.Current.Resources["SystemFillColorSuccessBrush"],
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Margin = new Thickness(0, 0, 8, 0),
                 Visibility = _settings.ServiceTestStatus.TryGetValue(dict.ServiceId, out var passed) && passed
@@ -1809,7 +1983,7 @@ public sealed partial class SettingsPage : Page
             var deleteButton = new Button
             {
                 Content = loc.GetString("MdxDeleteDictionary"),
-                Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red),
+                Foreground = (SolidColorBrush)Application.Current.Resources["SystemFillColorCriticalBrush"],
                 Padding = new Thickness(8, 4, 8, 4)
             };
             deleteButton.Click += async (s, args) =>
@@ -1872,7 +2046,7 @@ public sealed partial class SettingsPage : Page
         TranslationManagerService.Instance.UnregisterMdxDictionary(serviceId);
 
         // Rebuild UI
-        LoadSettings();
+        LoadSettings(MinimalThemeService.IsActive);
     }
 
     /// <summary>
@@ -2100,7 +2274,7 @@ public sealed partial class SettingsPage : Page
             if (!_settings.FixedWindowEnabledServices.Contains(serviceId)) _settings.FixedWindowEnabledServices.Add(serviceId);
 
             _settings.Save();
-            LoadSettings();
+            LoadSettings(MinimalThemeService.IsActive);
 
             var loc = LocalizationService.Instance;
             if (imported.IsEncrypted)
@@ -2305,6 +2479,8 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private async Task<bool> SaveSettingsAsync()
     {
+        EnsureAllSettingsTabDataInitialized();
+
         // Get localization service instance once for the entire method
         var loc = LocalizationService.Instance;
 
@@ -3903,22 +4079,136 @@ public class SettingsTabBrushConverter : Microsoft.UI.Xaml.Data.IValueConverter
     public object Convert(object value, Type targetType, object parameter, string language)
     {
         bool selected = value is true;
-        var res = Application.Current.Resources;
+        var role = parameter as string;
+        var themeName = GetThemeDictionaryName();
+
+        if (TryCreateStaticSettingsTabBrush(themeName, selected, role, out var staticBrush))
+        {
+            return staticBrush;
+        }
+
         return (parameter as string) switch
         {
             "Background" => selected
-                ? res["AccentFillColorTertiaryBrush"]
-                : res["SubtleFillColorTransparentBrush"],
+                ? ResolveBrush("SettingsTabSelectedBackgroundBrush", Microsoft.UI.Colors.Transparent)
+                : ResolveBrush("SettingsTabBackgroundBrush", Microsoft.UI.Colors.Transparent),
             "Border" => selected
-                ? res["AccentFillColorDefaultBrush"]
-                : res["ControlStrokeColorDefaultBrush"],
+                ? ResolveBrush("SettingsTabSelectedBorderBrush", Microsoft.UI.Colors.Transparent)
+                : ResolveBrush("SettingsTabBorderBrush", Microsoft.UI.Colors.Transparent),
             "Foreground" => selected
-                ? res["AccentTextFillColorPrimaryBrush"]
-                : res["TextFillColorPrimaryBrush"],
+                ? ResolveBrush("SettingsTabSelectedForegroundBrush", GetReadableForegroundFallback())
+                : ResolveBrush("SettingsTabForegroundBrush", GetReadableForegroundFallback()),
             _ => throw new ArgumentException($"Unknown parameter: {parameter}", nameof(parameter)),
         };
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new NotImplementedException();
+
+    private static Brush ResolveBrush(string key, Windows.UI.Color fallbackColor)
+    {
+        var resources = Application.Current.Resources;
+        var themeName = GetThemeDictionaryName();
+
+        if (TryGetBrush(resources, key, themeName, out var brush))
+        {
+            return brush;
+        }
+
+        foreach (var merged in resources.MergedDictionaries.Reverse())
+        {
+            if (TryGetBrush(merged, key, themeName, out brush))
+            {
+                return brush;
+            }
+        }
+
+        return new SolidColorBrush(fallbackColor);
+    }
+
+    private static string GetThemeDictionaryName()
+    {
+        return MinimalThemeService.TryGetExplicitThemeDictionaryName()
+            ?? GetSystemThemeDictionaryName();
+    }
+
+    private static string GetSystemThemeDictionaryName()
+    {
+        try
+        {
+            var background = new Windows.UI.ViewManagement.UISettings()
+                .GetColorValue(Windows.UI.ViewManagement.UIColorType.Background);
+            var luminance = (0.2126 * background.R + 0.7152 * background.G + 0.0722 * background.B) / 255;
+            return luminance < 0.5 ? "Dark" : "Light";
+        }
+        catch
+        {
+            return Application.Current.RequestedTheme == ApplicationTheme.Dark ? "Dark" : "Light";
+        }
+    }
+
+    private static bool TryCreateStaticSettingsTabBrush(
+        string themeName,
+        bool selected,
+        string? role,
+        out Brush brush)
+    {
+        Windows.UI.Color? color = (themeName, selected, role) switch
+        {
+            ("Dark", false, "Background") => Microsoft.UI.ColorHelper.FromArgb(255, 32, 33, 39),
+            ("Dark", false, "Border") => Microsoft.UI.ColorHelper.FromArgb(255, 205, 213, 224),
+            ("Dark", false, "Foreground") => Microsoft.UI.ColorHelper.FromArgb(255, 230, 235, 242),
+            ("Dark", true, "Background") => Microsoft.UI.ColorHelper.FromArgb(255, 234, 243, 255),
+            ("Dark", true, "Border") => Microsoft.UI.ColorHelper.FromArgb(255, 112, 163, 224),
+            ("Dark", true, "Foreground") => Microsoft.UI.ColorHelper.FromArgb(255, 23, 78, 139),
+            ("Light", false, "Background") => Microsoft.UI.ColorHelper.FromArgb(0, 255, 255, 255),
+            ("Light", false, "Border") => Microsoft.UI.ColorHelper.FromArgb(255, 214, 221, 232),
+            ("Light", false, "Foreground") => Microsoft.UI.ColorHelper.FromArgb(255, 42, 47, 54),
+            ("Light", true, "Background") => Microsoft.UI.ColorHelper.FromArgb(255, 234, 243, 255),
+            ("Light", true, "Border") => Microsoft.UI.ColorHelper.FromArgb(255, 92, 143, 199),
+            ("Light", true, "Foreground") => Microsoft.UI.ColorHelper.FromArgb(255, 23, 78, 139),
+            _ => null
+        };
+
+        if (color is { } resolvedColor)
+        {
+            brush = new SolidColorBrush(resolvedColor);
+            return true;
+        }
+
+        brush = null!;
+        return false;
+    }
+
+    private static Windows.UI.Color GetReadableForegroundFallback()
+    {
+        return GetThemeDictionaryName() == "Dark"
+            ? Microsoft.UI.ColorHelper.FromArgb(255, 230, 235, 242)
+            : Microsoft.UI.ColorHelper.FromArgb(255, 42, 47, 54);
+    }
+
+    private static bool TryGetBrush(
+        ResourceDictionary resources,
+        string key,
+        string themeName,
+        out Brush brush)
+    {
+        if (resources.ThemeDictionaries.TryGetValue(themeName, out var themeObj) &&
+            themeObj is ResourceDictionary themeDictionary &&
+            themeDictionary.TryGetValue(key, out var themedValue) &&
+            themedValue is Brush themedBrush)
+        {
+            brush = themedBrush;
+            return true;
+        }
+
+        if (resources.TryGetValue(key, out var value) && value is Brush directBrush)
+        {
+            brush = directBrush;
+            return true;
+        }
+
+        brush = null!;
+        return false;
+    }
 }

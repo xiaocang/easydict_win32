@@ -59,7 +59,9 @@
         <!-- Compact Input -->
         <Border Grid.Row="1"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                CornerRadius="6"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="{ThemeResource EasydictCardBorderThickness}"
+                CornerRadius="{ThemeResource EasydictCardCornerRadius}"
                 Padding="8"
                 Margin="0,0,0,4">
             <TextBox
@@ -125,7 +127,9 @@
                 Width="32"
                 Height="32"
                 Padding="0"
-                CornerRadius="16"
+                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
+                CornerRadius="{ThemeResource EasydictRoundButtonCornerRadius}"
                 Background="{ThemeResource AccentBrush}"
                 ToolTipService.ToolTip="Translate"
                 Margin="4,0,0,0">

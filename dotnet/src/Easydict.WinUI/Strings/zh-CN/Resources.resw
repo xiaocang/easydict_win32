@@ -707,6 +707,9 @@
   <data name="ThemeDark" xml:space="preserve">
     <value>深色</value>
   </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>极简线框</value>
+  </data>
 
   <!-- Unsaved Changes Dialog -->
   <data name="UnsavedChangesTitle" xml:space="preserve">

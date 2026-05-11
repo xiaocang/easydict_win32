@@ -9,7 +9,6 @@ using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Input;
-using System.Numerics;
 using Windows.Graphics;
 using Windows.System;
 using WinRT.Interop;
@@ -33,7 +32,7 @@ public sealed partial class FixedWindow : Window
     private Task? _currentQueryTask;
     private readonly SettingsService _settings = SettingsService.Instance;
     private readonly List<ServiceQueryResult> _serviceResults = new();
-    private readonly List<ServiceResultItem> _resultControls = new();
+    private readonly List<IServiceResultView> _resultControls = new();
     private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
     private AppWindow? _appWindow;
     private OverlappedPresenter? _presenter;
@@ -299,9 +298,7 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     private void InitializeServiceResults()
     {
-        _serviceResults.Clear();
-        _resultControls.Clear();
-        ResultsPanel.Items.Clear();
+        ReleaseServiceResultControls();
 
         // Get enabled services and EnabledQuery settings from settings
         var enabledServices = _settings.FixedWindowEnabledServices;
@@ -328,19 +325,48 @@ public sealed partial class FixedWindow : Window
                 IsExpanded = enabledQuery // Manual-query services start collapsed
             };
 
-            var control = new ServiceResultItem
-            {
-                ServiceResult = result
-            };
-            control.CollapseToggled += OnServiceCollapseToggled;
-            control.QueryRequested += OnServiceQueryRequested;
-
             _serviceResults.Add(result);
-            _resultControls.Add(control);
-            ResultsPanel.Items.Add(control);
+            ServiceResultViewHost.Add(
+                result,
+                _resultControls,
+                ResultsPanel,
+                OnServiceCollapseToggled,
+                OnServiceQueryRequested);
         }
 
         ReorderResultsPanel();
+    }
+
+    private void RebuildServiceResultControlsForCurrentTheme()
+    {
+        if (_serviceResults.Count == 0)
+        {
+            return;
+        }
+
+        ServiceResultViewHost.RebuildForCurrentTheme(
+            _serviceResults,
+            _resultControls,
+            ResultsPanel,
+            OnServiceCollapseToggled,
+            OnServiceQueryRequested);
+
+        ReorderResultsPanel();
+        RequestResize();
+    }
+
+    private void ReleaseServiceResultControls(bool clearResults = true)
+    {
+        ServiceResultViewHost.Release(
+            _resultControls,
+            ResultsPanel,
+            OnServiceCollapseToggled,
+            OnServiceQueryRequested);
+
+        if (clearResults)
+        {
+            _serviceResults.Clear();
+        }
     }
 
     /// <summary>
@@ -437,41 +463,7 @@ public sealed partial class FixedWindow : Window
 
     private void OnResultsScrollViewerViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (_resultControls == null || _resultControls.Count == 0) return;
-
-        const double margin = 4.0;
-
-        foreach (var control in _resultControls)
-        {
-            if (control.Visibility != Visibility.Visible || control.ActionButtonsPanel == null)
-                continue;
-
-            try
-            {
-                var transform = control.TransformToVisual(ResultsScrollViewer);
-                var point = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-
-                // Y relative to the viewport
-                var y = point.Y;
-
-                double offsetY = 0;
-                if (y < 0)
-                {
-                    offsetY = Math.Abs(y);
-                }
-
-                // Clamp to item height so headers and buttons don't leave the item container
-                var maxOffset = control.ActualHeight - control.HeaderPanel.ActualHeight - margin;
-                offsetY = Math.Clamp(offsetY, 0, Math.Max(0, maxOffset));
-
-                control.HeaderPanel.Translation = new Vector3(0, (float)offsetY, 0);
-                control.ActionButtonsPanel.Translation = new Vector3(0, (float)offsetY, 0);
-            }
-            catch (Exception)
-            {
-                // Ignore transformation errors
-            }
-        }
+        ServiceResultViewHost.UpdateStickyHeaders(_resultControls, ResultsScrollViewer);
     }
 
     private async void OnWindowClosed(object sender, WindowEventArgs args)
@@ -602,6 +594,7 @@ public sealed partial class FixedWindow : Window
 
         _currentQueryTask = null;
         _detectionService = null;  // Clear immediately to prevent re-use
+        ReleaseServiceResultControls();
 
         if (task == null || task.IsCompleted)
         {
@@ -655,6 +648,7 @@ public sealed partial class FixedWindow : Window
 
         // Swap icon: show cancel (X) glyph during query, translate glyph otherwise
         TranslateIcon.Glyph = loading ? "\uE711" : "\uE8C1";
+        MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing);
 
         // Hide progress ring (cancel icon replaces it)
         LoadingRing.IsActive = false;
@@ -1010,6 +1004,13 @@ public sealed partial class FixedWindow : Window
     private void UpdateDetectedLanguageDisplay(TranslationLanguage detected)
     {
         if (!_isLoaded) return;
+
+        if (MinimalThemeService.IsActive)
+        {
+            DetectedLangText.Text = "";
+            DetectedLangText.Visibility = Visibility.Collapsed;
+            return;
+        }
 
         if (detected != TranslationLanguage.Auto)
         {
@@ -1421,6 +1422,26 @@ public sealed partial class FixedWindow : Window
         if (this.Content is FrameworkElement root)
         {
             root.RequestedTheme = theme;
+            MinimalThemeService.ApplyFloatingWindowRootBackground(root);
+        }
+
+        var minimal = MinimalThemeService.IsActive;
+        DetectedLangText.Visibility = minimal ? Visibility.Collapsed : DetectedLangText.Visibility;
+        StatusText.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
+        MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing);
+
+        if (ServiceResultViewHost.NeedsThemeRebuild(_resultControls, minimal))
+        {
+            RebuildServiceResultControlsForCurrentTheme();
+        }
+
+        if (minimal)
+        {
+            MinimalThemeService.ApplyWindowBackdrop(this);
+        }
+        else
+        {
+            TryApplyMicaBackdrop();
         }
     }
 
@@ -1432,29 +1453,11 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     private void ReorderResultsPanel()
     {
-        if (_resultControls.Count == 0) return;
-
-        var hideEmpty = SettingsService.Instance.HideEmptyServiceResults;
-        var order = ServiceResultDemotionHelper.StablePartitionIndices(_serviceResults, hideEmpty);
-
-        // Only rebuild Items if order actually changes (avoid visual-tree churn during streaming).
-        bool orderMatches = ResultsPanel.Items.Count == _resultControls.Count;
-        for (int i = 0; orderMatches && i < order.Count; i++)
-        {
-            if (!ReferenceEquals(ResultsPanel.Items[i], _resultControls[order[i]]))
-                orderMatches = false;
-        }
-        if (orderMatches) return;
-
-        // Remove+Insert rather than Clear() to preserve WebView2 and streaming state.
-        for (int i = 0; i < order.Count; i++)
-        {
-            var target = _resultControls[order[i]];
-            var currentIndex = ResultsPanel.Items.IndexOf(target);
-            if (currentIndex == i) continue;
-            if (currentIndex >= 0) ResultsPanel.Items.RemoveAt(currentIndex);
-            ResultsPanel.Items.Insert(i, target);
-        }
+        ServiceResultViewHost.Reorder(
+            _serviceResults,
+            _resultControls,
+            ResultsPanel,
+            SettingsService.Instance.HideEmptyServiceResults);
     }
 
     private void OnHideEmptyServiceResultsChanged(object? sender, EventArgs e)
@@ -1478,20 +1481,6 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     private void UpdatePhoneticDeduplication()
     {
-        var shownPhonetics = new HashSet<string>();
-
-        foreach (var control in _resultControls)
-        {
-            // Set which phonetics have already been shown (before this control)
-            control.AlreadyShownPhonetics = shownPhonetics.Count > 0
-                ? new HashSet<string>(shownPhonetics)
-                : null;
-
-            // Collect phonetics displayed by this control for subsequent controls
-            foreach (var key in control.GetDisplayedPhoneticKeys())
-            {
-                shownPhonetics.Add(key);
-            }
-        }
+        ServiceResultViewHost.UpdatePhoneticDeduplication(_resultControls);
     }
 }

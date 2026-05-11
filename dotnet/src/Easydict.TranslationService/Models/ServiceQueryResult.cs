@@ -42,7 +42,13 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     public TranslationResult? Result
     {
         get => _result;
-        set => SetField(ref _result, value);
+        set
+        {
+            if (SetField(ref _result, value))
+            {
+                OnResultStateChanged();
+            }
+        }
     }
 
     /// <summary>
@@ -51,7 +57,13 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     public TranslationException? Error
     {
         get => _error;
-        set => SetField(ref _error, value);
+        set
+        {
+            if (SetField(ref _error, value))
+            {
+                OnResultStateChanged();
+            }
+        }
     }
 
     /// <summary>
@@ -64,6 +76,8 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
         {
             if (SetField(ref _isLoading, value))
             {
+                OnPropertyChanged(nameof(StatusText));
+                OnPropertyChanged(nameof(ContentVisibility));
                 OnPropertyChanged(nameof(ShowPendingQueryHint));
             }
         }
@@ -139,7 +153,13 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     public bool EnabledQuery
     {
         get => _enabledQuery;
-        set => SetField(ref _enabledQuery, value);
+        set
+        {
+            if (SetField(ref _enabledQuery, value))
+            {
+                OnPropertyChanged(nameof(ShowPendingQueryHint));
+            }
+        }
     }
 
     /// <summary>
@@ -318,6 +338,19 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
         {
             IsExpanded = false;
         }
+    }
+
+    private void OnResultStateChanged()
+    {
+        OnPropertyChanged(nameof(HasResult));
+        OnPropertyChanged(nameof(IsInfoResult));
+        OnPropertyChanged(nameof(HasSuccessfulResult));
+        OnPropertyChanged(nameof(HasError));
+        OnPropertyChanged(nameof(IsWarningError));
+        OnPropertyChanged(nameof(ShowPendingQueryHint));
+        OnPropertyChanged(nameof(DisplayText));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(ContentVisibility));
     }
 
     /// <summary>

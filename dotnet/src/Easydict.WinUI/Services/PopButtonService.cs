@@ -202,13 +202,7 @@ public sealed class PopButtonService : IDisposable
         }
 
         // Apply current theme
-        var theme = SettingsService.Instance.AppTheme switch
-        {
-            "Light" => ElementTheme.Light,
-            "Dark" => ElementTheme.Dark,
-            _ => ElementTheme.Default
-        };
-        _popWindow.ApplyTheme(theme);
+        _popWindow.ApplyTheme(MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme));
 
         // Sync to the current mode (in case user already switched before first pop button show)
         _popWindow.UpdateMode(MiniWindowService.Instance.CurrentQueryMode);

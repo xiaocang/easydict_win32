@@ -1,25 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
     <!-- Workaround for `Payload contains two or more files with the same destination path 'onnxruntime.dll'`.
-         Two packages drop onnxruntime.dll into the publish output:
-         (1) Intel.ML.OnnxRuntime.OpenVino (referenced via Easydict.OpenVINO) — needed for OpenVINO EP / NPU.
-         (2) Microsoft.Windows.AI.MachineLearning (transitive from Microsoft.WindowsAppSDK 2.x) — Windows ML's
-             own ORT build with DirectML EP. We don't use that managed surface yet, so we drop its native
-             onnxruntime.dll from the copy-local set before publish/packaging picks them up.
-         If the Windows ML APIs are needed later, switch this to keep Microsoft's runtime and instead exclude
-         the Intel-shipped duplicate (and find another way to load the OpenVINO EP). -->
+         Both Intel.ML.OnnxRuntime.OpenVino 1.21.0 (referenced via Easydict.OpenVINO, needed for the
+         OpenVINO EP that targets NPU) and Microsoft.Windows.AI.MachineLearning 2.0.300 (transitive
+         from Microsoft.WindowsAppSDK 2.x — Windows ML's own ORT build with DirectML EP) ship
+         runtimes/win-x64/native/onnxruntime.dll. AppX packaging refuses the duplicate destination.
+         We keep the Intel-shipped runtime (it has the OpenVINO EP we actually use) and drop the
+         Microsoft.Windows.AI.MachineLearning native asset via a sweep across every collection the
+         publish / AppX pipeline pulls files from. -->
     <Target Name="DedupeOnnxRuntime"
-            AfterTargets="ResolveAssemblyReferences"
-            BeforeTargets="_ComputeResolvedFilesToPublishTypes;_GetPackagingOutputs;GenerateAppxPackageRecipe">
+            AfterTargets="ResolveAssemblyReferences;ResolvePackageAssets;ResolveRuntimePackAssets;_ResolveCopyLocalAssetsForRuntimeDependencies"
+            BeforeTargets="_CopyFilesMarkedCopyLocal;ComputeFilesToPublish;_ComputeResolvedFilesToPublishTypes;_GetPackagingOutputs;GenerateAppxPackageRecipe">
         <ItemGroup>
-            <_WinAiOnnxRuntime Include="@(ReferenceCopyLocalPaths)"
-                               Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
-                                          $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
-            <ReferenceCopyLocalPaths Remove="@(_WinAiOnnxRuntime)" />
+            <ReferenceCopyLocalPaths
+                Remove="@(ReferenceCopyLocalPaths)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+            <ResolvedFileToPublish
+                Remove="@(ResolvedFileToPublish)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+            <RuntimeCopyLocalItems
+                Remove="@(RuntimeCopyLocalItems)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+            <RuntimeTargetsCopyLocalItems
+                Remove="@(RuntimeTargetsCopyLocalItems)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+            <NativeCopyLocalItems
+                Remove="@(NativeCopyLocalItems)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+            <_PackagingOutputs
+                Remove="@(_PackagingOutputs)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+            <PackagingOutputs
+                Remove="@(PackagingOutputs)"
+                Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                           $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
         </ItemGroup>
-        <Message Importance="high" Condition="'@(_WinAiOnnxRuntime->Count())' != '0'"
-                 Text="[DedupeOnnxRuntime] Dropped @(_WinAiOnnxRuntime->Count()) Microsoft.Windows.AI.MachineLearning onnxruntime.dll(s) to avoid OpenVINO EP duplicate-payload conflict." />
     </Target>
+
+    <ItemGroup>
+        <!-- Explicit reference matching the transitive WindowsAppSDK 2.x dependency
+             so we can attach ExcludeAssets metadata. ExcludeAssets="runtime;native"
+             tells NuGet to skip copying this package's native/runtime files to output,
+             leaving managed-API surface usable but dropping the conflicting onnxruntime.dll.
+             Version is a floating "2.0.*" so it tracks whatever WindowsAppSDK resolves. -->
+        <PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.0.*">
+            <ExcludeAssets>runtime;native</ExcludeAssets>
+        </PackageReference>
+    </ItemGroup>
 
     <PropertyGroup>
         <Version>0.7.5</Version>

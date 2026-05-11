@@ -16,6 +16,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
     /// <summary>Singleton instance.</summary>
     public static readonly TextLayoutEngine Instance = new();
 
+    /// <inheritdoc/>
     public PreparedParagraph Prepare(TextPrepareRequest request, ITextMeasurer measurer)
     {
         var (segments, kinds) = TextSegmenter.Segment(request.Text, request.NormalizeWhitespace);
@@ -125,6 +126,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         };
     }
 
+    /// <inheritdoc/>
     public LayoutResult Layout(PreparedParagraph prepared, double maxWidth)
     {
         var lineCount = 0;
@@ -140,6 +142,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         return new LayoutResult(lineCount, maxLineWidth, HasOverflow: false);
     }
 
+    /// <inheritdoc/>
     public LayoutLinesResult LayoutWithLines(PreparedParagraph prepared, double maxWidth)
     {
         var lines = new List<LayoutLine>();
@@ -162,6 +165,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         return new LayoutLinesResult(lines, maxLineWidth, HasOverflow: false);
     }
 
+    /// <inheritdoc/>
     public LayoutResult Layout(PreparedParagraph prepared, IReadOnlyList<double> maxWidths)
     {
         if (maxWidths.Count == 0)
@@ -188,6 +192,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         return new LayoutResult(lineCount, maxLineWidth, HasOverflow: false);
     }
 
+    /// <inheritdoc/>
     public LayoutLinesResult LayoutWithLines(PreparedParagraph prepared, IReadOnlyList<double> maxWidths)
     {
         if (maxWidths.Count == 0)
@@ -216,6 +221,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         return new LayoutLinesResult(lines, maxLineWidth, HasOverflow: false);
     }
 
+    /// <inheritdoc/>
     public int WalkLineRanges(PreparedParagraph prepared, double maxWidth, Action<LayoutLineRange> onLine)
     {
         var lineCount = 0;
@@ -239,6 +245,7 @@ public sealed class TextLayoutEngine : ITextLayoutEngine
         return lineCount;
     }
 
+    /// <inheritdoc/>
     public LayoutLine? LayoutNextLine(PreparedParagraph prepared, LayoutCursor start, double maxWidth)
     {
         return LayoutNextLineCore(prepared, start, maxWidth, buildText: true);

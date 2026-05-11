@@ -1,5 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
+    <!-- Workaround for `Payload contains two or more files with the same destination path 'onnxruntime.dll'`.
+         Two packages drop onnxruntime.dll into the publish output:
+         (1) Intel.ML.OnnxRuntime.OpenVino (referenced via Easydict.OpenVINO) — needed for OpenVINO EP / NPU.
+         (2) Microsoft.Windows.AI.MachineLearning (transitive from Microsoft.WindowsAppSDK 2.x) — Windows ML's
+             own ORT build with DirectML EP. We don't use that managed surface yet, so we drop its native
+             onnxruntime.dll from the copy-local set before publish/packaging picks them up.
+         If the Windows ML APIs are needed later, switch this to keep Microsoft's runtime and instead exclude
+         the Intel-shipped duplicate (and find another way to load the OpenVINO EP). -->
+    <Target Name="DedupeOnnxRuntime"
+            AfterTargets="ResolveAssemblyReferences"
+            BeforeTargets="_ComputeResolvedFilesToPublishTypes;_GetPackagingOutputs;GenerateAppxPackageRecipe">
+        <ItemGroup>
+            <_WinAiOnnxRuntime Include="@(ReferenceCopyLocalPaths)"
+                               Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                                          $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+            <ReferenceCopyLocalPaths Remove="@(_WinAiOnnxRuntime)" />
+        </ItemGroup>
+        <Message Importance="high" Condition="'@(_WinAiOnnxRuntime->Count())' != '0'"
+                 Text="[DedupeOnnxRuntime] Dropped @(_WinAiOnnxRuntime->Count()) Microsoft.Windows.AI.MachineLearning onnxruntime.dll(s) to avoid OpenVINO EP duplicate-payload conflict." />
+    </Target>
+
     <PropertyGroup>
         <Version>0.7.5</Version>
         <AssemblyVersion>0.7.5.0</AssemblyVersion>

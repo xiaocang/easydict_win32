@@ -82,6 +82,7 @@
   <data name="Refresh" xml:space="preserve"><value>रीफ़्रेश</value></data>
   <data name="DeepLDescription" xml:space="preserve"><value>मुफ़्त वेब अनुवाद के लिए API key खाली छोड़ें। Pro API key से अधिक सीमा मिलती है।</value></data>
   <data name="DeepLFreeOption" xml:space="preserve"><value>मुफ़्त API का उपयोग करें (वेब अनुवाद के लिए API key आवश्यक नहीं)</value></data>
+  <data name="DeepLQualityOption" xml:space="preserve"><value>गुणवत्ता-अनुकूलित मॉडल का उपयोग करें (केवल API; धीमा, उच्च गुणवत्ता)</value></data>
   <data name="OpenAIDescription" xml:space="preserve"><value>आप सीधे कस्टम model नाम टाइप कर सकते हैं।</value></data>
   <data name="DeepSeekDescription" xml:space="preserve"><value>platform.deepseek.com से API key प्राप्त करें। आप कस्टम model नाम टाइप कर सकते हैं।</value></data>
   <data name="GroqDescription" xml:space="preserve"><value>Groq तेज़ इंफ़रेंस प्रदान करता है। console.groq.com से API key प्राप्त करें। आप कस्टम model नाम टाइप कर सकते हैं।</value></data>

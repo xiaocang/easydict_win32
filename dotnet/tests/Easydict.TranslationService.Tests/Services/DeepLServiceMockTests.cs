@@ -325,6 +325,50 @@ public class DeepLServiceMockTests
     }
 
     [Fact]
+    public async Task TranslateAsync_ApiMode_OmitsModelTypeByDefault()
+    {
+        // Arrange
+        _service.Configure("test-key:fx", useWebFirst: false);
+        var apiResponse = """{"translations":[{"text":"Hi"}]}""";
+        _mockHandler.EnqueueJsonResponse(apiResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        var body = _mockHandler.LastRequestBody;
+        body.Should().NotContain("model_type");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ApiMode_SendsQualityOptimizedWhenEnabled()
+    {
+        // Arrange
+        _service.Configure("test-key:fx", useWebFirst: false, useQualityOptimized: true);
+        var apiResponse = """{"translations":[{"text":"Hi"}]}""";
+        _mockHandler.EnqueueJsonResponse(apiResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        var body = _mockHandler.LastRequestBody;
+        body.Should().Contain("model_type=quality_optimized");
+    }
+
+    [Fact]
     public async Task TranslateAsync_ApiMode_DetectsLanguageFromResponse()
     {
         // Arrange

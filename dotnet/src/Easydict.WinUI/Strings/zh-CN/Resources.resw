@@ -319,6 +319,9 @@
   <data name="DeepLFreeOption" xml:space="preserve">
     <value>使用免费 API（网页翻译无需 API 密钥）</value>
   </data>
+  <data name="DeepLQualityOption" xml:space="preserve">
+    <value>使用质量优化模型（仅 API；速度较慢，质量更高）</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>您可以直接输入自定义模型名称。</value>
   </data>

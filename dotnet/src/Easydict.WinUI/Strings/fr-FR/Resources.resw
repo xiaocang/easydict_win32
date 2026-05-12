@@ -316,6 +316,9 @@
   <data name="DeepLFreeOption" xml:space="preserve">
     <value>Utiliser l'API gratuite (aucune clé API requise pour la traduction web)</value>
   </data>
+  <data name="DeepLQualityOption" xml:space="preserve">
+    <value>Utiliser le modèle optimisé pour la qualité (API uniquement ; plus lent, qualité supérieure)</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>Vous pouvez saisir directement un nom de modèle personnalisé.</value>
   </data>

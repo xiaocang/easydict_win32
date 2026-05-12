@@ -265,6 +265,8 @@
                                         HorizontalAlignment="Left"/>
                                 <CheckBox x:Name="DeepLFreeCheck"
                                         Content="Use Free API (no API key required for web translation)"/>
+                                <CheckBox x:Name="DeepLQualityCheck"
+                                        Content="Use quality-optimized model (API only; slower, higher quality)"/>
                                 <TextBlock Text="Leave API key empty to use free web translation. Pro API key gives higher limits."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"

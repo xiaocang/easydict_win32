@@ -192,6 +192,9 @@
   <data name="DeepLFreeOption" xml:space="preserve">
     <value>&#xE43;&#xE0A;&#xE49; API &#xE1F;&#xE23;&#xE35; (&#xE01;&#xE32;&#xE23;&#xE41;&#xE1B;&#xE25;&#xE40;&#xE27;&#xE47;&#xE1A;&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; API key)</value>
   </data>
+  <data name="DeepLQualityOption" xml:space="preserve">
+    <value>ใช้โมเดลคุณภาพสูง (API เท่านั้น; ช้ากว่า คุณภาพดีกว่า)</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>&#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE1E;&#xE34;&#xE21;&#xE1E;&#xE4C;&#xE0A;&#xE37;&#xE48;&#xE2D; model &#xE17;&#xE35;&#xE48;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;&#xE44;&#xE14;&#xE49;&#xE42;&#xE14;&#xE22;&#xE15;&#xE23;&#xE07;</value>
   </data>

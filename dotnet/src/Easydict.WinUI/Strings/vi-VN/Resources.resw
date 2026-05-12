@@ -208,6 +208,9 @@
   <data name="DeepLFreeOption" xml:space="preserve">
     <value>S&#x1EED; d&#x1EE5;ng API mi&#x1EC5;n ph&#xED; (d&#x1ECB;ch web kh&#xF4;ng c&#x1EA7;n API key)</value>
   </data>
+  <data name="DeepLQualityOption" xml:space="preserve">
+    <value>Sử dụng mô hình tối ưu chất lượng (chỉ API; chậm hơn, chất lượng cao hơn)</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>B&#x1EA1;n c&#xF3; th&#x1EC3; nh&#x1EAD;p tr&#x1EF1;c ti&#x1EBF;p t&#xEA;n model t&#xF9;y ch&#x1EC9;nh.</value>
   </data>

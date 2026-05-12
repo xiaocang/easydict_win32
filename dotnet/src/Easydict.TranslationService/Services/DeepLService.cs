@@ -22,6 +22,7 @@ public sealed class DeepLService : BaseTranslationService
 
     private string? _apiKey;
     private bool _useWebFirst = true; // Default to web translation (no API key needed)
+    private bool _useQualityOptimized; // Default: latency-optimized (DeepL API default)
 
     private static readonly IReadOnlyList<Language> DeepLLanguages =
     [
@@ -50,10 +51,16 @@ public sealed class DeepLService : BaseTranslationService
     /// </summary>
     /// <param name="apiKey">Optional API key for official API access.</param>
     /// <param name="useWebFirst">If true, try web translation first (default). If false, use API only.</param>
-    public void Configure(string? apiKey, bool useWebFirst = true)
+    /// <param name="useQualityOptimized">
+    /// If true, request DeepL's quality-optimized model (next-generation, web-translator-equivalent)
+    /// via <c>model_type=quality_optimized</c>. Only affects the official API path; the web path
+    /// already uses high-quality models. Default: false (DeepL's latency-optimized default).
+    /// </param>
+    public void Configure(string? apiKey, bool useWebFirst = true, bool useQualityOptimized = false)
     {
         _apiKey = apiKey;
         _useWebFirst = useWebFirst;
+        _useQualityOptimized = useQualityOptimized;
     }
 
     protected override async Task<TranslationResult> TranslateInternalAsync(
@@ -118,6 +125,11 @@ public sealed class DeepLService : BaseTranslationService
         if (sourceCode != null)
         {
             formData.Add(new("source_lang", sourceCode));
+        }
+
+        if (_useQualityOptimized)
+        {
+            formData.Add(new("model_type", "quality_optimized"));
         }
 
         using var content = new FormUrlEncodedContent(formData);

@@ -247,7 +247,8 @@ public sealed class TranslationManagerService : IDisposable
             {
                 deepl.Configure(
                     _settings.DeepLApiKey,
-                    useWebFirst: _settings.DeepLUseFreeApi);
+                    useWebFirst: _settings.DeepLUseFreeApi,
+                    useQualityOptimized: _settings.DeepLUseQualityOptimized);
             }
         });
 

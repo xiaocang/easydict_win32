@@ -80,6 +80,7 @@ public sealed class SettingsService
     // API Keys
     public string? DeepLApiKey { get; set; }
     public bool DeepLUseFreeApi { get; set; } = true;
+    public bool DeepLUseQualityOptimized { get; set; }
 
     // OpenAI settings
     public string? OpenAIApiKey { get; set; }
@@ -591,6 +592,7 @@ public sealed class SettingsService
 
         DeepLApiKey = GetValue<string?>(nameof(DeepLApiKey), null);
         DeepLUseFreeApi = GetValue(nameof(DeepLUseFreeApi), true);
+        DeepLUseQualityOptimized = GetValue(nameof(DeepLUseQualityOptimized), false);
 
         // OpenAI settings
         OpenAIApiKey = GetValue<string?>(nameof(OpenAIApiKey), null);
@@ -810,6 +812,7 @@ public sealed class SettingsService
 
         _settings[nameof(DeepLApiKey)] = DeepLApiKey ?? string.Empty;
         _settings[nameof(DeepLUseFreeApi)] = DeepLUseFreeApi;
+        _settings[nameof(DeepLUseQualityOptimized)] = DeepLUseQualityOptimized;
 
         // OpenAI settings
         _settings[nameof(OpenAIApiKey)] = OpenAIApiKey ?? string.Empty;

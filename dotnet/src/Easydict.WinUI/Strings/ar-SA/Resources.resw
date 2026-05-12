@@ -208,6 +208,9 @@
   <data name="DeepLFreeOption" xml:space="preserve">
     <value>استخدام API المجاني (ترجمة الويب لا تتطلب مفتاح API)</value>
   </data>
+  <data name="DeepLQualityOption" xml:space="preserve">
+    <value>استخدام النموذج المُحسَّن للجودة (API فقط؛ أبطأ، جودة أعلى)</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>يمكنك كتابة اسم نموذج مخصص مباشرة.</value>
   </data>

@@ -1394,6 +1394,8 @@ public sealed partial class SettingsPage : Page
         // CheckBox changes
         DeepLFreeCheck.Checked += OnSettingChanged;
         DeepLFreeCheck.Unchecked += OnSettingChanged;
+        DeepLQualityCheck.Checked += OnSettingChanged;
+        DeepLQualityCheck.Unchecked += OnSettingChanged;
 
         // Service selection changes (via PropertyChanged on ServiceCheckItem)
         RegisterServiceCollectionHandlers(_mainWindowServices);
@@ -1484,6 +1486,8 @@ public sealed partial class SettingsPage : Page
 
         DeepLFreeCheck.Checked -= OnSettingChanged;
         DeepLFreeCheck.Unchecked -= OnSettingChanged;
+        DeepLQualityCheck.Checked -= OnSettingChanged;
+        DeepLQualityCheck.Unchecked -= OnSettingChanged;
 
         UnregisterServiceCollectionHandlers(_mainWindowServices);
         UnregisterServiceCollectionHandlers(_miniWindowServices);
@@ -1692,6 +1696,7 @@ public sealed partial class SettingsPage : Page
             // DeepL settings
             DeepLKeyBox.Password = _settings.DeepLApiKey ?? string.Empty;
             DeepLFreeCheck.IsChecked = _settings.DeepLUseFreeApi;
+            DeepLQualityCheck.IsChecked = _settings.DeepLUseQualityOptimized;
 
             // OpenAI settings
             OpenAIKeyBox.Password = _settings.OpenAIApiKey ?? string.Empty;
@@ -2873,6 +2878,7 @@ public sealed partial class SettingsPage : Page
         var deepLKey = DeepLKeyBox.Password;
         _settings.DeepLApiKey = string.IsNullOrWhiteSpace(deepLKey) ? null : deepLKey;
         _settings.DeepLUseFreeApi = DeepLFreeCheck.IsChecked ?? true;
+        _settings.DeepLUseQualityOptimized = DeepLQualityCheck.IsChecked ?? false;
 
         // Save OpenAI settings
         var openAIKey = OpenAIKeyBox.Password;
@@ -3560,7 +3566,8 @@ public sealed partial class SettingsPage : Page
                 var apiKey = DeepLKeyBox.Password;
                 deepl.Configure(
                     string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-                    useWebFirst: DeepLFreeCheck.IsChecked ?? true);
+                    useWebFirst: DeepLFreeCheck.IsChecked ?? true,
+                    useQualityOptimized: DeepLQualityCheck.IsChecked ?? false);
             }
         }, TestDeepLButton, DeepLStatusText);
     }

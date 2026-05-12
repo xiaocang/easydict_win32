@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -75,50 +76,106 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
         _decoderLogitsOutputName        = ResolveOutputName(_decoderSession, "logits");
     }
 
-    public async IAsyncEnumerable<int> GenerateAsync(
+    public IAsyncEnumerable<int> GenerateAsync(
         IReadOnlyList<int> encoderInputIds,
         int forcedBosTokenId,
         int maxNewTokens,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         if (encoderInputIds.Count == 0)
         {
-            yield break;
+            return EmptyTokenStream();
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
+        // Single background worker that runs the encoder once and the decoder
+        // loop to completion, writing tokens into a channel. The previous
+        // implementation queued a fresh Task.Run for every decoder step (one
+        // dispatch per token, ~256/translation), which spent measurable time
+        // in thread-pool scheduling. With the channel pattern the producer is
+        // one task and the consumer's `await` only resumes when a token is
+        // actually available — no per-step round trips through the scheduler.
+        var channel = Channel.CreateUnbounded<int>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = true,
+        });
 
-        // ── Encoder forward (once per translation) ────────────────────────
-        var (encoderHidden, encoderAttentionMask, srcLen) = await Task.Run(
-            () => RunEncoder(encoderInputIds),
+        _ = Task.Run(
+            () => RunDecodeAsync(
+                encoderInputIds,
+                forcedBosTokenId,
+                maxNewTokens,
+                channel.Writer,
+                cancellationToken),
             cancellationToken);
 
-        // ── Decoder greedy loop ───────────────────────────────────────────
-        // NLLB's decoding convention: prime with [</s>, <tgt_lang>]. The model
-        // generates the actual translation after this two-token seed; we don't
-        // yield the seed tokens to the caller.
-        var decoderInput = new List<long>(maxNewTokens + 2)
-        {
-            EosTokenId,
-            forcedBosTokenId,
-        };
+        return ReadChannelAsync(channel.Reader, cancellationToken);
+    }
 
-        for (var step = 0; step < maxNewTokens; step++)
+    private Task RunDecodeAsync(
+        IReadOnlyList<int> encoderInputIds,
+        int forcedBosTokenId,
+        int maxNewTokens,
+        ChannelWriter<int> writer,
+        CancellationToken cancellationToken)
+    {
+        try
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var nextToken = await Task.Run(
-                () => RunDecoderStep(encoderHidden, encoderAttentionMask, srcLen, decoderInput),
-                cancellationToken);
+            // Encoder forward (once per translation).
+            var (encoderHidden, encoderAttentionMask, srcLen) = RunEncoder(encoderInputIds);
 
-            if (nextToken == EosTokenId || nextToken == PadTokenId)
+            // Decoder greedy loop. NLLB's decoding convention: prime with
+            // [</s>, <tgt_lang>]; the model generates the actual translation
+            // after this two-token seed (we don't yield the seed to the caller).
+            var decoderInput = new List<long>(maxNewTokens + 2)
             {
-                yield break;
+                EosTokenId,
+                forcedBosTokenId,
+            };
+
+            for (var step = 0; step < maxNewTokens; step++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var nextToken = RunDecoderStep(encoderHidden, encoderAttentionMask, srcLen, decoderInput);
+
+                if (nextToken == EosTokenId || nextToken == PadTokenId)
+                {
+                    break;
+                }
+
+                writer.TryWrite(nextToken);
+                decoderInput.Add(nextToken);
             }
 
-            yield return nextToken;
-            decoderInput.Add(nextToken);
+            writer.TryComplete();
         }
+        catch (Exception ex)
+        {
+            writer.TryComplete(ex);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<int> ReadChannelAsync(
+        ChannelReader<int> reader,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (var token in reader.ReadAllAsync(cancellationToken))
+        {
+            yield return token;
+        }
+    }
+
+    private static async IAsyncEnumerable<int> EmptyTokenStream()
+    {
+        // Used when encoderInputIds is empty — no encoder/decoder pass at all.
+        // The `await` is a no-op required to keep this a valid async iterator.
+        await Task.CompletedTask;
+        yield break;
     }
 
     public void Dispose()

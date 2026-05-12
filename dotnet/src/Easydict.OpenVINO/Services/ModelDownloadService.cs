@@ -77,6 +77,22 @@ public sealed class ModelDownloadService
     {
         Directory.CreateDirectory(ModelDirectory);
 
+        // Make the unpinned/unverified state loud at runtime so it can't slip
+        // past code review or QA. Flagged by the PR reviewer; flipping to
+        // `false` is paired with (a) pinning ModelManifest.Revision to an
+        // immutable commit SHA and (b) populating every ModelFileEntry.Sha256
+        // with the matching upstream LFS hash.
+        var isMutableRevision = string.Equals(ModelManifest.Revision, "main", StringComparison.Ordinal);
+        var hasUnverifiedFiles = ModelManifest.Files.Any(f => string.IsNullOrEmpty(f.Sha256));
+        if (isMutableRevision || hasUnverifiedFiles)
+        {
+            Debug.WriteLine(
+                "[ModelDownloadService] WARNING: model bundle is fetched from a mutable ref " +
+                $"(Revision='{ModelManifest.Revision}') and/or has files without SHA-256 verification. " +
+                "Installs are not reproducible. Before the OpenVINO provider ships as stable, " +
+                "pin Revision to an immutable commit SHA and populate ModelFileEntry.Sha256 for every file.");
+        }
+
         var totalBytes = ModelManifest.Files.Sum(f => f.ApproximateBytes);
         long bytesDoneAcrossFiles = 0;
 

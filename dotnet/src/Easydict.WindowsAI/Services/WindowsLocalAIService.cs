@@ -117,20 +117,78 @@ public sealed class WindowsLocalAIService : IStreamTranslationService, ILocalMod
 
         var prompt = BuildTranslationPrompt(request);
 
-        // Note: yield-return inside try/catch is restricted, so the WinRT-exception
-        // wrapping for the streaming path lives in WindowsLanguageModelClient's channel
-        // writer (which surfaces failures via TryComplete(ex)). EnsureReadyOrThrowAsync
-        // already covers the most common failure mode (device not ready).
-        await foreach (var chunk in _client.GenerateStreamAsync(
-            prompt,
-            DefaultGenerationOptions,
-            cancellationToken))
+        // Manual iteration (rather than `await foreach`) so we can wrap raw
+        // WinRT-level exceptions into TranslationException with a populated
+        // ErrorCode + ServiceId — matching the behavior of the non-streaming
+        // path. C# forbids yield-return inside try/catch, so the catch
+        // surrounds MoveNextAsync and the yield happens outside it.
+        var enumerator = _client
+            .GenerateStreamAsync(prompt, DefaultGenerationOptions, cancellationToken)
+            .GetAsyncEnumerator(cancellationToken);
+
+        try
         {
-            if (!string.IsNullOrEmpty(chunk))
+            while (true)
             {
-                yield return chunk;
+                bool hasNext;
+                string current;
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync();
+                    if (!hasNext)
+                    {
+                        yield break;
+                    }
+                    current = enumerator.Current;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (TranslationException)
+                {
+                    throw;
+                }
+                catch (WindowsLanguageModelException wex)
+                {
+                    throw MapStreamException(wex);
+                }
+                catch (Exception ex)
+                {
+                    throw new TranslationException($"Windows Local AI failed: {ex.Message}", ex)
+                    {
+                        ErrorCode = TranslationErrorCode.Unknown,
+                        ServiceId = ServiceId,
+                    };
+                }
+
+                if (!string.IsNullOrEmpty(current))
+                {
+                    yield return current;
+                }
             }
         }
+        finally
+        {
+            await enumerator.DisposeAsync();
+        }
+    }
+
+    private TranslationException MapStreamException(WindowsLanguageModelException wex)
+    {
+        var code = wex.Status switch
+        {
+            WindowsAIResponseStatus.PromptLargerThanContext => TranslationErrorCode.TextTooLong,
+            WindowsAIResponseStatus.BlockedByPolicy => TranslationErrorCode.ServiceUnavailable,
+            _ => TranslationErrorCode.InvalidResponse,
+        };
+
+        return new TranslationException(
+            $"Windows Local AI: {wex.Message}", wex)
+        {
+            ErrorCode = code,
+            ServiceId = ServiceId,
+        };
     }
 
     // ── ILocalModelProvider ─────────────────────────────────────────────

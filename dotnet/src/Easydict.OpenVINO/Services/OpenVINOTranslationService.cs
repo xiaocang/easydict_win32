@@ -93,15 +93,34 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
     }
 
     /// <summary>
-    /// Sets the preferred OpenVINO compute device. Takes effect on next engine load
-    /// (existing loaded session is disposed so the new device is picked up).
+    /// Sets the preferred OpenVINO compute device. Takes effect on the next
+    /// engine load: the existing in-flight session (if any) is detached from
+    /// the cached field but not disposed, so a translation currently streaming
+    /// keeps generating tokens on the old device until it completes. The
+    /// detached session is freed by GC once the in-flight iterator releases
+    /// its reference. New translations rebuild the engine with the new device.
+    ///
+    /// This is the safer alternative to the original "Dispose immediately" —
+    /// Configure() is invoked from the Settings page combo at arbitrary times
+    /// and could race with mid-stream RunDecoderStep, producing
+    /// ObjectDisposedException or worse undefined behavior in the native ORT
+    /// session. We accept a brief leak window over a crash.
     /// </summary>
     public void Configure(OpenVINODevice device)
     {
         if (_device == device) return;
 
-        _device = device;
-        DisposeEngine();
+        lock (_engineLock)
+        {
+            _device = device;
+            // Drop the cached references so EnsureLoaded() rebuilds with the
+            // new device on the next translation. Don't call Dispose on the
+            // engine — if a translation captured it from a previous
+            // EnsureLoaded() call, the IAsyncEnumerator is still iterating
+            // through RunDecoderStep on it.
+            _engine = null;
+            _tokenizer = null;
+        }
     }
 
     public OpenVINODevice Device => _device;

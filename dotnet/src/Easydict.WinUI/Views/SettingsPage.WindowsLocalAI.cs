@@ -113,7 +113,18 @@ public sealed partial class SettingsPage
 
         var loc = LocalizationService.Instance;
         WindowsLocalAIStatusBar.Title = loc.GetString("WindowsLocalAI_Title_Unavailable");
-        WindowsLocalAIStatusBar.Message = loc.GetString("WindowsLocalAI_Status_PrepareFailed");
+
+        // Surface the underlying exception text alongside the localized failure
+        // message so users can tell whether the failure is "offline / AV blocked"
+        // vs. "Windows not licensed / quota exhausted". Without the detail the
+        // generic message looks identical for every cause.
+        var message = loc.GetString("WindowsLocalAI_Status_PrepareFailed");
+        if (!string.IsNullOrWhiteSpace(detailMessage))
+        {
+            message = $"{message}\n\n{detailMessage.Trim()}";
+        }
+        WindowsLocalAIStatusBar.Message = message;
+
         WindowsLocalAIStatusBar.Severity = InfoBarSeverity.Error;
         WindowsLocalAIStatusBar.IsOpen = true;
 

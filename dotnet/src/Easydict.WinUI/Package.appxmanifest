@@ -22,7 +22,29 @@
   </Properties>
 
   <Dependencies>
-    <!-- MinVersion 10.0.19041.0 (Windows 10 2004) required for .msix bundle support -->
+    <!-- Install-time floor: Windows 10 2004 (19041). Intentionally lower than
+         the compile-time TargetPlatformMinVersion (10.0.22621.0) declared in
+         Easydict.WinUI.csproj. The csproj value gates which API surface the
+         compiler will accept references to; this manifest value gates which
+         OS builds can install the MSIX at all. The two are deliberately
+         decoupled:
+
+         * Most of Easydict (translation services, OCR, mouse-selection, etc.)
+           runs fine on Windows 10 19041+, which is also the minimum supported
+           by Microsoft.WindowsAppRuntime.2 (so the framework dependency below
+           doesn't push the floor up).
+         * The Windows AI APIs (Microsoft.Windows.AI.Text.LanguageModel a.k.a.
+           Phi Silica) are only available on Windows 11 22621+ Copilot+ PCs.
+           Calls to those types on older builds throw at the WinRT activation
+           layer; WindowsLanguageModelClient.GetReadyState wraps every entry
+           point in try/catch and maps the failure to
+           WindowsAIReadyState.NotSupportedOnCurrentSystem so the UI surfaces
+           "Not supported" instead of crashing.
+         * The OpenVINO/NLLB provider is pure ONNX Runtime + native OpenVINO,
+           neither of which requires 22621.
+
+         If you raise this number, also bump the compile-time floor in the
+         csproj and remove the runtime guards. See discussion in PR #146. -->
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26200.0" />
     <!-- Windows App SDK runtime framework dependency (required for WinRT activation in packaged mode).
          WinAppSDK 2.x: framework package short name drops the minor — `Microsoft.WindowsAppRuntime.2`

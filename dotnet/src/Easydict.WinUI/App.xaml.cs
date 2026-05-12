@@ -1113,28 +1113,40 @@ namespace Easydict.WinUI
             try
             {
                 var titleBar = Instance._appWindow.TitleBar;
-                if (MinimalThemeService.IsMinimal(theme) || elementTheme == ElementTheme.Default)
+
+                // Defer to system colors when:
+                //  - Minimal mode (we suppress custom title bar painting),
+                //  - Element theme is Default (system theme — let WinUI track it),
+                //  - High Contrast is active (must respect accessibility palette).
+                if (MinimalThemeService.IsMinimal(theme) ||
+                    elementTheme == ElementTheme.Default ||
+                    MinimalThemeService.IsHighContrastActive())
                 {
                     ResetTitleBarColors(titleBar);
                     return;
                 }
 
-                var dark = elementTheme == ElementTheme.Dark;
-                var background = dark
-                    ? Windows.UI.Color.FromArgb(255, 31, 34, 41)
-                    : Windows.UI.Color.FromArgb(255, 252, 252, 251);
-                var foreground = dark
-                    ? Windows.UI.Color.FromArgb(255, 226, 230, 237)
-                    : Windows.UI.Color.FromArgb(255, 48, 50, 54);
-                var inactiveForeground = dark
-                    ? Windows.UI.Color.FromArgb(255, 143, 150, 163)
-                    : Windows.UI.Color.FromArgb(255, 121, 124, 130);
-                var buttonHoverBackground = dark
-                    ? Windows.UI.Color.FromArgb(255, 43, 47, 56)
-                    : Windows.UI.Color.FromArgb(255, 244, 244, 242);
-                var buttonPressedBackground = dark
-                    ? Windows.UI.Color.FromArgb(255, 50, 55, 68)
-                    : Windows.UI.Color.FromArgb(255, 236, 236, 233);
+                var themeName = elementTheme == ElementTheme.Dark ? "Dark" : "Light";
+                var background = ResolveTitleBarColor("TitleBarBackgroundColor", themeName,
+                    elementTheme == ElementTheme.Dark ? 31 : 252,
+                    elementTheme == ElementTheme.Dark ? 34 : 252,
+                    elementTheme == ElementTheme.Dark ? 41 : 251);
+                var foreground = ResolveTitleBarColor("TitleBarForegroundColor", themeName,
+                    elementTheme == ElementTheme.Dark ? 226 : 48,
+                    elementTheme == ElementTheme.Dark ? 230 : 50,
+                    elementTheme == ElementTheme.Dark ? 237 : 54);
+                var inactiveForeground = ResolveTitleBarColor("TitleBarInactiveForegroundColor", themeName,
+                    elementTheme == ElementTheme.Dark ? 143 : 121,
+                    elementTheme == ElementTheme.Dark ? 150 : 124,
+                    elementTheme == ElementTheme.Dark ? 163 : 130);
+                var buttonHoverBackground = ResolveTitleBarColor("TitleBarButtonHoverBackgroundColor", themeName,
+                    elementTheme == ElementTheme.Dark ? 43 : 244,
+                    elementTheme == ElementTheme.Dark ? 47 : 244,
+                    elementTheme == ElementTheme.Dark ? 56 : 242);
+                var buttonPressedBackground = ResolveTitleBarColor("TitleBarButtonPressedBackgroundColor", themeName,
+                    elementTheme == ElementTheme.Dark ? 50 : 236,
+                    elementTheme == ElementTheme.Dark ? 55 : 236,
+                    elementTheme == ElementTheme.Dark ? 68 : 233);
 
                 titleBar.BackgroundColor = background;
                 titleBar.ForegroundColor = foreground;
@@ -1153,6 +1165,18 @@ namespace Easydict.WinUI
             {
                 System.Diagnostics.Debug.WriteLine($"[App] Apply title bar theme failed: {ex.Message}");
             }
+        }
+
+        private static Windows.UI.Color ResolveTitleBarColor(
+            string key,
+            string themeName,
+            int fallbackR,
+            int fallbackG,
+            int fallbackB)
+        {
+            return MinimalThemeService.TryGetResource<Windows.UI.Color>(key, themeName, out var color)
+                ? color
+                : Windows.UI.Color.FromArgb(255, (byte)fallbackR, (byte)fallbackG, (byte)fallbackB);
         }
 
         private static void ResetTitleBarColors(AppWindowTitleBar titleBar)

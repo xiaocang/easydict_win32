@@ -36,14 +36,14 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         new(Microsoft.UI.ColorHelper.FromArgb(255, 242, 244, 248));
     private static readonly SolidColorBrush _onDarkHeaderSecondaryForegroundBrush =
         new(Microsoft.UI.ColorHelper.FromArgb(255, 200, 206, 216));
-    private static readonly SolidColorBrush _darkResultBackgroundBrush =
-        new(Microsoft.UI.ColorHelper.FromArgb(255, 34, 38, 46));
-    private static readonly SolidColorBrush _darkHeaderBackgroundBrush =
-        new(Microsoft.UI.ColorHelper.FromArgb(255, 42, 46, 56));
-    private static readonly SolidColorBrush _darkHeaderHoverBackgroundBrush =
-        new(Microsoft.UI.ColorHelper.FromArgb(255, 50, 55, 68));
-    private static readonly SolidColorBrush _darkBorderBrush =
-        new(Microsoft.UI.ColorHelper.FromArgb(255, 55, 61, 73));
+
+    /// <summary>
+    /// Cached result of <see cref="ShouldUseDarkServiceChrome"/>. The computation walks the
+    /// visual tree and may probe <see cref="Windows.UI.ViewManagement.UISettings"/>, which is
+    /// too expensive to run on every UpdateUI() during streaming. Invalidated on Loaded /
+    /// ActualThemeChanged / RefreshThemeChrome.
+    /// </summary>
+    private bool? _cachedUseDarkChrome;
 
     /// <summary>
     /// Exposes the control instance for parent item hosting.
@@ -91,7 +91,11 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// </summary>
     public void RefreshDemotionState() => UpdateUI();
 
-    public void RefreshThemeChrome() => RefreshHeaderChromeForCurrentTheme();
+    public void RefreshThemeChrome()
+    {
+        InvalidateChromeCache();
+        RefreshHeaderChromeForCurrentTheme();
+    }
 
     public void Cleanup()
     {
@@ -354,14 +358,26 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        InvalidateChromeCache();
         RefreshHeaderChromeForCurrentTheme();
-        DispatcherQueue.TryEnqueue(RefreshHeaderChromeForCurrentTheme);
+
+        // The visual tree isn't fully attached on the first synchronous call, so
+        // HasDarkAncestorBackground may return a stale answer. Invalidate again and
+        // re-resolve once the layout pass is complete.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            InvalidateChromeCache();
+            RefreshHeaderChromeForCurrentTheme();
+        });
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
     {
+        InvalidateChromeCache();
         RefreshHeaderChromeForCurrentTheme();
     }
+
+    private void InvalidateChromeCache() => _cachedUseDarkChrome = null;
 
     private void ApplyMinimalChrome()
     {
@@ -1110,8 +1126,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             return;
         }
 
-        var background = ShouldUseDarkServiceChrome()
-            ? _darkHeaderHoverBackgroundBrush
+        Brush? background = ShouldUseDarkServiceChrome()
+            ? FindThemeBrushFor("ServiceResultHeaderHoverBackgroundBrush", "Dark")
             : FindThemeBrush("ServiceResultHeaderHoverBackgroundBrush")
                 ?? FindThemeBrush("ButtonHoverBrush");
         if (background is not null)
@@ -1131,14 +1147,32 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             : null;
     }
 
+    private static Brush? FindThemeBrushFor(string key, string themeName)
+    {
+        return MinimalThemeService.TryGetResource<Brush>(key, themeName, out var brush)
+            ? brush
+            : null;
+    }
+
     private void RefreshHeaderChromeForCurrentTheme()
     {
         if (!MinimalThemeService.IsActive && ShouldUseDarkServiceChrome())
         {
-            RootBorder.Background = _darkResultBackgroundBrush;
-            RootBorder.BorderBrush = _darkBorderBrush;
-            HeaderBar.Background = _darkHeaderBackgroundBrush;
-            HeaderBar.BorderBrush = _darkBorderBrush;
+            // Resolve the dark-context chrome from the Dark theme dictionary so
+            // HighContrast tweaks and palette updates flow through Colors.xaml.
+            var darkBackground = FindThemeBrushFor("ResultViewBackgroundBrush", "Dark");
+            var darkBorder = FindThemeBrushFor("CardStrokeColorDefaultBrush", "Dark")
+                ?? FindThemeBrushFor("MainBorderBrush", "Dark");
+            var darkHeader = FindThemeBrushFor("ServiceResultHeaderBackgroundBrush", "Dark");
+
+            if (darkBackground is not null) RootBorder.Background = darkBackground;
+            if (darkBorder is not null)
+            {
+                RootBorder.BorderBrush = darkBorder;
+                HeaderBar.BorderBrush = darkBorder;
+            }
+            if (darkHeader is not null) HeaderBar.Background = darkHeader;
+
             ApplyHeaderForegroundForBackground(HeaderBar.Background);
             return;
         }
@@ -1205,7 +1239,27 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private bool ShouldUseDarkServiceChrome()
     {
+        if (_cachedUseDarkChrome is bool cached)
+        {
+            return cached;
+        }
+
+        var result = ResolveShouldUseDarkServiceChrome();
+        _cachedUseDarkChrome = result;
+        return result;
+    }
+
+    private bool ResolveShouldUseDarkServiceChrome()
+    {
         if (MinimalThemeService.IsActive)
+        {
+            return false;
+        }
+
+        // In High Contrast mode the system palette governs everything; deferring to
+        // the HighContrast theme dictionary preserves accessibility behavior instead
+        // of forcing our dark chrome on top of it.
+        if (MinimalThemeService.IsHighContrastActive())
         {
             return false;
         }

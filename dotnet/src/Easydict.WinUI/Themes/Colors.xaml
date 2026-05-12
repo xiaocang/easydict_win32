@@ -10,7 +10,11 @@
             <Color x:Key="MainBorderColor">#D9DDE5</Color>
             <Color x:Key="QueryViewBackgroundColor">#F4F4F2</Color>
             <Color x:Key="QueryTextColor">#262626</Color>
-            <Color x:Key="TitleBarBackgroundColor">#F1F1F1</Color>
+            <Color x:Key="TitleBarBackgroundColor">#FCFCFB</Color>
+            <Color x:Key="TitleBarForegroundColor">#303236</Color>
+            <Color x:Key="TitleBarInactiveForegroundColor">#797C82</Color>
+            <Color x:Key="TitleBarButtonHoverBackgroundColor">#F4F4F2</Color>
+            <Color x:Key="TitleBarButtonPressedBackgroundColor">#ECECE9</Color>
             <Color x:Key="ResultViewBackgroundColor">#FFFFFF</Color>
             <Color x:Key="ServiceResultHeaderBackgroundColor">#FFFFFF</Color>
             <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#F4F4F2</Color>
@@ -154,6 +158,10 @@
             <Color x:Key="QueryViewBackgroundColor">#272B34</Color>
             <Color x:Key="QueryTextColor">#E2E4E9</Color>
             <Color x:Key="TitleBarBackgroundColor">#1F2229</Color>
+            <Color x:Key="TitleBarForegroundColor">#E2E6ED</Color>
+            <Color x:Key="TitleBarInactiveForegroundColor">#8F96A3</Color>
+            <Color x:Key="TitleBarButtonHoverBackgroundColor">#2B2F38</Color>
+            <Color x:Key="TitleBarButtonPressedBackgroundColor">#323744</Color>
             <Color x:Key="ResultViewBackgroundColor">#22262E</Color>
             <Color x:Key="ServiceResultHeaderBackgroundColor">#2A2E38</Color>
             <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#323744</Color>
@@ -298,6 +306,10 @@
             <Color x:Key="QueryViewBackgroundColor">#FFFFFF</Color>
             <Color x:Key="QueryTextColor">#000000</Color>
             <Color x:Key="TitleBarBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="TitleBarForegroundColor">#000000</Color>
+            <Color x:Key="TitleBarInactiveForegroundColor">#000000</Color>
+            <Color x:Key="TitleBarButtonHoverBackgroundColor">#E0E0E0</Color>
+            <Color x:Key="TitleBarButtonPressedBackgroundColor">#C0C0C0</Color>
             <Color x:Key="ResultViewBackgroundColor">#FFFFFF</Color>
             <Color x:Key="ServiceResultHeaderBackgroundColor">#FFFFFF</Color>
             <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#E0E0E0</Color>

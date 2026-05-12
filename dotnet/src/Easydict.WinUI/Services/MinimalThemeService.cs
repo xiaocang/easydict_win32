@@ -122,7 +122,7 @@ internal static class MinimalThemeService
 
     public static Brush? GetBrush(string key)
     {
-        return TryGetResource<Brush>(key, null, out var brush)
+        return TryGetResource<Brush>(key, (FrameworkElement?)null, out var brush)
             ? brush
             : null;
     }
@@ -141,7 +141,7 @@ internal static class MinimalThemeService
 
     public static bool TryGetResource<T>(string key, FrameworkElement? root, out T resource)
     {
-        if (TryGetResourceValue(key, root, out var value) && value is T typed)
+        if (TryGetResourceValue(key, GetThemeDictionaryName(root), out var value) && value is T typed)
         {
             resource = typed;
             return true;
@@ -151,10 +151,27 @@ internal static class MinimalThemeService
         return false;
     }
 
-    private static bool TryGetResourceValue(string key, FrameworkElement? root, out object? value)
+    /// <summary>
+    /// Resolves a resource against an explicit theme dictionary name (e.g. "Dark", "Light",
+    /// "HighContrast"), bypassing the active app theme and any element's ActualTheme. Used
+    /// when a control needs to render in a context that doesn't match its element theme
+    /// (e.g. a Light app being hosted on a Dark surface).
+    /// </summary>
+    public static bool TryGetResource<T>(string key, string themeName, out T resource)
+    {
+        if (TryGetResourceValue(key, themeName, out var value) && value is T typed)
+        {
+            resource = typed;
+            return true;
+        }
+
+        resource = default!;
+        return false;
+    }
+
+    private static bool TryGetResourceValue(string key, string? themeName, out object? value)
     {
         var resources = Application.Current.Resources;
-        var themeName = GetThemeDictionaryName(root);
 
         if (themeName is not null)
         {
@@ -205,6 +222,22 @@ internal static class MinimalThemeService
     }
 
     /// <summary>
+    /// Returns true when the system is currently in High Contrast mode. Callers that paint
+    /// custom chrome should defer to system colors / theme dictionaries in this case.
+    /// </summary>
+    public static bool IsHighContrastActive()
+    {
+        try
+        {
+            return new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Apply chrome for the floating MiniWindow / FixedWindow surfaces. Both windows share
     /// the same root-padding, surface-clear, and source-input container layout.
     /// </summary>
@@ -224,10 +257,10 @@ internal static class MinimalThemeService
 
         surface.BorderThickness = new Thickness(0);
         surface.CornerRadius = new CornerRadius(0);
-        surface.Padding = minimal ? new Thickness(0) : new Thickness(16);
 
         if (minimal)
         {
+            surface.Padding = new Thickness(0);
             surface.Background = GetBrush("ApplicationPageBackgroundThemeBrush");
             sourceContainer.Background = GetBrush("CardBackgroundFillColorDefaultBrush");
             sourceContainer.BorderBrush = GetBrush("CardStrokeColorDefaultBrush");
@@ -239,6 +272,10 @@ internal static class MinimalThemeService
         }
 
         surface.Background = GetBrush("ApplicationPageBackgroundThemeBrush", themeRoot);
+        surface.Padding = GetResourceOrDefault(
+            "FloatingWindowContentPadding",
+            themeRoot,
+            new Thickness(16));
         sourceContainer.Background = GetBrush("TextControlBackground", themeRoot);
         sourceContainer.BorderBrush = GetBrush("TextControlBorderBrush", themeRoot);
         sourceContainer.BorderThickness = new Thickness(1);
@@ -246,8 +283,14 @@ internal static class MinimalThemeService
             "ControlCornerRadius",
             themeRoot,
             new CornerRadius(8));
-        sourceContainer.Padding = new Thickness(10, 9, 10, 9);
-        sourceContainer.Margin = new Thickness(0, 2, 0, 6);
+        sourceContainer.Padding = GetResourceOrDefault(
+            "FloatingInputPadding",
+            themeRoot,
+            new Thickness(10, 9, 10, 9));
+        sourceContainer.Margin = GetResourceOrDefault(
+            "FloatingInputMargin",
+            themeRoot,
+            new Thickness(0, 2, 0, 6));
     }
 
     public static void ApplyAccentIconForeground(FontIcon icon, ProgressRing? progressRing = null)

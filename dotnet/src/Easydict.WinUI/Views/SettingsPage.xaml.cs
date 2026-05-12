@@ -735,6 +735,9 @@ public sealed partial class SettingsPage : Page
         // Service configuration controls (API Keys, Endpoints, Models, etc.)
         // TextBox/PasswordBox headers for each service
         DeepLKeyBox.Header = loc.GetString("ApiKeyOptional");
+        DeepLFreeCheck.Content = loc.GetString("DeepLFreeOption");
+        DeepLQualityCheck.Content = loc.GetString("DeepLQualityOption");
+        DeepLDescriptionText.Text = loc.GetString("DeepLDescription");
         OpenAIKeyBox.Header = loc.GetString("ApiKey");
         OpenAIEndpointBox.Header = loc.GetString("EndpointOptional");
         OpenAIModelCombo.Header = loc.GetString("Model");

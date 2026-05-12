@@ -263,11 +263,9 @@
                                         Width="350"
                                         PlaceholderText="Enter your DeepL API key"
                                         HorizontalAlignment="Left"/>
-                                <CheckBox x:Name="DeepLFreeCheck"
-                                        Content="Use Free API (no API key required for web translation)"/>
-                                <CheckBox x:Name="DeepLQualityCheck"
-                                        Content="Use quality-optimized model (API only; slower, higher quality)"/>
-                                <TextBlock Text="Leave API key empty to use free web translation. Pro API key gives higher limits."
+                                <CheckBox x:Name="DeepLFreeCheck"/>
+                                <CheckBox x:Name="DeepLQualityCheck"/>
+                                <TextBlock x:Name="DeepLDescriptionText"
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>

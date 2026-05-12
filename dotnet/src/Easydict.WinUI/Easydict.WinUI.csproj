@@ -48,8 +48,12 @@
              so we can attach ExcludeAssets metadata. ExcludeAssets="runtime;native"
              tells NuGet to skip copying this package's native/runtime files to output,
              leaving managed-API surface usable but dropping the conflicting onnxruntime.dll.
-             Version is a floating "2.0.*" so it tracks whatever WindowsAppSDK resolves. -->
-        <PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.0.*">
+             Version is pinned to the exact value WindowsAppSDK 2.0.1 resolves to
+             (observed in the duplicate-payload error: ".nuget/packages/microsoft.windows.ai.machinelearning/2.0.300/...").
+             A floating "2.0.*" was previously used but is non-reproducible: if a 2.0.301
+             ships with a different native-asset layout, the dedupe behavior could change
+             without any code edit. Bump this number in lockstep with WindowsAppSDK upgrades. -->
+        <PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.0.300">
             <ExcludeAssets>runtime;native</ExcludeAssets>
         </PackageReference>
     </ItemGroup>

@@ -187,16 +187,22 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
             .First(o => o.Name == _decoderLogitsOutputName)
             .AsTensor<float>();
 
-        // logits shape: [1, tgtLen, vocab_size]. We only care about the last position.
-        var dims = logits.Dimensions;
-        var vocabSize = dims[2];
+        // logits shape: [1, tgtLen, vocab_size]. Argmax over the LAST position's
+        // vocab vector. We materialize a DenseTensor and walk its row-major
+        // buffer directly — using Tensor.GetValue(int) only worked accidentally
+        // (it relies on a row-major linear layout that Tensor<T> doesn't actually
+        // promise) and isn't future-proof. A span walk is also faster than
+        // calling the 3D indexer in a 256k-iteration loop.
+        var dense = logits.ToDenseTensor();
+        var buffer = dense.Buffer.Span;
+        var vocabSize = (int)dense.Dimensions[2];
         var lastPosBase = (tgtLen - 1) * vocabSize;
 
         int bestId = 0;
         float bestLogit = float.NegativeInfinity;
         for (var v = 0; v < vocabSize; v++)
         {
-            var logit = logits.GetValue(lastPosBase + v);
+            var logit = buffer[lastPosBase + v];
             if (logit > bestLogit)
             {
                 bestLogit = logit;

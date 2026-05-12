@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using Easydict.OpenVINO.Models;
 
 namespace Easydict.OpenVINO.Services;
@@ -167,6 +168,24 @@ public sealed class ModelDownloadService
                 }
             }
 
+            // Integrity check before publishing: when the manifest declares an
+            // expected SHA-256, recompute it from the .part file and fail loudly
+            // on mismatch. The .part is left in the finally block's delete path
+            // so a corrupted download doesn't survive to be treated as the cached
+            // model. Skipped when Sha256 is null (current default while Revision
+            // is "main" — see ModelManifest XML doc).
+            if (!string.IsNullOrEmpty(file.Sha256))
+            {
+                var actual = await ComputeSha256HexAsync(tmpPath, cancellationToken);
+                if (!string.Equals(actual, file.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidDataException(
+                        $"SHA-256 mismatch for '{file.LocalFileName}'. " +
+                        $"Expected {file.Sha256}, got {actual}. " +
+                        $"The downloaded file may be corrupt or the upstream model has changed.");
+                }
+            }
+
             // Atomic publish so a crash mid-write doesn't leave a half-file that
             // IsModelInstalled would treat as valid.
             File.Move(tmpPath, localPath, overwrite: true);
@@ -193,6 +212,19 @@ public sealed class ModelDownloadService
             return 0.0;
         }
         return Math.Clamp(done * 100.0 / total, 0.0, 100.0);
+    }
+
+    /// <summary>
+    /// Streams the file through SHA-256 and returns the lowercase hex digest.
+    /// Streaming (not <see cref="File.ReadAllBytes(string)"/>) keeps memory flat
+    /// for the ~165 MB encoder model.
+    /// </summary>
+    private static async Task<string> ComputeSha256HexAsync(string path, CancellationToken cancellationToken)
+    {
+        await using var stream = File.OpenRead(path);
+        using var sha = SHA256.Create();
+        var hash = await sha.ComputeHashAsync(stream, cancellationToken);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private static string DefaultCacheRoot()

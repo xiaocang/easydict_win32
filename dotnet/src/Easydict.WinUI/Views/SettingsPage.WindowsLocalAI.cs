@@ -84,8 +84,13 @@ public sealed partial class SettingsPage
         }
         catch (Exception ex)
         {
+            // Distinct from the "user hasn't tried yet" path: show the dedicated
+            // PrepareFailed message + Error severity so the user sees that the
+            // attempt failed and knows to retry / investigate. The raw exception
+            // message is forwarded as the InfoBar's secondary content so common
+            // diagnostics (offline, AV blocking, quota) are visible.
             Debug.WriteLine($"[Settings] Windows Local AI prepare failed: {ex.Message}");
-            UpdateWindowsLocalAIStatusUi(WindowsLocalAIAvailability.GetReadyState());
+            ShowWindowsLocalAIPrepareFailure(ex.Message);
         }
         finally
         {
@@ -93,6 +98,31 @@ public sealed partial class SettingsPage
             WindowsLocalAIPrepareButton.Content = originalContent;
             WindowsLocalAIPrepareButton.IsEnabled = true;
         }
+    }
+
+    /// <summary>
+    /// Renders the failure path of <see cref="OnPrepareWindowsLocalAIModel"/> —
+    /// distinct from the normal "NotReady, click to prepare" state. Uses the
+    /// dedicated <c>WindowsLocalAI_Status_PrepareFailed</c> resource key (not
+    /// <c>WindowsLocalAI_Status_NotReady</c>) so the user can tell the system
+    /// tried and failed. Leaves the Prepare button visible so retry is one click.
+    /// </summary>
+    private void ShowWindowsLocalAIPrepareFailure(string? detailMessage)
+    {
+        if (WindowsLocalAIStatusBar is null) return;
+
+        var loc = LocalizationService.Instance;
+        WindowsLocalAIStatusBar.Title = loc.GetString("WindowsLocalAI_Title_Unavailable");
+        WindowsLocalAIStatusBar.Message = loc.GetString("WindowsLocalAI_Status_PrepareFailed");
+        WindowsLocalAIStatusBar.Severity = InfoBarSeverity.Error;
+        WindowsLocalAIStatusBar.IsOpen = true;
+
+        WindowsLocalAIStatusBadge.Text = "⚠";
+        WindowsLocalAIStatusBadge.Foreground = GetLocalAiStatusBrush(isReady: false);
+        WindowsLocalAIStatusBadge.Visibility = Visibility.Visible;
+
+        // Allow retry — failure isn't a permanent state.
+        WindowsLocalAIPrepareButton.Visibility = Visibility.Visible;
     }
 
     /// <summary>

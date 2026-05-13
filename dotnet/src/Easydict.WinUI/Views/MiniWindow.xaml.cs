@@ -110,6 +110,7 @@ public sealed partial class MiniWindow : Window
         // Track when content is loaded for safe UI operations
         if (this.Content is FrameworkElement content)
         {
+            content.ActualThemeChanged += OnContentActualThemeChanged;
             content.Loaded += (s, e) =>
             {
                 _isLoaded = true;
@@ -130,6 +131,12 @@ public sealed partial class MiniWindow : Window
                 "MiniWindow");
             _titleBarHelper.Initialize();
         }
+    }
+
+    private void OnContentActualThemeChanged(FrameworkElement sender, object args)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+            ApplyTheme(MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme), forceResourceRefresh: false));
     }
 
     /// <summary>
@@ -431,7 +438,8 @@ public sealed partial class MiniWindow : Window
                 _resultControls,
                 ResultsPanel,
                 OnServiceCollapseToggled,
-                OnServiceQueryRequested);
+                OnServiceQueryRequested,
+                Content as FrameworkElement);
         }
 
         ReorderResultsPanel();
@@ -449,7 +457,8 @@ public sealed partial class MiniWindow : Window
             _resultControls,
             ResultsPanel,
             OnServiceCollapseToggled,
-            OnServiceQueryRequested);
+            OnServiceQueryRequested,
+            Content as FrameworkElement);
 
         ReorderResultsPanel();
         RequestResize();
@@ -667,6 +676,10 @@ public sealed partial class MiniWindow : Window
         try
         {
             SettingsService.Instance.HideEmptyServiceResultsChanged -= OnHideEmptyServiceResultsChanged;
+            if (Content is FrameworkElement content)
+            {
+                content.ActualThemeChanged -= OnContentActualThemeChanged;
+            }
 
             _isClosing = true;
 
@@ -1610,8 +1623,8 @@ public sealed partial class MiniWindow : Window
         {
             ProtectedCursorHelper.Set(SourceTextContainer, InputSystemCursor.Create(InputSystemCursorShape.Hand));
             var themeRoot = Content as FrameworkElement;
-            SourceTextContainer.BorderBrush = MinimalThemeService.GetBrush("AccentTextFillColorPrimaryBrush", themeRoot)
-                ?? MinimalThemeService.GetBrush("AccentBrush", themeRoot);
+            SourceTextContainer.BorderBrush = ThemeResourceService.GetBrush("AccentTextFillColorPrimaryBrush", themeRoot)
+                ?? ThemeResourceService.GetBrush("AccentBrush", themeRoot);
             SourceTextContainer.BorderThickness = new Microsoft.UI.Xaml.Thickness(1);
         }
     }
@@ -1970,7 +1983,8 @@ public sealed partial class MiniWindow : Window
         SourcePlayButton.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
         DetectedLangText.Visibility = minimal ? Visibility.Collapsed : DetectedLangText.Visibility;
         StatusText.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
-        MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing);
+        var themeRoot = Content as FrameworkElement;
+        MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing, themeRoot);
 
         if (ServiceResultViewHost.NeedsThemeRebuild(_resultControls, minimal))
         {
@@ -1978,7 +1992,7 @@ public sealed partial class MiniWindow : Window
         }
         else
         {
-            ServiceResultViewHost.RefreshThemeChrome(_resultControls);
+            ServiceResultViewHost.RefreshThemeChrome(_resultControls, themeRoot);
         }
 
         if (minimal)

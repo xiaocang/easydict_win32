@@ -15,7 +15,10 @@
         <local:BoolToCompactMarginConverter x:Key="BoolToCompactMarginConverter"/>
         <local:BoolToCompactFontSizeConverter x:Key="BoolToCompactFontSizeConverter"/>
         <local:BoolToItalicFontStyleConverter x:Key="BoolToItalicFontStyleConverter"/>
-        <local:SettingsTabBrushConverter x:Key="SettingsTabBrushConverter"/>
+        <Style x:Key="SettingsAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictAccentButtonStyle}"/>
+        <Style x:Key="SettingsSectionStyle" TargetType="Border" BasedOn="{StaticResource EasydictSurfaceStyle}">
+            <Setter Property="Padding" Value="16"/>
+        </Style>
         <Style x:Key="SettingsTabButtonStyle" TargetType="Button">
             <Setter Property="MinWidth" Value="0"/>
             <Setter Property="MinHeight" Value="0"/>
@@ -67,11 +70,14 @@
                 <Grid x:Name="HeaderSection">
                     <StackPanel Orientation="Horizontal"
                             Spacing="12">
-                        <Button Click="OnBackClick"
-                                Style="{StaticResource AccentButtonStyle}"
+                        <Button x:Name="BackButton"
+                                AutomationProperties.AutomationId="BackButton"
+                                Click="OnBackClick"
+                                Style="{StaticResource SettingsAccentButtonStyle}"
                                 Padding="8">
                             <FontIcon Glyph="&#xE72B;"
-                                    FontSize="16"/>
+                                    FontSize="16"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                         </Button>
                         <TextBlock x:Name="SettingsHeaderText"
                                 Text="Settings"
@@ -99,26 +105,50 @@
                                     Height="76"
                                     Margin="0,0,10,10"
                                     Padding="0"
-                                    Background="{Binding IsSelected, Converter={StaticResource SettingsTabBrushConverter}, ConverterParameter=Background}"
-                                    BorderBrush="{Binding IsSelected, Converter={StaticResource SettingsTabBrushConverter}, ConverterParameter=Border}"
+                                    Background="{ThemeResource SettingsTabBackgroundBrush}"
+                                    BorderBrush="{ThemeResource SettingsTabBorderBrush}"
                                     BorderThickness="1"
-                                    CornerRadius="8"
-                                    Foreground="{Binding IsSelected, Converter={StaticResource SettingsTabBrushConverter}, ConverterParameter=Foreground}"
+                                    CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                                    Foreground="{ThemeResource SettingsTabForegroundBrush}"
                                     HorizontalAlignment="Left"
                                     ToolTipService.ToolTip="{Binding Tooltip}">
-                                <StackPanel Spacing="6"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center">
-                                    <FontIcon Glyph="{Binding IconGlyph}"
-                                              FontSize="22"
-                                              Foreground="{Binding IsSelected, Converter={StaticResource SettingsTabBrushConverter}, ConverterParameter=Foreground}"
-                                              HorizontalAlignment="Center"/>
-                                    <TextBlock Text="{Binding Label}"
-                                               FontSize="12"
-                                               Foreground="{Binding IsSelected, Converter={StaticResource SettingsTabBrushConverter}, ConverterParameter=Foreground}"
-                                               TextAlignment="Center"
-                                               HorizontalAlignment="Center"/>
-                                </StackPanel>
+                                <Grid>
+                                    <StackPanel Spacing="6"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center">
+                                        <FontIcon Glyph="{Binding IconGlyph}"
+                                                  FontSize="22"
+                                                  Foreground="{ThemeResource SettingsTabForegroundBrush}"
+                                                  HorizontalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Label}"
+                                                   FontSize="12"
+                                                   Foreground="{ThemeResource SettingsTabForegroundBrush}"
+                                                   TextAlignment="Center"
+                                                   HorizontalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <Border
+                                        Background="{ThemeResource SettingsTabSelectedBackgroundBrush}"
+                                        BorderBrush="{ThemeResource SettingsTabSelectedBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                                        Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                    <StackPanel Spacing="6"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <FontIcon Glyph="{Binding IconGlyph}"
+                                                  FontSize="22"
+                                                  Foreground="{ThemeResource SettingsTabSelectedForegroundBrush}"
+                                                  HorizontalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Label}"
+                                                   FontSize="12"
+                                                   Foreground="{ThemeResource SettingsTabSelectedForegroundBrush}"
+                                                   TextAlignment="Center"
+                                                   HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Grid>
                             </Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -161,8 +191,7 @@
                         </StackPanel>
 
                         <!-- International Services Toggle -->
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
+                        <Border Style="{StaticResource SettingsSectionStyle}"
                                 Padding="12,8">
                             <StackPanel Spacing="4">
                                 <Grid>
@@ -838,9 +867,7 @@
                                 Spacing="8"/>
 
                         <!-- Google Translate & Linguee (No configuration needed) -->
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="8">
                                 <TextBlock x:Name="FreeServicesHeaderText"
                                         Text="Free Services (No Configuration Required)"
@@ -872,8 +899,7 @@
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextWrapping="Wrap"/>
 
-                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    CornerRadius="8"
+                            <Border Style="{StaticResource SettingsSectionStyle}"
                                     Padding="12">
                                 <StackPanel Spacing="14">
                                     <StackPanel x:Name="MainWindowSection"
@@ -1144,9 +1170,7 @@
                                 FontWeight="SemiBold"/>
 
 
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        CornerRadius="8"
-                        Padding="16">
+                <Border Style="{StaticResource SettingsSectionStyle}">
                     <StackPanel Spacing="16">
                         <!-- First Language -->
                         <ComboBox
@@ -1278,9 +1302,7 @@
                                     VerticalAlignment="Center"/>
                         </StackPanel>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
                                 <StackPanel Orientation="Horizontal"
                                         Spacing="12"
@@ -1383,9 +1405,7 @@
                                 FontSize="18"
                                 FontWeight="SemiBold"/>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="12">
                                 <!-- App Theme -->
                                 <ComboBox
@@ -1474,7 +1494,7 @@
                                    Text="TTS Output Settings"
                                    FontSize="18"
                                    FontWeight="SemiBold" />
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
                                 <StackPanel Spacing="4">
                                     <TextBlock x:Name="TtsSpeedLabelText"
@@ -1503,9 +1523,7 @@
                                 FontSize="18"
                                 FontWeight="SemiBold"/>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="8">
                                 <TextBlock FontWeight="SemiBold"
                                         Text="Easydict for Windows ᵇᵉᵗᵃ"/>
@@ -1549,9 +1567,7 @@
                                 FontSize="18"
                                 FontWeight="SemiBold"/>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
                                 <ComboBox x:Name="OcrEngineCombo"
                                         Header="OCR Engine"
@@ -1628,9 +1644,7 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 TextWrapping="Wrap"/>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
                                 <ComboBox x:Name="LayoutDetectionModeCombo"
                                         Header="Detection Mode"
@@ -1722,9 +1736,7 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 TextWrapping="Wrap"/>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
                                 <StackPanel Orientation="Horizontal"
                                         Spacing="12">
@@ -1766,9 +1778,7 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 TextWrapping="Wrap"/>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
                                 <TextBox x:Name="FormulaFontPatternBox"
                                         Header="Font Pattern (Regex)"
@@ -1804,9 +1814,7 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 TextWrapping="Wrap"/>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
                                 <ToggleSwitch x:Name="TranslationCacheToggle"
                                         Header="Enable Translation Cache"
@@ -1844,9 +1852,7 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 TextWrapping="Wrap"/>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
                                 <TextBox x:Name="CustomPromptBox"
                                         Header="Additional Instructions"
@@ -1874,9 +1880,7 @@
                                 FontSize="18"
                                 FontWeight="SemiBold"/>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                CornerRadius="8"
-                                Padding="16">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="16">
                                 <ToggleSwitch x:Name="ProxyEnabledToggle"
                                         Header="Use HTTP Proxy"/>
@@ -1907,7 +1911,7 @@
         <Button x:Name="SaveButton"
                 Content="Save Settings"
                 Click="OnSaveClick"
-                Style="{StaticResource AccentButtonStyle}"
+                Style="{StaticResource SettingsAccentButtonStyle}"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Bottom"
                 Margin="0,0,32,32"

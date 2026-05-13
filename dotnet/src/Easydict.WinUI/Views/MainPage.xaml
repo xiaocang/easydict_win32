@@ -110,13 +110,13 @@
                         x:Name="StatusDot"
                         Width="8"
                         Height="8"
-                        Fill="White"
+                        Fill="{ThemeResource StatusIndicatorForegroundBrush}"
                         VerticalAlignment="Center"/>
                     <TextBlock
                         x:Name="StatusText"
                         Text="Disconnected"
                         FontSize="12"
-                        Foreground="White"
+                        Foreground="{ThemeResource StatusIndicatorForegroundBrush}"
                         VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
@@ -126,14 +126,8 @@
                 x:Name="SettingsButton"
                 Grid.Column="3"
                 Click="OnSettingsClicked"
+                Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Settings"
-                Background="Transparent"
-                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
-                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                Width="36"
-                Height="36"
-                Padding="0"
                 VerticalAlignment="Center">
                 <FontIcon Glyph="&#xE713;"
                           FontSize="18"
@@ -143,6 +137,7 @@
 
         <!-- Quick Translate Content -->
         <ScrollViewer x:Name="QuickTranslateContent"
+                      AutomationProperties.AutomationId="QuickTranslateContent"
                       Grid.Row="1"
                       VerticalScrollBarVisibility="Visible"
                       HorizontalScrollBarVisibility="Disabled"
@@ -215,13 +210,7 @@
                         x:Name="SwapLanguageButton"
                         Grid.Column="1"
                         Click="OnSwapLanguagesClicked"
-                        Width="36"
-                        Height="36"
-                        Padding="0"
-                        CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                        Background="Transparent"
-                        BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                        BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
+                        Style="{StaticResource EasydictIconButtonStyle}"
                         ToolTipService.ToolTip="Swap source and target languages"
                         Margin="8,0"
                         VerticalAlignment="Center">
@@ -255,12 +244,8 @@
                         x:Name="TranslateButton"
                         Grid.Column="4"
                         Click="OnTranslateClicked"
-                        Width="40"
-                        Height="40"
-                        Padding="0"
-                        CornerRadius="{ThemeResource EasydictRoundButtonCornerRadius}"
+                        Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                         VerticalAlignment="Center"
-                        Background="{ThemeResource AccentBrush}"
                         ToolTipService.ToolTip="Translate">
                         <Grid>
                             <ProgressRing
@@ -268,13 +253,13 @@
                                 IsActive="False"
                                 Width="16"
                                 Height="16"
-                                Foreground="White"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                 Visibility="Collapsed"/>
                             <FontIcon
                                 x:Name="TranslateIcon"
                                 Glyph="&#xE8C1;"
                                 FontSize="16"
-                                Foreground="White"/>
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                         </Grid>
                     </Button>
                 </Grid>
@@ -305,13 +290,7 @@
                             x:Name="SwapLanguageButtonNarrow"
                             Grid.Column="1"
                             Click="OnSwapLanguagesClicked"
-                            Width="36"
-                            Height="36"
-                            Padding="0"
-                            CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                            Background="Transparent"
-                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                            BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
+                            Style="{StaticResource EasydictIconButtonStyle}"
                             ToolTipService.ToolTip="Swap source and target languages"
                             VerticalAlignment="Center"
                             Margin="4,0">
@@ -340,12 +319,8 @@
                     <Button
                         x:Name="TranslateButtonNarrow"
                         Click="OnTranslateClicked"
-                        Width="40"
-                        Height="40"
-                        Padding="0"
-                        CornerRadius="{ThemeResource EasydictRoundButtonCornerRadius}"
+                        Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                         HorizontalAlignment="Center"
-                        Background="{ThemeResource AccentBrush}"
                         ToolTipService.ToolTip="Translate">
                         <Grid>
                             <ProgressRing
@@ -353,13 +328,13 @@
                                 IsActive="False"
                                 Width="16"
                                 Height="16"
-                                Foreground="White"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                 Visibility="Collapsed"/>
                             <FontIcon
                                 x:Name="TranslateIconNarrow"
                                 Glyph="&#xE8C1;"
                                 FontSize="16"
-                                Foreground="White"/>
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                         </Grid>
                     </Button>
                 </StackPanel>
@@ -405,13 +380,10 @@
                                 x:Name="SourcePlayButton"
                                 Grid.Column="2"
                                 Click="OnSourcePlayClicked"
+                                Style="{StaticResource EasydictIconButtonStyle}"
                                 ToolTipService.ToolTip="Play source text"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                                 Width="24"
                                 Height="24"
-                                Padding="0"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center">
                                 <FontIcon x:Name="SourcePlayIcon"
@@ -745,18 +717,14 @@
                             Grid.Row="2"
                             Grid.Column="3"
                             Click="OnLongDocTranslateClicked"
-                            Width="40"
-                            Height="40"
-                            Padding="0"
-                            CornerRadius="{ThemeResource EasydictRoundButtonCornerRadius}"
+                            Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
-                            Background="{ThemeResource AccentBrush}"
                             ToolTipService.ToolTip="Translate">
                         <FontIcon x:Name="LongDocTranslateIcon"
                                   Glyph="&#xE8C1;"
                                   FontSize="16"
-                                  Foreground="White"/>
+                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                     </Button>
 
                     <!-- Row 1, Col 0: Input Mode -->

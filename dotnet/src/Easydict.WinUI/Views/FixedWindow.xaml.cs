@@ -90,6 +90,7 @@ public sealed partial class FixedWindow : Window
         // Track when content is loaded for safe UI operations
         if (this.Content is FrameworkElement content)
         {
+            content.ActualThemeChanged += OnContentActualThemeChanged;
             content.Loaded += (s, e) =>
             {
                 _isLoaded = true;
@@ -110,6 +111,12 @@ public sealed partial class FixedWindow : Window
                 "FixedWindow");
             _titleBarHelper.Initialize();
         }
+    }
+
+    private void OnContentActualThemeChanged(FrameworkElement sender, object args)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+            ApplyTheme(MinimalThemeService.ToElementTheme(SettingsService.Instance.AppTheme), forceResourceRefresh: false));
     }
 
     /// <summary>
@@ -331,7 +338,8 @@ public sealed partial class FixedWindow : Window
                 _resultControls,
                 ResultsPanel,
                 OnServiceCollapseToggled,
-                OnServiceQueryRequested);
+                OnServiceQueryRequested,
+                Content as FrameworkElement);
         }
 
         ReorderResultsPanel();
@@ -349,7 +357,8 @@ public sealed partial class FixedWindow : Window
             _resultControls,
             ResultsPanel,
             OnServiceCollapseToggled,
-            OnServiceQueryRequested);
+            OnServiceQueryRequested,
+            Content as FrameworkElement);
 
         ReorderResultsPanel();
         RequestResize();
@@ -471,6 +480,10 @@ public sealed partial class FixedWindow : Window
         try
         {
             SettingsService.Instance.HideEmptyServiceResultsChanged -= OnHideEmptyServiceResultsChanged;
+            if (Content is FrameworkElement content)
+            {
+                content.ActualThemeChanged -= OnContentActualThemeChanged;
+            }
 
             _isClosing = true;
             SaveWindowPosition();
@@ -1434,7 +1447,8 @@ public sealed partial class FixedWindow : Window
             Content as FrameworkElement);
         DetectedLangText.Visibility = minimal ? Visibility.Collapsed : DetectedLangText.Visibility;
         StatusText.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
-        MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing);
+        var themeRoot = Content as FrameworkElement;
+        MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing, themeRoot);
 
         if (ServiceResultViewHost.NeedsThemeRebuild(_resultControls, minimal))
         {
@@ -1442,7 +1456,7 @@ public sealed partial class FixedWindow : Window
         }
         else
         {
-            ServiceResultViewHost.RefreshThemeChrome(_resultControls);
+            ServiceResultViewHost.RefreshThemeChrome(_resultControls, themeRoot);
         }
 
         if (minimal)

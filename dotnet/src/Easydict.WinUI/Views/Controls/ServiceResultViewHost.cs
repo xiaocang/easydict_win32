@@ -11,12 +11,14 @@ internal static class ServiceResultViewHost
     public static IServiceResultView Create(
         ServiceQueryResult result,
         EventHandler<ServiceQueryResult> collapseToggled,
-        EventHandler<ServiceQueryResult> queryRequested)
+        EventHandler<ServiceQueryResult> queryRequested,
+        FrameworkElement? themeRoot = null)
     {
         IServiceResultView control = MinimalThemeService.IsActive
             ? new MinimalServiceResultItem()
             : new ServiceResultItem();
 
+        control.ThemeRoot = themeRoot;
         control.ServiceResult = result;
         control.CollapseToggled += collapseToggled;
         control.QueryRequested += queryRequested;
@@ -28,9 +30,10 @@ internal static class ServiceResultViewHost
         IList<IServiceResultView> controls,
         ItemsControl resultsPanel,
         EventHandler<ServiceQueryResult> collapseToggled,
-        EventHandler<ServiceQueryResult> queryRequested)
+        EventHandler<ServiceQueryResult> queryRequested,
+        FrameworkElement? themeRoot = null)
     {
-        var control = Create(result, collapseToggled, queryRequested);
+        var control = Create(result, collapseToggled, queryRequested, themeRoot ?? resultsPanel);
         controls.Add(control);
         resultsPanel.Items.Add(control.Element);
         return control;
@@ -46,13 +49,14 @@ internal static class ServiceResultViewHost
         IList<IServiceResultView> controls,
         ItemsControl resultsPanel,
         EventHandler<ServiceQueryResult> collapseToggled,
-        EventHandler<ServiceQueryResult> queryRequested)
+        EventHandler<ServiceQueryResult> queryRequested,
+        FrameworkElement? themeRoot = null)
     {
         Release(controls, resultsPanel, collapseToggled, queryRequested);
 
         foreach (var result in results)
         {
-            Add(result, controls, resultsPanel, collapseToggled, queryRequested);
+            Add(result, controls, resultsPanel, collapseToggled, queryRequested, themeRoot);
         }
     }
 
@@ -174,10 +178,17 @@ internal static class ServiceResultViewHost
         }
     }
 
-    public static void RefreshThemeChrome(IEnumerable<IServiceResultView> controls)
+    public static void RefreshThemeChrome(
+        IEnumerable<IServiceResultView> controls,
+        FrameworkElement? themeRoot = null)
     {
         foreach (var control in controls)
         {
+            if (themeRoot is not null)
+            {
+                control.ThemeRoot = themeRoot;
+            }
+
             control.RefreshThemeChrome();
         }
     }

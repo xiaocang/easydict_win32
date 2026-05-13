@@ -53,10 +53,8 @@
                 x:Name="CloseButton"
                 Grid.Column="1"
                 Click="OnCloseClicked"
+                Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Hide (Ctrl+Alt+F to show again)"
-                Background="Transparent"
-                BorderThickness="0"
-                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                 Width="28"
                 Height="28"
                 Padding="0">
@@ -72,9 +70,9 @@
                 Background="{ThemeResource TextControlBackground}"
                 BorderBrush="{ThemeResource TextControlBorderBrush}"
                 BorderThickness="{ThemeResource EasydictCardBorderThickness}"
-                CornerRadius="{ThemeResource ControlCornerRadius}"
-                Padding="10,9"
-                Margin="0,2,0,6">
+                CornerRadius="{ThemeResource FloatingInputCornerRadius}"
+                Padding="{ThemeResource FloatingInputPadding}"
+                Margin="{ThemeResource FloatingInputMargin}">
             <TextBox
                 x:Name="InputTextBox"
                 PlaceholderText="Enter text..."
@@ -123,11 +121,9 @@
                 Grid.Column="1"
                 Click="OnSwapClicked"
                 Width="28"
-                    Height="28"
+                Height="28"
                 Padding="0"
-                Background="Transparent"
-                BorderThickness="0"
-                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Swap languages"
                 Margin="4,0">
                 <FontIcon Glyph="&#xE8AB;"
@@ -151,10 +147,7 @@
                 Width="32"
                 Height="32"
                 Padding="0"
-                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
-                CornerRadius="{ThemeResource EasydictRoundButtonCornerRadius}"
-                Background="{ThemeResource AccentBrush}"
+                Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                 ToolTipService.ToolTip="Translate"
                 Margin="4,0,0,0">
                 <Grid>
@@ -162,14 +155,14 @@
                         x:Name="LoadingRing"
                         IsActive="False"
                         Width="14"
-                            Height="14"
-                        Foreground="White"
+                        Height="14"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                         Visibility="Collapsed"/>
                     <FontIcon
                         x:Name="TranslateIcon"
                         Glyph="&#xE8C1;"
                         FontSize="14"
-                        Foreground="White"/>
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                 </Grid>
             </Button>
         </Grid>

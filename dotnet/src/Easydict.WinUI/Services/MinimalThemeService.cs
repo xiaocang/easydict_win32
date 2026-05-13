@@ -24,28 +24,32 @@ internal static class MinimalThemeService
 
     public static ElementTheme ToElementTheme(string theme)
     {
+        if (ThemeResourceService.IsHighContrastActive() && !IsMinimal(theme))
+        {
+            return ElementTheme.Default;
+        }
+
         return theme switch
         {
             "Light" => ElementTheme.Light,
             "Dark" => ElementTheme.Dark,
             ThemeName => ElementTheme.Light,
-            _ => ElementTheme.Default
+            _ => ResolveSystemElementTheme()
         };
     }
 
-    /// <summary>
-    /// Resolves "Light"/"Dark" for ThemeDictionaries lookup. Returns null when the
-    /// caller should fall back to per-element <see cref="FrameworkElement.ActualTheme"/>
-    /// (or the system theme, for non-elemented sites). Minimal mode pins to "Light".
-    /// </summary>
-    public static string? TryGetExplicitThemeDictionaryName()
+    private static ElementTheme ResolveSystemElementTheme()
     {
-        if (IsActive) return "Light";
-        return SettingsService.Instance.AppTheme switch
+        if (ThemeResourceService.IsHighContrastActive())
         {
-            "Dark" => "Dark",
-            "Light" => "Light",
-            _ => null
+            return ElementTheme.Default;
+        }
+
+        return SystemThemeProbe.IsSystemDark() switch
+        {
+            true => ElementTheme.Dark,
+            false => ElementTheme.Light,
+            null => ElementTheme.Default
         };
     }
 
@@ -111,129 +115,12 @@ internal static class MinimalThemeService
 
         if (IsActive)
         {
-            panel.Background = GetBrush("ApplicationPageBackgroundThemeBrush")
-                ?? new SolidColorBrush(Microsoft.UI.Colors.White);
+            panel.Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush")
+                ?? _transparentBrush;
         }
         else
         {
             panel.Background = _transparentBrush;
-        }
-    }
-
-    public static Brush? GetBrush(string key)
-    {
-        return TryGetResource<Brush>(key, (FrameworkElement?)null, out var brush)
-            ? brush
-            : null;
-    }
-
-    public static Brush? GetBrush(string key, FrameworkElement? root)
-    {
-        return TryGetResource<Brush>(key, root, out var brush)
-            ? brush
-            : null;
-    }
-
-    public static T GetResourceOrDefault<T>(string key, FrameworkElement? root, T fallback)
-    {
-        return TryGetResource<T>(key, root, out var value) ? value : fallback;
-    }
-
-    public static bool TryGetResource<T>(string key, FrameworkElement? root, out T resource)
-    {
-        if (TryGetResourceValue(key, GetThemeDictionaryName(root), out var value) && value is T typed)
-        {
-            resource = typed;
-            return true;
-        }
-
-        resource = default!;
-        return false;
-    }
-
-    /// <summary>
-    /// Resolves a resource against an explicit theme dictionary name (e.g. "Dark", "Light",
-    /// "HighContrast"), bypassing the active app theme and any element's ActualTheme. Used
-    /// when a control needs to render in a context that doesn't match its element theme
-    /// (e.g. a Light app being hosted on a Dark surface).
-    /// </summary>
-    public static bool TryGetResource<T>(string key, string themeName, out T resource)
-    {
-        if (TryGetResourceValue(key, themeName, out var value) && value is T typed)
-        {
-            resource = typed;
-            return true;
-        }
-
-        resource = default!;
-        return false;
-    }
-
-    private static bool TryGetResourceValue(string key, string? themeName, out object? value)
-    {
-        var resources = Application.Current.Resources;
-
-        if (themeName is not null)
-        {
-            if (resources.ThemeDictionaries.TryGetValue(themeName, out var topObj) &&
-                topObj is ResourceDictionary topThemeDictionary &&
-                topThemeDictionary.TryGetValue(key, out value))
-            {
-                return true;
-            }
-
-            var merged = resources.MergedDictionaries;
-            for (var i = merged.Count - 1; i >= 0; i--)
-            {
-                if (merged[i].ThemeDictionaries.TryGetValue(themeName, out var themeObj) &&
-                    themeObj is ResourceDictionary themeDictionary &&
-                    themeDictionary.TryGetValue(key, out value))
-                {
-                    return true;
-                }
-            }
-        }
-
-        for (var i = resources.MergedDictionaries.Count - 1; i >= 0; i--)
-        {
-            if (resources.MergedDictionaries[i].TryGetValue(key, out value))
-            {
-                return true;
-            }
-        }
-
-        return resources.TryGetValue(key, out value);
-    }
-
-    private static string? GetThemeDictionaryName(FrameworkElement? root)
-    {
-        var explicitTheme = TryGetExplicitThemeDictionaryName();
-        if (explicitTheme is not null)
-        {
-            return explicitTheme;
-        }
-
-        return root?.ActualTheme switch
-        {
-            ElementTheme.Dark => "Dark",
-            ElementTheme.Light => "Light",
-            _ => null
-        };
-    }
-
-    /// <summary>
-    /// Returns true when the system is currently in High Contrast mode. Callers that paint
-    /// custom chrome should defer to system colors / theme dictionaries in this case.
-    /// </summary>
-    public static bool IsHighContrastActive()
-    {
-        try
-        {
-            return new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
-        }
-        catch
-        {
-            return false;
         }
     }
 
@@ -261,9 +148,9 @@ internal static class MinimalThemeService
         if (minimal)
         {
             surface.Padding = new Thickness(0);
-            surface.Background = GetBrush("ApplicationPageBackgroundThemeBrush");
-            sourceContainer.Background = GetBrush("CardBackgroundFillColorDefaultBrush");
-            sourceContainer.BorderBrush = GetBrush("CardStrokeColorDefaultBrush");
+            surface.Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush");
+            sourceContainer.Background = ThemeResourceService.GetBrush("CardBackgroundFillColorDefaultBrush");
+            sourceContainer.BorderBrush = ThemeResourceService.GetBrush("CardStrokeColorDefaultBrush");
             sourceContainer.BorderThickness = new Thickness(1);
             sourceContainer.CornerRadius = new CornerRadius(0);
             sourceContainer.Padding = new Thickness(8);
@@ -271,33 +158,53 @@ internal static class MinimalThemeService
             return;
         }
 
-        surface.Background = GetBrush("ApplicationPageBackgroundThemeBrush", themeRoot);
-        surface.Padding = GetResourceOrDefault(
+        var resolvedAppBg = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush", themeRoot);
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine(
+            $"[Theme] ApplyFloatingChrome " +
+            $"AppTheme={SettingsService.Instance.AppTheme} " +
+            $"SystemDark={SystemThemeProbe.IsSystemDark()} " +
+            $"ThemeRootRequested={themeRoot?.RequestedTheme} " +
+            $"ThemeRootActual={themeRoot?.ActualTheme} " +
+            $"DictName={ThemeResourceService.GetThemeDictionaryName(themeRoot)} " +
+            $"ResolvedAppBg={(resolvedAppBg as SolidColorBrush)?.Color} " +
+            $"SurfaceBgBefore={(surface.Background as SolidColorBrush)?.Color}");
+#endif
+        surface.Background = resolvedAppBg;
+        surface.Padding = ThemeResourceService.GetResourceOrDefault(
             "FloatingWindowContentPadding",
             themeRoot,
             new Thickness(16));
-        sourceContainer.Background = GetBrush("TextControlBackground", themeRoot);
-        sourceContainer.BorderBrush = GetBrush("TextControlBorderBrush", themeRoot);
+        sourceContainer.Background = ThemeResourceService.GetBrush("TextControlBackground", themeRoot);
+        sourceContainer.BorderBrush = ThemeResourceService.GetBrush("TextControlBorderBrush", themeRoot);
         sourceContainer.BorderThickness = new Thickness(1);
-        sourceContainer.CornerRadius = GetResourceOrDefault(
-            "ControlCornerRadius",
+        sourceContainer.CornerRadius = ThemeResourceService.GetResourceOrDefault(
+            "FloatingInputCornerRadius",
             themeRoot,
-            new CornerRadius(8));
-        sourceContainer.Padding = GetResourceOrDefault(
+            new CornerRadius(18));
+        sourceContainer.Padding = ThemeResourceService.GetResourceOrDefault(
             "FloatingInputPadding",
             themeRoot,
             new Thickness(10, 9, 10, 9));
-        sourceContainer.Margin = GetResourceOrDefault(
+        sourceContainer.Margin = ThemeResourceService.GetResourceOrDefault(
             "FloatingInputMargin",
             themeRoot,
             new Thickness(0, 2, 0, 6));
     }
 
-    public static void ApplyAccentIconForeground(FontIcon icon, ProgressRing? progressRing = null)
+    public static void ApplyAccentIconForeground(
+        FontIcon icon,
+        ProgressRing? progressRing = null,
+        FrameworkElement? themeRoot = null)
     {
         var foreground = IsActive
-            ? GetBrush("ButtonForeground") ?? new SolidColorBrush(Microsoft.UI.Colors.Black)
-            : new SolidColorBrush(Microsoft.UI.Colors.White);
+            ? ThemeResourceService.GetBrush("ButtonForeground", themeRoot)
+                ?? ThemeResourceService.GetBrush("TextFillColorPrimaryBrush", themeRoot)
+                ?? _transparentBrush
+            : ThemeResourceService.GetBrush("AccentTextFillColorPrimaryBrush", themeRoot)
+                ?? ThemeResourceService.GetBrush("AccentForegroundBrush", themeRoot)
+                ?? ThemeResourceService.GetBrush("ButtonForeground", themeRoot)
+                ?? _transparentBrush;
 
         icon.Foreground = foreground;
         if (progressRing is not null)

@@ -9,6 +9,11 @@ public interface IServiceResultView
 
     FrameworkElement Element { get; }
 
+    /// <summary>
+    /// Root whose ActualTheme/RequestedTheme drives code-created resource resolution.
+    /// </summary>
+    FrameworkElement? ThemeRoot { get; set; }
+
     FrameworkElement HeaderPanel { get; }
 
     FrameworkElement? ActionButtonsPanel { get; }

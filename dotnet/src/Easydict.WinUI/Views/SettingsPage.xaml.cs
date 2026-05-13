@@ -271,6 +271,7 @@ public sealed partial class SettingsPage : Page
 #endif
         this.Loaded += OnPageLoaded;
         this.Unloaded += OnPageUnloaded;
+        this.ActualThemeChanged += OnActualThemeChanged;
     }
 
     public void ApplyThemeChrome()
@@ -287,6 +288,11 @@ public sealed partial class SettingsPage : Page
         {
             tab.RefreshThemeBindings();
         }
+    }
+
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        DispatcherQueue.TryEnqueue(ApplyThemeChrome);
     }
 
     private static bool IsDeferredIoDisabledForDebug()
@@ -1030,6 +1036,7 @@ public sealed partial class SettingsPage : Page
         // Disconnect lifecycle handlers to avoid retaining the page.
         this.Loaded -= OnPageLoaded;
         this.Unloaded -= OnPageUnloaded;
+        this.ActualThemeChanged -= OnActualThemeChanged;
 
         UnregisterChangeHandlers();
         UnregisterLanguageCheckboxHandlers();
@@ -4047,7 +4054,6 @@ public class BoolToCompactMarginConverter : Microsoft.UI.Xaml.Data.IValueConvert
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new NotImplementedException();
 }
-
 /// <summary>
 /// Converts a boolean (IsAvailable) to font size for compact layout.
 /// True = normal size (14), False = smaller size (12) for unavailable items.
@@ -4072,143 +4078,4 @@ public class BoolToItalicFontStyleConverter : Microsoft.UI.Xaml.Data.IValueConve
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new NotImplementedException();
-}
-
-public class SettingsTabBrushConverter : Microsoft.UI.Xaml.Data.IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, string language)
-    {
-        bool selected = value is true;
-        var role = parameter as string;
-        var themeName = GetThemeDictionaryName();
-
-        if (TryCreateStaticSettingsTabBrush(themeName, selected, role, out var staticBrush))
-        {
-            return staticBrush;
-        }
-
-        return (parameter as string) switch
-        {
-            "Background" => selected
-                ? ResolveBrush("SettingsTabSelectedBackgroundBrush", Microsoft.UI.Colors.Transparent)
-                : ResolveBrush("SettingsTabBackgroundBrush", Microsoft.UI.Colors.Transparent),
-            "Border" => selected
-                ? ResolveBrush("SettingsTabSelectedBorderBrush", Microsoft.UI.Colors.Transparent)
-                : ResolveBrush("SettingsTabBorderBrush", Microsoft.UI.Colors.Transparent),
-            "Foreground" => selected
-                ? ResolveBrush("SettingsTabSelectedForegroundBrush", GetReadableForegroundFallback())
-                : ResolveBrush("SettingsTabForegroundBrush", GetReadableForegroundFallback()),
-            _ => throw new ArgumentException($"Unknown parameter: {parameter}", nameof(parameter)),
-        };
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, string language)
-        => throw new NotImplementedException();
-
-    private static Brush ResolveBrush(string key, Windows.UI.Color fallbackColor)
-    {
-        var resources = Application.Current.Resources;
-        var themeName = GetThemeDictionaryName();
-
-        if (TryGetBrush(resources, key, themeName, out var brush))
-        {
-            return brush;
-        }
-
-        foreach (var merged in resources.MergedDictionaries.Reverse())
-        {
-            if (TryGetBrush(merged, key, themeName, out brush))
-            {
-                return brush;
-            }
-        }
-
-        return new SolidColorBrush(fallbackColor);
-    }
-
-    private static string GetThemeDictionaryName()
-    {
-        return MinimalThemeService.TryGetExplicitThemeDictionaryName()
-            ?? GetSystemThemeDictionaryName();
-    }
-
-    private static string GetSystemThemeDictionaryName()
-    {
-        try
-        {
-            var background = new Windows.UI.ViewManagement.UISettings()
-                .GetColorValue(Windows.UI.ViewManagement.UIColorType.Background);
-            var luminance = (0.2126 * background.R + 0.7152 * background.G + 0.0722 * background.B) / 255;
-            return luminance < 0.5 ? "Dark" : "Light";
-        }
-        catch
-        {
-            return Application.Current.RequestedTheme == ApplicationTheme.Dark ? "Dark" : "Light";
-        }
-    }
-
-    private static bool TryCreateStaticSettingsTabBrush(
-        string themeName,
-        bool selected,
-        string? role,
-        out Brush brush)
-    {
-        Windows.UI.Color? color = (themeName, selected, role) switch
-        {
-            ("Dark", false, "Background") => Microsoft.UI.ColorHelper.FromArgb(255, 32, 33, 39),
-            ("Dark", false, "Border") => Microsoft.UI.ColorHelper.FromArgb(255, 205, 213, 224),
-            ("Dark", false, "Foreground") => Microsoft.UI.ColorHelper.FromArgb(255, 230, 235, 242),
-            ("Dark", true, "Background") => Microsoft.UI.ColorHelper.FromArgb(255, 234, 243, 255),
-            ("Dark", true, "Border") => Microsoft.UI.ColorHelper.FromArgb(255, 112, 163, 224),
-            ("Dark", true, "Foreground") => Microsoft.UI.ColorHelper.FromArgb(255, 23, 78, 139),
-            ("Light", false, "Background") => Microsoft.UI.ColorHelper.FromArgb(0, 255, 255, 255),
-            ("Light", false, "Border") => Microsoft.UI.ColorHelper.FromArgb(255, 214, 221, 232),
-            ("Light", false, "Foreground") => Microsoft.UI.ColorHelper.FromArgb(255, 42, 47, 54),
-            ("Light", true, "Background") => Microsoft.UI.ColorHelper.FromArgb(255, 234, 243, 255),
-            ("Light", true, "Border") => Microsoft.UI.ColorHelper.FromArgb(255, 92, 143, 199),
-            ("Light", true, "Foreground") => Microsoft.UI.ColorHelper.FromArgb(255, 23, 78, 139),
-            _ => null
-        };
-
-        if (color is { } resolvedColor)
-        {
-            brush = new SolidColorBrush(resolvedColor);
-            return true;
-        }
-
-        brush = null!;
-        return false;
-    }
-
-    private static Windows.UI.Color GetReadableForegroundFallback()
-    {
-        return GetThemeDictionaryName() == "Dark"
-            ? Microsoft.UI.ColorHelper.FromArgb(255, 230, 235, 242)
-            : Microsoft.UI.ColorHelper.FromArgb(255, 42, 47, 54);
-    }
-
-    private static bool TryGetBrush(
-        ResourceDictionary resources,
-        string key,
-        string themeName,
-        out Brush brush)
-    {
-        if (resources.ThemeDictionaries.TryGetValue(themeName, out var themeObj) &&
-            themeObj is ResourceDictionary themeDictionary &&
-            themeDictionary.TryGetValue(key, out var themedValue) &&
-            themedValue is Brush themedBrush)
-        {
-            brush = themedBrush;
-            return true;
-        }
-
-        if (resources.TryGetValue(key, out var value) && value is Brush directBrush)
-        {
-            brush = directBrush;
-            return true;
-        }
-
-        brush = null!;
-        return false;
-    }
 }

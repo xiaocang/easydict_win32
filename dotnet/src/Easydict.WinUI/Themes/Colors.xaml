@@ -6,21 +6,21 @@
         <!-- Light Theme Colors -->
         <ResourceDictionary x:Key="Light">
             <!-- Main Colors -->
-            <Color x:Key="MainViewBackgroundColor">#FFFFFF</Color>
-            <Color x:Key="MainBorderColor">#D9DDE5</Color>
-            <Color x:Key="QueryViewBackgroundColor">#F4F4F2</Color>
+            <Color x:Key="MainViewBackgroundColor">#F7F9FC</Color>
+            <Color x:Key="MainBorderColor">#DDE4EE</Color>
+            <Color x:Key="QueryViewBackgroundColor">#F1F4F8</Color>
             <Color x:Key="QueryTextColor">#262626</Color>
-            <Color x:Key="TitleBarBackgroundColor">#FCFCFB</Color>
+            <Color x:Key="TitleBarBackgroundColor">#F7F9FC</Color>
             <Color x:Key="TitleBarForegroundColor">#303236</Color>
             <Color x:Key="TitleBarInactiveForegroundColor">#797C82</Color>
-            <Color x:Key="TitleBarButtonHoverBackgroundColor">#F4F4F2</Color>
-            <Color x:Key="TitleBarButtonPressedBackgroundColor">#ECECE9</Color>
+            <Color x:Key="TitleBarButtonHoverBackgroundColor">#EEF3F8</Color>
+            <Color x:Key="TitleBarButtonPressedBackgroundColor">#E5EBF3</Color>
             <Color x:Key="ResultViewBackgroundColor">#FFFFFF</Color>
-            <Color x:Key="ServiceResultHeaderBackgroundColor">#FFFFFF</Color>
-            <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#F4F4F2</Color>
+            <Color x:Key="ServiceResultHeaderBackgroundColor">#FBFCFE</Color>
+            <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#F1F4F8</Color>
             <Color x:Key="ServiceResultHeaderForegroundColor">#1F2328</Color>
             <Color x:Key="ServiceResultHeaderSecondaryForegroundColor">#5F6670</Color>
-            <Color x:Key="ButtonHoverColor">#F1F1EF</Color>
+            <Color x:Key="ButtonHoverColor">#EEF3F8</Color>
 
             <!-- Accent Colors -->
             <Color x:Key="BlueAccentColor">#007AFF</Color>
@@ -30,7 +30,14 @@
             <Color x:Key="StatusConnectedColor">#107C10</Color>
             <Color x:Key="StatusDisconnectedColor">#797775</Color>
             <Color x:Key="StatusErrorColor">#D13438</Color>
+            <Color x:Key="StatusIndicatorForegroundColor">#FFFFFF</Color>
             <Color x:Key="AccentColor">#0078D4</Color>
+            <Color x:Key="AccentForegroundColor">#FFFFFF</Color>
+            <Color x:Key="AccentPointerOverColor">#106EBE</Color>
+            <Color x:Key="AccentPressedColor">#005A9E</Color>
+            <Color x:Key="DictionaryHtmlBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="DictionaryHtmlTextColor">#262626</Color>
+            <Color x:Key="DictionaryHtmlLinkColor">#007AFF</Color>
 
             <!-- Phonetic Badge Colors -->
             <Color x:Key="PhoneticBadgeBackgroundColor">#F0E6F6</Color>
@@ -56,18 +63,18 @@
             <Color x:Key="PopButtonBackgroundColor">#F7FBFF</Color>
             <Color x:Key="PopButtonBorderColor">#7AA7D9</Color>
             <Color x:Key="PopButtonForegroundColor">#1F5F9F</Color>
-            <Color x:Key="FloatingWindowBackgroundColor">#FCFCFB</Color>
-            <Color x:Key="FloatingWindowBorderColor">#D9DDE5</Color>
-            <Color x:Key="FloatingInputBackgroundColor">#F4F4F2</Color>
-            <Color x:Key="FloatingInputBorderColor">#E9E9E6</Color>
+            <Color x:Key="FloatingWindowBackgroundColor">#F7F9FC</Color>
+            <Color x:Key="FloatingWindowBorderColor">#DDE4EE</Color>
+            <Color x:Key="FloatingInputBackgroundColor">#F1F4F8</Color>
+            <Color x:Key="FloatingInputBorderColor">#E1E7EF</Color>
             <Color x:Key="FloatingIconForegroundColor">#303236</Color>
             <Color x:Key="EasydictCardBackgroundColor">#FFFFFF</Color>
-            <Color x:Key="EasydictCardBorderColor">#D9DDE5</Color>
+            <Color x:Key="EasydictCardBorderColor">#DDE4EE</Color>
 
-            <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
-            <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
-            <CornerRadius x:Key="EasydictCardCornerRadius">8</CornerRadius>
-            <CornerRadius x:Key="EasydictControlCornerRadius">8</CornerRadius>
+            <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
+            <CornerRadius x:Key="OverlayCornerRadius">10</CornerRadius>
+            <CornerRadius x:Key="EasydictCardCornerRadius">10</CornerRadius>
+            <CornerRadius x:Key="EasydictControlCornerRadius">10</CornerRadius>
             <CornerRadius x:Key="EasydictRoundButtonCornerRadius">20</CornerRadius>
             <CornerRadius x:Key="EasydictStatusCornerRadius">12</CornerRadius>
             <CornerRadius x:Key="FloatingWindowCornerRadius">0</CornerRadius>
@@ -77,9 +84,9 @@
             <Thickness x:Key="FloatingWindowOuterPadding">0</Thickness>
             <Thickness x:Key="FloatingWindowContentPadding">16</Thickness>
             <Thickness x:Key="FloatingWindowBorderThickness">0</Thickness>
-            <Thickness x:Key="FloatingInputPadding">10,9</Thickness>
+            <Thickness x:Key="FloatingInputPadding">12,10</Thickness>
             <Thickness x:Key="FloatingInputMargin">0,2,0,6</Thickness>
-            <Thickness x:Key="EasydictCardPadding">10</Thickness>
+            <Thickness x:Key="EasydictCardPadding">12</Thickness>
 
             <!-- Brushes -->
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
@@ -124,9 +131,14 @@
             <SolidColorBrush x:Key="StatusConnectedBrush" Color="{StaticResource StatusConnectedColor}" />
             <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
             <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
+            <SolidColorBrush x:Key="StatusIndicatorForegroundBrush" Color="{StaticResource StatusIndicatorForegroundColor}" />
             <SolidColorBrush x:Key="SystemFillColorSuccessBrush" Color="{StaticResource StatusConnectedColor}" />
             <SolidColorBrush x:Key="SystemFillColorCriticalBrush" Color="{StaticResource StatusErrorColor}" />
             <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{StaticResource AccentForegroundColor}" />
+            <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForegroundColor}" />
+            <SolidColorBrush x:Key="AccentPointerOverBrush" Color="{StaticResource AccentPointerOverColor}" />
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}" />
             <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="{StaticResource PhoneticBadgeBackgroundColor}" />
             <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource PhoneticBadgeTextColor}" />
             <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="{StaticResource PosTagBackgroundColor}" />
@@ -154,20 +166,20 @@
         <ResourceDictionary x:Key="Dark">
             <!-- Main Colors — subtle blue-tinted grays for depth and visual warmth -->
             <Color x:Key="MainViewBackgroundColor">#1F2229</Color>
-            <Color x:Key="MainBorderColor">#373D49</Color>
-            <Color x:Key="QueryViewBackgroundColor">#272B34</Color>
+            <Color x:Key="MainBorderColor">#3A4250</Color>
+            <Color x:Key="QueryViewBackgroundColor">#2A2F39</Color>
             <Color x:Key="QueryTextColor">#E2E4E9</Color>
             <Color x:Key="TitleBarBackgroundColor">#1F2229</Color>
             <Color x:Key="TitleBarForegroundColor">#E2E6ED</Color>
             <Color x:Key="TitleBarInactiveForegroundColor">#8F96A3</Color>
-            <Color x:Key="TitleBarButtonHoverBackgroundColor">#2B2F38</Color>
-            <Color x:Key="TitleBarButtonPressedBackgroundColor">#323744</Color>
-            <Color x:Key="ResultViewBackgroundColor">#22262E</Color>
-            <Color x:Key="ServiceResultHeaderBackgroundColor">#2A2E38</Color>
-            <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#323744</Color>
+            <Color x:Key="TitleBarButtonHoverBackgroundColor">#2A2F39</Color>
+            <Color x:Key="TitleBarButtonPressedBackgroundColor">#323946</Color>
+            <Color x:Key="ResultViewBackgroundColor">#222731</Color>
+            <Color x:Key="ServiceResultHeaderBackgroundColor">#282D37</Color>
+            <Color x:Key="ServiceResultHeaderHoverBackgroundColor">#323946</Color>
             <Color x:Key="ServiceResultHeaderForegroundColor">#F2F4F8</Color>
             <Color x:Key="ServiceResultHeaderSecondaryForegroundColor">#C8CED8</Color>
-            <Color x:Key="ButtonHoverColor">#3A3D4A</Color>
+            <Color x:Key="ButtonHoverColor">#323946</Color>
 
             <!-- Accent Colors — desaturated for dark backgrounds to reduce eye strain -->
             <Color x:Key="BlueAccentColor">#5EB5FF</Color>
@@ -177,9 +189,16 @@
             <Color x:Key="StatusConnectedColor">#79B873</Color>
             <Color x:Key="StatusDisconnectedColor">#8A8D93</Color>
             <Color x:Key="StatusErrorColor">#E58A95</Color>
+            <Color x:Key="StatusIndicatorForegroundColor">#FFFFFF</Color>
 
             <!-- Button accent — medium blue that supports white text on top -->
             <Color x:Key="AccentColor">#2B88D8</Color>
+            <Color x:Key="AccentForegroundColor">#FFFFFF</Color>
+            <Color x:Key="AccentPointerOverColor">#3A99E6</Color>
+            <Color x:Key="AccentPressedColor">#1F6FB3</Color>
+            <Color x:Key="DictionaryHtmlBackgroundColor">#22262E</Color>
+            <Color x:Key="DictionaryHtmlTextColor">#E2E4E9</Color>
+            <Color x:Key="DictionaryHtmlLinkColor">#5EB5FF</Color>
 
             <!-- Phonetic Badge Colors — muted purple for dark backgrounds -->
             <Color x:Key="PhoneticBadgeBackgroundColor">#352842</Color>
@@ -193,11 +212,11 @@
             <Color x:Key="ExampleTextColor">#9CA3AF</Color>
 
             <!-- Settings UI -->
-            <Color x:Key="AddMinusBackgroundColor">#2B303A</Color>
-            <Color x:Key="ListBorderColor">#373D49</Color>
+            <Color x:Key="AddMinusBackgroundColor">#2A2F39</Color>
+            <Color x:Key="ListBorderColor">#3A4250</Color>
             <Color x:Key="ActionButtonIconColor">#A3ABB7</Color>
             <Color x:Key="SettingsTabBackgroundColor">#202127</Color>
-            <Color x:Key="SettingsTabBorderColor">#3A3D4A</Color>
+            <Color x:Key="SettingsTabBorderColor">#3A4250</Color>
             <Color x:Key="SettingsTabForegroundColor">#E6EBF2</Color>
             <Color x:Key="SettingsTabSelectedBackgroundColor">#243247</Color>
             <Color x:Key="SettingsTabSelectedBorderColor">#5B7FA6</Color>
@@ -206,17 +225,17 @@
             <Color x:Key="PopButtonBorderColor">#6B7584</Color>
             <Color x:Key="PopButtonForegroundColor">#E6EBF2</Color>
             <Color x:Key="FloatingWindowBackgroundColor">#1F2229</Color>
-            <Color x:Key="FloatingWindowBorderColor">#373D49</Color>
-            <Color x:Key="FloatingInputBackgroundColor">#2B2F38</Color>
-            <Color x:Key="FloatingInputBorderColor">#3B414D</Color>
+            <Color x:Key="FloatingWindowBorderColor">#3A4250</Color>
+            <Color x:Key="FloatingInputBackgroundColor">#2A2F39</Color>
+            <Color x:Key="FloatingInputBorderColor">#3A4250</Color>
             <Color x:Key="FloatingIconForegroundColor">#E2E6ED</Color>
-            <Color x:Key="EasydictCardBackgroundColor">#22262E</Color>
-            <Color x:Key="EasydictCardBorderColor">#373D49</Color>
+            <Color x:Key="EasydictCardBackgroundColor">#222731</Color>
+            <Color x:Key="EasydictCardBorderColor">#3A4250</Color>
 
-            <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
-            <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
-            <CornerRadius x:Key="EasydictCardCornerRadius">8</CornerRadius>
-            <CornerRadius x:Key="EasydictControlCornerRadius">8</CornerRadius>
+            <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
+            <CornerRadius x:Key="OverlayCornerRadius">10</CornerRadius>
+            <CornerRadius x:Key="EasydictCardCornerRadius">10</CornerRadius>
+            <CornerRadius x:Key="EasydictControlCornerRadius">10</CornerRadius>
             <CornerRadius x:Key="EasydictRoundButtonCornerRadius">20</CornerRadius>
             <CornerRadius x:Key="EasydictStatusCornerRadius">12</CornerRadius>
             <CornerRadius x:Key="FloatingWindowCornerRadius">0</CornerRadius>
@@ -226,9 +245,9 @@
             <Thickness x:Key="FloatingWindowOuterPadding">0</Thickness>
             <Thickness x:Key="FloatingWindowContentPadding">16</Thickness>
             <Thickness x:Key="FloatingWindowBorderThickness">0</Thickness>
-            <Thickness x:Key="FloatingInputPadding">10,9</Thickness>
+            <Thickness x:Key="FloatingInputPadding">12,10</Thickness>
             <Thickness x:Key="FloatingInputMargin">0,2,0,6</Thickness>
-            <Thickness x:Key="EasydictCardPadding">10</Thickness>
+            <Thickness x:Key="EasydictCardPadding">12</Thickness>
 
             <!-- Brushes -->
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
@@ -273,9 +292,14 @@
             <SolidColorBrush x:Key="StatusConnectedBrush" Color="{StaticResource StatusConnectedColor}" />
             <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
             <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
+            <SolidColorBrush x:Key="StatusIndicatorForegroundBrush" Color="{StaticResource StatusIndicatorForegroundColor}" />
             <SolidColorBrush x:Key="SystemFillColorSuccessBrush" Color="{StaticResource StatusConnectedColor}" />
             <SolidColorBrush x:Key="SystemFillColorCriticalBrush" Color="{StaticResource StatusErrorColor}" />
             <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{StaticResource AccentForegroundColor}" />
+            <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForegroundColor}" />
+            <SolidColorBrush x:Key="AccentPointerOverBrush" Color="{StaticResource AccentPointerOverColor}" />
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}" />
             <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="{StaticResource PhoneticBadgeBackgroundColor}" />
             <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource PhoneticBadgeTextColor}" />
             <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="{StaticResource PosTagBackgroundColor}" />
@@ -321,7 +345,14 @@
             <Color x:Key="StatusConnectedColor">#107C10</Color>
             <Color x:Key="StatusDisconnectedColor">#797775</Color>
             <Color x:Key="StatusErrorColor">#D13438</Color>
+            <Color x:Key="StatusIndicatorForegroundColor">#FFFFFF</Color>
             <Color x:Key="AccentColor">#0078D4</Color>
+            <Color x:Key="AccentForegroundColor">#FFFFFF</Color>
+            <Color x:Key="AccentPointerOverColor">#0000FF</Color>
+            <Color x:Key="AccentPressedColor">#0000FF</Color>
+            <Color x:Key="DictionaryHtmlBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="DictionaryHtmlTextColor">#000000</Color>
+            <Color x:Key="DictionaryHtmlLinkColor">#0000FF</Color>
             <Color x:Key="AddMinusBackgroundColor">#E0E0E0</Color>
             <Color x:Key="ListBorderColor">#000000</Color>
             <Color x:Key="ActionButtonIconColor">#999999</Color>
@@ -406,9 +437,14 @@
             <SolidColorBrush x:Key="StatusConnectedBrush" Color="{StaticResource StatusConnectedColor}" />
             <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
             <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
+            <SolidColorBrush x:Key="StatusIndicatorForegroundBrush" Color="{StaticResource StatusIndicatorForegroundColor}" />
             <SolidColorBrush x:Key="SystemFillColorSuccessBrush" Color="{StaticResource StatusConnectedColor}" />
             <SolidColorBrush x:Key="SystemFillColorCriticalBrush" Color="{StaticResource StatusErrorColor}" />
             <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{StaticResource AccentForegroundColor}" />
+            <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForegroundColor}" />
+            <SolidColorBrush x:Key="AccentPointerOverBrush" Color="{StaticResource AccentPointerOverColor}" />
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}" />
             <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="{StaticResource PhoneticBadgeBackgroundColor}" />
             <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource PhoneticBadgeTextColor}" />
             <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="{StaticResource PosTagBackgroundColor}" />

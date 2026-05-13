@@ -6,10 +6,16 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Background="White">
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-        <TextBlock Text="Easydict Test Page" FontSize="24" FontWeight="Bold" Foreground="Black" />
-        <TextBlock Text="If you can see this, navigation works!" FontSize="16" Foreground="DarkGray" Margin="0,10,0,0" />
+        <TextBlock Text="Easydict Test Page"
+                   FontSize="24"
+                   FontWeight="Bold"
+                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+        <TextBlock Text="If you can see this, navigation works!"
+                   FontSize="16"
+                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                   Margin="0,10,0,0" />
     </StackPanel>
 </Page>

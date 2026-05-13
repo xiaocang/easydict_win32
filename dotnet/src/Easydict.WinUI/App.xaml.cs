@@ -230,6 +230,7 @@ namespace Easydict.WinUI
             {
                 rootFrame = new Frame();
                 rootFrame.NavigationFailed += OnNavigationFailed;
+                rootFrame.Navigated += OnRootFrameNavigated;
                 _window.Content = rootFrame;
             }
 
@@ -1057,43 +1058,25 @@ namespace Easydict.WinUI
         /// Apply app theme setting to all windows.
         /// </summary>
         /// <param name="theme">Theme name: "System", "Light", "Dark", or "Minimal"</param>
-        private static string? _lastAppliedTheme;
-
         public static void ApplyTheme(string theme)
         {
             var isMinimal = MinimalThemeService.IsMinimal(theme);
-            var resourceStateNeedsChange = MinimalThemeService.ResourcesApplied != isMinimal;
-            if (!resourceStateNeedsChange &&
-                string.Equals(_lastAppliedTheme, theme, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-            _lastAppliedTheme = theme;
-
             var wasMinimalResourcesApplied = MinimalThemeService.ResourcesApplied;
             MinimalThemeService.ApplyResources(isMinimal);
             var forceThemeResourceRefresh = wasMinimalResourcesApplied != isMinimal;
             var elementTheme = MinimalThemeService.ToElementTheme(theme);
             ApplyMainWindowTitleBarChrome(theme, elementTheme);
 
-            if (Instance._window?.Content is FrameworkElement mainRoot)
+            if (Instance._window?.Content is Frame frame)
+            {
+                ApplyFrameTheme(frame, theme, forceThemeResourceRefresh);
+            }
+            else if (Instance._window?.Content is FrameworkElement mainRoot)
             {
                 MinimalThemeService.ApplyRequestedTheme(
                     mainRoot,
                     elementTheme,
                     forceThemeResourceRefresh);
-
-                if (mainRoot is Frame frame)
-                {
-                    if (frame.Content is MainPage mainPage)
-                    {
-                        mainPage.ApplyThemeChrome();
-                    }
-                    else if (frame.Content is SettingsPage settingsPage)
-                    {
-                        settingsPage.ApplyThemeChrome();
-                    }
-                }
             }
 
             MiniWindowService.Instance.ApplyTheme(elementTheme, forceThemeResourceRefresh);
@@ -1101,6 +1084,56 @@ namespace Easydict.WinUI
             Instance._popButtonService?.ApplyTheme(elementTheme, forceThemeResourceRefresh);
 
             System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {theme} (ElementTheme.{elementTheme})");
+        }
+
+        private static void ApplyFrameTheme(
+            Frame frame,
+            string theme,
+            bool forceThemeResourceRefresh)
+        {
+            var elementTheme = MinimalThemeService.ToElementTheme(theme);
+            MinimalThemeService.ApplyRequestedTheme(
+                frame,
+                elementTheme,
+                forceThemeResourceRefresh);
+            ApplyFrameContentTheme(frame, elementTheme, forceThemeResourceRefresh);
+            RefreshFrameContentThemeChrome(frame);
+            frame.DispatcherQueue.TryEnqueue(() =>
+            {
+                var currentTheme = SettingsService.Instance.AppTheme;
+                var currentElementTheme = MinimalThemeService.ToElementTheme(currentTheme);
+                ApplyFrameContentTheme(frame, currentElementTheme, forceThemeResourceRefresh: false);
+                RefreshFrameContentThemeChrome(frame);
+            });
+        }
+
+        private static void ApplyFrameContentTheme(
+            Frame frame,
+            ElementTheme elementTheme,
+            bool forceThemeResourceRefresh)
+        {
+            if (frame.Content is not FrameworkElement pageRoot)
+            {
+                return;
+            }
+
+            MinimalThemeService.ApplyRequestedTheme(
+                pageRoot,
+                elementTheme,
+                forceThemeResourceRefresh);
+        }
+
+        private static void RefreshFrameContentThemeChrome(Frame frame)
+        {
+            switch (frame.Content)
+            {
+                case MainPage mainPage:
+                    mainPage.ApplyThemeChrome();
+                    break;
+                case SettingsPage settingsPage:
+                    settingsPage.ApplyThemeChrome();
+                    break;
+            }
         }
 
         private static void ApplyMainWindowTitleBarChrome(string theme, ElementTheme elementTheme)
@@ -1120,33 +1153,33 @@ namespace Easydict.WinUI
                 //  - High Contrast is active (must respect accessibility palette).
                 if (MinimalThemeService.IsMinimal(theme) ||
                     elementTheme == ElementTheme.Default ||
-                    MinimalThemeService.IsHighContrastActive())
+                    ThemeResourceService.IsHighContrastActive())
                 {
                     ResetTitleBarColors(titleBar);
                     return;
                 }
 
                 var themeName = elementTheme == ElementTheme.Dark ? "Dark" : "Light";
-                var background = ResolveTitleBarColor("TitleBarBackgroundColor", themeName,
-                    elementTheme == ElementTheme.Dark ? 31 : 252,
-                    elementTheme == ElementTheme.Dark ? 34 : 252,
-                    elementTheme == ElementTheme.Dark ? 41 : 251);
-                var foreground = ResolveTitleBarColor("TitleBarForegroundColor", themeName,
-                    elementTheme == ElementTheme.Dark ? 226 : 48,
-                    elementTheme == ElementTheme.Dark ? 230 : 50,
-                    elementTheme == ElementTheme.Dark ? 237 : 54);
-                var inactiveForeground = ResolveTitleBarColor("TitleBarInactiveForegroundColor", themeName,
-                    elementTheme == ElementTheme.Dark ? 143 : 121,
-                    elementTheme == ElementTheme.Dark ? 150 : 124,
-                    elementTheme == ElementTheme.Dark ? 163 : 130);
-                var buttonHoverBackground = ResolveTitleBarColor("TitleBarButtonHoverBackgroundColor", themeName,
-                    elementTheme == ElementTheme.Dark ? 43 : 244,
-                    elementTheme == ElementTheme.Dark ? 47 : 244,
-                    elementTheme == ElementTheme.Dark ? 56 : 242);
-                var buttonPressedBackground = ResolveTitleBarColor("TitleBarButtonPressedBackgroundColor", themeName,
-                    elementTheme == ElementTheme.Dark ? 50 : 236,
-                    elementTheme == ElementTheme.Dark ? 55 : 236,
-                    elementTheme == ElementTheme.Dark ? 68 : 233);
+                var background = ResolveTitleBarColor(
+                    "TitleBarBackgroundColor",
+                    themeName,
+                    "FloatingWindowBackgroundColor");
+                var foreground = ResolveTitleBarColor(
+                    "TitleBarForegroundColor",
+                    themeName,
+                    "QueryTextColor");
+                var inactiveForeground = ResolveTitleBarColor(
+                    "TitleBarInactiveForegroundColor",
+                    themeName,
+                    "ServiceResultHeaderSecondaryForegroundColor");
+                var buttonHoverBackground = ResolveTitleBarColor(
+                    "TitleBarButtonHoverBackgroundColor",
+                    themeName,
+                    "ServiceResultHeaderHoverBackgroundColor");
+                var buttonPressedBackground = ResolveTitleBarColor(
+                    "TitleBarButtonPressedBackgroundColor",
+                    themeName,
+                    "ServiceResultHeaderHoverBackgroundColor");
 
                 titleBar.BackgroundColor = background;
                 titleBar.ForegroundColor = foreground;
@@ -1170,13 +1203,19 @@ namespace Easydict.WinUI
         private static Windows.UI.Color ResolveTitleBarColor(
             string key,
             string themeName,
-            int fallbackR,
-            int fallbackG,
-            int fallbackB)
+            string fallbackKey)
         {
-            return MinimalThemeService.TryGetResource<Windows.UI.Color>(key, themeName, out var color)
-                ? color
-                : Windows.UI.Color.FromArgb(255, (byte)fallbackR, (byte)fallbackG, (byte)fallbackB);
+            if (ThemeResourceService.TryGetResource<Windows.UI.Color>(key, themeName, out var color))
+            {
+                return color;
+            }
+
+            if (ThemeResourceService.TryGetResource<Windows.UI.Color>(fallbackKey, themeName, out var fallbackColor))
+            {
+                return fallbackColor;
+            }
+
+            return default;
         }
 
         private static void ResetTitleBarColors(AppWindowTitleBar titleBar)
@@ -1485,6 +1524,14 @@ namespace Easydict.WinUI
         void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
         {
             throw new Exception("Failed to load Page " + e.SourcePageType.FullName);
+        }
+
+        private void OnRootFrameNavigated(object sender, NavigationEventArgs e)
+        {
+            if (sender is Frame frame)
+            {
+                ApplyFrameTheme(frame, SettingsService.Instance.AppTheme, forceThemeResourceRefresh: false);
+            }
         }
     }
 }

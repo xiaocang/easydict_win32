@@ -198,7 +198,7 @@ jobs:
           path: dotnet/**/TestResults/*.trx
           retention-days: 30
 
-  # ── Job 3: UI Automation Tests (parallel, 4 shards) ──
+  # ── Job 3: UI Automation Tests (parallel, 5 shards) ──
   ui-automation:
     name: UI Automation (${{ matrix.shard.name }})
     runs-on: windows-latest
@@ -209,17 +209,20 @@ jobs:
       matrix:
         shard:
           - name: "PopButton"
-            filter: "Category=UIAutomation & FullyQualifiedName~PopButton"
+            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PopButtonTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PopButtonSelectionTests.)"
             suffix: "shard-1"
           - name: "Advanced"
-            filter: "Category=UIAutomation & (FullyQualifiedName~MiniWindowLongText | FullyQualifiedName~PhoneticTranscription)"
+            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MiniWindowLongTextTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MiniWindowFocusTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PhoneticTranscriptionTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DictionaryWebViewRenderingTests.)"
             suffix: "shard-2"
           - name: "Core & Settings"
-            filter: "Category=UIAutomation & (FullyQualifiedName~MainWindowTests. | FullyQualifiedName~TranslationTests. | FullyQualifiedName~WindowLifecycle | FullyQualifiedName~SettingsPage | FullyQualifiedName~DarkMode)"
+            filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MainWindowTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.TranslationTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowLifecycleTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageScrollTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DarkModeTests.)"
             suffix: "shard-3"
           - name: "OCR"
-            filter: "Category=UIAutomation & FullyQualifiedName~OcrTests"
+            filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.OcrTests."
             suffix: "shard-4"
+          - name: "LongDoc"
+            filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.LongDocTranslationTests."
+            suffix: "shard-5"
 
     steps:
       - name: Checkout code

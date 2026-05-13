@@ -135,6 +135,7 @@ namespace Easydict.WinUI.Views
 
             this.Loaded += OnPageLoaded;
             this.Unloaded += OnPageUnloaded;
+            this.ActualThemeChanged += OnActualThemeChanged;
 
             // Sync selection between Wide and Narrow layout ComboBoxes
             SourceLangCombo.SelectionChanged += (s, e) =>
@@ -238,6 +239,23 @@ namespace Easydict.WinUI.Views
 #endif
         }
 
+        private void OnActualThemeChanged(FrameworkElement sender, object args)
+        {
+            DispatcherQueue.TryEnqueue(ApplyThemeChrome);
+        }
+
+        protected override void OnNavigatedTo(NavigationEventArgs e)
+        {
+            base.OnNavigatedTo(e);
+            App.ApplyTheme(SettingsService.Instance.AppTheme);
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                App.ApplyTheme(SettingsService.Instance.AppTheme);
+                ApplyThemeChrome();
+                ServiceResultViewHost.RefreshThemeChrome(_resultControls, this);
+            });
+        }
+
         private void EnsureLongDocFeaturesInitialized()
         {
             if (_longDocFeaturesInitialized)
@@ -278,7 +296,13 @@ namespace Easydict.WinUI.Views
             {
                 RebuildServiceResultControlsForCurrentTheme();
             }
+            else
+            {
+                ServiceResultViewHost.RefreshThemeChrome(_resultControls, this);
+            }
 
+            ApplyMainWindowBorderChrome(minimal);
+            ApplyMainLayoutChrome(minimal);
             ApplyStatusChrome();
             ApplyStatusSummaryChrome();
             ApplyTranslateButtonsChrome();
@@ -287,6 +311,177 @@ namespace Easydict.WinUI.Views
             {
                 control.RefreshDemotionState();
             }
+        }
+
+        private void ApplyMainLayoutChrome(bool minimal)
+        {
+            if (minimal)
+            {
+                MainHeader.Margin = new Thickness(8, 4, 8, 4);
+                QuickContentGrid.Padding = new Thickness(4);
+                LongDocContentGrid.Padding = new Thickness(4);
+                ActionBarWide.Margin = new Thickness(0, 4, 0, 4);
+                ActionBarNarrow.Margin = new Thickness(0, 4, 0, 4);
+                ActionBarNarrow.Spacing = 4;
+
+                QuickInputCard.Margin = new Thickness(0, 0, 0, 2);
+                QuickOutputCard.Margin = new Thickness(0, 2, 0, 0);
+                QuickInputCardContent.Margin = new Thickness(4);
+                QuickOutputCardContent.Margin = new Thickness(4);
+                QuickInputHeaderRow.Height = new GridLength(15);
+
+                LongDocInputCard.Margin = new Thickness(0, 0, 0, 2);
+                LongDocControlBar.Margin = new Thickness(0, 4, 0, 4);
+                LongDocControlBar.RowSpacing = 4;
+                LongDocInputCardContent.Margin = new Thickness(4);
+                LongDocOutputCard.Margin = new Thickness(0, 2, 0, 0);
+                LongDocOutputCardContent.Margin = new Thickness(4);
+                LongDocHistoryExpander.Margin = new Thickness(0, 8, 0, 0);
+
+                SettingsButton.Width = 36;
+                SettingsButton.Height = 36;
+                SwapLanguageButton.Width = 36;
+                SwapLanguageButton.Height = 36;
+                SwapLanguageButtonNarrow.Width = 36;
+                SwapLanguageButtonNarrow.Height = 36;
+                SourcePlayButton.Width = 24;
+                SourcePlayButton.Height = 24;
+                SourcePlayIcon.FontSize = 12;
+                TranslateButton.Margin = new Thickness(0);
+                TranslateButtonNarrow.Margin = new Thickness(0);
+                LongDocTranslateButton.Margin = new Thickness(0);
+                return;
+            }
+
+            MainHeader.Margin = new Thickness(0, 0, 0, 10);
+            QuickContentGrid.Padding = new Thickness(0);
+            LongDocContentGrid.Padding = new Thickness(0);
+            ActionBarWide.Margin = new Thickness(0, 8, 0, 8);
+            ActionBarNarrow.Margin = new Thickness(0, 8, 0, 8);
+            ActionBarNarrow.Spacing = 8;
+
+            QuickInputCard.Margin = new Thickness(0, 0, 0, 8);
+            QuickOutputCard.Margin = new Thickness(0);
+            QuickInputCardContent.Margin = new Thickness(0);
+            QuickOutputCardContent.Margin = new Thickness(0);
+            QuickInputHeaderRow.Height = GridLength.Auto;
+
+            LongDocInputCard.Margin = new Thickness(0, 0, 0, 8);
+            LongDocControlBar.Margin = new Thickness(0, 8, 0, 8);
+            LongDocControlBar.RowSpacing = 8;
+            LongDocInputCardContent.Margin = new Thickness(0);
+            LongDocOutputCard.Margin = new Thickness(0);
+            LongDocOutputCardContent.Margin = new Thickness(0);
+            LongDocHistoryExpander.Margin = new Thickness(0, 10, 0, 0);
+
+            SettingsButton.Width = 36;
+            SettingsButton.Height = 36;
+            SwapLanguageButton.Width = 36;
+            SwapLanguageButton.Height = 36;
+            SwapLanguageButtonNarrow.Width = 36;
+            SwapLanguageButtonNarrow.Height = 36;
+            SourcePlayButton.Width = 28;
+            SourcePlayButton.Height = 28;
+            SourcePlayIcon.FontSize = 14;
+            TranslateButton.Margin = new Thickness(0, 0, 18, 0);
+            TranslateButtonNarrow.Margin = new Thickness(0);
+            LongDocTranslateButton.Margin = new Thickness(0, 0, 18, 0);
+        }
+
+        private void ApplyMainWindowBorderChrome(bool minimal)
+        {
+            if (minimal)
+            {
+                Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush")
+                    ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                MainWindowBorder.Background = null;
+                MainWindowBorder.BorderBrush = null;
+                MainWindowBorder.BorderThickness = new Thickness(0);
+                MainWindowBorder.CornerRadius = new CornerRadius(0);
+                MainWindowBorder.Padding = new Thickness(0);
+                ApplyMainInputChrome(minimal);
+                return;
+            }
+
+            Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush", this)
+                ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            MainWindowBorder.Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush", this);
+            MainWindowBorder.BorderBrush = ThemeResourceService.GetBrush("MainBorderBrush", this);
+            MainWindowBorder.BorderThickness = new Thickness(0);
+            MainWindowBorder.CornerRadius = new CornerRadius(0);
+            MainWindowBorder.Padding = new Thickness(16);
+            ApplyMainInputChrome(minimal);
+        }
+
+        private void ApplyMainInputChrome(bool minimal)
+        {
+            if (minimal)
+            {
+                var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                InputTextContainer.Background = transparent;
+                InputTextContainer.BorderBrush = transparent;
+                InputTextContainer.BorderThickness = new Thickness(0);
+                InputTextContainer.CornerRadius = new CornerRadius(0);
+                InputTextContainer.Padding = new Thickness(0);
+                InputTextContainer.Margin = new Thickness(0, 4, 0, 0);
+                InputTextBox.Background = transparent;
+                InputTextBox.BorderBrush = transparent;
+                InputTextBox.BorderThickness = new Thickness(0);
+                InputTextBox.CornerRadius = new CornerRadius(0);
+                InputTextBox.Padding = new Thickness(8);
+                SetTextBoxChromeResources(InputTextBox, transparent, transparent);
+                return;
+            }
+
+            var textBackground = ThemeResourceService.GetBrush("TextControlBackground", this)
+                ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            var textBorder = ThemeResourceService.GetBrush("TextControlBorderBrush", this)
+                ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            var textForeground = ThemeResourceService.GetBrush("TextControlForeground", this)
+                ?? ThemeResourceService.GetBrush("QueryTextBrush", this);
+            var placeholderForeground = ThemeResourceService.GetBrush("TextControlPlaceholderForeground", this)
+                ?? ThemeResourceService.GetBrush("TextFillColorTertiaryBrush", this);
+            var transparentBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+
+            InputTextContainer.Background = textBackground;
+            InputTextContainer.BorderBrush = textBorder;
+            InputTextContainer.BorderThickness = new Thickness(1);
+            InputTextContainer.CornerRadius = ThemeResourceService.GetResourceOrDefault(
+                "FloatingInputCornerRadius",
+                this,
+                new CornerRadius(18));
+            InputTextContainer.Padding = ThemeResourceService.GetResourceOrDefault(
+                "FloatingInputPadding",
+                this,
+                new Thickness(10, 9, 10, 9));
+            InputTextContainer.Margin = new Thickness(0, 4, 0, 0);
+
+            InputTextBox.Background = textBackground;
+            InputTextBox.BorderBrush = transparentBrush;
+            InputTextBox.BorderThickness = new Thickness(0);
+            InputTextBox.CornerRadius = new CornerRadius(0);
+            InputTextBox.Padding = new Thickness(0);
+            if (textForeground is not null)
+            {
+                InputTextBox.Foreground = textForeground;
+            }
+
+            if (placeholderForeground is not null)
+            {
+                InputTextBox.PlaceholderForeground = placeholderForeground;
+            }
+
+            SetTextBoxChromeResources(InputTextBox, textBackground, transparentBrush);
+        }
+
+        private static void SetTextBoxChromeResources(TextBox textBox, Brush background, Brush border)
+        {
+            textBox.Resources["TextControlBackground"] = background;
+            textBox.Resources["TextControlBackgroundPointerOver"] = background;
+            textBox.Resources["TextControlBackgroundFocused"] = background;
+            textBox.Resources["TextControlBorderBrush"] = border;
+            textBox.Resources["TextControlBorderBrushPointerOver"] = border;
+            textBox.Resources["TextControlBorderBrushFocused"] = border;
         }
 
         private void ApplyStatusChrome()
@@ -301,31 +496,44 @@ namespace Easydict.WinUI.Views
                     ? Visibility.Visible
                     : Visibility.Collapsed;
                 StatusDot.Visibility = Visibility.Collapsed;
-                StatusText.Foreground = MinimalThemeService.GetBrush("TextFillColorPrimaryBrush")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
-                StatusIndicator.Background = MinimalThemeService.GetBrush("CardBackgroundFillColorDefaultBrush")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.White);
-                StatusIndicator.BorderBrush = MinimalThemeService.GetBrush("ControlStrokeColorDefaultBrush")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
+                StatusText.Foreground = ThemeResourceService.GetBrush("TextFillColorPrimaryBrush")
+                    ?? ThemeResourceService.GetBrush("ButtonForeground");
+                StatusIndicator.Background = ThemeResourceService.GetBrush("CardBackgroundFillColorDefaultBrush")
+                    ?? ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush");
+                StatusIndicator.BorderBrush = ThemeResourceService.GetBrush("ControlStrokeColorDefaultBrush")
+                    ?? ThemeResourceService.GetBrush("MainBorderBrush");
                 StatusIndicator.BorderThickness = new Thickness(1);
                 return;
             }
 
             StatusIndicator.Visibility = Visibility.Visible;
             StatusDot.Visibility = Visibility.Visible;
-            StatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+            var statusForeground = ThemeResourceService.GetBrush("StatusIndicatorForegroundBrush", this)
+                ?? ThemeResourceService.GetBrush("AccentTextFillColorPrimaryBrush", this)
+                ?? ThemeResourceService.GetBrush("AccentForegroundBrush", this)
+                ?? ThemeResourceService.GetBrush("ButtonForeground", this);
+            if (statusForeground is not null)
+            {
+                StatusText.Foreground = statusForeground;
+                StatusDot.Fill = statusForeground;
+            }
+            StatusIndicator.BorderBrush = ThemeResourceService.GetBrush("ControlStrokeColorDefaultBrush", this);
+            StatusIndicator.BorderThickness = ThemeResourceService.GetResourceOrDefault(
+                "EasydictIconButtonBorderThickness",
+                this,
+                new Thickness(0));
 
             if (_lastStatusConnected == true)
             {
-                StatusIndicator.Background = (Brush)Application.Current.Resources["StatusConnectedBrush"];
+                StatusIndicator.Background = ThemeResourceService.GetBrush("StatusConnectedBrush", this);
             }
             else if (_lastStatusConnected == false)
             {
-                StatusIndicator.Background = (Brush)Application.Current.Resources["StatusErrorBrush"];
+                StatusIndicator.Background = ThemeResourceService.GetBrush("StatusErrorBrush", this);
             }
             else
             {
-                StatusIndicator.Background = (Brush)Application.Current.Resources["StatusDisconnectedBrush"];
+                StatusIndicator.Background = ThemeResourceService.GetBrush("StatusDisconnectedBrush", this);
             }
         }
 
@@ -398,13 +606,13 @@ namespace Easydict.WinUI.Views
                 button.Height = 32;
                 button.MinWidth = 72;
                 button.Padding = new Thickness(10, 4, 10, 4);
-                button.Background = MinimalThemeService.GetBrush("ButtonBackground")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.White);
-                button.BorderBrush = MinimalThemeService.GetBrush("ButtonBorderBrush")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
+                button.Background = ThemeResourceService.GetBrush("ButtonBackground")
+                    ?? ThemeResourceService.GetBrush("CardBackgroundFillColorDefaultBrush");
+                button.BorderBrush = ThemeResourceService.GetBrush("ButtonBorderBrush")
+                    ?? ThemeResourceService.GetBrush("ControlStrokeColorDefaultBrush");
                 button.BorderThickness = new Thickness(1);
-                button.Foreground = MinimalThemeService.GetBrush("ButtonForeground")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
+                button.Foreground = ThemeResourceService.GetBrush("ButtonForeground")
+                    ?? ThemeResourceService.GetBrush("TextFillColorPrimaryBrush");
                 return;
             }
 
@@ -413,7 +621,12 @@ namespace Easydict.WinUI.Views
             button.Height = normalHeight;
             button.MinWidth = 0;
             button.Padding = new Thickness(0);
-            button.Background = Application.Current.Resources["AccentBrush"] as Brush;
+            button.Background = ThemeResourceService.TryGetResource<Brush>(
+                "AccentBrush",
+                button,
+                out var accentBrush)
+                ? accentBrush
+                : null;
             button.BorderBrush = null;
             button.BorderThickness = new Thickness(0);
             button.Foreground = null;
@@ -436,6 +649,7 @@ namespace Easydict.WinUI.Views
                 try
                 {
                     _isClosing = true;
+                    this.ActualThemeChanged -= OnActualThemeChanged;
                     App.ClipboardTextReceived -= OnClipboardTextReceived;
                     await CleanupResourcesAsync();
                 }
@@ -892,7 +1106,8 @@ namespace Easydict.WinUI.Views
                     _resultControls,
                     ResultsPanel,
                     OnServiceCollapseToggled,
-                    OnServiceQueryRequested);
+                    OnServiceQueryRequested,
+                    this);
             }
 
             ReorderResultsPanel();
@@ -920,7 +1135,8 @@ namespace Easydict.WinUI.Views
                 _resultControls,
                 ResultsPanel,
                 OnServiceCollapseToggled,
-                OnServiceQueryRequested);
+                OnServiceQueryRequested,
+                this);
 
             ReorderResultsPanel();
         }
@@ -2134,7 +2350,7 @@ namespace Easydict.WinUI.Views
                 };
                 if (!isReady)
                 {
-                    item.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+                    item.Foreground = ThemeResourceService.GetBrush("TextFillColorSecondaryBrush", this);
                 }
                 LongDocServiceCombo.Items.Add(item);
             }

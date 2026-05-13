@@ -18,6 +18,8 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     public FrameworkElement Element => this;
 
+    public FrameworkElement? ThemeRoot { get; set; }
+
     public FrameworkElement HeaderPanel => HeaderBar;
 
     public FrameworkElement? ActionButtonsPanel => null;
@@ -63,6 +65,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         }
 
         _serviceResult = null;
+        ThemeRoot = null;
         ServiceNameText.Text = string.Empty;
         StatusText.Text = string.Empty;
         ResultText.Text = string.Empty;
@@ -200,10 +203,11 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         return string.Empty;
     }
 
-    private static Brush? ResolveTextBrush(bool isInfoResult)
+    private Brush? ResolveTextBrush(bool isInfoResult)
     {
-        return MinimalThemeService.GetBrush(
-            isInfoResult ? "TextFillColorSecondaryBrush" : "QueryTextBrush");
+        return ThemeResourceService.GetBrush(
+            isInfoResult ? "TextFillColorSecondaryBrush" : "QueryTextBrush",
+            ThemeRoot ?? this);
     }
 
     private void OnHeaderPointerPressed(object sender, PointerRoutedEventArgs e)

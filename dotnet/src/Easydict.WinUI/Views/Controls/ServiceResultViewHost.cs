@@ -2,6 +2,7 @@ using System.Numerics;
 using Easydict.TranslationService.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Easydict.WinUI.Views.Controls;
@@ -11,13 +12,17 @@ internal static class ServiceResultViewHost
     public static IServiceResultView Create(
         ServiceQueryResult result,
         EventHandler<ServiceQueryResult> collapseToggled,
-        EventHandler<ServiceQueryResult> queryRequested)
+        EventHandler<ServiceQueryResult> queryRequested,
+        FrameworkElement? themeRoot = null)
     {
         IServiceResultView control = MinimalThemeService.IsActive
             ? new MinimalServiceResultItem()
             : new ServiceResultItem();
 
+        control.ThemeRoot = themeRoot;
         control.ServiceResult = result;
+        ApplyAutomationProperties(control, result);
+        control.RefreshThemeChrome();
         control.CollapseToggled += collapseToggled;
         control.QueryRequested += queryRequested;
         return control;
@@ -28,12 +33,28 @@ internal static class ServiceResultViewHost
         IList<IServiceResultView> controls,
         ItemsControl resultsPanel,
         EventHandler<ServiceQueryResult> collapseToggled,
-        EventHandler<ServiceQueryResult> queryRequested)
+        EventHandler<ServiceQueryResult> queryRequested,
+        FrameworkElement? themeRoot = null)
     {
-        var control = Create(result, collapseToggled, queryRequested);
+        var control = Create(result, collapseToggled, queryRequested, themeRoot ?? resultsPanel);
         controls.Add(control);
         resultsPanel.Items.Add(control.Element);
+        control.RefreshThemeChrome();
         return control;
+    }
+
+    private static void ApplyAutomationProperties(IServiceResultView control, ServiceQueryResult result)
+    {
+        var serviceId = string.IsNullOrWhiteSpace(result.ServiceId)
+            ? "unknown"
+            : result.ServiceId.Trim();
+        var automationIdSuffix = string.Concat(
+            serviceId.Select(ch => char.IsLetterOrDigit(ch) || ch is '-' or '_' ? ch : '_'));
+
+        AutomationProperties.SetAutomationId(control.Element, $"ServiceResultItem_{automationIdSuffix}");
+        AutomationProperties.SetName(control.Element, result.ServiceDisplayName);
+        AutomationProperties.SetAutomationId(control.HeaderPanel, $"ServiceResultHeader_{automationIdSuffix}");
+        AutomationProperties.SetName(control.HeaderPanel, result.ServiceDisplayName);
     }
 
     public static bool NeedsThemeRebuild(IReadOnlyList<IServiceResultView> controls, bool minimal)
@@ -46,13 +67,14 @@ internal static class ServiceResultViewHost
         IList<IServiceResultView> controls,
         ItemsControl resultsPanel,
         EventHandler<ServiceQueryResult> collapseToggled,
-        EventHandler<ServiceQueryResult> queryRequested)
+        EventHandler<ServiceQueryResult> queryRequested,
+        FrameworkElement? themeRoot = null)
     {
         Release(controls, resultsPanel, collapseToggled, queryRequested);
 
         foreach (var result in results)
         {
-            Add(result, controls, resultsPanel, collapseToggled, queryRequested);
+            Add(result, controls, resultsPanel, collapseToggled, queryRequested, themeRoot);
         }
     }
 
@@ -171,6 +193,21 @@ internal static class ServiceResultViewHost
             {
                 shownPhonetics.Add(key);
             }
+        }
+    }
+
+    public static void RefreshThemeChrome(
+        IEnumerable<IServiceResultView> controls,
+        FrameworkElement? themeRoot = null)
+    {
+        foreach (var control in controls)
+        {
+            if (themeRoot is not null)
+            {
+                control.ThemeRoot = themeRoot;
+            }
+
+            control.RefreshThemeChrome();
         }
     }
 

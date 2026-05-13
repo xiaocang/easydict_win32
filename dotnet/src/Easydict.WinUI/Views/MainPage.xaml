@@ -16,6 +16,12 @@
         <views:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </Page.Resources>
 
+    <Border x:Name="MainWindowBorder"
+            Background="Transparent"
+            BorderBrush="Transparent"
+            BorderThickness="0"
+            CornerRadius="0"
+            Padding="0">
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -23,7 +29,8 @@
         </Grid.RowDefinitions>
 
         <!-- Shared Header (Row 0) -->
-        <Grid Grid.Row="0"
+        <Grid x:Name="MainHeader"
+              Grid.Row="0"
               Margin="8,4,8,4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -43,6 +50,7 @@
                 <StackPanel VerticalAlignment="Center">
                     <Button Background="Transparent"
                             BorderThickness="0"
+                            CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                             Padding="4,2"
                             MinHeight="0"
                             MinWidth="0"
@@ -102,13 +110,13 @@
                         x:Name="StatusDot"
                         Width="8"
                         Height="8"
-                        Fill="White"
+                        Fill="{ThemeResource StatusIndicatorForegroundBrush}"
                         VerticalAlignment="Center"/>
                     <TextBlock
                         x:Name="StatusText"
                         Text="Disconnected"
                         FontSize="12"
-                        Foreground="White"
+                        Foreground="{ThemeResource StatusIndicatorForegroundBrush}"
                         VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
@@ -118,27 +126,24 @@
                 x:Name="SettingsButton"
                 Grid.Column="3"
                 Click="OnSettingsClicked"
+                Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Settings"
-                Background="Transparent"
-                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
-                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                Width="36"
-                Height="36"
-                Padding="0"
                 VerticalAlignment="Center">
                 <FontIcon Glyph="&#xE713;"
-                          FontSize="18"/>
+                          FontSize="18"
+                          Foreground="{ThemeResource ButtonForeground}"/>
             </Button>
         </Grid>
 
         <!-- Quick Translate Content -->
         <ScrollViewer x:Name="QuickTranslateContent"
+                      AutomationProperties.AutomationId="QuickTranslateContent"
                       Grid.Row="1"
                       VerticalScrollBarVisibility="Visible"
                       HorizontalScrollBarVisibility="Disabled"
                       ViewChanged="OnQuickTranslateContentViewChanged">
-            <Grid Padding="4">
+            <Grid x:Name="QuickContentGrid"
+                  Padding="4">
                 <VisualStateManager.VisualStateGroups>
                     <VisualStateGroup x:Name="LayoutStates">
                         <!-- Wide layout: all controls in one row -->
@@ -169,10 +174,10 @@
                 </VisualStateManager.VisualStateGroups>
 
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*"
+                    <RowDefinition Height="Auto"
                                    MinHeight="40"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"
+                    <RowDefinition Height="Auto"
                                    MinHeight="40"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -205,18 +210,13 @@
                         x:Name="SwapLanguageButton"
                         Grid.Column="1"
                         Click="OnSwapLanguagesClicked"
-                        Width="36"
-                        Height="36"
-                        Padding="0"
-                        CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                        Background="Transparent"
-                        BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                        BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
+                        Style="{StaticResource EasydictIconButtonStyle}"
                         ToolTipService.ToolTip="Swap source and target languages"
                         Margin="8,0"
                         VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE8AB;"
-                                  FontSize="16"/>
+                                  FontSize="16"
+                                  Foreground="{ThemeResource ButtonForeground}"/>
                     </Button>
 
                     <!-- Target Language -->
@@ -244,12 +244,8 @@
                         x:Name="TranslateButton"
                         Grid.Column="4"
                         Click="OnTranslateClicked"
-                        Width="40"
-                        Height="40"
-                        Padding="0"
-                        CornerRadius="{ThemeResource EasydictRoundButtonCornerRadius}"
+                        Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                         VerticalAlignment="Center"
-                        Background="{ThemeResource AccentBrush}"
                         ToolTipService.ToolTip="Translate">
                         <Grid>
                             <ProgressRing
@@ -257,13 +253,13 @@
                                 IsActive="False"
                                 Width="16"
                                 Height="16"
-                                Foreground="White"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                 Visibility="Collapsed"/>
                             <FontIcon
                                 x:Name="TranslateIcon"
                                 Glyph="&#xE8C1;"
                                 FontSize="16"
-                                Foreground="White"/>
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                         </Grid>
                     </Button>
                 </Grid>
@@ -294,18 +290,13 @@
                             x:Name="SwapLanguageButtonNarrow"
                             Grid.Column="1"
                             Click="OnSwapLanguagesClicked"
-                            Width="36"
-                            Height="36"
-                            Padding="0"
-                            CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                            Background="Transparent"
-                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                            BorderThickness="{ThemeResource EasydictIconButtonBorderThickness}"
+                            Style="{StaticResource EasydictIconButtonStyle}"
                             ToolTipService.ToolTip="Swap source and target languages"
                             VerticalAlignment="Center"
                             Margin="4,0">
                             <FontIcon Glyph="&#xE8AB;"
-                                      FontSize="16"/>
+                                      FontSize="16"
+                                      Foreground="{ThemeResource ButtonForeground}"/>
                         </Button>
 
                         <ComboBox
@@ -328,12 +319,8 @@
                     <Button
                         x:Name="TranslateButtonNarrow"
                         Click="OnTranslateClicked"
-                        Width="40"
-                        Height="40"
-                        Padding="0"
-                        CornerRadius="{ThemeResource EasydictRoundButtonCornerRadius}"
+                        Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                         HorizontalAlignment="Center"
-                        Background="{ThemeResource AccentBrush}"
                         ToolTipService.ToolTip="Translate">
                         <Grid>
                             <ProgressRing
@@ -341,24 +328,28 @@
                                 IsActive="False"
                                 Width="16"
                                 Height="16"
-                                Foreground="White"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                 Visibility="Collapsed"/>
                             <FontIcon
                                 x:Name="TranslateIconNarrow"
                                 Glyph="&#xE8C1;"
                                 FontSize="16"
-                                Foreground="White"/>
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                         </Grid>
                     </Button>
                 </StackPanel>
 
                 <!-- Input Card -->
-                <Border Grid.Row="0"
+                <Border x:Name="QuickInputCard"
+                        Grid.Row="0"
+                        MaxHeight="480"
                         Style="{StaticResource CardStyle}"
                         Margin="0,0,0,2">
-                    <Grid Margin="4">
+                    <Grid x:Name="QuickInputCardContent"
+                          Margin="4">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="15"/>
+                            <RowDefinition x:Name="QuickInputHeaderRow"
+                                           Height="15"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
@@ -390,17 +381,16 @@
                                 x:Name="SourcePlayButton"
                                 Grid.Column="2"
                                 Click="OnSourcePlayClicked"
+                                Style="{StaticResource EasydictIconButtonStyle}"
                                 ToolTipService.ToolTip="Play source text"
-                                Background="Transparent"
-                                BorderThickness="0"
                                 Width="24"
                                 Height="24"
-                                Padding="0"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center">
                                 <FontIcon x:Name="SourcePlayIcon"
                                           Glyph="&#xE768;"
-                                          FontSize="12"/>
+                                          FontSize="12"
+                                          Foreground="{ThemeResource ButtonForeground}"/>
                             </Button>
                         </Grid>
 
@@ -414,28 +404,51 @@
                             VerticalAlignment="Top"
                             Visibility="Collapsed"/>
 
-                        <TextBox
-                            x:Name="InputTextBox"
+                        <Border
+                            x:Name="InputTextContainer"
                             Grid.Row="1"
-                            PlaceholderText="Enter or paste text to translate..."
-                            Style="{StaticResource TranslationTextBoxStyle}"
-                            BorderThickness="0"
                             Background="Transparent"
-                            Margin="0,4,0,0"
-                            AcceptsReturn="True"
-                            TextWrapping="Wrap"
-                            ScrollViewer.VerticalScrollBarVisibility="Auto"
-                            VerticalAlignment="Stretch"
-                            HorizontalAlignment="Stretch"
-                            PreviewKeyDown="OnInputTextBoxKeyDown"/>
+                            BorderBrush="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="0"
+                            Padding="0"
+                            Margin="0,4,0,0">
+                            <TextBox
+                                x:Name="InputTextBox"
+                                PlaceholderText="Enter or paste text to translate..."
+                                Style="{StaticResource TranslationTextBoxStyle}"
+                                Margin="0"
+                                AcceptsReturn="True"
+                                TextWrapping="Wrap"
+                                ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                VerticalAlignment="Stretch"
+                                HorizontalAlignment="Stretch"
+                                PreviewKeyDown="OnInputTextBoxKeyDown">
+                                <TextBox.Resources>
+                                    <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                                    <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+                                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                                </TextBox.Resources>
+                            </TextBox>
+                        </Border>
                     </Grid>
                 </Border>
 
                 <!-- Output Area: Multiple Service Results -->
-                <Border Grid.Row="2"
+                <Border x:Name="QuickOutputCard"
+                        AutomationProperties.AutomationId="QuickOutputCard"
+                        AutomationProperties.AccessibilityView="Control"
+                        Grid.Row="2"
+                        MinHeight="280"
                         Style="{StaticResource CardStyle}"
                         Margin="0,2,0,0">
-                    <Grid Margin="4">
+                    <Grid x:Name="QuickOutputCardContent"
+                          Margin="4">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
@@ -498,7 +511,8 @@
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       Visibility="Collapsed">
-            <Grid Padding="4">
+            <Grid x:Name="LongDocContentGrid"
+                  Padding="4">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"
                                    MinHeight="80"/>
@@ -510,10 +524,12 @@
                 </Grid.RowDefinitions>
 
                 <!-- Row 0: Input Card -->
-                <Border Grid.Row="0"
+                <Border x:Name="LongDocInputCard"
+                        Grid.Row="0"
                         Style="{StaticResource CardStyle}"
                         Margin="0,0,0,2">
-                    <Grid Margin="4">
+                    <Grid x:Name="LongDocInputCardContent"
+                          Margin="4">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
@@ -562,7 +578,7 @@
                                         <Border Margin="0,4,0,0"
                                                 Padding="8,6"
                                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                                CornerRadius="6"
+                                                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                                                 BorderThickness="1"
                                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                                             <Grid>
@@ -597,6 +613,7 @@
                                                         Padding="4,2"
                                                         Background="Transparent"
                                                         BorderThickness="0"
+                                                        CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                                                         Margin="4,0,0,0">
                                                     <FontIcon Glyph="&#xE711;"
                                                               FontSize="10"
@@ -634,7 +651,8 @@
                 </Border>
 
                 <!-- Row 1: Control bar — single unified Grid with headers above controls -->
-                <Grid Grid.Row="1"
+                <Grid x:Name="LongDocControlBar"
+                      Grid.Row="1"
                       Margin="0,4,0,4"
                       ColumnSpacing="8"
                       RowSpacing="4">
@@ -703,18 +721,14 @@
                             Grid.Row="2"
                             Grid.Column="3"
                             Click="OnLongDocTranslateClicked"
-                            Width="40"
-                            Height="40"
-                            Padding="0"
-                            CornerRadius="{ThemeResource EasydictRoundButtonCornerRadius}"
+                            Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
-                            Background="{ThemeResource AccentBrush}"
                             ToolTipService.ToolTip="Translate">
                         <FontIcon x:Name="LongDocTranslateIcon"
                                   Glyph="&#xE8C1;"
                                   FontSize="16"
-                                  Foreground="White"/>
+                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                     </Button>
 
                     <!-- Row 1, Col 0: Input Mode -->
@@ -809,6 +823,10 @@
                              Grid.Column="3"
                              PlaceholderText="1-3,5,7-10"
                              MinWidth="110"
+                             Background="{ThemeResource TextControlBackground}"
+                             BorderBrush="{ThemeResource TextControlBorderBrush}"
+                             BorderThickness="{ThemeResource EasydictCardBorderThickness}"
+                             CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                              ToolTipService.ToolTip="Page range (leave empty for all)"
                              TextChanged="OnLongDocPageRangeChanged">
                         <TextBox.Header>
@@ -828,10 +846,12 @@
                 </Grid>
 
                 <!-- Row 2: Output Card -->
-                <Border Grid.Row="2"
+                <Border x:Name="LongDocOutputCard"
+                        Grid.Row="2"
                         Style="{StaticResource CardStyle}"
                         Margin="0,2,0,0">
-                    <Grid Margin="4">
+                    <Grid x:Name="LongDocOutputCardContent"
+                          Margin="4">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
@@ -944,7 +964,7 @@
                                 <Grid Margin="0,4"
                                       Padding="8,6"
                                       Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                      CornerRadius="6">
+                                      CornerRadius="{ThemeResource EasydictControlCornerRadius}">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
@@ -988,8 +1008,8 @@
                     Padding="4"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8">
+                    BorderThickness="{ThemeResource EasydictCardBorderThickness}"
+                    CornerRadius="{ThemeResource EasydictCardCornerRadius}">
                 <ListView x:Name="SuggestionListView"
                           IsTabStop="False"
                           AllowFocusOnInteraction="False"
@@ -1022,4 +1042,5 @@
             </Border>
         </Popup>
     </Grid>
+    </Border>
 </Page>

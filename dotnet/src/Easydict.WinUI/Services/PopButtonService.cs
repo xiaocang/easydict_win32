@@ -247,9 +247,9 @@ public sealed class PopButtonService : IDisposable
     /// <summary>
     /// Apply theme to the pop button window.
     /// </summary>
-    public void ApplyTheme(ElementTheme theme)
+    public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
-        _popWindow?.ApplyTheme(theme);
+        _popWindow?.ApplyTheme(theme, forceResourceRefresh);
     }
 
     internal static string? GetForegroundProcessName()

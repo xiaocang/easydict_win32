@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    AutomationProperties.AccessibilityView="Control"
     mc:Ignorable="d">
 
     <Border
@@ -13,7 +14,7 @@
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="{ThemeResource EasydictCardBorderThickness}"
         CornerRadius="{ThemeResource EasydictCardCornerRadius}"
-        Margin="0,0,0,4"
+        Margin="0,0,0,8"
         PointerEntered="OnControlPointerEntered"
         PointerExited="OnControlPointerExited">
         <Grid>
@@ -25,6 +26,7 @@
             <!-- Header Bar (30 DIPs, matches macOS EZResultViewMiniHeight) -->
             <Border
                 x:Name="HeaderBar"
+                AutomationProperties.AccessibilityView="Control"
                 Grid.Row="0"
                 Background="{ThemeResource ServiceResultHeaderBackgroundBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -126,7 +128,7 @@
             <Border
                 x:Name="ContentArea"
                 Grid.Row="1"
-                Padding="8,6,8,8"
+                Padding="10,8,10,10"
                 Visibility="Visible">
                 <Grid>
                     <ScrollViewer

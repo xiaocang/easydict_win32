@@ -279,11 +279,11 @@ public sealed partial class PopButtonWindow : Window
     /// <summary>
     /// Apply theme to the pop button window.
     /// </summary>
-    public void ApplyTheme(ElementTheme theme)
+    public void ApplyTheme(ElementTheme theme, bool forceResourceRefresh = false)
     {
         if (this.Content is FrameworkElement root)
         {
-            root.RequestedTheme = theme;
+            MinimalThemeService.ApplyRequestedTheme(root, theme, forceResourceRefresh);
         }
 
         RootGrid.Opacity = CurrentBaseOpacity;

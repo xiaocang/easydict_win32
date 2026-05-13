@@ -28,19 +28,26 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private HashSet<string>? _alreadyShownPhonetics;
     private bool _webViewInitialized;
     private MdxDictionaryTranslationService? _currentMdxService;
-    private static readonly SolidColorBrush _onLightHeaderForegroundBrush =
-        new(Microsoft.UI.ColorHelper.FromArgb(255, 31, 35, 40));
-    private static readonly SolidColorBrush _onLightHeaderSecondaryForegroundBrush =
-        new(Microsoft.UI.ColorHelper.FromArgb(255, 95, 102, 112));
-    private static readonly SolidColorBrush _onDarkHeaderForegroundBrush =
-        new(Microsoft.UI.ColorHelper.FromArgb(255, 242, 244, 248));
-    private static readonly SolidColorBrush _onDarkHeaderSecondaryForegroundBrush =
-        new(Microsoft.UI.ColorHelper.FromArgb(255, 200, 206, 216));
+    private FrameworkElement? _themeRoot;
 
     /// <summary>
     /// Exposes the control instance for parent item hosting.
     /// </summary>
     public FrameworkElement Element => this;
+
+    public FrameworkElement? ThemeRoot
+    {
+        get => _themeRoot;
+        set
+        {
+            if (ReferenceEquals(_themeRoot, value))
+            {
+                return;
+            }
+
+            _themeRoot = value;
+        }
+    }
 
     /// <summary>
     /// The full renderer includes icons, dictionary panels, actions, and optional WebView output.
@@ -83,6 +90,11 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// </summary>
     public void RefreshDemotionState() => UpdateUI();
 
+    public void RefreshThemeChrome()
+    {
+        ApplyServiceChromeForCurrentTheme();
+    }
+
     public void Cleanup()
     {
         Debug.WriteLine(
@@ -122,6 +134,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
         _serviceResult = null;
         _currentMdxService = null;
+        _themeRoot = null;
         _cachedServiceId = null;
         _cachedIcon = null;
         _alreadyShownPhonetics = null;
@@ -332,17 +345,24 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
 
         ApplyMinimalChrome();
-        ApplyHeaderForegroundForBackground(HeaderBar.Background);
+        if (!minimal && !_isHovering)
+        {
+            ApplyServiceChromeForCurrentTheme();
+        }
+        else
+        {
+            ApplyHeaderForegroundForCurrentChrome();
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        RefreshHeaderChromeForCurrentTheme();
+        ApplyServiceChromeForCurrentTheme();
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
     {
-        RefreshHeaderChromeForCurrentTheme();
+        ApplyServiceChromeForCurrentTheme();
     }
 
     private void ApplyMinimalChrome()
@@ -366,10 +386,14 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private void UpdateTranslationUI()
     {
         GrammarResultPanel.Visibility = Visibility.Collapsed;
-        var resultTextBrush = FindThemeBrush("QueryTextBrush")
-            ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
-        var infoTextBrush = FindThemeBrush("TextFillColorSecondaryBrush")
-            ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);
+        var resultTextBrush = FindServiceChromeBrushFallback(
+                "QueryTextBrush",
+                "TextFillColorPrimaryBrush")
+            ?? ResultText.Foreground;
+        var infoTextBrush = FindServiceChromeBrushFallback(
+                "TextFillColorSecondaryBrush",
+                "ExampleTextBrush")
+            ?? resultTextBrush;
 
         // Result text - handle streaming state
         if (_serviceResult!.IsStreaming)
@@ -655,8 +679,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                     FontSize = 13,
                     FontStyle = Windows.UI.Text.FontStyle.Italic,
                     TextWrapping = TextWrapping.Wrap,
-                    Foreground = FindThemeBrush("ExampleTextBrush")
-                        ?? new SolidColorBrush(Microsoft.UI.Colors.Gray),
+                    Foreground = FindServiceChromeBrushFallback(
+                        "ExampleTextBrush",
+                        "TextFillColorSecondaryBrush"),
                     IsTextSelectionEnabled = true,
                     Margin = new Thickness(0, 1, 0, 1)
                 });
@@ -672,10 +697,12 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// </summary>
     private TextBlock CreateWordFormsRow(IReadOnlyList<WordForm> wordForms)
     {
-        var mutedBrush = FindThemeBrush("ExampleTextBrush")
-            ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);
-        var normalBrush = FindThemeBrush("QueryTextBrush")
-            ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
+        var mutedBrush = FindServiceChromeBrushFallback(
+            "ExampleTextBrush",
+            "TextFillColorSecondaryBrush");
+        var normalBrush = FindServiceChromeBrushFallback(
+            "QueryTextBrush",
+            "TextFillColorPrimaryBrush");
 
         var block = new TextBlock
         {
@@ -723,10 +750,12 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// </summary>
     private Grid CreateSynonymRow(Synonym synonym)
     {
-        var mutedBrush = FindThemeBrush("ExampleTextBrush")
-            ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);
-        var normalBrush = FindThemeBrush("QueryTextBrush")
-            ?? new SolidColorBrush(Microsoft.UI.Colors.Black);
+        var mutedBrush = FindServiceChromeBrushFallback(
+            "ExampleTextBrush",
+            "TextFillColorSecondaryBrush");
+        var normalBrush = FindServiceChromeBrushFallback(
+            "QueryTextBrush",
+            "TextFillColorPrimaryBrush");
 
         var row = new Grid { ColumnSpacing = 6 };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -802,8 +831,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             var posTag = new Border
             {
-                Background = FindThemeBrush("PosTagBackgroundBrush")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.LightBlue),
+                Background = FindServiceChromeBrushFallback(
+                    "PosTagBackgroundBrush",
+                    "ControlFillColorSecondaryBrush"),
                 CornerRadius = MinimalThemeService.IsActive ? new CornerRadius(0) : new CornerRadius(3),
                 Padding = new Thickness(5, 1, 5, 1),
                 VerticalAlignment = VerticalAlignment.Center
@@ -814,8 +844,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 Text = definition.PartOfSpeech,
                 FontSize = 11,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Foreground = FindThemeBrush("PosTagTextBrush")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.DarkBlue),
+                Foreground = FindServiceChromeBrushFallback(
+                    "PosTagTextBrush",
+                    "BlueAccentBrush",
+                    "QueryTextBrush"),
                 VerticalAlignment = VerticalAlignment.Center
             };
 
@@ -833,8 +865,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 Text = string.Join("; ", meanings),
                 FontSize = 13,
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = FindThemeBrush("QueryTextBrush")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.Black),
+                Foreground = FindServiceChromeBrushFallback(
+                    "QueryTextBrush",
+                    "TextFillColorPrimaryBrush"),
                 IsTextSelectionEnabled = true,
                 VerticalAlignment = VerticalAlignment.Center
             };
@@ -866,8 +899,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
         var badge = new Border
         {
-            Background = FindThemeBrush("PhoneticBadgeBackgroundBrush")
-                ?? new SolidColorBrush(Microsoft.UI.Colors.LightGray),
+            Background = FindServiceChromeBrushFallback(
+                "PhoneticBadgeBackgroundBrush",
+                "ControlFillColorSecondaryBrush"),
             CornerRadius = MinimalThemeService.IsActive ? new CornerRadius(0) : new CornerRadius(4),
             Padding = new Thickness(6, 2, 4, 2)
         };
@@ -891,8 +925,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 Text = accentLabel,
                 FontSize = 10,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Foreground = FindThemeBrush("PhoneticBadgeTextBrush")
-                    ?? new SolidColorBrush(Microsoft.UI.Colors.Purple),
+                Foreground = FindServiceChromeBrushFallback(
+                    "PhoneticBadgeTextBrush",
+                    "QueryTextBrush"),
                 VerticalAlignment = VerticalAlignment.Center
             });
         }
@@ -902,8 +937,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             Text = PhoneticDisplayHelper.FormatPhoneticText(phonetic.Text!),
             FontSize = 10,
-            Foreground = FindThemeBrush("PhoneticBadgeTextBrush")
-                ?? new SolidColorBrush(Microsoft.UI.Colors.Purple),
+            Foreground = FindServiceChromeBrushFallback(
+                "PhoneticBadgeTextBrush",
+                "QueryTextBrush"),
             VerticalAlignment = VerticalAlignment.Center,
             IsTextSelectionEnabled = true
         });
@@ -923,8 +959,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             Glyph = "\uE767", // Volume icon
             FontSize = 10,
-            Foreground = FindThemeBrush("PhoneticBadgeTextBrush")
-                ?? new SolidColorBrush(Microsoft.UI.Colors.Purple)
+            Foreground = FindServiceChromeBrushFallback(
+                "PhoneticBadgeTextBrush",
+                "QueryTextBrush")
         };
         speakerButton.Content = speakerIcon;
 
@@ -1092,82 +1129,103 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             return;
         }
 
-        Brush? background = null;
-        if (FindThemeBrush("ServiceResultHeaderHoverBackgroundBrush") is Brush brush)
-            background = brush;
-        else if (FindThemeBrush("ButtonHoverBrush") is Brush hoverBrush)
-            background = hoverBrush;
-
+        Brush? background = FindServiceChromeColorOrBrush(
+            "ServiceResultHeaderHoverBackgroundColor",
+            "ServiceResultHeaderHoverBackgroundBrush",
+            "ButtonHoverBrush");
         if (background is not null)
         {
             HeaderBar.Background = background;
         }
 
-        ApplyHeaderForegroundForBackground(HeaderBar.Background);
+        ApplyHeaderForegroundForCurrentChrome();
 
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
     }
 
     private Brush? FindThemeBrush(string key)
     {
-        var themeName = MinimalThemeService.TryGetExplicitThemeDictionaryName()
-            ?? (ActualTheme == ElementTheme.Dark ? "Dark" : "Light");
+        return ThemeResourceService.GetBrush(key, _themeRoot ?? this);
+    }
 
-        // Check top-level ThemeDictionaries first
-        if (Application.Current.Resources.ThemeDictionaries.TryGetValue(themeName, out var topObj))
-        {
-            var topDict = (ResourceDictionary)topObj;
-            if (topDict.ContainsKey(key))
-                return (Brush)topDict[key];
-        }
+    private Windows.UI.Color? FindThemeColor(string key)
+    {
+        return ThemeResourceService.GetColor(key, _themeRoot ?? this);
+    }
 
-        // Check merged dictionaries (Colors.xaml lives here)
-        var merged = Application.Current.Resources.MergedDictionaries;
-        for (int i = merged.Count - 1; i >= 0; i--)
+    private Brush? FindServiceChromeBrush(string key)
+    {
+        return FindThemeBrush(key);
+    }
+
+    private Brush? FindServiceChromeColorBrush(string key)
+    {
+        return FindServiceChromeColor(key) is Windows.UI.Color color
+            ? new SolidColorBrush(color)
+            : null;
+    }
+
+    private Brush? FindServiceChromeColorOrBrush(string colorKey, params string[] brushKeys)
+    {
+        return FindServiceChromeColorBrush(colorKey) ?? FindServiceChromeBrushFallback(brushKeys);
+    }
+
+    private Brush? FindServiceChromeBrushFallback(params string[] keys)
+    {
+        foreach (var key in keys)
         {
-            if (merged[i].ThemeDictionaries.TryGetValue(themeName, out var obj))
+            if (FindServiceChromeBrush(key) is Brush brush)
             {
-                var dict = (ResourceDictionary)obj;
-                if (dict.ContainsKey(key))
-                    return (Brush)dict[key];
+                return brush;
             }
         }
 
         return null;
     }
 
-    private void RefreshHeaderChromeForCurrentTheme()
+    private Windows.UI.Color? FindServiceChromeColor(string key)
     {
-        if (FindThemeBrush("ServiceResultHeaderBackgroundBrush") is Brush brush)
+        return FindThemeColor(key);
+    }
+
+    private void ApplyServiceChromeForCurrentTheme()
+    {
+        if (FindServiceChromeColorOrBrush(
+                "ResultViewBackgroundColor",
+                "ResultViewBackgroundBrush") is Brush rootBackground)
+        {
+            RootBorder.Background = rootBackground;
+        }
+
+        if (FindServiceChromeColorOrBrush(
+                "EasydictCardBorderColor",
+                "CardStrokeColorDefaultBrush",
+                "MainBorderBrush") is Brush borderBrush)
+        {
+            RootBorder.BorderBrush = borderBrush;
+            HeaderBar.BorderBrush = borderBrush;
+        }
+
+        if (FindServiceChromeColorOrBrush(
+                "ServiceResultHeaderBackgroundColor",
+                "ServiceResultHeaderBackgroundBrush") is Brush brush)
         {
             HeaderBar.Background = brush;
         }
 
-        ApplyHeaderForegroundForBackground(HeaderBar.Background);
+        ApplyHeaderForegroundForCurrentChrome();
     }
 
-    private void ApplyHeaderForegroundForBackground(Brush? background)
+    private void ApplyHeaderForegroundForCurrentChrome()
     {
-        Brush? primaryBrush;
-        Brush? secondaryBrush;
-
-        if (background is SolidColorBrush solidBrush)
-        {
-            var isLightBackground = IsLightColor(solidBrush.Color.R, solidBrush.Color.G, solidBrush.Color.B);
-            primaryBrush = isLightBackground
-                ? _onLightHeaderForegroundBrush
-                : _onDarkHeaderForegroundBrush;
-            secondaryBrush = isLightBackground
-                ? _onLightHeaderSecondaryForegroundBrush
-                : _onDarkHeaderSecondaryForegroundBrush;
-        }
-        else
-        {
-            primaryBrush = FindThemeBrush("ServiceResultHeaderForegroundBrush")
-                ?? FindThemeBrush("TextFillColorPrimaryBrush");
-            secondaryBrush = FindThemeBrush("ServiceResultHeaderSecondaryForegroundBrush")
-                ?? FindThemeBrush("TextFillColorSecondaryBrush");
-        }
+        var primaryBrush = FindServiceChromeColorOrBrush(
+            "ServiceResultHeaderForegroundColor",
+            "ServiceResultHeaderForegroundBrush",
+            "TextFillColorPrimaryBrush");
+        var secondaryBrush = FindServiceChromeColorOrBrush(
+            "ServiceResultHeaderSecondaryForegroundColor",
+            "ServiceResultHeaderSecondaryForegroundBrush",
+            "TextFillColorSecondaryBrush");
 
         if (primaryBrush is not null)
         {
@@ -1181,10 +1239,28 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
     }
 
-    private static bool IsLightColor(byte red, byte green, byte blue)
+    private string ResolveServiceChromeCssColor(params string[] keys)
     {
-        var luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
-        return luminance >= 0.72;
+        foreach (var key in keys)
+        {
+            if (FindServiceChromeColor(key) is Windows.UI.Color color)
+            {
+                return ToCssColor(color);
+            }
+        }
+
+        return "transparent";
+    }
+
+    private static string ToCssColor(Windows.UI.Color color)
+    {
+        if (color.A == 255)
+        {
+            return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+        }
+
+        return FormattableString.Invariant(
+            $"rgba({color.R}, {color.G}, {color.B}, {color.A / 255d:0.###})");
     }
 
     private void OnHeaderBarPointerExited(object sender, PointerRoutedEventArgs e)
@@ -1196,12 +1272,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
 
         // Restore opaque background instead of clearing it to maintain sticky header visibility.
-        if (FindThemeBrush("ServiceResultHeaderBackgroundBrush") is Brush brush)
-            HeaderBar.Background = brush;
-        else if (FindThemeBrush("SolidBackgroundFillColorBaseBrush") is Brush appBrush)
-            HeaderBar.Background = appBrush;
-
-        ApplyHeaderForegroundForBackground(HeaderBar.Background);
+        ApplyServiceChromeForCurrentTheme();
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     }
 
@@ -1377,10 +1448,15 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 Debug.WriteLine($"[ServiceResultItem] Failed to resolve MDX service: {ex.Message}");
             }
 
-            // Determine theme
-            var isDark = ActualTheme == ElementTheme.Dark;
-            var bgColor = isDark ? "#1e1e1e" : "#ffffff";
-            var textColor = isDark ? "#d4d4d4" : "#1e1e1e";
+            var bgColor = ResolveServiceChromeCssColor(
+                "DictionaryHtmlBackgroundColor",
+                "ResultViewBackgroundColor");
+            var textColor = ResolveServiceChromeCssColor(
+                "DictionaryHtmlTextColor",
+                "QueryTextColor");
+            var linkColor = ResolveServiceChromeCssColor(
+                "DictionaryHtmlLinkColor",
+                "BlueAccentColor");
 
             // Rewrite relative resource paths to use virtual host
             var processedHtml = RewriteResourcePaths(rawHtml);
@@ -1437,7 +1513,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                     }
                     img, svg, table { max-width: 100% !important; height: auto; }
                     pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-                    a { color: {{(isDark ? "#569cd6" : "#0066cc")}}; }
+                    a { color: {{linkColor}}; }
                     [style*="overflow-y"],
                     [style*="overflow:"],
                     [style*="max-height"],

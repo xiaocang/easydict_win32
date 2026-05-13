@@ -230,6 +230,7 @@ namespace Easydict.WinUI
             {
                 rootFrame = new Frame();
                 rootFrame.NavigationFailed += OnNavigationFailed;
+                rootFrame.Navigated += OnRootFrameNavigated;
                 _window.Content = rootFrame;
             }
 
@@ -1057,42 +1058,180 @@ namespace Easydict.WinUI
         /// Apply app theme setting to all windows.
         /// </summary>
         /// <param name="theme">Theme name: "System", "Light", "Dark", or "Minimal"</param>
-        private static string? _lastAppliedTheme;
-
         public static void ApplyTheme(string theme)
         {
-            if (string.Equals(_lastAppliedTheme, theme, StringComparison.OrdinalIgnoreCase))
+            var isMinimal = MinimalThemeService.IsMinimal(theme);
+            var wasMinimalResourcesApplied = MinimalThemeService.ResourcesApplied;
+            MinimalThemeService.ApplyResources(isMinimal);
+            var forceThemeResourceRefresh = wasMinimalResourcesApplied != isMinimal;
+            var elementTheme = MinimalThemeService.ToElementTheme(theme);
+            ApplyMainWindowTitleBarChrome(theme, elementTheme);
+
+            if (Instance._window?.Content is Frame frame)
+            {
+                ApplyFrameTheme(frame, theme, forceThemeResourceRefresh);
+            }
+            else if (Instance._window?.Content is FrameworkElement mainRoot)
+            {
+                MinimalThemeService.ApplyRequestedTheme(
+                    mainRoot,
+                    elementTheme,
+                    forceThemeResourceRefresh);
+            }
+
+            MiniWindowService.Instance.ApplyTheme(elementTheme, forceThemeResourceRefresh);
+            FixedWindowService.Instance.ApplyTheme(elementTheme, forceThemeResourceRefresh);
+            Instance._popButtonService?.ApplyTheme(elementTheme, forceThemeResourceRefresh);
+
+            System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {theme} (ElementTheme.{elementTheme})");
+        }
+
+        private static void ApplyFrameTheme(
+            Frame frame,
+            string theme,
+            bool forceThemeResourceRefresh)
+        {
+            var elementTheme = MinimalThemeService.ToElementTheme(theme);
+            MinimalThemeService.ApplyRequestedTheme(
+                frame,
+                elementTheme,
+                forceThemeResourceRefresh);
+            ApplyFrameContentTheme(frame, elementTheme, forceThemeResourceRefresh);
+            RefreshFrameContentThemeChrome(frame);
+            frame.DispatcherQueue.TryEnqueue(() =>
+            {
+                var currentTheme = SettingsService.Instance.AppTheme;
+                var currentElementTheme = MinimalThemeService.ToElementTheme(currentTheme);
+                ApplyFrameContentTheme(frame, currentElementTheme, forceThemeResourceRefresh: false);
+                RefreshFrameContentThemeChrome(frame);
+            });
+        }
+
+        private static void ApplyFrameContentTheme(
+            Frame frame,
+            ElementTheme elementTheme,
+            bool forceThemeResourceRefresh)
+        {
+            if (frame.Content is not FrameworkElement pageRoot)
             {
                 return;
             }
-            _lastAppliedTheme = theme;
 
-            var isMinimal = MinimalThemeService.IsMinimal(theme);
-            MinimalThemeService.ApplyResources(isMinimal);
-            var elementTheme = MinimalThemeService.ToElementTheme(theme);
+            MinimalThemeService.ApplyRequestedTheme(
+                pageRoot,
+                elementTheme,
+                forceThemeResourceRefresh);
+        }
 
-            if (Instance._window?.Content is FrameworkElement mainRoot)
+        private static void RefreshFrameContentThemeChrome(Frame frame)
+        {
+            switch (frame.Content)
             {
-                mainRoot.RequestedTheme = elementTheme;
+                case MainPage mainPage:
+                    mainPage.ApplyThemeChrome();
+                    break;
+                case SettingsPage settingsPage:
+                    settingsPage.ApplyThemeChrome();
+                    break;
+            }
+        }
 
-                if (mainRoot is Frame frame)
-                {
-                    if (frame.Content is MainPage mainPage)
-                    {
-                        mainPage.ApplyThemeChrome();
-                    }
-                    else if (frame.Content is SettingsPage settingsPage)
-                    {
-                        settingsPage.ApplyThemeChrome();
-                    }
-                }
+        private static void ApplyMainWindowTitleBarChrome(string theme, ElementTheme elementTheme)
+        {
+            if (Instance._appWindow is null)
+            {
+                return;
             }
 
-            MiniWindowService.Instance.ApplyTheme(elementTheme);
-            FixedWindowService.Instance.ApplyTheme(elementTheme);
-            Instance._popButtonService?.ApplyTheme(elementTheme);
+            try
+            {
+                var titleBar = Instance._appWindow.TitleBar;
 
-            System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {theme} (ElementTheme.{elementTheme})");
+                // Defer to system colors when:
+                //  - Minimal mode (we suppress custom title bar painting),
+                //  - Element theme is Default (system theme — let WinUI track it),
+                //  - High Contrast is active (must respect accessibility palette).
+                if (MinimalThemeService.IsMinimal(theme) ||
+                    elementTheme == ElementTheme.Default ||
+                    ThemeResourceService.IsHighContrastActive())
+                {
+                    ResetTitleBarColors(titleBar);
+                    return;
+                }
+
+                var themeName = elementTheme == ElementTheme.Dark ? "Dark" : "Light";
+                var background = ResolveTitleBarColor(
+                    "TitleBarBackgroundColor",
+                    themeName,
+                    "FloatingWindowBackgroundColor");
+                var foreground = ResolveTitleBarColor(
+                    "TitleBarForegroundColor",
+                    themeName,
+                    "QueryTextColor");
+                var inactiveForeground = ResolveTitleBarColor(
+                    "TitleBarInactiveForegroundColor",
+                    themeName,
+                    "ServiceResultHeaderSecondaryForegroundColor");
+                var buttonHoverBackground = ResolveTitleBarColor(
+                    "TitleBarButtonHoverBackgroundColor",
+                    themeName,
+                    "ServiceResultHeaderHoverBackgroundColor");
+                var buttonPressedBackground = ResolveTitleBarColor(
+                    "TitleBarButtonPressedBackgroundColor",
+                    themeName,
+                    "ServiceResultHeaderHoverBackgroundColor");
+
+                titleBar.BackgroundColor = background;
+                titleBar.ForegroundColor = foreground;
+                titleBar.InactiveBackgroundColor = background;
+                titleBar.InactiveForegroundColor = inactiveForeground;
+                titleBar.ButtonBackgroundColor = background;
+                titleBar.ButtonForegroundColor = foreground;
+                titleBar.ButtonHoverBackgroundColor = buttonHoverBackground;
+                titleBar.ButtonHoverForegroundColor = foreground;
+                titleBar.ButtonPressedBackgroundColor = buttonPressedBackground;
+                titleBar.ButtonPressedForegroundColor = foreground;
+                titleBar.ButtonInactiveBackgroundColor = background;
+                titleBar.ButtonInactiveForegroundColor = inactiveForeground;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] Apply title bar theme failed: {ex.Message}");
+            }
+        }
+
+        private static Windows.UI.Color ResolveTitleBarColor(
+            string key,
+            string themeName,
+            string fallbackKey)
+        {
+            if (ThemeResourceService.TryGetResource<Windows.UI.Color>(key, themeName, out var color))
+            {
+                return color;
+            }
+
+            if (ThemeResourceService.TryGetResource<Windows.UI.Color>(fallbackKey, themeName, out var fallbackColor))
+            {
+                return fallbackColor;
+            }
+
+            return default;
+        }
+
+        private static void ResetTitleBarColors(AppWindowTitleBar titleBar)
+        {
+            titleBar.BackgroundColor = null;
+            titleBar.ForegroundColor = null;
+            titleBar.InactiveBackgroundColor = null;
+            titleBar.InactiveForegroundColor = null;
+            titleBar.ButtonBackgroundColor = null;
+            titleBar.ButtonForegroundColor = null;
+            titleBar.ButtonHoverBackgroundColor = null;
+            titleBar.ButtonHoverForegroundColor = null;
+            titleBar.ButtonPressedBackgroundColor = null;
+            titleBar.ButtonPressedForegroundColor = null;
+            titleBar.ButtonInactiveBackgroundColor = null;
+            titleBar.ButtonInactiveForegroundColor = null;
         }
 
         private static AppWindow ConfigureWindow(Window window)
@@ -1385,6 +1524,14 @@ namespace Easydict.WinUI
         void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
         {
             throw new Exception("Failed to load Page " + e.SourcePageType.FullName);
+        }
+
+        private void OnRootFrameNavigated(object sender, NavigationEventArgs e)
+        {
+            if (sender is Frame frame)
+            {
+                ApplyFrameTheme(frame, SettingsService.Instance.AppTheme, forceThemeResourceRefresh: false);
+            }
         }
     }
 }

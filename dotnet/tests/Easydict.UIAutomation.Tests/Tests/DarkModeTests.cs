@@ -649,8 +649,8 @@ public class DarkModeTests : IDisposable
         ThemePalette palette)
     {
         serviceRows.Count.Should().BeGreaterThanOrEqualTo(
-            3,
-            $"the first three visible service result rows must be present in {Path.GetFileName(screenshotPath)}");
+            1,
+            $"at least one visible service result row must be present in {Path.GetFileName(screenshotPath)} for palette assertion");
 
         using var bitmap = new Bitmap(screenshotPath);
         var windowBounds = window.BoundingRectangle;

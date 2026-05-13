@@ -5,6 +5,7 @@ using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;
 using System.Drawing;
+using System.Text.Json;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -201,6 +202,15 @@ public class DarkModeTests : IDisposable
 
         var persistedTheme = WaitForPersistedAppTheme(themeName, TimeSpan.FromSeconds(5));
         _output.WriteLine($"Persisted AppTheme after selecting {themeName}: {persistedTheme}");
+        if (!string.Equals(persistedTheme, themeName, StringComparison.OrdinalIgnoreCase))
+        {
+            _output.WriteLine("Settings paths checked:");
+            foreach (var path in GetSettingsFileCandidates().Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                _output.WriteLine($"  {path}");
+            }
+        }
+
         persistedTheme.Should().Be(
             themeName,
             $"theme selection must be persisted before rendering {themeName} palette assertions");
@@ -208,20 +218,6 @@ public class DarkModeTests : IDisposable
 
     private void SelectThemeComboItem(ComboBox themeCombo, string themeName, int themeIndex)
     {
-        try
-        {
-            themeCombo.Select(themeIndex);
-            Thread.Sleep(800);
-            if (string.Equals(ReadPersistedAppTheme(), themeName, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            _output.WriteLine($"AppThemeCombo.Select({themeIndex}) failed: {ex.Message}");
-        }
-
         themeCombo.Expand();
         Thread.Sleep(500);
         var items = themeCombo.Items;
@@ -234,34 +230,10 @@ public class DarkModeTests : IDisposable
                 $"AppThemeCombo exposed {items.Length} item(s), cannot select index {themeIndex} for {themeName}");
         }
 
-        SelectOrClick(items[themeIndex]);
-        Thread.Sleep(800);
-        DismissComboDropdown();
-    }
-
-    private static void SelectOrClick(AutomationElement element)
-    {
-        var selectionItemPattern = element.Patterns.SelectionItem.PatternOrDefault;
-        if (selectionItemPattern is not null)
-        {
-            selectionItemPattern.Select();
-            return;
-        }
-
-        InvokeOrClick(element);
-    }
-
-    private static void DismissComboDropdown()
-    {
-        try
-        {
-            Keyboard.Press(VirtualKeyShort.ESCAPE);
-            Thread.Sleep(100);
-        }
-        finally
-        {
-            try { Keyboard.Release(VirtualKeyShort.ESCAPE); } catch { /* ignore */ }
-        }
+        // Click() drives a real mouse click through the UI input pipeline so WinUI's
+        // ComboBox fires SelectionChanged. SelectionItemPattern.Select() programmatically
+        // toggles IsSelected without firing the event, so AppTheme would not persist.
+        items[themeIndex].Click();
     }
 
     private static string WaitForPersistedAppTheme(string expectedTheme, TimeSpan timeout)
@@ -287,33 +259,82 @@ public class DarkModeTests : IDisposable
     {
         try
         {
-            var settingsPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Easydict",
-                "settings.json");
+            var settingsPath = GetSettingsFileCandidates()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(File.Exists);
             if (!File.Exists(settingsPath))
             {
                 return "<missing settings.json>";
             }
 
-            var json = File.ReadAllText(settingsPath);
-            var marker = "\"AppTheme\"";
-            var markerIndex = json.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-            if (markerIndex < 0)
+            using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+            if (!document.RootElement.TryGetProperty("AppTheme", out var appTheme))
             {
                 return "<missing AppTheme>";
             }
 
-            var colonIndex = json.IndexOf(':', markerIndex);
-            var firstQuote = json.IndexOf('"', colonIndex + 1);
-            var secondQuote = firstQuote >= 0 ? json.IndexOf('"', firstQuote + 1) : -1;
-            return firstQuote >= 0 && secondQuote > firstQuote
-                ? json[(firstQuote + 1)..secondQuote]
+            return appTheme.ValueKind == JsonValueKind.String
+                ? appTheme.GetString() ?? "<missing AppTheme>"
                 : "<unreadable AppTheme>";
         }
         catch (Exception ex)
         {
             return $"<error: {ex.Message}>";
+        }
+    }
+
+    private static IEnumerable<string> GetSettingsFileCandidates()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var packageFamilyName = Environment.GetEnvironmentVariable("EASYDICT_PACKAGE_FAMILY_NAME");
+
+        foreach (var familyName in GetPackageFamilyNameCandidates(localAppData, packageFamilyName))
+        {
+            yield return Path.Combine(
+                localAppData,
+                "Packages",
+                familyName,
+                "LocalCache",
+                "Local",
+                "Easydict",
+                "settings.json");
+        }
+
+        yield return Path.Combine(localAppData, "Easydict", "settings.json");
+    }
+
+    private static IEnumerable<string> GetPackageFamilyNameCandidates(
+        string localAppData,
+        string? packageFamilyName)
+    {
+        if (!string.IsNullOrWhiteSpace(packageFamilyName))
+        {
+            yield return packageFamilyName;
+        }
+
+        var packagesRoot = Path.Combine(localAppData, "Packages");
+        if (!Directory.Exists(packagesRoot))
+        {
+            yield break;
+        }
+
+        string[] packagePaths;
+        try
+        {
+            packagePaths = Directory.GetDirectories(packagesRoot, "xiaocang.EasydictforWindows_*");
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (var path in packagePaths)
+        {
+            var familyName = Path.GetFileName(path);
+            if (!string.IsNullOrWhiteSpace(familyName))
+            {
+                yield return familyName;
+            }
         }
     }
 

@@ -190,8 +190,10 @@ internal static class ThemeResourceService
         out object? value)
     {
         // XAML resource lookup walks the element tree before falling back to
-        // application resources, so element-scoped overrides win. Match that
-        // order here so code-behind sees the same brushes XAML would resolve.
+        // application resources, so directly scoped overrides win. Keep merged
+        // framework dictionaries out of this first pass: several Easydict keys
+        // intentionally shadow WinUI resource names, and framework Light values
+        // must not beat the app's themed Colors.xaml dictionary in dark mode.
         if (TryGetElementResourceValue(root, key, themeName, out value))
         {
             return true;
@@ -242,7 +244,7 @@ internal static class ThemeResourceService
         while (current is not null)
         {
             if (current is FrameworkElement element &&
-                TryGetDictionaryResourceValue(element.Resources, key, themeName, out value))
+                TryGetDirectElementResourceValue(element.Resources, key, themeName, out value))
             {
                 return true;
             }
@@ -252,6 +254,23 @@ internal static class ThemeResourceService
 
         value = null;
         return false;
+    }
+
+    private static bool TryGetDirectElementResourceValue(
+        ResourceDictionary resources,
+        string key,
+        string? themeName,
+        out object? value)
+    {
+        if (themeName is not null &&
+            resources.ThemeDictionaries.TryGetValue(themeName, out var themeObj) &&
+            themeObj is ResourceDictionary themeDictionary &&
+            TryGetDictionaryResourceValue(themeDictionary, key, null, out value))
+        {
+            return true;
+        }
+
+        return TryGetDirectResourceValue(resources, key, out value);
     }
 
     private static bool TryGetDictionaryResourceValue(
@@ -289,6 +308,26 @@ internal static class ThemeResourceService
             }
         }
 
-        return resources.TryGetValue(key, out value);
+        return TryGetDirectResourceValue(resources, key, out value);
+    }
+
+    private static bool TryGetDirectResourceValue(
+        ResourceDictionary resources,
+        string key,
+        out object? value)
+    {
+        foreach (var resourceKey in resources.Keys)
+        {
+            if (!string.Equals(resourceKey as string, key, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            value = resources[resourceKey];
+            return true;
+        }
+
+        value = null;
+        return false;
     }
 }

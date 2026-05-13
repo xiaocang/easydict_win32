@@ -196,22 +196,91 @@ public class DarkModeTests : IDisposable
     {
         var themeCombo = FindAppThemeCombo(window);
 
-        _output.WriteLine($"Selecting {themeName} theme by clicking AppThemeCombo item index {themeIndex}");
+        _output.WriteLine($"Selecting {themeName} theme with AppThemeCombo item index {themeIndex}");
+        SelectThemeComboItem(themeCombo, themeName, themeIndex);
+
+        var persistedTheme = WaitForPersistedAppTheme(themeName, TimeSpan.FromSeconds(5));
+        _output.WriteLine($"Persisted AppTheme after selecting {themeName}: {persistedTheme}");
+        persistedTheme.Should().Be(
+            themeName,
+            $"theme selection must be persisted before rendering {themeName} palette assertions");
+    }
+
+    private void SelectThemeComboItem(ComboBox themeCombo, string themeName, int themeIndex)
+    {
+        try
+        {
+            themeCombo.Select(themeIndex);
+            Thread.Sleep(800);
+            if (string.Equals(ReadPersistedAppTheme(), themeName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"AppThemeCombo.Select({themeIndex}) failed: {ex.Message}");
+        }
+
         themeCombo.Expand();
         Thread.Sleep(500);
         var items = themeCombo.Items;
-        if (items.Length > themeIndex)
+        _output.WriteLine(
+            $"AppThemeCombo exposed {items.Length} item(s): {string.Join(", ", items.Select(i => $"'{i.Name}'"))}");
+
+        if (items.Length <= themeIndex)
         {
-            items[themeIndex].Click();
-        }
-        else
-        {
-            _output.WriteLine($"AppThemeCombo exposed {items.Length} item(s), falling back to SelectionPattern index {themeIndex}");
-            themeCombo.Select(themeIndex);
+            throw new InvalidOperationException(
+                $"AppThemeCombo exposed {items.Length} item(s), cannot select index {themeIndex} for {themeName}");
         }
 
-        Thread.Sleep(1500);
-        _output.WriteLine($"Persisted AppTheme after selecting {themeName}: {ReadPersistedAppTheme()}");
+        SelectOrClick(items[themeIndex]);
+        Thread.Sleep(800);
+        DismissComboDropdown();
+    }
+
+    private static void SelectOrClick(AutomationElement element)
+    {
+        var selectionItemPattern = element.Patterns.SelectionItem.PatternOrDefault;
+        if (selectionItemPattern is not null)
+        {
+            selectionItemPattern.Select();
+            return;
+        }
+
+        InvokeOrClick(element);
+    }
+
+    private static void DismissComboDropdown()
+    {
+        try
+        {
+            Keyboard.Press(VirtualKeyShort.ESCAPE);
+            Thread.Sleep(100);
+        }
+        finally
+        {
+            try { Keyboard.Release(VirtualKeyShort.ESCAPE); } catch { /* ignore */ }
+        }
+    }
+
+    private static string WaitForPersistedAppTheme(string expectedTheme, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        string current;
+        do
+        {
+            current = ReadPersistedAppTheme();
+            if (string.Equals(current, expectedTheme, StringComparison.OrdinalIgnoreCase))
+            {
+                return current;
+            }
+
+            Thread.Sleep(200);
+        }
+        while (DateTime.UtcNow < deadline);
+
+        return current;
     }
 
     private static string ReadPersistedAppTheme()

@@ -250,77 +250,77 @@
             <Thickness x:Key="EasydictCardPadding">12</Thickness>
 
             <!-- Brushes -->
-            <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
-            <SolidColorBrush x:Key="MainBorderBrush" Color="{StaticResource MainBorderColor}" />
-            <SolidColorBrush x:Key="QueryViewBackgroundBrush" Color="{StaticResource QueryViewBackgroundColor}" />
-            <SolidColorBrush x:Key="QueryTextBrush" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="{StaticResource TitleBarBackgroundColor}" />
-            <SolidColorBrush x:Key="ResultViewBackgroundBrush" Color="{StaticResource ResultViewBackgroundColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderBackgroundBrush" Color="{StaticResource ServiceResultHeaderBackgroundColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderHoverBackgroundBrush" Color="{StaticResource ServiceResultHeaderHoverBackgroundColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderForegroundBrush" Color="{StaticResource ServiceResultHeaderForegroundColor}" />
-            <SolidColorBrush x:Key="ServiceResultHeaderSecondaryForegroundBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
-            <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHoverColor}" />
-            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="{StaticResource FloatingWindowBackgroundColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
-            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{StaticResource EasydictCardBorderColor}" />
-            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{StaticResource FloatingInputBackgroundColor}" />
-            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="{StaticResource ServiceResultHeaderHoverBackgroundColor}" />
-            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
-            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{StaticResource FloatingInputBorderColor}" />
-            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{StaticResource MainBorderColor}" />
-            <SolidColorBrush x:Key="ButtonBackground" Color="{StaticResource FloatingInputBackgroundColor}" />
-            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{StaticResource ServiceResultHeaderHoverBackgroundColor}" />
+            <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="#1F2229" />
+            <SolidColorBrush x:Key="MainBorderBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="QueryViewBackgroundBrush" Color="#2A2F39" />
+            <SolidColorBrush x:Key="QueryTextBrush" Color="#E2E4E9" />
+            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#1F2229" />
+            <SolidColorBrush x:Key="ResultViewBackgroundBrush" Color="#222731" />
+            <SolidColorBrush x:Key="ServiceResultHeaderBackgroundBrush" Color="#282D37" />
+            <SolidColorBrush x:Key="ServiceResultHeaderHoverBackgroundBrush" Color="#323946" />
+            <SolidColorBrush x:Key="ServiceResultHeaderForegroundBrush" Color="#F2F4F8" />
+            <SolidColorBrush x:Key="ServiceResultHeaderSecondaryForegroundBrush" Color="#C8CED8" />
+            <SolidColorBrush x:Key="ButtonHoverBrush" Color="#323946" />
+            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="#1F2229" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#222731" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="#2A2F39" />
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#323946" />
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="#222731" />
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="ButtonBackground" Color="#2A2F39" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#323946" />
             <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#383C48" />
-            <SolidColorBrush x:Key="ButtonForeground" Color="{StaticResource FloatingIconForegroundColor}" />
-            <SolidColorBrush x:Key="ButtonBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
-            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{StaticResource MainBorderColor}" />
-            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{StaticResource MainBorderColor}" />
-            <SolidColorBrush x:Key="ComboBoxBackground" Color="{StaticResource FloatingInputBackgroundColor}" />
-            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="{StaticResource ServiceResultHeaderHoverBackgroundColor}" />
-            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
-            <SolidColorBrush x:Key="ComboBoxForeground" Color="{StaticResource QueryTextColor}" />
-            <SolidColorBrush x:Key="TextControlBackground" Color="{StaticResource FloatingInputBackgroundColor}" />
-            <SolidColorBrush x:Key="TextControlBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
-            <SolidColorBrush x:Key="TextControlForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ButtonForeground" Color="#E2E6ED" />
+            <SolidColorBrush x:Key="ButtonBorderBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#3A4250" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#3A4250" />
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="#2A2F39" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#323946" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="ComboBoxForeground" Color="#E2E4E9" />
+            <SolidColorBrush x:Key="TextControlBackground" Color="#2A2F39" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="TextControlForeground" Color="#E2E4E9" />
             <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#9CA4B0" />
-            <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource BlueAccentColor}" />
-            <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
-            <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
-            <SolidColorBrush x:Key="ListBorderBrush" Color="{StaticResource ListBorderColor}" />
-            <SolidColorBrush x:Key="ActionButtonIconBrush" Color="{StaticResource ActionButtonIconColor}" />
-            <SolidColorBrush x:Key="StatusConnectedBrush" Color="{StaticResource StatusConnectedColor}" />
-            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="{StaticResource StatusDisconnectedColor}" />
-            <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource StatusErrorColor}" />
-            <SolidColorBrush x:Key="StatusIndicatorForegroundBrush" Color="{StaticResource StatusIndicatorForegroundColor}" />
-            <SolidColorBrush x:Key="SystemFillColorSuccessBrush" Color="{StaticResource StatusConnectedColor}" />
-            <SolidColorBrush x:Key="SystemFillColorCriticalBrush" Color="{StaticResource StatusErrorColor}" />
-            <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
-            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{StaticResource AccentForegroundColor}" />
-            <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForegroundColor}" />
-            <SolidColorBrush x:Key="AccentPointerOverBrush" Color="{StaticResource AccentPointerOverColor}" />
-            <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}" />
-            <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="{StaticResource PhoneticBadgeBackgroundColor}" />
-            <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="{StaticResource PhoneticBadgeTextColor}" />
-            <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="{StaticResource PosTagBackgroundColor}" />
-            <SolidColorBrush x:Key="PosTagTextBrush" Color="{StaticResource PosTagTextColor}" />
-            <SolidColorBrush x:Key="ExampleTextBrush" Color="{StaticResource ExampleTextColor}" />
-            <SolidColorBrush x:Key="SettingsTabBackgroundBrush" Color="{StaticResource SettingsTabBackgroundColor}" />
-            <SolidColorBrush x:Key="SettingsTabBorderBrush" Color="{StaticResource SettingsTabBorderColor}" />
-            <SolidColorBrush x:Key="SettingsTabForegroundBrush" Color="{StaticResource SettingsTabForegroundColor}" />
-            <SolidColorBrush x:Key="SettingsTabSelectedBackgroundBrush" Color="{StaticResource SettingsTabSelectedBackgroundColor}" />
-            <SolidColorBrush x:Key="SettingsTabSelectedBorderBrush" Color="{StaticResource SettingsTabSelectedBorderColor}" />
-            <SolidColorBrush x:Key="SettingsTabSelectedForegroundBrush" Color="{StaticResource SettingsTabSelectedForegroundColor}" />
-            <SolidColorBrush x:Key="PopButtonBackgroundBrush" Color="{StaticResource PopButtonBackgroundColor}" />
-            <SolidColorBrush x:Key="PopButtonBorderBrush" Color="{StaticResource PopButtonBorderColor}" />
-            <SolidColorBrush x:Key="PopButtonForegroundBrush" Color="{StaticResource PopButtonForegroundColor}" />
-            <SolidColorBrush x:Key="FloatingWindowBackgroundBrush" Color="{StaticResource FloatingWindowBackgroundColor}" />
-            <SolidColorBrush x:Key="FloatingWindowBorderBrush" Color="{StaticResource FloatingWindowBorderColor}" />
-            <SolidColorBrush x:Key="FloatingInputBackgroundBrush" Color="{StaticResource FloatingInputBackgroundColor}" />
-            <SolidColorBrush x:Key="FloatingInputBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
-            <SolidColorBrush x:Key="FloatingIconForegroundBrush" Color="{StaticResource FloatingIconForegroundColor}" />
-            <SolidColorBrush x:Key="EasydictCardBackgroundBrush" Color="{StaticResource EasydictCardBackgroundColor}" />
-            <SolidColorBrush x:Key="EasydictCardBorderBrush" Color="{StaticResource EasydictCardBorderColor}" />
+            <SolidColorBrush x:Key="BlueAccentBrush" Color="#5EB5FF" />
+            <SolidColorBrush x:Key="BlueTintBrush" Color="#4DB8E8" />
+            <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="#2A2F39" />
+            <SolidColorBrush x:Key="ListBorderBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="ActionButtonIconBrush" Color="#A3ABB7" />
+            <SolidColorBrush x:Key="StatusConnectedBrush" Color="#79B873" />
+            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="#8A8D93" />
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="#E58A95" />
+            <SolidColorBrush x:Key="StatusIndicatorForegroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="SystemFillColorSuccessBrush" Color="#79B873" />
+            <SolidColorBrush x:Key="SystemFillColorCriticalBrush" Color="#E58A95" />
+            <SolidColorBrush x:Key="AccentBrush" Color="#2B88D8" />
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AccentForegroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AccentPointerOverBrush" Color="#3A99E6" />
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="#1F6FB3" />
+            <SolidColorBrush x:Key="PhoneticBadgeBackgroundBrush" Color="#352842" />
+            <SolidColorBrush x:Key="PhoneticBadgeTextBrush" Color="#CDA4E0" />
+            <SolidColorBrush x:Key="PosTagBackgroundBrush" Color="#1E3A5F" />
+            <SolidColorBrush x:Key="PosTagTextBrush" Color="#93C5FD" />
+            <SolidColorBrush x:Key="ExampleTextBrush" Color="#9CA3AF" />
+            <SolidColorBrush x:Key="SettingsTabBackgroundBrush" Color="#202127" />
+            <SolidColorBrush x:Key="SettingsTabBorderBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="SettingsTabForegroundBrush" Color="#E6EBF2" />
+            <SolidColorBrush x:Key="SettingsTabSelectedBackgroundBrush" Color="#243247" />
+            <SolidColorBrush x:Key="SettingsTabSelectedBorderBrush" Color="#5B7FA6" />
+            <SolidColorBrush x:Key="SettingsTabSelectedForegroundBrush" Color="#D8E8FF" />
+            <SolidColorBrush x:Key="PopButtonBackgroundBrush" Color="#252A33" />
+            <SolidColorBrush x:Key="PopButtonBorderBrush" Color="#6B7584" />
+            <SolidColorBrush x:Key="PopButtonForegroundBrush" Color="#E6EBF2" />
+            <SolidColorBrush x:Key="FloatingWindowBackgroundBrush" Color="#1F2229" />
+            <SolidColorBrush x:Key="FloatingWindowBorderBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="FloatingInputBackgroundBrush" Color="#2A2F39" />
+            <SolidColorBrush x:Key="FloatingInputBorderBrush" Color="#3A4250" />
+            <SolidColorBrush x:Key="FloatingIconForegroundBrush" Color="#E2E6ED" />
+            <SolidColorBrush x:Key="EasydictCardBackgroundBrush" Color="#222731" />
+            <SolidColorBrush x:Key="EasydictCardBorderBrush" Color="#3A4250" />
         </ResourceDictionary>
 
         <!-- HighContrast Theme (fallback to Light theme values) -->

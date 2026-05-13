@@ -251,6 +251,8 @@ namespace Easydict.WinUI.Views
             DispatcherQueue.TryEnqueue(() =>
             {
                 App.ApplyTheme(SettingsService.Instance.AppTheme);
+                ApplyThemeChrome();
+                ServiceResultViewHost.RefreshThemeChrome(_resultControls, this);
             });
         }
 

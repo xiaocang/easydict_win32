@@ -69,32 +69,66 @@ public static class ScreenshotHelper
         window.SetForeground();
         Thread.Sleep(300);
 
-        var hwnd = window.Properties.NativeWindowHandle.Value;
-        if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var rect))
+        var bounds = GetWindowPhysicalBounds(window);
+        if (bounds.Width <= 0 || bounds.Height <= 0)
         {
             return CaptureWindow(window, name);
         }
 
-        var width = rect.Right - rect.Left;
-        var height = rect.Bottom - rect.Top;
-        if (width <= 0 || height <= 0)
-        {
-            return CaptureWindow(window, name);
-        }
-
-        using var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        using var bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
         using (var graphics = Graphics.FromImage(bitmap))
         {
             graphics.CopyFromScreen(
-                rect.Left,
-                rect.Top,
+                bounds.Left,
+                bounds.Top,
                 0,
                 0,
-                new Size(width, height),
+                bounds.Size,
                 CopyPixelOperation.SourceCopy);
         }
 
         return SaveBitmap(bitmap, name);
+    }
+
+    public static Rectangle GetWindowPhysicalBounds(Window window)
+    {
+        var hwnd = window.Properties.NativeWindowHandle.Value;
+        if (hwnd != IntPtr.Zero && GetWindowRect(hwnd, out var rect))
+        {
+            return Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
+        }
+
+        var bounds = window.BoundingRectangle;
+        return Rectangle.FromLTRB(
+            (int)Math.Round(Convert.ToDouble(bounds.Left)),
+            (int)Math.Round(Convert.ToDouble(bounds.Top)),
+            (int)Math.Round(Convert.ToDouble(bounds.Right)),
+            (int)Math.Round(Convert.ToDouble(bounds.Bottom)));
+    }
+
+    public static bool TrySetWindowPhysicalBounds(Window window, Rectangle bounds)
+    {
+        var hwnd = window.Properties.NativeWindowHandle.Value;
+        return hwnd != IntPtr.Zero && SetWindowPos(
+            hwnd,
+            IntPtr.Zero,
+            bounds.Left,
+            bounds.Top,
+            bounds.Width,
+            bounds.Height,
+            SetWindowPosNoZOrder | SetWindowPosNoActivate);
+    }
+
+    public static double GetWindowDpiScale(Window window)
+    {
+        var hwnd = window.Properties.NativeWindowHandle.Value;
+        if (hwnd == IntPtr.Zero)
+        {
+            return 1d;
+        }
+
+        var dpi = GetDpiForWindow(hwnd);
+        return dpi == 0 ? 1d : dpi / 96d;
     }
 
     /// <summary>
@@ -130,6 +164,22 @@ public static class ScreenshotHelper
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetWindowRect(IntPtr hWnd, out WindowRect rect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint uFlags);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    private const uint SetWindowPosNoZOrder = 0x0004;
+    private const uint SetWindowPosNoActivate = 0x0010;
 
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct WindowRect

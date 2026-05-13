@@ -174,10 +174,10 @@
                 </VisualStateManager.VisualStateGroups>
 
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*"
+                    <RowDefinition Height="Auto"
                                    MinHeight="40"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"
+                    <RowDefinition Height="Auto"
                                    MinHeight="40"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -342,6 +342,7 @@
                 <!-- Input Card -->
                 <Border x:Name="QuickInputCard"
                         Grid.Row="0"
+                        MaxHeight="480"
                         Style="{StaticResource CardStyle}"
                         Margin="0,0,0,2">
                     <Grid x:Name="QuickInputCardContent"
@@ -440,7 +441,10 @@
 
                 <!-- Output Area: Multiple Service Results -->
                 <Border x:Name="QuickOutputCard"
+                        AutomationProperties.AutomationId="QuickOutputCard"
+                        AutomationProperties.AccessibilityView="Control"
                         Grid.Row="2"
+                        MinHeight="280"
                         Style="{StaticResource CardStyle}"
                         Margin="0,2,0,0">
                     <Grid x:Name="QuickOutputCardContent"

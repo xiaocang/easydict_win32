@@ -92,7 +92,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     public void RefreshThemeChrome()
     {
-        RefreshHeaderChromeForCurrentTheme();
+        ApplyServiceChromeForCurrentTheme();
     }
 
     public void Cleanup()
@@ -347,7 +347,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         ApplyMinimalChrome();
         if (!minimal && !_isHovering)
         {
-            RefreshHeaderChromeForCurrentTheme();
+            ApplyServiceChromeForCurrentTheme();
         }
         else
         {
@@ -357,12 +357,12 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        RefreshHeaderChromeForCurrentTheme();
+        ApplyServiceChromeForCurrentTheme();
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
     {
-        RefreshHeaderChromeForCurrentTheme();
+        ApplyServiceChromeForCurrentTheme();
     }
 
     private void ApplyMinimalChrome()
@@ -1129,8 +1129,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             return;
         }
 
-        Brush? background = FindServiceChromeBrush("ServiceResultHeaderHoverBackgroundBrush")
-            ?? FindServiceChromeBrush("ButtonHoverBrush");
+        Brush? background = FindServiceChromeColorOrBrush(
+            "ServiceResultHeaderHoverBackgroundColor",
+            "ServiceResultHeaderHoverBackgroundBrush",
+            "ButtonHoverBrush");
         if (background is not null)
         {
             HeaderBar.Background = background;
@@ -1156,6 +1158,18 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         return FindThemeBrush(key);
     }
 
+    private Brush? FindServiceChromeColorBrush(string key)
+    {
+        return FindServiceChromeColor(key) is Windows.UI.Color color
+            ? new SolidColorBrush(color)
+            : null;
+    }
+
+    private Brush? FindServiceChromeColorOrBrush(string colorKey, params string[] brushKeys)
+    {
+        return FindServiceChromeColorBrush(colorKey) ?? FindServiceChromeBrushFallback(brushKeys);
+    }
+
     private Brush? FindServiceChromeBrushFallback(params string[] keys)
     {
         foreach (var key in keys)
@@ -1174,21 +1188,27 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         return FindThemeColor(key);
     }
 
-    private void RefreshHeaderChromeForCurrentTheme()
+    private void ApplyServiceChromeForCurrentTheme()
     {
-        if (FindServiceChromeBrush("ResultViewBackgroundBrush") is Brush rootBackground)
+        if (FindServiceChromeColorOrBrush(
+                "ResultViewBackgroundColor",
+                "ResultViewBackgroundBrush") is Brush rootBackground)
         {
             RootBorder.Background = rootBackground;
         }
 
-        if ((FindServiceChromeBrush("CardStrokeColorDefaultBrush")
-            ?? FindServiceChromeBrush("MainBorderBrush")) is Brush borderBrush)
+        if (FindServiceChromeColorOrBrush(
+                "EasydictCardBorderColor",
+                "CardStrokeColorDefaultBrush",
+                "MainBorderBrush") is Brush borderBrush)
         {
             RootBorder.BorderBrush = borderBrush;
             HeaderBar.BorderBrush = borderBrush;
         }
 
-        if (FindServiceChromeBrush("ServiceResultHeaderBackgroundBrush") is Brush brush)
+        if (FindServiceChromeColorOrBrush(
+                "ServiceResultHeaderBackgroundColor",
+                "ServiceResultHeaderBackgroundBrush") is Brush brush)
         {
             HeaderBar.Background = brush;
         }
@@ -1198,10 +1218,14 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private void ApplyHeaderForegroundForCurrentChrome()
     {
-        var primaryBrush = FindServiceChromeBrush("ServiceResultHeaderForegroundBrush")
-            ?? FindServiceChromeBrush("TextFillColorPrimaryBrush");
-        var secondaryBrush = FindServiceChromeBrush("ServiceResultHeaderSecondaryForegroundBrush")
-            ?? FindServiceChromeBrush("TextFillColorSecondaryBrush");
+        var primaryBrush = FindServiceChromeColorOrBrush(
+            "ServiceResultHeaderForegroundColor",
+            "ServiceResultHeaderForegroundBrush",
+            "TextFillColorPrimaryBrush");
+        var secondaryBrush = FindServiceChromeColorOrBrush(
+            "ServiceResultHeaderSecondaryForegroundColor",
+            "ServiceResultHeaderSecondaryForegroundBrush",
+            "TextFillColorSecondaryBrush");
 
         if (primaryBrush is not null)
         {
@@ -1248,7 +1272,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
 
         // Restore opaque background instead of clearing it to maintain sticky header visibility.
-        RefreshHeaderChromeForCurrentTheme();
+        ApplyServiceChromeForCurrentTheme();
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     }
 

@@ -250,17 +250,23 @@ public class DarkModeTests : IDisposable
 
     private ComboBox FindAppThemeCombo(Window window)
     {
+        ScreenshotHelper.TrySetWindowPhysicalBounds(window, new Rectangle(0, 0, 900, 900));
+        window.SetForeground();
+        Thread.Sleep(500);
+
         var settingsButton = Retry.WhileNull(
             () => window.FindFirstDescendant(cf => cf.ByAutomationId("SettingsButton")),
             TimeSpan.FromSeconds(2)).Result;
 
         if (settingsButton is not null)
         {
-            settingsButton.Click();
+            _output.WriteLine($"Clicking SettingsButton at {settingsButton.BoundingRectangle}");
+            InvokeOrClick(settingsButton);
             Thread.Sleep(2000);
         }
         else
         {
+            _output.WriteLine("SettingsButton not found before opening settings");
             var existingThemeCombo = window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo"))?.AsComboBox();
             if (existingThemeCombo is not null && !existingThemeCombo.IsOffscreen)
             {
@@ -271,6 +277,12 @@ public class DarkModeTests : IDisposable
         var scrollViewer = Retry.WhileNull(
             () => window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer")),
             TimeSpan.FromSeconds(15)).Result;
+
+        if (scrollViewer is null)
+        {
+            var path = ScreenshotHelper.CaptureWindow(window, "darkmode_settings_navigation_failed");
+            _output.WriteLine($"Settings navigation failed screenshot saved: {path}");
+        }
 
         scrollViewer.Should().NotBeNull(
             "MainScrollViewer must appear on settings page once initialization finishes");
@@ -285,6 +297,17 @@ public class DarkModeTests : IDisposable
 
         _output.WriteLine("Found AppThemeCombo");
         return themeCombo!;
+    }
+
+    private static void InvokeOrClick(AutomationElement element)
+    {
+        if (element.Patterns.Invoke.IsSupported)
+        {
+            element.Patterns.Invoke.Pattern.Invoke();
+            return;
+        }
+
+        element.Click();
     }
 
     /// <summary>
@@ -306,7 +329,7 @@ public class DarkModeTests : IDisposable
 
         if (backButton != null)
         {
-            backButton.Click();
+            InvokeOrClick(backButton);
             Thread.Sleep(1000);
 
             // Handle unsaved changes dialog if it appears
@@ -342,27 +365,37 @@ public class DarkModeTests : IDisposable
     private void PrepareMainWindowForScreenshot(Window window, string label)
     {
         _output.WriteLine($"{label} window bounds before move: {window.BoundingRectangle}");
-        ResizeMainWindowForScreenshot(window);
-        window.Move(0, 0);
+        var positionedByNativeWindow = ResizeMainWindowForScreenshot(window);
+        if (!positionedByNativeWindow)
+        {
+            window.Move(0, 0);
+        }
+
         Thread.Sleep(500);
         window.SetForeground();
         Thread.Sleep(500);
         _output.WriteLine($"{label} window bounds after move: {window.BoundingRectangle}");
     }
 
-    private void ResizeMainWindowForScreenshot(Window window)
+    private bool ResizeMainWindowForScreenshot(Window window)
     {
         try
         {
+            if (ScreenshotHelper.TrySetWindowPhysicalBounds(window, new Rectangle(0, 0, 900, 900)))
+            {
+                Thread.Sleep(500);
+                return true;
+            }
+
             if (!window.Patterns.Transform.IsSupported)
             {
-                return;
+                return false;
             }
 
             var transform = window.Patterns.Transform.Pattern;
             if (!transform.CanResize.Value)
             {
-                return;
+                return false;
             }
 
             transform.Resize(900, 1000);
@@ -371,7 +404,10 @@ public class DarkModeTests : IDisposable
         catch (Exception ex)
         {
             _output.WriteLine($"Window resize skipped: {ex.Message}");
+            return false;
         }
+
+        return false;
     }
 
     private void CaptureAndAssertMainWindowPalette(Window window, ThemePalette palette, string baseName)
@@ -382,7 +418,132 @@ public class DarkModeTests : IDisposable
         _output.WriteLine($"Explicit {palette} top palette screenshot saved: {topPath}");
         AssertMainWindowPalette(topPath, palette, TopPaletteProbes);
 
+        var serviceRows = ScrollServiceRowsIntoView(window);
+        var servicePath = ScreenshotHelper.CaptureWindowPhysical(window, $"{baseName}_service_rows_palette");
+        _output.WriteLine($"Explicit {palette} service rows screenshot saved: {servicePath}");
+        AssertServiceResultRowsPalette(window, serviceRows, servicePath, palette);
+
         ScrollMainContentToPercent(window, 0);
+    }
+
+    private IReadOnlyList<AutomationElement> ScrollServiceRowsIntoView(Window window)
+    {
+        TryScrollElementIntoView(
+            window.FindFirstDescendant(cf => cf.ByAutomationId("QuickOutputCard")),
+            "QuickOutputCard");
+
+        var firstServiceRow = FindServiceResultRows(window).FirstOrDefault();
+        TryScrollElementIntoView(firstServiceRow, firstServiceRow is null ? "first service row" : GetAutomationIdOrEmpty(firstServiceRow));
+
+        var bestRows = Array.Empty<AutomationElement>();
+        foreach (var percent in new[] { 0d, 35d, 50d, 65d, 80d, 100d })
+        {
+            ScrollMainContentToPercent(window, percent);
+            var rows = FindVisibleServiceResultRows(window);
+            if (rows.Count > bestRows.Length)
+            {
+                bestRows = rows.ToArray();
+            }
+
+            if (rows.Count >= 3)
+            {
+                return rows.Take(3).ToArray();
+            }
+        }
+
+        return bestRows.Take(3).ToArray();
+    }
+
+    private void TryScrollElementIntoView(AutomationElement? element, string label)
+    {
+        if (element is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (element.Patterns.ScrollItem.IsSupported)
+            {
+                element.Patterns.ScrollItem.Pattern.ScrollIntoView();
+                _output.WriteLine($"ScrollItem: scrolled {label} into view");
+                Thread.Sleep(800);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"ScrollItem for {label} failed: {ex.Message}");
+        }
+
+        try
+        {
+            element.Focus();
+            _output.WriteLine($"Focus: focused {label}");
+            Thread.Sleep(800);
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Focus for {label} failed: {ex.Message}");
+        }
+    }
+
+    private IReadOnlyList<AutomationElement> FindVisibleServiceResultRows(Window window)
+    {
+        var windowBounds = window.BoundingRectangle;
+        var rows = FindServiceResultRows(window)
+            .Where(element => IsVisibleWithinWindow(element, windowBounds))
+            .OrderBy(element => element.BoundingRectangle.Top)
+            .ToArray();
+
+        _output.WriteLine($"Visible service result rows: {string.Join(", ", rows.Select(row => $"{GetAutomationIdOrEmpty(row)}@{row.BoundingRectangle}"))}");
+        return rows;
+    }
+
+    private static IReadOnlyList<AutomationElement> FindServiceResultRows(Window window)
+    {
+        var headers = FindServiceResultElementsByPrefix(window, "ServiceResultHeader_");
+        return headers.Count >= 3
+            ? headers
+            : FindServiceResultElementsByPrefix(window, "ServiceResultItem_");
+    }
+
+    private static IReadOnlyList<AutomationElement> FindServiceResultElementsByPrefix(
+        Window window,
+        string automationIdPrefix)
+    {
+        return window.FindAllDescendants()
+            .Where(element => GetAutomationIdOrEmpty(element).StartsWith(
+                automationIdPrefix,
+                StringComparison.Ordinal))
+            .OrderBy(element => element.BoundingRectangle.Top)
+            .ToArray();
+    }
+
+    private static string GetAutomationIdOrEmpty(AutomationElement element)
+    {
+        try
+        {
+            return element.AutomationId ?? string.Empty;
+        }
+        catch (FlaUI.Core.Exceptions.PropertyNotSupportedException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static bool IsVisibleWithinWindow(
+        AutomationElement element,
+        Rectangle windowBounds)
+    {
+        var bounds = element.BoundingRectangle;
+        return !element.IsOffscreen
+            && bounds.Width > 40
+            && bounds.Height > 10
+            && bounds.Right > windowBounds.Left
+            && bounds.Left < windowBounds.Right
+            && bounds.Bottom > windowBounds.Top
+            && bounds.Top < windowBounds.Bottom;
     }
 
     private void ScrollMainContentToPercent(Window window, double verticalPercent)
@@ -408,7 +569,7 @@ public class DarkModeTests : IDisposable
         {
             _output.WriteLine("QuickTranslateContent ScrollPattern unavailable, falling back to mouse wheel");
             var rect = scrollViewer.BoundingRectangle;
-            Mouse.MoveTo(new Point(rect.Right - 12, rect.Top + (rect.Height / 2)));
+            Mouse.MoveTo(new Point(rect.Right - 24, rect.Top + (rect.Height / 2)));
         }
         else
         {
@@ -416,7 +577,16 @@ public class DarkModeTests : IDisposable
             Mouse.MoveTo(window.GetClickablePoint());
         }
 
-        Mouse.Scroll(verticalPercent > 0 ? -10 : 10);
+        var scrollDelta = verticalPercent > 0 ? -5 : 5;
+        var wheelTicks = verticalPercent > 0
+            ? Math.Clamp((int)Math.Ceiling(verticalPercent / 5d), 8, 24)
+            : 18;
+        for (var i = 0; i < wheelTicks; i++)
+        {
+            Mouse.Scroll(scrollDelta);
+            Thread.Sleep(40);
+        }
+
         Thread.Sleep(800);
     }
 
@@ -472,9 +642,63 @@ public class DarkModeTests : IDisposable
         }
     }
 
+    private void AssertServiceResultRowsPalette(
+        Window window,
+        IReadOnlyList<AutomationElement> serviceRows,
+        string screenshotPath,
+        ThemePalette palette)
+    {
+        serviceRows.Count.Should().BeGreaterThanOrEqualTo(
+            3,
+            $"the first three visible service result rows must be present in {Path.GetFileName(screenshotPath)}");
+
+        using var bitmap = new Bitmap(screenshotPath);
+        var windowBounds = window.BoundingRectangle;
+        var dpiScale = ScreenshotHelper.GetWindowDpiScale(window);
+        _output.WriteLine($"{palette} service row DPI scale: {dpiScale:0.###}");
+
+        foreach (var row in serviceRows.Take(3))
+        {
+            var automationId = GetAutomationIdOrEmpty(row);
+            var rowRect = ToScreenshotPixelRect(bitmap, row.BoundingRectangle, windowBounds, dpiScale);
+            rowRect.Top.Should().BeGreaterThanOrEqualTo(
+                0,
+                $"{automationId} must be inside the captured main-window screenshot");
+            rowRect.Top.Should().BeLessThan(
+                bitmap.Height - 8,
+                $"{automationId} must be visible in the captured main-window screenshot");
+            rowRect.Height.Should().BeGreaterThan(
+                20,
+                $"{automationId} must have a visible service-row height in the captured main-window screenshot");
+
+            var sampleRect = ToServiceRowSampleRect(bitmap, rowRect);
+            var sample = AverageRegion(bitmap, sampleRect);
+            _output.WriteLine(
+                $"{palette} {automationId}: row={rowRect}, sample={sampleRect}, avg rgb=({sample.R:0.0}, {sample.G:0.0}, {sample.B:0.0}), brightness={sample.Brightness:0.0}");
+
+            if (palette == ThemePalette.Dark)
+            {
+                sample.Brightness.Should().BeLessThan(
+                    135,
+                    $"{automationId} in {Path.GetFileName(screenshotPath)} must use dark service-row chrome instead of light-mode white fill");
+            }
+            else
+            {
+                sample.Brightness.Should().BeGreaterThan(
+                    248,
+                    $"{automationId} in {Path.GetFileName(screenshotPath)} must use light service-row chrome instead of dark-mode fill");
+            }
+        }
+    }
+
     private static PaletteSample AverageRegion(Bitmap bitmap, PaletteProbe probe)
     {
         var rect = ToPixelRect(bitmap, probe);
+        return AverageRegion(bitmap, rect);
+    }
+
+    private static PaletteSample AverageRegion(Bitmap bitmap, Rectangle rect)
+    {
         double r = 0;
         double g = 0;
         double b = 0;
@@ -497,6 +721,42 @@ public class DarkModeTests : IDisposable
         b /= count;
         var brightness = (0.299 * r) + (0.587 * g) + (0.114 * b);
         return new PaletteSample(r, g, b, brightness);
+    }
+
+    private static Rectangle ToScreenshotPixelRect(
+        Bitmap bitmap,
+        Rectangle elementBounds,
+        Rectangle windowBounds,
+        double dpiScale)
+    {
+        var left = (int)Math.Round((elementBounds.Left - windowBounds.Left) * dpiScale);
+        var top = (int)Math.Round((elementBounds.Top - windowBounds.Top) * dpiScale);
+        var right = (int)Math.Round((elementBounds.Right - windowBounds.Left) * dpiScale);
+        var bottom = (int)Math.Round((elementBounds.Bottom - windowBounds.Top) * dpiScale);
+
+        return Rectangle.FromLTRB(left, top, right, bottom);
+    }
+
+    private static Rectangle ToServiceRowSampleRect(Bitmap bitmap, Rectangle rowRect)
+    {
+        var left = rowRect.Left + (int)Math.Round(rowRect.Width * 0.42);
+        var top = rowRect.Top + (int)Math.Round(rowRect.Height * 0.30);
+        var width = Math.Max(12, (int)Math.Round(rowRect.Width * 0.24));
+        var height = Math.Max(6, (int)Math.Round(rowRect.Height * 0.40));
+
+        return ClipRect(
+            new Rectangle(left, top, width, height),
+            bitmap.Width,
+            bitmap.Height);
+    }
+
+    private static Rectangle ClipRect(Rectangle rect, int maxWidth, int maxHeight)
+    {
+        var left = Math.Clamp(rect.Left, 0, maxWidth - 1);
+        var top = Math.Clamp(rect.Top, 0, maxHeight - 1);
+        var right = Math.Clamp(rect.Right, left + 1, maxWidth);
+        var bottom = Math.Clamp(rect.Bottom, top + 1, maxHeight);
+        return Rectangle.FromLTRB(left, top, right, bottom);
     }
 
     private static Rectangle ToPixelRect(Bitmap bitmap, PaletteProbe probe)

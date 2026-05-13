@@ -139,14 +139,16 @@ internal static class MinimalThemeService
         {
             rootGrid.Padding = minimal
                 ? new Thickness(8)
-                : new Thickness(0);
+                : ThemeResourceService.GetResourceOrDefault(
+                    "FloatingWindowOuterPadding",
+                    themeRoot,
+                    new Thickness(0));
         }
-
-        surface.BorderThickness = new Thickness(0);
-        surface.CornerRadius = new CornerRadius(0);
 
         if (minimal)
         {
+            surface.BorderThickness = new Thickness(0);
+            surface.CornerRadius = new CornerRadius(0);
             surface.Padding = new Thickness(0);
             surface.Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush");
             sourceContainer.Background = ThemeResourceService.GetBrush("CardBackgroundFillColorDefaultBrush");
@@ -157,6 +159,15 @@ internal static class MinimalThemeService
             sourceContainer.Margin = new Thickness(0, 0, 0, 4);
             return;
         }
+
+        surface.BorderThickness = ThemeResourceService.GetResourceOrDefault(
+            "FloatingWindowBorderThickness",
+            themeRoot,
+            new Thickness(0));
+        surface.CornerRadius = ThemeResourceService.GetResourceOrDefault(
+            "FloatingWindowCornerRadius",
+            themeRoot,
+            new CornerRadius(0));
 
         var resolvedAppBg = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush", themeRoot);
 #if DEBUG
@@ -171,6 +182,7 @@ internal static class MinimalThemeService
             $"SurfaceBgBefore={(surface.Background as SolidColorBrush)?.Color}");
 #endif
         surface.Background = resolvedAppBg;
+        surface.BorderBrush = ThemeResourceService.GetBrush("FloatingWindowBorderBrush", themeRoot);
         surface.Padding = ThemeResourceService.GetResourceOrDefault(
             "FloatingWindowContentPadding",
             themeRoot,

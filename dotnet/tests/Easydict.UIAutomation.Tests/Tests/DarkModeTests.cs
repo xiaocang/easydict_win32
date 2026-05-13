@@ -400,14 +400,13 @@ public class DarkModeTests : IDisposable
 
             transform.Resize(900, 1000);
             Thread.Sleep(500);
+            return true;
         }
         catch (Exception ex)
         {
             _output.WriteLine($"Window resize skipped: {ex.Message}");
             return false;
         }
-
-        return false;
     }
 
     private void CaptureAndAssertMainWindowPalette(Window window, ThemePalette palette, string baseName)

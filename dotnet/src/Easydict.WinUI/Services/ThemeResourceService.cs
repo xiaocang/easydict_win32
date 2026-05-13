@@ -189,13 +189,16 @@ internal static class ThemeResourceService
         FrameworkElement? root,
         out object? value)
     {
-        if (themeName is not null &&
-            TryGetThemeDictionaryResourceValue(Application.Current.Resources, key, themeName, out value))
+        // XAML resource lookup walks the element tree before falling back to
+        // application resources, so element-scoped overrides win. Match that
+        // order here so code-behind sees the same brushes XAML would resolve.
+        if (TryGetElementResourceValue(root, key, themeName, out value))
         {
             return true;
         }
 
-        if (TryGetElementResourceValue(root, key, themeName, out value))
+        if (themeName is not null &&
+            TryGetThemeDictionaryResourceValue(Application.Current.Resources, key, themeName, out value))
         {
             return true;
         }

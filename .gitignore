@@ -67,6 +67,9 @@ nul
 # CI debug files
 .ci-debug/
 
+# Local test artifacts (screenshots, captures from local test runs)
+artifacts/
+
 # Local review and package files
 packages-microsoft-prod.deb
 pr-comments.txt

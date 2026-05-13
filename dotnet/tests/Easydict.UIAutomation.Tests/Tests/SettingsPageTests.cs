@@ -175,7 +175,7 @@ public class SettingsPageTests : IDisposable
         var buttons = window.FindAllDescendants(cf => cf.ByControlType(ControlType.Button));
         return buttons
             .Where(button =>
-                !button.IsOffscreen &&
+                IsOnScreenOrUnknown(button) &&
                 button.BoundingRectangle.Width > 5 &&
                 button.BoundingRectangle.Height > 5 &&
                 button.BoundingRectangle.Left >= bounds.Left &&
@@ -184,6 +184,21 @@ public class SettingsPageTests : IDisposable
                 button.BoundingRectangle.Top <= bounds.Top + 180)
             .OrderBy(button => button.BoundingRectangle.Left + button.BoundingRectangle.Top)
             .FirstOrDefault();
+    }
+
+    // Some auto-generated WinUI subtrees expose Button control type without the
+    // IsOffscreen property; reading it throws PropertyNotSupportedException. Treat
+    // those as on-screen so geometry filters below decide visibility.
+    private static bool IsOnScreenOrUnknown(AutomationElement element)
+    {
+        try
+        {
+            return !element.IsOffscreen;
+        }
+        catch (FlaUI.Core.Exceptions.PropertyNotSupportedException)
+        {
+            return true;
+        }
     }
 
     private static AutomationElement? FindTopRightLikelySettingsButton(Window window)

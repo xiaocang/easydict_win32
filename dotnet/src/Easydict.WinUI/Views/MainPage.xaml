@@ -350,6 +350,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition x:Name="QuickInputHeaderRow"
                                            Height="15"/>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
@@ -406,7 +407,7 @@
 
                         <Border
                             x:Name="InputTextContainer"
-                            Grid.Row="1"
+                            Grid.Row="2"
                             Background="Transparent"
                             BorderBrush="Transparent"
                             BorderThickness="0"
@@ -493,14 +494,27 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock
-                        x:Name="StatusSummaryText"
-                        Grid.Column="0"
-                        Text=""
-                        FontSize="12"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="0"
+                                Spacing="4">
+                        <StackPanel x:Name="LocalModelPreparationProgressPanel"
+                                    Spacing="3"
+                                    Visibility="Collapsed">
+                            <TextBlock x:Name="LocalModelPreparationStatusText"
+                                       FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"/>
+                            <ProgressBar x:Name="LocalModelPreparationProgressBar"
+                                         Height="3"
+                                         IsIndeterminate="True"/>
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="StatusSummaryText"
+                            Text=""
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"/>
+                    </StackPanel>
                 </Grid>
             </Grid>
         </ScrollViewer>

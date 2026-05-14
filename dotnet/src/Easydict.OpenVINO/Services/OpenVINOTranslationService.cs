@@ -25,6 +25,8 @@ namespace Easydict.OpenVINO.Services;
 /// </summary>
 public sealed class OpenVINOTranslationService : IStreamTranslationService, ILocalModelProvider, IDisposable
 {
+    public const string ServiceIdValue = "openvino-local-ai";
+
     private const int DefaultMaxNewTokens = 256;
 
     private readonly ModelDownloadService _downloader;
@@ -33,7 +35,9 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
 
     private INllbInferenceEngine? _engine;
     private INllbTokenizer? _tokenizer;
+    private readonly List<INllbInferenceEngine> _retiredEngines = new();
     private OpenVINODevice _device = OpenVINODevice.Auto;
+    private int _activeTranslationCount;
     private bool _disposed;
 
     public OpenVINOTranslationService()
@@ -47,7 +51,7 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
     }
 
     /// <summary>
-    /// Test seam: inject preloaded tokenizer + engine so the suite doesn't need
+    /// Test hook: inject preloaded tokenizer + engine so the suite doesn't need
     /// the ~360 MB NLLB-200 bundle on disk or a real OpenVINO runtime.
     /// </summary>
     internal OpenVINOTranslationService(
@@ -62,9 +66,9 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
 
     // ── Translation service contract ────────────────────────────────────
 
-    public string ServiceId => "openvino-local-ai";
+    public string ServiceId => ServiceIdValue;
 
-    public string DisplayName => "OpenVINO NPU (NLLB-200)";
+    public string DisplayName => "OpenVINO (local NLLB)";
 
     public bool RequiresApiKey => false;
 
@@ -94,33 +98,52 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
 
     /// <summary>
     /// Sets the preferred OpenVINO compute device. Takes effect on the next
-    /// engine load: the existing in-flight session (if any) is detached from
-    /// the cached field but not disposed, so a translation currently streaming
-    /// keeps generating tokens on the old device until it completes. The
-    /// detached session is freed by GC once the in-flight iterator releases
-    /// its reference. New translations rebuild the engine with the new device.
+    /// engine load: the existing in-flight session (if any) is retired from
+    /// the cached field, so a translation currently streaming keeps generating
+    /// tokens on the old device until it completes. Retired engines are
+    /// disposed as soon as the last active stream ends. New translations
+    /// rebuild the engine with the new device.
     ///
     /// This is the safer alternative to the original "Dispose immediately" —
     /// Configure() is invoked from the Settings page combo at arbitrary times
     /// and could race with mid-stream RunDecoderStep, producing
     /// ObjectDisposedException or worse undefined behavior in the native ORT
-    /// session. We accept a brief leak window over a crash.
+    /// session. We accept a brief retirement window over a crash, but we do
+    /// still dispose native ONNX/OpenVINO sessions once they are idle.
     /// </summary>
     public void Configure(OpenVINODevice device)
     {
         if (_device == device) return;
 
+        INllbInferenceEngine? idleEngineToDispose = null;
         lock (_engineLock)
         {
+            if (_device == device) return;
+
             _device = device;
             // Drop the cached references so EnsureLoaded() rebuilds with the
-            // new device on the next translation. Don't call Dispose on the
-            // engine — if a translation captured it from a previous
-            // EnsureLoaded() call, the IAsyncEnumerator is still iterating
-            // through RunDecoderStep on it.
+            // new device on the next translation. If a stream is still using
+            // the old engine, retire it and dispose after the stream ends.
+            // Otherwise dispose immediately; ONNX/OpenVINO sessions own large
+            // native heaps and simply dropping the reference leaves the
+            // process working set high until a later finalization pass.
+            if (_engine is not null)
+            {
+                if (_activeTranslationCount == 0)
+                {
+                    idleEngineToDispose = _engine;
+                }
+                else
+                {
+                    _retiredEngines.Add(_engine);
+                }
+            }
+
             _engine = null;
             _tokenizer = null;
         }
+
+        DisposeEngineSafely(idleEngineToDispose);
     }
 
     public OpenVINODevice Device => _device;
@@ -160,31 +183,44 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
         if (!_downloader.IsModelInstalled())
         {
             throw new TranslationException(
-                "OpenVINO NLLB-200 model is not downloaded. Open Settings → Local AI and click \"Download model\".")
+                "OpenVINO NLLB-200 model is not downloaded. Open Settings → Services and click \"Download model\".")
             {
                 ErrorCode = TranslationErrorCode.ServiceUnavailable,
                 ServiceId = ServiceId,
             };
         }
 
-        var (engine, tokenizer) = EnsureLoaded();
-
-        var srcCode = ResolveSourceCode(request.FromLanguage);
-        var tgtCode = NllbLanguageCodes.GetCode(request.ToLanguage);
-        var inputIds = tokenizer.EncodeSource(request.Text, srcCode);
-        var tgtTokenId = tokenizer.GetLanguageTokenId(tgtCode);
-
-        await foreach (var tokenId in engine.GenerateAsync(
-            inputIds,
-            tgtTokenId,
-            DefaultMaxNewTokens,
-            cancellationToken))
+        EnterTranslation();
+        try
         {
-            var piece = tokenizer.DecodeSingle(tokenId);
-            if (!string.IsNullOrEmpty(piece))
+            var (engine, tokenizer) = EnsureLoaded();
+
+            var srcCode = ResolveSourceCode(request.FromLanguage);
+            var tgtCode = NllbLanguageCodes.GetCode(request.ToLanguage);
+            var inputIds = tokenizer.EncodeSource(request.Text, srcCode);
+            var tgtTokenId = tokenizer.GetLanguageTokenId(tgtCode);
+            var generatedTokenIds = new List<int>();
+            var previousDecodedText = string.Empty;
+
+            await foreach (var tokenId in engine.GenerateAsync(
+                inputIds,
+                tgtTokenId,
+                DefaultMaxNewTokens,
+                cancellationToken))
             {
-                yield return piece;
+                generatedTokenIds.Add(tokenId);
+                var decodedText = tokenizer.Decode(generatedTokenIds);
+                var chunk = GetStreamingDecodeDelta(previousDecodedText, decodedText);
+                if (!string.IsNullOrEmpty(chunk))
+                {
+                    previousDecodedText = decodedText;
+                    yield return chunk;
+                }
             }
+        }
+        finally
+        {
+            ExitTranslation();
         }
     }
 
@@ -278,11 +314,22 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
 
     private void DisposeEngine()
     {
+        var enginesToDispose = new List<INllbInferenceEngine>();
         lock (_engineLock)
         {
-            (_engine as IDisposable)?.Dispose();
+            if (_engine is not null)
+            {
+                enginesToDispose.Add(_engine);
+            }
+            enginesToDispose.AddRange(_retiredEngines);
+            _retiredEngines.Clear();
             _engine = null;
             _tokenizer = null;
+        }
+
+        foreach (var engine in enginesToDispose)
+        {
+            DisposeEngineSafely(engine);
         }
     }
 
@@ -299,6 +346,54 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
         StatusChanged?.Invoke(this, status);
     }
 
+    private void EnterTranslation()
+    {
+        lock (_engineLock)
+        {
+            _activeTranslationCount++;
+        }
+    }
+
+    private void ExitTranslation()
+    {
+        List<INllbInferenceEngine>? enginesToDispose = null;
+        lock (_engineLock)
+        {
+            if (_activeTranslationCount > 0)
+            {
+                _activeTranslationCount--;
+            }
+
+            if (_activeTranslationCount == 0 && _retiredEngines.Count > 0)
+            {
+                enginesToDispose = _retiredEngines.ToList();
+                _retiredEngines.Clear();
+            }
+        }
+
+        if (enginesToDispose is null)
+        {
+            return;
+        }
+
+        foreach (var engine in enginesToDispose)
+        {
+            DisposeEngineSafely(engine);
+        }
+    }
+
+    private static void DisposeEngineSafely(INllbInferenceEngine? engine)
+    {
+        try
+        {
+            (engine as IDisposable)?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[OpenVINOTranslationService] Failed to dispose engine: {ex.Message}");
+        }
+    }
+
     private static string ResolveSourceCode(Language fromLanguage)
     {
         if (fromLanguage == Language.Auto)
@@ -310,6 +405,30 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
         }
 
         return NllbLanguageCodes.GetCode(fromLanguage);
+    }
+
+    internal static string GetStreamingDecodeDelta(string previousDecodedText, string decodedText)
+    {
+        if (string.IsNullOrEmpty(decodedText)
+            || string.Equals(previousDecodedText, decodedText, StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
+
+        if (decodedText.StartsWith(previousDecodedText, StringComparison.Ordinal))
+        {
+            return decodedText[previousDecodedText.Length..];
+        }
+
+        var commonPrefixLength = 0;
+        var maxPrefixLength = Math.Min(previousDecodedText.Length, decodedText.Length);
+        while (commonPrefixLength < maxPrefixLength
+            && previousDecodedText[commonPrefixLength] == decodedText[commonPrefixLength])
+        {
+            commonPrefixLength++;
+        }
+
+        return decodedText[commonPrefixLength..];
     }
 
     private void ValidateRequest(TranslationRequest request)

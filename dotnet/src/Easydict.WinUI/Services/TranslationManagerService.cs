@@ -25,10 +25,14 @@ public sealed class TranslationManagerService : IDisposable
     private readonly Dictionary<TranslationManager, int> _handleCounts = new();
     private readonly List<TranslationManager> _disposalQueue = new();
 
-    // OpenVINO provider is stateful (lazy-loaded ONNX sessions); reuse one
-    // instance across ConfigureServices/ReconfigureProxy so a warmed model
-    // isn't discarded when the user toggles unrelated settings.
+    // Local AI providers are stateful: Phi Silica readiness is expensive to
+    // probe repeatedly, and OpenVINO lazy-loads ONNX sessions. Reuse instances
+    // across ConfigureServices/ReconfigureProxy so a warmed model isn't
+    // discarded when the user toggles unrelated settings.
+    private PhiSilicaTranslationService? _phiSilicaService;
+    private FoundryLocalService? _foundryLocalService;
     private OpenVINOTranslationService? _openVinoService;
+    private LocalAITranslationService? _localAIService;
 
     public static TranslationManagerService Instance => _instance.Value;
 
@@ -43,6 +47,17 @@ public sealed class TranslationManagerService : IDisposable
             lock (_lock)
             {
                 return _translationManager;
+            }
+        }
+    }
+
+    internal OpenVINOTranslationService? OpenVinoService
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _openVinoService;
             }
         }
     }
@@ -191,19 +206,18 @@ public sealed class TranslationManagerService : IDisposable
             }
         });
 
-        // Register the Windows Local AI (Phi Silica) provider lazily from the WinUI layer
-        // so the platform-agnostic Easydict.TranslationService core does not pull in
-        // WindowsAppSDK 2.x. RegisterService is idempotent (keyed on ServiceId), so it's
-        // safe to call on both initial configuration and after ReconfigureProxy() rebuilds
-        // the TranslationManager.
-        _translationManager.RegisterService(new WindowsLocalAIService());
-
-        // Register the OpenVINO + NLLB-200 provider. The service caches its ONNX sessions
-        // after first translate, so we reuse one instance across ReconfigureServices /
-        // ReconfigureProxy calls — re-instantiating would discard the warmed-up model.
+        // Local AI is exposed as one user-facing service. Auto mode tries
+        // Phi Silica first, then Foundry Local, then OpenVINO/NLLB as the
+        // hardware-accelerated translation fallback.
+        _phiSilicaService ??= new PhiSilicaTranslationService();
+        _foundryLocalService ??= new FoundryLocalService(_translationManager.SharedHttpClient);
+        _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
         _openVinoService ??= new OpenVINOTranslationService();
         _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
-        _translationManager.RegisterService(_openVinoService);
+        _localAIService ??= new LocalAITranslationService(_phiSilicaService, _foundryLocalService, _openVinoService);
+        _localAIService.Configure(LocalAIProviderModeExtensions.Parse(_settings.LocalAIProvider));
+        _translationManager.UnregisterService(LocalAITranslationService.LegacyOpenVinoServiceId);
+        _translationManager.RegisterService(_localAIService);
 
         // Configure BuiltIn AI
         _translationManager.ConfigureService("builtin", service =>
@@ -490,6 +504,8 @@ public sealed class TranslationManagerService : IDisposable
 
             oldManager = _translationManager;
             _translationManager = new TranslationManager(options);
+            _foundryLocalService = null;
+            _localAIService = null;
             ConfigureServices();
 
             // Check if the old manager has active handles
@@ -599,6 +615,8 @@ public sealed class TranslationManagerService : IDisposable
         // Dispose it explicitly so we don't leak the warmed model on app shutdown.
         _openVinoService?.Dispose();
         _openVinoService = null;
+        _localAIService = null;
+        _phiSilicaService = null;
 
         _translationManager.Dispose();
         Debug.WriteLine("[TranslationManagerService] Disposed");

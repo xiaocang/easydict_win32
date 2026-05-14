@@ -403,12 +403,29 @@ public sealed partial class FixedWindow : Window
             return;
         }
 
-        // Mark as loading and queried
-        serviceResult.IsLoading = true;
-        serviceResult.MarkQueried();
-
         try
         {
+            var phiSilicaPromptResult = await PhiSilicaModelPreparationPromptService.PromptAndPrepareIfNeededAsync(
+                [serviceResult],
+                _settings,
+                (Content as FrameworkElement)?.XamlRoot,
+                async dialog => await dialog.ShowAsync(),
+                CancellationToken.None);
+            if (phiSilicaPromptResult == PhiSilicaModelPreparationPromptResult.Disabled)
+            {
+                InitializeServiceResults();
+                return;
+            }
+
+            if (PhiSilicaModelPreparationPromptService.ShouldSkipServiceForCurrentQuery(serviceResult, phiSilicaPromptResult))
+            {
+                return;
+            }
+
+            // Mark as loading and queried
+            serviceResult.IsLoading = true;
+            serviceResult.MarkQueried();
+
             // Detect language (use cached if available from recent query)
             // Run detection on thread pool to avoid blocking UI thread
             var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
@@ -711,6 +728,21 @@ public sealed partial class FixedWindow : Window
 
         try
         {
+            var phiSilicaPromptResult = await PhiSilicaModelPreparationPromptService.PromptAndPrepareIfNeededAsync(
+                _serviceResults.Where(result => result.EnabledQuery),
+                _settings,
+                (Content as FrameworkElement)?.XamlRoot,
+                async dialog => await dialog.ShowAsync(),
+                ct);
+            if (phiSilicaPromptResult == PhiSilicaModelPreparationPromptResult.Disabled)
+            {
+                InitializeServiceResults();
+                if (!_serviceResults.Any(result => result.EnabledQuery))
+                {
+                    return;
+                }
+            }
+
             SetLoading(true);
 
             // Reset all service results
@@ -718,7 +750,7 @@ public sealed partial class FixedWindow : Window
             {
                 result.Reset();
                 // Only set loading for auto-query services
-                if (result.EnabledQuery)
+                if (PhiSilicaModelPreparationPromptService.ShouldQueryServiceForCurrentQuery(result, phiSilicaPromptResult))
                 {
                     result.IsLoading = true;
                 }
@@ -763,7 +795,7 @@ public sealed partial class FixedWindow : Window
             var tasks = _serviceResults.Select(async serviceResult =>
             {
                 // Skip manual-query services (EnabledQuery=false)
-                if (!serviceResult.EnabledQuery)
+                if (!PhiSilicaModelPreparationPromptService.ShouldQueryServiceForCurrentQuery(serviceResult, phiSilicaPromptResult))
                 {
                     return;
                 }

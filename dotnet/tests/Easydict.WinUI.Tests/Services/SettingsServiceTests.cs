@@ -1,4 +1,5 @@
 using Easydict.TranslationService;
+using Easydict.WindowsAI;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using FluentAssertions;
@@ -385,6 +386,103 @@ public class SettingsServiceTests
 
         // Should return either "bing" (China) or "google" (international)
         serviceId.Should().BeOneOf("bing", "google");
+    }
+
+    [Theory]
+    [InlineData(WindowsAIReadyState.Ready)]
+    [InlineData(WindowsAIReadyState.NotReady)]
+    public void GetDefaultEnabledServices_AddsPhiSilica_WhenDeviceSupportsIt(WindowsAIReadyState state)
+    {
+        var services = SettingsService.GetDefaultEnabledServices(state);
+
+        services.Should().Equal("google", "windows-local-ai");
+    }
+
+    [Theory]
+    [InlineData(WindowsAIReadyState.CapabilityMissing)]
+    [InlineData(WindowsAIReadyState.NotCompatibleWithSystemHardware)]
+    [InlineData(WindowsAIReadyState.OSUpdateNeeded)]
+    [InlineData(WindowsAIReadyState.DisabledByUser)]
+    [InlineData(WindowsAIReadyState.NotSupportedOnCurrentSystem)]
+    public void GetDefaultEnabledServices_KeepsGoogleOnly_WhenPhiSilicaIsNotSupported(WindowsAIReadyState state)
+    {
+        var services = SettingsService.GetDefaultEnabledServices(state);
+
+        services.Should().Equal("google");
+    }
+
+    [Fact]
+    public void GetDefaultEnabledServicesForProfile_AddsPhiSilica_ForFreshProfile()
+    {
+        var services = SettingsService.GetDefaultEnabledServicesForProfile(
+            hasSavedEnabledServiceSettings: false,
+            WindowsAIReadyState.NotReady);
+
+        services.Should().Equal("google", "windows-local-ai");
+    }
+
+    [Fact]
+    public void GetDefaultEnabledServicesForProfile_KeepsLegacyDefault_WhenAnyServiceSettingExists()
+    {
+        var services = SettingsService.GetDefaultEnabledServicesForProfile(
+            hasSavedEnabledServiceSettings: true,
+            WindowsAIReadyState.Ready);
+
+        services.Should().Equal("google");
+    }
+
+    [Fact]
+    public void DisableServiceEverywhere_RemovesServiceFromAllWindowsAndMarksUserConfigured()
+    {
+        var originalMiniServices = new List<string>(_settings.MiniWindowEnabledServices);
+        var originalMainServices = new List<string>(_settings.MainWindowEnabledServices);
+        var originalFixedServices = new List<string>(_settings.FixedWindowEnabledServices);
+        var originalMiniQuery = new Dictionary<string, bool>(_settings.MiniWindowServiceEnabledQuery);
+        var originalMainQuery = new Dictionary<string, bool>(_settings.MainWindowServiceEnabledQuery);
+        var originalFixedQuery = new Dictionary<string, bool>(_settings.FixedWindowServiceEnabledQuery);
+        var originalHasUserConfiguredServices = _settings.HasUserConfiguredServices;
+
+        try
+        {
+            _settings.MiniWindowEnabledServices = ["google", "windows-local-ai"];
+            _settings.MainWindowEnabledServices = ["windows-local-ai", "deepl"];
+            _settings.FixedWindowEnabledServices = ["WINDOWS-LOCAL-AI", "bing"];
+            _settings.MiniWindowServiceEnabledQuery = new Dictionary<string, bool>
+            {
+                ["windows-local-ai"] = true
+            };
+            _settings.MainWindowServiceEnabledQuery = new Dictionary<string, bool>
+            {
+                ["windows-local-ai"] = false
+            };
+            _settings.FixedWindowServiceEnabledQuery = new Dictionary<string, bool>
+            {
+                ["WINDOWS-LOCAL-AI"] = true
+            };
+            _settings.HasUserConfiguredServices = false;
+
+            _settings.DisableServiceEverywhere("windows-local-ai");
+
+            _settings.MiniWindowEnabledServices.Should().Equal("google");
+            _settings.MainWindowEnabledServices.Should().Equal("deepl");
+            _settings.FixedWindowEnabledServices.Should().Equal("bing");
+            _settings.MiniWindowServiceEnabledQuery.Should().NotContainKey("windows-local-ai");
+            _settings.MainWindowServiceEnabledQuery.Should().NotContainKey("windows-local-ai");
+            _settings.FixedWindowServiceEnabledQuery.Keys
+                .Should().NotContain(key => string.Equals(key, "windows-local-ai", StringComparison.OrdinalIgnoreCase));
+            _settings.HasUserConfiguredServices.Should().BeTrue();
+        }
+        finally
+        {
+            _settings.MiniWindowEnabledServices = originalMiniServices;
+            _settings.MainWindowEnabledServices = originalMainServices;
+            _settings.FixedWindowEnabledServices = originalFixedServices;
+            _settings.MiniWindowServiceEnabledQuery = originalMiniQuery;
+            _settings.MainWindowServiceEnabledQuery = originalMainQuery;
+            _settings.FixedWindowServiceEnabledQuery = originalFixedQuery;
+            _settings.HasUserConfiguredServices = originalHasUserConfiguredServices;
+            _settings.Save();
+        }
     }
 
     [Fact]

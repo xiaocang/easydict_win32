@@ -695,10 +695,7 @@ internal static class LongDocumentCliCommand
 
     private static bool IsLongDocSupportedService(ITranslationService service)
     {
-        if (string.Equals(service.ServiceId, "builtin", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        return service is IStreamTranslationService;
+        return LongDocumentServiceSupport.IsSupported(service);
     }
 
     private static void PrintSupportedServices(TranslationManager manager)

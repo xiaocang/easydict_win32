@@ -5,14 +5,15 @@ sortTitle: Easydict
 voiceTitle: Easy Dict
 shortDescription: Easy to look up words or translate text
 description: |-
-  Easydict for Windows is a free and open-source translation and dictionary tool that provides instant access to 19 translation services. The full source code is available on GitHub under the GPL-3.0 license. Whether you need quick word lookups, full-text translation, or AI-powered translations with real-time streaming, Easydict has you covered.
+  Easydict for Windows is a free and open-source translation and dictionary tool that provides instant access to 20 translation services. The full source code is available on GitHub under the GPL-3.0 license. Whether you need quick word lookups, full-text translation, or AI-powered translations with real-time streaming, Easydict has you covered.
 
   A Windows port of the popular macOS Easydict app, built with modern .NET and WinUI 3 technologies for a native Windows experience.
 
   Key Highlights:
 
-  - 19 Translation Services: Google Translate, Google Dict, Bing Translate, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama, and more
+  - 20 Translation Services: Google Translate, Google Dict, Bing Translate, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama, Windows Local AI, and more
   - AI-Powered Streaming: Watch LLM translations appear in real-time as they're generated
+  - Local AI Translation: Use Phi Silica on supported Copilot+ PCs, Foundry Local on ordinary Windows PCs, or OpenVINO NLLB-200 as an offline fallback
   - Grammar Correction: AI-powered grammar correction with detailed explanations of errors
   - Long Document Translation: Translate PDF, plain text, and Markdown files with ML-based layout detection, formula protection, parallel processing, and bilingual export
   - Dictionary Mode: Look up words with phonetics, definitions, parts of speech, and example sentences via Google Dict
@@ -30,8 +31,9 @@ description: |-
 
   Perfect for students, professionals, translators, and anyone who needs quick, reliable translations across multiple languages.
 features:
-- 19 translation services including Google, Bing, DeepL, OpenAI, Gemini, DeepSeek, and Volcano Engine
+- 20 translation services including Google, Bing, DeepL, OpenAI, Gemini, DeepSeek, and Windows Local AI
 - Real-time LLM streaming translation with AI services
+- Local AI translation with Phi Silica, Foundry Local, and OpenVINO offline fallback
 - Grammar correction with AI-powered error detection and explanation
 - Long document translation for PDF, text, and Markdown with bilingual export
 - Dictionary mode with phonetics, definitions, and example sentences

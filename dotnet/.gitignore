@@ -37,6 +37,8 @@ src/Easydict.WinUI/Assets/icon_unplated_1024.png
 
 # Auto-generated service icon variants
 src/Easydict.WinUI/Assets/ServiceIcons/*.scale-*.png
+!src/Easydict.WinUI/Assets/ServiceIcons/GitHubOnLight.scale-*.png
+!src/Easydict.WinUI/Assets/ServiceIcons/windows-local-ai.scale-*.png
 
 temp_*/
 test-extracted/

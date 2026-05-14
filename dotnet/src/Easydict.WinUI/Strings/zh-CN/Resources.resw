@@ -1148,21 +1148,63 @@
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>排除划词翻译的进程名称，用逗号分隔。示例："code" 代表 VS Code。</value></data>
 
-  <!-- Windows Local AI (Phi Silica) -->
+  <!-- Windows AI provider selection -->
+  <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>
+  <data name="LocalAI_ProviderLabel" xml:space="preserve"><value>提供方</value></data>
+  <data name="LocalAI_ProviderAutomationName" xml:space="preserve"><value>Windows Local AI 提供方</value></data>
+  <data name="LocalAI_Provider_Auto" xml:space="preserve"><value>自动（Phi Silica → Foundry Local → OpenVINO）</value></data>
+  <data name="LocalAI_Provider_WindowsAI" xml:space="preserve"><value>Phi Silica（Copilot+ PC）</value></data>
+  <data name="LocalAI_Provider_OpenVINO" xml:space="preserve"><value>OpenVINO（NLLB-200，本地）</value></data>
+  <data name="LocalAI_Rating_WindowsAI" xml:space="preserve"><value>★★★★★</value></data>
+  <data name="LocalAI_Rating_WindowsAI_Tooltip" xml:space="preserve"><value>可用时质量最好。使用支持的 Copilot+ PC 上的 Phi Silica。</value></data>
+  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★</value></data>
+  <data name="LocalAI_Rating_FoundryLocal_Tooltip" xml:space="preserve"><value>较好的本地 LLM 兜底。需要 Foundry Local 和已加载的本地模型。</value></data>
+  <data name="LocalAI_Rating_OpenVINO" xml:space="preserve"><value>★★</value></data>
+  <data name="LocalAI_Rating_OpenVINO_Tooltip" xml:space="preserve"><value>基础离线翻译兜底。硬件加速为尽力而为。</value></data>
+  <data name="LocalAI_Description" xml:space="preserve"><value>自动优先使用 Phi Silica；不可用时尝试 Foundry Local；最后使用 OpenVINO/NLLB 本地兜底。无需云端 API Key。</value></data>
+  <data name="LocalAI_Description_Auto" xml:space="preserve"><value>自动优先使用 Phi Silica；不可用时尝试 Foundry Local；最后使用 OpenVINO/NLLB 本地兜底。无需云端 API Key。</value></data>
+  <data name="LocalAI_Description_WindowsAI" xml:space="preserve"><value>通过 Windows AI API 在 Copilot+ PC 上使用 Phi Silica。无需 API 密钥或网络。</value></data>
+  <data name="LocalAI_Description_OpenVINO" xml:space="preserve"><value>使用 ONNX Runtime + OpenVINO 在本地运行 NLLB-200。硬件加速为尽力而为；不支持的图会回退到 CPU。无需 API Key 或网络。</value></data>
+  <data name="LocalAI_WindowsAISectionTitle" xml:space="preserve"><value>Phi Silica</value></data>
+  <data name="OpenVINO_ConfigTitle" xml:space="preserve"><value>OpenVINO（本地 NLLB）</value></data>
+  <data name="OpenVINO_ConfigDescription" xml:space="preserve"><value>使用 ONNX Runtime + OpenVINO 在本地运行 NLLB-200。硬件加速为尽力而为，必要时会回退到 CPU。</value></data>
+
+  <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
+  <data name="FoundryLocal_ConfigDescription" xml:space="preserve"><value>留空端点时会通过 foundry service status 自动发现；如果本地服务使用固定的 OpenAI 兼容端点，也可以手动填写。</value></data>
+  <data name="FoundryLocal_InstallLinkText" xml:space="preserve"><value>安装 Foundry Local</value></data>
+  <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local 模型未配置。</value></data>
+  <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>通过 foundry service status 自动发现</value></data>
+  <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>模型</value></data>
+  <data name="FoundryLocal_Status_NotRunning" xml:space="preserve"><value>Foundry Local 未运行。请启动 Foundry Local 服务，或手动设置端点。</value></data>
+  <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
+  <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>通过 Microsoft Foundry Local 的 OpenAI 兼容本地端点运行本地模型。需要安装 Foundry Local 并准备好本地模型。</value></data>
+  <data name="FoundryLocal_Status_Ready" xml:space="preserve"><value>Foundry Local 已配置。运行时会使用本地端点或自动发现端点。</value></data>
+  <data name="FoundryLocal_EndpointLabel" xml:space="preserve"><value>端点（可选）</value></data>
+  <data name="PhiSilicaModelPrompt_Title" xml:space="preserve"><value>下载 Phi Silica 模型？</value></data>
+  <data name="PhiSilicaModelPrompt_Message" xml:space="preserve"><value>Phi Silica 首次使用前需要下载并准备由 Windows 管理的本机语言模型组件。预计是数 GB 级安装，具体大小取决于设备和 Windows 版本。你可以现在下载、本次先跳过，或暂时禁用 Phi Silica；之后可在“设置”中重新开启。</value></data>
+  <data name="PhiSilicaModelPrompt_DownloadNow" xml:space="preserve"><value>现在下载</value></data>
+  <data name="PhiSilicaModelPrompt_NotNow" xml:space="preserve"><value>本次跳过</value></data>
+  <data name="PhiSilicaModelPrompt_Disable" xml:space="preserve"><value>禁用 Phi Silica</value></data>
+  <!-- Windows AI (Phi Silica) -->
   <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>已就绪</value></data>
   <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>不可用</value></data>
   <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>正在准备…</value></data>
+  <data name="WindowsLocalAI_PrepareButton" xml:space="preserve"><value>准备模型</value></data>
+  <data name="PhiSilicaPreparationProgress_Checking" xml:space="preserve"><value>正在检查 Phi Silica 模型状态…</value></data>
+  <data name="PhiSilicaPreparationProgress_Requesting" xml:space="preserve"><value>正在请求 Windows 下载并准备模型…</value></data>
+  <data name="PhiSilicaPreparationProgress_Waiting" xml:space="preserve"><value>Windows 正在下载或准备本机模型。这可能是数 GB 级安装…</value></data>
+  <data name="PhiSilicaPreparationProgress_Finalizing" xml:space="preserve"><value>正在确认模型状态…</value></data>
   <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>正在准备本机语言模型…</value></data>
   <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>本机语言模型已就绪。翻译完全在本机进行，不会发送任何文本到外部服务。</value></data>
-  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>当前设备支持本机语言模型，但模型尚未准备。点击"准备模型"以下载并安装。</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>当前设备支持本机语言模型，但模型尚未准备。点击“准备模型”以下载并安装。预计是数 GB 级 Windows 托管安装，具体大小取决于设备和 Windows 版本。</value></data>
   <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>应用包缺少 systemAIModels 能力声明。该状态通常出现在便携版/未打包版本中，请安装 MSIX 或 Microsoft Store 版本。</value></data>
-  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>当前设备没有兼容的 NPU 硬件。Windows 本机 AI 仅在 Copilot+ PC 上运行。可改用 Ollama 或云端服务作为替代方案。</value></data>
-  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows 本机 AI 需要更新的 Windows 版本。请安装最新的 Windows 更新后重试。</value></data>
-  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows 本机 AI 已被禁用或卸载。请在系统设置中重新启用 Windows AI 功能。</value></data>
-  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>当前系统或地区不支持 Windows 本机 AI。可改用 Ollama 或云端服务作为替代方案。</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>Phi Silica 需要带兼容 NPU 的 Copilot+ PC。可在 Windows Local AI 中选择“自动”或 OpenVINO，使用本机 NLLB-200 备用方案。</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows AI 需要更新的 Windows 版本。请安装最新的 Windows 更新后重试。</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows AI 已被禁用或卸载。请在系统设置中重新启用 Windows AI 功能。</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Phi Silica 在当前系统或地区不可用。可在 Windows Local AI 中选择“自动”或 OpenVINO，使用本机 NLLB-200 备用方案。</value></data>
   <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>本机语言模型准备失败。请检查 Windows 更新与 AI 功能可用性后重试。</value></data>
 
-  <!-- OpenVINO NPU (NLLB-200) -->
+  <!-- OpenVINO local NLLB (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>已就绪</value></data>
   <data name="OpenVINO_Title_Unavailable" xml:space="preserve"><value>未下载</value></data>
   <data name="OpenVINO_Status_Ready" xml:space="preserve"><value>NLLB-200 模型已安装并就绪。翻译完全在本机通过 ONNX Runtime + OpenVINO 进行。</value></data>

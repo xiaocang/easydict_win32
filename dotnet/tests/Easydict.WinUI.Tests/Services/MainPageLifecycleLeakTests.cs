@@ -10,7 +10,9 @@ namespace Easydict.WinUI.Tests.Services;
 public class MainPageLifecycleLeakTests
 {
     private static readonly string ProjectRoot = FindProjectRoot();
+    private static readonly string MainPageXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MainPage.xaml");
     private static readonly string MainPagePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MainPage.xaml.cs");
+    private static readonly string PhiSilicaPromptServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "PhiSilicaModelPreparationPromptService.cs");
     private static readonly string ServiceResultViewHostPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultViewHost.cs");
 
     [Fact]
@@ -60,6 +62,36 @@ public class MainPageLifecycleLeakTests
     }
 
     [Fact]
+    public void MainPage_PreservesLanguageSelectionSuppressionWhileSyncingResponsiveCombos()
+    {
+        var content = File.ReadAllText(MainPagePath);
+
+        content.Should().Contain("var wasSuppressed = _suppressSourceLanguageSelectionChanged;",
+            "wide/narrow source combo synchronization must not clear an outer localization/settings suppression scope");
+        content.Should().Contain("finally { _suppressSourceLanguageSelectionChanged = wasSuppressed; }",
+            "source combo synchronization should restore the previous suppression state");
+        content.Should().Contain("var wasSuppressed = _suppressTargetLanguageSelectionChanged;",
+            "wide/narrow target combo synchronization must not fire a second manual target-language change");
+        content.Should().Contain("finally { _suppressTargetLanguageSelectionChanged = wasSuppressed; }",
+            "target combo synchronization should restore the previous suppression state");
+        content.Should().NotContain("TargetLangCombo.SelectionChanged += (s, e) => SyncComboSelection",
+            "target combo sync should run under suppression instead of directly changing the paired combo");
+    }
+
+    [Fact]
+    public void MainPage_CancelsTransientQueriesWhenNavigatingAwayInCachedMode()
+    {
+        var content = File.ReadAllText(MainPagePath);
+
+        content.Should().Contain("private void CancelTransientQueriesForNavigation()",
+            "cached page navigation should stop in-flight translation work without disposing the page");
+        content.Should().MatchRegex(@"CancelTransientQueriesForNavigation\(\);\s*#if DEBUG\s*MemoryDiagnostics\.LogSnapshot\(""MainPage\.OnPageUnloaded complete \(A cached\)""\)",
+            "the cached unload path should cancel transient queries before the page is hidden");
+        content.Should().Contain("var manualCts = Interlocked.Exchange(ref _manualQueryCts, null);",
+            "manual per-service requests should be cancelled with the normal translation request");
+    }
+
+    [Fact]
     public void MainPage_LogsResultRebuildReason()
     {
         var content = File.ReadAllText(MainPagePath);
@@ -79,6 +111,27 @@ public class MainPageLifecycleLeakTests
             "load completion should be logged for correlation with Settings navigation");
         content.Should().Contain("MemoryDiagnostics.LogSnapshot(\"MainPage.OnPageUnloaded complete (A cached)\")",
             "cached unload should still emit diagnostics to distinguish retention from page reuse");
+    }
+
+    [Fact]
+    public void MainPage_ShowsLocalModelPreparationProgressDuringPhiSilicaDownload()
+    {
+        var xaml = File.ReadAllText(MainPageXamlPath);
+        var content = File.ReadAllText(MainPagePath);
+        var promptService = File.ReadAllText(PhiSilicaPromptServicePath);
+
+        xaml.Should().Contain("x:Name=\"LocalModelPreparationProgressPanel\"");
+        xaml.Should().Contain("x:Name=\"LocalModelPreparationStatusText\"");
+        xaml.Should().Contain("x:Name=\"LocalModelPreparationProgressBar\"");
+        xaml.Should().Contain("IsIndeterminate=\"True\"");
+
+        content.Should().Contain("ShowLocalModelPreparationProgress");
+        content.Should().Contain("HideLocalModelPreparationProgress");
+        content.Should().MatchRegex(@"PromptAndPrepareIfNeededAsync\([\s\S]*ShowDialogAsync,\s*ct,\s*ShowLocalModelPreparationProgress");
+
+        promptService.Should().Contain("Action<string>? reportPreparationProgress");
+        promptService.Should().Contain("reportPreparationProgress?.Invoke(\"PhiSilicaPreparationProgress_Requesting\")");
+        promptService.Should().Contain("reportPreparationProgress?.Invoke(\"PhiSilicaPreparationProgress_Waiting\")");
     }
 
     private static string FindProjectRoot()

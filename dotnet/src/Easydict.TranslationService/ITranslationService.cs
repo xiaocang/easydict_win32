@@ -91,6 +91,7 @@ public enum TranslationErrorCode
     TextTooLong,
     ServiceUnavailable,
     InvalidResponse,
-    InvalidModel
+    InvalidModel,
+    LocalModelNeedsPreparation
 }
 

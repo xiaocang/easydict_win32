@@ -263,6 +263,32 @@ public class LocalizationServiceTests
             "Package.appxmanifest Resources section should be closed");
     }
 
+    [Fact]
+    public void AppxManifest_DeclaresWindowsAiCapability()
+    {
+        var manifestPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Package.appxmanifest");
+        var doc = XDocument.Load(manifestPath);
+        XNamespace appx = "http://schemas.microsoft.com/appx/manifest/foundation/windows10";
+        XNamespace systemai = "http://schemas.microsoft.com/appx/manifest/systemai/windows10";
+
+        doc.Root.Should().NotBeNull();
+        doc.Root!.Attribute("IgnorableNamespaces")?.Value
+            .Should().Contain("systemai", "Windows AI capability namespace must be declared in IgnorableNamespaces");
+
+        var capability = doc
+            .Descendants(systemai + "Capability")
+            .SingleOrDefault(e => (string?)e.Attribute("Name") == "systemAIModels");
+        capability.Should().NotBeNull("Windows AI APIs require systemAIModels in packaged builds");
+
+        var targetDeviceFamily = doc
+            .Descendants(appx + "TargetDeviceFamily")
+            .Single(e => (string?)e.Attribute("Name") == "Windows.Desktop");
+        var maxVersion = Version.Parse(targetDeviceFamily.Attribute("MaxVersionTested")!.Value);
+        maxVersion.Should().BeGreaterThanOrEqualTo(
+            new Version(10, 0, 26226, 0),
+            "Windows AI APIs require a recent MaxVersionTested for systemAIModels to be honored");
+    }
+
     #endregion
 
     #region Build Script Tests

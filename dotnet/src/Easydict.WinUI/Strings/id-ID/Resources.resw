@@ -891,21 +891,63 @@
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Nama proses yang dikecualikan dari terjemahan pilihan mouse, dipisahkan dengan koma. Contoh: "code" untuk VS Code.</value></data>
 
-  <!-- Windows Local AI (Phi Silica) -->
+  <!-- Windows AI provider selection -->
+  <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>
+  <data name="LocalAI_ProviderLabel" xml:space="preserve"><value>Penyedia</value></data>
+  <data name="LocalAI_ProviderAutomationName" xml:space="preserve"><value>Penyedia Windows Local AI</value></data>
+  <data name="LocalAI_Provider_Auto" xml:space="preserve"><value>Auto (Phi Silica → Foundry Local → OpenVINO)</value></data>
+  <data name="LocalAI_Provider_WindowsAI" xml:space="preserve"><value>Phi Silica (Copilot+ PC)</value></data>
+  <data name="LocalAI_Provider_OpenVINO" xml:space="preserve"><value>OpenVINO (NLLB-200, local)</value></data>
+  <data name="LocalAI_Rating_WindowsAI" xml:space="preserve"><value>★★★★★</value></data>
+  <data name="LocalAI_Rating_WindowsAI_Tooltip" xml:space="preserve"><value>Best quality when available. Uses Phi Silica on supported Copilot+ PCs.</value></data>
+  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★</value></data>
+  <data name="LocalAI_Rating_FoundryLocal_Tooltip" xml:space="preserve"><value>Good local LLM fallback. Requires Foundry Local and a loaded model.</value></data>
+  <data name="LocalAI_Rating_OpenVINO" xml:space="preserve"><value>★★</value></data>
+  <data name="LocalAI_Rating_OpenVINO_Tooltip" xml:space="preserve"><value>Basic offline translation fallback. Hardware acceleration is best effort.</value></data>
+  <data name="LocalAI_Description" xml:space="preserve"><value>Auto tries Phi Silica first, then Foundry Local, then OpenVINO/NLLB as the local translation fallback. No cloud API key.</value></data>
+  <data name="LocalAI_Description_Auto" xml:space="preserve"><value>Auto tries Phi Silica first, then Foundry Local, then OpenVINO/NLLB as the local translation fallback. No cloud API key.</value></data>
+  <data name="LocalAI_Description_WindowsAI" xml:space="preserve"><value>Menggunakan Phi Silica di PC Copilot+ melalui API Windows AI. Tanpa kunci API, tanpa jaringan.</value></data>
+  <data name="LocalAI_Description_OpenVINO" xml:space="preserve"><value>Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort; unsupported graph parts fall back to CPU. No API key, no network.</value></data>
+  <data name="LocalAI_WindowsAISectionTitle" xml:space="preserve"><value>Phi Silica</value></data>
+  <data name="OpenVINO_ConfigTitle" xml:space="preserve"><value>OpenVINO (local NLLB)</value></data>
+  <data name="OpenVINO_ConfigDescription" xml:space="preserve"><value>Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort and falls back to CPU when needed.</value></data>
+
+  <data name="FoundryLocal_ConfigDescription" xml:space="preserve"><value>Leave endpoint empty to auto-detect it from foundry service status; set it manually if the local service uses a fixed OpenAI-compatible endpoint.</value></data>
+  <data name="FoundryLocal_InstallLinkText" xml:space="preserve"><value>Install Foundry Local</value></data>
+  <data name="FoundryLocal_Status_NotRunning" xml:space="preserve"><value>Foundry Local is not running. Start the Foundry Local service or set the endpoint manually.</value></data>
+  <data name="FoundryLocal_Status_Ready" xml:space="preserve"><value>Foundry Local is configured. The local endpoint will be used or auto-detected at runtime.</value></data>
+  <data name="FoundryLocal_EndpointLabel" xml:space="preserve"><value>Endpoint (optional)</value></data>
+  <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
+  <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local model is not configured.</value></data>
+  <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>Runs local models through the Microsoft Foundry Local OpenAI-compatible endpoint. Requires Foundry Local installed and a local model available.</value></data>
+  <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>Auto-detect from foundry service status</value></data>
+  <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>Model</value></data>
+  <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
+  <data name="PhiSilicaModelPrompt_Title" xml:space="preserve"><value>Unduh model Phi Silica?</value></data>
+  <data name="PhiSilicaModelPrompt_Message" xml:space="preserve"><value>Phi Silica needs to download and prepare Windows-managed on-device language model components before first use. Expect a several-GB install; the exact size depends on your device and Windows version. You can download it now, skip this translation, or disable Phi Silica until you turn it back on in Settings.</value></data>
+  <data name="PhiSilicaModelPrompt_DownloadNow" xml:space="preserve"><value>Unduh sekarang</value></data>
+  <data name="PhiSilicaModelPrompt_NotNow" xml:space="preserve"><value>Jangan sekarang</value></data>
+  <data name="PhiSilicaModelPrompt_Disable" xml:space="preserve"><value>Nonaktifkan Phi Silica</value></data>
+  <!-- Windows AI (Phi Silica) -->
   <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>Siap</value></data>
   <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>Tidak tersedia</value></data>
   <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>Mempersiapkan…</value></data>
+  <data name="WindowsLocalAI_PrepareButton" xml:space="preserve"><value>Prepare model</value></data>
+  <data name="PhiSilicaPreparationProgress_Checking" xml:space="preserve"><value>Checking Phi Silica model status...</value></data>
+  <data name="PhiSilicaPreparationProgress_Requesting" xml:space="preserve"><value>Requesting model download and preparation from Windows...</value></data>
+  <data name="PhiSilicaPreparationProgress_Waiting" xml:space="preserve"><value>Windows is downloading or preparing the on-device model. This can be a several-GB install...</value></data>
+  <data name="PhiSilicaPreparationProgress_Finalizing" xml:space="preserve"><value>Finalizing model status...</value></data>
   <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>Mempersiapkan model bahasa di perangkat…</value></data>
   <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>Model bahasa di perangkat siap. Terjemahan berjalan secara lokal tanpa mengirim teks ke layanan eksternal.</value></data>
-  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>Model bahasa di perangkat didukung tetapi belum dipersiapkan. Klik "Persiapkan model" untuk menginstalnya.</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>The on-device language model is supported but has not been prepared yet. Click &quot;Prepare model&quot; to install it. Expect a several-GB Windows-managed install; the exact size depends on your device and Windows version.</value></data>
   <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>Paket aplikasi kehilangan kemampuan systemAIModels. Ini biasanya memengaruhi build portabel/tidak dikemas; instal versi MSIX/Store sebagai gantinya.</value></data>
-  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>Perangkat ini tidak memiliki NPU yang kompatibel. Windows Local AI hanya berjalan di PC Copilot+. Gunakan Ollama atau penyedia cloud sebagai alternatif.</value></data>
-  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI memerlukan build Windows yang lebih baru. Instal pembaruan Windows terbaru dan coba lagi.</value></data>
-  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI telah dinonaktifkan atau dihapus. Aktifkan kembali fitur Windows AI di pengaturan sistem.</value></data>
-  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI tidak didukung pada sistem atau wilayah ini. Gunakan Ollama atau penyedia cloud sebagai alternatif.</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>Phi Silica memerlukan PC Copilot+ dengan NPU yang kompatibel. Pilih Auto atau OpenVINO di Windows Local AI untuk menggunakan fallback NLLB-200 lokal.</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows AI memerlukan build Windows yang lebih baru. Instal pembaruan Windows terbaru dan coba lagi.</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows AI telah dinonaktifkan atau dihapus. Aktifkan kembali fitur Windows AI di pengaturan sistem.</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Phi Silica tidak tersedia di sistem atau wilayah ini. Pilih Auto atau OpenVINO di Windows Local AI untuk menggunakan fallback NLLB-200 lokal.</value></data>
   <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>Persiapan model bahasa di perangkat gagal. Periksa Windows Update dan ketersediaan fitur AI, lalu coba lagi.</value></data>
 
-  <!-- OpenVINO NPU (NLLB-200) -->
+  <!-- OpenVINO local NLLB (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>Siap</value></data>
   <data name="OpenVINO_Title_Unavailable" xml:space="preserve"><value>Belum diunduh</value></data>
   <data name="OpenVINO_Status_Ready" xml:space="preserve"><value>Model NLLB-200 terinstal dan siap. Terjemahan berjalan di perangkat melalui ONNX Runtime + OpenVINO.</value></data>

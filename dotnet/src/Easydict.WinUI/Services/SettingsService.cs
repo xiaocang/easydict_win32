@@ -2,6 +2,9 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Easydict.TranslationService;
+using Easydict.TranslationService.Services;
+using Easydict.WindowsAI;
+using Easydict.WindowsAI.Services;
 using Easydict.WinUI.Models;
 
 namespace Easydict.WinUI.Services;
@@ -12,6 +15,8 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class SettingsService
 {
+    private const string GoogleServiceId = "google";
+
     public sealed class ImportedMdxDictionary
     {
         public string ServiceId { get; set; } = string.Empty;
@@ -86,7 +91,15 @@ public sealed class SettingsService
     public string OllamaEndpoint { get; set; } = "http://localhost:11434/v1/chat/completions";
     public string OllamaModel { get; set; } = "llama3.2";
 
-    // OpenVINO NPU translation provider settings.
+    // Local AI provider settings. Stored as the enum name.
+    // "WindowsAI" is retained as the persisted value for the Phi Silica backend.
+    public string LocalAIProvider { get; set; } = "Auto";
+
+    // Foundry Local settings. Empty endpoint means auto-detect from the local CLI.
+    public string FoundryLocalEndpoint { get; set; } = "";
+    public string FoundryLocalModel { get; set; } = FoundryLocalService.DefaultModel;
+
+    // OpenVINO local NLLB fallback settings.
     // Stored as the enum name ("Auto", "NPU", "GPU", "CPU"); parsed in
     // TranslationManagerService when configuring the service.
     public string OpenVinoDevice { get; set; } = "Auto";
@@ -589,7 +602,12 @@ public sealed class SettingsService
         OllamaEndpoint = GetValue(nameof(OllamaEndpoint), "http://localhost:11434/v1/chat/completions");
         OllamaModel = GetValue(nameof(OllamaModel), "llama3.2");
 
-        // OpenVINO NPU settings
+        // Local AI settings
+        LocalAIProvider = GetValue(nameof(LocalAIProvider), "Auto");
+        FoundryLocalEndpoint = GetValue(nameof(FoundryLocalEndpoint), "");
+        FoundryLocalModel = GetValue(nameof(FoundryLocalModel), FoundryLocalService.DefaultModel);
+
+        // OpenVINO local NLLB fallback settings
         OpenVinoDevice = GetValue(nameof(OpenVinoDevice), "Auto");
 
         // Built-in AI settings
@@ -703,8 +721,15 @@ public sealed class SettingsService
         MiniWindowWidthDips = GetValue(nameof(MiniWindowWidthDips), 320.0);
         MiniWindowHeightDips = GetValue(nameof(MiniWindowHeightDips), 200.0);
         MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
-        MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), ["google"]);
-        MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), ["google"]);
+        var phiSilicaReadyState = PhiSilicaAvailability.GetReadyState();
+        var hasSavedEnabledServiceSettings = _settings.ContainsKey(nameof(MiniWindowEnabledServices))
+            || _settings.ContainsKey(nameof(MainWindowEnabledServices))
+            || _settings.ContainsKey(nameof(FixedWindowEnabledServices));
+        var defaultEnabledServices = GetDefaultEnabledServicesForProfile(
+            hasSavedEnabledServiceSettings,
+            phiSilicaReadyState);
+        MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), defaultEnabledServices);
+        MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), defaultEnabledServices);
         ImportedMdxDictionaries = GetImportedMdxDictionaries();
 
         // Fixed window settings
@@ -717,12 +742,13 @@ public sealed class SettingsService
             FixedWindowXDips != 0.0 || FixedWindowYDips != 0.0);
         FixedWindowWidthDips = GetValue(nameof(FixedWindowWidthDips), 320.0);
         FixedWindowHeightDips = GetValue(nameof(FixedWindowHeightDips), 280.0);
-        FixedWindowEnabledServices = GetStringList(nameof(FixedWindowEnabledServices), ["google"]);
+        FixedWindowEnabledServices = GetStringList(nameof(FixedWindowEnabledServices), defaultEnabledServices);
 
         // EnabledQuery settings per window (which services auto-query vs. query on demand)
         MainWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(MainWindowServiceEnabledQuery));
         MiniWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(MiniWindowServiceEnabledQuery));
         FixedWindowServiceEnabledQuery = GetStringBoolDictionary(nameof(FixedWindowServiceEnabledQuery));
+        MigrateStandaloneOpenVinoService();
 
         // Service test status
         ServiceTestStatus = GetStringBoolDictionary(nameof(ServiceTestStatus));
@@ -794,7 +820,12 @@ public sealed class SettingsService
         _settings[nameof(OllamaEndpoint)] = OllamaEndpoint;
         _settings[nameof(OllamaModel)] = OllamaModel;
 
-        // OpenVINO NPU settings
+        // Local AI settings
+        _settings[nameof(LocalAIProvider)] = LocalAIProvider;
+        _settings[nameof(FoundryLocalEndpoint)] = FoundryLocalEndpoint;
+        _settings[nameof(FoundryLocalModel)] = FoundryLocalModel;
+
+        // OpenVINO local NLLB fallback settings
         _settings[nameof(OpenVinoDevice)] = OpenVinoDevice;
 
         // Built-in AI settings
@@ -1056,6 +1087,37 @@ public sealed class SettingsService
     }
 
     /// <summary>
+    /// Default enabled services for a fresh profile. Phi Silica is enabled only
+    /// when the OS reports that the on-device language model is supported on
+    /// this PC; <see cref="WindowsAIReadyState.NotReady"/> still counts because
+    /// the model can be prepared on first use after user confirmation.
+    /// </summary>
+    internal static List<string> GetDefaultEnabledServices(WindowsAIReadyState phiSilicaReadyState)
+    {
+        var services = new List<string> { GoogleServiceId };
+        if (IsPhiSilicaSupportedForDefaultEnable(phiSilicaReadyState))
+        {
+            services.Add(LocalAITranslationService.ServiceIdValue);
+        }
+
+        return services;
+    }
+
+    internal static List<string> GetDefaultEnabledServicesForProfile(
+        bool hasSavedEnabledServiceSettings,
+        WindowsAIReadyState phiSilicaReadyState)
+    {
+        return hasSavedEnabledServiceSettings
+            ? [GoogleServiceId]
+            : GetDefaultEnabledServices(phiSilicaReadyState);
+    }
+
+    internal static bool IsPhiSilicaSupportedForDefaultEnable(WindowsAIReadyState phiSilicaReadyState)
+    {
+        return phiSilicaReadyState is WindowsAIReadyState.Ready or WindowsAIReadyState.NotReady;
+    }
+
+    /// <summary>
     /// Checks if a service ID belongs to the international-only set.
     /// </summary>
     public static bool IsInternationalOnlyService(string serviceId)
@@ -1116,20 +1178,152 @@ public sealed class SettingsService
     /// </summary>
     private static void ReplaceInList(List<string> list, string oldValue, string newValue)
     {
-        var hasNewValue = list.Contains(newValue);
+        var hasNewValue = ContainsInList(list, newValue);
         for (var i = list.Count - 1; i >= 0; i--)
         {
-            if (list[i] == oldValue)
+            if (string.Equals(list[i], oldValue, StringComparison.OrdinalIgnoreCase))
             {
                 if (hasNewValue)
-                    list.RemoveAt(i);     // bing already present → just remove google
+                {
+                    list.RemoveAt(i);
+                }
                 else
                 {
-                    list[i] = newValue;   // replace first google → bing
-                    hasNewValue = true;   // subsequent googles should be removed
+                    list[i] = newValue;
+                    hasNewValue = true;
                 }
             }
         }
+    }
+
+    internal void DisablePhiSilicaService()
+    {
+        DisableServiceEverywhere(LocalAITranslationService.ServiceIdValue);
+    }
+
+    internal void DisableServiceEverywhere(string serviceId)
+    {
+        RemoveFromList(MiniWindowEnabledServices, serviceId);
+        RemoveFromList(MainWindowEnabledServices, serviceId);
+        RemoveFromList(FixedWindowEnabledServices, serviceId);
+
+        RemoveDictionaryKey(MiniWindowServiceEnabledQuery, serviceId);
+        RemoveDictionaryKey(MainWindowServiceEnabledQuery, serviceId);
+        RemoveDictionaryKey(FixedWindowServiceEnabledQuery, serviceId);
+
+        HasUserConfiguredServices = true;
+        Save();
+    }
+
+    private static void RemoveFromList(List<string> list, string value)
+    {
+        for (var i = list.Count - 1; i >= 0; i--)
+        {
+            if (string.Equals(list[i], value, StringComparison.OrdinalIgnoreCase))
+            {
+                list.RemoveAt(i);
+            }
+        }
+    }
+
+    private void MigrateStandaloneOpenVinoService()
+    {
+        var hadOpenVino = ContainsInList(MiniWindowEnabledServices, LocalAITranslationService.LegacyOpenVinoServiceId)
+            || ContainsInList(MainWindowEnabledServices, LocalAITranslationService.LegacyOpenVinoServiceId)
+            || ContainsInList(FixedWindowEnabledServices, LocalAITranslationService.LegacyOpenVinoServiceId);
+        var hadPhiSilicaService = ContainsInList(MiniWindowEnabledServices, LocalAITranslationService.ServiceIdValue)
+            || ContainsInList(MainWindowEnabledServices, LocalAITranslationService.ServiceIdValue)
+            || ContainsInList(FixedWindowEnabledServices, LocalAITranslationService.ServiceIdValue);
+
+        if (hadOpenVino && !hadPhiSilicaService && !_settings.ContainsKey(nameof(LocalAIProvider)))
+        {
+            LocalAIProvider = "OpenVINO";
+        }
+
+        ReplaceInList(
+            MiniWindowEnabledServices,
+            LocalAITranslationService.LegacyOpenVinoServiceId,
+            LocalAITranslationService.ServiceIdValue);
+        ReplaceInList(
+            MainWindowEnabledServices,
+            LocalAITranslationService.LegacyOpenVinoServiceId,
+            LocalAITranslationService.ServiceIdValue);
+        ReplaceInList(
+            FixedWindowEnabledServices,
+            LocalAITranslationService.LegacyOpenVinoServiceId,
+            LocalAITranslationService.ServiceIdValue);
+
+        MoveDictionaryKey(
+            MiniWindowServiceEnabledQuery,
+            LocalAITranslationService.LegacyOpenVinoServiceId,
+            LocalAITranslationService.ServiceIdValue);
+        MoveDictionaryKey(
+            MainWindowServiceEnabledQuery,
+            LocalAITranslationService.LegacyOpenVinoServiceId,
+            LocalAITranslationService.ServiceIdValue);
+        MoveDictionaryKey(
+            FixedWindowServiceEnabledQuery,
+            LocalAITranslationService.LegacyOpenVinoServiceId,
+            LocalAITranslationService.ServiceIdValue);
+    }
+
+    private static void MoveDictionaryKey(Dictionary<string, bool> dictionary, string oldKey, string newKey)
+    {
+        if (!TryGetDictionaryEntry(dictionary, oldKey, out var existingKey, out var value))
+        {
+            return;
+        }
+
+        dictionary.Remove(existingKey);
+        if (!ContainsDictionaryKey(dictionary, newKey))
+        {
+            dictionary[newKey] = value;
+        }
+    }
+
+    private static void RemoveDictionaryKey(Dictionary<string, bool> dictionary, string key)
+    {
+        if (TryGetDictionaryEntry(dictionary, key, out var existingKey, out _))
+        {
+            dictionary.Remove(existingKey);
+        }
+    }
+
+    private static bool ContainsInList(IEnumerable<string> list, string value)
+    {
+        return list.Any(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ContainsDictionaryKey(Dictionary<string, bool> dictionary, string key)
+    {
+        return TryGetDictionaryEntry(dictionary, key, out _, out _);
+    }
+
+    private static bool TryGetDictionaryEntry(
+        Dictionary<string, bool> dictionary,
+        string key,
+        out string existingKey,
+        out bool value)
+    {
+        if (dictionary.TryGetValue(key, out value))
+        {
+            existingKey = key;
+            return true;
+        }
+
+        foreach (var candidate in dictionary.Keys)
+        {
+            if (string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase))
+            {
+                existingKey = candidate;
+                value = dictionary[candidate];
+                return true;
+            }
+        }
+
+        existingKey = string.Empty;
+        value = false;
+        return false;
     }
 
     /// <summary>
@@ -1354,4 +1548,3 @@ public sealed class SettingsService
         }
     }
 }
-

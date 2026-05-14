@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Easydict.OpenVINO.Inference;
 using Easydict.OpenVINO.Services;
 using Easydict.TranslationService.LocalModels;
 using Easydict.WinUI.Services;
@@ -19,7 +18,6 @@ public sealed partial class SettingsPage
 {
     private OpenVINOTranslationService? _openVinoServiceCached;
     private bool _openVinoSubscribed;
-    private bool _suppressOpenVinoDeviceChange;
 
     private OpenVINOTranslationService? GetOpenVinoService()
     {
@@ -28,18 +26,11 @@ public sealed partial class SettingsPage
             return _openVinoServiceCached;
         }
 
-        using var handle = TranslationManagerService.Instance.AcquireHandle();
-        if (handle.Manager.Services.TryGetValue("openvino-local-ai", out var svc)
-            && svc is OpenVINOTranslationService openvino)
-        {
-            _openVinoServiceCached = openvino;
-            return openvino;
-        }
-
-        return null;
+        _openVinoServiceCached = TranslationManagerService.Instance.OpenVinoService;
+        return _openVinoServiceCached;
     }
 
-    private void InitializeOpenVinoExpander()
+    private void InitializeOpenVinoPanel()
     {
         var svc = GetOpenVinoService();
         if (svc is null) return;
@@ -48,29 +39,6 @@ public sealed partial class SettingsPage
         {
             svc.StatusChanged += OnOpenVinoStatusChanged;
             _openVinoSubscribed = true;
-        }
-
-        // Populate device combo from current setting.
-        _suppressOpenVinoDeviceChange = true;
-        try
-        {
-            var current = _settings.OpenVinoDevice;
-            foreach (var item in OpenVinoDeviceCombo.Items.OfType<ComboBoxItem>())
-            {
-                if (string.Equals(item.Tag as string, current, StringComparison.OrdinalIgnoreCase))
-                {
-                    OpenVinoDeviceCombo.SelectedItem = item;
-                    break;
-                }
-            }
-            if (OpenVinoDeviceCombo.SelectedItem is null && OpenVinoDeviceCombo.Items.Count > 0)
-            {
-                OpenVinoDeviceCombo.SelectedIndex = 0;
-            }
-        }
-        finally
-        {
-            _suppressOpenVinoDeviceChange = false;
         }
 
         UpdateOpenVinoStatusUi(svc.GetStatus());
@@ -111,6 +79,7 @@ public sealed partial class SettingsPage
         OpenVinoStatusBadge.Text = isReady ? "✓" : "⚠";
         OpenVinoStatusBadge.Foreground = GetLocalAiStatusBrush(isReady);
         OpenVinoStatusBadge.Visibility = Visibility.Visible;
+        RefreshLocalAIHeaderStatusBadge();
 
         // Progress bar — only meaningful during download.
         if (status.State == LocalModelState.Preparing && status.ProgressPercent is double pct)
@@ -159,31 +128,13 @@ public sealed partial class SettingsPage
         }
     }
 
-    private void OnOpenVinoDeviceChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppressOpenVinoDeviceChange || !_isInitialized) return;
-
-        if (OpenVinoDeviceCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
-        {
-            _settings.OpenVinoDevice = tag;
-            _settings.Save();
-
-            var svc = GetOpenVinoService();
-            if (svc is not null
-                && Enum.TryParse<OpenVINODevice>(tag, ignoreCase: true, out var device))
-            {
-                svc.Configure(device);
-            }
-        }
-    }
-
     /// <summary>
     /// Detach the StatusChanged subscription so the singleton
     /// <see cref="OpenVINOTranslationService"/> doesn't retain this page after
     /// navigation/unload (which would also keep enqueuing UI updates to a dead
     /// dispatcher). Called from <c>SettingsPage.TeardownOnUnload</c>.
     /// </summary>
-    private void TeardownOpenVinoExpander()
+    private void TeardownOpenVinoPanel()
     {
         if (!_openVinoSubscribed) return;
 

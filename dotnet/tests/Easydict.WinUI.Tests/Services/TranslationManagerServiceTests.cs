@@ -40,6 +40,33 @@ public class TranslationManagerServiceTests
     }
 
     [Fact]
+    public void Manager_RegistersLocalAiServicesForSettings()
+    {
+        var service = TranslationManagerService.Instance;
+        var manager = service.Manager;
+
+        manager.Services.Should().ContainKey("windows-local-ai");
+        manager.Services.Should().NotContainKey("openvino-local-ai",
+            "OpenVINO is configured as the Windows AI fallback instead of a separate selectable service");
+        manager.Services.Should().ContainKey("ollama");
+    }
+
+    [Fact]
+    public void Manager_LongDocumentSupportedServicesIncludeWindowsLocalAi()
+    {
+        var service = TranslationManagerService.Instance;
+        var manager = service.Manager;
+
+        var serviceIds = manager.Services.Values
+            .Where(LongDocumentServiceSupport.IsSupported)
+            .Select(s => s.ServiceId)
+            .ToList();
+
+        serviceIds.Should().Contain("windows-local-ai");
+        serviceIds.Should().NotContain("builtin");
+    }
+
+    [Fact]
     public void Manager_HasDefaultServiceId()
     {
         var service = TranslationManagerService.Instance;

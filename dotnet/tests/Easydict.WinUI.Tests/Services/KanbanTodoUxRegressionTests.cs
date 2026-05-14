@@ -48,6 +48,25 @@ public class KanbanTodoUxRegressionTests
     }
 
     [Fact]
+    public void MainPage_DetectedLanguageLabel_DoesNotShareInputTextBoxRow()
+    {
+        var doc = XDocument.Load(MainPageXamlPath);
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        var detectedLanguage = doc
+            .Descendants()
+            .Single(e => (string?)e.Attribute(x + "Name") == "DetectedLanguageText");
+        var inputContainer = doc
+            .Descendants()
+            .Single(e => (string?)e.Attribute(x + "Name") == "InputTextContainer");
+
+        detectedLanguage.Attribute("Grid.Row")?.Value.Should().Be("1",
+            "the detected-language label needs its own row above the input box");
+        inputContainer.Attribute("Grid.Row")?.Value.Should().Be("2",
+            "the input box must sit below the detected-language row instead of covering it");
+    }
+
+    [Fact]
     public void AllLanguages_HaveHotkeysDescriptionResource()
     {
         foreach (var languageDir in Directory.GetDirectories(StringsPath))

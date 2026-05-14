@@ -21,7 +21,7 @@ public interface INllbTokenizer
 
     /// <summary>
     /// Encodes a source string for NLLB-200's encoder. Returns
-    /// <c>[src_lang_id] + spm_tokens + [eos_id]</c>.
+    /// <c>[src_lang_id] + model_vocab_spm_tokens + [eos_id]</c>.
     /// </summary>
     IReadOnlyList<int> EncodeSource(string text, string srcFloresCode);
 
@@ -33,8 +33,7 @@ public interface INllbTokenizer
 
     /// <summary>
     /// Decodes a single token id. Returns null when the token is a special token
-    /// that should not appear in user-facing output. Used during streaming so
-    /// each generated id can be surfaced incrementally.
+    /// that should not appear in user-facing output.
     /// </summary>
     string? DecodeSingle(int tokenId);
 

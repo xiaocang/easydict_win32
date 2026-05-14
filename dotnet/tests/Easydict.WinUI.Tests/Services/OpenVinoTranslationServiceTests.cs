@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text;
 using Easydict.OpenVINO.Inference;
 using Easydict.OpenVINO.Models;
 using Easydict.OpenVINO.Services;
@@ -17,6 +18,9 @@ namespace Easydict.WinUI.Tests.Services;
 /// </summary>
 public class OpenVinoTranslationServiceTests : IDisposable
 {
+    private static readonly string ProjectRoot = FindProjectRoot();
+    private static readonly string NllbInferenceEnginePath = Path.Combine(ProjectRoot, "src", "Easydict.OpenVINO", "Inference", "NllbInferenceEngine.cs");
+
     private readonly string _tempDir;
     private readonly ModelDownloadService _downloader;
 
@@ -55,6 +59,39 @@ public class OpenVinoTranslationServiceTests : IDisposable
     {
         using var svc = NewService();
         svc.RequiresApiKey.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DefaultDevice_IsAuto()
+    {
+        using var svc = NewService();
+        svc.Device.Should().Be(OpenVINODevice.Auto);
+    }
+
+    [Fact]
+    public void OpenVinoDeviceMapping_AutoPrefersNpuBeforeGpuAndCpu()
+    {
+        OpenVINODevice.Auto.ToOpenVINOString().Should().Be("AUTO:NPU,GPU,CPU");
+        OpenVINODevice.NPU.ToOpenVINOString().Should().Be("NPU");
+        OpenVINODevice.GPU.ToOpenVINOString().Should().Be("GPU");
+        OpenVINODevice.CPU.ToOpenVINOString().Should().Be("CPU");
+    }
+
+    [Fact]
+    public void SentencePieceIdMapping_OffsetsContentIdsForNllbModelVocabulary()
+    {
+        NllbTokenizer.ToModelSentencePieceId(0).Should().Be(0);
+        NllbTokenizer.ToModelSentencePieceId(1).Should().Be(1);
+        NllbTokenizer.ToModelSentencePieceId(2).Should().Be(2);
+        NllbTokenizer.ToModelSentencePieceId(3).Should().Be(4);
+        NllbTokenizer.ToModelSentencePieceId(94123).Should().Be(94124);
+
+        NllbTokenizer.ToTokenizerSentencePieceId(0).Should().Be(0);
+        NllbTokenizer.ToTokenizerSentencePieceId(1).Should().Be(1);
+        NllbTokenizer.ToTokenizerSentencePieceId(2).Should().Be(2);
+        NllbTokenizer.ToTokenizerSentencePieceId(3).Should().Be(3);
+        NllbTokenizer.ToTokenizerSentencePieceId(4).Should().Be(3);
+        NllbTokenizer.ToTokenizerSentencePieceId(94124).Should().Be(94123);
     }
 
     [Fact]
@@ -209,6 +246,162 @@ public class OpenVinoTranslationServiceTests : IDisposable
         collected.Should().Equal("Hello", "world");
     }
 
+    [Fact]
+    public async Task TranslateStreamAsync_UsesCumulativeDecodeToPreserveSentencePieceSpaces()
+    {
+        var tokenizer = new FakeTokenizer
+        {
+            FullDecodedText =
+            {
+                ["100"] = "-",
+                ["100,200"] = "- How",
+                ["100,200,300"] = "- How are",
+                ["100,200,300,400"] = "- How are you?",
+            },
+        };
+        var engine = new FakeEngine { TokenStream = new[] { 100, 200, 300, 400 } };
+
+        using var svc = new OpenVINOTranslationService(_downloader, tokenizer, engine);
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English,
+        };
+
+        var collected = new List<string>();
+        await foreach (var chunk in svc.TranslateStreamAsync(request))
+        {
+            collected.Add(chunk);
+        }
+
+        collected.Should().Equal("-", " How", " are", " you?");
+    }
+
+    [Fact]
+    public void GetStreamingDecodeDelta_ReturnsOnlyNewSuffix()
+    {
+        OpenVINOTranslationService.GetStreamingDecodeDelta("- How", "- How are")
+            .Should()
+            .Be(" are");
+    }
+
+    [Fact]
+    public void OpenCompatibleSentencePieceModelStream_RewritesNllbNormalizerName()
+    {
+        var spmPath = Path.Combine(_tempDir, "sentencepiece-nmt-nfkc.model");
+        File.WriteAllBytes(spmPath, Encoding.UTF8.GetBytes("prefix nmt_nfkc suffix"));
+
+        using var stream = NllbTokenizer.OpenCompatibleSentencePieceModelStream(spmPath);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        reader.ReadToEnd().Should().Be("prefix identity suffix");
+    }
+
+    [Fact]
+    public void TryRewriteUnsupportedNormalizerName_ReturnsFalseWhenNotNeeded()
+    {
+        var bytes = Encoding.UTF8.GetBytes("prefix identity suffix");
+
+        NllbTokenizer.TryRewriteUnsupportedNormalizerName(bytes).Should().BeFalse();
+        Encoding.UTF8.GetString(bytes).Should().Be("prefix identity suffix");
+    }
+
+    [Fact]
+    public void NormalizeInputForNllbTokenizer_AppliesNfkc()
+    {
+        NllbTokenizer.NormalizeInputForNllbTokenizer("ＡＢＣ１２３")
+            .Should()
+            .Be("ABC123");
+    }
+
+    [Fact]
+    public void IsOpenVinoRuntimeFailure_DetectsOutputNameMismatch()
+    {
+        var ex = new InvalidOperationException(
+            "[OpenVINO-EP] Output names mismatch between OpenVINO and ONNX");
+
+        NllbInferenceEngine.IsOpenVinoRuntimeFailure(ex).Should().BeTrue();
+    }
+
+    [Fact]
+    public void RecordOpenVinoEncoderRuntimeFailure_DisablesOnlyReportedDevice()
+    {
+        NllbInferenceEngine.ResetOpenVinoEncoderRuntimeFailuresForTests();
+        try
+        {
+            var ex = new InvalidOperationException(
+                "OpenVINOExecutionProvider failed: Output names mismatch between OpenVINO and ONNX");
+
+            NllbInferenceEngine.RecordOpenVinoEncoderRuntimeFailure(OpenVINODevice.Auto, ex);
+
+            NllbInferenceEngine.IsOpenVinoEncoderRuntimeDisabled(OpenVINODevice.Auto).Should().BeTrue();
+            NllbInferenceEngine.IsOpenVinoEncoderRuntimeDisabled(OpenVINODevice.NPU).Should().BeFalse();
+            NllbInferenceEngine.IsOpenVinoEncoderRuntimeDisabled(OpenVINODevice.CPU).Should().BeFalse();
+        }
+        finally
+        {
+            NllbInferenceEngine.ResetOpenVinoEncoderRuntimeFailuresForTests();
+        }
+    }
+
+    [Fact]
+    public void RuntimeFallback_DisposesPrimaryOpenVinoEncoderSession()
+    {
+        var source = File.ReadAllText(NllbInferenceEnginePath);
+
+        source.Should().Contain("private void DisposePrimaryEncoderSession()",
+            "the failed OpenVINO encoder session owns a large native heap and must have an explicit release path");
+        source.Should().MatchRegex(
+            @"RecordOpenVinoEncoderRuntimeFailure\(_encoderDevice, ex\);\s*_useEncoderCpuFallback = true;\s*DisposePrimaryEncoderSession\(\);",
+            "runtime fallback should release the failed OpenVINO encoder before continuing on the CPU encoder");
+    }
+
+    [Fact]
+    public void Configure_DeviceChangeDisposesIdleCachedEngine()
+    {
+        var tokenizer = new FakeTokenizer();
+        var engine = new FakeEngine();
+        using var svc = new OpenVINOTranslationService(_downloader, tokenizer, engine);
+
+        svc.Configure(OpenVINODevice.NPU);
+
+        engine.DisposeCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Configure_DeviceChangeRetiresActiveEngineUntilStreamCompletes()
+    {
+        var tokenizer = new FakeTokenizer
+        {
+            DecodedPieces = { [100] = "Hello" },
+        };
+        var engine = new FakeEngine { TokenStream = new[] { 100 } };
+        using var svc = new OpenVINOTranslationService(_downloader, tokenizer, engine);
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English,
+        };
+
+        var enumerator = svc.TranslateStreamAsync(request).GetAsyncEnumerator();
+        try
+        {
+            (await enumerator.MoveNextAsync()).Should().BeTrue();
+
+            svc.Configure(OpenVINODevice.NPU);
+
+            engine.DisposeCount.Should().Be(0);
+        }
+        finally
+        {
+            await enumerator.DisposeAsync();
+        }
+
+        engine.DisposeCount.Should().Be(1);
+    }
+
     // ── Fakes ───────────────────────────────────────────────────────────
 
     private OpenVINOTranslationService NewService()
@@ -227,6 +420,7 @@ public class OpenVinoTranslationServiceTests : IDisposable
     private sealed class FakeTokenizer : INllbTokenizer
     {
         public Dictionary<int, string?> DecodedPieces { get; } = new();
+        public Dictionary<string, string> FullDecodedText { get; } = new();
 
         public int BosTokenId => 0;
         public int PadTokenId => 1;
@@ -241,6 +435,12 @@ public class OpenVinoTranslationServiceTests : IDisposable
 
         public string Decode(IReadOnlyList<int> tokenIds)
         {
+            var key = string.Join(",", tokenIds);
+            if (FullDecodedText.TryGetValue(key, out var decoded))
+            {
+                return decoded;
+            }
+
             return string.Concat(tokenIds.Select(id => DecodedPieces.TryGetValue(id, out var p) ? p : ""));
         }
 
@@ -252,9 +452,10 @@ public class OpenVinoTranslationServiceTests : IDisposable
         public int GetLanguageTokenId(string floresCode) => floresCode.GetHashCode();
     }
 
-    private sealed class FakeEngine : INllbInferenceEngine
+    private sealed class FakeEngine : INllbInferenceEngine, IDisposable
     {
         public IReadOnlyList<int> TokenStream { get; set; } = Array.Empty<int>();
+        public int DisposeCount { get; private set; }
 
         public async IAsyncEnumerable<int> GenerateAsync(
             IReadOnlyList<int> encoderInputIds,
@@ -269,5 +470,27 @@ public class OpenVinoTranslationServiceTests : IDisposable
                 yield return t;
             }
         }
+
+        public void Dispose()
+        {
+            DisposeCount++;
+        }
+    }
+
+    private static string FindProjectRoot()
+    {
+        var current = AppDomain.CurrentDomain.BaseDirectory;
+        while (!string.IsNullOrEmpty(current))
+        {
+            var solutionPath = Path.Combine(current, "Easydict.Win32.sln");
+            if (File.Exists(solutionPath))
+            {
+                return current;
+            }
+
+            current = Path.GetDirectoryName(current);
+        }
+
+        return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..");
     }
 }

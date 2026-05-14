@@ -5,14 +5,15 @@ sortTitle: Easydict
 voiceTitle: Easy Dict
 shortDescription: Einfach Wörter nachschlagen oder Texte übersetzen
 description: |-
-  Easydict für Windows ist ein kostenloses Open-Source-Übersetzungs- und Wörterbuchtool mit sofortigem Zugriff auf 19 Übersetzungsdienste. Der vollständige Quellcode ist auf GitHub unter der GPL-3.0-Lizenz verfügbar. Ob Sie schnell ein Wort nachschlagen, einen vollständigen Text übersetzen oder KI-gestützte Übersetzungen mit Echtzeit-Streaming nutzen möchten – Easydict deckt alles ab.
+  Easydict für Windows ist ein kostenloses Open-Source-Übersetzungs- und Wörterbuchtool mit sofortigem Zugriff auf 20 Übersetzungsdienste. Der vollständige Quellcode ist auf GitHub unter der GPL-3.0-Lizenz verfügbar. Ob Sie schnell ein Wort nachschlagen, einen vollständigen Text übersetzen oder KI-gestützte Übersetzungen mit Echtzeit-Streaming nutzen möchten – Easydict deckt alles ab.
 
   Eine Windows-Portierung der beliebten macOS-App Easydict, entwickelt mit modernen .NET- und WinUI 3-Technologien für ein natives Windows-Erlebnis.
 
   Wichtigste Funktionen:
 
-  - 19 Übersetzungsdienste: Google Übersetzer, Google Wörterbuch, Bing Übersetzer, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama und mehr
+  - 20 Übersetzungsdienste: Google Übersetzer, Google Wörterbuch, Bing Übersetzer, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama, Windows Local AI und mehr
   - KI-Streaming-Übersetzung: LLM-Übersetzungen erscheinen in Echtzeit
+  - Lokale KI-Übersetzung: Phi Silica auf unterstützten Copilot+ PCs; OpenVINO NLLB-200 dient als lokale NPU-bevorzugte Ausweichoption
   - Grammatikkorrektur: KI-gestützte Grammatikkorrektur mit detaillierten Fehlererklärungen
   - Langdokument-Übersetzung: Übersetzung von PDF-, Text- und Markdown-Dateien mit ML-Layouterkennung, Formelschutz, paralleler Verarbeitung und zweisprachigem Export
   - Wörterbuchmodus: Phonetik, Definitionen, Wortarten und Beispielsätze über Google Dict nachschlagen
@@ -30,8 +31,9 @@ description: |-
 
   Perfekt für Studenten, Berufstätige, Übersetzer und alle, die schnelle, zuverlässige Übersetzungen in mehreren Sprachen benötigen.
 features:
-- 19 Übersetzungsdienste einschließlich Google, Bing, DeepL, OpenAI, Gemini, DeepSeek und Volcano Engine
+- 20 Übersetzungsdienste einschließlich Google, Bing, DeepL, OpenAI, Gemini, DeepSeek und Windows Local AI
 - Echtzeit-Streaming-Übersetzung mit KI-Diensten
+- Lokale KI-Übersetzung mit Phi Silica, Foundry Local und OpenVINO-Offline-Fallback
 - KI-gestützte Grammatikkorrektur mit Fehlererkennung und Erklärung
 - Langdokument-Übersetzung für PDF, Text und Markdown mit zweisprachigem Export
 - Wörterbuchmodus mit Phonetik, Definitionen und Beispielsätzen

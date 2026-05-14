@@ -18,6 +18,9 @@ CERT_PATH ?= ./certs/dev.pfx
 # Default version for local builds
 VERSION ?= 0.1.0.0
 
+# WinUI target framework used by Easydict.WinUI.csproj.
+WINUI_TFM ?= net8.0-windows10.0.22621.0
+
 # Manifest source path
 MANIFEST_SRC := src/Easydict.WinUI/Package.appxmanifest
 
@@ -274,11 +277,11 @@ installer: installer-x64
 
 # Run the application (Debug)
 run: build
-	./src/Easydict.WinUI/bin/Debug/net8.0-windows10.0.19041.0/win-x64/Easydict.WinUI.exe
+	./src/Easydict.WinUI/bin/Debug/$(WINUI_TFM)/win-x64/Easydict.WinUI.exe
 
 # Run the application (Release)
 run-release: build-release
-	./src/Easydict.WinUI/bin/Release/net8.0-windows10.0.19041.0/win-x64/Easydict.WinUI.exe
+	./src/Easydict.WinUI/bin/Release/$(WINUI_TFM)/win-x64/Easydict.WinUI.exe
 
 # ============================================================
 # Help

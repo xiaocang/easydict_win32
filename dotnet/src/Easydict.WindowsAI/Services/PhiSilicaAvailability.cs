@@ -4,7 +4,7 @@ namespace Easydict.WindowsAI.Services;
 /// Lightweight static helper for the settings page (and any other UI surface)
 /// to query Phi Silica availability without instantiating the translation service.
 /// </summary>
-public static class WindowsLocalAIAvailability
+public static class PhiSilicaAvailability
 {
     private static readonly Lazy<IWindowsLanguageModelClient> _defaultClient =
         new(() => new WindowsLanguageModelClient(), LazyThreadSafetyMode.PublicationOnly);
@@ -12,8 +12,6 @@ public static class WindowsLocalAIAvailability
     public static IWindowsLanguageModelClient Client => _defaultClient.Value;
 
     public static WindowsAIReadyState GetReadyState() => Client.GetReadyState();
-
-    public static bool IsReady => GetReadyState() == WindowsAIReadyState.Ready;
 
     /// <summary>
     /// Resource-key suffix for the user-facing message describing the current state.
@@ -31,3 +29,4 @@ public static class WindowsLocalAIAvailability
         _ => "WindowsLocalAI_Status_NotSupported",
     };
 }
+

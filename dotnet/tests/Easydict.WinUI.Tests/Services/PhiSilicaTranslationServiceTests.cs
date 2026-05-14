@@ -9,65 +9,65 @@ using Xunit;
 namespace Easydict.WinUI.Tests.Services;
 
 /// <summary>
-/// Unit tests for the Windows Local AI (Phi Silica) translation provider.
+/// Unit tests for the Phi Silica translation provider.
 /// Uses a fake <see cref="IWindowsLanguageModelClient"/> so the suite can run
 /// on any machine — Copilot+ NPU is not required.
 /// </summary>
-public class WindowsLocalAIServiceTests
+public class PhiSilicaTranslationServiceTests
 {
     [Fact]
     public void ServiceId_IsWindowsLocalAi()
     {
-        var service = new WindowsLocalAIService(new FakeClient());
+        var service = new PhiSilicaTranslationService(new FakeClient());
         service.ServiceId.Should().Be("windows-local-ai");
     }
 
     [Fact]
-    public void DisplayName_IsWindowsLocalAI()
+    public void DisplayName_IsPhiSilica()
     {
-        var service = new WindowsLocalAIService(new FakeClient());
-        service.DisplayName.Should().Be("Windows Local AI");
+        var service = new PhiSilicaTranslationService(new FakeClient());
+        service.DisplayName.Should().Be("Phi Silica");
     }
 
     [Fact]
     public void RequiresApiKey_IsFalse()
     {
-        var service = new WindowsLocalAIService(new FakeClient());
+        var service = new PhiSilicaTranslationService(new FakeClient());
         service.RequiresApiKey.Should().BeFalse();
     }
 
     [Fact]
     public void IsConfigured_IsTrue()
     {
-        var service = new WindowsLocalAIService(new FakeClient());
+        var service = new PhiSilicaTranslationService(new FakeClient());
         service.IsConfigured.Should().BeTrue();
     }
 
     [Fact]
     public void IsStreaming_IsTrue()
     {
-        var service = new WindowsLocalAIService(new FakeClient());
+        var service = new PhiSilicaTranslationService(new FakeClient());
         service.IsStreaming.Should().BeTrue();
     }
 
     [Fact]
     public void SupportsLanguagePair_TargetAuto_ReturnsFalse()
     {
-        var service = new WindowsLocalAIService(new FakeClient());
+        var service = new PhiSilicaTranslationService(new FakeClient());
         service.SupportsLanguagePair(Language.English, Language.Auto).Should().BeFalse();
     }
 
     [Fact]
     public void SupportsLanguagePair_TargetReal_ReturnsTrue()
     {
-        var service = new WindowsLocalAIService(new FakeClient());
+        var service = new PhiSilicaTranslationService(new FakeClient());
         service.SupportsLanguagePair(Language.Auto, Language.SimplifiedChinese).Should().BeTrue();
     }
 
     [Fact]
     public async Task TranslateAsync_EmptyText_ThrowsInvalidResponse()
     {
-        var service = new WindowsLocalAIService(new FakeClient());
+        var service = new PhiSilicaTranslationService(new FakeClient());
         var request = new TranslationRequest { Text = "   ", ToLanguage = Language.English };
 
         var act = async () => await service.TranslateAsync(request);
@@ -80,7 +80,7 @@ public class WindowsLocalAIServiceTests
     [Fact]
     public async Task TranslateAsync_TargetAuto_ThrowsUnsupportedLanguage()
     {
-        var service = new WindowsLocalAIService(new FakeClient());
+        var service = new PhiSilicaTranslationService(new FakeClient());
         var request = new TranslationRequest { Text = "Hello", ToLanguage = Language.Auto };
 
         var act = async () => await service.TranslateAsync(request);
@@ -90,13 +90,30 @@ public class WindowsLocalAIServiceTests
     }
 
     [Fact]
-    public async Task TranslateAsync_ModelNotReadyAndCannotPrepare_ThrowsServiceUnavailable()
+    public async Task TranslateAsync_ModelNeedsPreparation_DoesNotPrepareImplicitly()
+    {
+        var client = new FakeClient
+        {
+            ReadyState = WindowsAIReadyState.NotReady,
+        };
+        var service = new PhiSilicaTranslationService(client);
+        var request = new TranslationRequest { Text = "Hello", ToLanguage = Language.SimplifiedChinese };
+
+        var act = async () => await service.TranslateAsync(request);
+
+        var ex = await act.Should().ThrowAsync<TranslationException>();
+        ex.Which.ErrorCode.Should().Be(TranslationErrorCode.LocalModelNeedsPreparation);
+        client.EnsureReadyCallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ModelNotCompatible_ThrowsServiceUnavailable()
     {
         var client = new FakeClient
         {
             ReadyState = WindowsAIReadyState.NotCompatibleWithSystemHardware,
         };
-        var service = new WindowsLocalAIService(client);
+        var service = new PhiSilicaTranslationService(client);
         var request = new TranslationRequest { Text = "Hello", ToLanguage = Language.SimplifiedChinese };
 
         var act = async () => await service.TranslateAsync(request);
@@ -116,7 +133,7 @@ public class WindowsLocalAIServiceTests
                 string.Empty,
                 "context overflow"),
         };
-        var service = new WindowsLocalAIService(client);
+        var service = new PhiSilicaTranslationService(client);
         var request = new TranslationRequest { Text = "Hello", ToLanguage = Language.SimplifiedChinese };
 
         var act = async () => await service.TranslateAsync(request);
@@ -135,7 +152,7 @@ public class WindowsLocalAIServiceTests
                 string.Empty,
                 "blocked"),
         };
-        var service = new WindowsLocalAIService(client);
+        var service = new PhiSilicaTranslationService(client);
         var request = new TranslationRequest { Text = "Hello", ToLanguage = Language.SimplifiedChinese };
 
         var act = async () => await service.TranslateAsync(request);
@@ -153,7 +170,7 @@ public class WindowsLocalAIServiceTests
                 WindowsAIResponseStatus.Complete,
                 "Translation: \"你好\"\n"),
         };
-        var service = new WindowsLocalAIService(client);
+        var service = new PhiSilicaTranslationService(client);
         var request = new TranslationRequest
         {
             Text = "Hello",
@@ -164,7 +181,7 @@ public class WindowsLocalAIServiceTests
 
         result.TranslatedText.Should().Be("你好");
         result.OriginalText.Should().Be("Hello");
-        result.ServiceName.Should().Be("Windows Local AI");
+        result.ServiceName.Should().Be("Phi Silica");
         result.TargetLanguage.Should().Be(Language.SimplifiedChinese);
     }
 
@@ -175,7 +192,7 @@ public class WindowsLocalAIServiceTests
         {
             StreamChunks = new[] { "你", "好", "，", "世界" },
         };
-        var service = new WindowsLocalAIService(client);
+        var service = new PhiSilicaTranslationService(client);
         var request = new TranslationRequest
         {
             Text = "Hello, world",
@@ -198,7 +215,7 @@ public class WindowsLocalAIServiceTests
         {
             StreamChunks = new[] { "Hello", string.Empty, " ", "world" },
         };
-        var service = new WindowsLocalAIService(client);
+        var service = new PhiSilicaTranslationService(client);
         var request = new TranslationRequest
         {
             Text = "Test",
@@ -225,7 +242,7 @@ public class WindowsLocalAIServiceTests
             ToLanguage = Language.SimplifiedChinese,
         };
 
-        var prompt = WindowsLocalAIService.BuildTranslationPrompt(request);
+        var prompt = PhiSilicaTranslationService.BuildTranslationPrompt(request);
 
         prompt.Should().Contain("English");
         prompt.Should().Contain("Simplified Chinese");
@@ -242,7 +259,7 @@ public class WindowsLocalAIServiceTests
             ToLanguage = Language.Japanese,
         };
 
-        var prompt = WindowsLocalAIService.BuildTranslationPrompt(request);
+        var prompt = PhiSilicaTranslationService.BuildTranslationPrompt(request);
 
         prompt.Should().Contain("auto-detected");
     }
@@ -257,7 +274,7 @@ public class WindowsLocalAIServiceTests
             CustomPrompt = "Use formal register and prefer Quebec spellings.",
         };
 
-        var prompt = WindowsLocalAIService.BuildTranslationPrompt(request);
+        var prompt = PhiSilicaTranslationService.BuildTranslationPrompt(request);
 
         prompt.Should().Contain("Additional user instruction");
         prompt.Should().Contain("Quebec spellings");
@@ -272,7 +289,7 @@ public class WindowsLocalAIServiceTests
             ToLanguage = Language.German,
         };
 
-        var prompt = WindowsLocalAIService.BuildTranslationPrompt(request);
+        var prompt = PhiSilicaTranslationService.BuildTranslationPrompt(request);
 
         prompt.Should().NotContain("Additional user instruction");
     }
@@ -287,11 +304,15 @@ public class WindowsLocalAIServiceTests
         public IReadOnlyList<string> StreamChunks { get; set; } = Array.Empty<string>();
 
         public string? LastPrompt { get; private set; }
+        public int EnsureReadyCallCount { get; private set; }
 
         public WindowsAIReadyState GetReadyState() => ReadyState;
 
         public Task<WindowsAIReadyState> EnsureReadyAsync(CancellationToken cancellationToken)
-            => Task.FromResult(ReadyState);
+        {
+            EnsureReadyCallCount++;
+            return Task.FromResult(ReadyState);
+        }
 
         public Task<WindowsAIResponse> GenerateAsync(
             string prompt,
@@ -317,3 +338,5 @@ public class WindowsLocalAIServiceTests
         }
     }
 }
+
+

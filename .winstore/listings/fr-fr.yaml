@@ -5,14 +5,15 @@ sortTitle: Easydict
 voiceTitle: Easy Dict
 shortDescription: Recherchez facilement des mots ou traduisez du texte
 description: |-
-  Easydict pour Windows est un outil de traduction et de dictionnaire gratuit et open source, offrant un accès instantané à 19 services de traduction. Le code source complet est disponible sur GitHub sous licence GPL-3.0. Que vous ayez besoin de rechercher rapidement un mot, de traduire un texte intégral ou d'utiliser des traductions alimentées par l'IA avec streaming en temps réel, Easydict répond à tous vos besoins.
+  Easydict pour Windows est un outil de traduction et de dictionnaire gratuit et open source, offrant un accès instantané à 20 services de traduction. Le code source complet est disponible sur GitHub sous licence GPL-3.0. Que vous ayez besoin de rechercher rapidement un mot, de traduire un texte intégral ou d'utiliser des traductions alimentées par l'IA avec streaming en temps réel, Easydict répond à tous vos besoins.
 
   Version Windows de la populaire application macOS Easydict, construite avec les technologies modernes .NET et WinUI 3 pour une expérience Windows native.
 
   Points forts :
 
-  - 19 services de traduction : Google Traduction, Google Dictionnaire, Bing Traduction, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama et plus encore
+  - 20 services de traduction : Google Traduction, Google Dictionnaire, Bing Traduction, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama, Windows Local AI et plus encore
   - Traduction IA en streaming : regardez les traductions LLM apparaître en temps réel
+  - Traduction IA locale : Phi Silica sur les PC Copilot+ compatibles, avec OpenVINO NLLB-200 comme solution locale privilégiant le NPU
   - Correction grammaticale : correction grammaticale par IA avec explications détaillées des erreurs
   - Traduction de longs documents : traduction de fichiers PDF, texte et Markdown avec détection de mise en page ML, protection des formules, traitement parallèle et export bilingue
   - Mode dictionnaire : recherchez la phonétique, les définitions, les parties du discours et les exemples via Google Dict
@@ -30,8 +31,9 @@ description: |-
 
   Parfait pour les étudiants, les professionnels, les traducteurs et tous ceux qui ont besoin de traductions rapides et fiables dans plusieurs langues.
 features:
-- 19 services de traduction dont Google, Bing, DeepL, OpenAI, Gemini, DeepSeek et Volcano Engine
+- 20 services de traduction dont Google, Bing, DeepL, OpenAI, Gemini, DeepSeek et Windows Local AI
 - Traduction en streaming en temps réel avec les services IA
+- Traduction IA locale avec Phi Silica et solution OpenVINO privilégiant le NPU
 - Correction grammaticale par IA avec détection et explication des erreurs
 - Traduction de longs documents PDF, texte et Markdown avec export bilingue
 - Mode dictionnaire avec phonétique, définitions et exemples

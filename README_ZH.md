@@ -102,6 +102,8 @@
 
 - **LLM 流式翻译** - 实时显示翻译结果
 
+- **本地 AI 翻译** - Windows Local AI 可在支持的 Copilot+ PC 上使用 Phi Silica，也可在普通 Windows PC 上使用 Foundry Local，或用 OpenVINO NLLB-200 作为离线兜底
+
 - **系统托盘** - 最小化到托盘，后台运行
 
 - **剪贴板监听** - 自动翻译复制的文本
@@ -120,7 +122,7 @@
 
 - **高 DPI 支持** - Per-Monitor V2 DPI 感知
 
-- **多种翻译服务**（19 种服务）
+- **多种翻译服务**（20 种服务）
   - Google 翻译（免费，无需 API Key）
   - Google 词典（丰富词典：音标、释义、例句）
   - 必应翻译（免费，无需 API Key）
@@ -138,6 +140,7 @@
   - 小牛翻译（450+ 语种，支持繁体中文）
   - Linguee 词典（带上下文例句）
   - Ollama（本地 LLM，默认：llama3.2）
+  - Windows Local AI（Copilot+ PC 上使用 Phi Silica，OpenVINO 回退）
   - 内置 AI（免费，由 Groq 提供）
   - 自定义 OpenAI 兼容服务
 
@@ -284,7 +287,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | 功能 | macOS | Windows |
 |------|-------|---------|
-| 翻译服务 | 25+ | 19 |
+| 翻译服务 | 25+ | 20 |
 | OCR 截图翻译 | 支持 | 支持 |
 | TTS | 支持 | 支持 |
 | 划词翻译 | 支持 | 支持 |

@@ -6,7 +6,8 @@ param(
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
     [string]$CertPath = ".\certs\dev-signing.pfx",
-    [string]$CertPassword = $(if ($env:CERT_PASSWORD) { $env:CERT_PASSWORD } else { "password" })
+    [string]$CertPassword = $(if ($env:CERT_PASSWORD) { $env:CERT_PASSWORD } else { "password" }),
+    [switch]$SkipInstall
 )
 
 $ErrorActionPreference = "Stop"
@@ -100,7 +101,9 @@ try {
     try {
         $manifestContent = Get-Content $manifestPath -Raw
         $manifestContent = $manifestContent -replace 'ProcessorArchitecture="[^"]*"', "ProcessorArchitecture=`"$Platform`""
-        $manifestContent = $manifestContent -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"$msixVersion`""
+        # Use negative lookbehind for 'Min' so MinVersion="..." on PackageDependency
+        # / TargetDeviceFamily isn't accidentally rewritten to the app version.
+        $manifestContent = $manifestContent -replace '(?<!Min)Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"$msixVersion`""
         Set-Content $tempManifest $manifestContent
 
         winapp package $publishDir --output $msixPath --manifest $tempManifest --skip-pri --verbose
@@ -124,6 +127,13 @@ try {
     Write-Host ""
 
     # Step 6: Reinstall
+    if ($SkipInstall) {
+        Write-Host "[6/6] Skipping local install (-SkipInstall)" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "=== Build Complete ===" -ForegroundColor Cyan
+        Write-Host "Signed MSIX: $msixPath" -ForegroundColor White
+        return
+    }
     Write-Host "[6/6] Reinstalling app..." -ForegroundColor Yellow
 
     # Remove existing installation

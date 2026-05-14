@@ -102,6 +102,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **LLM Streaming Translation** - Real-time display of translation results
 
+- **Local AI Translation** - Windows Local AI can use Phi Silica on supported Copilot+ PCs, Foundry Local on ordinary Windows PCs, or OpenVINO NLLB-200 as an offline fallback
+
 - **System Tray** - Minimize to tray, run in background
 
 - **Clipboard Monitoring** - Auto-translate copied text
@@ -120,7 +122,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **High DPI Support** - Per-Monitor V2 DPI awareness
 
-- **Multiple Translation Services** (19 services)
+- **Multiple Translation Services** (20 services)
   - Google Translate (free, no API key required)
   - Google Dict (rich dictionary: phonetics, definitions, examples)
   - Bing Translate (free, no API key required)
@@ -138,6 +140,7 @@ While the feature set is not yet complete compared to the macOS version, this po
   - NiuTrans (小牛翻译, 450+ languages, Traditional Chinese supported)
   - Linguee Dictionary (with context examples)
   - Ollama (local LLM, default: llama3.2)
+  - Windows Local AI (Phi Silica on Copilot+ PCs, OpenVINO fallback)
   - BuiltIn AI (free, powered by Groq)
   - Custom OpenAI-compatible services
 
@@ -284,7 +287,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 | Feature | macOS | Windows |
 |---------|-------|---------|
-| Translation Services | 25+ | 19 |
+| Translation Services | 25+ | 20 |
 | OCR Screenshot Translation | Yes | Yes |
 | TTS | Yes | Yes |
 | Selection Translation | Yes | Yes |

@@ -7,9 +7,11 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 namespace Easydict.OpenVINO.Inference;
 
 /// <summary>
-/// Greedy-decode inference engine for NLLB-200 backed by ONNX Runtime with the
-/// OpenVINO Execution Provider. Loads encoder/decoder sessions once and reuses
-/// them across translations.
+/// Greedy-decode inference engine for NLLB-200 backed by ONNX Runtime. The
+/// encoder is routed through the OpenVINO Execution Provider when available;
+/// the decoder currently uses the default CPU EP because the dynamic
+/// autoregressive decoder subgraphs can trigger OpenVINO EP output-name
+/// mismatches on ORT/OpenVINO 1.21.
 ///
 /// First-pass design notes:
 ///  - Batch size 1 only.
@@ -23,9 +25,13 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
     private const int EncoderHiddenDim = 1024; // NLLB-200-distilled-600M
     private const int PadTokenId = 1;
     private const int EosTokenId = 2;
+    private static readonly object OpenVinoRuntimeFallbackLock = new();
+    private static readonly HashSet<OpenVINODevice> OpenVinoRuntimeDisabledDevices = [];
 
     private readonly InferenceSession _encoderSession;
     private readonly InferenceSession _decoderSession;
+    private readonly Func<InferenceSession>? _encoderCpuFallbackFactory;
+    private readonly OpenVINODevice _encoderDevice;
     private readonly string _encoderInputIdsName;
     private readonly string _encoderAttentionMaskName;
     private readonly string _encoderHiddenStateOutputName;
@@ -33,6 +39,10 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
     private readonly string _decoderEncoderAttentionMaskName;
     private readonly string _decoderEncoderHiddenStatesName;
     private readonly string _decoderLogitsOutputName;
+    private readonly object _encoderFallbackLock = new();
+    private InferenceSession? _encoderCpuFallbackSession;
+    private bool _useEncoderCpuFallback;
+    private bool _primaryEncoderSessionDisposed;
     private bool _disposed;
 
     public static NllbInferenceEngine Load(
@@ -52,18 +62,26 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
             throw new FileNotFoundException($"NLLB decoder not found at '{decoderPath}'", decoderPath);
         }
 
-        var sessionOptions = BuildSessionOptions(device, precisionHint);
+        var encoderSession = CreateEncoderSession(encoderPath, device, precisionHint);
+        var decoderSession = new InferenceSession(decoderPath, BuildCpuSessionOptions());
 
-        var encoderSession = new InferenceSession(encoderPath, sessionOptions);
-        var decoderSession = new InferenceSession(decoderPath, sessionOptions);
-
-        return new NllbInferenceEngine(encoderSession, decoderSession);
+        return new NllbInferenceEngine(
+            encoderSession,
+            decoderSession,
+            () => new InferenceSession(encoderPath, BuildCpuSessionOptions()),
+            device);
     }
 
-    internal NllbInferenceEngine(InferenceSession encoderSession, InferenceSession decoderSession)
+    internal NllbInferenceEngine(
+        InferenceSession encoderSession,
+        InferenceSession decoderSession,
+        Func<InferenceSession>? encoderCpuFallbackFactory = null,
+        OpenVINODevice encoderDevice = OpenVINODevice.CPU)
     {
         _encoderSession = encoderSession;
         _decoderSession = decoderSession;
+        _encoderCpuFallbackFactory = encoderCpuFallbackFactory;
+        _encoderDevice = encoderDevice;
 
         // Resolve ONNX I/O names defensively — different Optimum versions have
         // slightly different naming for NLLB exports.
@@ -182,7 +200,12 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _encoderSession.Dispose();
+        lock (_encoderFallbackLock)
+        {
+            DisposePrimaryEncoderSession();
+            _encoderCpuFallbackSession?.Dispose();
+            _encoderCpuFallbackSession = null;
+        }
         _decoderSession.Dispose();
     }
 
@@ -210,7 +233,76 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
             NamedOnnxValue.CreateFromTensor(_encoderAttentionMaskName, attentionTensor),
         };
 
-        using var outputs = _encoderSession.Run(inputs);
+        try
+        {
+            lock (_encoderFallbackLock)
+            {
+                if (_useEncoderCpuFallback)
+                {
+                    return RunEncoderWithSession(GetEncoderCpuFallbackSession(), inputs, attentionTensor, srcLen);
+                }
+
+                return RunEncoderWithSession(_encoderSession, inputs, attentionTensor, srcLen);
+            }
+        }
+        catch (OnnxRuntimeException ex) when (!_useEncoderCpuFallback && IsOpenVinoRuntimeFailure(ex) && _encoderCpuFallbackFactory is not null)
+        {
+            lock (_encoderFallbackLock)
+            {
+                Debug.WriteLine($"[NllbInferenceEngine] OpenVINO encoder run failed ({ex.Message}); switching encoder to CPU EP.");
+                RecordOpenVinoEncoderRuntimeFailure(_encoderDevice, ex);
+                _useEncoderCpuFallback = true;
+                DisposePrimaryEncoderSession();
+                return RunEncoderWithSession(GetEncoderCpuFallbackSession(), inputs, attentionTensor, srcLen);
+            }
+        }
+    }
+
+    private InferenceSession GetEncoderCpuFallbackSession()
+    {
+        if (_encoderCpuFallbackSession is not null)
+        {
+            return _encoderCpuFallbackSession;
+        }
+
+        if (_encoderCpuFallbackFactory is null)
+        {
+            return _encoderSession;
+        }
+
+        lock (_encoderFallbackLock)
+        {
+            _encoderCpuFallbackSession ??= _encoderCpuFallbackFactory();
+            return _encoderCpuFallbackSession;
+        }
+    }
+
+    private void DisposePrimaryEncoderSession()
+    {
+        if (_primaryEncoderSessionDisposed)
+        {
+            return;
+        }
+
+        _primaryEncoderSessionDisposed = true;
+        try
+        {
+            _encoderSession.Dispose();
+            Debug.WriteLine("[NllbInferenceEngine] Primary encoder session disposed.");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[NllbInferenceEngine] Failed to dispose primary encoder session: {ex.Message}");
+        }
+    }
+
+    private (DenseTensor<float> hidden, DenseTensor<long> attentionMask, int srcLen) RunEncoderWithSession(
+        InferenceSession session,
+        IReadOnlyCollection<NamedOnnxValue> inputs,
+        DenseTensor<long> attentionTensor,
+        int srcLen)
+    {
+        using var outputs = session.Run(inputs);
         var hidden = outputs
             .First(o => o.Name == _encoderHiddenStateOutputName)
             .AsTensor<float>();
@@ -272,9 +364,44 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
-    private static SessionOptions BuildSessionOptions(OpenVINODevice device, string? precisionHint)
+    private static InferenceSession CreateEncoderSession(
+        string encoderPath,
+        OpenVINODevice device,
+        string? precisionHint)
     {
-        var options = new SessionOptions();
+        if (device == OpenVINODevice.CPU || IsOpenVinoEncoderRuntimeDisabled(device))
+        {
+            if (device != OpenVINODevice.CPU)
+            {
+                Debug.WriteLine($"[NllbInferenceEngine] OpenVINO encoder runtime disabled for {device}; using CPU EP.");
+            }
+
+            return new InferenceSession(encoderPath, BuildCpuSessionOptions());
+        }
+
+        try
+        {
+            return new InferenceSession(encoderPath, BuildOpenVinoSessionOptions(device, precisionHint));
+        }
+        catch (Exception ex)
+        {
+            // Device not present, EP unavailable, or model unsupported by the
+            // requested OpenVINO target. Fall back to CPU so the provider still
+            // produces a translation instead of failing at load time.
+            Debug.WriteLine($"[NllbInferenceEngine] OpenVINO encoder session unavailable ({ex.Message}); falling back to CPU EP.");
+            return new InferenceSession(encoderPath, BuildCpuSessionOptions());
+        }
+    }
+
+    private static SessionOptions BuildOpenVinoSessionOptions(OpenVINODevice device, string? precisionHint)
+    {
+        var options = new SessionOptions
+        {
+            // Known OpenVINO EP runtime incompatibilities are caught and handled
+            // below. Keep ORT from printing scary error logs for the expected
+            // first-chance failure before we switch to CPU.
+            LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_FATAL,
+        };
 
         // OpenVINO EP options: device_type controls hardware target.
         // precision hint: FP16 is the sweet spot for NPU; INT8 is set by the model itself.
@@ -290,7 +417,7 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
         try
         {
             options.AppendExecutionProvider("OpenVINO", ovOptions);
-            Debug.WriteLine($"[NllbInferenceEngine] OpenVINO EP appended (device={device}).");
+            Debug.WriteLine($"[NllbInferenceEngine] OpenVINO EP appended for encoder (device={device}).");
         }
         catch (Exception ex)
         {
@@ -301,6 +428,47 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
         }
 
         return options;
+    }
+
+    private static SessionOptions BuildCpuSessionOptions()
+    {
+        return new SessionOptions();
+    }
+
+    internal static bool IsOpenVinoRuntimeFailure(Exception ex)
+    {
+        return ex.Message.Contains("OpenVINO-EP", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("OpenVINOExecutionProvider", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("openvino_ep", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool IsOpenVinoEncoderRuntimeDisabled(OpenVINODevice device)
+    {
+        lock (OpenVinoRuntimeFallbackLock)
+        {
+            return OpenVinoRuntimeDisabledDevices.Contains(device);
+        }
+    }
+
+    internal static void RecordOpenVinoEncoderRuntimeFailure(OpenVINODevice device, Exception ex)
+    {
+        if (!IsOpenVinoRuntimeFailure(ex) || device == OpenVINODevice.CPU)
+        {
+            return;
+        }
+
+        lock (OpenVinoRuntimeFallbackLock)
+        {
+            OpenVinoRuntimeDisabledDevices.Add(device);
+        }
+    }
+
+    internal static void ResetOpenVinoEncoderRuntimeFailuresForTests()
+    {
+        lock (OpenVinoRuntimeFallbackLock)
+        {
+            OpenVinoRuntimeDisabledDevices.Clear();
+        }
     }
 
     private static string ResolveInputName(InferenceSession session, string expected)

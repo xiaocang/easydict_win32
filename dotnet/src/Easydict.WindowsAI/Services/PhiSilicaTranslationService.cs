@@ -12,26 +12,30 @@ namespace Easydict.WindowsAI.Services;
 /// Available only on Copilot+ PCs that meet the model's hardware requirements;
 /// surfaces a friendly state via <see cref="WindowsAIReadyState"/> on others.
 /// </summary>
-public sealed class WindowsLocalAIService : IStreamTranslationService, ILocalModelProvider
+public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILocalModelProvider
 {
+    public const string ServiceIdValue = "windows-local-ai";
+
     private static readonly IReadOnlyList<Language> _allLanguages =
         Enum.GetValues<Language>().Where(l => l != Language.Auto).ToArray();
 
+    private const string UserFacingName = "Phi Silica";
+
     private readonly IWindowsLanguageModelClient _client;
 
-    public WindowsLocalAIService()
-        : this(WindowsLocalAIAvailability.Client)
+    public PhiSilicaTranslationService()
+        : this(PhiSilicaAvailability.Client)
     {
     }
 
-    internal WindowsLocalAIService(IWindowsLanguageModelClient client)
+    internal PhiSilicaTranslationService(IWindowsLanguageModelClient client)
     {
         _client = client;
     }
 
-    public string ServiceId => "windows-local-ai";
+    public string ServiceId => ServiceIdValue;
 
-    public string DisplayName => "Windows Local AI";
+    public string DisplayName => UserFacingName;
 
     public bool RequiresApiKey => false;
 
@@ -100,7 +104,7 @@ public sealed class WindowsLocalAIService : IStreamTranslationService, ILocalMod
         }
         catch (Exception ex)
         {
-            throw new TranslationException($"Windows Local AI failed: {ex.Message}", ex)
+            throw new TranslationException($"{UserFacingName} failed: {ex.Message}", ex)
             {
                 ErrorCode = TranslationErrorCode.Unknown,
                 ServiceId = ServiceId,
@@ -155,7 +159,7 @@ public sealed class WindowsLocalAIService : IStreamTranslationService, ILocalMod
                 }
                 catch (Exception ex)
                 {
-                    throw new TranslationException($"Windows Local AI failed: {ex.Message}", ex)
+                    throw new TranslationException($"{UserFacingName} failed: {ex.Message}", ex)
                     {
                         ErrorCode = TranslationErrorCode.Unknown,
                         ServiceId = ServiceId,
@@ -184,7 +188,7 @@ public sealed class WindowsLocalAIService : IStreamTranslationService, ILocalMod
         };
 
         return new TranslationException(
-            $"Windows Local AI: {wex.Message}", wex)
+            $"{UserFacingName}: {wex.Message}", wex)
         {
             ErrorCode = code,
             ServiceId = ServiceId,
@@ -289,17 +293,21 @@ public sealed class WindowsLocalAIService : IStreamTranslationService, ILocalMod
         }
     }
 
-    private async Task EnsureReadyOrThrowAsync(CancellationToken cancellationToken)
+    private Task EnsureReadyOrThrowAsync(CancellationToken cancellationToken)
     {
-        var state = await _client.EnsureReadyAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var state = _client.GetReadyState();
         if (state == WindowsAIReadyState.Ready)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         throw new TranslationException(GetReadyStateMessage(state))
         {
-            ErrorCode = TranslationErrorCode.ServiceUnavailable,
+            ErrorCode = state == WindowsAIReadyState.NotReady
+                ? TranslationErrorCode.LocalModelNeedsPreparation
+                : TranslationErrorCode.ServiceUnavailable,
             ServiceId = ServiceId,
         };
     }
@@ -319,8 +327,8 @@ public sealed class WindowsLocalAIService : IStreamTranslationService, ILocalMod
         };
 
         var message = !string.IsNullOrWhiteSpace(response.ErrorMessage)
-            ? $"Windows Local AI: {response.ErrorMessage}"
-            : $"Windows Local AI returned status {response.Status}.";
+            ? $"{UserFacingName}: {response.ErrorMessage}"
+            : $"{UserFacingName} returned status {response.Status}.";
 
         throw new TranslationException(message)
         {
@@ -399,23 +407,24 @@ public sealed class WindowsLocalAIService : IStreamTranslationService, ILocalMod
     private static string GetReadyStateMessage(WindowsAIReadyState state) => state switch
     {
         WindowsAIReadyState.CapabilityMissing =>
-            "Windows Local AI is unavailable: the app package is missing the systemAIModels capability.",
+            $"{UserFacingName} is unavailable: the app package is missing the systemAIModels capability.",
 
         WindowsAIReadyState.NotCompatibleWithSystemHardware =>
-            "Windows Local AI requires a Copilot+ PC with a compatible NPU. Use Ollama or a cloud provider as a fallback.",
+            $"{UserFacingName} requires a Copilot+ PC with a compatible NPU. Select Auto or OpenVINO in Windows Local AI settings to use the local fallback.",
 
         WindowsAIReadyState.OSUpdateNeeded =>
-            "Windows Local AI requires a newer Windows build. Update Windows and try again.",
+            $"{UserFacingName} requires a newer Windows build. Update Windows and try again.",
 
         WindowsAIReadyState.DisabledByUser =>
-            "Windows Local AI has been disabled or removed. Re-enable Windows AI features in system settings.",
+            $"{UserFacingName} has been disabled or removed. Re-enable Windows AI features in system settings.",
 
         WindowsAIReadyState.NotSupportedOnCurrentSystem =>
-            "Windows Local AI is not supported on the current system or region.",
+            $"{UserFacingName} is not supported on the current system or region. Select Auto or OpenVINO in Windows Local AI settings to use the local fallback.",
 
         WindowsAIReadyState.NotReady =>
-            "Windows Local AI model is not ready and could not be prepared automatically.",
+            $"{UserFacingName} model is not ready. Start a translation again and choose Download to prepare it.",
 
-        _ => $"Windows Local AI is unavailable ({state}).",
+        _ => $"{UserFacingName} is unavailable ({state}).",
     };
 }
+

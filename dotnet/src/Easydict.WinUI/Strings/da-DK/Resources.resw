@@ -537,21 +537,63 @@
   <data name="ExcludedAppsPlaceholder" xml:space="preserve"><value>code, slack, discord</value></data>
   <data name="ExcludedAppsDescription" xml:space="preserve"><value>Procesnavne der skal ekskluderes fra musemarkerings-oversættelse, adskilt med kommaer. Eksempel: "code" for VS Code.</value></data>
 
-  <!-- Windows Local AI (Phi Silica) -->
+  <!-- Windows AI provider selection -->
+  <data name="LocalAI_Title" xml:space="preserve"><value>Windows Local AI</value></data>
+  <data name="LocalAI_ProviderLabel" xml:space="preserve"><value>Udbyder</value></data>
+  <data name="LocalAI_ProviderAutomationName" xml:space="preserve"><value>Windows Local AI-udbyder</value></data>
+  <data name="LocalAI_Provider_Auto" xml:space="preserve"><value>Auto (Phi Silica → Foundry Local → OpenVINO)</value></data>
+  <data name="LocalAI_Provider_WindowsAI" xml:space="preserve"><value>Phi Silica (Copilot+ PC)</value></data>
+  <data name="LocalAI_Provider_OpenVINO" xml:space="preserve"><value>OpenVINO (NLLB-200, local)</value></data>
+  <data name="LocalAI_Rating_WindowsAI" xml:space="preserve"><value>★★★★★</value></data>
+  <data name="LocalAI_Rating_WindowsAI_Tooltip" xml:space="preserve"><value>Best quality when available. Uses Phi Silica on supported Copilot+ PCs.</value></data>
+  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★</value></data>
+  <data name="LocalAI_Rating_FoundryLocal_Tooltip" xml:space="preserve"><value>Good local LLM fallback. Requires Foundry Local and a loaded model.</value></data>
+  <data name="LocalAI_Rating_OpenVINO" xml:space="preserve"><value>★★</value></data>
+  <data name="LocalAI_Rating_OpenVINO_Tooltip" xml:space="preserve"><value>Basic offline translation fallback. Hardware acceleration is best effort.</value></data>
+  <data name="LocalAI_Description" xml:space="preserve"><value>Auto tries Phi Silica first, then Foundry Local, then OpenVINO/NLLB as the local translation fallback. No cloud API key.</value></data>
+  <data name="LocalAI_Description_Auto" xml:space="preserve"><value>Auto tries Phi Silica first, then Foundry Local, then OpenVINO/NLLB as the local translation fallback. No cloud API key.</value></data>
+  <data name="LocalAI_Description_WindowsAI" xml:space="preserve"><value>Bruger Phi Silica på Copilot+ PC’er via Windows AI-API’er. Ingen API-nøgle, intet netværk.</value></data>
+  <data name="LocalAI_Description_OpenVINO" xml:space="preserve"><value>Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort; unsupported graph parts fall back to CPU. No API key, no network.</value></data>
+  <data name="LocalAI_WindowsAISectionTitle" xml:space="preserve"><value>Phi Silica</value></data>
+  <data name="OpenVINO_ConfigTitle" xml:space="preserve"><value>OpenVINO (local NLLB)</value></data>
+  <data name="OpenVINO_ConfigDescription" xml:space="preserve"><value>Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort and falls back to CPU when needed.</value></data>
+
+  <data name="FoundryLocal_ConfigDescription" xml:space="preserve"><value>Leave endpoint empty to auto-detect it from foundry service status; set it manually if the local service uses a fixed OpenAI-compatible endpoint.</value></data>
+  <data name="FoundryLocal_InstallLinkText" xml:space="preserve"><value>Install Foundry Local</value></data>
+  <data name="FoundryLocal_Status_NotRunning" xml:space="preserve"><value>Foundry Local is not running. Start the Foundry Local service or set the endpoint manually.</value></data>
+  <data name="FoundryLocal_Status_Ready" xml:space="preserve"><value>Foundry Local is configured. The local endpoint will be used or auto-detected at runtime.</value></data>
+  <data name="FoundryLocal_EndpointLabel" xml:space="preserve"><value>Endpoint (optional)</value></data>
+  <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
+  <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local model is not configured.</value></data>
+  <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>Runs local models through the Microsoft Foundry Local OpenAI-compatible endpoint. Requires Foundry Local installed and a local model available.</value></data>
+  <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>Auto-detect from foundry service status</value></data>
+  <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>Model</value></data>
+  <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
+  <data name="PhiSilicaModelPrompt_Title" xml:space="preserve"><value>Download Phi Silica-modellen?</value></data>
+  <data name="PhiSilicaModelPrompt_Message" xml:space="preserve"><value>Phi Silica needs to download and prepare Windows-managed on-device language model components before first use. Expect a several-GB install; the exact size depends on your device and Windows version. You can download it now, skip this translation, or disable Phi Silica until you turn it back on in Settings.</value></data>
+  <data name="PhiSilicaModelPrompt_DownloadNow" xml:space="preserve"><value>Download nu</value></data>
+  <data name="PhiSilicaModelPrompt_NotNow" xml:space="preserve"><value>Ikke nu</value></data>
+  <data name="PhiSilicaModelPrompt_Disable" xml:space="preserve"><value>Deaktiver Phi Silica</value></data>
+  <!-- Windows AI (Phi Silica) -->
   <data name="WindowsLocalAI_Title_Ready" xml:space="preserve"><value>Klar</value></data>
   <data name="WindowsLocalAI_Title_Unavailable" xml:space="preserve"><value>Ikke tilgængelig</value></data>
   <data name="WindowsLocalAI_Preparing" xml:space="preserve"><value>Forbereder…</value></data>
+  <data name="WindowsLocalAI_PrepareButton" xml:space="preserve"><value>Prepare model</value></data>
+  <data name="PhiSilicaPreparationProgress_Checking" xml:space="preserve"><value>Checking Phi Silica model status...</value></data>
+  <data name="PhiSilicaPreparationProgress_Requesting" xml:space="preserve"><value>Requesting model download and preparation from Windows...</value></data>
+  <data name="PhiSilicaPreparationProgress_Waiting" xml:space="preserve"><value>Windows is downloading or preparing the on-device model. This can be a several-GB install...</value></data>
+  <data name="PhiSilicaPreparationProgress_Finalizing" xml:space="preserve"><value>Finalizing model status...</value></data>
   <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>Forbereder den lokale sprogmodel…</value></data>
   <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>Den lokale sprogmodel er klar. Oversættelse kører lokalt uden at sende tekst til eksterne tjenester.</value></data>
-  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>Den lokale sprogmodel understøttes, men er endnu ikke forberedt. Klik på "Forbered model" for at installere den.</value></data>
+  <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>The on-device language model is supported but has not been prepared yet. Click &quot;Prepare model&quot; to install it. Expect a several-GB Windows-managed install; the exact size depends on your device and Windows version.</value></data>
   <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>App-pakken mangler funktionen systemAIModels. Dette påvirker typisk portable/ikke-pakkede versioner; installer MSIX/Store-versionen i stedet.</value></data>
-  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>Denne enhed har ikke en kompatibel NPU. Windows Local AI kører kun på Copilot+ PC'er. Brug Ollama eller en cloud-udbyder som alternativ.</value></data>
-  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows Local AI kræver en nyere Windows-version. Installer de seneste Windows-opdateringer og prøv igen.</value></data>
-  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows Local AI er deaktiveret eller fjernet. Aktiver Windows AI-funktioner i systemindstillingerne.</value></data>
-  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Windows Local AI understøttes ikke på dette system eller i denne region. Brug Ollama eller en cloud-udbyder som alternativ.</value></data>
+  <data name="WindowsLocalAI_Status_NotCompatibleHardware" xml:space="preserve"><value>Phi Silica kræver en Copilot+ PC med en kompatibel NPU. Vælg Auto eller OpenVINO i Windows Local AI for at bruge den lokale NLLB-200-fallback.</value></data>
+  <data name="WindowsLocalAI_Status_OSUpdateNeeded" xml:space="preserve"><value>Windows AI kræver en nyere Windows-version. Installer de seneste Windows-opdateringer og prøv igen.</value></data>
+  <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows AI er deaktiveret eller fjernet. Aktiver Windows AI-funktioner i systemindstillingerne.</value></data>
+  <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Phi Silica er ikke tilgængelig på dette system eller i denne region. Vælg Auto eller OpenVINO i Windows Local AI for at bruge den lokale NLLB-200-fallback.</value></data>
   <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>Forberedelse af den lokale sprogmodel mislykkedes. Tjek Windows-opdateringer og tilgængeligheden af AI-funktioner, og prøv igen.</value></data>
 
-  <!-- OpenVINO NPU (NLLB-200) -->
+  <!-- OpenVINO local NLLB (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>Klar</value></data>
   <data name="OpenVINO_Title_Unavailable" xml:space="preserve"><value>Ikke downloadet</value></data>
   <data name="OpenVINO_Status_Ready" xml:space="preserve"><value>NLLB-200-modellen er installeret og klar. Oversættelse kører lokalt via ONNX Runtime + OpenVINO.</value></data>

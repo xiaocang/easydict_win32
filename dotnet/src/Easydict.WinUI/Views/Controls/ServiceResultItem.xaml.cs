@@ -24,6 +24,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private ServiceQueryResult? _serviceResult;
     private bool _isHovering;
     private string? _cachedServiceId;
+    private ElementTheme _cachedIconTheme;
     private BitmapImage? _cachedIcon;
     private HashSet<string>? _alreadyShownPhonetics;
     private bool _webViewInitialized;
@@ -136,6 +137,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         _currentMdxService = null;
         _themeRoot = null;
         _cachedServiceId = null;
+        _cachedIconTheme = ElementTheme.Default;
         _cachedIcon = null;
         _alreadyShownPhonetics = null;
         _updateUIPending = false;
@@ -266,21 +268,26 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
         // Service info
         ServiceNameText.Text = _serviceResult.ServiceDisplayName;
+        var iconTheme = GetEffectiveIconTheme();
 
         // Load service icon only when ServiceId changes (avoid repeated allocations during streaming)
         if (minimal)
         {
             _cachedServiceId = null;
+            _cachedIconTheme = ElementTheme.Default;
             _cachedIcon = null;
             ServiceIcon.Source = null;
             ServiceIcon.Visibility = Visibility.Collapsed;
         }
-        else if (_cachedServiceId != _serviceResult.ServiceId || _cachedIcon is null)
+        else if (_cachedServiceId != _serviceResult.ServiceId
+                 || _cachedIconTheme != iconTheme
+                 || _cachedIcon is null)
         {
             _cachedServiceId = _serviceResult.ServiceId;
+            _cachedIconTheme = iconTheme;
             try
             {
-                _cachedIcon = new BitmapImage(new Uri(_serviceResult.ServiceIconPath));
+                _cachedIcon = new BitmapImage(ServiceIconAssetResolver.GetIconUri(_serviceResult.ServiceId, iconTheme));
                 ServiceIcon.Source = _cachedIcon;
                 ServiceIcon.Visibility = Visibility.Visible;
             }
@@ -362,7 +369,14 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
     {
+        _cachedIcon = null;
+        UpdateUI();
         ApplyServiceChromeForCurrentTheme();
+    }
+
+    private ElementTheme GetEffectiveIconTheme()
+    {
+        return ThemeRoot?.ActualTheme ?? ActualTheme;
     }
 
     private void ApplyMinimalChrome()

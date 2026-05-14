@@ -8,7 +8,7 @@ namespace Easydict.WinUI.Services;
 ///
 /// Usage:
 ///   MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageLoaded");
-///   var baseline = GC.GetTotalMemory(true);
+///   var baseline = MemoryDiagnostics.GetTotalMemoryForDiagnostics();
 ///   // ... operation ...
 ///   MemoryDiagnostics.LogDelta("After operation", baseline);
 ///
@@ -16,6 +16,13 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 internal static class MemoryDiagnostics
 {
+    public static bool ForceFullGcForDiagnostics => IsDebugEnvFlagEnabled("EASYDICT_DEBUG_FORCE_MEMORY_GC");
+
+    public static long GetTotalMemoryForDiagnostics()
+    {
+        return GC.GetTotalMemory(ForceFullGcForDiagnostics);
+    }
+
     /// <summary>
     /// Log a memory snapshot with GC heap, committed bytes, working set, and GC generation counts.
     /// </summary>
@@ -35,13 +42,20 @@ internal static class MemoryDiagnostics
 
     /// <summary>
     /// Log the delta between a baseline measurement and the current GC heap size.
-    /// Forces a full GC collection for accurate measurement.
+    /// Set EASYDICT_DEBUG_FORCE_MEMORY_GC=1 when an exact retained-size probe is needed.
     /// </summary>
     [Conditional("DEBUG")]
     public static void LogDelta(string label, long baselineBytes)
     {
-        var current = GC.GetTotalMemory(forceFullCollection: true);
+        var current = GetTotalMemoryForDiagnostics();
         var delta = current - baselineBytes;
         Debug.WriteLine($"[Memory] {label}: delta = {delta / 1024.0:F1} KB (total = {current / 1024.0 / 1024.0:F1} MB)");
+    }
+
+    private static bool IsDebugEnvFlagEnabled(string name)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }
 }

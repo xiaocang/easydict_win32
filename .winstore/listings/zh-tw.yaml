@@ -5,42 +5,33 @@ sortTitle: Easydict
 voiceTitle: 易詞典
 shortDescription: 輕鬆查詞翻譯
 description: |-
-  Easydict Windows 版是一款免費開源的翻譯和詞典工具，提供 20 種翻譯服務的即時存取。完整原始碼已在 GitHub 上以 GPL-3.0 授權條款開放。無論您需要快速查詞、全文翻譯，還是支援即時串流輸出的 AI 翻譯，Easydict 都能滿足您的需求。
+  Easydict Windows 版是一款免費開源的翻譯與詞典工具，提供 Copilot+ PC 增強型本機 AI 翻譯。
+  - Copilot+ PC 增強型本機 AI — Copilot+ PC 上使用 Phi Silica，一般 Windows PC 上使用 Foundry Local，OpenVINO NLLB-200 作為離線備援
+  - 20+ 翻譯服務 — Google、DeepL、Bing、OpenAI、Gemini、DeepSeek、Groq、智譜 AI 等
+  - 即時 AI 串流翻譯、OCR 截圖翻譯、PDF/Markdown 長文件翻譯
 
-  本應用程式是熱門 macOS Easydict 應用程式的 Windows 移植版，採用現代 .NET 和 WinUI 3 技術建構，提供原生 Windows 體驗。
+  在搭載 40+ TOPS NPU 的 Copilot+ PC 上，Easydict 使用 Phi Silica 進行快速、私密的裝置端翻譯。一般 Windows PC 上的標準翻譯功能仍可完整使用。
+
+  Easydict 將裝置端本機 AI、傳統翻譯引擎與現代雲端 AI 模型整合為統一的工作流程，從快速查詞到全文翻譯。本應用程式是熱門 macOS Easydict 應用程式的 Windows 移植版，採用現代 .NET 和 WinUI 3 技術建構，提供原生 Windows 體驗。
 
   核心亮點：
+  - 一站式翻譯：Google、DeepL、Bing 等 20+ 服務
+  - 多 AI 支援：OpenAI、Gemini、DeepSeek、Groq、智譜 AI 等
+  - OCR 截圖翻譯：基於 Windows 原生 OCR
+  - PDF 與長文翻譯：支援版面與公式保留
+  - MDX 自訂詞典：滿足進階查詞需求
+  - 原生 Windows 體驗：劃詞即譯
+  - 多種 LLM 即時 AI 串流翻譯
+  - 多種視窗模式、全域快速鍵、剪貼簿監聽、系統匣
+  - 文字轉語音、深色模式、高 DPI 顯示
 
-  - 20 種翻譯服務：Google 翻譯、Google 詞典、Bing 翻譯、DeepL、OpenAI、Gemini、DeepSeek、Groq、智譜 AI、GitHub Models、豆包、火山翻譯、彩雲小譯、小牛翻譯、Linguee、Ollama、Windows Local AI 等
-  - AI 串流翻譯：即時觀看 LLM 翻譯結果逐字生成
-  - 本機 AI 翻譯：在支援的 Copilot+ PC 上使用 Phi Silica，本機 OpenVINO NLLB-200 可作為優先嘗試 NPU 的備援
-  - 文法校正：AI 智慧文法校正，詳細說明錯誤原因
-  - 長文件翻譯：支援 PDF、純文字和 Markdown 檔案翻譯，具備 ML 版面偵測、公式保護、並行翻譯和雙語匯出功能
-  - 詞典模式：透過 Google Dict 查詢單詞音標、釋義、詞性和例句
-  - MDX 詞典：匯入 MDict (.mdx) 詞典檔案，支援離線查詞和豐富的 HTML 渲染
-  - 多種視窗模式：完整主視窗、精巧迷你視窗或常駐固定視窗
-  - 劃詞翻譯：在任意位置選取文字，點擊浮動翻譯按鈕即可翻譯
-  - OCR 截圖翻譯：類似 Snipaste 的截圖體驗 — 選取螢幕區域，OCR 辨識文字並即時翻譯，使用 Windows OCR API
-  - 全域快速鍵：透過可自訂的鍵盤快速鍵隨時隨地翻譯
-  - 系統匣：安靜地在背景執行，需要時隨時可用
-  - 剪貼簿監聽：自動翻譯複製的文字
-  - 深色/淺色主題：跟隨 Windows 系統主題
-  - 文字轉語音：朗讀原文和翻譯結果
-  - 高 DPI 支援：在任何顯示器上都清晰銳利
-  - 40+ 語種支援：可自訂語言選擇，從 40 多種語言中選擇顯示在來源語言/目標語言選擇器中的語種，涵蓋東亞、歐洲、中東、南亞和東南亞語言
-
-  適合學生、職場人士、翻譯工作者以及需要快速、可靠多語言翻譯的所有人。
+  Easydict 包含 AI 產生的翻譯和文法校正功能，AI 輸出可能存在差異，請使用者自行檢閱。
 features:
-- 20 種翻譯服務，包括 Google、Bing、DeepL、OpenAI、Gemini、DeepSeek 和 Windows Local AI
+- 'Copilot+ PC 增強型本機 AI 翻譯：Phi Silica、Foundry Local 和 OpenVINO NLLB-200 離線備援'
+- 支援 Copilot+ PC（40+ TOPS）的 NPU 加速裝置端翻譯，一般 Windows PC 自動回退
+- 20+ 翻譯服務，包括 Google、Bing、DeepL、OpenAI、Gemini、DeepSeek 和火山翻譯
 - AI 服務即時串流翻譯
-- 本機 AI 翻譯，支援 Phi Silica、Foundry Local 和 OpenVINO 離線備援
-- AI 智慧文法校正，偵測並說明文法錯誤
-- 長文件翻譯，支援 PDF、文字和 Markdown 雙語匯出
-- 詞典模式，查詢音標、釋義和例句
-- MDX (MDict) 詞典匯入，支援離線查詞
-- 多種視窗模式：主視窗、迷你視窗和固定視窗
-- 劃詞翻譯，選取文字點擊浮動按鈕即可翻譯
-- OCR 截圖翻譯，類似 Snipaste 的截圖辨識翻譯
+- '多種視窗模式：主視窗、迷你視窗和固定視窗'
 - 全域快速鍵，從任意應用程式中即時翻譯
 - 系統匣整合，支援背景執行
 - 剪貼簿監聽，自動翻譯
@@ -49,17 +40,21 @@ features:
 - HTTP 代理支援
 - 透過 Ollama 支援本機 LLM
 - 自訂 OpenAI 相容服務支援
-- 40+ 可自訂來源語言和目標語言
 - 高 DPI 和多顯示器支援
+- 劃詞翻譯，選取文字點擊浮動按鈕即可翻譯
+- 'OCR 截圖翻譯：類似 Snipaste 的截圖體驗，選取螢幕區域，OCR 辨識文字並即時翻譯，使用 Windows OCR API'
+- '文法校正：AI 智慧文法校正，詳細說明錯誤原因'
+- '長文件翻譯：支援 PDF、純文字和 Markdown 檔案翻譯，具備 ML 版面偵測、公式保護、並行處理和雙語匯出功能'
+- 'MDX 詞典：匯入 MDict (.mdx) 詞典檔案，支援離線查詞和豐富的 HTML 渲染'
 keywords:
 - 翻譯
 - 詞典
-- 翻譯器
-- 開源
 - 大型語言模型
+- 本機 AI
+- for Copilot+ PC
 - OCR
 - 劃詞翻譯
-releaseNotes: ''
+releaseNotes: 新增 Copilot+ PC 支援，提供針對 NPU 最佳化的裝置端本機 AI 翻譯。所有 Windows 裝置上的標準翻譯服務仍可完整使用。
 copyrightAndTrademarkInfo: Copyright (c) xiaocang. 基於 GPL-3.0 授權條款。
 additionalLicenseTerms: ''
 developedBy: xiaocang

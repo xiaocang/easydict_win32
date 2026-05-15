@@ -40,6 +40,8 @@
 
 This is a Windows port of [Easydict](https://github.com/tisfeng/Easydict), originally a macOS translation dictionary app. The project was developed using **Vibe Coding** - AI-assisted programming to migrate the Swift/SwiftUI codebase to .NET + WinUI 3.
 
+Easydict supports **Copilot+ PC enhanced local AI translation**: on supported Copilot+ PCs with a 40+ TOPS NPU, translations run on-device via Phi Silica for fast, private output. Foundry Local is supported on regular Windows PCs, with OpenVINO NLLB-200 as an offline fallback — standard translation services remain fully available on every Windows device.
+
 While the feature set is not yet complete compared to the macOS version, this port fills the gap for Windows users who want a convenient translation tool with global hotkey support and multiple translation services.
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
@@ -73,6 +75,8 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 ## Features
 
+- **Copilot+ PC Enhanced Local AI Translation** - Windows Local AI runs on-device with NPU acceleration via Phi Silica on supported Copilot+ PCs (40+ TOPS), Foundry Local on regular Windows PCs, or OpenVINO NLLB-200 as an offline fallback. Auto mode picks the best available provider; standard cloud translation services remain fully available everywhere.
+
 - **OCR Screenshot Translate** - Snipaste-style screen capture: press `Ctrl+Alt+S` to capture a screen region, auto-detect windows or drag to select, then OCR the text and translate. Uses Windows OCR API with configurable recognition language. Also supports silent OCR (`Ctrl+Alt+Shift+S`) that copies recognized text to clipboard without translating.
 
 - **Mouse Selection Translate** - Select text in any app (drag, double-click, or triple-click) and click the floating pop button to translate instantly in Mini Window
@@ -101,8 +105,6 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Fixed Window - Persistent translation window
 
 - **LLM Streaming Translation** - Real-time display of translation results
-
-- **Local AI Translation** - Windows Local AI can use Phi Silica on supported Copilot+ PCs, Foundry Local on ordinary Windows PCs, or OpenVINO NLLB-200 as an offline fallback
 
 - **System Tray** - Minimize to tray, run in background
 

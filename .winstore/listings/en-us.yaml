@@ -5,42 +5,33 @@ sortTitle: Easydict
 voiceTitle: Easy Dict
 shortDescription: Easy to look up words or translate text
 description: |-
-  Easydict for Windows is a free and open-source translation and dictionary tool that provides instant access to 20 translation services. The full source code is available on GitHub under the GPL-3.0 license. Whether you need quick word lookups, full-text translation, or AI-powered translations with real-time streaming, Easydict has you covered.
+  Easydict for Windows is a free, open-source translation and dictionary tool with Copilot+ PC enhanced local AI translation.
+  - Copilot+ PC enhanced local AI — Phi Silica on Copilot+ PCs, Foundry Local on regular Windows PCs, OpenVINO NLLB-200 offline fallback
+  - 20+ translation services — Google, DeepL, Bing, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, and more
+  - Real-time AI streaming translation, OCR screenshot translation, PDF/Markdown long-document translation
 
-  A Windows port of the popular macOS Easydict app, built with modern .NET and WinUI 3 technologies for a native Windows experience.
+  On supported Copilot+ PCs with a 40+ TOPS NPU, Easydict translates with Phi Silica for fast, private, on-device output. Standard translation features remain fully available on every Windows device.
 
-  Key Highlights:
+  Easydict combines on-device local AI, traditional translation engines, and modern cloud AI models into a unified workflow — from quick word lookups to full document translation. It is a Windows port of the popular macOS Easydict app, built with modern .NET and WinUI 3 for a native experience.
 
-  - 20 Translation Services: Google Translate, Google Dict, Bing Translate, DeepL, OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, GitHub Models, Doubao, Volcano Engine, Caiyun, NiuTrans, Linguee, Ollama, Windows Local AI, and more
-  - AI-Powered Streaming: Watch LLM translations appear in real-time as they're generated
-  - Local AI Translation: Use Phi Silica on supported Copilot+ PCs, Foundry Local on ordinary Windows PCs, or OpenVINO NLLB-200 as an offline fallback
-  - Grammar Correction: AI-powered grammar correction with detailed explanations of errors
-  - Long Document Translation: Translate PDF, plain text, and Markdown files with ML-based layout detection, formula protection, parallel processing, and bilingual export
-  - Dictionary Mode: Look up words with phonetics, definitions, parts of speech, and example sentences via Google Dict
-  - MDX Dictionary: Import MDict (.mdx) dictionary files for offline word lookups with rich HTML rendering
-  - Multiple Window Modes: Full main window, compact mini window, or persistent fixed window
-  - Mouse Selection Translation: Select text anywhere and click the floating pop button to translate instantly
-  - OCR Screenshot Translation: Snipaste-style screen capture — select a region, OCR the text, and translate instantly using Windows OCR API
-  - Global Hotkeys: Translate from anywhere with customizable keyboard shortcuts
-  - System Tray: Runs quietly in the background, always ready when you need it
-  - Clipboard Monitoring: Automatically translate copied text
-  - Dark/Light Theme: Follows your Windows system theme
-  - Text-to-Speech: Listen to source and translated text
-  - High DPI Support: Crystal clear on any display
-  - 40+ Languages: Customizable language selection — choose which languages appear in source/target pickers from over 40 options spanning East Asian, European, Middle Eastern, South Asian, and Southeast Asian languages
+  Highlights:
+  - All-in-one translation: Google, DeepL, Bing and 20+ services
+  - Multi-AI support: OpenAI, Gemini, DeepSeek, Groq, Zhipu AI, and more
+  - OCR screenshot translation using native Windows OCR
+  - PDF and long-text translation with layout and formula preservation
+  - MDX custom dictionary support for advanced workflows
+  - Native Windows experience with instant selection translation
+  - Real-time AI streaming translation with multiple LLMs
+  - Multiple window modes, global hotkeys, clipboard monitoring, system tray
+  - Text-to-Speech, dark mode, high DPI displays
 
-  Perfect for students, professionals, translators, and anyone who needs quick, reliable translations across multiple languages.
+  Easydict includes AI-generated translation and grammar-correction features. AI output may vary and should be reviewed by the user.
 features:
-- 20 translation services including Google, Bing, DeepL, OpenAI, Gemini, DeepSeek, and Windows Local AI
+- 'Copilot+ PC enhanced local AI translation: Phi Silica, Foundry Local, and OpenVINO NLLB-200 offline fallback'
+- NPU-accelerated on-device translation on Copilot+ PCs (40+ TOPS), with graceful fallback on regular Windows PCs
+- 20+ translation services including Google, Bing, DeepL, OpenAI, Gemini, DeepSeek, and Volcano Engine
 - Real-time LLM streaming translation with AI services
-- Local AI translation with Phi Silica, Foundry Local, and OpenVINO offline fallback
-- Grammar correction with AI-powered error detection and explanation
-- Long document translation for PDF, text, and Markdown with bilingual export
-- Dictionary mode with phonetics, definitions, and example sentences
-- MDX (MDict) dictionary import for offline word lookups
 - 'Multiple window modes: Main, Mini, and Fixed windows'
-- Mouse selection translation with floating pop button
-- OCR screenshot translation with Snipaste-style screen capture
 - Global hotkeys for instant translation from any application
 - System tray integration for background operation
 - Clipboard monitoring with auto-translate
@@ -49,17 +40,21 @@ features:
 - HTTP proxy support for network configuration
 - Support for local LLM via Ollama
 - Custom OpenAI-compatible service support
-- 40+ customizable languages for source and target pickers
 - High DPI and multi-monitor support
+- Mouse selection translation with floating pop button
+- 'OCR Screenshot Translation: Snipaste-style screen capture — select a region, OCR the text, and translate instantly using Windows OCR API'
+- 'Grammar Correction: AI-powered grammar correction with detailed explanations of errors'
+- 'Long Document Translation: Translate PDF, plain text, and Markdown files with ML-based layout detection, formula protection, parallel processing, and bilingual export'
+- 'MDX Dictionary: Import MDict (.mdx) dictionary files for offline word lookups with rich HTML rendering'
 keywords:
 - translate
 - translation
 - dictionary
-- translator
-- open source
 - LLM
+- local AI
+- for Copilot+ PC
 - OCR
-releaseNotes: ''
+releaseNotes: Added Copilot+ PC support with on-device local AI translation, optimized for NPU acceleration. Standard translation services remain available on every Windows device.
 copyrightAndTrademarkInfo: Copyright (c) xiaocang. Licensed under GPL-3.0.
 additionalLicenseTerms: ''
 developedBy: xiaocang

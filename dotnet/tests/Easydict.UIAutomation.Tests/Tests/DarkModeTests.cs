@@ -5,6 +5,7 @@ using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Xunit;
 using Xunit.Abstractions;
@@ -681,12 +682,25 @@ public class DarkModeTests : IDisposable
 
     /// <summary>
     /// Dismiss the unsaved changes confirmation dialog by clicking "Don't Save".
+    /// FindFirstDescendant can throw COMException(E_UNEXPECTED) while the UIA
+    /// tree is transitioning between Settings and Main — swallow it inside the
+    /// retry loop so the operation retries instead of failing the test outright.
     /// </summary>
     private void DismissUnsavedChangesDialog(Window window)
     {
         var dontSaveButton = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByName("Don't Save")) ??
-                  window.FindFirstDescendant(cf => cf.ByName("不保存")),
+            () =>
+            {
+                try
+                {
+                    return window.FindFirstDescendant(cf => cf.ByName("Don't Save"))
+                        ?? window.FindFirstDescendant(cf => cf.ByName("不保存"));
+                }
+                catch (COMException)
+                {
+                    return null;
+                }
+            },
             TimeSpan.FromSeconds(3)).Result;
 
         if (dontSaveButton != null)

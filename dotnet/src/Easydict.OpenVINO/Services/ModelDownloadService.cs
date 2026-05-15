@@ -165,11 +165,11 @@ public sealed class ModelDownloadService
 
         try
         {
+            long fileBytesDone = 0;
             await using (var network = await response.Content.ReadAsStreamAsync(cancellationToken))
             await using (var file_ = File.Create(tmpPath))
             {
                 var buffer = new byte[81_920];
-                long fileBytesDone = 0;
                 int read;
                 while ((read = await network.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
                 {
@@ -182,6 +182,19 @@ public sealed class ModelDownloadService
                         fileTotalBytes,
                         Percent(bytesDoneAcrossFiles + fileBytesDone, totalBytes)));
                 }
+            }
+
+            // Truncated-transfer check: when the server advertised Content-Length
+            // we MUST receive that many bytes. A short read indicates the
+            // connection was closed mid-stream; without this check (and with
+            // Sha256 null, see ModelManifest), a partial ONNX file would be
+            // moved into place and treated as a successful install.
+            if (fileTotalBytes is { } expectedBytes && fileBytesDone != expectedBytes)
+            {
+                throw new EndOfStreamException(
+                    $"Truncated download for '{file.LocalFileName}': " +
+                    $"expected {expectedBytes} bytes (Content-Length), got {fileBytesDone}. " +
+                    "Retry the download.");
             }
 
             // Integrity check before publishing: when the manifest declares an

@@ -90,10 +90,9 @@ public sealed class FoundryLocalService : BaseOpenAIService, ILocalModelProvider
         TranslationRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await EnsureEndpointAsync(cancellationToken).ConfigureAwait(false);
-        await EnsureModelAsync(cancellationToken).ConfigureAwait(false);
-
-        await foreach (var chunk in base.TranslateStreamAsync(request, cancellationToken)
+        await foreach (var chunk in StreamWithEndpointRefreshAsync(
+            () => base.TranslateStreamAsync(request, cancellationToken),
+            cancellationToken)
             .WithCancellation(cancellationToken)
             .ConfigureAwait(false))
         {
@@ -105,10 +104,9 @@ public sealed class FoundryLocalService : BaseOpenAIService, ILocalModelProvider
         GrammarCorrectionRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await EnsureEndpointAsync(cancellationToken).ConfigureAwait(false);
-        await EnsureModelAsync(cancellationToken).ConfigureAwait(false);
-
-        await foreach (var chunk in base.CorrectGrammarStreamAsync(request, cancellationToken)
+        await foreach (var chunk in StreamWithEndpointRefreshAsync(
+            () => base.CorrectGrammarStreamAsync(request, cancellationToken),
+            cancellationToken)
             .WithCancellation(cancellationToken)
             .ConfigureAwait(false))
         {
@@ -210,6 +208,104 @@ public sealed class FoundryLocalService : BaseOpenAIService, ILocalModelProvider
         {
             Debug.WriteLine($"[FoundryLocal] Failed to resolve model id: {ex.Message}");
         }
+    }
+
+    private async IAsyncEnumerable<string> StreamWithEndpointRefreshAsync(
+        Func<IAsyncEnumerable<string>> createStream,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var retriedAfterEndpointRefresh = false;
+
+        while (true)
+        {
+            await EnsureEndpointAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureModelAsync(cancellationToken).ConfigureAwait(false);
+
+            var emittedAnyChunk = false;
+            var shouldRetry = false;
+
+            await using var enumerator = createStream().GetAsyncEnumerator(cancellationToken);
+            while (true)
+            {
+                bool hasNext;
+                string chunk;
+
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                    if (!hasNext)
+                    {
+                        yield break;
+                    }
+
+                    chunk = enumerator.Current;
+                }
+                catch (TranslationException ex) when (!emittedAnyChunk && !retriedAfterEndpointRefresh && IsEndpointRefreshableNetworkError(ex))
+                {
+                    if (!await TryRefreshEndpointAfterNetworkFailureAsync(ex, cancellationToken).ConfigureAwait(false))
+                    {
+                        throw;
+                    }
+
+                    retriedAfterEndpointRefresh = true;
+                    shouldRetry = true;
+                    break;
+                }
+
+                emittedAnyChunk = true;
+                yield return chunk;
+            }
+
+            if (!shouldRetry)
+            {
+                yield break;
+            }
+        }
+    }
+
+    private async Task<bool> TryRefreshEndpointAfterNetworkFailureAsync(
+        TranslationException ex,
+        CancellationToken cancellationToken)
+    {
+        var previousEndpoint = Endpoint;
+        if (!IsLoopbackEndpoint(previousEndpoint))
+        {
+            return false;
+        }
+
+        try
+        {
+            var resolvedEndpoint = await _endpointResolver
+                .ResolveChatCompletionsEndpointAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var normalizedEndpoint = NormalizeChatCompletionsEndpoint(resolvedEndpoint);
+            if (string.IsNullOrWhiteSpace(normalizedEndpoint))
+            {
+                return false;
+            }
+
+            _resolvedEndpoint = normalizedEndpoint;
+            _resolvedModel = null;
+            Debug.WriteLine(
+                $"[FoundryLocal] Refreshed endpoint after {ex.ErrorCode}: {previousEndpoint} -> {normalizedEndpoint}");
+            return true;
+        }
+        catch (Exception refreshError) when (refreshError is not OperationCanceledException)
+        {
+            Debug.WriteLine($"[FoundryLocal] Failed to refresh endpoint after network error: {refreshError.Message}");
+            return false;
+        }
+    }
+
+    private static bool IsEndpointRefreshableNetworkError(TranslationException ex)
+    {
+        return ex.ErrorCode is TranslationErrorCode.NetworkError or TranslationErrorCode.Timeout;
+    }
+
+    private static bool IsLoopbackEndpoint(string? endpoint)
+    {
+        return Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            && uri.IsLoopback;
     }
 
     internal static string? GetModelsEndpoint(string chatCompletionsEndpoint)
@@ -323,6 +419,17 @@ public sealed class FoundryLocalService : BaseOpenAIService, ILocalModelProvider
                 };
                 return builder.Uri.ToString().TrimEnd('/');
             }
+
+            if (path.StartsWith("/openai/load/", StringComparison.OrdinalIgnoreCase))
+            {
+                var builder = new UriBuilder(uri)
+                {
+                    Path = "/v1/chat/completions",
+                    Query = "",
+                    Fragment = "",
+                };
+                return builder.Uri.ToString().TrimEnd('/');
+            }
         }
 
         if (normalized.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
@@ -360,17 +467,23 @@ public sealed class FoundryLocalCliEndpointResolver : IFoundryLocalEndpointResol
 
     public async Task<string?> ResolveChatCompletionsEndpointAsync(CancellationToken cancellationToken)
     {
-        var output = await RunFoundryAsync(["service", "status", "--json"], cancellationToken)
-            .ConfigureAwait(false);
-        var endpoint = TryExtractEndpoint(output);
-        if (!string.IsNullOrWhiteSpace(endpoint))
+        foreach (var arguments in new[]
         {
-            return endpoint;
+            new[] { "service", "status" },
+            new[] { "service", "status", "--verbose" },
+            new[] { "service", "status", "--json" },
+        })
+        {
+            var output = await RunFoundryAsync(arguments, cancellationToken)
+                .ConfigureAwait(false);
+            var endpoint = TryExtractEndpoint(output);
+            if (!string.IsNullOrWhiteSpace(endpoint))
+            {
+                return endpoint;
+            }
         }
 
-        output = await RunFoundryAsync(["service", "status"], cancellationToken)
-            .ConfigureAwait(false);
-        return TryExtractEndpoint(output);
+        return TryExtractEndpointFromDefaultLogDirectory();
     }
 
     public static string? TryExtractEndpoint(string? output)
@@ -391,6 +504,75 @@ public sealed class FoundryLocalCliEndpointResolver : IFoundryLocalEndpointResol
                 endpoint.Contains("localhost", StringComparison.OrdinalIgnoreCase)
                 || endpoint.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase))
             ?? candidates.FirstOrDefault();
+    }
+
+    public static string? TryExtractLatestEndpoint(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return null;
+        }
+
+        var lines = output.Split(
+            ['\r', '\n'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            var endpoint = TryExtractEndpoint(lines[i]);
+            if (!string.IsNullOrWhiteSpace(endpoint))
+            {
+                return endpoint;
+            }
+        }
+
+        return null;
+    }
+
+    public static string? TryExtractEndpointFromLogDirectory(string? logDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(logDirectory) || !Directory.Exists(logDirectory))
+        {
+            return null;
+        }
+
+        foreach (var logPath in Directory.EnumerateFiles(logDirectory, "foundry*.log")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .Take(5))
+        {
+            try
+            {
+                using var stream = new FileStream(
+                    logPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream);
+                var endpoint = TryExtractLatestEndpoint(reader.ReadToEnd());
+                if (!string.IsNullOrWhiteSpace(endpoint))
+                {
+                    return endpoint;
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private static string? TryExtractEndpointFromDefaultLogDirectory()
+    {
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrWhiteSpace(userProfile))
+        {
+            return null;
+        }
+
+        return TryExtractEndpointFromLogDirectory(Path.Combine(userProfile, ".foundry", "logs"));
     }
 
     private static async Task<string> RunFoundryAsync(

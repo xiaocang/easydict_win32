@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text.Json;
 using Easydict.WindowsAI;
 using Easydict.WindowsAI.Services;
 
@@ -6,7 +9,83 @@ namespace Easydict.WinUI.Services;
 internal sealed record PhiSilicaModelPreparationSnapshot(
     string ResourceKey,
     bool IsPreparing,
-    WindowsAIReadyState? ReadyState = null);
+    WindowsAIReadyState? ReadyState = null,
+    DeliveryOptimizationEstimate? DownloadEstimate = null)
+{
+    public double? ProgressPercent => DownloadEstimate?.ProgressPercent;
+}
+
+internal static class PhiSilicaModelPreparationProgressFormatter
+{
+    public static string FormatText(PhiSilicaModelPreparationSnapshot snapshot)
+    {
+        var loc = LocalizationService.Instance;
+        var text = loc.GetString(snapshot.ResourceKey);
+        if (string.IsNullOrWhiteSpace(text) || text == snapshot.ResourceKey)
+        {
+            text = "Preparing local AI model...";
+        }
+
+        if (snapshot.DownloadEstimate is not { } estimate)
+        {
+            return text;
+        }
+
+        var estimateTemplate = loc.GetString("PhiSilicaPreparationProgress_DeliveryOptimizationEstimate");
+        if (string.IsNullOrWhiteSpace(estimateTemplate)
+            || estimateTemplate == "PhiSilicaPreparationProgress_DeliveryOptimizationEstimate")
+        {
+            estimateTemplate = "Current package: {0}% ({1} of {2}), about {3} remaining. More Windows-managed components may follow.";
+        }
+
+        var eta = estimate.EstimatedTimeRemaining is { } remaining
+            ? FormatDuration(remaining)
+            : loc.GetString("PhiSilicaPreparationProgress_TimeUnknown");
+        if (string.IsNullOrWhiteSpace(eta) || eta == "PhiSilicaPreparationProgress_TimeUnknown")
+        {
+            eta = "unknown time";
+        }
+
+        var detail = string.Format(
+            CultureInfo.CurrentCulture,
+            estimateTemplate,
+            Math.Clamp((int)Math.Round(estimate.ProgressPercent), 0, 100),
+            FormatBytes(estimate.BytesDownloaded),
+            FormatBytes(estimate.TotalBytes),
+            eta);
+
+        return $"{text} {detail}";
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        const double KiB = 1024d;
+        const double MiB = KiB * 1024d;
+        const double GiB = MiB * 1024d;
+
+        if (bytes >= GiB)
+        {
+            return string.Format(CultureInfo.CurrentCulture, "{0:0.##} GB", bytes / GiB);
+        }
+
+        if (bytes >= MiB)
+        {
+            return string.Format(CultureInfo.CurrentCulture, "{0:0.#} MB", bytes / MiB);
+        }
+
+        return string.Format(CultureInfo.CurrentCulture, "{0:N0} KB", bytes / KiB);
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalMinutes >= 1)
+        {
+            return string.Format(CultureInfo.CurrentCulture, "{0:0} min", Math.Ceiling(duration.TotalMinutes));
+        }
+
+        return string.Format(CultureInfo.CurrentCulture, "{0:0} sec", Math.Max(1, Math.Ceiling(duration.TotalSeconds)));
+    }
+}
 
 /// <summary>
 /// Shares the single Windows-managed Phi Silica preparation operation across
@@ -22,6 +101,10 @@ internal sealed class PhiSilicaModelPreparationCoordinator
     private Task<WindowsAIReadyState>? _activePreparationTask;
     private PhiSilicaModelPreparationSnapshot _currentSnapshot =
         new("PhiSilicaPreparationProgress_Checking", IsPreparing: false);
+
+    private static readonly TimeSpan DeliveryOptimizationPollInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan DeliveryOptimizationQueryTimeout = TimeSpan.FromSeconds(4);
+    private const long MinimumCandidateFileSizeBytes = 100L * 1024L * 1024L;
 
     private PhiSilicaModelPreparationCoordinator()
     {
@@ -74,6 +157,7 @@ internal sealed class PhiSilicaModelPreparationCoordinator
 
         if (reusedExisting)
         {
+            Report("PhiSilicaPreparationProgress_ReusingExisting");
             reportProgress?.Invoke("PhiSilicaPreparationProgress_ReusingExisting");
         }
 
@@ -101,11 +185,31 @@ internal sealed class PhiSilicaModelPreparationCoordinator
                 return finalState;
             }
 
+            var existingEstimate = await TryGetDeliveryOptimizationEstimateAsync(CancellationToken.None);
+            if (existingEstimate is not null)
+            {
+                Report(CreateDeliveryOptimizationSnapshot(
+                    "PhiSilicaPreparationProgress_ReusingExisting",
+                    existingEstimate));
+            }
+
             Report("PhiSilicaPreparationProgress_Requesting");
             await Task.Yield();
 
             Report("PhiSilicaPreparationProgress_Waiting");
-            finalState = await PhiSilicaAvailability.Client.EnsureReadyAsync(CancellationToken.None);
+            var ensureReadyTask = PhiSilicaAvailability.Client.EnsureReadyAsync(CancellationToken.None);
+            using var pollCts = new CancellationTokenSource();
+            var pollTask = PollDeliveryOptimizationProgressAsync(ensureReadyTask, pollCts.Token);
+
+            try
+            {
+                finalState = await ensureReadyTask;
+            }
+            finally
+            {
+                pollCts.Cancel();
+                try { await pollTask; } catch (OperationCanceledException) { }
+            }
 
             Report("PhiSilicaPreparationProgress_Finalizing");
             return finalState;
@@ -118,13 +222,274 @@ internal sealed class PhiSilicaModelPreparationCoordinator
 
     private void Report(string resourceKey)
     {
-        var snapshot = new PhiSilicaModelPreparationSnapshot(resourceKey, IsPreparing: true);
+        Report(new PhiSilicaModelPreparationSnapshot(resourceKey, IsPreparing: true));
+    }
+
+    private void Report(PhiSilicaModelPreparationSnapshot snapshot)
+    {
         lock (_gate)
         {
+            if (_currentSnapshot == snapshot)
+            {
+                return;
+            }
             _currentSnapshot = snapshot;
         }
 
         ProgressChanged?.Invoke(this, snapshot);
+    }
+
+    private async Task PollDeliveryOptimizationProgressAsync(
+        Task<WindowsAIReadyState> preparationTask,
+        CancellationToken cancellationToken)
+    {
+        while (!preparationTask.IsCompleted && !cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(DeliveryOptimizationPollInterval, cancellationToken);
+
+            var estimate = await TryGetDeliveryOptimizationEstimateAsync(cancellationToken);
+            if (estimate is null)
+            {
+                continue;
+            }
+
+            Report(CreateDeliveryOptimizationSnapshot(
+                "PhiSilicaPreparationProgress_Waiting",
+                estimate));
+        }
+    }
+
+    private static PhiSilicaModelPreparationSnapshot CreateDeliveryOptimizationSnapshot(
+        string resourceKey,
+        DeliveryOptimizationEstimate estimate)
+    {
+        return new PhiSilicaModelPreparationSnapshot(
+            resourceKey,
+            IsPreparing: true,
+            DownloadEstimate: estimate);
+    }
+
+    private static async Task<DeliveryOptimizationEstimate?> TryGetDeliveryOptimizationEstimateAsync(
+        CancellationToken cancellationToken)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(DeliveryOptimizationQueryTimeout);
+
+        try
+        {
+            var jobs = await QueryDeliveryOptimizationJobsAsync(timeoutCts.Token);
+            return SelectDeliveryOptimizationCandidate(jobs);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[PhiSilicaPreparation] Delivery Optimization progress query failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static DeliveryOptimizationEstimate? SelectDeliveryOptimizationCandidate(
+        IReadOnlyList<DeliveryOptimizationJobSnapshot> jobs)
+    {
+        var candidate = jobs
+            .Select(job => (job, kind: ParseDeliveryOptimizationStatus(job.StatusName)))
+            .Where(t => t.job.FileSize >= MinimumCandidateFileSizeBytes
+                && t.job.TotalBytesDownloaded > 0
+                && t.kind != DeliveryOptimizationStatusKind.Other)
+            .OrderBy(t => (int)t.kind)
+            .ThenByDescending(t => t.job.TotalBytesDownloaded)
+            .Select(t => t.job)
+            .FirstOrDefault();
+
+        if (candidate is null || candidate.FileSize <= 0)
+        {
+            return null;
+        }
+
+        var percent = candidate.TotalBytesDownloaded * 100d / candidate.FileSize;
+        TimeSpan? eta = null;
+        if (candidate.DownloadDurationSeconds > 5
+            && candidate.TotalBytesDownloaded < candidate.FileSize)
+        {
+            var bytesPerSecond = candidate.TotalBytesDownloaded / candidate.DownloadDurationSeconds;
+            if (bytesPerSecond > 0)
+            {
+                eta = TimeSpan.FromSeconds((candidate.FileSize - candidate.TotalBytesDownloaded) / bytesPerSecond);
+            }
+        }
+
+        return new DeliveryOptimizationEstimate(
+            Math.Clamp(percent, 0d, 100d),
+            candidate.TotalBytesDownloaded,
+            candidate.FileSize,
+            eta);
+    }
+
+    private static DeliveryOptimizationStatusKind ParseDeliveryOptimizationStatus(string statusName)
+    {
+        if (string.Equals(statusName, "Downloading", StringComparison.OrdinalIgnoreCase))
+        {
+            return DeliveryOptimizationStatusKind.Downloading;
+        }
+
+        if (string.Equals(statusName, "Transferring", StringComparison.OrdinalIgnoreCase))
+        {
+            return DeliveryOptimizationStatusKind.Transferring;
+        }
+
+        if (string.Equals(statusName, "Caching", StringComparison.OrdinalIgnoreCase))
+        {
+            return DeliveryOptimizationStatusKind.Caching;
+        }
+
+        return DeliveryOptimizationStatusKind.Other;
+    }
+
+    private static async Task<IReadOnlyList<DeliveryOptimizationJobSnapshot>> QueryDeliveryOptimizationJobsAsync(
+        CancellationToken cancellationToken)
+    {
+        const string command = """
+            $ErrorActionPreference = 'SilentlyContinue';
+            @(Get-DeliveryOptimizationStatus | Select-Object `
+                @{Name='FileId';Expression={$_.FileId}}, `
+                @{Name='StatusName';Expression={$_.Status.ToString()}}, `
+                @{Name='FileSize';Expression={[Int64]$_.FileSize}}, `
+                @{Name='TotalBytesDownloaded';Expression={[Int64]$_.TotalBytesDownloaded}}, `
+                @{Name='DownloadDurationSeconds';Expression={[Double]$_.DownloadDuration.TotalSeconds}}) |
+                ConvertTo-Json -Compress -Depth 3
+            """;
+
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            },
+            EnableRaisingEvents = false,
+        };
+        process.StartInfo.ArgumentList.Add("-NoProfile");
+        process.StartInfo.ArgumentList.Add("-NonInteractive");
+        process.StartInfo.ArgumentList.Add("-Command");
+        process.StartInfo.ArgumentList.Add(command);
+
+        string output;
+        try
+        {
+            process.Start();
+            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+
+            output = await outputTask;
+            _ = await errorTask;
+        }
+        finally
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+
+        if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
+        {
+            return [];
+        }
+
+        return ParseDeliveryOptimizationJobs(output);
+    }
+
+    private static IReadOnlyList<DeliveryOptimizationJobSnapshot> ParseDeliveryOptimizationJobs(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            return document.RootElement
+                .EnumerateArray()
+                .Select(ParseDeliveryOptimizationJob)
+                .Where(job => job is not null)
+                .Cast<DeliveryOptimizationJobSnapshot>()
+                .ToArray();
+        }
+
+        if (document.RootElement.ValueKind == JsonValueKind.Object)
+        {
+            var job = ParseDeliveryOptimizationJob(document.RootElement);
+            return job is null ? [] : [job];
+        }
+
+        return [];
+    }
+
+    private static DeliveryOptimizationJobSnapshot? ParseDeliveryOptimizationJob(JsonElement element)
+    {
+        var statusName = GetString(element, "StatusName");
+        var fileSize = GetInt64(element, "FileSize");
+        var totalBytesDownloaded = GetInt64(element, "TotalBytesDownloaded");
+        var durationSeconds = GetDouble(element, "DownloadDurationSeconds");
+
+        if (string.IsNullOrWhiteSpace(statusName)
+            || fileSize <= 0
+            || totalBytesDownloaded <= 0)
+        {
+            return null;
+        }
+
+        return new DeliveryOptimizationJobSnapshot(
+            statusName,
+            fileSize,
+            totalBytesDownloaded,
+            durationSeconds);
+    }
+
+    private static string GetString(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property)
+            ? property.GetString() ?? string.Empty
+            : string.Empty;
+    }
+
+    private static long GetInt64(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return 0;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.Number when property.TryGetInt64(out var value) => value,
+            JsonValueKind.String when long.TryParse(property.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) => value,
+            _ => 0,
+        };
+    }
+
+    private static double GetDouble(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return 0;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.Number when property.TryGetDouble(out var value) => value,
+            JsonValueKind.String when double.TryParse(property.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) => value,
+            _ => 0,
+        };
     }
 
     private void Complete(WindowsAIReadyState finalState)
@@ -142,3 +507,23 @@ internal sealed class PhiSilicaModelPreparationCoordinator
         ProgressChanged?.Invoke(this, snapshot);
     }
 }
+
+internal enum DeliveryOptimizationStatusKind
+{
+    Downloading = 0,
+    Transferring = 1,
+    Caching = 2,
+    Other = 3,
+}
+
+internal sealed record DeliveryOptimizationJobSnapshot(
+    string StatusName,
+    long FileSize,
+    long TotalBytesDownloaded,
+    double DownloadDurationSeconds);
+
+internal sealed record DeliveryOptimizationEstimate(
+    double ProgressPercent,
+    long BytesDownloaded,
+    long TotalBytes,
+    TimeSpan? EstimatedTimeRemaining);

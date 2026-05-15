@@ -1194,6 +1194,9 @@
   <data name="PhiSilicaPreparationProgress_Requesting" xml:space="preserve"><value>正在请求 Windows 下载并准备模型…</value></data>
   <data name="PhiSilicaPreparationProgress_Waiting" xml:space="preserve"><value>Windows 正在下载或准备本机模型。这可能是数 GB 级安装…</value></data>
   <data name="PhiSilicaPreparationProgress_Finalizing" xml:space="preserve"><value>正在确认模型状态…</value></data>
+  <data name="PhiSilicaPreparationProgress_ReusingExisting" xml:space="preserve"><value>检测到已有 Windows 下载任务。正在继续准备，并请求 Windows 尽量断点续传/复用已下载内容…</value></data>
+  <data name="PhiSilicaPreparationProgress_DeliveryOptimizationEstimate" xml:space="preserve"><value>当前包：{0}%（{1} / {2}），预计剩余约 {3}。后续可能还有其它 Windows 托管组件。</value></data>
+  <data name="PhiSilicaPreparationProgress_TimeUnknown" xml:space="preserve"><value>未知时间</value></data>
   <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>正在准备本机语言模型…</value></data>
   <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>本机语言模型已就绪。翻译完全在本机进行，不会发送任何文本到外部服务。</value></data>
   <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>当前设备支持本机语言模型，但模型尚未准备。点击“准备模型”以下载并安装。预计是数 GB 级 Windows 托管安装，具体大小取决于设备和 Windows 版本。</value></data>

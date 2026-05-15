@@ -85,7 +85,10 @@ public class SettingsPageSplitTabsTests
         "PhiSilicaPreparationProgress_Checking",
         "PhiSilicaPreparationProgress_Requesting",
         "PhiSilicaPreparationProgress_Waiting",
-        "PhiSilicaPreparationProgress_Finalizing"
+        "PhiSilicaPreparationProgress_Finalizing",
+        "PhiSilicaPreparationProgress_ReusingExisting",
+        "PhiSilicaPreparationProgress_DeliveryOptimizationEstimate",
+        "PhiSilicaPreparationProgress_TimeUnknown"
     ];
 
     private static readonly string[] ExpectedServiceConfigurationIconAssets =
@@ -343,6 +346,37 @@ public class SettingsPageSplitTabsTests
         method.Should().Contain("OnSettingChanged(sender, e)");
         method.Should().NotContain("_settings.Save()");
         method.Should().NotContain("ReconfigureServices()");
+    }
+
+    [Fact]
+    public void SettingsPage_LocalAiProviderSelectionShowsAllConfigsInAutoAndHighlightsFirstAvailable()
+    {
+        var codeBehind = File.ReadAllText(SettingsPagePhiSilicaPath);
+        var method = GetMethodBody(codeBehind, "UpdateLocalAIProviderPanels");
+
+        method.Should().Contain("mode == LocalAIProviderMode.Auto || mode == LocalAIProviderMode.WindowsAI");
+        method.Should().Contain("mode == LocalAIProviderMode.Auto || mode == LocalAIProviderMode.FoundryLocal");
+        method.Should().Contain("mode == LocalAIProviderMode.Auto || mode == LocalAIProviderMode.OpenVINO");
+        method.Should().Contain("UpdateLocalAIProviderPanelEmphasis(mode)");
+
+        var firstAvailableStart = codeBehind.IndexOf(
+            "private LocalAIProviderMode? GetFirstAvailableLocalAIProviderMode()",
+            StringComparison.Ordinal);
+        firstAvailableStart.Should().BeGreaterThanOrEqualTo(0);
+        var firstAvailableEnd = codeBehind.IndexOf(
+            "private static void SetLocalAIProviderPanelEmphasis",
+            firstAvailableStart,
+            StringComparison.Ordinal);
+        firstAvailableEnd.Should().BeGreaterThan(firstAvailableStart);
+        var firstAvailableMethod = codeBehind[firstAvailableStart..firstAvailableEnd];
+        firstAvailableMethod.IndexOf("LocalAIProviderMode.WindowsAI", StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(firstAvailableMethod.IndexOf("LocalAIProviderMode.FoundryLocal", StringComparison.Ordinal));
+        firstAvailableMethod.IndexOf("LocalAIProviderMode.FoundryLocal", StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(firstAvailableMethod.IndexOf("LocalAIProviderMode.OpenVINO", StringComparison.Ordinal));
+
+        codeBehind.Should().Contain("var fontSize = isPrimary ? LocalAIPrimaryTitleFontSize : LocalAISecondaryTitleFontSize");
     }
 
     [Fact]

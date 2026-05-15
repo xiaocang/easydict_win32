@@ -266,6 +266,8 @@ public sealed class LocalAITranslationService : IStreamTranslationService, ILoca
     private static bool ShouldFallbackFromProvider(TranslationException ex)
     {
         return ex.ErrorCode is TranslationErrorCode.ServiceUnavailable
+            or TranslationErrorCode.NetworkError
+            or TranslationErrorCode.Timeout
             or TranslationErrorCode.InvalidModel
             or TranslationErrorCode.Unknown;
     }

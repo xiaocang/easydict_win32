@@ -29,12 +29,12 @@
       -User HCKTest `
       -IdentityFile "C:\Users\johnn\Downloads\qdc_id_2026-5-14_1534.pem" `
       -ProxyJump sshtunnel@ssh.qdc.qualcomm.com `
-      -MsixPath ..\..\msix\Easydict-v0.7.5.2-x64.msix
+      -MsixPath ..\..\msix\Easydict-v0.7.6-x64.msix
 
 .EXAMPLE
   # Direct (rare -- only if the device has a reachable IP)
   ./Deploy-ToQdc.ps1 -RemoteHost 10.0.0.5 -User HCKTest `
-      -MsixPath ..\..\msix\Easydict-v0.7.5.2-x64.msix `
+      -MsixPath ..\..\msix\Easydict-v0.7.6-x64.msix `
       -SkipValidate -LaunchApp
 #>
 

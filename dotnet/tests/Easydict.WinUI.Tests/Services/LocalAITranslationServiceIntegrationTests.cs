@@ -109,6 +109,41 @@ public sealed class LocalAITranslationServiceIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task TranslationManager_ExplicitFoundryLocal_DoesNotFallbackToOpenVino()
+    {
+        var phiClient = new FakeWindowsAIClient
+        {
+            GenerateResponse = new WindowsAIResponse(
+                WindowsAIResponseStatus.Complete,
+                "should not be used"),
+        };
+        var foundryLocal = new FakeFoundryLocalService
+        {
+            Failure = new TranslationException("Connection refused")
+            {
+                ErrorCode = TranslationErrorCode.NetworkError,
+                ServiceId = "foundry-local",
+            },
+        };
+        var openVinoEngine = new FakeNllbEngine { TokenStream = [100, 200] };
+        using var openVino = CreateOpenVino(openVinoEngine);
+        using var manager = CreateManager(
+            new PhiSilicaTranslationService(phiClient),
+            foundryLocal,
+            openVino,
+            LocalAIProviderMode.FoundryLocal);
+        var request = CreateRequest("Hello");
+
+        var act = async () => await manager.TranslateAsync(request, serviceId: "windows-local-ai");
+
+        var exception = await act.Should().ThrowAsync<TranslationException>();
+        exception.Which.ErrorCode.Should().Be(TranslationErrorCode.NetworkError);
+        phiClient.LastPrompt.Should().BeNull();
+        foundryLocal.TranslateCallCount.Should().BeGreaterThan(0);
+        openVinoEngine.GenerateCallCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task TranslationManager_UsesOpenVinoBackend_WhenProviderIsOpenVINO()
     {
         var phiClient = new FakeWindowsAIClient
@@ -194,6 +229,38 @@ public sealed class LocalAITranslationServiceIntegrationTests : IDisposable
         result.TranslatedText.Should().Be("你好");
         result.ServiceName.Should().Be("Windows Local AI");
         phiClient.LastPrompt.Should().BeNull();
+        foundryLocal.TranslateCallCount.Should().Be(1);
+        openVinoEngine.GenerateCallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TranslationManager_AutoProvider_FallsBackFromFoundryLocalNetworkErrorToOpenVino()
+    {
+        var phiClient = new FakeWindowsAIClient
+        {
+            ReadyState = WindowsAIReadyState.NotCompatibleWithSystemHardware,
+        };
+        var foundryLocal = new FakeFoundryLocalService
+        {
+            Failure = new TranslationException("Connection refused")
+            {
+                ErrorCode = TranslationErrorCode.NetworkError,
+                ServiceId = "foundry-local",
+            },
+        };
+        var openVinoEngine = new FakeNllbEngine { TokenStream = [100, 200] };
+        using var openVino = CreateOpenVino(openVinoEngine);
+        using var manager = CreateManager(
+            new PhiSilicaTranslationService(phiClient),
+            foundryLocal,
+            openVino,
+            LocalAIProviderMode.Auto);
+        var request = CreateRequest("Hello");
+
+        var result = await manager.TranslateAsync(request, serviceId: "windows-local-ai");
+
+        result.TranslatedText.Should().Be("你好");
+        result.ServiceName.Should().Be("Windows Local AI");
         foundryLocal.TranslateCallCount.Should().Be(1);
         openVinoEngine.GenerateCallCount.Should().Be(1);
     }

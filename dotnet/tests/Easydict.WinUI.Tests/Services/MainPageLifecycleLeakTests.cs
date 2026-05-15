@@ -13,6 +13,7 @@ public class MainPageLifecycleLeakTests
     private static readonly string MainPageXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MainPage.xaml");
     private static readonly string MainPagePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MainPage.xaml.cs");
     private static readonly string PhiSilicaPromptServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "PhiSilicaModelPreparationPromptService.cs");
+    private static readonly string PhiSilicaPreparationCoordinatorPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "PhiSilicaModelPreparationCoordinator.cs");
     private static readonly string ServiceResultViewHostPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultViewHost.cs");
 
     [Fact]
@@ -119,6 +120,7 @@ public class MainPageLifecycleLeakTests
         var xaml = File.ReadAllText(MainPageXamlPath);
         var content = File.ReadAllText(MainPagePath);
         var promptService = File.ReadAllText(PhiSilicaPromptServicePath);
+        var coordinator = File.ReadAllText(PhiSilicaPreparationCoordinatorPath);
 
         xaml.Should().Contain("x:Name=\"LocalModelPreparationProgressPanel\"");
         xaml.Should().Contain("x:Name=\"LocalModelPreparationStatusText\"");
@@ -127,11 +129,21 @@ public class MainPageLifecycleLeakTests
 
         content.Should().Contain("ShowLocalModelPreparationProgress");
         content.Should().Contain("HideLocalModelPreparationProgress");
+        content.Should().Contain("PhiSilicaModelPreparationCoordinator.Instance.ProgressChanged += OnPhiSilicaPreparationProgressChanged");
+        content.Should().Contain("SyncLocalModelPreparationProgressFromCoordinator");
         content.Should().MatchRegex(@"PromptAndPrepareIfNeededAsync\([\s\S]*ShowDialogAsync,\s*ct,\s*ShowLocalModelPreparationProgress");
 
         promptService.Should().Contain("Action<string>? reportPreparationProgress");
-        promptService.Should().Contain("reportPreparationProgress?.Invoke(\"PhiSilicaPreparationProgress_Requesting\")");
-        promptService.Should().Contain("reportPreparationProgress?.Invoke(\"PhiSilicaPreparationProgress_Waiting\")");
+        promptService.Should().Contain("PhiSilicaModelPreparationCoordinator.Instance.EnsureReadyAsync");
+
+        coordinator.Should().Contain("Get-DeliveryOptimizationStatus");
+        coordinator.Should().Contain("DeliveryOptimizationPollInterval");
+        coordinator.Should().Contain("CreateDeliveryOptimizationSnapshot");
+        coordinator.Should().Contain("ProgressPercent");
+        coordinator.Should().Contain("PhiSilicaPreparationProgress_ReusingExisting");
+        coordinator.Should().Contain("PhiSilicaPreparationProgress_DeliveryOptimizationEstimate");
+        coordinator.Should().Contain("CancellationToken.None",
+            "navigation/query cancellation should not cancel the Windows-managed model preparation job");
     }
 
     private static string FindProjectRoot()

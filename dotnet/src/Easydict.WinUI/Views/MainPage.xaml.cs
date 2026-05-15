@@ -72,7 +72,6 @@ namespace Easydict.WinUI.Views
         private string _lastStatusText = "Disconnected";
         private string _lastStatusSummaryText = string.Empty;
         private bool _lastStatusSummaryIsImportant;
-        private string? _lastLocalModelPreparationProgressKey;
         private bool _suppressSuggestionTextChanged;
         private int _suggestionRequestId;
         private bool _isSuggestionNavigationActive;
@@ -137,6 +136,7 @@ namespace Easydict.WinUI.Views
             this.Loaded += OnPageLoaded;
             this.Unloaded += OnPageUnloaded;
             this.ActualThemeChanged += OnActualThemeChanged;
+            PhiSilicaModelPreparationCoordinator.Instance.ProgressChanged += OnPhiSilicaPreparationProgressChanged;
 
             // Sync selection between Wide and Narrow layout ComboBoxes
             SourceLangCombo.SelectionChanged += (s, e) =>
@@ -247,6 +247,7 @@ namespace Easydict.WinUI.Views
                 EnsureLongDocFeaturesInitialized();
             }
             ApplyThemeChrome();
+            SyncLocalModelPreparationProgressFromCoordinator();
 #if DEBUG
             MemoryDiagnostics.LogDelta("MainPage.OnPageLoaded retained after init", loadBaseline);
             MemoryDiagnostics.LogSnapshot("MainPage.OnPageLoaded complete");
@@ -570,21 +571,62 @@ namespace Easydict.WinUI.Views
 
         private void ShowLocalModelPreparationProgress(string resourceKey)
         {
-            _lastLocalModelPreparationProgressKey = resourceKey;
+            ShowLocalModelPreparationProgress(new PhiSilicaModelPreparationSnapshot(resourceKey, IsPreparing: true));
+        }
 
-            var text = LocalizationService.Instance.GetString(resourceKey);
-            LocalModelPreparationStatusText.Text = string.IsNullOrWhiteSpace(text) || text == resourceKey
-                ? "Preparing local AI model..."
-                : text;
-            LocalModelPreparationProgressBar.IsIndeterminate = true;
+        private void ShowLocalModelPreparationProgress(PhiSilicaModelPreparationSnapshot snapshot)
+        {
+            LocalModelPreparationStatusText.Text = PhiSilicaModelPreparationProgressFormatter.FormatText(snapshot);
+            if (snapshot.ProgressPercent is { } percent)
+            {
+                LocalModelPreparationProgressBar.IsIndeterminate = false;
+                LocalModelPreparationProgressBar.Value = Math.Clamp(percent, 0, 100);
+            }
+            else
+            {
+                LocalModelPreparationProgressBar.IsIndeterminate = true;
+            }
             LocalModelPreparationProgressPanel.Visibility = Visibility.Visible;
         }
 
         private void HideLocalModelPreparationProgress()
         {
-            _lastLocalModelPreparationProgressKey = null;
             LocalModelPreparationProgressPanel.Visibility = Visibility.Collapsed;
             LocalModelPreparationStatusText.Text = string.Empty;
+        }
+
+        private void SyncLocalModelPreparationProgressFromCoordinator()
+        {
+            var snapshot = PhiSilicaModelPreparationCoordinator.Instance.CurrentSnapshot;
+            if (snapshot.IsPreparing)
+            {
+                ShowLocalModelPreparationProgress(snapshot);
+                return;
+            }
+
+            HideLocalModelPreparationProgress();
+        }
+
+        private void OnPhiSilicaPreparationProgressChanged(
+            object? sender,
+            PhiSilicaModelPreparationSnapshot snapshot)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing || !_isLoaded)
+                {
+                    return;
+                }
+
+                if (snapshot.IsPreparing)
+                {
+                    ShowLocalModelPreparationProgress(snapshot);
+                }
+                else
+                {
+                    HideLocalModelPreparationProgress();
+                }
+            });
         }
 
         private void ApplyTranslateButtonsChrome()
@@ -684,6 +726,7 @@ namespace Easydict.WinUI.Views
                 {
                     _isClosing = true;
                     this.ActualThemeChanged -= OnActualThemeChanged;
+                    PhiSilicaModelPreparationCoordinator.Instance.ProgressChanged -= OnPhiSilicaPreparationProgressChanged;
                     App.ClipboardTextReceived -= OnClipboardTextReceived;
                     await CleanupResourcesAsync();
                 }
@@ -866,10 +909,7 @@ namespace Easydict.WinUI.Views
             // Output placeholder
             PlaceholderText.Text = loc.GetString("TranslationPlaceholder");
 
-            if (_lastLocalModelPreparationProgressKey is not null)
-            {
-                ShowLocalModelPreparationProgress(_lastLocalModelPreparationProgressKey);
-            }
+            SyncLocalModelPreparationProgressFromCoordinator();
 
             // Tooltips
             ToolTipService.SetToolTip(SettingsButton, loc.GetString("SettingsTooltip"));
@@ -1330,7 +1370,7 @@ namespace Easydict.WinUI.Views
                 }
                 finally
                 {
-                    HideLocalModelPreparationProgress();
+                    SyncLocalModelPreparationProgressFromCoordinator();
                 }
                 if (phiSilicaPromptResult == PhiSilicaModelPreparationPromptResult.Disabled)
                 {
@@ -1661,7 +1701,7 @@ namespace Easydict.WinUI.Views
                 }
                 finally
                 {
-                    HideLocalModelPreparationProgress();
+                    SyncLocalModelPreparationProgressFromCoordinator();
                 }
                 if (phiSilicaPromptResult == PhiSilicaModelPreparationPromptResult.Disabled)
                 {
@@ -2423,9 +2463,9 @@ namespace Easydict.WinUI.Views
             var manager = TranslationManagerService.Instance.Manager;
             foreach (var service in manager.Services.Values.Where(IsLongDocSupportedService).OrderBy(s => s.DisplayName))
             {
-                var isReady = service.IsConfigured
-                    && _settings.ServiceTestStatus.TryGetValue(service.ServiceId, out var passed)
-                    && passed;
+                var isReady = LongDocumentServiceSupport.IsReadyForSelection(
+                    service,
+                    _settings.ServiceTestStatus);
 
                 var item = new ComboBoxItem
                 {

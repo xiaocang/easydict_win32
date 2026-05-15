@@ -17,6 +17,9 @@ namespace Easydict.WinUI.Views;
 /// </summary>
 public sealed partial class SettingsPage
 {
+    private const double LocalAIPrimaryTitleFontSize = 14;
+    private const double LocalAISecondaryTitleFontSize = 12;
+
     private bool _phiSilicaPreparing;
     private bool _suppressLocalAIProviderChange;
 
@@ -29,7 +32,7 @@ public sealed partial class SettingsPage
         _phiSilicaPreparing = snapshot.IsPreparing;
         if (snapshot.IsPreparing)
         {
-            ShowPhiSilicaPrepareProgress(snapshot.ResourceKey);
+            ShowPhiSilicaPrepareProgress(snapshot);
         }
 
         RefreshPhiSilicaStatus();
@@ -87,26 +90,81 @@ public sealed partial class SettingsPage
 
         if (WindowsLocalAIConfigPanel is not null)
         {
-            WindowsLocalAIConfigPanel.Visibility = mode is LocalAIProviderMode.OpenVINO or LocalAIProviderMode.FoundryLocal
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            WindowsLocalAIConfigPanel.Visibility = mode == LocalAIProviderMode.Auto || mode == LocalAIProviderMode.WindowsAI
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
         if (FoundryLocalConfigPanel is not null)
         {
-            FoundryLocalConfigPanel.Visibility = mode is LocalAIProviderMode.WindowsAI or LocalAIProviderMode.OpenVINO
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            FoundryLocalConfigPanel.Visibility = mode == LocalAIProviderMode.Auto || mode == LocalAIProviderMode.FoundryLocal
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
         if (OpenVinoConfigPanel is not null)
         {
-            OpenVinoConfigPanel.Visibility = mode is LocalAIProviderMode.WindowsAI or LocalAIProviderMode.FoundryLocal
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            OpenVinoConfigPanel.Visibility = mode == LocalAIProviderMode.Auto || mode == LocalAIProviderMode.OpenVINO
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
+        UpdateLocalAIProviderPanelEmphasis(mode);
         RefreshLocalAIHeaderStatusBadge();
+    }
+
+    private void UpdateLocalAIProviderPanelEmphasis(LocalAIProviderMode mode)
+    {
+        var highlightedMode = mode == LocalAIProviderMode.Auto
+            ? GetFirstAvailableLocalAIProviderMode()
+            : mode;
+
+        SetLocalAIProviderPanelEmphasis(
+            WindowsLocalAISectionTitleText,
+            WindowsLocalAISectionRatingText,
+            highlightedMode == LocalAIProviderMode.WindowsAI);
+        SetLocalAIProviderPanelEmphasis(
+            FoundryLocalTitleText,
+            FoundryLocalRatingText,
+            highlightedMode == LocalAIProviderMode.FoundryLocal);
+        SetLocalAIProviderPanelEmphasis(
+            OpenVinoTitleText,
+            OpenVinoRatingText,
+            highlightedMode == LocalAIProviderMode.OpenVINO);
+    }
+
+    private LocalAIProviderMode? GetFirstAvailableLocalAIProviderMode()
+    {
+        if (PhiSilicaAvailability.GetReadyState() == WindowsAIReadyState.Ready)
+        {
+            return LocalAIProviderMode.WindowsAI;
+        }
+
+        if (IsFoundryLocalConfigured())
+        {
+            return LocalAIProviderMode.FoundryLocal;
+        }
+
+        if (GetOpenVinoService()?.GetStatus().State == LocalModelState.Ready)
+        {
+            return LocalAIProviderMode.OpenVINO;
+        }
+
+        return null;
+    }
+
+    private static void SetLocalAIProviderPanelEmphasis(TextBlock? title, TextBlock? rating, bool isPrimary)
+    {
+        var fontSize = isPrimary ? LocalAIPrimaryTitleFontSize : LocalAISecondaryTitleFontSize;
+        if (title is not null)
+        {
+            title.FontSize = fontSize;
+        }
+
+        if (rating is not null)
+        {
+            rating.FontSize = fontSize;
+        }
     }
 
     private LocalAIProviderMode GetSelectedLocalAIProviderMode()
@@ -277,7 +335,7 @@ public sealed partial class SettingsPage
             _phiSilicaPreparing = snapshot.IsPreparing;
             if (snapshot.IsPreparing)
             {
-                ShowPhiSilicaPrepareProgress(snapshot.ResourceKey);
+                ShowPhiSilicaPrepareProgress(snapshot);
                 UpdatePhiSilicaStatusUi(PhiSilicaAvailability.GetReadyState());
                 return;
             }
@@ -289,6 +347,11 @@ public sealed partial class SettingsPage
 
     private void ShowPhiSilicaPrepareProgress(string resourceKey)
     {
+        ShowPhiSilicaPrepareProgress(new PhiSilicaModelPreparationSnapshot(resourceKey, IsPreparing: true));
+    }
+
+    private void ShowPhiSilicaPrepareProgress(PhiSilicaModelPreparationSnapshot snapshot)
+    {
         if (WindowsLocalAIPrepareProgressPanel is null
             || WindowsLocalAIPrepareProgressText is null
             || WindowsLocalAIPrepareProgressBar is null)
@@ -296,11 +359,16 @@ public sealed partial class SettingsPage
             return;
         }
 
-        var text = LocalizationService.Instance.GetString(resourceKey);
-        WindowsLocalAIPrepareProgressText.Text = string.IsNullOrWhiteSpace(text) || text == resourceKey
-            ? "Preparing local AI model..."
-            : text;
-        WindowsLocalAIPrepareProgressBar.IsIndeterminate = true;
+        WindowsLocalAIPrepareProgressText.Text = PhiSilicaModelPreparationProgressFormatter.FormatText(snapshot);
+        if (snapshot.ProgressPercent is { } percent)
+        {
+            WindowsLocalAIPrepareProgressBar.IsIndeterminate = false;
+            WindowsLocalAIPrepareProgressBar.Value = Math.Clamp(percent, 0, 100);
+        }
+        else
+        {
+            WindowsLocalAIPrepareProgressBar.IsIndeterminate = true;
+        }
         WindowsLocalAIPrepareProgressPanel.Visibility = Visibility.Visible;
     }
 

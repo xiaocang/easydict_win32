@@ -1149,6 +1149,9 @@
   <data name="PhiSilicaPreparationProgress_Requesting" xml:space="preserve"><value>正在請求 Windows 下載並準備模型…</value></data>
   <data name="PhiSilicaPreparationProgress_Waiting" xml:space="preserve"><value>Windows 正在下載或準備本機模型。這可能是數 GB 等級的安裝…</value></data>
   <data name="PhiSilicaPreparationProgress_Finalizing" xml:space="preserve"><value>正在確認模型狀態…</value></data>
+  <data name="PhiSilicaPreparationProgress_ReusingExisting" xml:space="preserve"><value>偵測到既有 Windows 下載工作。正在繼續準備，並請求 Windows 盡量續傳／重用已下載內容…</value></data>
+  <data name="PhiSilicaPreparationProgress_DeliveryOptimizationEstimate" xml:space="preserve"><value>目前套件：{0}%（{1} / {2}），預計剩餘約 {3}。後續可能還有其他 Windows 託管元件。</value></data>
+  <data name="PhiSilicaPreparationProgress_TimeUnknown" xml:space="preserve"><value>未知時間</value></data>
   <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>正在準備本機語言模型…</value></data>
   <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>本機語言模型已就緒。翻譯完全在本機進行，不會傳送任何文字到外部服務。</value></data>
   <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>目前裝置支援本機語言模型，但模型尚未準備。點擊「準備模型」以下載並安裝。預計是數 GB 等級的 Windows 託管安裝，實際大小取決於裝置和 Windows 版本。</value></data>

@@ -77,20 +77,28 @@ public sealed class ModelDownloadService
     {
         Directory.CreateDirectory(ModelDirectory);
 
-        // Make the unpinned/unverified state loud at runtime so it can't slip
-        // past code review or QA. Flagged by the PR reviewer; flipping to
-        // `false` is paired with (a) pinning ModelManifest.Revision to an
-        // immutable commit SHA and (b) populating every ModelFileEntry.Sha256
-        // with the matching upstream LFS hash.
-        var isMutableRevision = string.Equals(ModelManifest.Revision, "main", StringComparison.Ordinal);
-        var hasUnverifiedFiles = ModelManifest.Files.Any(f => string.IsNullOrEmpty(f.Sha256));
-        if (isMutableRevision || hasUnverifiedFiles)
+        // Surface any drift from the pinned/verified state at runtime so a
+        // future regression (someone unpinning Revision or dropping a hash)
+        // can't slip past review. A 40-char hex string is the immutable-commit
+        // shape HuggingFace returns; anything else (a branch, tag, or "main")
+        // is mutable.
+        var isMutableRevision = ModelManifest.Revision.Length != 40
+            || !ModelManifest.Revision.All(IsHexDigit);
+        var unverifiedFiles = ModelManifest.Files
+            .Where(f => string.IsNullOrEmpty(f.Sha256))
+            .Select(f => f.LocalFileName)
+            .ToArray();
+        if (isMutableRevision)
         {
             Debug.WriteLine(
-                "[ModelDownloadService] WARNING: model bundle is fetched from a mutable ref " +
-                $"(Revision='{ModelManifest.Revision}') and/or has files without SHA-256 verification. " +
-                "Installs are not reproducible. Before the OpenVINO provider ships as stable, " +
-                "pin Revision to an immutable commit SHA and populate ModelFileEntry.Sha256 for every file.");
+                $"[ModelDownloadService] WARNING: ModelManifest.Revision='{ModelManifest.Revision}' " +
+                "is not an immutable 40-char commit SHA. Installs will not be reproducible.");
+        }
+        if (unverifiedFiles.Length > 0)
+        {
+            Debug.WriteLine(
+                "[ModelDownloadService] NOTE: files without SHA-256 verification " +
+                $"(integrity relies on Content-Length only): {string.Join(", ", unverifiedFiles)}.");
         }
 
         var totalBytes = ModelManifest.Files.Sum(f => f.ApproximateBytes);
@@ -233,6 +241,9 @@ public sealed class ModelDownloadService
             }
         }
     }
+
+    private static bool IsHexDigit(char c) =>
+        (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 
     private static double Percent(long done, long total)
     {

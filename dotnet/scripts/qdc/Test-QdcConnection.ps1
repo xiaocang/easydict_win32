@@ -18,20 +18,30 @@
   After that, this script can connect over the network.
 
   QDC reaches the Windows box via a jump host (sshtunnel@ssh.qdc.qualcomm.com)
-  because the device's hostname is only resolvable inside the QDC cluster. Use
-  -ProxyJump to route every ssh/scp call through it.
+  because the device's hostname is only resolvable inside the QDC cluster. The
+  QDC jump host only allows explicit -L port forwarding and rejects the
+  direct-tcpip channel that OpenSSH's -J ProxyJump uses, so the canonical
+  workflow is:
+
+    1. Open a persistent local forward with Start-QdcTunnel.ps1 (once per
+       session). It maps localhost:2222 -> <DeviceHost>:22 through the jump
+       host and records the PID for cleanup.
+    2. Run this script against localhost:2222 (the -ProxyJump parameter still
+       exists for the rare direct-public-IP case, but the QDC jump host is not
+       a valid value for it).
 
 .EXAMPLE
-  # Direct (rare -- only if the device has a public IP)
-  ./Test-QdcConnection.ps1 -RemoteHost 10.0.0.5 -User HCKTest -IdentityFile ~/.ssh/qdc_key
-
-.EXAMPLE
-  # Typical QDC: routed through the QDC jump host
-  ./Test-QdcConnection.ps1 `
-      -RemoteHost sa590782.sa.svc.cluster.local `
-      -User HCKTest `
+  # Typical QDC: run Start-QdcTunnel.ps1 first, then probe via the local forward.
+  ./Start-QdcTunnel.ps1 `
       -IdentityFile "C:\Users\johnn\Downloads\qdc_id_2026-5-14_1534.pem" `
-      -ProxyJump sshtunnel@ssh.qdc.qualcomm.com
+      -DeviceHost sa590782.sa.svc.cluster.local
+  ./Test-QdcConnection.ps1 `
+      -RemoteHost localhost -Port 2222 -User HCKTest `
+      -IdentityFile "C:\Users\johnn\Downloads\qdc_id_2026-5-14_1534.pem"
+
+.EXAMPLE
+  # Direct (rare -- only if the device has a reachable IP)
+  ./Test-QdcConnection.ps1 -RemoteHost 10.0.0.5 -User HCKTest -IdentityFile ~/.ssh/qdc_key
 #>
 
 param(

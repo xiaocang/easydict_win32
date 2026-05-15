@@ -28,6 +28,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Manifest data is loaded as an embedded resource by ModelManifest.cs so
+         the model file list / SHA-256 / pinned revision can be updated without
+         touching code. -->
+    <EmbeddedResource Include="Models\nllb-200-distilled-600M.manifest.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Easydict.WinUI.Tests" />
   </ItemGroup>
 

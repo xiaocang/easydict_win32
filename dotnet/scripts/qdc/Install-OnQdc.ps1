@@ -10,8 +10,11 @@
   copies this script + cert + MSIX to a staging dir on the remote, then runs it
   over SSH.
 
-  Tries CurrentUser\TrustedPeople first (works without admin). If that fails or
-  -Machine is passed, falls back to LocalMachine\TrustedPeople (requires admin).
+  Imports the developer cert into Cert:\LocalMachine\TrustedPeople (admin
+  required — Add-AppxPackage's deployment service runs under a security context
+  that only consults the machine store, so CurrentUser\TrustedPeople would be
+  ignored even if it succeeded). Failures here usually mean the SSH session
+  is not elevated.
 #>
 
 param(
@@ -22,8 +25,6 @@ param(
     [string]$MsixPath,
 
     [string]$PackageName = "xiaocang.EasydictforWindows",
-
-    [switch]$Machine,
 
     [switch]$LaunchApp
 )

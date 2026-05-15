@@ -1,0 +1,37 @@
+{
+  "$comment": "OpenVINO NLLB-200 model bundle. Updating: bump revision to a new HuggingFace commit SHA (immutable), then refresh sha256/approximateBytes from each file's LFS metadata. Loaded as an embedded resource by ModelManifest.cs.",
+  "revision": "261c31d1a5732c67cdd16d80e8d6088507c7ccea",
+  "files": [
+    {
+      "localFileName": "encoder_model_quantized.onnx",
+      "remoteRelativePath": "onnx/encoder_model_quantized.onnx",
+      "approximateBytes": 419120483,
+      "sha256": "5cde664eacba07a62f198857ec6c06e09572b1ebb77c8137f1fa99ac604a3a28"
+    },
+    {
+      "localFileName": "decoder_model_quantized.onnx",
+      "remoteRelativePath": "onnx/decoder_model_quantized.onnx",
+      "approximateBytes": 470533055,
+      "sha256": "ddea619b640379609719becf91a488c5e6ce4c4b2052efbb5388edaed465a552"
+    },
+    {
+      "localFileName": "sentencepiece.bpe.model",
+      "remoteRelativePath": "sentencepiece.bpe.model",
+      "approximateBytes": 4852054,
+      "sha256": "14bb8dfb35c0ffdea7bc01e56cea38b9e3d5efcdcb9c251d6b40538e1aab555a"
+    },
+    {
+      "localFileName": "tokenizer.json",
+      "remoteRelativePath": "tokenizer.json",
+      "approximateBytes": 17331224,
+      "sha256": "8ac789ad7dabea44d41537822d48c516ba358374c51813e2cba78c006e150c94"
+    },
+    {
+      "$comment": "config.json is not LFS-tracked upstream so its SHA isn't discoverable via the tree API. Content-Length validation in ModelDownloadService catches truncation.",
+      "localFileName": "config.json",
+      "remoteRelativePath": "config.json",
+      "approximateBytes": 800,
+      "sha256": null
+    }
+  ]
+}

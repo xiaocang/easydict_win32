@@ -22,20 +22,15 @@ public sealed partial class SettingsPage
 
     private bool _phiSilicaPreparing;
     private bool _suppressLocalAIProviderChange;
+    private double? _phiSilicaLastProgressPercent;
 
     private void InitializePhiSilicaPanel()
     {
         PhiSilicaModelPreparationCoordinator.Instance.ProgressChanged -= OnPhiSilicaPreparationProgressChanged;
         PhiSilicaModelPreparationCoordinator.Instance.ProgressChanged += OnPhiSilicaPreparationProgressChanged;
 
-        var snapshot = PhiSilicaModelPreparationCoordinator.Instance.CurrentSnapshot;
-        _phiSilicaPreparing = snapshot.IsPreparing;
-        if (snapshot.IsPreparing)
-        {
-            ShowPhiSilicaPrepareProgress(snapshot);
-        }
-
         RefreshPhiSilicaStatus();
+        SyncPhiSilicaPreparationProgressFromCoordinator();
     }
 
     private void TeardownPhiSilicaPanel()
@@ -111,6 +106,7 @@ public sealed partial class SettingsPage
 
         UpdateLocalAIProviderPanelEmphasis(mode);
         RefreshLocalAIHeaderStatusBadge();
+        SyncPhiSilicaPreparationProgressFromCoordinator();
     }
 
     private void UpdateLocalAIProviderPanelEmphasis(LocalAIProviderMode mode)
@@ -135,7 +131,7 @@ public sealed partial class SettingsPage
 
     private LocalAIProviderMode? GetFirstAvailableLocalAIProviderMode()
     {
-        if (PhiSilicaAvailability.GetReadyState() == WindowsAIReadyState.Ready)
+        if (GetPhiSilicaLocalModelStatus().State == LocalModelState.Ready)
         {
             return LocalAIProviderMode.WindowsAI;
         }
@@ -200,10 +196,10 @@ public sealed partial class SettingsPage
         var mode = GetSelectedLocalAIProviderMode();
         var isReady = mode switch
         {
-            LocalAIProviderMode.WindowsAI => PhiSilicaAvailability.GetReadyState() == WindowsAIReadyState.Ready,
+            LocalAIProviderMode.WindowsAI => GetPhiSilicaLocalModelStatus().State == LocalModelState.Ready,
             LocalAIProviderMode.FoundryLocal => IsFoundryLocalConfigured(),
             LocalAIProviderMode.OpenVINO => GetOpenVinoService()?.GetStatus().State == LocalModelState.Ready,
-            _ => PhiSilicaAvailability.GetReadyState() == WindowsAIReadyState.Ready
+            _ => GetPhiSilicaLocalModelStatus().State == LocalModelState.Ready
                 || IsFoundryLocalConfigured()
                 || GetOpenVinoService()?.GetStatus().State == LocalModelState.Ready,
         };
@@ -225,11 +221,18 @@ public sealed partial class SettingsPage
 
     private void RefreshPhiSilicaStatus()
     {
-        var state = PhiSilicaAvailability.GetReadyState();
-        UpdatePhiSilicaStatusUi(state);
+        UpdatePhiSilicaStatusUi(GetPhiSilicaLocalModelStatus());
     }
 
     private void UpdatePhiSilicaStatusUi(WindowsAIReadyState state)
+    {
+        UpdatePhiSilicaStatusUi(
+            state == WindowsAIReadyState.Ready
+                ? GetPhiSilicaLocalModelStatus()
+                : PhiSilicaTranslationService.MapReadyStateToStatus(state));
+    }
+
+    private void UpdatePhiSilicaStatusUi(LocalModelStatus status)
     {
         if (WindowsLocalAIStatusBar == null)
         {
@@ -238,26 +241,38 @@ public sealed partial class SettingsPage
 
         var loc = LocalizationService.Instance;
 
-        var titleKey = state == WindowsAIReadyState.Ready
+        var isReady = status.State == LocalModelState.Ready;
+        var titleKey = isReady
             ? "WindowsLocalAI_Title_Ready"
             : "WindowsLocalAI_Title_Unavailable";
         WindowsLocalAIStatusBar.Title = loc.GetString(titleKey);
 
-        var messageKey = PhiSilicaAvailability.GetStatusResourceKey(state);
-        WindowsLocalAIStatusBar.Message = loc.GetString(messageKey);
-
-        WindowsLocalAIStatusBar.Severity = state switch
+        var message = loc.GetString(status.ResourceKey);
+        if (!string.IsNullOrWhiteSpace(status.DetailMessage))
         {
-            WindowsAIReadyState.Ready => InfoBarSeverity.Success,
-            WindowsAIReadyState.NotReady => InfoBarSeverity.Informational,
+            message = $"{message}\n\n{status.DetailMessage.Trim()}";
+        }
+        WindowsLocalAIStatusBar.Message = message;
+
+        WindowsLocalAIStatusBar.Severity = status.State switch
+        {
+            LocalModelState.Ready => InfoBarSeverity.Success,
+            LocalModelState.NeedsPreparation => InfoBarSeverity.Informational,
+            LocalModelState.Failed => InfoBarSeverity.Error,
             _ => InfoBarSeverity.Warning,
         };
 
         RefreshLocalAIHeaderStatusBadge();
 
-        WindowsLocalAIPrepareButton.Visibility = state == WindowsAIReadyState.NotReady && !_phiSilicaPreparing
+        WindowsLocalAIPrepareButton.Visibility = status.State is LocalModelState.NeedsPreparation or LocalModelState.Failed
+            && !_phiSilicaPreparing
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    private static LocalModelStatus GetPhiSilicaLocalModelStatus()
+    {
+        return PhiSilicaBackendHealthMonitor.Shared.GetStatus(PhiSilicaAvailability.Client);
     }
 
     private async void OnPreparePhiSilicaModel(object sender, RoutedEventArgs e)
@@ -268,11 +283,13 @@ public sealed partial class SettingsPage
         }
 
         _phiSilicaPreparing = true;
+        _phiSilicaLastProgressPercent = null;
         var loc = LocalizationService.Instance;
         var originalContent = WindowsLocalAIPrepareButton.Content;
         WindowsLocalAIPrepareButton.IsEnabled = false;
         WindowsLocalAIPrepareButton.Content = loc.GetString("WindowsLocalAI_Preparing");
         var shouldRefreshStatusAfterPreparing = false;
+        WindowsAIReadyState? completedState = null;
 
         try
         {
@@ -287,6 +304,7 @@ public sealed partial class SettingsPage
             ShowPhiSilicaPrepareProgress("PhiSilicaPreparationProgress_Finalizing");
             UpdatePhiSilicaStatusUi(newState);
             shouldRefreshStatusAfterPreparing = true;
+            completedState = newState;
         }
         catch (OperationCanceledException) when (_lifetimeCts.IsCancellationRequested)
         {
@@ -316,7 +334,10 @@ public sealed partial class SettingsPage
             HidePhiSilicaPrepareProgress();
             if (!_isUnloaded && shouldRefreshStatusAfterPreparing)
             {
-                UpdatePhiSilicaStatusUi(PhiSilicaAvailability.GetReadyState());
+                var state = completedState == WindowsAIReadyState.Ready
+                    ? WindowsAIReadyState.Ready
+                    : PhiSilicaAvailability.GetReadyState();
+                UpdatePhiSilicaStatusUi(state);
             }
         }
     }
@@ -345,9 +366,23 @@ public sealed partial class SettingsPage
         });
     }
 
+    private void SyncPhiSilicaPreparationProgressFromCoordinator()
+    {
+        var snapshot = PhiSilicaModelPreparationCoordinator.Instance.CurrentSnapshot;
+        _phiSilicaPreparing = snapshot.IsPreparing;
+        if (snapshot.IsPreparing)
+        {
+            ShowPhiSilicaPrepareProgress(snapshot);
+            return;
+        }
+
+        HidePhiSilicaPrepareProgress();
+    }
+
     private void ShowPhiSilicaPrepareProgress(string resourceKey)
     {
-        ShowPhiSilicaPrepareProgress(new PhiSilicaModelPreparationSnapshot(resourceKey, IsPreparing: true));
+        ShowPhiSilicaPrepareProgress(
+            PhiSilicaModelPreparationCoordinator.Instance.CreatePreparingSnapshot(resourceKey));
     }
 
     private void ShowPhiSilicaPrepareProgress(PhiSilicaModelPreparationSnapshot snapshot)
@@ -360,10 +395,13 @@ public sealed partial class SettingsPage
         }
 
         WindowsLocalAIPrepareProgressText.Text = PhiSilicaModelPreparationProgressFormatter.FormatText(snapshot);
-        if (snapshot.ProgressPercent is { } percent)
+        _phiSilicaLastProgressPercent = PhiSilicaModelPreparationProgressFormatter.MergeProgressPercent(
+            _phiSilicaLastProgressPercent,
+            snapshot.ProgressPercent);
+        if (_phiSilicaLastProgressPercent is { } percent)
         {
             WindowsLocalAIPrepareProgressBar.IsIndeterminate = false;
-            WindowsLocalAIPrepareProgressBar.Value = Math.Clamp(percent, 0, 100);
+            WindowsLocalAIPrepareProgressBar.Value = percent;
         }
         else
         {
@@ -382,40 +420,37 @@ public sealed partial class SettingsPage
 
         WindowsLocalAIPrepareProgressPanel.Visibility = Visibility.Collapsed;
         WindowsLocalAIPrepareProgressText.Text = string.Empty;
+        _phiSilicaLastProgressPercent = null;
     }
 
     /// <summary>
     /// Renders the failure path of <see cref="OnPreparePhiSilicaModel"/> —
-    /// distinct from the normal "NotReady, click to prepare" state. Uses the
-    /// dedicated <c>WindowsLocalAI_Status_PrepareFailed</c> resource key (not
-    /// <c>WindowsLocalAI_Status_NotReady</c>) so the user can tell the system
-    /// tried and failed. Leaves the Prepare button visible so retry is one click.
+    /// distinct from the normal "NotReady, click to prepare" state. Baseline
+    /// diagnostics get a dedicated resource key so users can tell Windows AI is
+    /// unavailable on the current image rather than assuming translation broke.
     /// </summary>
     private void ShowPhiSilicaPrepareFailure(string? detailMessage)
     {
         if (WindowsLocalAIStatusBar is null) return;
 
-        var loc = LocalizationService.Instance;
-        WindowsLocalAIStatusBar.Title = loc.GetString("WindowsLocalAI_Title_Unavailable");
+        var status = PhiSilicaTranslationService.CreatePreparationFailureStatus(
+            detailMessage,
+            TryGetPhiSilicaHealthFingerprint());
 
-        // Surface the underlying exception text alongside the localized failure
-        // message so users can tell whether the failure is "offline / AV blocked"
-        // vs. "Windows not licensed / quota exhausted". Without the detail the
-        // generic message looks identical for every cause.
-        var message = loc.GetString("WindowsLocalAI_Status_PrepareFailed");
-        if (!string.IsNullOrWhiteSpace(detailMessage))
-        {
-            message = $"{message}\n\n{detailMessage.Trim()}";
-        }
-        WindowsLocalAIStatusBar.Message = message;
-
-        WindowsLocalAIStatusBar.Severity = InfoBarSeverity.Error;
+        UpdatePhiSilicaStatusUi(status);
         WindowsLocalAIStatusBar.IsOpen = true;
+    }
 
-        RefreshLocalAIHeaderStatusBadge();
-
-        // Allow retry — failure isn't a permanent state.
-        WindowsLocalAIPrepareButton.Visibility = Visibility.Visible;
+    private static WindowsAIHealthFingerprint? TryGetPhiSilicaHealthFingerprint()
+    {
+        try
+        {
+            return PhiSilicaAvailability.Client.GetHealthFingerprint();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -439,5 +474,3 @@ public sealed partial class SettingsPage
             : new SolidColorBrush(Colors.Gray);
     }
 }
-
-

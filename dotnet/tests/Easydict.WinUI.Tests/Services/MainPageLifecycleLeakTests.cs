@@ -128,6 +128,8 @@ public class MainPageLifecycleLeakTests
         xaml.Should().Contain("IsIndeterminate=\"True\"");
 
         content.Should().Contain("ShowLocalModelPreparationProgress");
+        content.Should().Contain("PhiSilicaModelPreparationCoordinator.Instance.CreatePreparingSnapshot",
+            "string-only progress callbacks should resume the shared coordinator snapshot after navigation");
         content.Should().Contain("HideLocalModelPreparationProgress");
         content.Should().Contain("PhiSilicaModelPreparationCoordinator.Instance.ProgressChanged += OnPhiSilicaPreparationProgressChanged");
         content.Should().Contain("SyncLocalModelPreparationProgressFromCoordinator");

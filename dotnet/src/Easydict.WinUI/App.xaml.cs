@@ -66,6 +66,13 @@ namespace Easydict.WinUI
             // so x:Uid is intentionally not used in this codebase for app strings.
             this.InitializeComponent();
 
+            // Easydict.WindowsAI lives below the UI layer and cannot reach LocalizationService
+            // directly. The hook lets it surface localized hints in exception messages without
+            // taking a dependency on UI services. Tests and non-UI consumers leave it null and
+            // receive English defaults.
+            Easydict.WindowsAI.WindowsLanguageModelClient.HintLocalizer =
+                key => LocalizationService.Instance.GetString(key);
+
             this.UnhandledException += OnUnhandledException;
         }
 

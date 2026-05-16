@@ -1112,7 +1112,7 @@
   <data name="LocalAI_Provider_OpenVINO" xml:space="preserve"><value>OpenVINO（NLLB-200，本機）</value></data>
   <data name="LocalAI_Rating_WindowsAI" xml:space="preserve"><value>★★★★★</value></data>
   <data name="LocalAI_Rating_WindowsAI_Tooltip" xml:space="preserve"><value>可用時品質最好。使用支援的 Copilot+ PC 上的 Phi Silica。</value></data>
-  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★</value></data>
+  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★★</value></data>
   <data name="LocalAI_Rating_FoundryLocal_Tooltip" xml:space="preserve"><value>較好的本機 LLM 備援。需要 Foundry Local 和已載入的本機模型。</value></data>
   <data name="LocalAI_Rating_OpenVINO" xml:space="preserve"><value>★★</value></data>
   <data name="LocalAI_Rating_OpenVINO_Tooltip" xml:space="preserve"><value>基礎離線翻譯備援。硬體加速為盡力而為。</value></data>
@@ -1148,11 +1148,17 @@
   <data name="PhiSilicaPreparationProgress_Checking" xml:space="preserve"><value>正在檢查 Phi Silica 模型狀態…</value></data>
   <data name="PhiSilicaPreparationProgress_Requesting" xml:space="preserve"><value>正在請求 Windows 下載並準備模型…</value></data>
   <data name="PhiSilicaPreparationProgress_Waiting" xml:space="preserve"><value>Windows 正在下載或準備本機模型。這可能是數 GB 等級的安裝…</value></data>
+  <data name="PhiSilicaPreparationProgress_CreatingSession" xml:space="preserve"><value>Creating a Phi Silica model session...</value></data>
+  <data name="PhiSilicaPreparationProgress_WarmingUp" xml:space="preserve"><value>Running a short Phi Silica warm-up inference...</value></data>
   <data name="PhiSilicaPreparationProgress_Finalizing" xml:space="preserve"><value>正在確認模型狀態…</value></data>
   <data name="PhiSilicaPreparationProgress_ReusingExisting" xml:space="preserve"><value>偵測到既有 Windows 下載工作。正在繼續準備，並請求 Windows 盡量續傳／重用已下載內容…</value></data>
   <data name="PhiSilicaPreparationProgress_DeliveryOptimizationEstimate" xml:space="preserve"><value>目前套件：{0}%（{1} / {2}），預計剩餘約 {3}。後續可能還有其他 Windows 託管元件。</value></data>
   <data name="PhiSilicaPreparationProgress_TimeUnknown" xml:space="preserve"><value>未知時間</value></data>
   <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>正在準備本機語言模型…</value></data>
+  <data name="WindowsLocalAI_Status_WarmupRequired" xml:space="preserve"><value>The on-device language model package is ready, but Easydict needs to create a Phi Silica session and run a short warm-up before treating it as usable.</value></data>
+  <data name="WindowsLocalAI_Status_WarmingUp" xml:space="preserve"><value>Creating a Phi Silica session and running a short warm-up inference…</value></data>
+  <data name="WindowsLocalAI_Status_RuntimeUnhealthy" xml:space="preserve"><value>Phi Silica is installed, but the Windows AI runtime failed to create a usable model session. Auto mode will use Foundry Local or OpenVINO as fallback.</value></data>
+  <data name="WindowsLocalAI_Status_UnsupportedWindowsAIBaseline" xml:space="preserve"><value>Phi Silica 不可用，因為目前 Windows 安裝似乎沒有有效的 Windows AI baseline。這通常發生在未啟用、過舊、Insider、受管理或不完整的 Copilot+ PC 映像上，Windows Update 無法安裝 AI Components。請啟用 Windows，安裝最新累積更新與 AI Components，然後在 AI Dev Gallery 中驗證 Phi Silica。</value></data>
   <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>本機語言模型已就緒。翻譯完全在本機進行，不會傳送任何文字到外部服務。</value></data>
   <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>目前裝置支援本機語言模型，但模型尚未準備。點擊「準備模型」以下載並安裝。預計是數 GB 等級的 Windows 託管安裝，實際大小取決於裝置和 Windows 版本。</value></data>
   <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>應用程式套件缺少 systemAIModels 能力宣告。此狀態通常出現在可攜版/未封裝版本中，請改安裝 MSIX 或 Microsoft Store 版本。</value></data>
@@ -1161,6 +1167,10 @@
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows AI 已被停用或解除安裝。請在系統設定中重新啟用 Windows AI 功能。</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Phi Silica 在目前系統或地區不可用。可在 Windows Local AI 中選擇「自動」或 OpenVINO，使用本機 NLLB-200 備援方案。</value></data>
   <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>本機語言模型準備失敗。請檢查 Windows Update 與 AI 功能可用性後重試。</value></data>
+  <data name="WindowsLocalAI_Hint_ServiceDisabled" xml:space="preserve"><value>必要的 Windows 更新或下載相關服務已被停用或無法啟動。請啟用 Windows Update 與 Delivery Optimization 後重試。</value></data>
+  <data name="WindowsLocalAI_Hint_PackageResourceInUse" xml:space="preserve"><value>Windows 已下載模型套件,但因相關元件正在使用而無法完成安裝。請關閉 Easydict 與其他 Windows AI 應用,或重啟 Windows 後重試。</value></data>
+  <data name="WindowsLocalAI_Hint_NpuRuntimeReset" xml:space="preserve"><value>模型回報就緒後 Windows 傳回了通用錯誤。這通常表示模型套件安裝完成後 Windows AI 的模型工作階段或首次推論失敗。請關閉其他 Windows AI 應用與佔用資源的處理程序,重啟 Windows 以重置 NPU 與模型執行階段後重試。若問題仍未解決,請改用 Foundry Local 或 OpenVINO 作為替代方案。</value></data>
+  <data name="WindowsLocalAI_Hint_NpuModelSessionInit" xml:space="preserve"><value>Windows AI 已下載模型,但在初始化 Phi Silica 模型工作階段或首次推論時失敗。請關閉其他 Windows AI 應用與佔用資源的處理程序,重啟 Windows 以重置 NPU 與模型執行階段後重試。若問題仍未解決,請改用 Foundry Local 或 OpenVINO 作為替代方案。</value></data>
 
   <!-- OpenVINO local NLLB (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>已就緒</value></data>
@@ -1169,4 +1179,52 @@
   <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>NLLB-200 模型尚未下載（約 360 MB）。點擊「下載模型」將檔案儲存到 %LOCALAPPDATA%\Easydict\models。</value></data>
   <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>正在下載 NLLB-200 模型檔案…</value></data>
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>下載失敗。請檢查網路連線後重試。</value></data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
+  </data>
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
+  </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>Minimal</value>
+  </data>
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
+  </data>
 </root>

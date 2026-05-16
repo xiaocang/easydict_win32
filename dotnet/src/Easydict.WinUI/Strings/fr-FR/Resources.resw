@@ -1070,7 +1070,7 @@
   <data name="LocalAI_Provider_OpenVINO" xml:space="preserve"><value>OpenVINO (NLLB-200, local)</value></data>
   <data name="LocalAI_Rating_WindowsAI" xml:space="preserve"><value>★★★★★</value></data>
   <data name="LocalAI_Rating_WindowsAI_Tooltip" xml:space="preserve"><value>Best quality when available. Uses Phi Silica on supported Copilot+ PCs.</value></data>
-  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★</value></data>
+  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★★</value></data>
   <data name="LocalAI_Rating_FoundryLocal_Tooltip" xml:space="preserve"><value>Good local LLM fallback. Requires Foundry Local and a loaded model.</value></data>
   <data name="LocalAI_Rating_OpenVINO" xml:space="preserve"><value>★★</value></data>
   <data name="LocalAI_Rating_OpenVINO_Tooltip" xml:space="preserve"><value>Basic offline translation fallback. Hardware acceleration is best effort.</value></data>
@@ -1106,11 +1106,17 @@
   <data name="PhiSilicaPreparationProgress_Checking" xml:space="preserve"><value>Checking Phi Silica model status...</value></data>
   <data name="PhiSilicaPreparationProgress_Requesting" xml:space="preserve"><value>Requesting model download and preparation from Windows...</value></data>
   <data name="PhiSilicaPreparationProgress_Waiting" xml:space="preserve"><value>Windows is downloading or preparing the on-device model. This can be a several-GB install...</value></data>
+  <data name="PhiSilicaPreparationProgress_CreatingSession" xml:space="preserve"><value>Creating a Phi Silica model session...</value></data>
+  <data name="PhiSilicaPreparationProgress_WarmingUp" xml:space="preserve"><value>Running a short Phi Silica warm-up inference...</value></data>
   <data name="PhiSilicaPreparationProgress_Finalizing" xml:space="preserve"><value>Finalizing model status...</value></data>
   <data name="PhiSilicaPreparationProgress_ReusingExisting" xml:space="preserve"><value>Detected an existing Windows download. Continuing preparation and asking Windows to resume/reuse downloaded content when possible...</value></data>
   <data name="PhiSilicaPreparationProgress_DeliveryOptimizationEstimate" xml:space="preserve"><value>Current package: {0}% ({1} of {2}), about {3} remaining. More Windows-managed components may follow.</value></data>
   <data name="PhiSilicaPreparationProgress_TimeUnknown" xml:space="preserve"><value>unknown time</value></data>
   <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>Préparation du modèle linguistique sur l'appareil…</value></data>
+  <data name="WindowsLocalAI_Status_WarmupRequired" xml:space="preserve"><value>The on-device language model package is ready, but Easydict needs to create a Phi Silica session and run a short warm-up before treating it as usable.</value></data>
+  <data name="WindowsLocalAI_Status_WarmingUp" xml:space="preserve"><value>Creating a Phi Silica session and running a short warm-up inference…</value></data>
+  <data name="WindowsLocalAI_Status_RuntimeUnhealthy" xml:space="preserve"><value>Phi Silica is installed, but the Windows AI runtime failed to create a usable model session. Auto mode will use Foundry Local or OpenVINO as fallback.</value></data>
+  <data name="WindowsLocalAI_Status_UnsupportedWindowsAIBaseline" xml:space="preserve"><value>Phi Silica is unavailable because this Windows installation does not appear to have a valid Windows AI baseline. This usually happens on unactivated, outdated, Insider, managed, or incomplete Copilot+ PC images where Windows Update cannot install AI Components. Activate Windows, install the latest cumulative update and AI Components, then verify Phi Silica in AI Dev Gallery.</value></data>
   <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>Le modèle linguistique sur l'appareil est prêt. La traduction s'exécute localement sans envoyer de texte à un service externe.</value></data>
   <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>The on-device language model is supported but has not been prepared yet. Click &quot;Prepare model&quot; to install it. Expect a several-GB Windows-managed install; the exact size depends on your device and Windows version.</value></data>
   <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>Le package de l'application ne dispose pas de la capacité systemAIModels. Cela affecte généralement les builds portables/non packagés ; installez plutôt la version MSIX/Store.</value></data>
@@ -1119,6 +1125,10 @@
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows AI a été désactivé ou supprimé. Réactivez les fonctionnalités Windows AI dans les paramètres système.</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Phi Silica n’est pas disponible sur ce système ou dans cette région. Sélectionnez Auto ou OpenVINO dans Windows Local AI pour utiliser le repli local NLLB-200.</value></data>
   <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>Échec de la préparation du modèle linguistique sur l'appareil. Vérifiez Windows Update et la disponibilité des fonctionnalités IA, puis réessayez.</value></data>
+  <data name="WindowsLocalAI_Hint_ServiceDisabled" xml:space="preserve"><value>Un service Windows Update/téléchargement requis est désactivé ou ne peut pas démarrer. Activez Windows Update et Delivery Optimization, puis réessayez.</value></data>
+  <data name="WindowsLocalAI_Hint_PackageResourceInUse" xml:space="preserve"><value>Windows a téléchargé le package du modèle mais n'a pas pu terminer l'installation car un package ou une ressource associée est en cours d'utilisation. Fermez Easydict et les autres applications Windows AI, ou redémarrez Windows, puis réessayez.</value></data>
+  <data name="WindowsLocalAI_Hint_NpuRuntimeReset" xml:space="preserve"><value>Windows a renvoyé une erreur générique alors que le modèle se déclarait prêt. Cela signifie généralement que la session de modèle Windows AI ou la première inférence a échoué après l'installation du package du modèle. Fermez les autres applications Windows AI et les processus lourds, redémarrez Windows pour réinitialiser le runtime NPU/modèle, puis réessayez. Si le problème persiste, utilisez Foundry Local ou OpenVINO comme solution de repli.</value></data>
+  <data name="WindowsLocalAI_Hint_NpuModelSessionInit" xml:space="preserve"><value>Windows AI a téléchargé le modèle mais a échoué lors de l'initialisation de la session de modèle Phi Silica ou de la première inférence. Fermez les autres applications Windows AI et les processus lourds, redémarrez Windows pour réinitialiser le runtime NPU/modèle, puis réessayez. Si le problème persiste, utilisez Foundry Local ou OpenVINO comme solution de repli.</value></data>
 
   <!-- OpenVINO local NLLB (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>Prêt</value></data>
@@ -1127,4 +1137,94 @@
   <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>Le modèle NLLB-200 n'est pas encore téléchargé (~360 Mo). Cliquez sur « Télécharger le modèle » pour le récupérer dans %LOCALAPPDATA%\Easydict\models.</value></data>
   <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>Téléchargement des fichiers du modèle NLLB-200…</value></data>
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>Échec du téléchargement. Vérifiez votre connexion réseau et réessayez.</value></data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
+  </data>
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
+  </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>Minimal</value>
+  </data>
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
+  </data>
+  <data name="MdxDictionaryReady" xml:space="preserve">
+    <value>This dictionary is ready to use. No configuration needed.</value>
+  </data>
+  <data name="MdxDeleteDictionary" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxRedetectEncryption" xml:space="preserve">
+    <value>Re-detect Encryption</value>
+  </data>
+  <data name="MdxDeleteConfirmTitle" xml:space="preserve">
+    <value>Delete Dictionary</value>
+  </data>
+  <data name="MdxDeleteConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to remove {0}? The dictionary file on disk will not be deleted.</value>
+  </data>
+  <data name="MdxFilePath" xml:space="preserve">
+    <value>File Path</value>
+  </data>
+  <data name="MdxRegistrationCode" xml:space="preserve">
+    <value>Registration Code</value>
+  </data>
+  <data name="MdxEncryptedHelpText" xml:space="preserve">
+    <value>This dictionary is encrypted. Enter the email and registration code used when purchasing this dictionary.</value>
+  </data>
+  <data name="MdxEmailPlaceholder" xml:space="preserve">
+    <value>Email address used for registration</value>
+  </data>
+  <data name="MddFilesDetected" xml:space="preserve">
+    <value>Imported '{0}' with {1} companion resource file(s).</value>
+  </data>
+  <data name="MddNoFilesDetected" xml:space="preserve">
+    <value>Imported '{0}'. No companion MDD resource files found.</value>
+  </data>
+  <data name="MddAddFile" xml:space="preserve">
+    <value>Add MDD File...</value>
+  </data>
+  <data name="MddRescanFiles" xml:space="preserve">
+    <value>Re-scan MDD Files</value>
+  </data>
+  <data name="MddAssociatedFiles" xml:space="preserve">
+    <value>Resource Files</value>
+  </data>
 </root>

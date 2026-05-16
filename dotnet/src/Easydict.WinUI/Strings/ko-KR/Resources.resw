@@ -1112,7 +1112,7 @@
   <data name="LocalAI_Provider_OpenVINO" xml:space="preserve"><value>OpenVINO (NLLB-200, local)</value></data>
   <data name="LocalAI_Rating_WindowsAI" xml:space="preserve"><value>★★★★★</value></data>
   <data name="LocalAI_Rating_WindowsAI_Tooltip" xml:space="preserve"><value>Best quality when available. Uses Phi Silica on supported Copilot+ PCs.</value></data>
-  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★</value></data>
+  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★★</value></data>
   <data name="LocalAI_Rating_FoundryLocal_Tooltip" xml:space="preserve"><value>Good local LLM fallback. Requires Foundry Local and a loaded model.</value></data>
   <data name="LocalAI_Rating_OpenVINO" xml:space="preserve"><value>★★</value></data>
   <data name="LocalAI_Rating_OpenVINO_Tooltip" xml:space="preserve"><value>Basic offline translation fallback. Hardware acceleration is best effort.</value></data>
@@ -1148,11 +1148,17 @@
   <data name="PhiSilicaPreparationProgress_Checking" xml:space="preserve"><value>Checking Phi Silica model status...</value></data>
   <data name="PhiSilicaPreparationProgress_Requesting" xml:space="preserve"><value>Requesting model download and preparation from Windows...</value></data>
   <data name="PhiSilicaPreparationProgress_Waiting" xml:space="preserve"><value>Windows is downloading or preparing the on-device model. This can be a several-GB install...</value></data>
+  <data name="PhiSilicaPreparationProgress_CreatingSession" xml:space="preserve"><value>Creating a Phi Silica model session...</value></data>
+  <data name="PhiSilicaPreparationProgress_WarmingUp" xml:space="preserve"><value>Running a short Phi Silica warm-up inference...</value></data>
   <data name="PhiSilicaPreparationProgress_Finalizing" xml:space="preserve"><value>Finalizing model status...</value></data>
   <data name="PhiSilicaPreparationProgress_ReusingExisting" xml:space="preserve"><value>Detected an existing Windows download. Continuing preparation and asking Windows to resume/reuse downloaded content when possible...</value></data>
   <data name="PhiSilicaPreparationProgress_DeliveryOptimizationEstimate" xml:space="preserve"><value>Current package: {0}% ({1} of {2}), about {3} remaining. More Windows-managed components may follow.</value></data>
   <data name="PhiSilicaPreparationProgress_TimeUnknown" xml:space="preserve"><value>unknown time</value></data>
   <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>디바이스 내 언어 모델을 준비하는 중…</value></data>
+  <data name="WindowsLocalAI_Status_WarmupRequired" xml:space="preserve"><value>The on-device language model package is ready, but Easydict needs to create a Phi Silica session and run a short warm-up before treating it as usable.</value></data>
+  <data name="WindowsLocalAI_Status_WarmingUp" xml:space="preserve"><value>Creating a Phi Silica session and running a short warm-up inference…</value></data>
+  <data name="WindowsLocalAI_Status_RuntimeUnhealthy" xml:space="preserve"><value>Phi Silica is installed, but the Windows AI runtime failed to create a usable model session. Auto mode will use Foundry Local or OpenVINO as fallback.</value></data>
+  <data name="WindowsLocalAI_Status_UnsupportedWindowsAIBaseline" xml:space="preserve"><value>Phi Silica is unavailable because this Windows installation does not appear to have a valid Windows AI baseline. This usually happens on unactivated, outdated, Insider, managed, or incomplete Copilot+ PC images where Windows Update cannot install AI Components. Activate Windows, install the latest cumulative update and AI Components, then verify Phi Silica in AI Dev Gallery.</value></data>
   <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>디바이스 내 언어 모델이 준비되었습니다. 번역은 외부 서비스에 텍스트를 전송하지 않고 로컬에서 실행됩니다.</value></data>
   <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>The on-device language model is supported but has not been prepared yet. Click &quot;Prepare model&quot; to install it. Expect a several-GB Windows-managed install; the exact size depends on your device and Windows version.</value></data>
   <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>앱 패키지에 systemAIModels 기능이 없습니다. 일반적으로 휴대용/패키지되지 않은 빌드에 영향을 미칩니다. 대신 MSIX/Store 버전을 설치하세요.</value></data>
@@ -1161,6 +1167,10 @@
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows AI가 비활성화되었거나 제거되었습니다. 시스템 설정에서 Windows AI 기능을 다시 활성화하세요.</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Phi Silica는 이 시스템 또는 지역에서 사용할 수 없습니다. Windows Local AI에서 자동 또는 OpenVINO를 선택해 로컬 NLLB-200 폴백을 사용할 수 있습니다.</value></data>
   <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>디바이스 내 언어 모델 준비 실패. Windows 업데이트 및 AI 기능 가용성을 확인한 후 다시 시도하세요.</value></data>
+  <data name="WindowsLocalAI_Hint_ServiceDisabled" xml:space="preserve"><value>필요한 Windows 업데이트/다운로드 서비스가 비활성화되어 있거나 시작할 수 없습니다. Windows Update와 Delivery Optimization을 활성화한 후 다시 시도하세요.</value></data>
+  <data name="WindowsLocalAI_Hint_PackageResourceInUse" xml:space="preserve"><value>Windows가 모델 패키지를 다운로드했지만 관련 패키지 또는 리소스가 사용 중이어서 설치를 완료할 수 없습니다. Easydict 및 다른 Windows AI 앱을 닫거나 Windows를 다시 시작한 후 다시 시도하세요.</value></data>
+  <data name="WindowsLocalAI_Hint_NpuRuntimeReset" xml:space="preserve"><value>모델이 준비됐다고 보고된 후 Windows가 일반 오류를 반환했습니다. 일반적으로 모델 패키지 설치 후 Windows AI 모델 세션 또는 첫 추론이 실패했음을 의미합니다. 다른 Windows AI 앱과 무거운 프로세스를 닫고, Windows를 다시 시작하여 NPU/모델 런타임을 재설정한 후 다시 시도하세요. 계속되면 Foundry Local 또는 OpenVINO를 대안으로 사용하세요.</value></data>
+  <data name="WindowsLocalAI_Hint_NpuModelSessionInit" xml:space="preserve"><value>Windows AI가 모델을 다운로드했지만 Phi Silica 모델 세션 또는 첫 추론을 초기화하는 중에 실패했습니다. 다른 Windows AI 앱과 무거운 프로세스를 닫고, Windows를 다시 시작하여 NPU/모델 런타임을 재설정한 후 다시 시도하세요. 계속되면 Foundry Local 또는 OpenVINO를 대안으로 사용하세요.</value></data>
 
   <!-- OpenVINO local NLLB (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>준비됨</value></data>
@@ -1169,4 +1179,52 @@
   <data name="OpenVINO_Status_NotDownloaded" xml:space="preserve"><value>NLLB-200 모델이 아직 다운로드되지 않았습니다(~360 MB). "모델 다운로드"를 클릭하여 %LOCALAPPDATA%\Easydict\models로 가져오세요.</value></data>
   <data name="OpenVINO_Status_Downloading" xml:space="preserve"><value>NLLB-200 모델 파일을 다운로드하는 중…</value></data>
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>다운로드 실패. 네트워크 연결을 확인하고 다시 시도하세요.</value></data>
+  <data name="TrayTranslateClipboard" xml:space="preserve">
+    <value>Translate Clipboard</value>
+  </data>
+  <data name="TrayOcrTranslate" xml:space="preserve">
+    <value>OCR Translate</value>
+  </data>
+  <data name="ScreenCaptureExitConfirm" xml:space="preserve">
+    <value>Exit screenshot?</value>
+  </data>
+  <data name="ThemeMinimal" xml:space="preserve">
+    <value>Minimal</value>
+  </data>
+  <data name="LayoutDetection_Title" xml:space="preserve">
+    <value>Layout Detection</value>
+  </data>
+  <data name="LayoutDetection_Description" xml:space="preserve">
+    <value>ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.</value>
+  </data>
+  <data name="LayoutDetection_Auto" xml:space="preserve">
+    <value>Auto (Recommended)</value>
+  </data>
+  <data name="LayoutDetection_OnnxLocal" xml:space="preserve">
+    <value>Local ONNX Model</value>
+  </data>
+  <data name="LayoutDetection_VisionLLM" xml:space="preserve">
+    <value>Vision LLM</value>
+  </data>
+  <data name="LayoutDetection_Heuristic" xml:space="preserve">
+    <value>Heuristic Only</value>
+  </data>
+  <data name="LayoutDetection_DownloadModel" xml:space="preserve">
+    <value>Download Model (~75MB)</value>
+  </data>
+  <data name="LayoutDetection_Downloaded" xml:space="preserve">
+    <value>ONNX Model: Ready</value>
+  </data>
+  <data name="LayoutDetection_NotDownloaded" xml:space="preserve">
+    <value>ONNX Model: Not Downloaded</value>
+  </data>
+  <data name="LayoutDetection_DownloadFailed" xml:space="preserve">
+    <value>Download Failed</value>
+  </data>
+  <data name="LayoutDetection_DetectionMode" xml:space="preserve">
+    <value>Detection Mode</value>
+  </data>
+  <data name="LayoutDetection_VisionService" xml:space="preserve">
+    <value>Vision Service</value>
+  </data>
 </root>

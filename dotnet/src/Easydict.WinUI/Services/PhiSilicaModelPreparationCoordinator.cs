@@ -10,13 +10,29 @@ internal sealed record PhiSilicaModelPreparationSnapshot(
     string ResourceKey,
     bool IsPreparing,
     WindowsAIReadyState? ReadyState = null,
-    DeliveryOptimizationEstimate? DownloadEstimate = null)
+    DeliveryOptimizationEstimate? DownloadEstimate = null,
+    double? SdkProgressPercent = null)
 {
-    public double? ProgressPercent => DownloadEstimate?.ProgressPercent;
+    public double? ProgressPercent => DownloadEstimate?.ProgressPercent ?? SdkProgressPercent;
 }
 
 internal static class PhiSilicaModelPreparationProgressFormatter
 {
+    public static double? MergeProgressPercent(double? previousPercent, double? nextPercent)
+    {
+        if (nextPercent is not { } next
+            || double.IsNaN(next)
+            || double.IsInfinity(next))
+        {
+            return previousPercent;
+        }
+
+        var clampedNext = Math.Clamp(next, 0d, 100d);
+        return previousPercent is { } previous
+            ? Math.Max(Math.Clamp(previous, 0d, 100d), clampedNext)
+            : clampedNext;
+    }
+
     public static string FormatText(PhiSilicaModelPreparationSnapshot snapshot)
     {
         var loc = LocalizationService.Instance;
@@ -134,6 +150,19 @@ internal sealed class PhiSilicaModelPreparationCoordinator
         }
     }
 
+    /// <summary>
+    /// Returns a snapshot for displaying a transient preparation status text.
+    /// If a preparation is in flight, the active snapshot's progress fields
+    /// are preserved so the UI doesn't lose the percent it was already showing.
+    /// </summary>
+    public PhiSilicaModelPreparationSnapshot CreatePreparingSnapshot(string resourceKey)
+    {
+        var snapshot = CurrentSnapshot;
+        return snapshot.IsPreparing
+            ? snapshot with { ResourceKey = resourceKey }
+            : new PhiSilicaModelPreparationSnapshot(resourceKey, IsPreparing: true);
+    }
+
     public async Task<WindowsAIReadyState> EnsureReadyAsync(
         Action<string>? reportProgress,
         CancellationToken waitCancellationToken)
@@ -177,11 +206,13 @@ internal sealed class PhiSilicaModelPreparationCoordinator
         try
         {
             Report("PhiSilicaPreparationProgress_Checking");
+            PhiSilicaBackendHealthMonitor.Shared.Reset();
             await Task.Yield();
 
             finalState = PhiSilicaAvailability.GetReadyState();
             if (finalState == WindowsAIReadyState.Ready)
             {
+                await EnsurePhiSilicaBackendHealthyAsync();
                 return finalState;
             }
 
@@ -197,7 +228,10 @@ internal sealed class PhiSilicaModelPreparationCoordinator
             await Task.Yield();
 
             Report("PhiSilicaPreparationProgress_Waiting");
-            var ensureReadyTask = PhiSilicaAvailability.Client.EnsureReadyAsync(CancellationToken.None);
+            var sdkProgress = new Progress<double>(ReportSdkProgress);
+            var ensureReadyTask = PhiSilicaAvailability.Client.EnsureReadyAsync(
+                CancellationToken.None,
+                sdkProgress);
             using var pollCts = new CancellationTokenSource();
             var pollTask = PollDeliveryOptimizationProgressAsync(ensureReadyTask, pollCts.Token);
 
@@ -212,6 +246,11 @@ internal sealed class PhiSilicaModelPreparationCoordinator
             }
 
             Report("PhiSilicaPreparationProgress_Finalizing");
+            if (finalState == WindowsAIReadyState.Ready)
+            {
+                await EnsurePhiSilicaBackendHealthyAsync();
+            }
+
             return finalState;
         }
         finally
@@ -229,6 +268,7 @@ internal sealed class PhiSilicaModelPreparationCoordinator
     {
         lock (_gate)
         {
+            snapshot = PreserveProgress(snapshot, _currentSnapshot);
             if (_currentSnapshot == snapshot)
             {
                 return;
@@ -237,6 +277,72 @@ internal sealed class PhiSilicaModelPreparationCoordinator
         }
 
         ProgressChanged?.Invoke(this, snapshot);
+    }
+
+    private static PhiSilicaModelPreparationSnapshot PreserveProgress(
+        PhiSilicaModelPreparationSnapshot snapshot,
+        PhiSilicaModelPreparationSnapshot currentSnapshot)
+    {
+        if (!snapshot.IsPreparing)
+        {
+            return snapshot;
+        }
+
+        var previousPercent = currentSnapshot.IsPreparing
+            ? currentSnapshot.ProgressPercent
+            : null;
+        var mergedPercent = PhiSilicaModelPreparationProgressFormatter.MergeProgressPercent(
+            previousPercent,
+            snapshot.ProgressPercent);
+
+        if (mergedPercent is null || mergedPercent == snapshot.ProgressPercent)
+        {
+            return snapshot;
+        }
+
+        return snapshot with
+        {
+            DownloadEstimate = null,
+            SdkProgressPercent = mergedPercent,
+        };
+    }
+
+    private void ReportSdkProgress(double progressPercent)
+    {
+        if (double.IsNaN(progressPercent) || double.IsInfinity(progressPercent))
+        {
+            return;
+        }
+
+        // Round to whole-percent steps so high-frequency SDK callbacks don't
+        // wake observers (and the WinUI dispatcher) for sub-pixel changes.
+        var rounded = Math.Round(Math.Clamp(progressPercent, 0d, 100d), MidpointRounding.AwayFromZero);
+
+        Report(new PhiSilicaModelPreparationSnapshot(
+            "PhiSilicaPreparationProgress_Waiting",
+            IsPreparing: true,
+            SdkProgressPercent: rounded));
+    }
+
+    private async Task EnsurePhiSilicaBackendHealthyAsync()
+    {
+        await PhiSilicaBackendHealthMonitor.Shared.EnsureHealthyAsync(
+            PhiSilicaAvailability.Client,
+            snapshot =>
+            {
+                var resourceKey = snapshot.State switch
+                {
+                    PhiSilicaBackendHealthState.CreatingSession =>
+                        "PhiSilicaPreparationProgress_CreatingSession",
+                    PhiSilicaBackendHealthState.WarmingUp =>
+                        "PhiSilicaPreparationProgress_WarmingUp",
+                    PhiSilicaBackendHealthState.Healthy =>
+                        "PhiSilicaPreparationProgress_Finalizing",
+                    _ => "PhiSilicaPreparationProgress_Finalizing",
+                };
+                Report(resourceKey);
+            },
+            CancellationToken.None);
     }
 
     private async Task PollDeliveryOptimizationProgressAsync(

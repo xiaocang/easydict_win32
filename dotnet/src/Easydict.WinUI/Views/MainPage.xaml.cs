@@ -72,6 +72,7 @@ namespace Easydict.WinUI.Views
         private string _lastStatusText = "Disconnected";
         private string _lastStatusSummaryText = string.Empty;
         private bool _lastStatusSummaryIsImportant;
+        private double? _localModelPreparationLastProgressPercent;
         private bool _suppressSuggestionTextChanged;
         private int _suggestionRequestId;
         private bool _isSuggestionNavigationActive;
@@ -571,16 +572,20 @@ namespace Easydict.WinUI.Views
 
         private void ShowLocalModelPreparationProgress(string resourceKey)
         {
-            ShowLocalModelPreparationProgress(new PhiSilicaModelPreparationSnapshot(resourceKey, IsPreparing: true));
+            ShowLocalModelPreparationProgress(
+                PhiSilicaModelPreparationCoordinator.Instance.CreatePreparingSnapshot(resourceKey));
         }
 
         private void ShowLocalModelPreparationProgress(PhiSilicaModelPreparationSnapshot snapshot)
         {
             LocalModelPreparationStatusText.Text = PhiSilicaModelPreparationProgressFormatter.FormatText(snapshot);
-            if (snapshot.ProgressPercent is { } percent)
+            _localModelPreparationLastProgressPercent = PhiSilicaModelPreparationProgressFormatter.MergeProgressPercent(
+                _localModelPreparationLastProgressPercent,
+                snapshot.ProgressPercent);
+            if (_localModelPreparationLastProgressPercent is { } percent)
             {
                 LocalModelPreparationProgressBar.IsIndeterminate = false;
-                LocalModelPreparationProgressBar.Value = Math.Clamp(percent, 0, 100);
+                LocalModelPreparationProgressBar.Value = percent;
             }
             else
             {
@@ -593,6 +598,7 @@ namespace Easydict.WinUI.Views
         {
             LocalModelPreparationProgressPanel.Visibility = Visibility.Collapsed;
             LocalModelPreparationStatusText.Text = string.Empty;
+            _localModelPreparationLastProgressPercent = null;
         }
 
         private void SyncLocalModelPreparationProgressFromCoordinator()

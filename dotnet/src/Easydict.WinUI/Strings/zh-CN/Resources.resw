@@ -1157,7 +1157,7 @@
   <data name="LocalAI_Provider_OpenVINO" xml:space="preserve"><value>OpenVINO（NLLB-200，本地）</value></data>
   <data name="LocalAI_Rating_WindowsAI" xml:space="preserve"><value>★★★★★</value></data>
   <data name="LocalAI_Rating_WindowsAI_Tooltip" xml:space="preserve"><value>可用时质量最好。使用支持的 Copilot+ PC 上的 Phi Silica。</value></data>
-  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★</value></data>
+  <data name="LocalAI_Rating_FoundryLocal" xml:space="preserve"><value>★★★★</value></data>
   <data name="LocalAI_Rating_FoundryLocal_Tooltip" xml:space="preserve"><value>较好的本地 LLM 兜底。需要 Foundry Local 和已加载的本地模型。</value></data>
   <data name="LocalAI_Rating_OpenVINO" xml:space="preserve"><value>★★</value></data>
   <data name="LocalAI_Rating_OpenVINO_Tooltip" xml:space="preserve"><value>基础离线翻译兜底。硬件加速为尽力而为。</value></data>
@@ -1193,11 +1193,17 @@
   <data name="PhiSilicaPreparationProgress_Checking" xml:space="preserve"><value>正在检查 Phi Silica 模型状态…</value></data>
   <data name="PhiSilicaPreparationProgress_Requesting" xml:space="preserve"><value>正在请求 Windows 下载并准备模型…</value></data>
   <data name="PhiSilicaPreparationProgress_Waiting" xml:space="preserve"><value>Windows 正在下载或准备本机模型。这可能是数 GB 级安装…</value></data>
+  <data name="PhiSilicaPreparationProgress_CreatingSession" xml:space="preserve"><value>正在创建 Phi Silica 模型会话…</value></data>
+  <data name="PhiSilicaPreparationProgress_WarmingUp" xml:space="preserve"><value>正在执行一次很短的 Phi Silica 预热推理…</value></data>
   <data name="PhiSilicaPreparationProgress_Finalizing" xml:space="preserve"><value>正在确认模型状态…</value></data>
   <data name="PhiSilicaPreparationProgress_ReusingExisting" xml:space="preserve"><value>检测到已有 Windows 下载任务。正在继续准备，并请求 Windows 尽量断点续传/复用已下载内容…</value></data>
   <data name="PhiSilicaPreparationProgress_DeliveryOptimizationEstimate" xml:space="preserve"><value>当前包：{0}%（{1} / {2}），预计剩余约 {3}。后续可能还有其它 Windows 托管组件。</value></data>
   <data name="PhiSilicaPreparationProgress_TimeUnknown" xml:space="preserve"><value>未知时间</value></data>
   <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>正在准备本机语言模型…</value></data>
+  <data name="WindowsLocalAI_Status_WarmupRequired" xml:space="preserve"><value>本机语言模型包已就绪，但 Easydict 仍需要创建 Phi Silica 会话并完成一次短预热后，才会把它视为可用。</value></data>
+  <data name="WindowsLocalAI_Status_WarmingUp" xml:space="preserve"><value>正在创建 Phi Silica 会话并执行短预热推理…</value></data>
+  <data name="WindowsLocalAI_Status_RuntimeUnhealthy" xml:space="preserve"><value>Phi Silica 已安装，但 Windows AI runtime 未能创建可用的模型会话。自动模式将改用 Foundry Local 或 OpenVINO 作为备用方案。</value></data>
+  <data name="WindowsLocalAI_Status_UnsupportedWindowsAIBaseline" xml:space="preserve"><value>Phi Silica 不可用，因为当前 Windows 安装似乎没有有效的 Windows AI baseline。这通常发生在未激活、过旧、Insider、受管理或不完整的 Copilot+ PC 镜像上，Windows Update 无法安装 AI Components。请激活 Windows，安装最新累积更新和 AI Components，然后在 AI Dev Gallery 中验证 Phi Silica。</value></data>
   <data name="WindowsLocalAI_Status_Ready" xml:space="preserve"><value>本机语言模型已就绪。翻译完全在本机进行，不会发送任何文本到外部服务。</value></data>
   <data name="WindowsLocalAI_Status_NotReady" xml:space="preserve"><value>当前设备支持本机语言模型，但模型尚未准备。点击“准备模型”以下载并安装。预计是数 GB 级 Windows 托管安装，具体大小取决于设备和 Windows 版本。</value></data>
   <data name="WindowsLocalAI_Status_CapabilityMissing" xml:space="preserve"><value>应用包缺少 systemAIModels 能力声明。该状态通常出现在便携版/未打包版本中，请安装 MSIX 或 Microsoft Store 版本。</value></data>
@@ -1206,6 +1212,10 @@
   <data name="WindowsLocalAI_Status_DisabledByUser" xml:space="preserve"><value>Windows AI 已被禁用或卸载。请在系统设置中重新启用 Windows AI 功能。</value></data>
   <data name="WindowsLocalAI_Status_NotSupported" xml:space="preserve"><value>Phi Silica 在当前系统或地区不可用。可在 Windows Local AI 中选择“自动”或 OpenVINO，使用本机 NLLB-200 备用方案。</value></data>
   <data name="WindowsLocalAI_Status_PrepareFailed" xml:space="preserve"><value>本机语言模型准备失败。请检查 Windows 更新与 AI 功能可用性后重试。</value></data>
+  <data name="WindowsLocalAI_Hint_ServiceDisabled" xml:space="preserve"><value>Windows 更新或下载相关服务已被禁用或无法启动。请启用 Windows Update 与 Delivery Optimization 后重试。</value></data>
+  <data name="WindowsLocalAI_Hint_PackageResourceInUse" xml:space="preserve"><value>Windows 已下载模型包，但因相关组件正在使用而无法完成安装。请关闭 Easydict 和其他 Windows AI 应用，或重启 Windows 后重试。</value></data>
+  <data name="WindowsLocalAI_Hint_NpuRuntimeReset" xml:space="preserve"><value>模型显示就绪后 Windows 返回了通用错误。这通常表示模型包安装完成后 Windows AI 的模型会话或首次推理失败。请关闭其他 Windows AI 应用和占用资源的进程，重启 Windows 以重置 NPU 与模型运行时后重试。若仍未解决,请改用 Foundry Local 或 OpenVINO 作为备用。</value></data>
+  <data name="WindowsLocalAI_Hint_NpuModelSessionInit" xml:space="preserve"><value>Windows AI 已下载模型，但在初始化 Phi Silica 模型会话或首次推理时失败。请关闭其他 Windows AI 应用和占用资源的进程，重启 Windows 以重置 NPU 与模型运行时后重试。若仍未解决,请改用 Foundry Local 或 OpenVINO 作为备用。</value></data>
 
   <!-- OpenVINO local NLLB (NLLB-200) -->
   <data name="OpenVINO_Title_Ready" xml:space="preserve"><value>已就绪</value></data>

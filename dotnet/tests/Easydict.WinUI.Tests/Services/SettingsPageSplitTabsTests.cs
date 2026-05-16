@@ -88,7 +88,8 @@ public class SettingsPageSplitTabsTests
         "PhiSilicaPreparationProgress_Finalizing",
         "PhiSilicaPreparationProgress_ReusingExisting",
         "PhiSilicaPreparationProgress_DeliveryOptimizationEstimate",
-        "PhiSilicaPreparationProgress_TimeUnknown"
+        "PhiSilicaPreparationProgress_TimeUnknown",
+        "WindowsLocalAI_Status_UnsupportedWindowsAIBaseline"
     ];
 
     private static readonly string[] ExpectedServiceConfigurationIconAssets =
@@ -264,7 +265,7 @@ public class SettingsPageSplitTabsTests
         xaml.Should().Contain("x:Name=\"FoundryLocalRatingText\"");
         xaml.Should().Contain("x:Name=\"OpenVinoRatingText\"");
         xaml.Should().Contain("Text=\"★★★★★\"");
-        xaml.Should().Contain("Text=\"★★★\"");
+        xaml.Should().Contain("Text=\"★★★★\"");
         xaml.Should().Contain("Text=\"★★\"");
         xaml.Should().Contain("ToolTipService.ToolTip");
         xaml.Should().NotContain("Segoe UI Emoji");
@@ -298,6 +299,18 @@ public class SettingsPageSplitTabsTests
         File.ReadAllText(SettingsPagePhiSilicaPath).Should().Contain("ShowPhiSilicaPrepareProgress");
         File.ReadAllText(SettingsPagePhiSilicaPath).Should().Contain("PhiSilicaPreparationProgress_Waiting");
         xaml.Should().NotContain("x:Name=\"OpenVinoExpander\"");
+    }
+
+    [Fact]
+    public void SettingsPage_PhiSilicaProgressResumesFromSharedCoordinator()
+    {
+        var codeBehind = File.ReadAllText(SettingsPagePhiSilicaPath);
+
+        codeBehind.Should().Contain("SyncPhiSilicaPreparationProgressFromCoordinator");
+        GetMethodBody(codeBehind, "InitializePhiSilicaPanel")
+            .Should().Contain("SyncPhiSilicaPreparationProgressFromCoordinator();");
+        GetMethodBody(codeBehind, "ShowPhiSilicaPrepareProgress")
+            .Should().Contain("PhiSilicaModelPreparationCoordinator.Instance.CreatePreparingSnapshot(resourceKey)");
     }
 
     [Fact]

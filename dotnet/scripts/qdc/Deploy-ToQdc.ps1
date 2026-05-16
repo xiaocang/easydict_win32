@@ -67,7 +67,14 @@ param(
     [switch]$ScpVerbose
 )
 
-$ErrorActionPreference = "Stop"
+# EAP=Continue (not Stop) because every ssh/scp call below already audits
+# $LASTEXITCODE explicitly. Newer OpenSSH writes informational lines to stderr
+# (post-quantum advisory, "Permanently added ... to known hosts"), and with
+# EAP=Stop those become RemoteException terminating errors before the exit
+# code is ever inspected. The few cmdlets in this script (Test-Path, Get-Item,
+# Select-Xml, etc.) all use explicit `throw` on failure, so we don't need Stop
+# semantics for them either.
+$ErrorActionPreference = "Continue"
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 $dotnetDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
@@ -140,6 +147,11 @@ function Get-SshArgs {
     # See Test-QdcConnection.ps1 for the rationale on disabling host key check:
     # QDC's localhost:2222 -> $deviceHost mapping changes every session.
     $a = @(
+        # See reference_qdc_quirks: UserKnownHostsFile=NUL alone fails when the
+        # device behind localhost:$Port changes between QDC reservations -- ssh
+        # still flags REMOTE HOST IDENTIFICATION HAS CHANGED and disables -L
+        # forwarding. NoHostAuthenticationForLocalhost=yes is the localhost opt-out.
+        "-o", "NoHostAuthenticationForLocalhost=yes",
         "-o", "StrictHostKeyChecking=no",
         "-o", "UserKnownHostsFile=NUL",
         "-o", "ConnectTimeout=15",
@@ -153,6 +165,11 @@ function Get-SshArgs {
 function Get-ScpArgs {
     # scp uses -P (capital) for port, not -p
     $a = @(
+        # See reference_qdc_quirks: UserKnownHostsFile=NUL alone fails when the
+        # device behind localhost:$Port changes between QDC reservations -- ssh
+        # still flags REMOTE HOST IDENTIFICATION HAS CHANGED and disables -L
+        # forwarding. NoHostAuthenticationForLocalhost=yes is the localhost opt-out.
+        "-o", "NoHostAuthenticationForLocalhost=yes",
         "-o", "StrictHostKeyChecking=no",
         "-o", "UserKnownHostsFile=NUL",
         "-o", "ConnectTimeout=15",
@@ -173,6 +190,34 @@ function To-ScpLocalPath {
 $sshArgs = Get-SshArgs
 $scpArgs = Get-ScpArgs
 $target = "$User@$RemoteHost"
+
+# Run a PowerShell snippet on the remote machine via SSH.
+#
+# The naive form `& ssh ... "powershell -Command \"... | Out-Null\""` breaks
+# because PowerShell 5.1 strips embedded double-quotes when handing argv to
+# native EXEs, so the remote cmd.exe sees the embedded `|` as a cmd-level
+# pipe and tries to run `Out-Null` (or `-File`/`-Path`/etc) as a cmd command.
+# Base64-encoding the payload puts no quotes/pipes/spaces inside it, so cmd
+# can parse the wire string unambiguously.
+function Invoke-RemotePwsh {
+    param(
+        [Parameter(Mandatory)][string]$Script,
+        # Stream: let stdout/stderr flow to our console (for long-running
+        # install/validate). Default: capture stdout, drop stderr (for short
+        # probes whose output we want as a string).
+        [switch]$Stream
+    )
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Script))
+    # -OutputFormat Text: child powershell otherwise switches to CLIXML
+    # (remoting wire format) when its stdout is captured by another PS host,
+    # which makes Write-Host output unreadable on our side.
+    $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -OutputFormat Text -EncodedCommand $b64"
+    if ($Stream) {
+        & ssh @sshArgs $target $cmd
+        return
+    }
+    return & ssh @sshArgs $target $cmd 2>$null
+}
 
 # --- 3. Determine remote home + staging dir --------------------------------
 
@@ -198,8 +243,7 @@ Write-Host "  Staging            = $RemoteStagingDir" -ForegroundColor Gray
 Write-Host ""
 
 # Create staging dir on remote
-$mkdirCmd = "powershell.exe -NoProfile -Command `"New-Item -ItemType Directory -Force -Path '$RemoteStagingDir' | Out-Null`""
-& ssh @sshArgs $target $mkdirCmd 2>$null | Out-Null
+Invoke-RemotePwsh "New-Item -ItemType Directory -Force -Path '$RemoteStagingDir' | Out-Null" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Failed to create remote staging dir" }
 
 # --- 4. Copy files ----------------------------------------------------------
@@ -238,10 +282,8 @@ $installFlags = ""
 if ($Machine)   { $installFlags += " -Machine" }
 if ($LaunchApp) { $installFlags += " -LaunchApp" }
 
-$installCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$remoteInstallScript`"" `
-    + " -CertPath `"$remoteCertPath`" -MsixPath `"$remoteMsixPath`"$installFlags"
-
-& ssh @sshArgs $target $installCmd
+$installScript = "& '$remoteInstallScript' -CertPath '$remoteCertPath' -MsixPath '$remoteMsixPath'$installFlags"
+Invoke-RemotePwsh -Stream $installScript
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Remote install failed (exit $LASTEXITCODE)." -ForegroundColor Red
     exit $LASTEXITCODE
@@ -256,8 +298,7 @@ if ($SkipValidate) {
 } else {
     Write-Host "[4/5] Validating remote deployment..." -ForegroundColor Yellow
     $remoteValidateScript = Join-Path $RemoteStagingDir (Split-Path -Leaf $ValidateScript)
-    $validateCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$remoteValidateScript`""
-    & ssh @sshArgs $target $validateCmd
+    Invoke-RemotePwsh -Stream "& '$remoteValidateScript'"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Validation reported failures (exit $LASTEXITCODE)." -ForegroundColor Red
         exit $LASTEXITCODE

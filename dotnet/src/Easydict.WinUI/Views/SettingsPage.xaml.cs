@@ -702,6 +702,11 @@ public sealed partial class SettingsPage : Page
             WindowsLocalAISectionTitleText.Text = loc.GetString("LocalAI_WindowsAISectionTitle");
         if (WindowsLocalAIPrepareButton != null)
             WindowsLocalAIPrepareButton.Content = loc.GetString("WindowsLocalAI_PrepareButton");
+        if (WindowsLocalAIWindowsUpdateLink != null)
+        {
+            WindowsLocalAIWindowsUpdateLink.Content = loc.GetString("PhiSilicaPreparationProgress_WindowsUpdateLink");
+            WindowsLocalAIWindowsUpdateLink.NavigateUri = new Uri("ms-settings:windowsupdate");
+        }
         if (FoundryLocalTitleText != null)
             FoundryLocalTitleText.Text = loc.GetString("FoundryLocal_ConfigTitle");
         if (FoundryLocalEndpointBox != null)

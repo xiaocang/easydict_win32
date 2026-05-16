@@ -91,7 +91,14 @@ $target = "$User@$RemoteHost"
 
 # Probe 1: trivial command to test connectivity
 Write-Host "[1/2] Probing SSH..." -ForegroundColor Yellow
+# ssh emits informational lines to stderr ("Warning: Permanently added ...",
+# OpenSSH post-quantum advisory). With $ErrorActionPreference=Stop these would
+# become terminating errors before we ever check $LASTEXITCODE — scope EAP to
+# Continue around native ssh invocations so we route only on the exit code.
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 $probe = & ssh @sshArgs $target "echo OK" 2>&1
+$ErrorActionPreference = $prevEap
 if ($LASTEXITCODE -ne 0) {
     Write-Host "SSH connection failed." -ForegroundColor Red
     Write-Host $probe
@@ -132,7 +139,10 @@ $pwshAvail = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "yes" } else 
 "PwshAvail  : $pwshAvail"
 '@
 $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($remotePs))
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 $envInfo = & ssh @sshArgs $target "powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded" 2>&1
+$ErrorActionPreference = $prevEap
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Remote environment query failed." -ForegroundColor Red
     Write-Host $envInfo

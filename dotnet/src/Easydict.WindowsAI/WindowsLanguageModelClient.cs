@@ -21,6 +21,8 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
     private const int PackageResourceInUseHResult = unchecked((int)0x80073D02);
     private const int UnspecifiedFailureHResult = unchecked((int)0x80004005);
 
+    private readonly record struct WindowsBuildInfo(string? CurrentBuild, int? Ubr);
+
     // Signatures of the broker-side init failure that surface as the generic
     // 0x80004005 from the WinRT facade. Matched against exception.ToString()
     // so the runtime hint can be more specific than the bare HRESULT entry.
@@ -87,9 +89,10 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
     {
         var languageModelAssembly = typeof(LanguageModel).Assembly.GetName();
         var rawReadyState = TryGetRawReadyState();
+        var buildInfo = TryGetWindowsBuildInfo();
         return new WindowsAIHealthFingerprint(
-            OsBuild: Environment.OSVersion.Version.ToString(),
-            Ubr: TryGetUbr(),
+            OsBuild: FormatFullWindowsBuild(buildInfo.CurrentBuild, buildInfo.Ubr, Environment.OSVersion.Version),
+            Ubr: buildInfo.Ubr,
             WindowsAppSdkVersion: languageModelAssembly.Version?.ToString() ?? "unknown",
             ProcessArchitecture: RuntimeInformation.ProcessArchitecture.ToString(),
             BackendName: "PhiSilica",
@@ -268,18 +271,59 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
 
     private static int? TryGetUbr()
     {
+        return TryGetWindowsBuildInfo().Ubr;
+    }
+
+    private static WindowsBuildInfo TryGetWindowsBuildInfo()
+    {
         try
         {
-            var value = Registry.GetValue(
-                @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion",
-                "UBR",
-                null);
-            return value is int ubr ? ubr : null;
+            using var key = Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            return new WindowsBuildInfo(
+                key?.GetValue("CurrentBuild")?.ToString(),
+                TryParseRegistryInt(key?.GetValue("UBR")));
         }
         catch
         {
-            return null;
+            return new WindowsBuildInfo(null, null);
         }
+    }
+
+    private static int? TryParseRegistryInt(object? value)
+    {
+        return value switch
+        {
+            int intValue => intValue,
+            long longValue when longValue is >= int.MinValue and <= int.MaxValue => (int)longValue,
+            string stringValue when int.TryParse(stringValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) => parsed,
+            _ => null,
+        };
+    }
+
+    internal static string FormatFullWindowsBuild(
+        string? currentBuild,
+        int? ubr,
+        Version fallbackVersion)
+    {
+        var build = string.IsNullOrWhiteSpace(currentBuild)
+            ? null
+            : currentBuild.Trim();
+
+        if (build is not null && ubr is { } updateBuildRevision)
+        {
+            return $"10.0.{build}.{updateBuildRevision}";
+        }
+
+        if (build is not null)
+        {
+            var fallbackRevision = fallbackVersion.Revision >= 0
+                ? fallbackVersion.Revision
+                : 0;
+            return $"10.0.{build}.{fallbackRevision}";
+        }
+
+        return fallbackVersion.ToString();
     }
 
     private static AIFeatureReadyState? TryGetRawReadyState()
@@ -313,7 +357,7 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
     {
         return rawReadyState switch
         {
-            AIFeatureReadyState.Ready or AIFeatureReadyState.NotReady => true,
+            AIFeatureReadyState.Ready => true,
             AIFeatureReadyState.OSUpdateNeeded => false,
             _ => null,
         };
@@ -435,7 +479,8 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
 
     private static void AddEnvironmentFingerprint(List<string> diagnostics)
     {
-        diagnostics.Add($"osBuild={Environment.OSVersion.Version}");
+        var buildInfo = TryGetWindowsBuildInfo();
+        diagnostics.Add($"osBuild={FormatFullWindowsBuild(buildInfo.CurrentBuild, buildInfo.Ubr, Environment.OSVersion.Version)}");
         diagnostics.Add($"processArch={System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
     }
 

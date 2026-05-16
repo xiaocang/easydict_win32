@@ -327,7 +327,7 @@
                                                 <TextBlock x:Name="LocalAIProviderFoundryLocalLabelText"
                                                            Text="Foundry Local"/>
                                                 <TextBlock x:Name="LocalAIProviderFoundryLocalRatingText"
-                                                           Text="★★★"
+                                                           Text="★★★★"
                                                            ToolTipService.ToolTip="Good local LLM fallback."/>
                                             </StackPanel>
                                         </ComboBoxItem>
@@ -383,6 +383,13 @@
                                         <ProgressBar x:Name="WindowsLocalAIPrepareProgressBar"
                                                      Height="4"
                                                      IsIndeterminate="True"/>
+                                        <HyperlinkButton x:Name="WindowsLocalAIWindowsUpdateLink"
+                                                         Content="Track download progress in Windows Update"
+                                                         NavigateUri="ms-settings:windowsupdate"
+                                                         Padding="0"
+                                                         MinHeight="0"
+                                                         FontSize="12"
+                                                         HorizontalAlignment="Left"/>
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel x:Name="FoundryLocalConfigPanel"
@@ -393,7 +400,7 @@
                                                    Text="Foundry Local"
                                                    FontWeight="SemiBold"/>
                                         <TextBlock x:Name="FoundryLocalRatingText"
-                                                   Text="★★★"
+                                                   Text="★★★★"
                                                    ToolTipService.ToolTip="Good local LLM fallback."/>
                                     </StackPanel>
                                     <TextBox x:Name="FoundryLocalEndpointBox"

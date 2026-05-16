@@ -9,13 +9,23 @@ public interface IWindowsLanguageModelClient
 {
     WindowsAIReadyState GetReadyState();
 
+    WindowsAIHealthFingerprint GetHealthFingerprint();
+
     /// <summary>
     /// Triggers <c>LanguageModel.EnsureReadyAsync()</c> when state is <see cref="WindowsAIReadyState.NotReady"/>.
-    /// Returns the post-attempt ready state (so callers can decide whether to proceed or fail).
+    /// Returns the SDK result state so callers are not dependent on an immediately refreshed
+    /// <see cref="GetReadyState"/> snapshot.
     /// </summary>
-    Task<WindowsAIReadyState> EnsureReadyAsync(CancellationToken cancellationToken);
+    Task<WindowsAIReadyState> EnsureReadyAsync(
+        CancellationToken cancellationToken,
+        IProgress<double>? progress = null);
 
     Task<WindowsAIResponse> GenerateAsync(
+        string prompt,
+        WindowsAIGenerationOptions options,
+        CancellationToken cancellationToken);
+
+    Task WarmUpAsync(
         string prompt,
         WindowsAIGenerationOptions options,
         CancellationToken cancellationToken);
@@ -42,6 +52,7 @@ public enum WindowsAIReadyState
     NotCompatibleWithSystemHardware,
     OSUpdateNeeded,
     DisabledByUser,
+    UnsupportedWindowsAIBaseline,
     NotSupportedOnCurrentSystem,
 }
 
@@ -68,3 +79,26 @@ public sealed record WindowsAIGenerationOptions(
     float Temperature = 0.1f,
     uint TopK = 1,
     float TopP = 0.9f);
+
+public sealed record WindowsAIHealthFingerprint(
+    string OsBuild,
+    int? Ubr,
+    string WindowsAppSdkVersion,
+    string ProcessArchitecture,
+    string BackendName,
+    string ComponentMarker,
+    bool? WindowsActivated = null,
+    bool? PhiSilicaAiComponentsPresent = null)
+{
+    public override string ToString()
+    {
+        var ubr = Ubr is { } value ? value.ToString() : "unknown";
+        var activated = WindowsActivated is { } activationValue
+            ? activationValue.ToString()
+            : "unknown";
+        var aiComponents = PhiSilicaAiComponentsPresent is { } componentValue
+            ? componentValue.ToString()
+            : "unknown";
+        return $"osBuild={OsBuild}; ubr={ubr}; windowsAppSdk={WindowsAppSdkVersion}; processArch={ProcessArchitecture}; backend={BackendName}; component={ComponentMarker}; windowsActivated={activated}; phiSilicaAiComponentsPresent={aiComponents}";
+    }
+}

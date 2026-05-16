@@ -1154,6 +1154,7 @@
   <data name="PhiSilicaPreparationProgress_ReusingExisting" xml:space="preserve"><value>偵測到既有 Windows 下載工作。正在繼續準備，並請求 Windows 盡量續傳／重用已下載內容…</value></data>
   <data name="PhiSilicaPreparationProgress_DeliveryOptimizationEstimate" xml:space="preserve"><value>目前套件：{0}%（{1} / {2}），預計剩餘約 {3}。後續可能還有其他 Windows 託管元件。</value></data>
   <data name="PhiSilicaPreparationProgress_TimeUnknown" xml:space="preserve"><value>未知時間</value></data>
+  <data name="PhiSilicaPreparationProgress_WindowsUpdateLink" xml:space="preserve"><value>在 Windows Update 中查看下載進度</value></data>
   <data name="WindowsLocalAI_Status_Preparing" xml:space="preserve"><value>正在準備本機語言模型…</value></data>
   <data name="WindowsLocalAI_Status_WarmupRequired" xml:space="preserve"><value>The on-device language model package is ready, but Easydict needs to create a Phi Silica session and run a short warm-up before treating it as usable.</value></data>
   <data name="WindowsLocalAI_Status_WarmingUp" xml:space="preserve"><value>Creating a Phi Silica session and running a short warm-up inference…</value></data>

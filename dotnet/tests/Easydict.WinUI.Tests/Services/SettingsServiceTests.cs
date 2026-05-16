@@ -403,6 +403,7 @@ public class SettingsServiceTests
     [InlineData(WindowsAIReadyState.NotCompatibleWithSystemHardware)]
     [InlineData(WindowsAIReadyState.OSUpdateNeeded)]
     [InlineData(WindowsAIReadyState.DisabledByUser)]
+    [InlineData(WindowsAIReadyState.UnsupportedWindowsAIBaseline)]
     [InlineData(WindowsAIReadyState.NotSupportedOnCurrentSystem)]
     public void GetDefaultEnabledServices_KeepsGoogleOnly_WhenPhiSilicaIsNotSupported(WindowsAIReadyState state)
     {

@@ -89,6 +89,7 @@ public class SettingsPageSplitTabsTests
         "PhiSilicaPreparationProgress_ReusingExisting",
         "PhiSilicaPreparationProgress_DeliveryOptimizationEstimate",
         "PhiSilicaPreparationProgress_TimeUnknown",
+        "PhiSilicaPreparationProgress_WindowsUpdateLink",
         "WindowsLocalAI_Status_UnsupportedWindowsAIBaseline"
     ];
 
@@ -262,6 +263,8 @@ public class SettingsPageSplitTabsTests
         xaml.Should().Contain("x:Name=\"WindowsLocalAIPrepareProgressPanel\"");
         xaml.Should().Contain("x:Name=\"WindowsLocalAIPrepareProgressText\"");
         xaml.Should().Contain("x:Name=\"WindowsLocalAIPrepareProgressBar\"");
+        xaml.Should().Contain("x:Name=\"WindowsLocalAIWindowsUpdateLink\"");
+        xaml.Should().Contain("ms-settings:windowsupdate");
         xaml.Should().Contain("x:Name=\"FoundryLocalRatingText\"");
         xaml.Should().Contain("x:Name=\"OpenVinoRatingText\"");
         xaml.Should().Contain("Text=\"★★★★★\"");
@@ -285,6 +288,7 @@ public class SettingsPageSplitTabsTests
         codeBehind.Should().Contain("LocalAI_Rating_OpenVINO_Tooltip");
         codeBehind.Should().Contain("SetLocalAiRating");
         codeBehind.Should().Contain("WindowsLocalAI_PrepareButton");
+        codeBehind.Should().Contain("PhiSilicaPreparationProgress_WindowsUpdateLink");
         codeBehind.Should().Contain("FoundryLocal_ConfigDescription");
         codeBehind.Should().Contain("FoundryLocal_InstallLinkText");
         codeBehind.Should().Contain("FoundryLocalService.InstallDocumentationUrl");

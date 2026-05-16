@@ -53,6 +53,27 @@ public sealed class LocalAITranslationServiceIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void PhiSilicaProgress_MergeProgressPercent_DoesNotRegress()
+    {
+        double? progress = null;
+
+        progress = PhiSilicaModelPreparationProgressFormatter.MergeProgressPercent(progress, 18d);
+        progress.Should().Be(18d);
+
+        progress = PhiSilicaModelPreparationProgressFormatter.MergeProgressPercent(progress, null);
+        progress.Should().Be(18d);
+
+        progress = PhiSilicaModelPreparationProgressFormatter.MergeProgressPercent(progress, double.NaN);
+        progress.Should().Be(18d);
+
+        progress = PhiSilicaModelPreparationProgressFormatter.MergeProgressPercent(progress, 0d);
+        progress.Should().Be(18d);
+
+        progress = PhiSilicaModelPreparationProgressFormatter.MergeProgressPercent(progress, 64d);
+        progress.Should().Be(64d);
+    }
+
+    [Fact]
     public async Task TranslationManager_UsesPhiSilicaBackend_WhenProviderIsWindowsAI()
     {
         var phiClient = new FakeWindowsAIClient
@@ -198,6 +219,68 @@ public sealed class LocalAITranslationServiceIntegrationTests : IDisposable
         phiClient.LastPrompt.Should().Contain("Hello");
         foundryLocal.TranslateCallCount.Should().Be(1);
         openVinoEngine.GenerateCallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TranslationManager_AutoProvider_StreamFallsBackFromPhiSilicaRuntimeErrorToFoundryLocal()
+    {
+        var phiClient = new FakeWindowsAIClient
+        {
+            StreamFailure = new WindowsLanguageModelException(
+                WindowsAIResponseStatus.Error,
+                "Windows AI runtime failed while running Phi Silica: operation=stream; hResult=0x80004005"),
+        };
+        var foundryLocal = new FakeFoundryLocalService { ResponseText = "你好 from Foundry" };
+        var openVinoEngine = new FakeNllbEngine { TokenStream = [100, 200] };
+        using var openVino = CreateOpenVino(openVinoEngine);
+        using var manager = CreateManager(
+            new PhiSilicaTranslationService(phiClient),
+            foundryLocal,
+            openVino,
+            LocalAIProviderMode.Auto);
+        var request = CreateRequest("Hello");
+
+        var chunks = new List<string>();
+        await foreach (var chunk in manager.TranslateStreamAsync(request, serviceId: "windows-local-ai"))
+        {
+            chunks.Add(chunk);
+        }
+
+        chunks.Should().Equal("你好 from Foundry");
+        phiClient.LastPrompt.Should().Contain("Hello");
+        foundryLocal.TranslateCallCount.Should().Be(1);
+        openVinoEngine.GenerateCallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TranslationManager_AutoProvider_WarmupFailureMarksPhiUnhealthyAndFallsBack()
+    {
+        var phiClient = new FakeWindowsAIClient
+        {
+            WarmUpFailure = new WindowsLanguageModelException(
+                WindowsAIResponseStatus.Error,
+                "Windows AI runtime failed while running Phi Silica: operation=warmup; hResult=0x80004005"),
+        };
+        var foundryLocal = new FakeFoundryLocalService { ResponseText = "你好 from Foundry" };
+        var openVinoEngine = new FakeNllbEngine { TokenStream = [100, 200] };
+        using var openVino = CreateOpenVino(openVinoEngine);
+        var localAI = new LocalAITranslationService(
+            new PhiSilicaTranslationService(phiClient),
+            foundryLocal,
+            openVino);
+        localAI.Configure(LocalAIProviderMode.Auto);
+        var request = CreateRequest("Hello");
+
+        var chunks = new List<string>();
+        await foreach (var chunk in localAI.TranslateStreamAsync(request))
+        {
+            chunks.Add(chunk);
+        }
+
+        chunks.Should().Equal("你好 from Foundry");
+        phiClient.WarmUpCallCount.Should().Be(1);
+        foundryLocal.TranslateCallCount.Should().Be(1);
+        localAI.GetStatus().State.Should().Be(LocalModelState.Ready);
     }
 
     [Fact]
@@ -396,12 +479,29 @@ public sealed class LocalAITranslationServiceIntegrationTests : IDisposable
         public WindowsAIResponse GenerateResponse { get; set; } =
             new(WindowsAIResponseStatus.Complete, "ok");
 
+        public Exception? StreamFailure { get; init; }
+        public Exception? WarmUpFailure { get; init; }
+
         public string? LastPrompt { get; private set; }
+        public int WarmUpCallCount { get; private set; }
 
         public WindowsAIReadyState GetReadyState() => ReadyState;
 
-        public Task<WindowsAIReadyState> EnsureReadyAsync(CancellationToken cancellationToken)
+        public WindowsAIHealthFingerprint GetHealthFingerprint() => new(
+            OsBuild: "10.0.26200.7309",
+            Ubr: null,
+            WindowsAppSdkVersion: "2.0.1",
+            ProcessArchitecture: "Arm64",
+            BackendName: "PhiSilica",
+            ComponentMarker: "Fake",
+            WindowsActivated: true,
+            PhiSilicaAiComponentsPresent: true);
+
+        public Task<WindowsAIReadyState> EnsureReadyAsync(
+            CancellationToken cancellationToken,
+            IProgress<double>? progress = null)
         {
+            progress?.Report(100);
             return Task.FromResult(ReadyState);
         }
 
@@ -414,12 +514,31 @@ public sealed class LocalAITranslationServiceIntegrationTests : IDisposable
             return Task.FromResult(GenerateResponse);
         }
 
+        public Task WarmUpAsync(
+            string prompt,
+            WindowsAIGenerationOptions options,
+            CancellationToken cancellationToken)
+        {
+            WarmUpCallCount++;
+            if (WarmUpFailure is not null)
+            {
+                throw WarmUpFailure;
+            }
+
+            return Task.CompletedTask;
+        }
+
         public async IAsyncEnumerable<string> GenerateStreamAsync(
             string prompt,
             WindowsAIGenerationOptions options,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             LastPrompt = prompt;
+            if (StreamFailure is not null)
+            {
+                throw StreamFailure;
+            }
+
             var response = await GenerateAsync(prompt, options, cancellationToken);
             yield return response.Text;
         }

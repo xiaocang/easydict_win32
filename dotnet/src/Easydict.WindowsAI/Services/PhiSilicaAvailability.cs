@@ -25,6 +25,8 @@ public static class PhiSilicaAvailability
         WindowsAIReadyState.NotCompatibleWithSystemHardware => "WindowsLocalAI_Status_NotCompatibleHardware",
         WindowsAIReadyState.OSUpdateNeeded => "WindowsLocalAI_Status_OSUpdateNeeded",
         WindowsAIReadyState.DisabledByUser => "WindowsLocalAI_Status_DisabledByUser",
+        WindowsAIReadyState.UnsupportedWindowsAIBaseline =>
+            WindowsAIBaselineDiagnostics.UnsupportedWindowsAIBaselineResourceKey,
         WindowsAIReadyState.NotSupportedOnCurrentSystem => "WindowsLocalAI_Status_NotSupported",
         _ => "WindowsLocalAI_Status_NotSupported",
     };

@@ -67,32 +67,58 @@ Write-Host ""
 # Step 2: Ensure WindowsAppRuntime framework dep is present
 # The MSIX declares PackageDependency on Microsoft.WindowsAppRuntime.2 >= 2.0.1.0.
 # Fresh QDC devices typically don't ship with it -- Add-AppxPackage will fail
-# with HRESULT 0x80073CF3 if missing. winget covers the install idempotently.
+# with HRESULT 0x80073CF3 if missing. winget covers the install idempotently when
+# it works; on SSH-only sessions winget itself often refuses to launch
+# ("Access is denied") because App Installer isn't initialized for this logon.
 Write-Host "[2/4] Ensuring Microsoft.WindowsAppRuntime.2 (2.0.x) is installed..." -ForegroundColor Yellow
 $wingetId = "Microsoft.WindowsAppRuntime.2.0"
-$alreadyInstalled = Get-AppxPackage -Name "Microsoft.WindowsAppRuntime.2.*" -ErrorAction SilentlyContinue
-if ($alreadyInstalled) {
-    Write-Host "  Already present:" -ForegroundColor Gray
-    $alreadyInstalled | ForEach-Object { Write-Host "    $($_.PackageFullName)" -ForegroundColor Gray }
+# Check both user-scope (Get-AppxPackage) and machine-scope (Get-AppxProvisionedPackage).
+# If a sysadmin installed via RDP with a different user, the package may be provisioned
+# without being registered for hcktest -- Add-AppxPackage will still find the dependency.
+$userRuntime = Get-AppxPackage -Name "Microsoft.WindowsAppRuntime.2.*" -ErrorAction SilentlyContinue
+$provRuntime = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+    Where-Object DisplayName -like "Microsoft.WindowsAppRuntime.2.*"
+if ($userRuntime) {
+    Write-Host "  Already present (user scope):" -ForegroundColor Gray
+    $userRuntime | ForEach-Object { Write-Host "    $($_.PackageFullName)" -ForegroundColor Gray }
+} elseif ($provRuntime) {
+    Write-Host "  Provisioned (machine scope, not registered for $env:USERNAME):" -ForegroundColor Gray
+    $provRuntime | ForEach-Object { Write-Host "    $($_.PackageName)" -ForegroundColor Gray }
+    Write-Host "  Add-AppxPackage should still resolve it as a dependency." -ForegroundColor Gray
 } else {
-    Write-Host "  Not installed -- running: winget install $wingetId" -ForegroundColor Gray
-    & winget install --id $wingetId `
-        --accept-source-agreements --accept-package-agreements `
-        --disable-interactivity `
-        --silent
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  winget install exit code $LASTEXITCODE" -ForegroundColor Yellow
-        Write-Host "  Continuing anyway -- Add-AppxPackage will report if the runtime is still missing." -ForegroundColor Gray
+    Write-Host "  Not installed -- attempting: winget install $wingetId" -ForegroundColor Gray
+    try {
+        & winget install --id $wingetId `
+            --accept-source-agreements --accept-package-agreements `
+            --disable-interactivity `
+            --silent
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  winget install exit code $LASTEXITCODE" -ForegroundColor Yellow
+        }
+    } catch {
+        # winget.exe failed to launch (typical on fresh QDC SSH sessions).
+        Write-Host "  winget could not launch: $($_.Exception.Message -replace ""`r?`n"", ' | ')" -ForegroundColor Yellow
+        Write-Host "  Workaround: RDP in (mstsc /v:localhost:5555) and run:" -ForegroundColor Yellow
+        Write-Host "    winget install --id $wingetId --accept-source-agreements --accept-package-agreements" -ForegroundColor Gray
     }
+    Write-Host "  Continuing anyway -- Add-AppxPackage will report if the runtime is still missing." -ForegroundColor Gray
 }
 Write-Host ""
 
 # Step 3: Remove existing package (best-effort)
+# Two scopes to clear:
+#   (a) user-scope registration (Get/Remove-AppxPackage)
+#   (b) machine-scope provisioned copy (Get/Remove-AppxProvisionedPackage)
+# When the previous deploy fell back to Add-AppxProvisionedPackage + Register
+# (the SSH/PLM 0x80070005 path), only clearing (a) leaves the staged binary
+# behind. A subsequent Add-AppxPackage of a rebuild with the same version then
+# fails 0x80073CFB ("same identity, different contents") because the
+# provisioned copy has different bits.
 Write-Host "[3/4] Removing prior installation (if any)..." -ForegroundColor Yellow
 $existing = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue
 if ($existing) {
     foreach ($p in $existing) {
-        Write-Host "  Removing $($p.PackageFullName)" -ForegroundColor Gray
+        Write-Host "  Removing user registration: $($p.PackageFullName)" -ForegroundColor Gray
         try {
             Remove-AppxPackage -Package $p.PackageFullName -ErrorAction Stop
         } catch {
@@ -100,7 +126,21 @@ if ($existing) {
         }
     }
 } else {
-    Write-Host "  No prior installation found" -ForegroundColor Gray
+    Write-Host "  No prior user registration" -ForegroundColor Gray
+}
+$provisioned = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+    Where-Object DisplayName -eq $PackageName
+if ($provisioned) {
+    foreach ($p in $provisioned) {
+        Write-Host "  Removing provisioned: $($p.PackageName)" -ForegroundColor Gray
+        try {
+            Remove-AppxProvisionedPackage -Online -PackageName $p.PackageName -ErrorAction Stop | Out-Null
+        } catch {
+            Write-Host "  WARNING: Remove-AppxProvisionedPackage failed: $_" -ForegroundColor Yellow
+        }
+    }
+} else {
+    Write-Host "  No prior provisioned package" -ForegroundColor Gray
 }
 Write-Host ""
 
@@ -133,9 +173,28 @@ if ($installError -and -not $installed) {
             Select-Object -First 1
         if ($prov) {
             $manifest = "C:\Program Files\WindowsApps\$($prov.PackageName)\AppxManifest.xml"
-            if (Test-Path $manifest) {
-                # Register reports a spurious 0x80070005 but still binds the package.
-                Add-AppxPackage -Register $manifest -DisableDevelopmentMode -ErrorAction SilentlyContinue
+            # On a fresh QDC reservation, the manifest can pass Test-Path before
+            # the provisioned package is fully staged. Retry Register a few times,
+            # surfacing errors instead of silently swallowing them.
+            for ($attempt = 1; $attempt -le 4; $attempt++) {
+                if (-not (Test-Path $manifest)) {
+                    Write-Host "  Manifest not yet at $manifest (attempt $attempt) -- waiting 3s..." -ForegroundColor Yellow
+                    Start-Sleep -Seconds 3
+                    continue
+                }
+                $regError = $null
+                # Register reports a spurious 0x80070005 but still binds the package
+                # in the success case; treat that one error code as success and
+                # confirm via Get-AppxPackage.
+                Add-AppxPackage -Register $manifest -DisableDevelopmentMode `
+                    -ErrorAction SilentlyContinue -ErrorVariable regError
+                $installed = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue
+                if ($installed) { break }
+                if ($regError) {
+                    $regMsg = ($regError[0].Exception.Message -replace "`r?`n", ' | ')
+                    Write-Host "  Register attempt $attempt failed: $regMsg" -ForegroundColor Yellow
+                }
+                Start-Sleep -Seconds 3
             }
         }
 

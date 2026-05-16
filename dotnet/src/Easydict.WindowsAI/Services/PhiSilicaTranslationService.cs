@@ -22,15 +22,24 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
     private const string UserFacingName = "Phi Silica";
 
     private readonly IWindowsLanguageModelClient _client;
+    private readonly PhiSilicaBackendHealthMonitor _healthMonitor;
 
     public PhiSilicaTranslationService()
-        : this(PhiSilicaAvailability.Client)
+        : this(PhiSilicaAvailability.Client, PhiSilicaBackendHealthMonitor.Shared)
     {
     }
 
     internal PhiSilicaTranslationService(IWindowsLanguageModelClient client)
+        : this(client, new PhiSilicaBackendHealthMonitor())
+    {
+    }
+
+    internal PhiSilicaTranslationService(
+        IWindowsLanguageModelClient client,
+        PhiSilicaBackendHealthMonitor healthMonitor)
     {
         _client = client;
+        _healthMonitor = healthMonitor;
     }
 
     public string ServiceId => ServiceIdValue;
@@ -102,6 +111,11 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         {
             throw;
         }
+        catch (WindowsLanguageModelException wex)
+        {
+            MarkUnhealthy(wex);
+            throw MapWindowsLanguageModelException(wex);
+        }
         catch (Exception ex)
         {
             throw new TranslationException($"{UserFacingName} failed: {ex.Message}", ex)
@@ -155,7 +169,8 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
                 }
                 catch (WindowsLanguageModelException wex)
                 {
-                    throw MapStreamException(wex);
+                    MarkUnhealthy(wex);
+                    throw MapWindowsLanguageModelException(wex);
                 }
                 catch (Exception ex)
                 {
@@ -178,10 +193,11 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         }
     }
 
-    private TranslationException MapStreamException(WindowsLanguageModelException wex)
+    private TranslationException MapWindowsLanguageModelException(WindowsLanguageModelException wex)
     {
         var code = wex.Status switch
         {
+            WindowsAIResponseStatus.Error => TranslationErrorCode.Unknown,
             WindowsAIResponseStatus.PromptLargerThanContext => TranslationErrorCode.TextTooLong,
             WindowsAIResponseStatus.BlockedByPolicy => TranslationErrorCode.ServiceUnavailable,
             _ => TranslationErrorCode.InvalidResponse,
@@ -201,7 +217,7 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
 
     public LocalModelStatus GetStatus()
     {
-        return MapStatus(_client.GetReadyState());
+        return _healthMonitor.GetStatus(_client);
     }
 
     public async Task<LocalModelStatus> PrepareAsync(CancellationToken cancellationToken)
@@ -209,17 +225,36 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         RaiseStatusChanged(new LocalModelStatus(
             LocalModelState.Preparing,
             "WindowsLocalAI_Status_Preparing"));
+        _healthMonitor.Reset();
 
         try
         {
             var newState = await _client.EnsureReadyAsync(cancellationToken);
-            var status = MapStatus(newState);
+            if (newState == WindowsAIReadyState.NotReady)
+            {
+                var failed = new LocalModelStatus(
+                    LocalModelState.Failed,
+                    "WindowsLocalAI_Status_PrepareFailed",
+                    DetailMessage: "Windows reported that the model is still not ready after the preparation request completed.");
+                RaiseStatusChanged(failed);
+                return failed;
+            }
+
+            if (newState == WindowsAIReadyState.Ready)
+            {
+                await _healthMonitor.EnsureHealthyAsync(
+                    _client,
+                    snapshot => RaiseStatusChanged(MapHealthSnapshotToStatus(snapshot)),
+                    cancellationToken);
+            }
+
+            var status = GetStatus();
             RaiseStatusChanged(status);
             return status;
         }
         catch (OperationCanceledException)
         {
-            var status = MapStatus(_client.GetReadyState());
+            var status = GetStatus();
             RaiseStatusChanged(status);
             throw;
         }
@@ -229,10 +264,10 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
             // tell users "we tried and it failed" vs. "you haven't tried yet".
             // The original exception message is forwarded as DetailMessage for
             // diagnostics (e.g. surfaced via InfoBar's secondary content).
-            var status = new LocalModelStatus(
-                LocalModelState.Failed,
-                "WindowsLocalAI_Status_PrepareFailed",
-                DetailMessage: ex.Message);
+            var fingerprint = TryGetHealthFingerprint(_client);
+            var status = LooksLikeRuntimeFailure(ex.Message)
+                ? CreateRuntimeFailureStatus(ex.Message, fingerprint)
+                : CreatePreparationFailureStatus(ex.Message, fingerprint);
             RaiseStatusChanged(status);
             return status;
         }
@@ -243,7 +278,7 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         StatusChanged?.Invoke(this, status);
     }
 
-    private static LocalModelStatus MapStatus(WindowsAIReadyState state) => state switch
+    public static LocalModelStatus MapReadyStateToStatus(WindowsAIReadyState state) => state switch
     {
         WindowsAIReadyState.Ready =>
             new LocalModelStatus(LocalModelState.Ready, "WindowsLocalAI_Status_Ready"),
@@ -263,9 +298,134 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         WindowsAIReadyState.DisabledByUser =>
             new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_DisabledByUser"),
 
+        WindowsAIReadyState.UnsupportedWindowsAIBaseline =>
+            new LocalModelStatus(
+                LocalModelState.NotCompatible,
+                WindowsAIBaselineDiagnostics.UnsupportedWindowsAIBaselineResourceKey),
+
         _ =>
             new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_NotSupported"),
     };
+
+    public static LocalModelStatus CreatePreparationFailureStatus(
+        string? detailMessage,
+        WindowsAIHealthFingerprint? fingerprint = null)
+    {
+        return WindowsAIBaselineDiagnostics.LooksLikeUnsupportedBaseline(fingerprint, detailMessage)
+            ? new LocalModelStatus(
+                LocalModelState.Failed,
+                WindowsAIBaselineDiagnostics.UnsupportedWindowsAIBaselineResourceKey,
+                DetailMessage: detailMessage)
+            : new LocalModelStatus(
+                LocalModelState.Failed,
+                "WindowsLocalAI_Status_PrepareFailed",
+                DetailMessage: detailMessage);
+    }
+
+    public static LocalModelStatus CreateRuntimeFailureStatus(
+        string? detailMessage,
+        WindowsAIHealthFingerprint? fingerprint = null)
+    {
+        var detail = FormatRuntimeFailureDetail(detailMessage, fingerprint);
+        return WindowsAIBaselineDiagnostics.LooksLikeUnsupportedBaseline(fingerprint, detail)
+            ? new LocalModelStatus(
+                LocalModelState.Failed,
+                WindowsAIBaselineDiagnostics.UnsupportedWindowsAIBaselineResourceKey,
+                DetailMessage: detail)
+            : new LocalModelStatus(
+                LocalModelState.Failed,
+                "WindowsLocalAI_Status_RuntimeUnhealthy",
+                DetailMessage: detail);
+    }
+
+    private static bool LooksLikeRuntimeFailure(string? detailMessage)
+    {
+        return detailMessage?.Contains(
+            "Windows AI runtime failed while running Phi Silica",
+            StringComparison.OrdinalIgnoreCase) == true
+            || detailMessage?.Contains(
+                "Phi Silica backend is unhealthy",
+                StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    internal static string FormatRuntimeFailureDetail(
+        string? detailMessage,
+        WindowsAIHealthFingerprint? fingerprint)
+    {
+        var parts = new List<string>();
+        var detail = string.IsNullOrWhiteSpace(detailMessage)
+            ? null
+            : detailMessage.Trim();
+
+        if (detail is not null)
+        {
+            parts.Add(detail);
+        }
+
+        if (fingerprint is not null)
+        {
+            var fingerprintDetail = FormatSupplementalFingerprint(fingerprint, detail);
+            if (!string.IsNullOrWhiteSpace(fingerprintDetail))
+            {
+                parts.Add(fingerprintDetail);
+            }
+        }
+
+        return string.Join("; ", parts);
+    }
+
+    private static LocalModelStatus MapHealthSnapshotToStatus(PhiSilicaBackendHealthSnapshot snapshot)
+    {
+        return snapshot.State switch
+        {
+            PhiSilicaBackendHealthState.Healthy =>
+                new LocalModelStatus(LocalModelState.Ready, "WindowsLocalAI_Status_Ready"),
+
+            PhiSilicaBackendHealthState.Unhealthy =>
+                CreateRuntimeFailureStatus(snapshot.DetailMessage, snapshot.Fingerprint),
+
+            _ =>
+                new LocalModelStatus(LocalModelState.Preparing, "WindowsLocalAI_Status_WarmingUp"),
+        };
+    }
+
+    private static string FormatSupplementalFingerprint(
+        WindowsAIHealthFingerprint fingerprint,
+        string? existingDetail)
+    {
+        var parts = new List<string>();
+        AddDiagnosticIfMissing(parts, existingDetail, "osBuild", fingerprint.OsBuild);
+        AddDiagnosticIfMissing(parts, existingDetail, "ubr", fingerprint.Ubr?.ToString() ?? "unknown");
+        AddDiagnosticIfMissing(parts, existingDetail, "windowsAppSdk", fingerprint.WindowsAppSdkVersion);
+        AddDiagnosticIfMissing(parts, existingDetail, "processArch", fingerprint.ProcessArchitecture);
+        AddDiagnosticIfMissing(parts, existingDetail, "backend", fingerprint.BackendName);
+        AddDiagnosticIfMissing(parts, existingDetail, "component", fingerprint.ComponentMarker);
+        AddDiagnosticIfMissing(parts, existingDetail, "windowsActivated", FormatOptionalBool(fingerprint.WindowsActivated));
+        AddDiagnosticIfMissing(parts, existingDetail, "phiSilicaAiComponentsPresent", FormatOptionalBool(fingerprint.PhiSilicaAiComponentsPresent));
+        return string.Join("; ", parts);
+    }
+
+    private static string FormatOptionalBool(bool? value) =>
+        value is { } present ? present.ToString() : "unknown";
+
+    private static void AddDiagnosticIfMissing(
+        List<string> parts,
+        string? existingDetail,
+        string key,
+        string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (existingDetail?.Contains($"{key}=", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return;
+        }
+
+        parts.Add($"{key}={value}");
+    }
 
     // ── Internal helpers ────────────────────────────────────────────────
 
@@ -293,23 +453,39 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         }
     }
 
-    private Task EnsureReadyOrThrowAsync(CancellationToken cancellationToken)
+    private async Task EnsureReadyOrThrowAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var state = _client.GetReadyState();
-        if (state == WindowsAIReadyState.Ready)
+        if (state != WindowsAIReadyState.Ready)
         {
-            return Task.CompletedTask;
+            throw new TranslationException(GetReadyStateMessage(state))
+            {
+                ErrorCode = state == WindowsAIReadyState.NotReady
+                    ? TranslationErrorCode.LocalModelNeedsPreparation
+                    : TranslationErrorCode.ServiceUnavailable,
+                ServiceId = ServiceId,
+            };
         }
 
-        throw new TranslationException(GetReadyStateMessage(state))
+        try
         {
-            ErrorCode = state == WindowsAIReadyState.NotReady
-                ? TranslationErrorCode.LocalModelNeedsPreparation
-                : TranslationErrorCode.ServiceUnavailable,
-            ServiceId = ServiceId,
-        };
+            await _healthMonitor.EnsureHealthyAsync(_client, cancellationToken: cancellationToken);
+        }
+        catch (WindowsLanguageModelException wex)
+        {
+            throw MapWindowsLanguageModelException(wex);
+        }
+    }
+
+    private void MarkUnhealthy(WindowsLanguageModelException wex)
+    {
+        if (wex.Status == WindowsAIResponseStatus.Error)
+        {
+            _healthMonitor.MarkUnhealthy(_client, wex.Message);
+            RaiseStatusChanged(GetStatus());
+        }
     }
 
     private void ThrowIfNotComplete(WindowsAIResponse response)
@@ -404,7 +580,7 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         return output;
     }
 
-    private static string GetReadyStateMessage(WindowsAIReadyState state) => state switch
+    internal static string GetReadyStateMessage(WindowsAIReadyState state) => state switch
     {
         WindowsAIReadyState.CapabilityMissing =>
             $"{UserFacingName} is unavailable: the app package is missing the systemAIModels capability.",
@@ -418,6 +594,11 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         WindowsAIReadyState.DisabledByUser =>
             $"{UserFacingName} has been disabled or removed. Re-enable Windows AI features in system settings.",
 
+        WindowsAIReadyState.UnsupportedWindowsAIBaseline =>
+            $"{UserFacingName} is unavailable because this Windows installation does not appear to have a valid Windows AI baseline. " +
+            "This usually happens on unactivated, outdated, Insider, managed, or incomplete Copilot+ PC images where Windows Update cannot install AI Components. " +
+            "Activate Windows, install the latest cumulative update and AI Components, then verify Phi Silica in AI Dev Gallery.",
+
         WindowsAIReadyState.NotSupportedOnCurrentSystem =>
             $"{UserFacingName} is not supported on the current system or region. Select Auto or OpenVINO in Windows Local AI settings to use the local fallback.",
 
@@ -426,5 +607,17 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
 
         _ => $"{UserFacingName} is unavailable ({state}).",
     };
+
+    private static WindowsAIHealthFingerprint? TryGetHealthFingerprint(IWindowsLanguageModelClient client)
+    {
+        try
+        {
+            return client.GetHealthFingerprint();
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
 

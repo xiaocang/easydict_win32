@@ -125,6 +125,31 @@ public static class LanguageCodes
     };
 
     /// <summary>
+    /// Try to parse an ISO 639-1 (optionally with region tag like <c>zh-CN</c>) code into a
+    /// <see cref="Language"/>. Returns <c>false</c> on null/whitespace/unknown input
+    /// (where <see cref="FromIso639"/> would silently return <see cref="Language.English"/>).
+    /// </summary>
+    public static bool TryParseIsoCode(string? code, out Language language)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            language = Language.Auto;
+            return false;
+        }
+        var parsed = FromIso639(code);
+        // FromIso639 returns English as a hard fallback for unknowns. We need to distinguish
+        // "explicit en" from "unknown → en", so re-check by looking the code up in the known set.
+        var normalized = code.Trim().ToLowerInvariant();
+        if (parsed == Language.English && normalized != "en")
+        {
+            language = Language.Auto;
+            return false;
+        }
+        language = parsed;
+        return true;
+    }
+
+    /// <summary>
     /// Parse language from ISO 639-1 code.
     /// </summary>
     public static Language FromIso639(string code) => code.ToLowerInvariant() switch

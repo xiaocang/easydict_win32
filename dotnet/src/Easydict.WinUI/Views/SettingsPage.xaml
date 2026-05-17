@@ -1754,6 +1754,144 @@
 
                     </StackPanel>
 
+                    <StackPanel x:Name="LocalApiTabContent"
+                                Spacing="24"
+                                Visibility="Collapsed">
+                        <StackPanel Spacing="12">
+                            <TextBlock x:Name="LocalApiHeaderText"
+                                       Text="Local API &amp; Integrations"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock x:Name="LocalApiDescriptionText"
+                                       Text="Expose configured translation services on http://127.0.0.1 so external tools (e.g. KISS Translator) can use them."
+                                       TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                            <Border Style="{StaticResource SettingsSectionStyle}">
+                                <StackPanel Spacing="16">
+                                    <ToggleSwitch x:Name="LocalApiEnabledToggle"
+                                                  Header="Enable local API server"
+                                                  Toggled="OnLocalApiEnabledToggled"/>
+
+                                    <StackPanel x:Name="LocalApiConfigPanel"
+                                                Spacing="16"
+                                                Margin="44,0,0,0"
+                                                Visibility="Collapsed">
+                                        <NumberBox x:Name="LocalApiPortBox"
+                                                   Header="Port"
+                                                   Width="200"
+                                                   HorizontalAlignment="Left"
+                                                   Minimum="1024"
+                                                   Maximum="65535"
+                                                   SpinButtonPlacementMode="Inline"
+                                                   ValueChanged="OnLocalApiPortChanged"/>
+
+                                        <StackPanel Spacing="6">
+                                            <TextBlock x:Name="LocalApiTokenLabel"
+                                                       Text="API Key (Bearer token)"
+                                                       FontWeight="SemiBold"/>
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="LocalApiTokenBox"
+                                                         Grid.Column="0"
+                                                         IsReadOnly="True"
+                                                         FontFamily="Consolas, Cascadia Mono, monospace"/>
+                                                <Button x:Name="LocalApiCopyTokenBtn"
+                                                        Grid.Column="1"
+                                                        Content="Copy"
+                                                        Click="OnLocalApiCopyTokenClick"/>
+                                                <Button x:Name="LocalApiRegenTokenBtn"
+                                                        Grid.Column="2"
+                                                        Content="Regenerate"
+                                                        Click="OnLocalApiRegenTokenClick"/>
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <StackPanel Spacing="6">
+                                            <TextBlock x:Name="LocalApiEndpointLabel"
+                                                       Text="Endpoint"
+                                                       FontWeight="SemiBold"/>
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="LocalApiEndpointBox"
+                                                         Grid.Column="0"
+                                                         IsReadOnly="True"
+                                                         FontFamily="Consolas, Cascadia Mono, monospace"/>
+                                                <Button x:Name="LocalApiCopyEndpointBtn"
+                                                        Grid.Column="1"
+                                                        Content="Copy"
+                                                        Click="OnLocalApiCopyEndpointClick"/>
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <InfoBar x:Name="LocalApiStatusInfo"
+                                                 IsOpen="False"
+                                                 IsClosable="False"
+                                                 Severity="Informational"/>
+
+                                        <StackPanel Spacing="6">
+                                            <TextBlock x:Name="LocalApiExposedHeader"
+                                                       Text="Exposed services"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="LocalApiExposedDescription"
+                                                       Text="Pick which configured services external tools can call. Unchecked services stay private."
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                            <ItemsControl x:Name="LocalApiServicesList">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <CheckBox Content="{Binding DisplayName}"
+                                                                  IsChecked="{Binding IsExposed, Mode=TwoWay}"
+                                                                  Tag="{Binding ServiceId}"
+                                                                  Margin="0,2,0,2"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <StackPanel Spacing="6">
+                                            <TextBlock x:Name="LocalApiCorsHeader"
+                                                       Text="CORS"
+                                                       FontWeight="SemiBold"/>
+                                            <RadioButtons x:Name="LocalApiCorsModeRadios"
+                                                          SelectionChanged="OnLocalApiCorsModeChanged">
+                                                <RadioButton x:Name="LocalApiCorsAnyRadio" Content="Any origin (*)" Tag="Any"/>
+                                                <RadioButton x:Name="LocalApiCorsAllowListRadio" Content="Allow-list only" Tag="AllowList"/>
+                                            </RadioButtons>
+                                            <TextBox x:Name="LocalApiCorsAllowListBox"
+                                                     Header="Allowed origins (comma-separated)"
+                                                     Visibility="Collapsed"
+                                                     PlaceholderText="chrome-extension://abcd, http://localhost:3000"
+                                                     LostFocus="OnLocalApiCorsAllowListLostFocus"/>
+                                            <InfoBar x:Name="LocalApiCorsAnyWarning"
+                                                     IsOpen="False"
+                                                     IsClosable="False"
+                                                     Severity="Warning"
+                                                     Message="Any website you visit can call your local API while it's running. Use 'Allow-list only' for tighter control."/>
+                                        </StackPanel>
+
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Button x:Name="LocalApiCopyKissHookBtn"
+                                                    Content="Copy KISS Hook Config"
+                                                    Click="OnLocalApiCopyKissHookClick"/>
+                                            <Button x:Name="LocalApiOpenKissSettingsBtn"
+                                                    Content="Open KISS Options"
+                                                    Click="OnLocalApiOpenKissSettingsClick"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+
                     <StackPanel x:Name="AboutTabContent"
                                 Spacing="24"
                                 Visibility="Collapsed">

@@ -204,6 +204,68 @@
         <div id="status-running" class="status"></div>
       </div>
     </div>
+
+    <div id="section-kiss-setup" class="section">
+      <div class="card">
+        <h2 data-i18n="kissSetupHeading">Configure KISS Translator</h2>
+        <p data-i18n="kissSetupDescription">
+          Reuse Easydict's already-configured translation services from inside KISS Translator.
+          Copy the values below into KISS → Settings → Custom Interface.
+        </p>
+        <ol class="steps">
+          <li><span data-i18n="kissSetupStep1">Open Easydict desktop app → Settings → Local API &amp; Integrations</span></li>
+          <li><span data-i18n="kissSetupStep2">Enable the local API server and copy the endpoint URL and API key</span></li>
+          <li><span data-i18n="kissSetupStep3">Paste them below, then open KISS Translator options and create a new Custom Interface using the values</span></li>
+        </ol>
+
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+          <div>
+            <label for="kiss-endpoint" data-i18n="kissSetupEndpointLabel" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">Endpoint URL</label>
+            <div style="display:flex;gap:8px">
+              <input id="kiss-endpoint" type="text" readonly placeholder="http://127.0.0.1:62333/v1/chat/completions"
+                     style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:Consolas,monospace;font-size:13px"/>
+              <button class="btn btn-outline copy-btn" data-target="kiss-endpoint" data-i18n="kissSetupCopy">Copy</button>
+            </div>
+          </div>
+          <div>
+            <label for="kiss-token" data-i18n="kissSetupTokenLabel" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">API Key</label>
+            <div style="display:flex;gap:8px">
+              <input id="kiss-token" type="text" readonly placeholder="sk-edt-…"
+                     style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:Consolas,monospace;font-size:13px"/>
+              <button class="btn btn-outline copy-btn" data-target="kiss-token" data-i18n="kissSetupCopy">Copy</button>
+            </div>
+          </div>
+          <div>
+            <label for="kiss-hook" data-i18n="kissSetupHookLabel" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">Request Hook</label>
+            <textarea id="kiss-hook" readonly rows="9"
+                      style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:Consolas,monospace;font-size:12px;resize:vertical">(text, from, to, url, key) => [url, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${key}`
+  },
+  body: {
+    model: "easydict-openai",
+    stream: true,
+    messages: [{ role: "user", content: text }],
+    extra_body: { easydict: { source_language: from, target_language: to } }
+  }
+}]</textarea>
+            <button class="btn btn-outline copy-btn" data-target="kiss-hook" data-i18n="kissSetupCopy" style="margin-top:6px">Copy</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="open-easydict-settings" class="btn btn-primary" data-i18n="kissSetupOpenEasydict">
+            Open Easydict Settings
+          </button>
+          <a class="btn btn-outline" href="https://fishjar.github.io/kiss-translator/options.html" target="_blank" rel="noopener" data-i18n="kissSetupOpenKiss">
+            Open KISS Options
+          </a>
+        </div>
+        <div id="status-kiss" class="status"></div>
+      </div>
+    </div>
   </div>
   <script src="setup.js"></script>
 </body>

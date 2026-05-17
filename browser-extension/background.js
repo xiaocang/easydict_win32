@@ -7,6 +7,7 @@
 
 const NATIVE_HOST_NAME = "com.easydict.bridge";
 const MENU_OCR = "easydict-ocr-translate";
+const MENU_KISS = "easydict-kiss-setup";
 const SETUP_RATE_LIMIT_MS = 10_000;
 
 let lastSetupOpenedAt = 0;
@@ -17,11 +18,18 @@ chrome.runtime.onInstalled.addListener(() => {
     title: chrome.i18n.getMessage("contextMenuTitle"),
     contexts: ["all"],
   });
+  chrome.contextMenus.create({
+    id: MENU_KISS,
+    title: chrome.i18n.getMessage("contextMenuKissSetup"),
+    contexts: ["all"],
+  });
 });
 
 chrome.contextMenus.onClicked.addListener((info, _tab) => {
   if (info.menuItemId === MENU_OCR) {
     triggerOcrTranslate();
+  } else if (info.menuItemId === MENU_KISS) {
+    chrome.tabs.create({ url: chrome.runtime.getURL("setup.html#kiss-setup") });
   }
 });
 

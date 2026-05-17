@@ -3429,6 +3429,21 @@ namespace Easydict.WinUI.Views
         }
 
         /// <summary>
+        /// Deep-link entry point: navigate to the Settings page and pre-select the tab
+        /// matching the given path segment from <c>easydict://settings/&lt;path&gt;</c>.
+        /// Unknown paths just open Settings on the default tab.
+        /// </summary>
+        public void NavigateToSettingsPath(string path)
+        {
+            SettingsTabId? tab = path?.ToLowerInvariant() switch
+            {
+                "local-api" => SettingsTabId.LocalApi,
+                _ => null,
+            };
+            Frame.Navigate(typeof(SettingsPage), tab);
+        }
+
+        /// <summary>
         /// Set text to translate (called from external sources like hotkey).
         /// </summary>
         public void SetTextAndTranslate(string text)

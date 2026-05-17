@@ -27,6 +27,12 @@ public static class Program
     /// </summary>
     internal static bool PendingOcrTranslate { get; private set; }
 
+    /// <summary>
+    /// Set to a path like "local-api" when launched via easydict://settings/&lt;path&gt;.
+    /// Consumed by App.xaml.cs to deep-link into a specific Settings tab.
+    /// </summary>
+    internal static string? PendingSettingsPath { get; private set; }
+
     [STAThread]
     static void Main(string[] args)
     {
@@ -65,6 +71,17 @@ public static class Program
                 // Mark pending so App.xaml.cs triggers OCR after initialization.
                 PendingOcrTranslate = true;
             }
+        }
+
+        // Check for easydict://settings/<path> deep link. Resolves both from packaged
+        // protocol activation and from argv (unpackaged / second-instance launch).
+        var settingsPath = ParseSettingsPath(args);
+        if (settingsPath != null)
+        {
+            PendingSettingsPath = settingsPath;
+            // Best-effort: nudge an already-running instance to show the main window
+            // (the running app's protocol-activation handler will navigate to the tab).
+            // We still need to start (single-instance redirector handles the rest).
         }
 
         // Replicates the auto-generated Main suppressed by DISABLE_XAML_GENERATED_MAIN.
@@ -108,5 +125,44 @@ public static class Program
             // WinRT activation infrastructure not available.
         }
         return false;
+    }
+
+    /// <summary>
+    /// Try to resolve a Settings deep-link from either argv (unpackaged) or the packaged
+    /// protocol activation context. Returns e.g. "local-api" for easydict://settings/local-api.
+    /// </summary>
+    private static string? ParseSettingsPath(string[] args)
+    {
+        foreach (var a in args)
+        {
+            if (TryExtractSettingsPath(a, out var path))
+                return path;
+        }
+
+        if (!EasydictConditions.IsPackaged) return null;
+        try
+        {
+            var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
+            if (activatedArgs.Kind != ExtendedActivationKind.Protocol)
+                return null;
+            if (activatedArgs.Data is Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocolArgs)
+            {
+                if (TryExtractSettingsPath(protocolArgs.Uri.ToString(), out var path))
+                    return path;
+            }
+        }
+        catch (System.Runtime.InteropServices.COMException) { }
+        return null;
+    }
+
+    private static bool TryExtractSettingsPath(string raw, out string path)
+    {
+        path = string.Empty;
+        if (string.IsNullOrEmpty(raw)) return false;
+        if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri)) return false;
+        if (!string.Equals(uri.Scheme, "easydict", StringComparison.OrdinalIgnoreCase)) return false;
+        if (!string.Equals(uri.Host, "settings", StringComparison.OrdinalIgnoreCase)) return false;
+        path = uri.AbsolutePath.Trim('/');
+        return path.Length > 0;
     }
 }

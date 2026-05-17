@@ -62,5 +62,57 @@
   "setupRetryAppNotRunning": {
     "message": "The app was found but is not responding. Please make sure Easydict is running.",
     "description": "Status message when retry finds host but app not running"
+  },
+  "contextMenuKissSetup": {
+    "message": "Configure KISS Translator (Easydict)",
+    "description": "Context menu item that opens the KISS setup helper page"
+  },
+  "kissSetupHeading": {
+    "message": "Configure KISS Translator",
+    "description": "Heading on the KISS setup helper page"
+  },
+  "kissSetupDescription": {
+    "message": "Reuse Easydict's already-configured translation services from inside KISS Translator. Copy the values below into KISS → Settings → Custom Interface.",
+    "description": "Subheading describing what the KISS setup helper does"
+  },
+  "kissSetupStep1": {
+    "message": "Open Easydict desktop app → Settings → Local API & Integrations",
+    "description": "KISS setup step 1"
+  },
+  "kissSetupStep2": {
+    "message": "Enable the local API server and copy the endpoint URL and API key",
+    "description": "KISS setup step 2"
+  },
+  "kissSetupStep3": {
+    "message": "Paste them below, then open KISS Translator options and create a new Custom Interface using the values",
+    "description": "KISS setup step 3"
+  },
+  "kissSetupEndpointLabel": {
+    "message": "Endpoint URL",
+    "description": "Label for the endpoint URL field"
+  },
+  "kissSetupTokenLabel": {
+    "message": "API Key",
+    "description": "Label for the API key field"
+  },
+  "kissSetupHookLabel": {
+    "message": "Request Hook",
+    "description": "Label for the request hook code field"
+  },
+  "kissSetupCopy": {
+    "message": "Copy",
+    "description": "Copy button label"
+  },
+  "kissSetupCopied": {
+    "message": "Copied!",
+    "description": "Transient label shown after a successful copy"
+  },
+  "kissSetupOpenEasydict": {
+    "message": "Open Easydict Settings",
+    "description": "Button that opens the Easydict desktop Local API settings tab via deep link"
+  },
+  "kissSetupOpenKiss": {
+    "message": "Open KISS Options",
+    "description": "Button that opens the KISS Translator options page"
   }
 }

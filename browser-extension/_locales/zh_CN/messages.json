@@ -62,5 +62,57 @@
   "setupRetryAppNotRunning": {
     "message": "已找到应用但无响应，请确保 Easydict 正在运行。",
     "description": "Status message when retry finds host but app not running"
+  },
+  "contextMenuKissSetup": {
+    "message": "配置 KISS 翻译（Easydict）",
+    "description": "Context menu item that opens the KISS setup helper page"
+  },
+  "kissSetupHeading": {
+    "message": "配置 KISS 翻译",
+    "description": "Heading on the KISS setup helper page"
+  },
+  "kissSetupDescription": {
+    "message": "让 KISS 翻译复用 Easydict 已配置的翻译服务。把下方信息复制到 KISS →「设置」→「自定义接口」。",
+    "description": "Subheading describing what the KISS setup helper does"
+  },
+  "kissSetupStep1": {
+    "message": "打开 Easydict 桌面应用 →「设置」→「本地 API 与集成」",
+    "description": "KISS setup step 1"
+  },
+  "kissSetupStep2": {
+    "message": "启用本地 API 服务，复制端点地址和 API 密钥",
+    "description": "KISS setup step 2"
+  },
+  "kissSetupStep3": {
+    "message": "粘贴到下面，然后打开 KISS 翻译设置页，新建一个「自定义接口」并填入这些值",
+    "description": "KISS setup step 3"
+  },
+  "kissSetupEndpointLabel": {
+    "message": "端点地址",
+    "description": "Label for the endpoint URL field"
+  },
+  "kissSetupTokenLabel": {
+    "message": "API 密钥",
+    "description": "Label for the API key field"
+  },
+  "kissSetupHookLabel": {
+    "message": "请求 Hook",
+    "description": "Label for the request hook code field"
+  },
+  "kissSetupCopy": {
+    "message": "复制",
+    "description": "Copy button label"
+  },
+  "kissSetupCopied": {
+    "message": "已复制！",
+    "description": "Transient label shown after a successful copy"
+  },
+  "kissSetupOpenEasydict": {
+    "message": "打开 Easydict 设置",
+    "description": "Button that opens the Easydict desktop Local API settings tab via deep link"
+  },
+  "kissSetupOpenKiss": {
+    "message": "打开 KISS 设置",
+    "description": "Button that opens the KISS Translator options page"
   }
 }

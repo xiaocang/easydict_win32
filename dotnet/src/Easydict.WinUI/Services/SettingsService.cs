@@ -220,6 +220,16 @@ public sealed class SettingsService
     /// </summary>
     public bool ShellContextMenu { get; set; } = false;
 
+    // Local OpenAI-compatible API server settings. Off by default; user opts in to expose
+    // already-configured translation services to external tools (e.g. KISS Translator).
+    public bool LocalApiEnabled { get; set; } = false;
+    public int LocalApiPort { get; set; } = 62333;
+    public string LocalApiToken { get; set; } = "";                       // generated lazily on first enable
+    public List<string> LocalApiExposedServices { get; set; } = [];       // ITranslationService.ServiceId values
+    public string LocalApiCorsMode { get; set; } = "Any";                 // "Any" | "AllowList"
+    public List<string> LocalApiCorsAllowList { get; set; } = [];
+    public string LocalApiDefaultTargetLanguage { get; set; } = "zh-CN";  // ISO 639 / BCP-47 code
+
     // Hotkey settings (stored as string like "Ctrl+Alt+T")
     public string ShowWindowHotkey { get; set; } = "Ctrl+Alt+T";
     public string TranslateSelectionHotkey { get; set; } = "Ctrl+Alt+D";
@@ -678,6 +688,15 @@ public sealed class SettingsService
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
         MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
+
+        // Local API settings
+        LocalApiEnabled = GetValue(nameof(LocalApiEnabled), false);
+        LocalApiPort = GetValue(nameof(LocalApiPort), 62333);
+        LocalApiToken = GetValue(nameof(LocalApiToken), "");
+        LocalApiExposedServices = GetStringList(nameof(LocalApiExposedServices), []);
+        LocalApiCorsMode = GetValue(nameof(LocalApiCorsMode), "Any");
+        LocalApiCorsAllowList = GetStringList(nameof(LocalApiCorsAllowList), []);
+        LocalApiDefaultTargetLanguage = GetValue(nameof(LocalApiDefaultTargetLanguage), "zh-CN");
         ShowWindowHotkey = GetValue(nameof(ShowWindowHotkey), "Ctrl+Alt+T");
         TranslateSelectionHotkey = GetValue(nameof(TranslateSelectionHotkey), "Ctrl+Alt+D");
         OcrTranslateHotkey = GetValue(nameof(OcrTranslateHotkey), "Ctrl+Alt+S");
@@ -895,6 +914,15 @@ public sealed class SettingsService
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
         _settings[nameof(MouseSelectionExcludedApps)] = MouseSelectionExcludedApps;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;
+
+        // Local API settings
+        _settings[nameof(LocalApiEnabled)] = LocalApiEnabled;
+        _settings[nameof(LocalApiPort)] = LocalApiPort;
+        _settings[nameof(LocalApiToken)] = LocalApiToken;
+        _settings[nameof(LocalApiExposedServices)] = LocalApiExposedServices;
+        _settings[nameof(LocalApiCorsMode)] = LocalApiCorsMode;
+        _settings[nameof(LocalApiCorsAllowList)] = LocalApiCorsAllowList;
+        _settings[nameof(LocalApiDefaultTargetLanguage)] = LocalApiDefaultTargetLanguage;
         _settings[nameof(ShowWindowHotkey)] = ShowWindowHotkey;
         _settings[nameof(TranslateSelectionHotkey)] = TranslateSelectionHotkey;
         _settings[nameof(OcrTranslateHotkey)] = OcrTranslateHotkey;

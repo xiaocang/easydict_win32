@@ -29,6 +29,7 @@ internal enum SettingsTabId
     Hotkeys,
     Advanced,
     Language,
+    LocalApi,
     About
 }
 
@@ -164,6 +165,7 @@ public sealed partial class SettingsPage : Page
         new() { Id = SettingsTabId.Hotkeys, IconGlyph = "\uE765" },
         new() { Id = SettingsTabId.Advanced, IconGlyph = "\uE771" },
         new() { Id = SettingsTabId.Language, IconGlyph = "\uE774" },
+        new() { Id = SettingsTabId.LocalApi, IconGlyph = "\uE968" },
         new() { Id = SettingsTabId.About, IconGlyph = "\uE946" }
     ];
     private readonly HashSet<SettingsTabId> _initializedSettingsTabData = [];
@@ -474,7 +476,24 @@ public sealed partial class SettingsPage : Page
     private void InitializeSettingsTabs()
     {
         SettingsTabsHost.ItemsSource = _settingsTabs;
-        SelectSettingsTab(SettingsTabId.General, resetScroll: false);
+        var initialTab = _navigationInitialTab ?? SettingsTabId.General;
+        _navigationInitialTab = null;
+        SelectSettingsTab(initialTab, resetScroll: false);
+    }
+
+    private SettingsTabId? _navigationInitialTab;
+
+    protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        if (e.Parameter is SettingsTabId tab)
+        {
+            _navigationInitialTab = tab;
+            if (_isInitialized)
+            {
+                SelectSettingsTab(tab, resetScroll: true);
+            }
+        }
     }
 
     private void OnSettingsTabClick(object sender, RoutedEventArgs e)
@@ -509,6 +528,10 @@ public sealed partial class SettingsPage : Page
         HotkeysTabContent.Visibility = tabId == SettingsTabId.Hotkeys ? Visibility.Visible : Visibility.Collapsed;
         AdvancedTabContent.Visibility = tabId == SettingsTabId.Advanced ? Visibility.Visible : Visibility.Collapsed;
         LanguageTabContent.Visibility = tabId == SettingsTabId.Language ? Visibility.Visible : Visibility.Collapsed;
+        if (LocalApiTabContent != null)
+        {
+            LocalApiTabContent.Visibility = tabId == SettingsTabId.LocalApi ? Visibility.Visible : Visibility.Collapsed;
+        }
         AboutTabContent.Visibility = tabId == SettingsTabId.About ? Visibility.Visible : Visibility.Collapsed;
 
         if (resetScroll)
@@ -565,6 +588,11 @@ public sealed partial class SettingsPage : Page
             if (tabId == SettingsTabId.Advanced)
             {
                 QueueDeferredSettingsIo(_lifetimeCts.Token);
+            }
+
+            if (tabId == SettingsTabId.LocalApi)
+            {
+                InitializeLocalApiPanel();
             }
         }
         finally
@@ -1271,6 +1299,7 @@ public sealed partial class SettingsPage : Page
         TeardownPhiSilicaPanel();
         TeardownFoundryLocalPanel();
         TeardownOpenVinoPanel();
+        TeardownLocalApiPanel();
 
         try { _currentDialog?.Hide(); } catch (COMException) { }
         _currentDialog = null;

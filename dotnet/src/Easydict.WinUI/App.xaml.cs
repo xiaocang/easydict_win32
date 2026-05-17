@@ -22,6 +22,7 @@ namespace Easydict.WinUI
         private MouseHookService? _mouseHookService;
         private PopButtonService? _popButtonService;
         private OcrTranslateService? _ocrTranslateService;
+        private LocalApiCoordinator? _localApiCoordinator;
         private AppWindow? _appWindow;
 
         // IPC: named event for context menu --ocr-translate signaling
@@ -53,6 +54,13 @@ namespace Easydict.WinUI
         /// Gets the HotkeyService instance for dynamic reloading.
         /// </summary>
         internal static HotkeyService? HotkeyService => Instance._hotkeyService;
+
+        /// <summary>
+        /// Gets the LocalApiCoordinator instance (drives the local OpenAI-compatible HTTP server).
+        /// Returns null before App.OnLaunched runs InitializeServices().
+        /// </summary>
+        internal static LocalApiCoordinator? LocalApiCoordinator =>
+            ((App?)Current)?._localApiCoordinator;
 
         /// <summary>
         /// Event fired when clipboard text is received (for auto-translate).
@@ -283,6 +291,27 @@ namespace Easydict.WinUI
                 });
             }
 
+            // If cold-launched via easydict://settings/<path>, deep-link to that settings tab.
+            if (!string.IsNullOrEmpty(Program.PendingSettingsPath))
+            {
+                var path = Program.PendingSettingsPath;
+                _window.DispatcherQueue.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        ShowAndActivateWindow();
+                        if (rootFrame.Content is MainPage main)
+                        {
+                            main.NavigateToSettingsPath(path);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[App] PendingSettingsPath nav error: {ex.Message}");
+                    }
+                });
+            }
+
             // Run region detection asynchronously after startup completes.
             // On first launch this detects China region and switches defaults (Google → Bing).
             // For returning users with saved settings this is a no-op.
@@ -342,6 +371,18 @@ namespace Easydict.WinUI
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[App] OcrTranslateService initialization failed: {ex}");
+            }
+
+            // Initialize local API coordinator (lazy; only starts the HTTP listener if enabled).
+            try
+            {
+                _localApiCoordinator = new LocalApiCoordinator(
+                    TranslationManagerService.Instance, SettingsService.Instance);
+                _ = _localApiCoordinator.StartIfEnabledAsync();
+            }
+            catch (Exception ex)
+            {
+                LogToFile($"[App] LocalApiCoordinator initialization failed: {ex}");
             }
 
             // Start named-event listener for Shell context menu --ocr-translate IPC.
@@ -971,6 +1012,18 @@ namespace Easydict.WinUI
             app._clipboardService?.Dispose();
             app._hotkeyService?.Dispose();
             app._trayIconService?.Dispose();
+            try
+            {
+                if (app._localApiCoordinator is { } coord)
+                {
+                    coord.StopAsync().Wait(TimeSpan.FromSeconds(2));
+                    coord.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] LocalApiCoordinator shutdown failed: {ex.Message}");
+            }
             FixedWindowService.Instance.Dispose();
             MiniWindowService.Instance.Dispose();
             TextToSpeechService.Instance.Stop();

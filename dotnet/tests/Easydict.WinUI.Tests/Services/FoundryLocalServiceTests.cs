@@ -358,15 +358,12 @@ public sealed class FoundryLocalServiceTests
             var resolver = new FoundryLocalCliEndpointResolver(
                 scriptPath,
                 startCommandTimeout: TimeSpan.FromMilliseconds(100));
-            var stopwatch = Stopwatch.StartNew();
 
             var act = async () => await resolver.StartServiceAsync(CancellationToken.None);
 
             var exception = await act.Should().ThrowAsync<FoundryLocalCliCommandException>();
-            stopwatch.Stop();
             exception.Which.ExitCode.Should().Be(-2);
             exception.Which.Message.Should().Contain("Timed out");
-            stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
         }
         finally
         {

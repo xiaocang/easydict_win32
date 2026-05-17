@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -118,6 +119,29 @@ public static class TextSelectionService
     private const int UiaSemaphoreTimeoutMs = 200;
     private const int UiaExecutionTimeoutMs = 800;
 
+    // Adaptive per-process suppression: after repeated non-text clipboard payloads
+    // (e.g. PotPlayer's Ctrl+C copies the current frame as CF_BITMAP), skip the
+    // clipboard fallback entirely for a window so drags/double-clicks don't waste
+    // 600 ms and steal focus from the playback window each time.
+    internal enum ClipWaitResult
+    {
+        Timeout,
+        Success,
+        NonTextPayload,
+    }
+
+    private sealed class ProcessSelectionStats
+    {
+        public int ConsecutiveNonTextFailures;
+        public long SuppressedUntilTicks;
+    }
+
+    private static readonly ConcurrentDictionary<string, ProcessSelectionStats> _processStats =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private const int NonTextFailureThreshold = 2;
+    private const int SuppressionWindowMs = 5 * 60 * 1000;
+
     /// <summary>
     /// Runs a synchronous function on the dispatcher thread and awaits the result.
     /// Unlike TryEnqueue + Task.Delay, this guarantees the work completes before continuing.
@@ -215,18 +239,27 @@ public static class TextSelectionService
             return string.Empty;
         }
 
+        if (IsProcessSuppressed(normalizedProcessName, isElectron, isTerminal))
+        {
+            Debug.WriteLine($"[TextSelectionService] Suppressed: '{processName}' previously produced non-text clipboard payloads; skipping UIA + clipboard");
+            return null;
+        }
+
         // Track if we already tried clipboard for Electron to avoid double Ctrl+C
         bool clipboardAlreadyAttempted = false;
+        ClipWaitResult? capturedClipOutcome = null;
 
         // For Electron apps, use clipboard method first since UIA doesn't work reliably
         if (isElectron)
         {
             Debug.WriteLine("[TextSelectionService] Detected Electron app, using clipboard method");
             clipboardAlreadyAttempted = true;
-            var clipboardText = await GetSelectedTextViaClipboardAsync(cancellationToken, isElectron);
+            var (clipboardText, electronOutcome) = await GetSelectedTextViaClipboardAsync(cancellationToken, isElectron);
+            capturedClipOutcome = electronOutcome;
             if (!string.IsNullOrWhiteSpace(clipboardText))
             {
                 Debug.WriteLine($"[TextSelectionService] Got {clipboardText.Length} chars via clipboard");
+                RecordOutcome(normalizedProcessName, ClipWaitResult.Success);
                 return clipboardText;
             }
         }
@@ -272,6 +305,8 @@ public static class TextSelectionService
 
         if (!string.IsNullOrWhiteSpace(uiaText))
         {
+            // UIA recovered the selection — rehabilitate any prior suppression.
+            RecordOutcome(normalizedProcessName, ClipWaitResult.Success);
             return uiaText;
         }
 
@@ -288,17 +323,23 @@ public static class TextSelectionService
         if (clipboardAlreadyAttempted)
         {
             Debug.WriteLine("[TextSelectionService] Clipboard already attempted, skipping fallback to avoid double Ctrl+C");
+            if (capturedClipOutcome.HasValue)
+            {
+                RecordOutcome(normalizedProcessName, capturedClipOutcome.Value);
+            }
             return null;
         }
 
         Debug.WriteLine("[TextSelectionService] UIA returned no text, falling back to clipboard method");
-        var fallbackText = await GetSelectedTextViaClipboardAsync(cancellationToken, false);
+        var (fallbackText, fallbackOutcome) = await GetSelectedTextViaClipboardAsync(cancellationToken, false);
         if (!string.IsNullOrWhiteSpace(fallbackText))
         {
             Debug.WriteLine($"[TextSelectionService] Got {fallbackText.Length} chars via clipboard fallback");
+            RecordOutcome(normalizedProcessName, ClipWaitResult.Success);
             return fallbackText;
         }
 
+        RecordOutcome(normalizedProcessName, fallbackOutcome);
         return null;
     }
 
@@ -419,8 +460,10 @@ public static class TextSelectionService
     /// <summary>
     /// Gets selected text using clipboard method (Ctrl+C).
     /// Saves and restores original clipboard content.
+    /// Returns the text (or null) plus the underlying ClipWait outcome so callers
+    /// can distinguish a benign timeout from a non-text payload (e.g. video frame).
     /// </summary>
-    private static async Task<string?> GetSelectedTextViaClipboardAsync(CancellationToken cancellationToken = default, bool isElectronApp = false)
+    private static async Task<(string? text, ClipWaitResult outcome)> GetSelectedTextViaClipboardAsync(CancellationToken cancellationToken = default, bool isElectronApp = false)
     {
         const int pollIntervalMs = 30;
         const int timeoutMsStandard = 450;
@@ -437,14 +480,14 @@ public static class TextSelectionService
             if (App.MainWindow == null)
             {
                 Debug.WriteLine("[TextSelectionService] MainWindow not available");
-                return null;
+                return (null, ClipWaitResult.Timeout);
             }
 
             var dispatcherQueue = App.MainWindow.DispatcherQueue;
             if (dispatcherQueue == null)
             {
                 Debug.WriteLine("[TextSelectionService] DispatcherQueue not available");
-                return null;
+                return (null, ClipWaitResult.Timeout);
             }
 
             // 1. Save current clipboard content (awaitable — guarantees completion)
@@ -467,7 +510,7 @@ public static class TextSelectionService
             catch (Exception ex)
             {
                 Debug.WriteLine($"[TextSelectionService] Failed to save clipboard: {ex.Message}");
-                return null;
+                return (null, ClipWaitResult.Timeout);
             }
 
             // 2. Capture baseline clipboard sequence BEFORE any modifications
@@ -503,7 +546,7 @@ public static class TextSelectionService
                     if (actualForeground != targetWindow)
                     {
                         Debug.WriteLine($"[TextSelectionService] Focus verification failed: expected {targetWindow}, got {actualForeground}");
-                        return null;
+                        return (null, ClipWaitResult.Timeout);
                     }
 
                     await Task.Delay(100, cancellationToken); // Wait for focus to settle
@@ -512,11 +555,11 @@ public static class TextSelectionService
                 SendCtrlC();
 
                 // Use ClipWait with baseline sequence - polls for clipboard readiness
-                var clipboardReady = await WaitForClipboardTextAsync(dispatcherQueue, timeoutMs, pollIntervalMs, baselineSequence, cancellationToken);
-                if (!clipboardReady)
+                var waitOutcome = await WaitForClipboardTextAsync(dispatcherQueue, timeoutMs, pollIntervalMs, baselineSequence, cancellationToken);
+                if (waitOutcome != ClipWaitResult.Success)
                 {
-                    Debug.WriteLine($"[TextSelectionService] ClipWait failed after {timeoutMs}ms, clipboard not ready");
-                    return null;
+                    Debug.WriteLine($"[TextSelectionService] ClipWait result={waitOutcome} after up to {timeoutMs}ms");
+                    return (null, waitOutcome);
                 }
             }
             finally
@@ -549,7 +592,7 @@ public static class TextSelectionService
             catch (Exception ex)
             {
                 Debug.WriteLine($"[TextSelectionService] Failed to read clipboard: {ex.Message}");
-                return null;
+                return (null, ClipWaitResult.Timeout);
             }
 
             Debug.WriteLine($"[TextSelectionService] Clipboard changed: {originalClipboard != selectedText}");
@@ -577,7 +620,8 @@ public static class TextSelectionService
                 });
             }
 
-            return selectedText;
+            var outcome = string.IsNullOrWhiteSpace(selectedText) ? ClipWaitResult.Timeout : ClipWaitResult.Success;
+            return (selectedText, outcome);
         }
         catch (OperationCanceledException)
         {
@@ -588,7 +632,7 @@ public static class TextSelectionService
         catch (Exception ex)
         {
             Debug.WriteLine($"[TextSelectionService] Clipboard method failed: {ex}");
-            return null;
+            return (null, ClipWaitResult.Timeout);
         }
     }
 
@@ -597,10 +641,18 @@ public static class TextSelectionService
     /// Uses GetClipboardSequenceNumber to efficiently detect clipboard changes.
     /// Clipboard reads are marshalled to the UI thread via dispatcherQueue to
     /// ensure WinRT Clipboard APIs are called from the correct thread.
+    ///
+    /// Classifies the resulting payload:
+    /// - Success: clipboard contains non-empty text
+    /// - NonTextPayload: clipboard changed but only contains non-text formats
+    ///   (e.g. CF_BITMAP from a video player). Requires two consecutive
+    ///   observations to avoid racing apps that stage text after an image.
+    /// - Timeout: timeout elapsed without a conclusive payload
     /// </summary>
-    private static async Task<bool> WaitForClipboardTextAsync(DispatcherQueue dispatcherQueue, int timeoutMs, int pollIntervalMs, uint baselineSequence, CancellationToken cancellationToken = default)
+    private static async Task<ClipWaitResult> WaitForClipboardTextAsync(DispatcherQueue dispatcherQueue, int timeoutMs, int pollIntervalMs, uint baselineSequence, CancellationToken cancellationToken = default)
     {
         var startTime = Environment.TickCount64;
+        int consecutiveNonTextTicks = 0;
 
         while (Environment.TickCount64 - startTime < timeoutMs)
         {
@@ -612,27 +664,50 @@ public static class TextSelectionService
                 Debug.WriteLine($"[TextSelectionService] ClipWait: Sequence changed from {baselineSequence} to {currentSequence}");
                 try
                 {
-                    var text = await RunOnDispatcherAsync<string?>(dispatcherQueue, async () =>
+                    var probe = await RunOnDispatcherAsync<ClipboardProbe?>(dispatcherQueue, async () =>
                     {
                         var content = Clipboard.GetContent();
-                        if (content.Contains(StandardDataFormats.Text))
-                            return await content.GetTextAsync();
-                        return null;
+                        var formats = content.AvailableFormats;
+                        var hasText = content.Contains(StandardDataFormats.Text);
+                        string? text = null;
+                        if (hasText)
+                        {
+                            text = await content.GetTextAsync();
+                        }
+                        return new ClipboardProbe(hasText, text, formats?.Count ?? 0);
                     });
 
-                    if (!string.IsNullOrWhiteSpace(text))
+                    if (probe is null)
                     {
-                        Debug.WriteLine($"[TextSelectionService] ClipWait: Clipboard ready after {Environment.TickCount64 - startTime}ms with {text.Length} chars");
-                        return true;
+                        // Couldn't read clipboard this tick; keep polling.
+                        consecutiveNonTextTicks = 0;
+                    }
+                    else if (probe.HasText && !string.IsNullOrWhiteSpace(probe.Text))
+                    {
+                        Debug.WriteLine($"[TextSelectionService] ClipWait: Clipboard ready after {Environment.TickCount64 - startTime}ms with {probe.Text!.Length} chars");
+                        return ClipWaitResult.Success;
+                    }
+                    else if (!probe.HasText && probe.AvailableFormatCount > 0)
+                    {
+                        consecutiveNonTextTicks++;
+                        Debug.WriteLine($"[TextSelectionService] ClipWait: Non-text payload detected ({probe.AvailableFormatCount} formats, tick {consecutiveNonTextTicks}/{2})");
+                        if (consecutiveNonTextTicks >= 2)
+                        {
+                            Debug.WriteLine($"[TextSelectionService] ClipWait: Fast-failing after {Environment.TickCount64 - startTime}ms — non-text clipboard payload confirmed");
+                            return ClipWaitResult.NonTextPayload;
+                        }
                     }
                     else
                     {
-                        Debug.WriteLine("[TextSelectionService] ClipWait: Sequence changed but no text found, continuing...");
+                        // Text format present but empty, or no formats at all — keep polling.
+                        Debug.WriteLine("[TextSelectionService] ClipWait: Sequence changed but no usable text yet, continuing...");
+                        consecutiveNonTextTicks = 0;
                     }
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"[TextSelectionService] ClipWait: Clipboard read failed: {ex.Message}");
+                    consecutiveNonTextTicks = 0;
                     // Continue polling if clipboard access fails
                 }
             }
@@ -641,8 +716,10 @@ public static class TextSelectionService
         }
 
         Debug.WriteLine($"[TextSelectionService] ClipWait: Timed out after {timeoutMs}ms (final sequence: {GetClipboardSequenceNumber()}, baseline: {baselineSequence})");
-        return false;
+        return ClipWaitResult.Timeout;
     }
+
+    private sealed record ClipboardProbe(bool HasText, string? Text, int AvailableFormatCount);
 
     /// <summary>
     /// Sends Ctrl+C keystroke to copy selected text using SendInput API.
@@ -746,4 +823,57 @@ public static class TextSelectionService
         }
     }
 
+    // ---- Adaptive suppression bookkeeping ----
+
+    private static bool IsProcessSuppressed(string normalizedProcessName, bool isElectron, bool isTerminal)
+        => IsProcessSuppressedCore(normalizedProcessName, isElectron, isTerminal, Environment.TickCount64);
+
+    private static bool IsProcessSuppressedCore(string normalizedProcessName, bool isElectron, bool isTerminal, long nowTicks)
+    {
+        if (string.IsNullOrEmpty(normalizedProcessName)) return false;
+        // Electron uses clipboard intentionally; terminals skip clipboard entirely.
+        // Both have dedicated paths and should never be tripped by this heuristic.
+        if (isElectron || isTerminal) return false;
+        if (!_processStats.TryGetValue(normalizedProcessName, out var stats)) return false;
+        return stats.SuppressedUntilTicks > nowTicks;
+    }
+
+    private static void RecordOutcome(string normalizedProcessName, ClipWaitResult outcome)
+        => RecordOutcomeCore(normalizedProcessName, outcome, Environment.TickCount64);
+
+    private static void RecordOutcomeCore(string normalizedProcessName, ClipWaitResult outcome, long nowTicks)
+    {
+        if (string.IsNullOrEmpty(normalizedProcessName)) return;
+        switch (outcome)
+        {
+            case ClipWaitResult.Success:
+                if (_processStats.TryGetValue(normalizedProcessName, out var existing))
+                {
+                    existing.ConsecutiveNonTextFailures = 0;
+                    existing.SuppressedUntilTicks = 0;
+                }
+                break;
+            case ClipWaitResult.NonTextPayload:
+                var stats = _processStats.GetOrAdd(normalizedProcessName, _ => new ProcessSelectionStats());
+                stats.ConsecutiveNonTextFailures++;
+                if (stats.ConsecutiveNonTextFailures >= NonTextFailureThreshold)
+                {
+                    stats.SuppressedUntilTicks = nowTicks + SuppressionWindowMs;
+                    Debug.WriteLine($"[TextSelectionService] Suppression engaged for '{normalizedProcessName}' for {SuppressionWindowMs / 1000}s after {stats.ConsecutiveNonTextFailures} non-text failures");
+                }
+                break;
+            case ClipWaitResult.Timeout:
+                // Leave stats unchanged — a plain timeout is weaker evidence than a confirmed non-text payload.
+                break;
+        }
+    }
+
+    // Test seams.
+    internal static void RecordOutcomeForTest(string normalizedProcessName, ClipWaitResult outcome, long nowTicks)
+        => RecordOutcomeCore(normalizedProcessName, outcome, nowTicks);
+
+    internal static bool IsProcessSuppressedForTest(string normalizedProcessName, long nowTicks, bool isElectron = false, bool isTerminal = false)
+        => IsProcessSuppressedCore(normalizedProcessName, isElectron, isTerminal, nowTicks);
+
+    internal static void ResetSuppressionStats() => _processStats.Clear();
 }

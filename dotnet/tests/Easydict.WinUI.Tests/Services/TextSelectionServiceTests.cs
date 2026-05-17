@@ -114,4 +114,136 @@ public class TextSelectionServiceTests
             TextSelectionService.GetSelectedTextAsync());
         exception.Should().BeNull();
     }
+
+    // ---- Adaptive suppression bookkeeping ----
+    // These cover the per-process suppression layer that prevents repeated
+    // expensive Ctrl+C attempts against apps whose Ctrl+C produces non-text
+    // clipboard payload (e.g. PotPlayer, games). Tests reset shared static
+    // state at the start of each case and exercise the test-only seams that
+    // accept an injected `nowTicks`.
+
+    [Fact]
+    public void Suppression_SingleNonTextFailure_IsNotSuppressed()
+    {
+        TextSelectionService.ResetSuppressionStats();
+        const string proc = "potplayermini64";
+        long now = 1000;
+
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+
+        TextSelectionService.IsProcessSuppressedForTest(proc, now + 1).Should().BeFalse(
+            "one non-text failure is below the threshold of 2 — single flukes shouldn't lock out a process");
+    }
+
+    [Fact]
+    public void Suppression_TwoConsecutiveNonTextFailures_TripsSuppression()
+    {
+        TextSelectionService.ResetSuppressionStats();
+        const string proc = "potplayermini64";
+        long now = 1000;
+
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+
+        TextSelectionService.IsProcessSuppressedForTest(proc, now + 1).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Suppression_ExpiresAfterWindow()
+    {
+        TextSelectionService.ResetSuppressionStats();
+        const string proc = "potplayermini64";
+        long now = 1000;
+        const int suppressionMs = 5 * 60 * 1000;
+
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+
+        TextSelectionService.IsProcessSuppressedForTest(proc, now + suppressionMs - 1).Should().BeTrue(
+            "still inside the 5-minute suppression window");
+        TextSelectionService.IsProcessSuppressedForTest(proc, now + suppressionMs + 1).Should().BeFalse(
+            "after the window expires, the process gets another full attempt");
+    }
+
+    [Fact]
+    public void Suppression_SuccessOutcome_ResetsCounterAndLiftsSuppression()
+    {
+        TextSelectionService.ResetSuppressionStats();
+        const string proc = "potplayermini64";
+        long now = 1000;
+
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+        TextSelectionService.IsProcessSuppressedForTest(proc, now + 1).Should().BeTrue();
+
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.Success, now + 2);
+
+        TextSelectionService.IsProcessSuppressedForTest(proc, now + 3).Should().BeFalse(
+            "a successful extraction rehabilitates the process — counter resets and suppression lifts");
+
+        // And re-arming requires two more consecutive failures, not one.
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now + 4);
+        TextSelectionService.IsProcessSuppressedForTest(proc, now + 5).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Suppression_TimeoutOutcome_DoesNotAffectCounter()
+    {
+        TextSelectionService.ResetSuppressionStats();
+        const string proc = "someapp";
+        long now = 1000;
+
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.Timeout, now);
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.Timeout, now);
+
+        TextSelectionService.IsProcessSuppressedForTest(proc, now + 1).Should().BeFalse(
+            "a plain timeout is too weak to count toward suppression — the signature is non-text payload");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    public void Suppression_EmptyProcessName_NeverSuppresses(string? proc)
+    {
+        TextSelectionService.ResetSuppressionStats();
+        long now = 1000;
+
+        TextSelectionService.RecordOutcomeForTest(proc!, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+        TextSelectionService.RecordOutcomeForTest(proc!, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+
+        TextSelectionService.IsProcessSuppressedForTest(proc!, now + 1).Should().BeFalse(
+            "unknown processes (no resolvable name) must not be suppressed — we don't know who we'd be locking out");
+    }
+
+    [Fact]
+    public void Suppression_ElectronApps_AreExempt()
+    {
+        TextSelectionService.ResetSuppressionStats();
+        const string proc = "code";
+        long now = 1000;
+
+        // Even if (theoretically) RecordOutcome marks Electron as failing,
+        // the suppression check exempts it because Electron uses clipboard intentionally.
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+
+        TextSelectionService.IsProcessSuppressedForTest(proc, now + 1, isElectron: true, isTerminal: false)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void Suppression_TerminalApps_AreExempt()
+    {
+        TextSelectionService.ResetSuppressionStats();
+        const string proc = "windowsterminal";
+        long now = 1000;
+
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+        TextSelectionService.RecordOutcomeForTest(proc, TextSelectionService.ClipWaitResult.NonTextPayload, now);
+
+        TextSelectionService.IsProcessSuppressedForTest(proc, now + 1, isElectron: false, isTerminal: true)
+            .Should().BeFalse(
+                "terminal apps already skip the clipboard path; the suppression layer must not double-block them");
+    }
 }

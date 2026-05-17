@@ -245,6 +245,28 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private void OnServiceResultPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        // Streaming hot path: while IsStreaming, only StreamingText/DisplayText change
+        // per chunk. Skip the heavy full UpdateUI (icon load, theme, error/grammar
+        // branches, ~30 property writes) and just refresh the text TextBlock — the
+        // rest of the state is already correct from the IsStreaming transition.
+        // IsStreaming → false transitions arrive as separate PropertyChanged events
+        // that fall through to the full UpdateUI below.
+        if (_serviceResult?.IsStreaming == true
+            && (e.PropertyName == nameof(ServiceQueryResult.StreamingText)
+                || e.PropertyName == nameof(ServiceQueryResult.DisplayText)))
+        {
+            if (!_streamingFastPathPending)
+            {
+                _streamingFastPathPending = true;
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    _streamingFastPathPending = false;
+                    UpdateStreamingTextOnly();
+                });
+            }
+            return;
+        }
+
         if (!_updateUIPending)
         {
             _updateUIPending = true;
@@ -253,6 +275,29 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 _updateUIPending = false;
                 UpdateUI();
             });
+        }
+    }
+
+    private bool _streamingFastPathPending;
+
+    private void UpdateStreamingTextOnly()
+    {
+        if (_serviceResult == null || !_serviceResult.IsStreaming)
+        {
+            return;
+        }
+
+        var text = string.IsNullOrEmpty(_serviceResult.StreamingText)
+            ? "Waiting for response..."
+            : _serviceResult.StreamingText;
+
+        if (_serviceResult.IsGrammarMode)
+        {
+            CorrectedText.Text = text;
+        }
+        else
+        {
+            ResultText.Text = text;
         }
     }
 

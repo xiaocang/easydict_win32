@@ -347,6 +347,7 @@ public sealed class FoundryLocalServiceTests
             """
             @echo off
             if "%1"=="service" if "%2"=="start" goto loop
+            echo polling
             exit /b 0
             :loop
             goto loop
@@ -357,6 +358,7 @@ public sealed class FoundryLocalServiceTests
         {
             var resolver = new FoundryLocalCliEndpointResolver(
                 scriptPath,
+                statusCommandTimeout: TimeSpan.FromSeconds(2),
                 startCommandTimeout: TimeSpan.FromMilliseconds(100));
 
             var act = async () => await resolver.StartServiceAsync(CancellationToken.None);

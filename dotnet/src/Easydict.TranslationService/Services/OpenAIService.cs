@@ -3,23 +3,30 @@ using Easydict.TranslationService.Models;
 namespace Easydict.TranslationService.Services;
 
 /// <summary>
-/// OpenAI translation service using the Chat Completions API.
+/// OpenAI translation service.
+/// Defaults to the Responses API endpoint; auto-detects format if the user
+/// configures a custom URL (e.g. Chat Completions for legacy or proxy setups).
 /// Requires API key from user settings.
 /// </summary>
 public sealed class OpenAIService : BaseOpenAIService
 {
-    private const string DefaultEndpoint = "https://api.openai.com/v1/chat/completions";
-    private const string DefaultModel = "gpt-4o-mini";
+    public const string DefaultEndpoint = "https://api.openai.com/v1/responses";
+    public const string LegacyChatCompletionsEndpoint = "https://api.openai.com/v1/chat/completions";
+    public const string DefaultModel = "gpt-5-mini";
 
     /// <summary>
-    /// Available OpenAI models for translation.
+    /// Suggested OpenAI models for translation, biased toward the cheap "mini"
+    /// tier of recent generations.
     /// </summary>
     public static readonly string[] AvailableModels = new[]
     {
+        "gpt-5-mini",
+        "gpt-5-nano",
+        "gpt-5",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
         "gpt-4o-mini",
         "gpt-4o",
-        "gpt-4-turbo",
-        "gpt-3.5-turbo"
     };
 
     private string _endpoint = DefaultEndpoint;
@@ -44,8 +51,8 @@ public sealed class OpenAIService : BaseOpenAIService
     /// Configure the OpenAI service.
     /// </summary>
     /// <param name="apiKey">OpenAI API key (required).</param>
-    /// <param name="endpoint">Custom endpoint URL (optional, defaults to OpenAI API).</param>
-    /// <param name="model">Model to use (optional, defaults to gpt-4o-mini).</param>
+    /// <param name="endpoint">Custom endpoint URL (optional, defaults to OpenAI Responses API).</param>
+    /// <param name="model">Model to use (optional, defaults to <see cref="DefaultModel"/>).</param>
     /// <param name="temperature">Generation temperature (optional, defaults to 0.3).</param>
     public void Configure(string apiKey, string? endpoint = null, string? model = null, double? temperature = null)
     {
@@ -56,5 +63,7 @@ public sealed class OpenAIService : BaseOpenAIService
             _model = model;
         if (temperature.HasValue)
             _temperature = Math.Clamp(temperature.Value, 0.0, 2.0);
+
+        ResetFormatDetection();
     }
 }

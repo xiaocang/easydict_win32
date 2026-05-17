@@ -53,5 +53,7 @@ public sealed class CustomOpenAIService : BaseOpenAIService
         if (!string.IsNullOrEmpty(model)) _model = model;
         if (temperature.HasValue) _temperature = Math.Clamp(temperature.Value, 0.0, 2.0);
         if (!string.IsNullOrEmpty(displayName)) _displayName = displayName;
+
+        ResetFormatDetection();
     }
 }

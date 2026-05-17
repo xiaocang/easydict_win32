@@ -1,3 +1,4 @@
+using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using FluentAssertions;
@@ -88,5 +89,63 @@ public class OcrServiceFactoryTests
         var svc = OcrServiceFactory.Create(options);
 
         svc.Should().BeOfType<WindowsOcrService>();
+    }
+
+    [Fact]
+    public void OcrServiceOptions_DefaultsToOllamaEndpoint_ForOllama()
+    {
+        var options = new OcrServiceOptions(OcrEngineType.Ollama, null, null, null, null);
+
+        options.Endpoint.Should().Be(OcrServiceOptions.DefaultOllamaEndpoint);
+        options.Model.Should().Be(OcrServiceOptions.DefaultOllamaModel);
+    }
+
+    [Fact]
+    public void OcrServiceOptions_DefaultsToResponsesEndpoint_ForCustomApi()
+    {
+        var options = new OcrServiceOptions(OcrEngineType.CustomApi, null, null, null, null);
+
+        options.Endpoint.Should().Be(OpenAIService.DefaultEndpoint);
+        options.Model.Should().Be(OpenAIService.DefaultModel);
+    }
+
+    [Fact]
+    public void CreateProxyAwareHandler_ConfiguresExplicitProxy_WhenEnabled()
+    {
+        using var handler = OcrServiceFactory.CreateProxyAwareHandler(
+            proxyEnabled: true,
+            proxyUri: "http://127.0.0.1:7890",
+            proxyBypassLocal: true);
+
+        handler.Proxy.Should().NotBeNull();
+        handler.UseProxy.Should().BeTrue();
+        handler.Proxy!.GetProxy(new Uri("https://api.openai.com/v1/responses"))
+            .Should().Be(new Uri("http://127.0.0.1:7890/"));
+    }
+
+    [Fact]
+    public void CreateProxyAwareHandler_BypassesLocalhost_WhenConfigured()
+    {
+        using var handler = OcrServiceFactory.CreateProxyAwareHandler(
+            proxyEnabled: true,
+            proxyUri: "http://127.0.0.1:7890",
+            proxyBypassLocal: true);
+
+        handler.Proxy.Should().NotBeNull();
+        handler.Proxy!.IsBypassed(new Uri("http://localhost:11434/api/generate"))
+            .Should().BeTrue();
+        handler.Proxy.IsBypassed(new Uri("https://api.openai.com/v1/responses"))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void CreateProxyAwareHandler_DoesNotConfigureProxy_WhenDisabled()
+    {
+        using var handler = OcrServiceFactory.CreateProxyAwareHandler(
+            proxyEnabled: false,
+            proxyUri: "http://127.0.0.1:7890",
+            proxyBypassLocal: true);
+
+        handler.Proxy.Should().BeNull();
     }
 }

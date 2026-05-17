@@ -23,8 +23,8 @@ internal static class LongDocumentCliCommand
         new("OPENAI_API_KEY", nameof(SettingsService.OpenAIApiKey)),
         new("OPENAI_MODEL", nameof(SettingsService.OpenAIModel)),
         new("OPENAI_ENDPOINT", nameof(SettingsService.OpenAIEndpoint)),
-        new("OPENAI_BASE_URL", nameof(SettingsService.OpenAIEndpoint), NormalizeChatCompletionsEndpoint),
-        new("OPENAI_API_BASE", nameof(SettingsService.OpenAIEndpoint), NormalizeChatCompletionsEndpoint),
+        new("OPENAI_BASE_URL", nameof(SettingsService.OpenAIEndpoint), NormalizeResponsesEndpoint),
+        new("OPENAI_API_BASE", nameof(SettingsService.OpenAIEndpoint), NormalizeResponsesEndpoint),
         new("OPENAI_TEMPERATURE", nameof(SettingsService.OpenAITemperature)),
         new("CUSTOM_OPENAI_API_KEY", nameof(SettingsService.CustomOpenAIApiKey)),
         new("CUSTOM_OPENAI_MODEL", nameof(SettingsService.CustomOpenAIModel)),
@@ -826,6 +826,21 @@ internal static class LongDocumentCliCommand
             return trimmed;
 
         return $"{trimmed}/chat/completions";
+    }
+
+    private static string NormalizeResponsesEndpoint(string endpoint)
+    {
+        if (string.IsNullOrWhiteSpace(endpoint))
+            return endpoint;
+
+        var trimmed = endpoint.TrimEnd('/');
+        if (trimmed.EndsWith("/responses", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
+        {
+            return trimmed;
+        }
+
+        return $"{trimmed}/responses";
     }
 
     private static void PrintUsage()

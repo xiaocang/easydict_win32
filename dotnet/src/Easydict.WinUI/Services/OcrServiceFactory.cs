@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Net;
+using System.Security.Authentication;
 using Easydict.WinUI.Models;
 
 namespace Easydict.WinUI.Services;
@@ -8,7 +11,9 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public static class OcrServiceFactory
 {
-    private static readonly HttpClient _sharedHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+    private static readonly object _httpClientLock = new();
+    private static HttpClient? _sharedHttpClient;
+    private static ProxySnapshot? _sharedProxySnapshot;
 
     /// <summary>
     /// Creates an <see cref="IOcrService"/> for the given options.
@@ -23,7 +28,7 @@ public static class OcrServiceFactory
     public static IOcrService Create(OcrServiceOptions? options = null, HttpClient? httpClient = null)
     {
         var resolved = options ?? OcrServiceOptions.FromSettings(SettingsService.Instance);
-        var client = httpClient ?? _sharedHttpClient;
+        var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
 
         return resolved.Engine switch
         {
@@ -31,5 +36,78 @@ public static class OcrServiceFactory
             OcrEngineType.CustomApi => new CustomApiOcrService(client, resolved),
             _ => new WindowsOcrService()
         };
+    }
+
+    internal static HttpClient CreateProxyAwareHttpClient(
+        bool proxyEnabled,
+        string? proxyUri,
+        bool proxyBypassLocal,
+        TimeSpan? timeout = null)
+    {
+        return new HttpClient(CreateProxyAwareHandler(proxyEnabled, proxyUri, proxyBypassLocal))
+        {
+            Timeout = timeout ?? TimeSpan.FromSeconds(60)
+        };
+    }
+
+    internal static HttpClientHandler CreateProxyAwareHandler(
+        bool proxyEnabled,
+        string? proxyUri,
+        bool proxyBypassLocal)
+    {
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = true,
+            SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
+        };
+
+        if (proxyEnabled && !string.IsNullOrWhiteSpace(proxyUri))
+        {
+            if (Uri.TryCreate(proxyUri, UriKind.Absolute, out var parsedProxyUri))
+            {
+                handler.Proxy = new WebProxy(parsedProxyUri)
+                {
+                    BypassProxyOnLocal = proxyBypassLocal
+                };
+                handler.UseProxy = true;
+                Debug.WriteLine($"[OcrServiceFactory] Proxy configured: {parsedProxyUri.Host}:{parsedProxyUri.Port}, BypassLocal={proxyBypassLocal}");
+            }
+            else
+            {
+                Debug.WriteLine($"[OcrServiceFactory] Invalid proxy URI: {proxyUri}");
+            }
+        }
+
+        return handler;
+    }
+
+    private static HttpClient GetSharedHttpClient(SettingsService settings)
+    {
+        var snapshot = ProxySnapshot.From(settings);
+
+        lock (_httpClientLock)
+        {
+            if (_sharedHttpClient is null || _sharedProxySnapshot != snapshot)
+            {
+                _sharedHttpClient = CreateProxyAwareHttpClient(
+                    snapshot.Enabled,
+                    snapshot.Uri,
+                    snapshot.BypassLocal);
+                _sharedProxySnapshot = snapshot;
+            }
+
+            return _sharedHttpClient;
+        }
+    }
+
+    private sealed record ProxySnapshot(bool Enabled, string Uri, bool BypassLocal)
+    {
+        public static ProxySnapshot From(SettingsService settings)
+        {
+            return new ProxySnapshot(
+                settings.ProxyEnabled,
+                settings.ProxyUri?.Trim() ?? string.Empty,
+                settings.ProxyBypassLocal);
+        }
     }
 }

@@ -15,13 +15,27 @@ internal sealed class ChatCompletionsFormatStrategy : IOpenAIFormatStrategy
 
     public OpenAIApiFormat Format => OpenAIApiFormat.ChatCompletions;
 
-    public object BuildRequestBody(IReadOnlyList<ChatMessage> messages, string model, double temperature) => new
+    public object BuildRequestBody(
+        IReadOnlyList<ChatMessage> messages,
+        string model,
+        double temperature,
+        string? reasoningEffort)
     {
-        model,
-        messages = messages.Select(m => new { role = m.RoleString, content = m.Content }),
-        temperature,
-        stream = true,
-    };
+        var body = new Dictionary<string, object?>
+        {
+            ["model"] = model,
+            ["messages"] = messages.Select(m => new { role = m.RoleString, content = m.Content }),
+            ["temperature"] = temperature,
+            ["stream"] = true,
+        };
+
+        if (!string.IsNullOrWhiteSpace(reasoningEffort))
+        {
+            body["reasoning_effort"] = reasoningEffort;
+        }
+
+        return body;
+    }
 
     public IAsyncEnumerable<string> ParseStreamAsync(Stream stream, CancellationToken cancellationToken)
         => SseParser.ParseStreamAsync(stream, cancellationToken);

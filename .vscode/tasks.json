@@ -27,6 +27,9 @@
             "label": "build",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "dependsOn": "ensure-build-submodules",
             "dependsOrder": "sequence",
             "args": [
@@ -51,6 +54,9 @@
             "label": "build-debug",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "dependsOn": "ensure-build-submodules",
             "dependsOrder": "sequence",
             "args": [
@@ -74,6 +80,9 @@
             "label": "build-release",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "dependsOn": "ensure-build-submodules",
             "dependsOrder": "sequence",
             "args": [
@@ -97,6 +106,9 @@
             "label": "clean",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "dependsOn": "ensure-build-submodules",
             "dependsOrder": "sequence",
             "args": [
@@ -156,6 +168,9 @@
             "label": "test-e2e",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "args": [
                 "run",
                 "--project",
@@ -176,6 +191,9 @@
             "label": "run-debug",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "dependsOn": "ensure-build-submodules",
             "dependsOrder": "sequence",
             "args": [
@@ -198,6 +216,9 @@
             "label": "run-release",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "dependsOn": "ensure-build-submodules",
             "dependsOrder": "sequence",
             "args": [
@@ -291,6 +312,9 @@
             "label": "publish-x64",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "dependsOn": "ensure-build-submodules",
             "dependsOrder": "sequence",
             "args": [
@@ -314,6 +338,9 @@
             "label": "publish-x86",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "dependsOn": "ensure-build-submodules",
             "dependsOrder": "sequence",
             "args": [
@@ -337,6 +364,9 @@
             "label": "publish-arm64",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "dependsOn": "ensure-build-submodules",
             "dependsOrder": "sequence",
             "args": [
@@ -363,6 +393,9 @@
             "label": "restore",
             "command": "dotnet",
             "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
             "dependsOn": "ensure-build-submodules",
             "dependsOrder": "sequence",
             "args": [

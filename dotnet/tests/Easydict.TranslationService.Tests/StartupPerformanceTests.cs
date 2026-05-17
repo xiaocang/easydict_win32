@@ -136,7 +136,7 @@ public class StartupPerformanceTests : IDisposable
         manager.ConfigureService("openai", service =>
         {
             if (service is OpenAIService openai)
-                openai.Configure("test-key", "https://api.openai.com/v1/chat/completions", "gpt-4o-mini", 0.3);
+                openai.Configure("test-key", OpenAIService.DefaultEndpoint, "gpt-4o-mini", 0.3);
         });
         manager.ConfigureService("ollama", service =>
         {
@@ -494,7 +494,7 @@ public class StartupPerformanceTests : IDisposable
             ["DeepLApiKey"] = "fake-deepl-key-1234567890",
             ["DeepLUseFreeApi"] = true,
             ["OpenAIApiKey"] = "sk-fake-openai-key-1234567890abcdef",
-            ["OpenAIEndpoint"] = "https://api.openai.com/v1/chat/completions",
+            ["OpenAIEndpoint"] = OpenAIService.DefaultEndpoint,
             ["OpenAIModel"] = "gpt-4o-mini",
             ["OpenAITemperature"] = 0.3,
             ["OllamaEndpoint"] = "http://localhost:11434/v1/chat/completions",
@@ -569,7 +569,7 @@ public class StartupPerformanceTests : IDisposable
         GetValue<string?>(parsed, "DeepLApiKey", null);
         GetValue(parsed, "DeepLUseFreeApi", true);
         GetValue<string?>(parsed, "OpenAIApiKey", null);
-        GetValue(parsed, "OpenAIEndpoint", "https://api.openai.com/v1/chat/completions");
+        GetValue(parsed, "OpenAIEndpoint", OpenAIService.DefaultEndpoint);
         GetValue(parsed, "OpenAIModel", "gpt-4o-mini");
         GetValue(parsed, "OpenAITemperature", 0.3);
         GetValue(parsed, "OllamaEndpoint", "http://localhost:11434/v1/chat/completions");
@@ -709,7 +709,7 @@ public class StartupPerformanceTests : IDisposable
         });
         manager.ConfigureService("openai", svc =>
         {
-            if (svc is OpenAIService openai) openai.Configure("key", "https://api.openai.com/v1/chat/completions", "gpt-4o-mini", 0.3);
+            if (svc is OpenAIService openai) openai.Configure("key", OpenAIService.DefaultEndpoint, "gpt-4o-mini", 0.3);
         });
         manager.ConfigureService("ollama", svc =>
         {

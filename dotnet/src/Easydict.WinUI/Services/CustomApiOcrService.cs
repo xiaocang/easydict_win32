@@ -10,9 +10,7 @@ using Easydict.WinUI.Models;
 namespace Easydict.WinUI.Services;
 
 /// <summary>
-/// OCR service using an OpenAI Vision-compatible API.
-/// Sends the captured image as a base64 data URL and extracts text from
-/// the standard choices[0].message.content response field.
+/// OCR service using OpenAI Chat Completions or Responses-compatible vision APIs.
 /// </summary>
 public sealed class CustomApiOcrService : IOcrService
 {
@@ -55,11 +53,50 @@ public sealed class CustomApiOcrService : IOcrService
 
         Debug.WriteLine($"[CustomApiOcr] Sending {pixelWidth}x{pixelHeight} image to {endpoint} (model: {model})");
 
-        // Convert BGRA8 pixel data to base64-encoded JPEG
         var base64Image = await ConvertBgraToBase64JpegAsync(pixelData, pixelWidth, pixelHeight);
+        var usesResponses = UsesResponsesEndpoint(endpoint);
 
-        // Build OpenAI Vision-compatible request
-        var requestBody = new
+        var requestBody = usesResponses
+            ? BuildResponsesRequestBody(model, systemPrompt, base64Image)
+            : BuildChatCompletionsRequestBody(model, systemPrompt, base64Image);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        }
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        var text = usesResponses
+            ? ParseResponsesTextResponse(json)
+            : ParseOpenAIVisionResponse(json);
+
+        Debug.WriteLine($"[CustomApiOcr] Recognized {text.Length} chars");
+
+        return new OcrResult
+        {
+            Text = text,
+            Lines = [],
+            TextAngle = null,
+            DetectedLanguage = null
+        };
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<OcrLanguage> GetAvailableLanguages() => [];
+
+    private static object BuildChatCompletionsRequestBody(
+        string model,
+        string systemPrompt,
+        string base64Image)
+    {
+        return new
         {
             model,
             max_tokens = 2048,
@@ -80,35 +117,32 @@ public sealed class CustomApiOcrService : IOcrService
                 }
             }
         };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        request.Content = new StringContent(
-            JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
-
-        if (!string.IsNullOrWhiteSpace(apiKey))
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        }
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        var text = ParseOpenAIVisionResponse(json);
-
-        Debug.WriteLine($"[CustomApiOcr] Recognized {text.Length} chars");
-
-        return new OcrResult
-        {
-            Text = text,
-            Lines = [],
-            TextAngle = null,
-            DetectedLanguage = null
-        };
     }
 
-    /// <inheritdoc />
-    public IReadOnlyList<OcrLanguage> GetAvailableLanguages() => [];
+    private static object BuildResponsesRequestBody(
+        string model,
+        string systemPrompt,
+        string base64Image)
+    {
+        return new
+        {
+            model,
+            max_output_tokens = 2048,
+            store = false,
+            input = new object[]
+            {
+                new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "input_text", text = systemPrompt },
+                        new { type = "input_image", image_url = $"data:image/jpeg;base64,{base64Image}" }
+                    }
+                }
+            }
+        };
+    }
 
     /// <summary>
     /// Extracts text from an OpenAI Vision-compatible JSON response.
@@ -130,6 +164,57 @@ public sealed class CustomApiOcrService : IOcrService
             Debug.WriteLine($"[CustomApiOcr] Failed to parse response: {ex.Message}");
             return string.Empty;
         }
+    }
+
+    private static string ParseResponsesTextResponse(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("output_text", out var outputText))
+            {
+                return outputText.GetString()?.Trim() ?? string.Empty;
+            }
+
+            if (!root.TryGetProperty("output", out var output) ||
+                output.ValueKind != JsonValueKind.Array)
+            {
+                return string.Empty;
+            }
+
+            var text = new StringBuilder();
+            foreach (var outputItem in output.EnumerateArray())
+            {
+                if (!outputItem.TryGetProperty("content", out var content) ||
+                    content.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var contentItem in content.EnumerateArray())
+                {
+                    if (contentItem.TryGetProperty("text", out var textElement))
+                    {
+                        text.Append(textElement.GetString());
+                    }
+                }
+            }
+
+            return text.ToString().Trim();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[CustomApiOcr] Failed to parse Responses response: {ex.Message}");
+            return string.Empty;
+        }
+    }
+
+    private static bool UsesResponsesEndpoint(string endpoint)
+    {
+        return Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) &&
+               uri.AbsolutePath.TrimEnd('/').EndsWith("/responses", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

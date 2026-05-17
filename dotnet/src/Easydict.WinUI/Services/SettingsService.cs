@@ -84,8 +84,8 @@ public sealed class SettingsService
 
     // OpenAI settings
     public string? OpenAIApiKey { get; set; }
-    public string OpenAIEndpoint { get; set; } = "https://api.openai.com/v1/responses";
-    public string OpenAIModel { get; set; } = "gpt-5-mini";
+    public string OpenAIEndpoint { get; set; } = OpenAIService.DefaultEndpoint;
+    public string OpenAIModel { get; set; } = OpenAIService.DefaultModel;
     public double OpenAITemperature { get; set; } = 0.3;
     /// <summary>
     /// API format override for OpenAI: "Auto" (default, infer from endpoint URL —
@@ -604,8 +604,8 @@ public sealed class SettingsService
 
         // OpenAI settings
         OpenAIApiKey = GetValue<string?>(nameof(OpenAIApiKey), null);
-        OpenAIEndpoint = GetValue(nameof(OpenAIEndpoint), "https://api.openai.com/v1/responses");
-        OpenAIModel = GetValue(nameof(OpenAIModel), "gpt-5-mini");
+        OpenAIEndpoint = GetValue(nameof(OpenAIEndpoint), OpenAIService.DefaultEndpoint);
+        OpenAIModel = GetValue(nameof(OpenAIModel), OpenAIService.DefaultModel);
         OpenAITemperature = GetValue(nameof(OpenAITemperature), 0.3);
         OpenAIApiFormatOverride = GetValue(nameof(OpenAIApiFormatOverride), "Auto");
 

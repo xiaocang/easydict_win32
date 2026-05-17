@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using Easydict.TranslationService.Tests.Mocks;
@@ -58,6 +59,9 @@ public class OpenAIServiceTests
     [Fact]
     public void AvailableModels_ContainsExpectedModels()
     {
+        OpenAIService.AvailableModels.Should().Contain(OpenAIService.DefaultModel);
+        OpenAIService.AvailableModels.Should().Contain("gpt-5.4-mini");
+        OpenAIService.AvailableModels.Should().Contain("gpt-5.1");
         OpenAIService.AvailableModels.Should().Contain("gpt-5-mini");
         OpenAIService.AvailableModels.Should().Contain("gpt-5-nano");
         OpenAIService.AvailableModels.Should().Contain("gpt-5");
@@ -129,5 +133,102 @@ public class OpenAIServiceTests
         // Assert
         var sentRequest = _mockHandler.LastRequest;
         sentRequest!.RequestUri!.Host.Should().Be("my-proxy.com");
+    }
+
+    [Fact]
+    public async Task TranslateStreamAsync_UsesNoneReasoning_WithModernGpt5ResponsesModel()
+    {
+        _service.Configure("sk-test", model: "gpt-5.4-mini", temperature: 0.3);
+        EnqueueResponsesStream("Hi");
+
+        await ConsumeAsync(_service.TranslateStreamAsync(new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        }));
+
+        var body = _mockHandler.LastRequestBody!;
+        body.Should().Contain("\"temperature\":0.3");
+        body.Should().Contain("\"reasoning\":");
+        body.Should().Contain("\"effort\":\"none\"");
+    }
+
+    [Fact]
+    public async Task TranslateStreamAsync_UsesCompatibleTemperature_WithLegacyGpt5ResponsesModel()
+    {
+        _service.Configure("sk-test", model: "gpt-5-mini", temperature: 0.3);
+        EnqueueResponsesStream("Hi");
+
+        await ConsumeAsync(_service.TranslateStreamAsync(new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        }));
+
+        var body = _mockHandler.LastRequestBody!;
+        body.Should().Contain("\"temperature\":1");
+        body.Should().Contain("\"reasoning\":");
+        body.Should().Contain("\"effort\":\"minimal\"");
+    }
+
+    [Fact]
+    public async Task TranslateStreamAsync_UsesReasoningEffort_WithModernGpt5ChatCompletionsModel()
+    {
+        _service.Configure(
+            "sk-test",
+            endpoint: OpenAIService.LegacyChatCompletionsEndpoint,
+            model: "gpt-5.4-mini",
+            temperature: 0.3);
+        _mockHandler.EnqueueStreamingResponse(new[] { """{"choices":[{"delta":{"content":"Hi"}}]}""" });
+
+        await ConsumeAsync(_service.TranslateStreamAsync(new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        }));
+
+        var body = _mockHandler.LastRequestBody!;
+        body.Should().Contain("\"temperature\":0.3");
+        body.Should().Contain("\"reasoning_effort\":\"none\"");
+    }
+
+    [Fact]
+    public async Task TranslateStreamAsync_UsesCompatibleTemperature_WithLegacyGpt5ChatCompletionsModel()
+    {
+        _service.Configure(
+            "sk-test",
+            endpoint: OpenAIService.LegacyChatCompletionsEndpoint,
+            model: "gpt-5-mini",
+            temperature: 0.3);
+        _mockHandler.EnqueueStreamingResponse(new[] { """{"choices":[{"delta":{"content":"Hi"}}]}""" });
+
+        await ConsumeAsync(_service.TranslateStreamAsync(new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        }));
+
+        var body = _mockHandler.LastRequestBody!;
+        body.Should().Contain("\"temperature\":1");
+        body.Should().Contain("\"reasoning_effort\":\"minimal\"");
+    }
+
+    private static async Task ConsumeAsync(IAsyncEnumerable<string> stream)
+    {
+        await foreach (var _ in stream) { }
+    }
+
+    private void EnqueueResponsesStream(string text)
+    {
+        var sse =
+            "event: response.output_text.delta\n" +
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"" + text + "\"}\n" +
+            "\n" +
+            "data: [DONE]\n\n";
+
+        _mockHandler.EnqueueResponse(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(sse, Encoding.UTF8, "text/event-stream")
+        });
     }
 }

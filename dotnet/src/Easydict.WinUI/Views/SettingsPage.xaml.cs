@@ -1887,6 +1887,7 @@ public sealed partial class SettingsPage : Page
             OcrEndpointBox.Text = _settings.OcrEndpoint;
             OcrModelBox.Text = _settings.OcrModel;
             OcrSystemPromptBox.Text = _settings.OcrSystemPrompt;
+            ApplyOcrEngineDefaultsIfNeeded(GetSelectedOcrEngine());
             UpdateOcrEngineUI();
 
             // HTTP Proxy settings
@@ -2680,9 +2681,7 @@ public sealed partial class SettingsPage : Page
 
     private OcrServiceOptions GetCurrentOcrServiceOptions()
     {
-        var engine = Enum.TryParse<OcrEngineType>(GetSelectedTag(OcrEngineCombo), out var parsedEngine)
-            ? parsedEngine
-            : OcrEngineType.WindowsNative;
+        var engine = GetSelectedOcrEngine();
 
         return new OcrServiceOptions(
             engine,
@@ -3194,15 +3193,42 @@ public sealed partial class SettingsPage : Page
 
     private void OnOcrEngineChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (!_isLoading)
+        {
+            ApplyOcrEngineDefaultsIfNeeded(GetSelectedOcrEngine());
+        }
+
         UpdateOcrEngineUI();
         OnSettingChanged(sender, e);
     }
 
     private void UpdateOcrEngineUI()
     {
-        var selectedEngine = GetSelectedTag(OcrEngineCombo);
-        var isAdvanced = selectedEngine == "Ollama" || selectedEngine == "CustomApi";
+        var engine = GetSelectedOcrEngine();
+        var isAdvanced = engine is OcrEngineType.Ollama or OcrEngineType.CustomApi;
         AdvancedOcrPanel.Visibility = isAdvanced ? Visibility.Visible : Visibility.Collapsed;
+        OcrEndpointBox.PlaceholderText = OcrServiceOptions.GetDefaultEndpoint(engine);
+        OcrModelBox.PlaceholderText = OcrServiceOptions.GetDefaultModel(engine);
+    }
+
+    private OcrEngineType GetSelectedOcrEngine()
+    {
+        return Enum.TryParse<OcrEngineType>(GetSelectedTag(OcrEngineCombo), out var parsedEngine)
+            ? parsedEngine
+            : OcrEngineType.WindowsNative;
+    }
+
+    private void ApplyOcrEngineDefaultsIfNeeded(OcrEngineType engine)
+    {
+        if (OcrServiceOptions.IsKnownDefaultEndpoint(OcrEndpointBox.Text))
+        {
+            OcrEndpointBox.Text = OcrServiceOptions.GetDefaultEndpoint(engine);
+        }
+
+        if (OcrServiceOptions.IsKnownDefaultModel(OcrModelBox.Text))
+        {
+            OcrModelBox.Text = OcrServiceOptions.GetDefaultModel(engine);
+        }
     }
 
     private async void OnTestOcrConnection(object sender, RoutedEventArgs e)
@@ -3231,7 +3257,11 @@ public sealed partial class SettingsPage : Page
 
             using (capture)
             {
-                var ocrEngine = OcrServiceFactory.Create(GetCurrentOcrServiceOptions());
+                using var httpClient = OcrServiceFactory.CreateProxyAwareHttpClient(
+                    ProxyEnabledToggle.IsOn,
+                    ProxyUriBox.Text,
+                    ProxyBypassLocalToggle.IsOn);
+                var ocrEngine = OcrServiceFactory.Create(GetCurrentOcrServiceOptions(), httpClient);
                 var result = await ocrEngine.RecognizeAsync(capture, null, CancellationToken.None);
 
                 DispatcherQueue.TryEnqueue(() =>

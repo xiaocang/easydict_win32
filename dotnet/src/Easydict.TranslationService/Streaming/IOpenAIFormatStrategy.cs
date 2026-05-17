@@ -13,7 +13,11 @@ internal interface IOpenAIFormatStrategy
     OpenAIApiFormat Format { get; }
 
     /// <summary>Serialize chat messages into the format-specific request body shape.</summary>
-    object BuildRequestBody(IReadOnlyList<ChatMessage> messages, string model, double temperature);
+    object BuildRequestBody(
+        IReadOnlyList<ChatMessage> messages,
+        string model,
+        double temperature,
+        string? reasoningEffort);
 
     /// <summary>Parse the SSE response stream into text chunks.</summary>
     IAsyncEnumerable<string> ParseStreamAsync(Stream stream, CancellationToken cancellationToken);

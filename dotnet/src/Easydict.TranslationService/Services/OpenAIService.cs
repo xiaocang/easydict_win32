@@ -12,7 +12,7 @@ public sealed class OpenAIService : BaseOpenAIService
 {
     public const string DefaultEndpoint = "https://api.openai.com/v1/responses";
     public const string LegacyChatCompletionsEndpoint = "https://api.openai.com/v1/chat/completions";
-    public const string DefaultModel = "gpt-5-mini";
+    public const string DefaultModel = "gpt-5.4-mini";
 
     /// <summary>
     /// Suggested OpenAI models for translation, biased toward the cheap "mini"
@@ -20,6 +20,10 @@ public sealed class OpenAIService : BaseOpenAIService
     /// </summary>
     public static readonly string[] AvailableModels = new[]
     {
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
+        "gpt-5.4",
+        "gpt-5.1",
         "gpt-5-mini",
         "gpt-5-nano",
         "gpt-5",
@@ -46,6 +50,14 @@ public sealed class OpenAIService : BaseOpenAIService
     public override string ApiKey => _apiKey;
     public override string Model => _model;
     public override double Temperature => _temperature;
+    protected override string? ResponsesReasoningEffort => GetResponsesReasoningEffort(_model);
+
+    // Older GPT-5 reasoning models reject non-default temperature values. Keep
+    // the parameter in the request, but use the API-compatible default.
+    protected override double GetEffectiveTemperature(OpenAIApiFormat format)
+        => IsLegacyGpt5ReasoningModel(_model)
+            ? 1.0
+            : Temperature;
 
     /// <summary>
     /// Configure the OpenAI service.
@@ -80,5 +92,47 @@ public sealed class OpenAIService : BaseOpenAIService
         {
             PinFormat(formatOverride);
         }
+    }
+
+    internal static string? GetResponsesReasoningEffort(string model)
+    {
+        if (SupportsNoneReasoningEffort(model))
+            return "none";
+
+        return IsLegacyGpt5ReasoningModel(model)
+            ? "minimal"
+            : null;
+    }
+
+    private static bool SupportsNoneReasoningEffort(string model)
+    {
+        var normalized = model.Trim().ToLowerInvariant();
+        const string prefix = "gpt-5.";
+
+        if (!normalized.StartsWith(prefix, StringComparison.Ordinal))
+            return false;
+
+        var suffix = normalized[prefix.Length..];
+        var length = 0;
+        while (length < suffix.Length && char.IsDigit(suffix[length]))
+        {
+            length++;
+        }
+
+        return length > 0
+            && int.TryParse(suffix[..length], out var minorVersion)
+            && minorVersion >= 1;
+    }
+
+    private static bool IsLegacyGpt5ReasoningModel(string model)
+    {
+        var normalized = model.Trim().ToLowerInvariant();
+
+        return normalized == "gpt-5"
+            || normalized.StartsWith("gpt-5-2025-", StringComparison.Ordinal)
+            || normalized == "gpt-5-mini"
+            || normalized.StartsWith("gpt-5-mini-", StringComparison.Ordinal)
+            || normalized == "gpt-5-nano"
+            || normalized.StartsWith("gpt-5-nano-", StringComparison.Ordinal);
     }
 }

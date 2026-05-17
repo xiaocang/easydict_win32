@@ -5,7 +5,7 @@ namespace Easydict.TranslationService.Streaming;
 
 /// <summary>
 /// OpenAI Responses wire format
-/// (POST /v1/responses with { model, instructions, input, temperature, stream, store }).
+/// (POST /v1/responses with { model, instructions, input, temperature, reasoning?, stream, store }).
 /// The system message is folded into <c>instructions</c>; remaining messages are
 /// concatenated into <c>input</c>.
 /// </summary>
@@ -17,22 +17,33 @@ internal sealed class ResponsesFormatStrategy : IOpenAIFormatStrategy
 
     public OpenAIApiFormat Format => OpenAIApiFormat.Responses;
 
-    public object BuildRequestBody(IReadOnlyList<ChatMessage> messages, string model, double temperature)
+    public object BuildRequestBody(
+        IReadOnlyList<ChatMessage> messages,
+        string model,
+        double temperature,
+        string? reasoningEffort)
     {
         var instructions = messages.FirstOrDefault(m => m.Role == ChatRole.System)?.Content;
         var input = string.Join(
             "\n\n",
             messages.Where(m => m.Role != ChatRole.System).Select(m => m.Content));
 
-        return new
+        var body = new Dictionary<string, object?>
         {
-            model,
-            instructions,
-            input,
-            temperature,
-            stream = true,
-            store = false,
+            ["model"] = model,
+            ["instructions"] = instructions,
+            ["input"] = input,
+            ["temperature"] = temperature,
+            ["stream"] = true,
+            ["store"] = false,
         };
+
+        if (!string.IsNullOrWhiteSpace(reasoningEffort))
+        {
+            body["reasoning"] = new { effort = reasoningEffort };
+        }
+
+        return body;
     }
 
     public IAsyncEnumerable<string> ParseStreamAsync(Stream stream, CancellationToken cancellationToken)

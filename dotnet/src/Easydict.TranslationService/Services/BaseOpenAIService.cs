@@ -123,6 +123,13 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     public virtual double Temperature => 0.3;
 
     /// <summary>
+    /// Optional Responses API reasoning effort. OpenAI's GPT-5 family uses this
+    /// newer control surface for reasoning behavior; third-party
+    /// OpenAI-compatible services leave it unset by default.
+    /// </summary>
+    protected virtual string? ResponsesReasoningEffort => null;
+
+    /// <summary>
     /// Whether this service requires an API key to function.
     /// Override to false for services like Ollama that don't need auth.
     /// </summary>
@@ -208,9 +215,14 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     {
         ValidateConfiguration();
 
-        var strategy = OpenAIFormatStrategies.For(DetectedFormat);
+        var detectedFormat = DetectedFormat;
+        var strategy = OpenAIFormatStrategies.For(detectedFormat);
         var messages = BuildChatMessages(request);
-        var requestBody = strategy.BuildRequestBody(messages, Model, Temperature);
+        var requestBody = strategy.BuildRequestBody(
+            messages,
+            Model,
+            GetEffectiveTemperature(detectedFormat),
+            GetReasoningEffort(detectedFormat));
 
         await foreach (var chunk in SendAndParseAsync(strategy, requestBody, cancellationToken).ConfigureAwait(false))
         {
@@ -227,9 +239,14 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     {
         ValidateConfiguration();
 
-        var strategy = OpenAIFormatStrategies.For(DetectedFormat);
+        var detectedFormat = DetectedFormat;
+        var strategy = OpenAIFormatStrategies.For(detectedFormat);
         var messages = BuildGrammarCorrectionMessages(request);
-        var requestBody = strategy.BuildRequestBody(messages, Model, Temperature);
+        var requestBody = strategy.BuildRequestBody(
+            messages,
+            Model,
+            GetEffectiveTemperature(detectedFormat),
+            GetReasoningEffort(detectedFormat));
 
         await foreach (var chunk in SendAndParseAsync(strategy, requestBody, cancellationToken).ConfigureAwait(false))
         {
@@ -287,6 +304,14 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     /// before it is sent. Called after Authorization header is set.
     /// </summary>
     protected virtual void ConfigureHttpRequest(HttpRequestMessage request) { }
+
+    /// <summary>
+    /// Allows provider-specific model compatibility adjustments before the
+    /// request body is serialized.
+    /// </summary>
+    protected virtual double GetEffectiveTemperature(OpenAIApiFormat format) => Temperature;
+
+    private string? GetReasoningEffort(OpenAIApiFormat format) => ResponsesReasoningEffort;
 
     /// <summary>
     /// Validate service configuration before making API calls.

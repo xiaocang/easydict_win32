@@ -319,6 +319,9 @@
   <data name="DeepLQualityOption" xml:space="preserve">
     <value>品質優先モデルを使用（APIのみ、速度は低下するが品質向上）</value>
   </data>
+  <data name="DeepLQualityApiKeyRequiredMessage" xml:space="preserve">
+    <value>DeepL の品質優先モードには API キーが必要です。</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>カスタムモデル名を直接入力できます。</value>
   </data>

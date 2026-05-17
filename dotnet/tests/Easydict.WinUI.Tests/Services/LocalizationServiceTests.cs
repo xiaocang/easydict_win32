@@ -104,6 +104,23 @@ public class LocalizationServiceTests
         }
     }
 
+    [Fact]
+    public void AllLanguages_HaveSameResourceKeys()
+    {
+        const string baselineLanguage = "en-US";
+        var baselineKeys = GetResourceKeys(baselineLanguage);
+
+        foreach (var lang in SupportedLanguages.Where(lang => lang != baselineLanguage))
+        {
+            var keys = GetResourceKeys(lang);
+
+            keys.Count.Should().Be(baselineKeys.Count,
+                $"{lang}/Resources.resw should have the same number of translation resources as {baselineLanguage}");
+            keys.Should().BeEquivalentTo(baselineKeys,
+                $"{lang}/Resources.resw should expose the same translation resource keys as {baselineLanguage}");
+        }
+    }
+
     #endregion
 
     #region Key Resource Verification Tests
@@ -340,6 +357,19 @@ public class LocalizationServiceTests
     #endregion
 
     #region Helper Methods
+
+    private static IReadOnlyList<string> GetResourceKeys(string language)
+    {
+        var reswPath = Path.Combine(StringsPath, language, "Resources.resw");
+        var doc = XDocument.Load(reswPath);
+
+        return doc.Descendants("data")
+            .Select(element => element.Attribute("name")?.Value)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+    }
 
     private static string FindProjectRoot()
     {

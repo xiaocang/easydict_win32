@@ -83,6 +83,7 @@
   <data name="DeepLDescription" xml:space="preserve"><value>Biarkan kunci API kosong untuk menggunakan terjemahan web percuma. Kunci API Pro memberikan had yang lebih tinggi.</value></data>
   <data name="DeepLFreeOption" xml:space="preserve"><value>Gunakan API Percuma (terjemahan web tidak memerlukan kunci API)</value></data>
   <data name="DeepLQualityOption" xml:space="preserve"><value>Gunakan model dioptimumkan kualiti (API sahaja; lebih perlahan, kualiti lebih tinggi)</value></data>
+  <data name="DeepLQualityApiKeyRequiredMessage" xml:space="preserve"><value>Mod DeepL yang dioptimumkan kualiti memerlukan kunci API.</value></data>
   <data name="OpenAIDescription" xml:space="preserve"><value>Anda boleh menaip nama model tersuai secara terus.</value></data>
   <data name="DeepSeekDescription" xml:space="preserve"><value>Dapatkan kunci API anda dari platform.deepseek.com. Anda boleh menaip nama model tersuai.</value></data>
   <data name="GroqDescription" xml:space="preserve"><value>Groq menyediakan inferens pantas. Dapatkan kunci API dari console.groq.com. Anda boleh menaip nama model tersuai.</value></data>

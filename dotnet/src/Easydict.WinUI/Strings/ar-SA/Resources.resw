@@ -211,6 +211,9 @@
   <data name="DeepLQualityOption" xml:space="preserve">
     <value>استخدام النموذج المُحسَّن للجودة (API فقط؛ أبطأ، جودة أعلى)</value>
   </data>
+  <data name="DeepLQualityApiKeyRequiredMessage" xml:space="preserve">
+    <value>يتطلب وضع DeepL المُحسَّن للجودة مفتاح API.</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>يمكنك كتابة اسم نموذج مخصص مباشرة.</value>
   </data>

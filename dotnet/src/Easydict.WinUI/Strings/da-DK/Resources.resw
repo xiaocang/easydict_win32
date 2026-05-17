@@ -83,6 +83,7 @@
   <data name="DeepLDescription" xml:space="preserve"><value>Lad API-nøglen være tom for at bruge gratis weboversættelse. Pro API-nøgle giver højere grænser.</value></data>
   <data name="DeepLFreeOption" xml:space="preserve"><value>Brug gratis API (weboversættelse kræver ingen API-nøgle)</value></data>
   <data name="DeepLQualityOption" xml:space="preserve"><value>Brug kvalitetsoptimeret model (kun API; langsommere, højere kvalitet)</value></data>
+  <data name="DeepLQualityApiKeyRequiredMessage" xml:space="preserve"><value>DeepL's kvalitetsoptimerede tilstand kræver en API-nøgle.</value></data>
   <data name="OpenAIDescription" xml:space="preserve"><value>Du kan skrive et brugerdefineret modelnavn direkte.</value></data>
   <data name="DeepSeekDescription" xml:space="preserve"><value>Hent din API-nøgle fra platform.deepseek.com. Du kan skrive et brugerdefineret modelnavn.</value></data>
   <data name="GroqDescription" xml:space="preserve"><value>Groq leverer hurtig inferens. Hent din API-nøgle fra console.groq.com. Du kan skrive et brugerdefineret modelnavn.</value></data>

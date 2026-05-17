@@ -319,6 +319,9 @@
   <data name="DeepLQualityOption" xml:space="preserve">
     <value>Qualitätsoptimiertes Modell verwenden (nur API; langsamer, höhere Qualität)</value>
   </data>
+  <data name="DeepLQualityApiKeyRequiredMessage" xml:space="preserve">
+    <value>Der qualitätsoptimierte DeepL-Modus erfordert einen API-Schlüssel.</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>Sie können einen benutzerdefinierten Modellnamen direkt eingeben.</value>
   </data>

@@ -211,6 +211,9 @@
   <data name="DeepLQualityOption" xml:space="preserve">
     <value>Sử dụng mô hình tối ưu chất lượng (chỉ API; chậm hơn, chất lượng cao hơn)</value>
   </data>
+  <data name="DeepLQualityApiKeyRequiredMessage" xml:space="preserve">
+    <value>Chế độ tối ưu chất lượng của DeepL yêu cầu khóa API.</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>B&#x1EA1;n c&#xF3; th&#x1EC3; nh&#x1EAD;p tr&#x1EF1;c ti&#x1EBF;p t&#xEA;n model t&#xF9;y ch&#x1EC9;nh.</value>
   </data>

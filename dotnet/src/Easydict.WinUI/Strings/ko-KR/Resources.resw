@@ -319,6 +319,9 @@
   <data name="DeepLQualityOption" xml:space="preserve">
     <value>품질 최적화 모델 사용 (API 전용, 속도 저하, 품질 향상)</value>
   </data>
+  <data name="DeepLQualityApiKeyRequiredMessage" xml:space="preserve">
+    <value>DeepL 품질 최적화 모드에는 API 키가 필요합니다.</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>사용자 정의 모델 이름을 직접 입력할 수 있습니다.</value>
   </data>

@@ -195,6 +195,9 @@
   <data name="DeepLQualityOption" xml:space="preserve">
     <value>ใช้โมเดลคุณภาพสูง (API เท่านั้น; ช้ากว่า คุณภาพดีกว่า)</value>
   </data>
+  <data name="DeepLQualityApiKeyRequiredMessage" xml:space="preserve">
+    <value>โหมดปรับคุณภาพของ DeepL ต้องใช้คีย์ API</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>&#xE04;&#xE38;&#xE13;&#xE2A;&#xE32;&#xE21;&#xE32;&#xE23;&#xE16;&#xE1E;&#xE34;&#xE21;&#xE1E;&#xE4C;&#xE0A;&#xE37;&#xE48;&#xE2D; model &#xE17;&#xE35;&#xE48;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE40;&#xE2D;&#xE07;&#xE44;&#xE14;&#xE49;&#xE42;&#xE14;&#xE22;&#xE15;&#xE23;&#xE07;</value>
   </data>

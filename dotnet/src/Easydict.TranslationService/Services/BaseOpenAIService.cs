@@ -266,42 +266,6 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     }
 
     /// <summary>
-    /// Build the Chat Completions API request body.
-    /// </summary>
-    protected virtual object BuildRequestBody(List<ChatMessage> messages)
-    {
-        return new
-        {
-            model = Model,
-            messages = messages.Select(m => new { role = m.RoleString, content = m.Content }),
-            temperature = Temperature,
-            stream = true
-        };
-    }
-
-    /// <summary>
-    /// Build the Responses API request body. The system prompt becomes
-    /// <c>instructions</c>; all other messages are concatenated as <c>input</c>.
-    /// </summary>
-    protected virtual object BuildResponsesRequestBody(List<ChatMessage> messages)
-    {
-        var instructions = messages.FirstOrDefault(m => m.Role == ChatRole.System)?.Content;
-        var input = string.Join(
-            "\n\n",
-            messages.Where(m => m.Role != ChatRole.System).Select(m => m.Content));
-
-        return new
-        {
-            model = Model,
-            instructions,
-            input,
-            temperature = Temperature,
-            stream = true,
-            store = false
-        };
-    }
-
-    /// <summary>
     /// Hook for subclasses to add custom headers or modify the HTTP request
     /// before it is sent. Called after Authorization header is set.
     /// </summary>
@@ -340,27 +304,26 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             ? cached
             : DetectFormatFromUrl(Endpoint);
 
-        OpenAIApiFormat chosen;
+        IOpenAIFormatStrategy strategy;
         HttpResponseMessage response;
 
         if (initial != OpenAIApiFormat.Auto)
         {
-            chosen = initial;
-            response = await SendFormatRequestAsync(chosen, messages, cancellationToken).ConfigureAwait(false);
+            strategy = OpenAIFormatStrategies.For(initial);
+            response = await SendWithStrategyAsync(strategy, messages, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            // Auto: probe with preferred format; if endpoint rejects the path,
-            // retry with the other format and cache whichever succeeds.
-            var first = PreferredAutoProbeFormat();
-            chosen = first;
-            response = await SendFormatRequestAsync(first, messages, cancellationToken).ConfigureAwait(false);
+            // Auto: probe with preferred strategy; if endpoint rejects the path,
+            // retry with the other strategy and cache whichever succeeds.
+            strategy = PreferredAutoProbeStrategy();
+            response = await SendWithStrategyAsync(strategy, messages, cancellationToken).ConfigureAwait(false);
 
             if (ShouldFallback(response.StatusCode))
             {
                 response.Dispose();
-                chosen = OtherFormat(first);
-                response = await SendFormatRequestAsync(chosen, messages, cancellationToken).ConfigureAwait(false);
+                strategy = OpenAIFormatStrategies.For(OtherFormat(strategy.Format));
+                response = await SendWithStrategyAsync(strategy, messages, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -372,28 +335,22 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
                 throw CreateErrorFromResponse(response.StatusCode, errorBody);
             }
 
-            CacheFormat(chosen);
+            CacheFormat(strategy.Format);
 
             var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            var chunks = chosen == OpenAIApiFormat.Responses
-                ? ResponsesSseParser.ParseStreamAsync(stream, cancellationToken)
-                : SseParser.ParseStreamAsync(stream, cancellationToken);
-
-            await foreach (var chunk in chunks.ConfigureAwait(false))
+            await foreach (var chunk in strategy.ParseStreamAsync(stream, cancellationToken).ConfigureAwait(false))
             {
                 yield return chunk;
             }
         }
     }
 
-    private async Task<HttpResponseMessage> SendFormatRequestAsync(
-        OpenAIApiFormat format,
+    private async Task<HttpResponseMessage> SendWithStrategyAsync(
+        IOpenAIFormatStrategy strategy,
         List<ChatMessage> messages,
         CancellationToken cancellationToken)
     {
-        var body = format == OpenAIApiFormat.Responses
-            ? BuildResponsesRequestBody(messages)
-            : BuildRequestBody(messages);
+        var body = strategy.BuildRequestBody(messages, Model, Temperature);
 
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
         {
@@ -428,16 +385,16 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         }
     }
 
-    private OpenAIApiFormat PreferredAutoProbeFormat()
+    private IOpenAIFormatStrategy PreferredAutoProbeStrategy()
     {
         // Official api.openai.com → try Responses (latest) first. Otherwise
         // (third-party / self-hosted) → Chat Completions, which has wider support.
         if (Uri.TryCreate(Endpoint, UriKind.Absolute, out var uri) &&
             uri.Host.Equals("api.openai.com", StringComparison.OrdinalIgnoreCase))
         {
-            return OpenAIApiFormat.Responses;
+            return ResponsesFormatStrategy.Instance;
         }
-        return OpenAIApiFormat.ChatCompletions;
+        return ChatCompletionsFormatStrategy.Instance;
     }
 
     private static OpenAIApiFormat OtherFormat(OpenAIApiFormat format) =>

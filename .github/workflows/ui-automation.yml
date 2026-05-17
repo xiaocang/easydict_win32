@@ -190,6 +190,34 @@ jobs:
             -p:Platform=x64 `
             --filter "Category=WinUI"
 
+      - name: Surface failed test names as annotations
+        if: failure()
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          $trx = Get-ChildItem -Recurse -Filter "winui-test-results.trx" | Select-Object -First 1
+          if (-not $trx) {
+            Write-Host "::warning::No trx file produced"
+            exit 0
+          }
+
+          [xml]$xml = Get-Content $trx.FullName
+
+          # Find failed UnitTestResult nodes (namespace-aware)
+          $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
+          $ns.AddNamespace("t", "http://microsoft.com/schemas/VisualStudio/TeamTest/2010")
+          $failed = $xml.SelectNodes("//t:UnitTestResult[@outcome='Failed']", $ns)
+
+          Write-Host "Found $($failed.Count) failed tests"
+          foreach ($t in $failed) {
+            $name = $t.GetAttribute("testName")
+            $msgNode = $t.SelectSingleNode("t:Output/t:ErrorInfo/t:Message", $ns)
+            $msg = if ($msgNode) { $msgNode.InnerText } else { "" }
+            $msg = $msg -replace "`r?`n", "%0A" -replace ":", "%3A" -replace ",", "%2C"
+            if ($msg.Length -gt 1500) { $msg = $msg.Substring(0, 1500) + "..." }
+            Write-Host "::error title=WinUI test failed::$name%0A$msg"
+          }
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()

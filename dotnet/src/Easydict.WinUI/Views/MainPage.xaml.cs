@@ -1257,6 +1257,16 @@ namespace Easydict.WinUI.Views
                 HideSuggestionPopup();
             }
 
+            // Skip intermediate frames from inertia / streaming-driven layout passes.
+            // Sticky header repositioning needs TransformToVisual per result control,
+            // and during streaming the ScrollViewer fires ViewChanged at every layout
+            // invalidation — collapsing those into final-frame-only avoids saturating
+            // the UI thread.
+            if (e.IsIntermediate)
+            {
+                return;
+            }
+
             ServiceResultViewHost.UpdateStickyHeaders(_resultControls, QuickTranslateContent);
         }
 
@@ -2076,7 +2086,6 @@ namespace Easydict.WinUI.Views
                 var stopwatch = Stopwatch.StartNew();
                 var sb = new StringBuilder();
                 var lastUpdateTime = DateTime.UtcNow;
-                const int throttleMs = 50;
 
                 // Mark as streaming
                 DispatcherQueue.TryEnqueue(() =>
@@ -2093,6 +2102,16 @@ namespace Easydict.WinUI.Views
                 {
                     sb.Append(chunk);
 
+                    // Scale throttle by accumulated length: Measure cost ~ O(chars) for
+                    // wrapped TextBlocks, so slow down updates as the buffer grows to
+                    // keep UI thread responsive for scroll/input dispatch.
+                    var throttleMs = sb.Length switch
+                    {
+                        < 512 => 50,
+                        < 2048 => 100,
+                        _ => 200,
+                    };
+
                     var now = DateTime.UtcNow;
                     if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
                     {
@@ -2100,8 +2119,10 @@ namespace Easydict.WinUI.Views
                         DispatcherQueue.TryEnqueue(() =>
                         {
                             if (_isClosing) return;
+                            // StreamingText PropertyChanged → coalesced UpdateUI in
+                            // ServiceResultItem, which takes a fast path during streaming.
+                            // No need to call RefreshServiceResultView here.
                             serviceResult.StreamingText = currentText;
-                            RefreshServiceResultView(serviceResult);
                         });
                         lastUpdateTime = now;
                     }
@@ -2172,7 +2193,6 @@ namespace Easydict.WinUI.Views
             var stopwatch = Stopwatch.StartNew();
             var sb = new StringBuilder();
             var lastUpdateTime = DateTime.UtcNow;
-            const int throttleMs = 50;
 
             // Mark as streaming
             DispatcherQueue.TryEnqueue(() =>
@@ -2191,7 +2211,16 @@ namespace Easydict.WinUI.Views
             {
                 sb.Append(chunk);
 
-                // Throttle UI updates
+                // Scale throttle by accumulated length: Measure cost ~ O(chars) for
+                // wrapped TextBlocks, so slow down updates as the buffer grows to
+                // keep UI thread responsive for scroll/input dispatch.
+                var throttleMs = sb.Length switch
+                {
+                    < 512 => 50,
+                    < 2048 => 100,
+                    _ => 200,
+                };
+
                 var now = DateTime.UtcNow;
                 if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
                 {
@@ -2199,8 +2228,10 @@ namespace Easydict.WinUI.Views
                     DispatcherQueue.TryEnqueue(() =>
                     {
                         if (_isClosing) return;
+                        // StreamingText PropertyChanged → coalesced UpdateUI in
+                        // ServiceResultItem, which takes a fast path during streaming.
+                        // No need to call RefreshServiceResultView here.
                         serviceResult.StreamingText = currentText;
-                        RefreshServiceResultView(serviceResult);
                     });
                     lastUpdateTime = now;
                 }

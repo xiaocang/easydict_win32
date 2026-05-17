@@ -339,6 +339,7 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
         _disposed = true;
         DisposeEngine();
         _prepareLock.Dispose();
+        _downloader.Dispose();
     }
 
     private void RaiseStatusChanged(LocalModelStatus status)

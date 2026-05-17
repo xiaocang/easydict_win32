@@ -13,7 +13,7 @@ namespace Easydict.WinUI.Services;
 /// provider decides whether requests go to Phi Silica directly, Foundry Local
 /// directly, OpenVINO directly, or an Auto chain across all local providers.
 /// </summary>
-public sealed class LocalAITranslationService : IStreamTranslationService, ILocalModelProvider
+public sealed class LocalAITranslationService : IStreamTranslationService, ILocalModelProvider, IDisposable
 {
     internal const string ServiceIdValue = PhiSilicaTranslationService.ServiceIdValue;
     internal const string LegacyOpenVinoServiceId = OpenVINOTranslationService.ServiceIdValue;
@@ -24,6 +24,7 @@ public sealed class LocalAITranslationService : IStreamTranslationService, ILoca
     private readonly ILocalModelProvider? _foundryLocalModelProvider;
     private readonly OpenVINOTranslationService _openVino;
     private LocalAIProviderMode _providerMode = LocalAIProviderMode.Auto;
+    private bool _disposed;
 
     public LocalAITranslationService(
         PhiSilicaTranslationService phiSilica,
@@ -35,12 +36,17 @@ public sealed class LocalAITranslationService : IStreamTranslationService, ILoca
         _foundryLocalModelProvider = foundryLocal as ILocalModelProvider;
         _openVino = openVino ?? throw new ArgumentNullException(nameof(openVino));
 
-        _phiSilica.StatusChanged += (_, status) => RaiseStatusChanged(status);
+        // Named handlers (not inline lambdas) so Dispose can unhook them.
+        // The underlying provider singletons outlive this wrapper — without
+        // explicit unsubscription, recreating LocalAITranslationService (e.g.
+        // via TranslationManagerService.ReconfigureProxy) leaks the old
+        // instance and double-forwards StatusChanged.
+        _phiSilica.StatusChanged += OnInnerStatusChanged;
         if (_foundryLocalModelProvider is not null)
         {
-            _foundryLocalModelProvider.StatusChanged += (_, status) => RaiseStatusChanged(status);
+            _foundryLocalModelProvider.StatusChanged += OnInnerStatusChanged;
         }
-        _openVino.StatusChanged += (_, status) => RaiseStatusChanged(status);
+        _openVino.StatusChanged += OnInnerStatusChanged;
     }
 
     public string ServiceId => ServiceIdValue;
@@ -298,9 +304,22 @@ public sealed class LocalAITranslationService : IStreamTranslationService, ILoca
             ?? new LocalModelStatus(LocalModelState.Ready, FoundryLocalResources.StatusKeys.Ready);
     }
 
-    private void RaiseStatusChanged(LocalModelStatus status)
+    private void OnInnerStatusChanged(object? sender, LocalModelStatus status)
     {
         StatusChanged?.Invoke(this, status);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _phiSilica.StatusChanged -= OnInnerStatusChanged;
+        if (_foundryLocalModelProvider is not null)
+        {
+            _foundryLocalModelProvider.StatusChanged -= OnInnerStatusChanged;
+        }
+        _openVino.StatusChanged -= OnInnerStatusChanged;
     }
 
     private TranslationResult NormalizeResult(TranslationResult result)

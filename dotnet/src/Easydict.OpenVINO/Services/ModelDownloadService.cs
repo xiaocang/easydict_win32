@@ -19,20 +19,41 @@ namespace Easydict.OpenVINO.Services;
 ///
 /// Tests can inject an alternate <see cref="HttpClient"/> and cache root.
 /// </summary>
-public sealed class ModelDownloadService
+public sealed class ModelDownloadService : IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly string _cacheRoot;
+    private readonly bool _ownsHttpClient;
+    private bool _disposed;
 
     public ModelDownloadService()
-        : this(new HttpClient { Timeout = TimeSpan.FromMinutes(15) }, DefaultCacheRoot())
+        : this(new HttpClient { Timeout = TimeSpan.FromMinutes(15) }, DefaultCacheRoot(), ownsHttpClient: true)
     {
     }
 
     internal ModelDownloadService(HttpClient httpClient, string cacheRoot)
+        : this(httpClient, cacheRoot, ownsHttpClient: false)
+    {
+    }
+
+    private ModelDownloadService(HttpClient httpClient, string cacheRoot, bool ownsHttpClient)
     {
         _httpClient = httpClient;
         _cacheRoot = cacheRoot;
+        // Only the parameterless ctor creates an HttpClient internally; the
+        // internal ctor receives one owned by the caller (test fakes, shared
+        // factory). Tracking ownership avoids disposing someone else's client.
+        _ownsHttpClient = ownsHttpClient;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsHttpClient)
+        {
+            _httpClient.Dispose();
+        }
     }
 
     /// <summary>

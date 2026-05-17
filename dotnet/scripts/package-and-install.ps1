@@ -101,9 +101,12 @@ try {
     try {
         $manifestContent = Get-Content $manifestPath -Raw
         $manifestContent = $manifestContent -replace 'ProcessorArchitecture="[^"]*"', "ProcessorArchitecture=`"$Platform`""
-        # Use negative lookbehind for 'Min' so MinVersion="..." on PackageDependency
-        # / TargetDeviceFamily isn't accidentally rewritten to the app version.
-        $manifestContent = $manifestContent -replace '(?<!Min)Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"$msixVersion`""
+        # Anchor the rewrite to the <Identity> element so unrelated Version-bearing
+        # attributes elsewhere in the manifest aren't clobbered. A previous
+        # `(?<!Min)Version="..."` only excluded `MinVersion`, but still matched
+        # `MaxVersionTested="..."` (the lookbehind sees `x`, not `Min`) — which
+        # would rewrite the Windows AI capability gate to the app version.
+        $manifestContent = $manifestContent -replace '(<Identity\b[^>]*?\sVersion=")[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(")', "`${1}$msixVersion`${2}"
         Set-Content $tempManifest $manifestContent
 
         winapp package $publishDir --output $msixPath --manifest $tempManifest --skip-pri --verbose

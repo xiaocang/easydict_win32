@@ -574,6 +574,10 @@ public sealed class TranslationManagerService : IDisposable
             oldManager = _translationManager;
             _translationManager = new TranslationManager(options);
             _foundryLocalService = null;
+            // Unhook the wrapper's StatusChanged subscriptions before dropping
+            // the reference, otherwise the inner providers keep the old wrapper
+            // alive and double-forward events to the new instance.
+            _localAIService?.Dispose();
             _localAIService = null;
             ConfigureServices();
 
@@ -684,7 +688,15 @@ public sealed class TranslationManagerService : IDisposable
         // Dispose it explicitly so we don't leak the warmed model on app shutdown.
         _openVinoService?.Dispose();
         _openVinoService = null;
+        // Unhook StatusChanged from the inner providers so the singleton
+        // PhiSilica/OpenVINO instances don't retain the disposed wrapper.
+        _localAIService?.Dispose();
         _localAIService = null;
+        // FoundryLocalService isn't IDisposable but it caches a reference to
+        // _translationManager.SharedHttpClient. Null it for parity with the
+        // other provider fields so it can't be accidentally used after the
+        // manager (and its HttpClient) are disposed.
+        _foundryLocalService = null;
         _phiSilicaService = null;
 
         _translationManager.Dispose();

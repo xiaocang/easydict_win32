@@ -261,7 +261,8 @@ public sealed class TranslationManagerService : IDisposable
                     _settings.OpenAIApiKey ?? "",
                     _settings.OpenAIEndpoint,
                     _settings.OpenAIModel,
-                    _settings.OpenAITemperature);
+                    _settings.OpenAITemperature,
+                    ParseOpenAIApiFormat(_settings.OpenAIApiFormatOverride));
             }
         });
 
@@ -709,6 +710,13 @@ public sealed class TranslationManagerService : IDisposable
         return Enum.TryParse<OpenVINODevice>(value, ignoreCase: true, out var parsed)
             ? parsed
             : OpenVINODevice.Auto;
+    }
+
+    private static OpenAIApiFormat ParseOpenAIApiFormat(string? value)
+    {
+        return Enum.TryParse<OpenAIApiFormat>(value, ignoreCase: true, out var parsed)
+            ? parsed
+            : OpenAIApiFormat.Auto;
     }
 
     private static void QueueMdxIndexBuild(

@@ -87,6 +87,12 @@ public sealed class SettingsService
     public string OpenAIEndpoint { get; set; } = "https://api.openai.com/v1/responses";
     public string OpenAIModel { get; set; } = "gpt-5-mini";
     public double OpenAITemperature { get; set; } = 0.3;
+    /// <summary>
+    /// API format override for OpenAI: "Auto" (default, detect from URL + probe),
+    /// "Responses", or "ChatCompletions". Persisted as the enum string value of
+    /// <c>Easydict.TranslationService.Services.OpenAIApiFormat</c>.
+    /// </summary>
+    public string OpenAIApiFormatOverride { get; set; } = "Auto";
 
     // Ollama settings (local LLM)
     public string OllamaEndpoint { get; set; } = "http://localhost:11434/v1/chat/completions";
@@ -600,6 +606,7 @@ public sealed class SettingsService
         OpenAIEndpoint = GetValue(nameof(OpenAIEndpoint), "https://api.openai.com/v1/responses");
         OpenAIModel = GetValue(nameof(OpenAIModel), "gpt-5-mini");
         OpenAITemperature = GetValue(nameof(OpenAITemperature), 0.3);
+        OpenAIApiFormatOverride = GetValue(nameof(OpenAIApiFormatOverride), "Auto");
 
         // Ollama settings
         OllamaEndpoint = GetValue(nameof(OllamaEndpoint), "http://localhost:11434/v1/chat/completions");
@@ -829,6 +836,7 @@ public sealed class SettingsService
         _settings[nameof(OpenAIApiKey)] = OpenAIApiKey ?? string.Empty;
         _settings[nameof(OpenAIEndpoint)] = OpenAIEndpoint;
         _settings[nameof(OpenAIModel)] = OpenAIModel;
+        _settings[nameof(OpenAIApiFormatOverride)] = OpenAIApiFormatOverride;
         _settings[nameof(OpenAITemperature)] = OpenAITemperature;
 
         // Ollama settings

@@ -54,7 +54,16 @@ public sealed class OpenAIService : BaseOpenAIService
     /// <param name="endpoint">Custom endpoint URL (optional, defaults to OpenAI Responses API).</param>
     /// <param name="model">Model to use (optional, defaults to <see cref="DefaultModel"/>).</param>
     /// <param name="temperature">Generation temperature (optional, defaults to 0.3).</param>
-    public void Configure(string apiKey, string? endpoint = null, string? model = null, double? temperature = null)
+    /// <param name="formatOverride">
+    /// Pin the API format. <see cref="OpenAIApiFormat.Auto"/> (default) keeps the
+    /// URL-then-probe detection; any other value bypasses detection entirely.
+    /// </param>
+    public void Configure(
+        string apiKey,
+        string? endpoint = null,
+        string? model = null,
+        double? temperature = null,
+        OpenAIApiFormat formatOverride = OpenAIApiFormat.Auto)
     {
         _apiKey = apiKey ?? "";
         if (!string.IsNullOrEmpty(endpoint))
@@ -65,5 +74,9 @@ public sealed class OpenAIService : BaseOpenAIService
             _temperature = Math.Clamp(temperature.Value, 0.0, 2.0);
 
         ResetFormatDetection();
+        if (formatOverride != OpenAIApiFormat.Auto)
+        {
+            PinFormat(formatOverride);
+        }
     }
 }

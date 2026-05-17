@@ -557,6 +557,20 @@
                                         Width="450"
                                          PlaceholderText="https://api.openai.com/v1/responses"
                                         HorizontalAlignment="Left"/>
+                                <ComboBox x:Name="OpenAIApiFormatCombo"
+                                        Header="API Format"
+                                        Width="280">
+                                    <ComboBoxItem Content="Auto-detect"
+                                            Tag="Auto"/>
+                                    <ComboBoxItem Content="Responses API"
+                                            Tag="Responses"/>
+                                    <ComboBoxItem Content="Chat Completions API"
+                                            Tag="ChatCompletions"/>
+                                </ComboBox>
+                                <TextBlock x:Name="OpenAIDetectedFormatText"
+                                           FontSize="12"
+                                           Visibility="Collapsed"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                 <ComboBox x:Name="OpenAIModelCombo"
                                         Header="Model"
                                         Width="280"
@@ -576,7 +590,7 @@
                                     <ComboBoxItem Content="gpt-4o"
                                             Tag="gpt-4o"/>
                                 </ComboBox>
-                                <TextBlock Text="Endpoint format (/responses vs /chat/completions) is auto-detected. You can type a custom model name directly."
+                                <TextBlock Text="Auto-detect picks /responses or /chat/completions from the endpoint URL (with a one-shot probe fallback). You can type a custom model name directly."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                 <Button x:Name="TestOpenAIButton"

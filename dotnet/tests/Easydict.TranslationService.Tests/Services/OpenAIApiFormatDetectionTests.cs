@@ -143,6 +143,62 @@ public class OpenAIApiFormatDetectionTests
     }
 
     [Fact]
+    public void Pin_ResponsesFormat_SkipsAutoDetection()
+    {
+        var httpClient = new HttpClient(new MockHttpMessageHandler());
+        var openai = new OpenAIService(httpClient);
+        openai.Configure("sk-test", endpoint: "https://api.openai.com/v1/chat/completions",
+            formatOverride: OpenAIApiFormat.Responses);
+
+        openai.DetectedFormat.Should().Be(OpenAIApiFormat.Responses);
+    }
+
+    [Fact]
+    public void Pin_ChatCompletionsFormat_SkipsAutoDetection()
+    {
+        var httpClient = new HttpClient(new MockHttpMessageHandler());
+        var openai = new OpenAIService(httpClient);
+        openai.Configure("sk-test", endpoint: "https://api.openai.com/v1/responses",
+            formatOverride: OpenAIApiFormat.ChatCompletions);
+
+        openai.DetectedFormat.Should().Be(OpenAIApiFormat.ChatCompletions);
+    }
+
+    [Fact]
+    public void Pin_AutoFormat_ResetsCache()
+    {
+        var httpClient = new HttpClient(new MockHttpMessageHandler());
+        var openai = new OpenAIService(httpClient);
+        openai.Configure("sk-test", formatOverride: OpenAIApiFormat.Responses);
+        openai.DetectedFormat.Should().Be(OpenAIApiFormat.Responses);
+
+        openai.Configure("sk-test", formatOverride: OpenAIApiFormat.Auto);
+        openai.DetectedFormat.Should().Be(OpenAIApiFormat.Auto);
+    }
+
+    [Fact]
+    public async Task PinnedFormat_OverridesUrlInspection()
+    {
+        var mockHandler = new MockHttpMessageHandler();
+        var httpClient = new HttpClient(mockHandler);
+        var openai = new OpenAIService(httpClient);
+
+        // URL says ChatCompletions, but user pinned Responses → Responses body must be sent.
+        openai.Configure("sk-test",
+            endpoint: "https://api.openai.com/v1/chat/completions",
+            formatOverride: OpenAIApiFormat.Responses);
+
+        EnqueueResponsesStream(mockHandler, "ok");
+        await ConsumeAsync(openai.TranslateStreamAsync(SampleRequest));
+
+        var body = mockHandler.LastRequestBody!;
+        body.Should().Contain("\"instructions\":");
+        body.Should().Contain("\"input\":");
+        body.Should().NotContain("\"messages\":");
+        mockHandler.Requests.Should().HaveCount(1);
+    }
+
+    [Fact]
     public async Task TranslateStreamAsync_DoesNotFallback_OnAuthError()
     {
         var mockHandler = new MockHttpMessageHandler();

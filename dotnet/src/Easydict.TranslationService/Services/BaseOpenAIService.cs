@@ -153,6 +153,22 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         lock (_formatLock) { _detectedFormat = OpenAIApiFormat.Auto; }
     }
 
+    /// <summary>
+    /// Pin the API format, bypassing URL inspection and probe fallback for
+    /// subsequent requests. Subclasses call this from Configure() when the
+    /// user has explicitly chosen a format. Pass <see cref="OpenAIApiFormat.Auto"/>
+    /// to <see cref="ResetFormatDetection"/> instead.
+    /// </summary>
+    protected void PinFormat(OpenAIApiFormat format)
+    {
+        if (format == OpenAIApiFormat.Auto)
+        {
+            throw new ArgumentException(
+                "Use ResetFormatDetection() to clear the pinned format.", nameof(format));
+        }
+        lock (_formatLock) { _detectedFormat = format; }
+    }
+
     private void CacheFormat(OpenAIApiFormat format)
     {
         lock (_formatLock) { _detectedFormat = format; }

@@ -71,7 +71,7 @@
     <value>源语言</value>
   </data>
   <data name="TargetLanguageTooltip" xml:space="preserve">
-    <value>目标语言</value>
+    <value>目标语言。选择与源语言相同会进入纠错；选择其他目标语言会回到翻译。</value>
   </data>
 
   <!-- Status -->
@@ -811,6 +811,15 @@
   </data>
   <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
     <value>检查语法</value>
+  </data>
+  <data name="GrammarCorrectionActiveNotice" xml:space="preserve">
+    <value>当前为纠错模式：将仅运行 AI 纠错服务。修改目标语言可回到翻译。</value>
+  </data>
+  <data name="GrammarCorrectionFallbackNotice" xml:space="preserve">
+    <value>未启用支持纠错的 AI 服务，已回退为普通翻译。配置一个支持纠错的 AI 服务后，源语言和目标语言相同时会显示纠错信息。</value>
+  </data>
+  <data name="NoAvailableTargetLanguage" xml:space="preserve">
+    <value>没有可用于翻译的目标语言。</value>
   </data>
   <data name="GrammarResult_Original" xml:space="preserve">
     <value>原文：</value>

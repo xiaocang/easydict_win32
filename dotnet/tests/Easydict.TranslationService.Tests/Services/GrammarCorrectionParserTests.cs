@@ -65,6 +65,74 @@ public class GrammarCorrectionParserTests
     }
 
     [Fact]
+    public void Parse_WithLegacySeparator_ExtractsCorrectedTextAndExplanation()
+    {
+        var rawOutput = """
+            He went to the store yesterday.
+            ---
+            Changed "go" to "went" to match the past-tense time marker.
+            """;
+
+        var result = GrammarCorrectionParser.Parse(rawOutput, "He go to the store yesterday.", ServiceName, 75);
+
+        result.CorrectedText.Should().Be("He went to the store yesterday.");
+        result.Explanation.Should().Contain("Changed \"go\" to \"went\"");
+        result.HasCorrections.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Parse_WithLegacySeparatorNoErrors_HasCorrectionsFalse()
+    {
+        var original = "The quick brown fox jumps over the lazy dog.";
+        var rawOutput = $"""
+            {original}
+            ---
+            No errors found.
+            """;
+
+        var result = GrammarCorrectionParser.Parse(rawOutput, original, ServiceName, 50);
+
+        result.CorrectedText.Should().Be(original);
+        result.Explanation.Should().Be("No errors found.");
+        result.HasCorrections.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Parse_WithMisplacedLeadingSeparatorSameLine_StripsSeparator()
+    {
+        var rawOutput = "--- I went swimming today at the gym's swimming pool.";
+
+        var result = GrammarCorrectionParser.Parse(
+            rawOutput,
+            "I went to swimming today to gym's swimming pool",
+            ServiceName,
+            75);
+
+        result.CorrectedText.Should().Be("I went swimming today at the gym's swimming pool.");
+        result.Explanation.Should().BeNull();
+        result.HasCorrections.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Parse_WithMisplacedLeadingSeparatorOwnLine_StripsSeparator()
+    {
+        var rawOutput = """
+            ---
+            I went swimming today at the gym's swimming pool.
+            """;
+
+        var result = GrammarCorrectionParser.Parse(
+            rawOutput,
+            "I went to swimming today to gym's swimming pool",
+            ServiceName,
+            75);
+
+        result.CorrectedText.Should().Be("I went swimming today at the gym's swimming pool.");
+        result.Explanation.Should().BeNull();
+        result.HasCorrections.Should().BeTrue();
+    }
+
+    [Fact]
     public void Parse_WithEmptyOutput_ReturnsOriginalText()
     {
         var original = "Some text.";

@@ -161,8 +161,6 @@
         <Grid Grid.Row="2"
                 Margin="0,0,0,4">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <!-- Mode Toggle -->
                 <ColumnDefinition Width="*"/>
                 <!-- Source Language -->
                 <ColumnDefinition Width="Auto"/>
@@ -173,23 +171,9 @@
                 <!-- Translate Button -->
             </Grid.ColumnDefinitions>
 
-            <!-- Query Mode Toggle -->
-            <Button x:Name="QueryModeButton"
-                    Grid.Column="0"
-                    Width="32"
-                    Height="32"
-                    Padding="0"
-                    VerticalAlignment="Center"
-                    Click="OnQueryModeButtonClick"
-                    Style="{StaticResource EasydictIconButtonStyle}"
-                    Margin="0,0,4,0">
-                <TextBlock x:Name="QueryModeEmoji"
-                        FontSize="18"/>
-            </Button>
-
             <ComboBox
                 x:Name="SourceLangCombo"
-                Grid.Column="1"
+                Grid.Column="0"
                 HorizontalAlignment="Stretch"
                 SelectionChanged="OnSourceLangChanged"
                 ToolTipService.ToolTip="Source Language">
@@ -198,7 +182,7 @@
 
             <Button
                 x:Name="SwapButton"
-                Grid.Column="2"
+                Grid.Column="1"
                 Click="OnSwapClicked"
                 Width="28"
                 Height="28"
@@ -213,7 +197,7 @@
 
             <ComboBox
                 x:Name="TargetLangCombo"
-                Grid.Column="3"
+                Grid.Column="2"
                 HorizontalAlignment="Stretch"
                 SelectionChanged="OnTargetLangChanged"
                 ToolTipService.ToolTip="Target Language">
@@ -222,7 +206,7 @@
 
             <Button
                 x:Name="TranslateButton"
-                Grid.Column="4"
+                Grid.Column="3"
                 Click="OnTranslateClicked"
                 Width="32"
                 Height="32"

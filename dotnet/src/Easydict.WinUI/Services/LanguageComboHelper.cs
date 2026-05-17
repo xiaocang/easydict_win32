@@ -130,6 +130,9 @@ public static class LanguageComboHelper
     /// </summary>
     public static int FindLanguageIndex(ComboBox combo, TranslationLanguage language)
     {
+        if (language == TranslationLanguage.Auto)
+            return FindItemByTag(combo, "auto");
+
         string? targetTag = null;
         foreach (var entry in AllLanguages)
         {
@@ -182,12 +185,25 @@ public static class LanguageComboHelper
     }
 
     /// <summary>
-    /// Populate a target language combo box with active languages (no Auto).
-    /// If <paramref name="defaultTag"/> is specified, selects that language; otherwise defaults to first item.
+    /// Populate a target language combo box with active languages.
+    /// Quick-translation targets include Auto to match macOS; long-document targets can opt out.
     /// </summary>
-    public static void PopulateTargetCombo(ComboBox combo, LocalizationService loc, string? defaultTag = null)
+    public static void PopulateTargetCombo(
+        ComboBox combo,
+        LocalizationService loc,
+        string? defaultTag = null,
+        bool includeAuto = true)
     {
         combo.Items.Clear();
+
+        if (includeAuto)
+        {
+            combo.Items.Add(new ComboBoxItem
+            {
+                Content = loc.GetString("LangAutoDetect"),
+                Tag = "auto"
+            });
+        }
 
         foreach (var entry in SelectableLanguages)
         {
@@ -218,58 +234,32 @@ public static class LanguageComboHelper
     }
 
     /// <summary>
-    /// Rebuild a target language combo box, excluding the specified source language.
-    /// Preserves the current target selection if possible; applies first-second
-    /// reversal if the current target was removed.
+    /// Rebuild a target language combo box while preserving the current target selection.
+    /// Same-language targets are intentionally kept because they trigger grammar correction.
     /// </summary>
-    /// <param name="targetCombo">The target language combo box to rebuild.</param>
-    /// <param name="sourceLanguage">The current source language to exclude (Auto means include all).</param>
-    /// <param name="currentTarget">The currently selected target language.</param>
-    /// <param name="loc">Localization service for display names.</param>
-    /// <param name="newTarget">The resolved target language after rebuilding.</param>
     public static void RebuildTargetCombo(
         ComboBox targetCombo,
-        TranslationLanguage sourceLanguage,
         TranslationLanguage currentTarget,
         LocalizationService loc,
         out TranslationLanguage newTarget)
     {
         targetCombo.Items.Clear();
 
-        var targetWasRemoved = false;
         newTarget = currentTarget;
+
+        targetCombo.Items.Add(new ComboBoxItem
+        {
+            Content = loc.GetString("LangAutoDetect"),
+            Tag = "auto"
+        });
 
         foreach (var entry in SelectableLanguages)
         {
-            // Skip the source language (unless source is Auto)
-            if (sourceLanguage != TranslationLanguage.Auto && entry.Language == sourceLanguage)
-            {
-                if (currentTarget == entry.Language)
-                    targetWasRemoved = true;
-                continue;
-            }
-
             targetCombo.Items.Add(new ComboBoxItem
             {
                 Content = loc.GetString(entry.LocalizationKey),
                 Tag = entry.Tag
             });
-        }
-
-        // If the current target was removed (same as source), apply reversal
-        if (targetWasRemoved)
-        {
-            // Use first↔second language reversal
-            var settings = SettingsService.Instance;
-            var firstLang = LanguageExtensions.FromCode(settings.FirstLanguage);
-            var secondLang = LanguageExtensions.FromCode(settings.SecondLanguage);
-
-            if (sourceLanguage == firstLang)
-                newTarget = secondLang;
-            else if (sourceLanguage == secondLang)
-                newTarget = firstLang;
-            else
-                newTarget = firstLang;
         }
 
         // Select the resolved target in the combo

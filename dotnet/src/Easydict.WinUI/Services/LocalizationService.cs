@@ -274,4 +274,13 @@ public static class LocalizationExtensions
     {
         return LocalizationService.Instance.GetString(key, args);
     }
+
+    /// <summary>
+    /// Gets a localized string, returning the provided fallback when the key is missing.
+    /// </summary>
+    public static string GetStringOrDefault(this LocalizationService loc, string key, string fallback)
+    {
+        var value = loc.GetString(key);
+        return string.Equals(value, key, StringComparison.Ordinal) ? fallback : value;
+    }
 }

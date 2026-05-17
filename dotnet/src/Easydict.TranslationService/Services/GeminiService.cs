@@ -241,10 +241,6 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
     {
         ValidateConfiguration();
 
-        var userPrompt = request.Language == Language.Auto
-            ? $"Correct the grammar in the following text:\n\n{request.Text}"
-            : $"Correct the grammar in the following {request.Language.GetDisplayName()} text. The result MUST remain in {request.Language.GetDisplayName()}:\n\n{request.Text}";
-
         var requestBody = new
         {
             contents = new[]
@@ -252,14 +248,12 @@ public sealed class GeminiService : BaseTranslationService, IStreamTranslationSe
                 new
                 {
                     role = "user",
-                    parts = new[] { new { text = userPrompt } }
+                    parts = new[] { new { text = GrammarCorrectionPromptResources.BuildUserPrompt(request) } }
                 }
             },
             systemInstruction = new
             {
-                parts = new[] { new { text = request.IncludeExplanations
-                    ? BaseOpenAIService.GrammarCorrectionSystemPromptWithExplanation
-                    : BaseOpenAIService.GrammarCorrectionSystemPrompt } }
+                parts = new[] { new { text = GrammarCorrectionPromptResources.GetSystemPrompt(request.IncludeExplanations) } }
             },
             generationConfig = new
             {

@@ -805,6 +805,15 @@
   <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
     <value>檢查語法</value>
   </data>
+  <data name="GrammarCorrectionActiveNotice" xml:space="preserve">
+    <value>目前為糾錯模式：將僅執行 AI 糾錯服務。修改目標語言可回到翻譯。</value>
+  </data>
+  <data name="GrammarCorrectionFallbackNotice" xml:space="preserve">
+    <value>未啟用支援糾錯的 AI 服務，已回退為普通翻譯。設定一個支援糾錯的 AI 服務後，源語言和目標語言相同時會顯示糾錯資訊。</value>
+  </data>
+  <data name="NoAvailableTargetLanguage" xml:space="preserve">
+    <value>沒有可用於翻譯的目標語言。</value>
+  </data>
   <data name="GrammarResult_Original" xml:space="preserve">
     <value>原文：</value>
   </data>

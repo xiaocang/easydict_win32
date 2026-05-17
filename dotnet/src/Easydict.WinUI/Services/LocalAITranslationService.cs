@@ -13,7 +13,7 @@ namespace Easydict.WinUI.Services;
 /// provider decides whether requests go to Phi Silica directly, Foundry Local
 /// directly, OpenVINO directly, or an Auto chain across all local providers.
 /// </summary>
-public sealed class LocalAITranslationService : IStreamTranslationService, ILocalModelProvider, IDisposable
+public sealed class LocalAITranslationService : IStreamTranslationService, IGrammarCorrectionService, ILocalModelProvider, IDisposable
 {
     internal const string ServiceIdValue = PhiSilicaTranslationService.ServiceIdValue;
     internal const string LegacyOpenVinoServiceId = OpenVINOTranslationService.ServiceIdValue;
@@ -171,6 +171,60 @@ public sealed class LocalAITranslationService : IStreamTranslationService, ILoca
         }
     }
 
+    public async IAsyncEnumerable<string> CorrectGrammarStreamAsync(
+        GrammarCorrectionRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var candidates = GetGrammarCorrectionCandidateServices(request.Language).ToArray();
+        if (candidates.Length == 0)
+        {
+            throw CreateNoGrammarProviderException();
+        }
+
+        for (var i = 0; i < candidates.Length; i++)
+        {
+            var emittedAnyChunk = false;
+            var shouldFallback = false;
+
+            await using var enumerator = candidates[i]
+                .CorrectGrammarStreamAsync(request, cancellationToken)
+                .GetAsyncEnumerator(cancellationToken);
+
+            while (true)
+            {
+                bool hasNext;
+                string current;
+
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync();
+                    if (!hasNext)
+                    {
+                        yield break;
+                    }
+
+                    current = enumerator.Current;
+                }
+                catch (TranslationException ex) when (!emittedAnyChunk && CanFallbackFrom(candidates, i, ex))
+                {
+                    shouldFallback = true;
+                    break;
+                }
+
+                if (!string.IsNullOrEmpty(current))
+                {
+                    emittedAnyChunk = true;
+                    yield return current;
+                }
+            }
+
+            if (!shouldFallback)
+            {
+                yield break;
+            }
+        }
+    }
+
     public LocalModelStatus GetStatus()
     {
         return _providerMode switch
@@ -191,6 +245,11 @@ public sealed class LocalAITranslationService : IStreamTranslationService, ILoca
             LocalAIProviderMode.OpenVINO => _openVino.PrepareAsync(cancellationToken),
             _ => _phiSilica.PrepareAsync(cancellationToken),
         };
+    }
+
+    public bool SupportsGrammarCorrection(Language language)
+    {
+        return GetGrammarCorrectionCandidateServices(language).Any();
     }
 
     private IEnumerable<IStreamTranslationService> GetCandidateServices(Language from, Language to)
@@ -228,6 +287,19 @@ public sealed class LocalAITranslationService : IStreamTranslationService, ILoca
         }
     }
 
+    private IEnumerable<IGrammarCorrectionService> GetGrammarCorrectionCandidateServices(Language language)
+    {
+        var from = language == Language.Auto ? Language.Auto : language;
+        var to = language == Language.Auto ? Language.English : language;
+        foreach (var service in GetCandidateServices(from, to))
+        {
+            if (service is IGrammarCorrectionService grammarService)
+            {
+                yield return grammarService;
+            }
+        }
+    }
+
     private bool ShouldTryPhiSilica(Language from, Language to)
     {
         if (!_phiSilica.SupportsLanguagePair(from, to))
@@ -259,8 +331,8 @@ public sealed class LocalAITranslationService : IStreamTranslationService, ILoca
             or LocalModelState.Preparing;
     }
 
-    private bool CanFallbackFrom(
-        IReadOnlyList<IStreamTranslationService> candidates,
+    private bool CanFallbackFrom<T>(
+        IReadOnlyList<T> candidates,
         int serviceIndex,
         TranslationException ex)
     {
@@ -330,6 +402,15 @@ public sealed class LocalAITranslationService : IStreamTranslationService, ILoca
     private TranslationException CreateNoProviderException()
     {
         return new TranslationException("No local AI provider supports this language pair")
+        {
+            ErrorCode = TranslationErrorCode.UnsupportedLanguage,
+            ServiceId = ServiceId,
+        };
+    }
+
+    private TranslationException CreateNoGrammarProviderException()
+    {
+        return new TranslationException("No local AI provider supports grammar correction")
         {
             ErrorCode = TranslationErrorCode.UnsupportedLanguage,
             ServiceId = ServiceId,

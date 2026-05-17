@@ -62,10 +62,6 @@
                                                      GroupName="AppMode"
                                                      IsChecked="True"
                                                      Click="OnModeMenuItemClick"/>
-                                <RadioMenuFlyoutItem x:Name="ModeGrammarItem"
-                                                     Text="✏️  Grammar Correction"
-                                                     GroupName="AppMode"
-                                                     Click="OnModeMenuItemClick"/>
                                 <RadioMenuFlyoutItem x:Name="ModeLongDocItem"
                                                      Text="📄  Long Document"
                                                      GroupName="AppMode"

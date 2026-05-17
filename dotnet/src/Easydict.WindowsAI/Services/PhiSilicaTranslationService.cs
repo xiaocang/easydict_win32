@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services;
 
 namespace Easydict.WindowsAI.Services;
 
@@ -12,7 +13,7 @@ namespace Easydict.WindowsAI.Services;
 /// Available only on Copilot+ PCs that meet the model's hardware requirements;
 /// surfaces a friendly state via <see cref="WindowsAIReadyState"/> on others.
 /// </summary>
-public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILocalModelProvider
+public sealed class PhiSilicaTranslationService : IStreamTranslationService, IGrammarCorrectionService, ILocalModelProvider
 {
     public const string ServiceIdValue = "windows-local-ai";
 
@@ -140,6 +141,67 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         // ErrorCode + ServiceId — matching the behavior of the non-streaming
         // path. C# forbids yield-return inside try/catch, so the catch
         // surrounds MoveNextAsync and the yield happens outside it.
+        var enumerator = _client
+            .GenerateStreamAsync(prompt, DefaultGenerationOptions, cancellationToken)
+            .GetAsyncEnumerator(cancellationToken);
+
+        try
+        {
+            while (true)
+            {
+                bool hasNext;
+                string current;
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync();
+                    if (!hasNext)
+                    {
+                        yield break;
+                    }
+                    current = enumerator.Current;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (TranslationException)
+                {
+                    throw;
+                }
+                catch (WindowsLanguageModelException wex)
+                {
+                    MarkUnhealthy(wex);
+                    throw MapWindowsLanguageModelException(wex);
+                }
+                catch (Exception ex)
+                {
+                    throw new TranslationException($"{UserFacingName} failed: {ex.Message}", ex)
+                    {
+                        ErrorCode = TranslationErrorCode.Unknown,
+                        ServiceId = ServiceId,
+                    };
+                }
+
+                if (!string.IsNullOrEmpty(current))
+                {
+                    yield return current;
+                }
+            }
+        }
+        finally
+        {
+            await enumerator.DisposeAsync();
+        }
+    }
+
+    public async IAsyncEnumerable<string> CorrectGrammarStreamAsync(
+        GrammarCorrectionRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ValidateGrammarCorrectionRequest(request);
+        await EnsureReadyOrThrowAsync(cancellationToken);
+
+        var prompt = BuildGrammarCorrectionPrompt(request);
         var enumerator = _client
             .GenerateStreamAsync(prompt, DefaultGenerationOptions, cancellationToken)
             .GetAsyncEnumerator(cancellationToken);
@@ -453,6 +515,18 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         }
     }
 
+    private void ValidateGrammarCorrectionRequest(GrammarCorrectionRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text))
+        {
+            throw new TranslationException("Text cannot be empty")
+            {
+                ErrorCode = TranslationErrorCode.InvalidResponse,
+                ServiceId = ServiceId,
+            };
+        }
+    }
+
     private async Task EnsureReadyOrThrowAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -548,6 +622,11 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         {request.Text}
         EASYDICT_SOURCE_TEXT
         """;
+    }
+
+    internal static string BuildGrammarCorrectionPrompt(GrammarCorrectionRequest request)
+    {
+        return GrammarCorrectionPromptResources.BuildPlainTextPrompt(request);
     }
 
     private static string FormatLanguage(Language language) => language switch

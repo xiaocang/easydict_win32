@@ -46,6 +46,9 @@ namespace Easydict.WinUI.Views
         private bool _suppressTargetLanguageSelectionChanged;
         private bool _suppressSourceLanguageSelectionChanged;
         private QueryMode _currentMode = QueryMode.Translation;
+        private QueryMode _currentQuickQueryMode = QueryMode.Translation;
+        private QuickQueryLanguageResolution? _lastQuickQueryResolution;
+        private bool _showingGrammarFallbackNotice;
         private Services.LongDocumentTranslationService? _longDocumentService;
         private LongDocumentDeduplicationService? _longDocDedupService;
         private bool _longDocFeaturesInitialized;
@@ -848,18 +851,15 @@ namespace Easydict.WinUI.Views
             MemoryDiagnostics.LogSnapshot("MainPage.ApplySettings begin");
             LogObjectState("ApplySettings begin");
 #endif
-            // Apply target language from settings (using FirstLanguage)
-            var targetLang = LanguageExtensions.FromCode(_settings.FirstLanguage);
-
             _suppressTargetLanguageSelectionChanged = true;
             try
             {
-                var targetIndex = LanguageComboHelper.FindLanguageIndex(TargetLangCombo, targetLang);
+                var targetIndex = LanguageComboHelper.FindLanguageIndex(TargetLangCombo, TranslationLanguage.Auto);
                 if (targetIndex >= 0)
                 {
                     TargetLangCombo.SelectedIndex = targetIndex;
                 }
-                var targetIndexNarrow = LanguageComboHelper.FindLanguageIndex(TargetLangComboNarrow, targetLang);
+                var targetIndexNarrow = LanguageComboHelper.FindLanguageIndex(TargetLangComboNarrow, TranslationLanguage.Auto);
                 if (targetIndexNarrow >= 0)
                 {
                     TargetLangComboNarrow.SelectedIndex = targetIndexNarrow;
@@ -899,7 +899,11 @@ namespace Easydict.WinUI.Views
 
                 // Long Doc language combos — default source to Auto, target to user's FirstLanguage
                 LanguageComboHelper.PopulateSourceCombo(LongDocSourceLangCombo, loc);
-                LanguageComboHelper.PopulateTargetCombo(LongDocTargetLangCombo, loc, _settings.FirstLanguage);
+                LanguageComboHelper.PopulateTargetCombo(
+                    LongDocTargetLangCombo,
+                    loc,
+                    _settings.FirstLanguage,
+                    includeAuto: false);
             }
             finally
             {
@@ -958,7 +962,6 @@ namespace Easydict.WinUI.Views
             // Update header emoji
             ModeEmojiIcon.Text = _currentMode switch
             {
-                QueryMode.GrammarCorrection => "✏️",
                 QueryMode.LongDocument => "📄",
                 _ => "🌐"
             };
@@ -966,10 +969,6 @@ namespace Easydict.WinUI.Views
             // Update subtitle
             switch (_currentMode)
             {
-                case QueryMode.GrammarCorrection:
-                    ModeSubtitle.Text = loc.GetString("QueryMode_GrammarCorrection") ?? "Grammar Correction";
-                    ModeSubtitle.Visibility = Visibility.Visible;
-                    break;
                 case QueryMode.LongDocument:
                     ModeSubtitle.Text = loc.GetString("Mode_LongDocument") ?? "Long Document";
                     ModeSubtitle.Visibility = Visibility.Visible;
@@ -989,28 +988,7 @@ namespace Easydict.WinUI.Views
             QuickTranslateContent.Visibility = isLongDoc ? Visibility.Collapsed : Visibility.Visible;
             LongDocContent.Visibility = isLongDoc ? Visibility.Visible : Visibility.Collapsed;
 
-            // Grammar-specific UI (only relevant when not in LongDoc mode)
-            if (_currentMode == QueryMode.GrammarCorrection)
-            {
-                TargetLangCombo.Visibility = Visibility.Collapsed;
-                SwapLanguageButton.Visibility = Visibility.Collapsed;
-                LangHelpIcon.Visibility = Visibility.Collapsed;
-                TargetLangComboNarrow.Visibility = Visibility.Collapsed;
-                SwapLanguageButtonNarrow.Visibility = Visibility.Collapsed;
-                LangHelpIconNarrow.Visibility = Visibility.Collapsed;
-
-                InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder_Grammar")
-                    ?? "Enter text to check grammar...";
-                ResultsTitleText.Text = loc.GetString("ResultsTitle_Grammar")
-                    ?? "Grammar Check Results";
-                PlaceholderText.Text = loc.GetString("GrammarPlaceholder")
-                    ?? "Grammar check results will appear here...";
-                ToolTipService.SetToolTip(TranslateButton,
-                    loc.GetString("TranslateButton_Grammar_Tooltip") ?? "Check Grammar");
-                ToolTipService.SetToolTip(TranslateButtonNarrow,
-                    loc.GetString("TranslateButton_Grammar_Tooltip") ?? "Check Grammar");
-            }
-            else if (_currentMode == QueryMode.Translation)
+            if (_currentMode == QueryMode.Translation)
             {
                 TargetLangCombo.Visibility = Visibility.Visible;
                 SwapLanguageButton.Visibility = Visibility.Visible;
@@ -1029,18 +1007,15 @@ namespace Easydict.WinUI.Views
 
             // Localize menu item texts. Minimal mode avoids emoji decoration.
             var translationText = loc.GetString("QueryMode_Translation") ?? "Quick Translation";
-            var grammarText = loc.GetString("QueryMode_GrammarCorrection") ?? "Grammar Correction";
             var longDocText = loc.GetString("Mode_LongDocument") ?? "Long Document";
             if (MinimalThemeService.IsActive)
             {
                 ModeTranslationItem.Text = translationText;
-                ModeGrammarItem.Text = grammarText;
                 ModeLongDocItem.Text = longDocText;
             }
             else
             {
                 ModeTranslationItem.Text = "🌐  " + translationText;
-                ModeGrammarItem.Text = "✏️  " + grammarText;
                 ModeLongDocItem.Text = "📄  " + longDocText;
             }
 
@@ -1153,6 +1128,8 @@ namespace Easydict.WinUI.Views
 
             // Get display names from TranslationManager (single source of truth)
             var manager = TranslationManagerService.Instance.Manager;
+            var grammarSourceLanguage = _lastQuickQueryResolution?.EffectiveSourceLanguage
+                ?? TranslationLanguage.Auto;
 
             foreach (var serviceId in enabledServices)
             {
@@ -1162,12 +1139,16 @@ namespace Easydict.WinUI.Views
                 {
                     displayName = service.DisplayName;
 
-                    // In grammar mode, only show LLM services that implement IGrammarCorrectionService
-                    if (_currentMode == QueryMode.GrammarCorrection &&
-                        service is not IGrammarCorrectionService)
+                    // In grammar correction, only show services that can correct grammar.
+                    if (_currentQuickQueryMode == QueryMode.GrammarCorrection &&
+                        !GrammarCorrectionServiceAvailability.IsAvailable(service, grammarSourceLanguage))
                     {
                         continue;
                     }
+                }
+                else if (_currentQuickQueryMode == QueryMode.GrammarCorrection)
+                {
+                    continue;
                 }
 
                 // Get EnabledQuery setting (default true if not found)
@@ -1179,7 +1160,7 @@ namespace Easydict.WinUI.Views
                     ServiceDisplayName = displayName,
                     EnabledQuery = enabledQuery,
                     IsExpanded = enabledQuery, // Manual-query services start collapsed
-                    CurrentMode = _currentMode
+                    CurrentMode = _currentQuickQueryMode
                 };
 
                 _serviceResults.Add(result);
@@ -1196,7 +1177,9 @@ namespace Easydict.WinUI.Views
             ReorderResultsPanel();
 
             // Hide placeholder since we have services
-            PlaceholderText.Text = LocalizationService.Instance.GetString("TranslationPlaceholder");
+            PlaceholderText.Text = _currentQuickQueryMode == QueryMode.GrammarCorrection
+                ? LocalizationService.Instance.GetString("GrammarPlaceholder")
+                : LocalizationService.Instance.GetString("TranslationPlaceholder");
             PlaceholderText.Visibility = Visibility.Collapsed;
 
 #if DEBUG
@@ -1323,7 +1306,12 @@ namespace Easydict.WinUI.Views
                 return sourceLanguage;
             }
 
-            var detectedLanguage = await DetectAutoSourceLanguageAsync(inputText, detectionService, ct);
+            var requiresReliableDetection = GetTargetLanguage() != TranslationLanguage.Auto;
+            var detectedLanguage = await DetectAutoSourceLanguageAsync(
+                inputText,
+                detectionService,
+                ct,
+                allowMinimalTimeout: !requiresReliableDetection);
             UpdateDetectedLanguageDisplay(detectedLanguage);
             return detectedLanguage;
         }
@@ -1331,9 +1319,10 @@ namespace Easydict.WinUI.Views
         private static async Task<TranslationLanguage> DetectAutoSourceLanguageAsync(
             string inputText,
             LanguageDetectionService detectionService,
-            CancellationToken ct)
+            CancellationToken ct,
+            bool allowMinimalTimeout = true)
         {
-            if (!MinimalThemeService.IsActive)
+            if (!MinimalThemeService.IsActive || !allowMinimalTimeout)
             {
                 return await Task.Run(() => detectionService.DetectAsync(inputText, ct));
             }
@@ -1349,6 +1338,125 @@ namespace Easydict.WinUI.Views
             {
                 return TranslationLanguage.Auto;
             }
+        }
+
+        private bool HasEnabledGrammarCorrectionService(TranslationLanguage sourceLanguage)
+        {
+            var manager = TranslationManagerService.Instance.Manager;
+            return _settings.MainWindowEnabledServices.Any(serviceId =>
+                manager.Services.TryGetValue(serviceId, out var service)
+                && GrammarCorrectionServiceAvailability.IsAvailable(service, sourceLanguage));
+        }
+
+        private QuickQueryLanguageResolution ResolveQuickQueryLanguage(
+            TranslationLanguage effectiveSource,
+            bool grammarCorrectionAvailable)
+        {
+            return _targetLanguageSelector.ResolveQueryLanguage(
+                GetSourceLanguage(),
+                GetTargetLanguage(),
+                effectiveSource,
+                grammarCorrectionAvailable);
+        }
+
+        private void ApplyQuickQueryResolution(
+            QuickQueryLanguageResolution resolution,
+            bool reinitializeServiceResults,
+            string reason)
+        {
+            var previousMode = _currentQuickQueryMode;
+            _lastQuickQueryResolution = resolution;
+            _currentQuickQueryMode = resolution.EffectiveMode;
+            _showingGrammarFallbackNotice = resolution.GrammarCorrectionFallback;
+
+            var loc = LocalizationService.Instance;
+            ResultsTitleText.Text = _currentQuickQueryMode == QueryMode.GrammarCorrection
+                ? loc.GetString("ResultsTitle_Grammar")
+                : loc.GetString("TranslationResults");
+            PlaceholderText.Text = _currentQuickQueryMode == QueryMode.GrammarCorrection
+                ? loc.GetString("GrammarPlaceholder")
+                : loc.GetString("TranslationPlaceholder");
+
+            var translateTooltip = _currentQuickQueryMode == QueryMode.GrammarCorrection
+                ? loc.GetString("TranslateButton_Grammar_Tooltip")
+                : loc.GetString("TranslateTooltip");
+            ToolTipService.SetToolTip(TranslateButton, translateTooltip);
+            ToolTipService.SetToolTip(TranslateButtonNarrow, translateTooltip);
+
+            if (reinitializeServiceResults && previousMode != _currentQuickQueryMode)
+            {
+                InitializeServiceResults(reason: reason);
+            }
+            else
+            {
+                foreach (var serviceResult in _serviceResults)
+                {
+                    serviceResult.CurrentMode = _currentQuickQueryMode;
+                }
+            }
+
+            UpdateQuickQueryModeStatus(resolution);
+        }
+
+        private void UpdateQuickQueryModeStatus(QuickQueryLanguageResolution resolution)
+        {
+            if (!_isLoaded || MinimalThemeService.IsActive)
+            {
+                DetectedLanguageText.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var loc = LocalizationService.Instance;
+            if (resolution.GrammarCorrectionFallback)
+            {
+                DetectedLanguageText.Text = loc.GetStringOrDefault(
+                    "GrammarCorrectionFallbackNotice",
+                    "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.");
+                DetectedLanguageText.Visibility = Visibility.Visible;
+                return;
+            }
+
+            if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
+            {
+                DetectedLanguageText.Text = loc.GetStringOrDefault(
+                    "GrammarCorrectionActiveNotice",
+                    "Grammar check mode: AI correction services will run. Choose a different target language to translate.");
+                DetectedLanguageText.Visibility = Visibility.Visible;
+                return;
+            }
+
+            _showingGrammarFallbackNotice = false;
+            UpdateDetectedLanguageDisplay(resolution.EffectiveSourceLanguage);
+        }
+
+        private void RefreshQuickQueryModePreview()
+        {
+            if (_currentMode != QueryMode.Translation)
+            {
+                return;
+            }
+
+            var selectedSource = GetSourceLanguage();
+            var effectiveSource = selectedSource != TranslationLanguage.Auto
+                ? selectedSource
+                : _lastDetectedLanguage;
+
+            if (effectiveSource == TranslationLanguage.Auto)
+            {
+                if (!_showingGrammarFallbackNotice)
+                {
+                    UpdateDetectedLanguageDisplay(effectiveSource);
+                }
+                return;
+            }
+
+            var resolution = ResolveQuickQueryLanguage(
+                effectiveSource,
+                HasEnabledGrammarCorrectionService(effectiveSource));
+            ApplyQuickQueryResolution(
+                resolution,
+                reinitializeServiceResults: true,
+                reason: "QuickQueryModePreview");
         }
 
         /// <summary>
@@ -1416,9 +1524,14 @@ namespace Easydict.WinUI.Views
                 var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
                     ? _lastDetectedLanguage
                     : await DetectSourceLanguageForQueryAsync(inputText, _detectionService, ct);
+                _lastDetectedLanguage = detectedLanguage;
+                var resolution = ResolveQuickQueryLanguage(
+                    detectedLanguage,
+                    HasEnabledGrammarCorrectionService(detectedLanguage));
+                serviceResult.CurrentMode = resolution.EffectiveMode;
 
                 // Grammar mode: route to grammar correction instead of translation
-                if (_currentMode == QueryMode.GrammarCorrection)
+                if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
                 {
                     var grammarRequest = new GrammarCorrectionRequest
                     {
@@ -1431,7 +1544,13 @@ namespace Easydict.WinUI.Views
                 }
 
                 // Get target language
-                var targetLanguage = GetTargetLanguage();
+                var targetLanguage = resolution.EffectiveTargetLanguage;
+                if (targetLanguage == TranslationLanguage.Auto)
+                {
+                    serviceResult.IsLoading = false;
+                    serviceResult.ClearQueried();
+                    return;
+                }
 
                 // Create request
                 var request = new TranslationRequest
@@ -1690,13 +1809,6 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            // Early return if no services are enabled
-            if (_serviceResults.Count == 0)
-            {
-                SetStatusSummary(LocalizationService.Instance.GetString("NoServicesEnabled"), important: true);
-                return;
-            }
-
             using var currentCts = new CancellationTokenSource();
             var previousCts = Interlocked.Exchange(ref _currentQueryCts, currentCts);
 
@@ -1723,6 +1835,44 @@ namespace Easydict.WinUI.Views
             try
             {
                 if (_isClosing) return;
+
+                // Resolve the effective quick-query mode before prompting services so
+                // grammar mode only prepares/runs grammar-capable services.
+                var detectedLanguage = await DetectSourceLanguageForQueryAsync(inputText, detectionService, ct);
+                _lastDetectedLanguage = detectedLanguage;
+
+                var resolution = ResolveQuickQueryLanguage(
+                    detectedLanguage,
+                    HasEnabledGrammarCorrectionService(detectedLanguage));
+                ApplyQuickQueryResolution(
+                    resolution,
+                    reinitializeServiceResults: true,
+                    reason: "StartQueryModeResolved");
+
+                var targetLanguage = resolution.EffectiveTargetLanguage;
+                if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
+                {
+                    UpdateTargetLanguageSelector(targetLanguage);
+                    SetStatusSummary(
+                        LocalizationService.Instance.GetString("GrammarCorrectionFallbackNotice"),
+                        important: true);
+                }
+
+                if (_serviceResults.Count == 0)
+                {
+                    SetStatusSummary(LocalizationService.Instance.GetString("NoServicesEnabled"), important: true);
+                    return;
+                }
+
+                if (resolution.EffectiveMode == QueryMode.Translation &&
+                    targetLanguage == TranslationLanguage.Auto)
+                {
+                    SetStatusSummary(
+                        LocalizationService.Instance.GetString("NoAvailableTargetLanguage"),
+                        important: true);
+                    return;
+                }
+
                 PhiSilicaModelPreparationPromptResult phiSilicaPromptResult;
                 try
                 {
@@ -1741,6 +1891,35 @@ namespace Easydict.WinUI.Views
                 if (phiSilicaPromptResult == PhiSilicaModelPreparationPromptResult.Disabled)
                 {
                     InitializeServiceResults(reason: "PhiSilicaDisabled");
+                    if (resolution.EffectiveMode == QueryMode.GrammarCorrection &&
+                        !HasEnabledGrammarCorrectionService(detectedLanguage))
+                    {
+                        resolution = ResolveQuickQueryLanguage(
+                            detectedLanguage,
+                            grammarCorrectionAvailable: false);
+                        ApplyQuickQueryResolution(
+                            resolution,
+                            reinitializeServiceResults: true,
+                            reason: "GrammarServiceDisabledFallback");
+                        targetLanguage = resolution.EffectiveTargetLanguage;
+                        if (targetLanguage != TranslationLanguage.Auto)
+                        {
+                            UpdateTargetLanguageSelector(targetLanguage);
+                        }
+                        SetStatusSummary(
+                            LocalizationService.Instance.GetString("GrammarCorrectionFallbackNotice"),
+                            important: true);
+                    }
+
+                    if (resolution.EffectiveMode == QueryMode.Translation &&
+                        targetLanguage == TranslationLanguage.Auto)
+                    {
+                        SetStatusSummary(
+                            LocalizationService.Instance.GetString("NoAvailableTargetLanguage"),
+                            important: true);
+                        return;
+                    }
+
                     if (!_serviceResults.Any(result => result.EnabledQuery))
                     {
                         return;
@@ -1764,27 +1943,14 @@ namespace Easydict.WinUI.Views
                 // Hide placeholder
                 PlaceholderText.Visibility = Visibility.Collapsed;
 
-                // Route based on mode
-                if (_currentMode == QueryMode.GrammarCorrection)
+                // Route based on effective quick-query mode
+                if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
                 {
-                    await StartGrammarCorrectionInternalAsync(inputText, detectionService, ct);
+                    await StartGrammarCorrectionInternalAsync(inputText, detectedLanguage, ct);
                     return;
                 }
 
-                // Step 1: Detect language (only when source = Auto)
-                var detectedLanguage = await DetectSourceLanguageForQueryAsync(inputText, detectionService, ct);
-                _lastDetectedLanguage = detectedLanguage;
-
-                // Step 2: Determine target language
-                var currentTarget = GetTargetLanguage();
-                var targetLanguage = _targetLanguageSelector.ResolveTargetLanguage(
-                    detectedLanguage, currentTarget, detectionService);
-                if (targetLanguage != currentTarget)
-                {
-                    UpdateTargetLanguageSelector(targetLanguage);
-                }
-
-                // Step 3: Execute translation for each enabled service in parallel
+                // Execute translation for each enabled service in parallel
                 var request = new TranslationRequest
                 {
                     Text = inputText,
@@ -2002,25 +2168,9 @@ namespace Easydict.WinUI.Views
         /// </summary>
         private async Task StartGrammarCorrectionInternalAsync(
             string inputText,
-            LanguageDetectionService detectionService,
+            TranslationLanguage detectedLang,
             CancellationToken ct)
         {
-            // Optional: detect language for prompt hint only
-            var detectedLang = TranslationLanguage.Auto;
-            try
-            {
-                detectedLang = await DetectSourceLanguageForQueryAsync(inputText, detectionService, ct);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch
-            {
-                // Best-effort: continue without language hint
-                DetectedLanguageText.Visibility = Visibility.Collapsed;
-            }
-
             var request = new GrammarCorrectionRequest
             {
                 Text = inputText,
@@ -2408,6 +2558,7 @@ namespace Easydict.WinUI.Views
 
             // User manually changed target language
             _targetLanguageSelector.MarkManualSelection();
+            RefreshQuickQueryModePreview();
 
             // Re-translate if there's text in the input
             if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
@@ -2422,52 +2573,41 @@ namespace Easydict.WinUI.Views
         private void OnSwapLanguagesClicked(object sender, RoutedEventArgs e)
         {
             var sourceLanguage = GetSourceLanguage();
+            var currentTarget = GetTargetLanguage();
 
-            if (sourceLanguage == TranslationLanguage.Auto)
+            if (sourceLanguage == currentTarget)
             {
-                // Source is Auto: swap target to detected language
-                if (_lastDetectedLanguage == TranslationLanguage.Auto)
-                    return; // No detection result, cannot swap
-
-                UpdateTargetLanguageSelector(_lastDetectedLanguage);
-                _targetLanguageSelector.MarkManualSelection();
+                return;
             }
-            else
+
+            var newSource = currentTarget;
+            var newTarget = sourceLanguage;
+
+            _suppressSourceLanguageSelectionChanged = true;
+            try
             {
-                // Source is specific: swap source ↔ target
-                var currentTarget = GetTargetLanguage();
-                var newSource = currentTarget;
-                var newTarget = sourceLanguage;
+                var srcIdx = LanguageComboHelper.FindLanguageIndex(SourceLangCombo, newSource);
+                if (srcIdx >= 0) SourceLangCombo.SelectedIndex = srcIdx;
+                var srcIdxNarrow = LanguageComboHelper.FindLanguageIndex(SourceLangComboNarrow, newSource);
+                if (srcIdxNarrow >= 0) SourceLangComboNarrow.SelectedIndex = srcIdxNarrow;
+            }
+            finally
+            {
+                _suppressSourceLanguageSelectionChanged = false;
+            }
 
-                // Set source to current target
-                _suppressSourceLanguageSelectionChanged = true;
-                try
-                {
-                    var srcIdx = LanguageComboHelper.FindLanguageIndex(SourceLangCombo, newSource);
-                    if (srcIdx >= 0) SourceLangCombo.SelectedIndex = srcIdx;
-                    var srcIdxNarrow = LanguageComboHelper.FindLanguageIndex(SourceLangComboNarrow, newSource);
-                    if (srcIdxNarrow >= 0) SourceLangComboNarrow.SelectedIndex = srcIdxNarrow;
-                }
-                finally
-                {
-                    _suppressSourceLanguageSelectionChanged = false;
-                }
+            RebuildTargetCombos(newTarget);
+            _targetLanguageSelector.MarkManualSelection();
+            RefreshQuickQueryModePreview();
 
-                // Rebuild target combos excluding new source
-                RebuildTargetCombos(newSource, newTarget);
-                _targetLanguageSelector.MarkManualSelection();
-
-                // Re-translate if text exists
-                if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
-                {
-                    _ = StartQueryTrackedAsync();
-                }
+            if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
+            {
+                _ = StartQueryTrackedAsync();
             }
         }
 
         /// <summary>
         /// Handle source language selection change.
-        /// Rebuilds target combo to exclude source language (mutual exclusion).
         /// </summary>
         private void OnSourceLanguageChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -2476,10 +2616,10 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            var sourceLanguage = GetSourceLanguage();
             var currentTarget = GetTargetLanguage();
 
-            RebuildTargetCombos(sourceLanguage, currentTarget);
+            RebuildTargetCombos(currentTarget);
+            RefreshQuickQueryModePreview();
 
             // Re-translate if text exists
             if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
@@ -2488,10 +2628,7 @@ namespace Easydict.WinUI.Views
             }
         }
 
-        /// <summary>
-        /// Rebuild both Wide and Narrow target combos excluding the source language.
-        /// </summary>
-        private void RebuildTargetCombos(TranslationLanguage sourceLanguage, TranslationLanguage currentTarget)
+        private void RebuildTargetCombos(TranslationLanguage currentTarget)
         {
             var loc = LocalizationService.Instance;
 
@@ -2499,9 +2636,9 @@ namespace Easydict.WinUI.Views
             try
             {
                 LanguageComboHelper.RebuildTargetCombo(
-                    TargetLangCombo, sourceLanguage, currentTarget, loc, out var newTarget);
+                    TargetLangCombo, currentTarget, loc, out var newTarget);
                 LanguageComboHelper.RebuildTargetCombo(
-                    TargetLangComboNarrow, sourceLanguage, currentTarget, loc, out _);
+                    TargetLangComboNarrow, currentTarget, loc, out _);
 
                 // If target changed due to reversal, mark manual selection
                 if (newTarget != currentTarget)
@@ -3411,8 +3548,6 @@ namespace Easydict.WinUI.Views
             QueryMode newMode;
             if (ReferenceEquals(sender, ModeTranslationItem))
                 newMode = QueryMode.Translation;
-            else if (ReferenceEquals(sender, ModeGrammarItem))
-                newMode = QueryMode.GrammarCorrection;
             else if (ReferenceEquals(sender, ModeLongDocItem))
                 newMode = QueryMode.LongDocument;
             else

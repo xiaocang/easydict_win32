@@ -6,29 +6,29 @@ using Xunit;
 namespace Easydict.WinUI.Tests.Services;
 
 /// <summary>
-/// Tests for TargetLanguageSelector.
-/// Verifies that manual language selection persists until explicitly reset,
-/// that auto-selection is used only when appropriate, and that same-language
-/// translation is always prevented via first↔second language reversal.
+/// Tests for quick-query language routing.
 /// </summary>
 [Trait("Category", "WinUI")]
 [Collection("SettingsService")]
 public class TargetLanguageSelectorTests : IDisposable
 {
     private readonly SettingsService _settings;
-    private readonly LanguageDetectionService _detectionService;
     private readonly TargetLanguageSelector _selector;
     private readonly string _originalFirstLanguage;
     private readonly string _originalSecondLanguage;
+    private readonly List<string> _originalSelectedLanguages;
 
     public TargetLanguageSelectorTests()
     {
         _settings = SettingsService.Instance;
         _originalFirstLanguage = _settings.FirstLanguage;
         _originalSecondLanguage = _settings.SecondLanguage;
+        _originalSelectedLanguages = [.. _settings.SelectedLanguages];
+
         _settings.FirstLanguage = "zh";
         _settings.SecondLanguage = "en";
-        _detectionService = new LanguageDetectionService(_settings);
+        _settings.SelectedLanguages = ["zh", "en", "ja"];
+
         _selector = new TargetLanguageSelector(_settings);
     }
 
@@ -36,10 +36,8 @@ public class TargetLanguageSelectorTests : IDisposable
     {
         _settings.FirstLanguage = _originalFirstLanguage;
         _settings.SecondLanguage = _originalSecondLanguage;
-        _detectionService.Dispose();
+        _settings.SelectedLanguages = _originalSelectedLanguages;
     }
-
-    // --- Construction ---
 
     [Fact]
     public void Constructor_WithValidSettings_CreatesInstance()
@@ -58,26 +56,11 @@ public class TargetLanguageSelectorTests : IDisposable
             .WithParameterName("settings");
     }
 
-    // --- Initial state ---
-
     [Fact]
     public void IsManualSelection_InitiallyFalse()
     {
         _selector.IsManualSelection.Should().BeFalse();
     }
-
-    [Fact]
-    public void ResolveTargetLanguage_Initially_ReturnsAutoSelected()
-    {
-        // With default settings (AutoSelectTargetLanguage=true), should auto-select
-        var result = _selector.ResolveTargetLanguage(
-            Language.English, Language.English, _detectionService);
-
-        // Should not translate to same language
-        result.Should().NotBe(Language.English);
-    }
-
-    // --- Manual selection persistence ---
 
     [Fact]
     public void MarkManualSelection_SetsFlag()
@@ -88,56 +71,9 @@ public class TargetLanguageSelectorTests : IDisposable
     }
 
     [Fact]
-    public void ResolveTargetLanguage_AfterManualSelection_UsesCurrentTarget()
-    {
-        _selector.MarkManualSelection();
-
-        // Manual mode should use the provided currentTarget
-        var result = _selector.ResolveTargetLanguage(
-            Language.English, Language.Japanese, _detectionService);
-
-        result.Should().Be(Language.Japanese);
-    }
-
-    [Fact]
-    public void ManualSelection_PersistsAcrossMultipleQueries()
-    {
-        // Simulate: user selects target language, then translates multiple texts
-        _selector.MarkManualSelection();
-
-        // Query 1: manual target is Japanese
-        var result1 = _selector.ResolveTargetLanguage(
-            Language.English, Language.Japanese, _detectionService);
-        result1.Should().Be(Language.Japanese, "manual selection should persist");
-
-        // Query 2: different detected source, still manual target
-        var result2 = _selector.ResolveTargetLanguage(
-            Language.SimplifiedChinese, Language.Japanese, _detectionService);
-        result2.Should().Be(Language.Japanese, "manual selection should persist across different texts");
-
-        _selector.IsManualSelection.Should().BeTrue("flag should never be reset by queries");
-    }
-
-    [Fact]
-    public void ManualSelection_PersistsAfterSwap()
-    {
-        // Simulate: user clicks swap button (which calls MarkManualSelection)
-        _selector.MarkManualSelection();
-
-        // Subsequent queries should still use manual selection
-        var result = _selector.ResolveTargetLanguage(
-            Language.English, Language.Korean, _detectionService);
-        result.Should().Be(Language.Korean, "swap is a manual selection that should persist");
-        _selector.IsManualSelection.Should().BeTrue();
-    }
-
-    // --- Reset behavior ---
-
-    [Fact]
     public void Reset_ClearsManualSelection()
     {
         _selector.MarkManualSelection();
-        _selector.IsManualSelection.Should().BeTrue();
 
         _selector.Reset();
 
@@ -145,217 +81,114 @@ public class TargetLanguageSelectorTests : IDisposable
     }
 
     [Fact]
-    public void ResolveTargetLanguage_AfterReset_ReturnsAutoSelected()
+    public void ResolveQueryLanguage_WhenTargetAutoAndSourceIsFirst_UsesSecondLanguage()
     {
-        // Manual selection, then reset (simulates window close/reopen)
-        _selector.MarkManualSelection();
-        _selector.Reset();
+        var result = _selector.ResolveQueryLanguage(
+            Language.SimplifiedChinese,
+            Language.Auto,
+            Language.SimplifiedChinese,
+            grammarCorrectionAvailable: true);
 
-        var result = _selector.ResolveTargetLanguage(
-            Language.English, Language.English, _detectionService);
-
-        // Should be back to auto-selection, not same as source
-        result.Should().NotBe(Language.English, "after reset, auto-selection should be active again");
+        result.EffectiveMode.Should().Be(QueryMode.Translation);
+        result.IsTargetAuto.Should().BeTrue();
+        result.EffectiveTargetLanguage.Should().Be(Language.English);
+        result.GrammarCorrectionRequested.Should().BeFalse();
     }
 
     [Fact]
-    public void Reset_CanBeCalledMultipleTimes()
+    public void ResolveQueryLanguage_WhenTargetAutoAndSourceIsSecond_UsesFirstLanguage()
     {
-        var act = () =>
-        {
-            _selector.Reset();
-            _selector.Reset();
-            _selector.Reset();
-        };
+        var result = _selector.ResolveQueryLanguage(
+            Language.English,
+            Language.Auto,
+            Language.English,
+            grammarCorrectionAvailable: true);
 
-        act.Should().NotThrow();
-        _selector.IsManualSelection.Should().BeFalse();
-    }
-
-    // --- Auto-select disabled ---
-
-    [Fact]
-    public void ResolveTargetLanguage_WhenAutoSelectDisabled_UsesCurrentTarget()
-    {
-        var original = _settings.AutoSelectTargetLanguage;
-        try
-        {
-            _settings.AutoSelectTargetLanguage = false;
-
-            var result = _selector.ResolveTargetLanguage(
-                Language.English, Language.Japanese, _detectionService);
-
-            result.Should().Be(Language.Japanese, "auto-select is disabled, should use current target");
-        }
-        finally
-        {
-            _settings.AutoSelectTargetLanguage = original;
-        }
+        result.EffectiveMode.Should().Be(QueryMode.Translation);
+        result.EffectiveTargetLanguage.Should().Be(Language.SimplifiedChinese);
     }
 
     [Fact]
-    public void ResolveTargetLanguage_WhenAutoSelectDisabled_ManualFlagIrrelevant()
+    public void ResolveQueryLanguage_WhenBothAutoAndDetectedSourceIsFirst_UsesSecondLanguage()
     {
-        var original = _settings.AutoSelectTargetLanguage;
-        try
-        {
-            _settings.AutoSelectTargetLanguage = false;
+        var result = _selector.ResolveQueryLanguage(
+            Language.Auto,
+            Language.Auto,
+            Language.SimplifiedChinese,
+            grammarCorrectionAvailable: true);
 
-            // Without manual selection
-            var result = _selector.ResolveTargetLanguage(
-                Language.English, Language.Korean, _detectionService);
-            result.Should().Be(Language.Korean);
-
-            // With manual selection too
-            _selector.MarkManualSelection();
-            var result2 = _selector.ResolveTargetLanguage(
-                Language.English, Language.Korean, _detectionService);
-            result2.Should().Be(Language.Korean);
-        }
-        finally
-        {
-            _settings.AutoSelectTargetLanguage = original;
-        }
-    }
-
-    // --- Null argument validation ---
-
-    [Fact]
-    public void ResolveTargetLanguage_WithNullDetectionService_ThrowsArgumentNullException()
-    {
-        var act = () => _selector.ResolveTargetLanguage(
-            Language.English, Language.Japanese, null!);
-
-        act.Should().Throw<ArgumentNullException>()
-            .WithParameterName("detectionService");
-    }
-
-    // --- Same-language reversal ---
-
-    [Fact]
-    public void ResolveTargetLanguage_ManualMode_SameAsSource_ReversesToSecondLanguage()
-    {
-        // Default: FirstLanguage=zh, SecondLanguage=en
-        // Source is Chinese (first lang), manual target is also Chinese -> should reverse to English (second)
-        _selector.MarkManualSelection();
-
-        var result = _selector.ResolveTargetLanguage(
-            Language.SimplifiedChinese, Language.SimplifiedChinese, _detectionService);
-
-        result.Should().Be(Language.English, "source == first language, should reverse to second language");
+        result.EffectiveMode.Should().Be(QueryMode.Translation);
+        result.EffectiveSourceLanguage.Should().Be(Language.SimplifiedChinese);
+        result.EffectiveTargetLanguage.Should().Be(Language.English);
     }
 
     [Fact]
-    public void ResolveTargetLanguage_ManualMode_SameAsSource_ReversesToFirstLanguage()
+    public void ResolveQueryLanguage_WhenExplicitSameLanguageAndGrammarAvailable_UsesGrammarCorrection()
     {
-        // Source is English (second lang), manual target is also English -> should reverse to Chinese (first)
-        _selector.MarkManualSelection();
+        var result = _selector.ResolveQueryLanguage(
+            Language.English,
+            Language.English,
+            Language.English,
+            grammarCorrectionAvailable: true);
 
-        var result = _selector.ResolveTargetLanguage(
-            Language.English, Language.English, _detectionService);
-
-        result.Should().Be(Language.SimplifiedChinese, "source == second language, should reverse to first language");
+        result.EffectiveMode.Should().Be(QueryMode.GrammarCorrection);
+        result.EffectiveSourceLanguage.Should().Be(Language.English);
+        result.EffectiveTargetLanguage.Should().Be(Language.English);
+        result.GrammarCorrectionRequested.Should().BeTrue();
+        result.GrammarCorrectionFallback.Should().BeFalse();
     }
 
     [Fact]
-    public void ResolveTargetLanguage_ManualMode_SameAsSource_NeitherFirstNorSecond_FallsBackToFirst()
+    public void ResolveQueryLanguage_WhenExplicitSameLanguageAndGrammarUnavailable_FallsBackToTranslation()
     {
-        // Source is Japanese (neither first nor second), manual target is also Japanese
-        // -> should fall back to first language (Chinese)
-        _selector.MarkManualSelection();
+        var result = _selector.ResolveQueryLanguage(
+            Language.English,
+            Language.English,
+            Language.English,
+            grammarCorrectionAvailable: false);
 
-        var result = _selector.ResolveTargetLanguage(
-            Language.Japanese, Language.Japanese, _detectionService);
-
-        result.Should().Be(Language.SimplifiedChinese, "source is neither first nor second, should fall back to first language");
+        result.EffectiveMode.Should().Be(QueryMode.Translation);
+        result.EffectiveTargetLanguage.Should().Be(Language.SimplifiedChinese);
+        result.GrammarCorrectionRequested.Should().BeTrue();
+        result.GrammarCorrectionFallback.Should().BeTrue();
     }
 
     [Fact]
-    public void ResolveTargetLanguage_ManualMode_DifferentFromSource_NoReversal()
+    public void ResolveQueryLanguage_WhenExplicitDifferentLanguage_UsesTranslation()
     {
-        // Source is English, manual target is Japanese -> different, no reversal needed
-        _selector.MarkManualSelection();
+        var result = _selector.ResolveQueryLanguage(
+            Language.English,
+            Language.Japanese,
+            Language.English,
+            grammarCorrectionAvailable: true);
 
-        var result = _selector.ResolveTargetLanguage(
-            Language.English, Language.Japanese, _detectionService);
-
-        result.Should().Be(Language.Japanese, "source != target, no reversal needed");
+        result.EffectiveMode.Should().Be(QueryMode.Translation);
+        result.EffectiveTargetLanguage.Should().Be(Language.Japanese);
+        result.GrammarCorrectionRequested.Should().BeFalse();
+        result.GrammarCorrectionFallback.Should().BeFalse();
     }
 
     [Fact]
-    public void ResolveTargetLanguage_AutoSelectDisabled_SameAsSource_StillReverses()
+    public void ResolveQueryLanguage_WhenSourceDetectionUnknownAndTargetExplicit_DoesNotEnterGrammar()
     {
-        // Even with auto-select disabled, same-language should be reversed
-        var original = _settings.AutoSelectTargetLanguage;
-        try
-        {
-            _settings.AutoSelectTargetLanguage = false;
+        var result = _selector.ResolveQueryLanguage(
+            Language.Auto,
+            Language.English,
+            Language.Auto,
+            grammarCorrectionAvailable: true);
 
-            var result = _selector.ResolveTargetLanguage(
-                Language.English, Language.English, _detectionService);
-
-            result.Should().NotBe(Language.English, "same-language reversal should apply even when auto-select is disabled");
-        }
-        finally
-        {
-            _settings.AutoSelectTargetLanguage = original;
-        }
+        result.EffectiveMode.Should().Be(QueryMode.Translation);
+        result.EffectiveTargetLanguage.Should().Be(Language.English);
+        result.GrammarCorrectionRequested.Should().BeFalse();
     }
 
     [Fact]
-    public void ResolveTargetLanguage_AutoMode_SourceIsAuto_NoReversal()
+    public void ResolveDifferentTargetLanguage_PrefersFirstSecondLanguages()
     {
-        // When source is Auto (not yet detected), skip reversal logic
-        var result = _selector.ResolveTargetLanguage(
-            Language.Auto, Language.English, _detectionService);
+        _selector.ResolveDifferentTargetLanguage(Language.SimplifiedChinese)
+            .Should().Be(Language.English);
 
-        // Should just return auto-selected target without reversal
-        // (Auto source cannot meaningfully be compared)
-        result.Should().NotBe(Language.Auto);
-    }
-
-    // --- Full workflow simulation ---
-
-    [Fact]
-    public void FullWorkflow_InitAutoSelect_ManualOverride_PersistsUntilReset()
-    {
-        // Step 1: Initial state - auto-select is active
-        var r1 = _selector.ResolveTargetLanguage(
-            Language.English, Language.English, _detectionService);
-        r1.Should().NotBe(Language.English, "initially, auto-select should be active and avoid same-language");
-
-        // Step 2: User manually selects a language
-        _selector.MarkManualSelection();
-
-        // Step 3: Multiple queries - manual selection persists
-        _selector.ResolveTargetLanguage(Language.English, Language.Japanese, _detectionService)
-            .Should().Be(Language.Japanese, "manual selection persists");
-        _selector.ResolveTargetLanguage(Language.SimplifiedChinese, Language.Japanese, _detectionService)
-            .Should().Be(Language.Japanese, "manual selection persists across different texts");
-
-        // Step 4: Window closes and reopens (reset)
-        _selector.Reset();
-
-        // Step 5: Back to auto-select
-        var r5 = _selector.ResolveTargetLanguage(
-            Language.English, Language.English, _detectionService);
-        r5.Should().NotBe(Language.English, "after reset, auto-select should be active again");
-    }
-
-    [Fact]
-    public void FullWorkflow_ManualSelection_SameLanguage_AutoReverses()
-    {
-        // User manually selects Chinese as target, then types Chinese text
-        _selector.MarkManualSelection();
-
-        // Source is Chinese, target is Chinese -> should auto-reverse to English
-        var result = _selector.ResolveTargetLanguage(
-            Language.SimplifiedChinese, Language.SimplifiedChinese, _detectionService);
-        result.Should().Be(Language.English, "same-language should auto-reverse even in manual mode");
-
-        // User then types English text with same manual Chinese target -> no reversal needed
-        var result2 = _selector.ResolveTargetLanguage(
-            Language.English, Language.SimplifiedChinese, _detectionService);
-        result2.Should().Be(Language.SimplifiedChinese, "different languages, no reversal");
+        _selector.ResolveDifferentTargetLanguage(Language.English)
+            .Should().Be(Language.SimplifiedChinese);
     }
 }

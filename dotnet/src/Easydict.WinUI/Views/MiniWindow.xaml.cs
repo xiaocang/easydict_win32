@@ -59,6 +59,8 @@ public sealed partial class MiniWindow : Window
     private bool _suppressTargetLanguageSelectionChanged;
     private bool _suppressSourceLanguageSelectionChanged;
     private QueryMode _currentMode = QueryMode.Translation;
+    private QuickQueryLanguageResolution? _lastQuickQueryResolution;
+    private bool _showingGrammarFallbackNotice;
     private TitleBarDragRegionHelper? _titleBarHelper;
     private bool _hasAutoPlayedCurrentQuery = false;
     private DateTime _lastShowTime = DateTime.MinValue;
@@ -164,9 +166,6 @@ public sealed partial class MiniWindow : Window
             _suppressTargetLanguageSelectionChanged = false;
         }
 
-        // Update query mode button emoji and tooltip
-        UpdateQueryModeButton();
-
         // Placeholders
         InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
 
@@ -177,54 +176,6 @@ public sealed partial class MiniWindow : Window
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
         ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
         ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
-    }
-
-    private void UpdateQueryModeButton()
-    {
-        bool isGrammar = _currentMode == QueryMode.GrammarCorrection;
-        QueryModeEmoji.Text = isGrammar ? "✏️" : "🌐";
-
-        var loc = LocalizationService.Instance;
-        var currentName = loc.GetString(isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
-            ?? (isGrammar ? "Grammar Check" : "Translate");
-        var otherName = loc.GetString(!isGrammar ? "QueryMode_GrammarCorrection" : "QueryMode_Translation")
-            ?? (!isGrammar ? "Grammar Check" : "Translate");
-        var fmt = loc.GetString("QueryModeButton_SwitchTooltip") ?? "{0} — click to switch to {1}";
-        ToolTipService.SetToolTip(QueryModeButton, string.Format(fmt, currentName, otherName));
-    }
-
-    private void OnQueryModeButtonClick(object sender, RoutedEventArgs e)
-    {
-        if (!_isLoaded) return;
-
-        _currentMode = _currentMode == QueryMode.GrammarCorrection
-            ? QueryMode.Translation
-            : QueryMode.GrammarCorrection;
-
-        UpdateQueryModeButton();
-        MiniWindowService.Instance.NotifyQueryModeChanged(_currentMode);
-
-        var loc = LocalizationService.Instance;
-        if (_currentMode == QueryMode.GrammarCorrection)
-        {
-            TargetLangCombo.Visibility = Visibility.Collapsed;
-            SwapButton.Visibility = Visibility.Collapsed;
-
-            InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder_Grammar")
-                ?? "Enter text to check grammar...";
-            ToolTipService.SetToolTip(TranslateButton,
-                loc.GetString("TranslateButton_Grammar_Tooltip") ?? "Check Grammar");
-        }
-        else
-        {
-            TargetLangCombo.Visibility = Visibility.Visible;
-            SwapButton.Visibility = Visibility.Visible;
-
-            InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
-            ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
-        }
-
-        InitializeServiceResults();
     }
 
     /// <summary>
@@ -408,6 +359,8 @@ public sealed partial class MiniWindow : Window
 
         // Get display names from TranslationManager (single source of truth)
         var manager = TranslationManagerService.Instance.Manager;
+        var grammarSourceLanguage = _lastQuickQueryResolution?.EffectiveSourceLanguage
+            ?? TranslationLanguage.Auto;
 
         foreach (var serviceId in enabledServices)
         {
@@ -416,9 +369,10 @@ public sealed partial class MiniWindow : Window
                 ? service.DisplayName
                 : serviceId;
 
-            // In grammar mode, only show LLM services that implement IGrammarCorrectionService
+            // In grammar mode, only show configured services that can correct grammar.
             if (_currentMode == QueryMode.GrammarCorrection &&
-                service is not IGrammarCorrectionService)
+                (service is null ||
+                 !GrammarCorrectionServiceAvailability.IsAvailable(service, grammarSourceLanguage)))
                 continue;
 
             // Get EnabledQuery setting (default true if not found)
@@ -445,6 +399,115 @@ public sealed partial class MiniWindow : Window
         }
 
         ReorderResultsPanel();
+    }
+
+    private bool HasEnabledGrammarCorrectionService(TranslationLanguage sourceLanguage)
+    {
+        var manager = TranslationManagerService.Instance.Manager;
+        return _settings.MiniWindowEnabledServices.Any(serviceId =>
+            manager.Services.TryGetValue(serviceId, out var service)
+            && GrammarCorrectionServiceAvailability.IsAvailable(service, sourceLanguage));
+    }
+
+    private QuickQueryLanguageResolution ResolveQuickQueryLanguage(
+        TranslationLanguage effectiveSource,
+        bool grammarCorrectionAvailable)
+    {
+        return _targetLanguageSelector.ResolveQueryLanguage(
+            GetSourceLanguage(),
+            GetTargetLanguage(),
+            effectiveSource,
+            grammarCorrectionAvailable);
+    }
+
+    private void ApplyQuickQueryResolution(
+        QuickQueryLanguageResolution resolution,
+        bool reinitializeServiceResults)
+    {
+        var previousMode = _currentMode;
+        _lastQuickQueryResolution = resolution;
+        _currentMode = resolution.EffectiveMode;
+        _showingGrammarFallbackNotice = resolution.GrammarCorrectionFallback;
+
+        var loc = LocalizationService.Instance;
+        InputTextBox.PlaceholderText = _currentMode == QueryMode.GrammarCorrection
+            ? loc.GetString("InputPlaceholder_Grammar")
+            : loc.GetString("InputPlaceholder");
+        ToolTipService.SetToolTip(
+            TranslateButton,
+            _currentMode == QueryMode.GrammarCorrection
+                ? loc.GetString("TranslateButton_Grammar_Tooltip")
+                : loc.GetString("TranslateTooltip"));
+
+        if (reinitializeServiceResults && previousMode != _currentMode)
+        {
+            InitializeServiceResults();
+        }
+        else
+        {
+            foreach (var serviceResult in _serviceResults)
+            {
+                serviceResult.CurrentMode = _currentMode;
+            }
+        }
+
+        UpdateQuickQueryModeStatus(resolution);
+    }
+
+    private void UpdateQuickQueryModeStatus(QuickQueryLanguageResolution resolution)
+    {
+        if (!_isLoaded || MinimalThemeService.IsActive)
+        {
+            DetectedLangText.Text = "";
+            DetectedLangText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var loc = LocalizationService.Instance;
+        if (resolution.GrammarCorrectionFallback)
+        {
+            DetectedLangText.Text = loc.GetStringOrDefault(
+                "GrammarCorrectionFallbackNotice",
+                "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.");
+            DetectedLangText.Visibility = Visibility.Visible;
+            RequestResize();
+            return;
+        }
+
+        if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
+        {
+            DetectedLangText.Text = loc.GetStringOrDefault(
+                "GrammarCorrectionActiveNotice",
+                "Grammar check mode: AI correction services will run. Choose a different target language to translate.");
+            DetectedLangText.Visibility = Visibility.Visible;
+            RequestResize();
+            return;
+        }
+
+        _showingGrammarFallbackNotice = false;
+        UpdateDetectedLanguageDisplay(resolution.EffectiveSourceLanguage);
+    }
+
+    private void RefreshQuickQueryModePreview()
+    {
+        var selectedSource = GetSourceLanguage();
+        var effectiveSource = selectedSource != TranslationLanguage.Auto
+            ? selectedSource
+            : _lastDetectedLanguage;
+
+        if (effectiveSource == TranslationLanguage.Auto)
+        {
+            if (!_showingGrammarFallbackNotice)
+            {
+                UpdateDetectedLanguageDisplay(effectiveSource);
+            }
+            return;
+        }
+
+        var resolution = ResolveQuickQueryLanguage(
+            effectiveSource,
+            HasEnabledGrammarCorrectionService(effectiveSource));
+        ApplyQuickQueryResolution(resolution, reinitializeServiceResults: true);
     }
 
     private void RebuildServiceResultControlsForCurrentTheme()
@@ -548,9 +611,14 @@ public sealed partial class MiniWindow : Window
             var detectedLanguage = _lastDetectedLanguage != TranslationLanguage.Auto
                 ? _lastDetectedLanguage
                 : await Task.Run(() => _detectionService.DetectAsync(inputText, ct));
+            _lastDetectedLanguage = detectedLanguage;
+            var resolution = ResolveQuickQueryLanguage(
+                detectedLanguage,
+                HasEnabledGrammarCorrectionService(detectedLanguage));
+            serviceResult.CurrentMode = resolution.EffectiveMode;
 
             // Grammar mode: route to grammar correction instead of translation
-            if (_currentMode == QueryMode.GrammarCorrection)
+            if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
             {
                 var grammarRequest = new GrammarCorrectionRequest
                 {
@@ -563,7 +631,13 @@ public sealed partial class MiniWindow : Window
             }
 
             // Get target language
-            var targetLanguage = GetTargetLanguage();
+            var targetLanguage = resolution.EffectiveTargetLanguage;
+            if (targetLanguage == TranslationLanguage.Auto)
+            {
+                serviceResult.IsLoading = false;
+                serviceResult.ClearQueried();
+                return;
+            }
 
             // Create request
             var request = new TranslationRequest
@@ -982,6 +1056,46 @@ public sealed partial class MiniWindow : Window
 
         try
         {
+            var sourceLanguage = GetSourceLanguage();
+            TranslationLanguage detectedLanguage;
+            if (sourceLanguage == TranslationLanguage.Auto)
+            {
+                detectedLanguage = await Task.Run(() => detectionService.DetectAsync(inputText, ct));
+                UpdateDetectedLanguageDisplay(detectedLanguage);
+            }
+            else
+            {
+                detectedLanguage = sourceLanguage;
+                DetectedLangText.Text = "";
+                DetectedLangText.Visibility = Visibility.Collapsed;
+            }
+            _lastDetectedLanguage = detectedLanguage;
+
+            var resolution = ResolveQuickQueryLanguage(
+                detectedLanguage,
+                HasEnabledGrammarCorrectionService(detectedLanguage));
+            ApplyQuickQueryResolution(resolution, reinitializeServiceResults: true);
+
+            var targetLanguage = resolution.EffectiveTargetLanguage;
+            if (resolution.GrammarCorrectionFallback && targetLanguage != TranslationLanguage.Auto)
+            {
+                UpdateTargetLanguageSelector(targetLanguage);
+                StatusText.Text = LocalizationService.Instance.GetString("GrammarCorrectionFallbackNotice");
+            }
+
+            if (_serviceResults.Count == 0)
+            {
+                StatusText.Text = LocalizationService.Instance.GetString("NoServicesEnabled");
+                return;
+            }
+
+            if (resolution.EffectiveMode == QueryMode.Translation &&
+                targetLanguage == TranslationLanguage.Auto)
+            {
+                StatusText.Text = LocalizationService.Instance.GetString("NoAvailableTargetLanguage");
+                return;
+            }
+
             var phiSilicaPromptResult = await PhiSilicaModelPreparationPromptService.PromptAndPrepareIfNeededAsync(
                 _serviceResults.Where(result => result.EnabledQuery),
                 _settings,
@@ -991,6 +1105,32 @@ public sealed partial class MiniWindow : Window
             if (phiSilicaPromptResult == PhiSilicaModelPreparationPromptResult.Disabled)
             {
                 InitializeServiceResults();
+                if (resolution.EffectiveMode == QueryMode.GrammarCorrection &&
+                    !HasEnabledGrammarCorrectionService(detectedLanguage))
+                {
+                    resolution = ResolveQuickQueryLanguage(
+                        detectedLanguage,
+                        grammarCorrectionAvailable: false);
+                    ApplyQuickQueryResolution(resolution, reinitializeServiceResults: true);
+                    targetLanguage = resolution.EffectiveTargetLanguage;
+                    if (targetLanguage != TranslationLanguage.Auto)
+                    {
+                        UpdateTargetLanguageSelector(targetLanguage);
+                    }
+                    StatusText.Text = LocalizationService.Instance.GetStringOrDefault(
+                        "GrammarCorrectionFallbackNotice",
+                        "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.");
+                }
+
+                if (resolution.EffectiveMode == QueryMode.Translation &&
+                    targetLanguage == TranslationLanguage.Auto)
+                {
+                    StatusText.Text = LocalizationService.Instance.GetStringOrDefault(
+                        "NoAvailableTargetLanguage",
+                        "No available target language for translation.");
+                    return;
+                }
+
                 if (!_serviceResults.Any(result => result.EnabledQuery))
                 {
                     return;
@@ -1011,37 +1151,11 @@ public sealed partial class MiniWindow : Window
                 }
             }
 
-            // Route based on mode
-            if (_currentMode == QueryMode.GrammarCorrection)
+            // Route based on effective quick-query mode
+            if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
             {
-                await StartGrammarCorrectionInternalAsync(inputText, detectionService, ct);
+                await StartGrammarCorrectionInternalAsync(inputText, detectedLanguage, ct);
                 return;
-            }
-
-            // Detect language (only when source = Auto)
-            // Run detection on thread pool to avoid blocking UI thread
-            var sourceLanguage = GetSourceLanguage();
-            TranslationLanguage detectedLanguage;
-            if (sourceLanguage == TranslationLanguage.Auto)
-            {
-                detectedLanguage = await Task.Run(() => detectionService.DetectAsync(inputText, ct));
-                UpdateDetectedLanguageDisplay(detectedLanguage);
-            }
-            else
-            {
-                detectedLanguage = sourceLanguage;
-                DetectedLangText.Text = "";
-                DetectedLangText.Visibility = Visibility.Collapsed;
-            }
-            _lastDetectedLanguage = detectedLanguage;
-
-            // Determine target language
-            var currentTarget = GetTargetLanguage();
-            var targetLanguage = _targetLanguageSelector.ResolveTargetLanguage(
-                detectedLanguage, currentTarget, detectionService);
-            if (targetLanguage != currentTarget)
-            {
-                UpdateTargetLanguageSelector(targetLanguage);
             }
 
             // Create translation request
@@ -1236,34 +1350,9 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     private async Task StartGrammarCorrectionInternalAsync(
         string inputText,
-        LanguageDetectionService detectionService,
+        TranslationLanguage detectedLang,
         CancellationToken ct)
     {
-        // Optional: detect language for prompt hint only
-        var detectedLang = TranslationLanguage.Auto;
-        var sourceLanguage = GetSourceLanguage();
-        if (sourceLanguage != TranslationLanguage.Auto)
-        {
-            detectedLang = sourceLanguage;
-        }
-        else
-        {
-            try
-            {
-                detectedLang = await Task.Run(() => detectionService.DetectAsync(inputText, ct));
-                UpdateDetectedLanguageDisplay(detectedLang);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch
-            {
-                DetectedLangText.Text = "";
-                DetectedLangText.Visibility = Visibility.Collapsed;
-            }
-        }
-
         var request = new GrammarCorrectionRequest
         {
             Text = inputText,
@@ -1709,41 +1798,34 @@ public sealed partial class MiniWindow : Window
     private void OnSwapClicked(object sender, RoutedEventArgs e)
     {
         var sourceLanguage = GetSourceLanguage();
+        var currentTarget = GetTargetLanguage();
 
-        if (sourceLanguage == TranslationLanguage.Auto)
+        if (sourceLanguage == currentTarget)
         {
-            // Source is Auto: swap target to detected language
-            if (_lastDetectedLanguage == TranslationLanguage.Auto)
-                return;
-
-            UpdateTargetLanguageSelector(_lastDetectedLanguage);
-            _targetLanguageSelector.MarkManualSelection();
+            return;
         }
-        else
+
+        var newSource = currentTarget;
+        var newTarget = sourceLanguage;
+
+        _suppressSourceLanguageSelectionChanged = true;
+        try
         {
-            // Source is specific: swap source ↔ target
-            var currentTarget = GetTargetLanguage();
-            var newSource = currentTarget;
-            var newTarget = sourceLanguage;
+            var srcIdx = LanguageComboHelper.FindLanguageIndex(SourceLangCombo, newSource);
+            if (srcIdx >= 0) SourceLangCombo.SelectedIndex = srcIdx;
+        }
+        finally
+        {
+            _suppressSourceLanguageSelectionChanged = false;
+        }
 
-            _suppressSourceLanguageSelectionChanged = true;
-            try
-            {
-                var srcIdx = LanguageComboHelper.FindLanguageIndex(SourceLangCombo, newSource);
-                if (srcIdx >= 0) SourceLangCombo.SelectedIndex = srcIdx;
-            }
-            finally
-            {
-                _suppressSourceLanguageSelectionChanged = false;
-            }
+        RebuildTargetCombo(newTarget);
+        _targetLanguageSelector.MarkManualSelection();
+        RefreshQuickQueryModePreview();
 
-            RebuildTargetCombo(newSource, newTarget);
-            _targetLanguageSelector.MarkManualSelection();
-
-            if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
-            {
-                _ = StartQueryTrackedAsync();
-            }
+        if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
+        {
+            _ = StartQueryTrackedAsync();
         }
     }
 
@@ -1755,9 +1837,9 @@ public sealed partial class MiniWindow : Window
         if (!_isLoaded || _suppressSourceLanguageSelectionChanged)
             return;
 
-        var sourceLanguage = GetSourceLanguage();
         var currentTarget = GetTargetLanguage();
-        RebuildTargetCombo(sourceLanguage, currentTarget);
+        RebuildTargetCombo(currentTarget);
+        RefreshQuickQueryModePreview();
 
         if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
         {
@@ -1765,17 +1847,14 @@ public sealed partial class MiniWindow : Window
         }
     }
 
-    /// <summary>
-    /// Rebuild target combo excluding the source language.
-    /// </summary>
-    private void RebuildTargetCombo(TranslationLanguage sourceLanguage, TranslationLanguage currentTarget)
+    private void RebuildTargetCombo(TranslationLanguage currentTarget)
     {
         var loc = LocalizationService.Instance;
         _suppressTargetLanguageSelectionChanged = true;
         try
         {
             LanguageComboHelper.RebuildTargetCombo(
-                TargetLangCombo, sourceLanguage, currentTarget, loc, out var newTarget);
+                TargetLangCombo, currentTarget, loc, out var newTarget);
             if (newTarget != currentTarget)
             {
                 _targetLanguageSelector.MarkManualSelection();
@@ -1796,6 +1875,11 @@ public sealed partial class MiniWindow : Window
         }
 
         _targetLanguageSelector.MarkManualSelection();
+        RefreshQuickQueryModePreview();
+        if (!string.IsNullOrWhiteSpace(InputTextBox.Text))
+        {
+            _ = StartQueryTrackedAsync();
+        }
     }
 
     /// <summary>

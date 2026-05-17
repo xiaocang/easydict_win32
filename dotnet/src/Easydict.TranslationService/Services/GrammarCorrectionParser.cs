@@ -5,7 +5,9 @@ namespace Easydict.TranslationService.Services;
 /// <summary>
 /// Parses structured grammar correction output from LLM services.
 /// Expected format uses [CORRECTED]...[/CORRECTED] and [EXPLANATION]...[/EXPLANATION] markers.
-/// Falls back to treating the entire output as corrected text if markers are absent.
+/// Also supports the legacy shared prompt format: corrected text, a line containing "---",
+/// then a brief explanation. Falls back to treating the entire output as corrected text
+/// if no known structure is present.
 /// </summary>
 public static class GrammarCorrectionParser
 {
@@ -37,11 +39,34 @@ public static class GrammarCorrectionParser
             };
         }
 
-        var correctedText = ExtractSection(rawOutput, CorrectedOpenTag, CorrectedCloseTag);
-        var explanation = ExtractSection(rawOutput, ExplanationOpenTag, ExplanationCloseTag);
+        var output = StripMisplacedLeadingSeparator(rawOutput);
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return new GrammarCorrectionResult
+            {
+                OriginalText = originalText,
+                CorrectedText = originalText,
+                Explanation = null,
+                ServiceName = serviceName,
+                TimingMs = timingMs,
+            };
+        }
 
-        // Fallback: if no markers found, treat entire output as corrected text
-        correctedText ??= rawOutput.Trim();
+        var correctedText = ExtractSection(output, CorrectedOpenTag, CorrectedCloseTag);
+        var explanation = ExtractSection(output, ExplanationOpenTag, ExplanationCloseTag);
+
+        if (correctedText is null)
+        {
+            var legacy = TryParseLegacySeparatorFormat(output);
+            if (legacy is not null)
+            {
+                correctedText = legacy.Value.CorrectedText;
+                explanation = legacy.Value.Explanation;
+            }
+        }
+
+        // Fallback: if no structure is found, treat entire output as corrected text.
+        correctedText ??= output.Trim();
 
         return new GrammarCorrectionResult
         {
@@ -69,5 +94,41 @@ public static class GrammarCorrectionParser
 
         var section = text[startIndex..endIndex].Trim();
         return string.IsNullOrEmpty(section) ? null : section;
+    }
+
+    private static string StripMisplacedLeadingSeparator(string text)
+    {
+        var trimmed = text.TrimStart();
+        if (!trimmed.StartsWith("---", StringComparison.Ordinal))
+        {
+            return text;
+        }
+
+        if (trimmed.Length > 3 && !char.IsWhiteSpace(trimmed[3]))
+        {
+            return text;
+        }
+
+        return trimmed[3..].TrimStart();
+    }
+
+    private static (string CorrectedText, string? Explanation)? TryParseLegacySeparatorFormat(string text)
+    {
+        var normalized = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        var lines = normalized.Split('\n');
+        var separatorIndex = Array.FindIndex(lines, line => line.Trim() == "---");
+        if (separatorIndex < 0)
+        {
+            return null;
+        }
+
+        var correctedText = string.Join('\n', lines.Take(separatorIndex)).Trim();
+        if (string.IsNullOrEmpty(correctedText))
+        {
+            return null;
+        }
+
+        var explanation = string.Join('\n', lines.Skip(separatorIndex + 1)).Trim();
+        return (correctedText, string.IsNullOrEmpty(explanation) ? null : explanation);
     }
 }

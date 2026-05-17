@@ -526,6 +526,26 @@ public class PhiSilicaTranslationServiceTests
         prompt.Should().NotContain("Additional user instruction");
     }
 
+    [Fact]
+    public void BuildGrammarCorrectionPrompt_UsesSharedExplanationFormat()
+    {
+        var request = new GrammarCorrectionRequest
+        {
+            Text = "He go to school.",
+            Language = Language.English,
+            IncludeExplanations = true,
+        };
+
+        var prompt = PhiSilicaTranslationService.BuildGrammarCorrectionPrompt(request);
+
+        prompt.Should().Contain("First output the fully corrected text");
+        prompt.Should().Contain("\"---\"");
+        prompt.Should().Contain("NEVER put \"---\" before the corrected text");
+        prompt.Should().Contain("He go to school.");
+        prompt.Should().NotContain("[CORRECTED]");
+        prompt.Should().NotContain("[EXPLANATION]");
+    }
+
     private static int CountOccurrences(string text, string value) =>
         text.Split(value, StringSplitOptions.None).Length - 1;
 

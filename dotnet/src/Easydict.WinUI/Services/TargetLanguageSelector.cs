@@ -6,14 +6,11 @@ namespace Easydict.WinUI.Services;
 /// <summary>
 /// Manages target language selection state for a translation window.
 /// Tracks whether the user has manually selected a target language and
-/// determines the appropriate target language for each query.
+/// determines the appropriate language route for each query.
 ///
 /// Once the user manually selects a target language (via combo box or swap),
 /// that selection is preserved until <see cref="Reset"/> is called
 /// (typically on window close/reopen).
-///
-/// In all modes (auto, manual, auto-select-disabled), same-language translation
-/// is prevented by reversing first↔second language when source == target.
 /// </summary>
 public sealed class TargetLanguageSelector
 {
@@ -51,52 +48,115 @@ public sealed class TargetLanguageSelector
     }
 
     /// <summary>
-    /// Resolve the target language for a query.
-    /// In auto mode, auto-selects the target language via the detection service.
-    /// In manual mode or when auto-select is disabled, uses <paramref name="currentTarget"/>.
-    /// In all modes, prevents same-language translation by reversing first↔second language.
+    /// Resolve the language route for a quick query.
     /// </summary>
-    /// <param name="detectedSource">The detected source language.</param>
-    /// <param name="currentTarget">The current target language from the UI combo box.</param>
-    /// <param name="detectionService">The language detection service for auto-selection.</param>
-    /// <returns>The resolved target language (never the same as source).</returns>
-    public Language ResolveTargetLanguage(
-        Language detectedSource,
-        Language currentTarget,
-        LanguageDetectionService detectionService)
+    public QuickQueryLanguageResolution ResolveQueryLanguage(
+        Language selectedSource,
+        Language selectedTarget,
+        Language effectiveSource,
+        bool grammarCorrectionAvailable)
     {
-        if (detectionService is null)
-            throw new ArgumentNullException(nameof(detectionService));
+        var isTargetAuto = selectedTarget == Language.Auto;
+        var target = isTargetAuto
+            ? ResolveAutoTargetLanguage(effectiveSource)
+            : selectedTarget;
 
-        Language target;
+        var grammarRequested = effectiveSource != Language.Auto
+            && !isTargetAuto
+            && target == effectiveSource;
 
-        if (_isManualSelection || !_settings.AutoSelectTargetLanguage)
+        if (grammarRequested && grammarCorrectionAvailable)
         {
-            target = currentTarget;
-            Debug.WriteLine($"[TargetLanguageSelector] Using {(_isManualSelection ? "manual" : "settings")} selection: {target}");
-        }
-        else
-        {
-            target = detectionService.GetTargetLanguage(detectedSource);
-            Debug.WriteLine($"[TargetLanguageSelector] Auto-selected: {target}");
-        }
-
-        // Prevent same-language translation
-        if (detectedSource != Language.Auto && target == detectedSource)
-        {
-            var firstLang = LanguageExtensions.FromCode(_settings.FirstLanguage);
-            var secondLang = LanguageExtensions.FromCode(_settings.SecondLanguage);
-
-            if (detectedSource == firstLang)
-                target = secondLang;
-            else if (detectedSource == secondLang)
-                target = firstLang;
-            else
-                target = firstLang;
-
-            Debug.WriteLine($"[TargetLanguageSelector] Same-language reversal: {detectedSource} -> {target}");
+            Debug.WriteLine($"[TargetLanguageSelector] Same-language route resolved as grammar correction: {effectiveSource}");
+            return new QuickQueryLanguageResolution(
+                selectedSource,
+                selectedTarget,
+                effectiveSource,
+                effectiveSource,
+                QueryMode.GrammarCorrection,
+                isTargetAuto,
+                GrammarCorrectionRequested: true,
+                GrammarCorrectionFallback: false);
         }
 
+        var fallback = false;
+        if (grammarRequested)
+        {
+            target = ResolveDifferentTargetLanguage(effectiveSource);
+            fallback = target != Language.Auto && target != effectiveSource;
+            Debug.WriteLine($"[TargetLanguageSelector] Grammar correction unavailable, fallback target: {target}");
+        }
+
+        return new QuickQueryLanguageResolution(
+            selectedSource,
+            selectedTarget,
+            effectiveSource,
+            target,
+            QueryMode.Translation,
+            isTargetAuto,
+            grammarRequested,
+            fallback);
+    }
+
+    /// <summary>
+    /// Resolve an automatic target language using Easydict macOS's first/second-language rule.
+    /// </summary>
+    public Language ResolveAutoTargetLanguage(Language source)
+    {
+        var firstLang = LanguageExtensions.FromCode(_settings.FirstLanguage);
+        var secondLang = LanguageExtensions.FromCode(_settings.SecondLanguage);
+
+        var target = firstLang;
+        if (source == firstLang)
+        {
+            target = secondLang;
+        }
+
+        if (target == source)
+        {
+            target = ResolveDifferentTargetLanguage(source);
+        }
+
+        Debug.WriteLine($"[TargetLanguageSelector] Auto target resolved: source={source}, target={target}");
         return target;
     }
+
+    /// <summary>
+    /// Resolve a normal translation fallback target that differs from the source.
+    /// </summary>
+    public Language ResolveDifferentTargetLanguage(Language source)
+    {
+        var firstLang = LanguageExtensions.FromCode(_settings.FirstLanguage);
+        var secondLang = LanguageExtensions.FromCode(_settings.SecondLanguage);
+
+        if (source != firstLang && firstLang != Language.Auto)
+            return firstLang;
+
+        if (source != secondLang && secondLang != Language.Auto)
+            return secondLang;
+
+        foreach (var entry in LanguageComboHelper.SelectableLanguages)
+        {
+            if (entry.Language != source)
+                return entry.Language;
+        }
+
+        if (source != Language.English)
+            return Language.English;
+
+        if (source != Language.SimplifiedChinese)
+            return Language.SimplifiedChinese;
+
+        return Language.Auto;
+    }
 }
+
+public sealed record QuickQueryLanguageResolution(
+    Language SelectedSourceLanguage,
+    Language SelectedTargetLanguage,
+    Language EffectiveSourceLanguage,
+    Language EffectiveTargetLanguage,
+    QueryMode EffectiveMode,
+    bool IsTargetAuto,
+    bool GrammarCorrectionRequested,
+    bool GrammarCorrectionFallback);

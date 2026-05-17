@@ -71,7 +71,7 @@
     <value>Source Language</value>
   </data>
   <data name="TargetLanguageTooltip" xml:space="preserve">
-    <value>Target Language</value>
+    <value>Target Language. Choose the same language as the source to check grammar; choose another target to translate.</value>
   </data>
 
   <!-- Status -->
@@ -811,6 +811,15 @@
   </data>
   <data name="TranslateButton_Grammar_Tooltip" xml:space="preserve">
     <value>Check Grammar</value>
+  </data>
+  <data name="GrammarCorrectionActiveNotice" xml:space="preserve">
+    <value>Grammar check mode: AI correction services will run. Choose a different target language to translate.</value>
+  </data>
+  <data name="GrammarCorrectionFallbackNotice" xml:space="preserve">
+    <value>No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.</value>
+  </data>
+  <data name="NoAvailableTargetLanguage" xml:space="preserve">
+    <value>No available target language for translation.</value>
   </data>
   <data name="GrammarResult_Original" xml:space="preserve">
     <value>Original:</value>

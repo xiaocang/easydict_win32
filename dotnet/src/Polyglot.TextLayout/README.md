@@ -27,15 +27,17 @@ using Polyglot.TextLayout.Preparation;
 using Polyglot.TextLayout.Layout;
 
 ITextMeasurer measurer = new MyMeasurer();           // your impl
-var engine = new TextLayoutEngine(measurer);
+var engine = TextLayoutEngine.Instance;
 
-var prepared = engine.Prepare(new TextPrepareRequest
-{
-    Text = "今日は世界、Hello world!",
-    FontSize = 14.0,
-});
+var prepared = engine.Prepare(
+    new TextPrepareRequest
+    {
+        Text = "今日は世界、Hello world!",
+        FontSize = 14.0,
+    },
+    measurer);
 
-LayoutResult result = engine.Layout(prepared, maxWidth: 240);
+LayoutLinesResult result = engine.LayoutWithLines(prepared, maxWidth: 240);
 foreach (var line in result.Lines)
 {
     Console.WriteLine(line.Text);

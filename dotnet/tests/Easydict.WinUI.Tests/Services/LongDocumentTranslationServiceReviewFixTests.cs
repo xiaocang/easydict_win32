@@ -904,11 +904,45 @@ public class LongDocumentTranslationServiceReviewFixTests
         initialOptions.EnableQualityFeedbackRetry.Should().BeTrue();
         initialOptions.MaxRetriesPerBlock.Should().Be(1);
         initialOptions.EnableOcrFallback.Should().BeTrue();
+        initialOptions.MaxConcurrency.Should().Be(4);
+        initialOptions.RequestTimeoutMs.Should().Be(30_000);
+        initialOptions.EnableDocumentContextPass.Should().BeTrue();
 
         retryOptions.EnableFormulaProtection.Should().BeTrue();
         retryOptions.EnableQualityFeedbackRetry.Should().BeTrue();
         retryOptions.MaxRetriesPerBlock.Should().Be(1);
         retryOptions.EnableOcrFallback.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CreateCoreTranslationOptions_ShouldUseConservativeProfile_ForFoundryLocalLongDocument()
+    {
+        var settings = SettingsService.Instance;
+        var originalProvider = settings.LocalAIProvider;
+
+        try
+        {
+            settings.LocalAIProvider = nameof(LocalAIProviderMode.FoundryLocal);
+
+            var options = WinUiLongDocumentTranslationService.CreateCoreTranslationOptions(
+                LocalAITranslationService.ServiceIdValue,
+                Language.English,
+                Language.SimplifiedChinese,
+                enableOcrFallback: true,
+                maxConcurrency: 4,
+                formulaFontPattern: null,
+                formulaCharPattern: null,
+                customPrompt: null,
+                enableDocumentContextPass: true);
+
+            options.MaxConcurrency.Should().Be(1);
+            options.EnableDocumentContextPass.Should().BeFalse();
+            options.RequestTimeoutMs.Should().Be(120_000);
+        }
+        finally
+        {
+            settings.LocalAIProvider = originalProvider;
+        }
     }
 
     [Fact]

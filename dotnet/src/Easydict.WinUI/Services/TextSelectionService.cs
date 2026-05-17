@@ -118,6 +118,7 @@ public static class TextSelectionService
     private static readonly SemaphoreSlim _automationSemaphore = new(1, 1);
     private const int UiaSemaphoreTimeoutMs = 200;
     private const int UiaExecutionTimeoutMs = 800;
+    private const int DispatcherOperationTimeoutMs = 500;
 
     // Adaptive per-process suppression: after repeated non-text clipboard payloads
     // (e.g. PotPlayer's Ctrl+C copies the current frame as CF_BITMAP), skip the
@@ -146,18 +147,21 @@ public static class TextSelectionService
     /// Runs a synchronous function on the dispatcher thread and awaits the result.
     /// Unlike TryEnqueue + Task.Delay, this guarantees the work completes before continuing.
     /// </summary>
-    private static Task<T?> RunOnDispatcherAsync<T>(DispatcherQueue dispatcher, Func<T?> func)
+    private static Task<T?> RunOnDispatcherAsync<T>(
+        DispatcherQueue dispatcher,
+        Func<T?> func,
+        CancellationToken cancellationToken = default)
     {
-        var tcs = new TaskCompletionSource<T?>();
+        var tcs = new TaskCompletionSource<T?>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!dispatcher.TryEnqueue(() =>
         {
-            try { tcs.SetResult(func()); }
-            catch (Exception ex) { tcs.SetException(ex); }
+            try { tcs.TrySetResult(func()); }
+            catch (Exception ex) { tcs.TrySetException(ex); }
         }))
         {
-            tcs.SetException(new InvalidOperationException("Failed to enqueue on dispatcher"));
+            tcs.TrySetException(new InvalidOperationException("Failed to enqueue on dispatcher"));
         }
-        return tcs.Task;
+        return WaitForDispatcherOperationAsync(tcs.Task, cancellationToken);
     }
 
     /// <summary>
@@ -165,35 +169,81 @@ public static class TextSelectionService
     /// This avoids blocking the UI thread with .GetAwaiter().GetResult() when
     /// calling WinRT async APIs (e.g., Clipboard.GetTextAsync) on the dispatcher.
     /// </summary>
-    private static Task<T?> RunOnDispatcherAsync<T>(DispatcherQueue dispatcher, Func<Task<T?>> asyncFunc)
+    private static Task<T?> RunOnDispatcherAsync<T>(
+        DispatcherQueue dispatcher,
+        Func<Task<T?>> asyncFunc,
+        CancellationToken cancellationToken = default)
     {
-        var tcs = new TaskCompletionSource<T?>();
+        var tcs = new TaskCompletionSource<T?>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!dispatcher.TryEnqueue(async () =>
         {
-            try { tcs.SetResult(await asyncFunc()); }
-            catch (Exception ex) { tcs.SetException(ex); }
+            try { tcs.TrySetResult(await asyncFunc()); }
+            catch (Exception ex) { tcs.TrySetException(ex); }
         }))
         {
-            tcs.SetException(new InvalidOperationException("Failed to enqueue on dispatcher"));
+            tcs.TrySetException(new InvalidOperationException("Failed to enqueue on dispatcher"));
         }
-        return tcs.Task;
+        return WaitForDispatcherOperationAsync(tcs.Task, cancellationToken);
     }
 
     /// <summary>
     /// Runs an action on the dispatcher thread and awaits completion.
     /// </summary>
-    private static Task RunOnDispatcherAsync(DispatcherQueue dispatcher, Action action)
+    private static Task RunOnDispatcherAsync(
+        DispatcherQueue dispatcher,
+        Action action,
+        CancellationToken cancellationToken = default)
     {
-        var tcs = new TaskCompletionSource();
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!dispatcher.TryEnqueue(() =>
         {
-            try { action(); tcs.SetResult(); }
-            catch (Exception ex) { tcs.SetException(ex); }
+            try { action(); tcs.TrySetResult(); }
+            catch (Exception ex) { tcs.TrySetException(ex); }
         }))
         {
-            tcs.SetException(new InvalidOperationException("Failed to enqueue on dispatcher"));
+            tcs.TrySetException(new InvalidOperationException("Failed to enqueue on dispatcher"));
         }
-        return tcs.Task;
+        return WaitForDispatcherOperationAsync(tcs.Task, cancellationToken);
+    }
+
+    private static async Task<T?> WaitForDispatcherOperationAsync<T>(
+        Task<T?> task,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutCts = new CancellationTokenSource(DispatcherOperationTimeoutMs);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeoutCts.Token);
+
+        try
+        {
+            return await task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested
+            && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException("Dispatcher operation timed out.");
+        }
+    }
+
+    private static async Task WaitForDispatcherOperationAsync(
+        Task task,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutCts = new CancellationTokenSource(DispatcherOperationTimeoutMs);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeoutCts.Token);
+
+        try
+        {
+            await task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested
+            && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException("Dispatcher operation timed out.");
+        }
     }
 
     /// <summary>
@@ -505,7 +555,7 @@ public static class TextSelectionService
                     }
                     Debug.WriteLine("[TextSelectionService] Original clipboard has no text");
                     return null;
-                });
+                }, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -587,7 +637,7 @@ public static class TextSelectionService
                     }
                     Debug.WriteLine("[TextSelectionService] After SendCtrlC clipboard has no text");
                     return null;
-                });
+                }, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -604,7 +654,7 @@ public static class TextSelectionService
                                 (originalClipboard == null && selectedText != null);
             if (shouldRestore)
             {
-                // Fire-and-forget is acceptable for restore — it's non-critical
+                // Fire-and-forget is acceptable for restore — it's non-critical.
                 _ = RunOnDispatcherAsync(dispatcherQueue, () =>
                 {
                     if (originalClipboard != null)
@@ -617,7 +667,9 @@ public static class TextSelectionService
                     {
                         Clipboard.Clear();
                     }
-                });
+                }).ContinueWith(
+                    task => Debug.WriteLine($"[TextSelectionService] Clipboard restore failed: {task.Exception?.GetBaseException().Message}"),
+                    TaskContinuationOptions.OnlyOnFaulted);
             }
 
             var outcome = string.IsNullOrWhiteSpace(selectedText) ? ClipWaitResult.Timeout : ClipWaitResult.Success;
@@ -675,7 +727,7 @@ public static class TextSelectionService
                             text = await content.GetTextAsync();
                         }
                         return new ClipboardProbe(hasText, text, formats?.Count ?? 0);
-                    });
+                    }, cancellationToken);
 
                     if (probe is null)
                     {

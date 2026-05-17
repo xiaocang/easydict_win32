@@ -161,6 +161,7 @@ public sealed class DocumentContextExtractor
             Text = batch.Text,
             FromLanguage = options.FromLanguage,
             ToLanguage = options.ToLanguage,
+            TimeoutMs = options.RequestTimeoutMs,
             BypassCache = true,
             CustomPrompt = MapPagePrompt,
         };
@@ -330,6 +331,7 @@ public sealed class DocumentContextExtractor
             Text = sb.ToString(),
             FromLanguage = options.FromLanguage,
             ToLanguage = options.ToLanguage,
+            TimeoutMs = options.RequestTimeoutMs,
             BypassCache = true,
             CustomPrompt = ReduceSummaryPrompt,
         };

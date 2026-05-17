@@ -207,9 +207,10 @@ jobs:
           $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
           $ns.AddNamespace("t", "http://microsoft.com/schemas/VisualStudio/TeamTest/2010")
 
-          # Surface anything that isn't a clean pass — Failed, Error, NotExecuted, Timeout, etc.
-          $bad = $xml.SelectNodes("//t:UnitTestResult[@outcome and @outcome!='Passed' and @outcome!='NotRunnable']", $ns)
-          Write-Host "Found $($bad.Count) non-passing tests"
+          # Surface actual failures. Skipped tests are recorded as NotExecuted in TRX and
+          # should not be promoted to error annotations when another test fails.
+          $bad = $xml.SelectNodes("//t:UnitTestResult[@outcome='Failed' or @outcome='Error' or @outcome='Timeout' or @outcome='Aborted']", $ns)
+          Write-Host "Found $($bad.Count) failing tests"
 
           if ($bad.Count -eq 0) {
             $counters = $xml.SelectSingleNode("//t:ResultSummary/t:Counters", $ns)
@@ -392,8 +393,8 @@ jobs:
           $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
           $ns.AddNamespace("t", "http://microsoft.com/schemas/VisualStudio/TeamTest/2010")
 
-          $bad = $xml.SelectNodes("//t:UnitTestResult[@outcome and @outcome!='Passed' and @outcome!='NotRunnable']", $ns)
-          Write-Host "Found $($bad.Count) non-passing UI tests"
+          $bad = $xml.SelectNodes("//t:UnitTestResult[@outcome='Failed' or @outcome='Error' or @outcome='Timeout' or @outcome='Aborted']", $ns)
+          Write-Host "Found $($bad.Count) failing UI tests"
 
           if ($bad.Count -eq 0) {
             $counters = $xml.SelectSingleNode("//t:ResultSummary/t:Counters", $ns)

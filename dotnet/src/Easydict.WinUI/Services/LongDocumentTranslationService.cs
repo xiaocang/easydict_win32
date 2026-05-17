@@ -529,6 +529,9 @@ public sealed class LongDocumentTranslationService : IDisposable
         return new RetryExecutionSummary(retryResult.QualityReport, reusedByCanonical);
     }
 
+    private const int DefaultLongDocRequestTimeoutMs = 30_000;
+    private const int FoundryLocalLongDocRequestTimeoutMs = 120_000;
+
     internal static LongDocumentTranslationOptions CreateCoreTranslationOptions(
         string serviceId,
         Language from,
@@ -541,22 +544,36 @@ public sealed class LongDocumentTranslationService : IDisposable
         System.IProgress<LongDocumentTranslationProgress>? progress = null,
         bool enableDocumentContextPass = true)
     {
+        var usesFoundryLocal = UsesFoundryLocalLongDocProfile(serviceId);
+
         return new LongDocumentTranslationOptions
         {
             ServiceId = serviceId,
             FromLanguage = from,
             ToLanguage = to,
             EnableFormulaProtection = true,
-            EnableDocumentContextPass = enableDocumentContextPass,
+            EnableDocumentContextPass = enableDocumentContextPass && !usesFoundryLocal,
             EnableOcrFallback = enableOcrFallback,
             EnableQualityFeedbackRetry = true,
             MaxRetriesPerBlock = 1,
-            MaxConcurrency = maxConcurrency,
+            MaxConcurrency = usesFoundryLocal ? 1 : Math.Clamp(maxConcurrency, 1, 16),
+            RequestTimeoutMs = usesFoundryLocal ? FoundryLocalLongDocRequestTimeoutMs : DefaultLongDocRequestTimeoutMs,
             FormulaFontPattern = formulaFontPattern,
             FormulaCharPattern = formulaCharPattern,
             CustomPrompt = customPrompt,
             Progress = progress
         };
+    }
+
+    private static bool UsesFoundryLocalLongDocProfile(string serviceId)
+    {
+        if (!string.Equals(serviceId, LocalAITranslationService.ServiceIdValue, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return LocalAIProviderModeExtensions.Parse(SettingsService.Instance.LocalAIProvider) is
+            LocalAIProviderMode.Auto or LocalAIProviderMode.FoundryLocal;
     }
 
     private async Task WriteCacheEntriesAsync(

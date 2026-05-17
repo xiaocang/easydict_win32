@@ -326,13 +326,9 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (IsNetworkException(ex))
         {
-            throw new TranslationException($"Network error: {ex.Message}", ex)
-            {
-                ErrorCode = TranslationErrorCode.NetworkError,
-                ServiceId = ServiceId
-            };
+            throw CreateNetworkException(ex);
         }
 
         using (response)
@@ -343,11 +339,53 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
                 throw CreateErrorFromResponse(response.StatusCode, errorBody);
             }
 
-            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            await foreach (var chunk in strategy.ParseStreamAsync(stream, cancellationToken).ConfigureAwait(false))
+            Stream stream;
+            try
             {
-                yield return chunk;
+                stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsNetworkException(ex))
+            {
+                throw CreateNetworkException(ex);
+            }
+
+            await using var enumerator = strategy
+                .ParseStreamAsync(stream, cancellationToken)
+                .GetAsyncEnumerator(cancellationToken);
+
+            while (true)
+            {
+                bool hasNext;
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex) when (IsNetworkException(ex))
+                {
+                    throw CreateNetworkException(ex);
+                }
+
+                if (!hasNext)
+                {
+                    yield break;
+                }
+
+                yield return enumerator.Current;
             }
         }
+    }
+
+    private TranslationException CreateNetworkException(Exception ex)
+    {
+        return new TranslationException($"Network error: {ex.Message}", ex)
+        {
+            ErrorCode = TranslationErrorCode.NetworkError,
+            ServiceId = ServiceId
+        };
+    }
+
+    private static bool IsNetworkException(Exception ex)
+    {
+        return ex is HttpRequestException or IOException;
     }
 }

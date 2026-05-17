@@ -58,6 +58,11 @@ public sealed class LongDocumentTranslationService
             throw new ArgumentOutOfRangeException(nameof(options.MaxConcurrency), options.MaxConcurrency, "MaxConcurrency must be greater than or equal to 1.");
         }
 
+        if (options.RequestTimeoutMs < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options.RequestTimeoutMs), options.RequestTimeoutMs, "RequestTimeoutMs must be greater than or equal to 1.");
+        }
+
         var timings = new Dictionary<string, long>();
         var progress = options.Progress;
         var totalPages = source.Pages.Count;
@@ -815,6 +820,7 @@ public sealed class LongDocumentTranslationService
                     Text = currentProtectedText,
                     FromLanguage = options.FromLanguage,
                     ToLanguage = options.ToLanguage,
+                    TimeoutMs = options.RequestTimeoutMs,
                     CustomPrompt = customPrompt
                 };
 

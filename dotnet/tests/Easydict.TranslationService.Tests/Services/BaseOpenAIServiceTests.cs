@@ -285,6 +285,33 @@ public class BaseOpenAIServiceTests
         result.TranslatedText.Should().Be("Hello World");
     }
 
+    [Fact]
+    public async Task TranslateStreamAsync_WrapsStreamingReadIOExceptionAsNetworkError()
+    {
+        _service.Configure("sk-test-key");
+        _mockHandler.EnqueueResponse(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ThrowingStreamContent()
+        });
+
+        var request = new TranslationRequest
+        {
+            Text = "Bonjour le monde",
+            ToLanguage = Language.English
+        };
+
+        var action = async () =>
+        {
+            await foreach (var _ in _service.TranslateStreamAsync(request))
+            {
+            }
+        };
+
+        var exception = await action.Should().ThrowAsync<TranslationException>();
+        exception.Which.ErrorCode.Should().Be(TranslationErrorCode.NetworkError);
+        exception.Which.InnerException.Should().BeOfType<IOException>();
+    }
+
     /// <summary>
     /// Concrete implementation for testing BaseOpenAIService.
     /// </summary>
@@ -306,6 +333,70 @@ public class BaseOpenAIServiceTests
         public void Configure(string apiKey)
         {
             _apiKey = apiKey;
+        }
+    }
+
+    private sealed class ThrowingStreamContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            return Task.CompletedTask;
+        }
+
+        protected override Task<Stream> CreateContentReadStreamAsync()
+        {
+            return Task.FromResult<Stream>(new ThrowingReadStream());
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = -1;
+            return false;
+        }
+    }
+
+    private sealed class ThrowingReadStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            throw new IOException("stream aborted");
+        }
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            throw new IOException("stream aborted");
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void SetLength(long value)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
         }
     }
 }

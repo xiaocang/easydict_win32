@@ -23,6 +23,7 @@ public sealed class FoundryLocalService : BaseOpenAIService, ILocalModelProvider
 
     private readonly IFoundryLocalEndpointResolver _endpointResolver;
     private readonly IFoundryLocalRuntimeController? _runtimeController;
+    private readonly SemaphoreSlim _requestGate = new(1, 1);
     private string _configuredEndpoint = "";
     private string? _resolvedEndpoint;
     private string _model = DefaultModel;
@@ -554,53 +555,62 @@ public sealed class FoundryLocalService : BaseOpenAIService, ILocalModelProvider
     {
         var retriedAfterEndpointRefresh = false;
 
-        while (true)
+        // The local runtime is prone to aborting long streaming responses under concurrent generation.
+        await _requestGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            await EnsureEndpointAsync(cancellationToken).ConfigureAwait(false);
-            await EnsureModelAsync(cancellationToken, requireSuccessfulModelsEndpoint: false).ConfigureAwait(false);
-
-            var emittedAnyChunk = false;
-            var shouldRetry = false;
-
-            await using var enumerator = createStream().GetAsyncEnumerator(cancellationToken);
             while (true)
             {
-                bool hasNext;
-                string chunk;
+                await EnsureEndpointAsync(cancellationToken).ConfigureAwait(false);
+                await EnsureModelAsync(cancellationToken, requireSuccessfulModelsEndpoint: false).ConfigureAwait(false);
 
-                try
+                var emittedAnyChunk = false;
+                var shouldRetry = false;
+
+                await using var enumerator = createStream().GetAsyncEnumerator(cancellationToken);
+                while (true)
                 {
-                    hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
-                    if (!hasNext)
+                    bool hasNext;
+                    string chunk;
+
+                    try
                     {
-                        yield break;
+                        hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                        if (!hasNext)
+                        {
+                            yield break;
+                        }
+
+                        chunk = enumerator.Current;
+                    }
+                    catch (TranslationException ex) when (!emittedAnyChunk && IsEndpointRefreshableNetworkError(ex))
+                    {
+                        if (!retriedAfterEndpointRefresh
+                            && await TryRefreshEndpointAfterNetworkFailureAsync(ex, cancellationToken).ConfigureAwait(false))
+                        {
+                            retriedAfterEndpointRefresh = true;
+                            shouldRetry = true;
+                            break;
+                        }
+
+                        var recoveryException = await CreateFoundryLocalRecoveryExceptionForNetworkFailureAsync(ex, cancellationToken)
+                            .ConfigureAwait(false);
+                        throw recoveryException;
                     }
 
-                    chunk = enumerator.Current;
+                    emittedAnyChunk = true;
+                    yield return chunk;
                 }
-                catch (TranslationException ex) when (!emittedAnyChunk && IsEndpointRefreshableNetworkError(ex))
+
+                if (!shouldRetry)
                 {
-                    if (!retriedAfterEndpointRefresh
-                        && await TryRefreshEndpointAfterNetworkFailureAsync(ex, cancellationToken).ConfigureAwait(false))
-                    {
-                        retriedAfterEndpointRefresh = true;
-                        shouldRetry = true;
-                        break;
-                    }
-
-                    var recoveryException = await CreateFoundryLocalRecoveryExceptionForNetworkFailureAsync(ex, cancellationToken)
-                        .ConfigureAwait(false);
-                    throw recoveryException;
+                    yield break;
                 }
-
-                emittedAnyChunk = true;
-                yield return chunk;
             }
-
-            if (!shouldRetry)
-            {
-                yield break;
-            }
+        }
+        finally
+        {
+            _requestGate.Release();
         }
     }
 

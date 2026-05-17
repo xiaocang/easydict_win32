@@ -300,6 +300,7 @@ public sealed record LongDocumentTranslationOptions
     public IReadOnlyDictionary<string, string>? Glossary { get; init; }
     public LayoutDetectionMode LayoutDetection { get; init; } = LayoutDetectionMode.Auto;
     public int MaxConcurrency { get; init; } = 1;
+    public int RequestTimeoutMs { get; init; } = 30000;
     public string? FormulaFontPattern { get; init; }
     public string? FormulaCharPattern { get; init; }
     public string? PageRange { get; init; }

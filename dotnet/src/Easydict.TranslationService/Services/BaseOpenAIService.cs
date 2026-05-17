@@ -216,24 +216,32 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     /// Stream translate text using OpenAI-compatible API.
     /// Dispatches to Chat Completions or Responses path based on cached / detected format.
     /// </summary>
-    public virtual IAsyncEnumerable<string> TranslateStreamAsync(
+    public virtual async IAsyncEnumerable<string> TranslateStreamAsync(
         TranslationRequest request,
-        CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ValidateConfiguration();
-        return StreamWithFormatDispatchAsync(BuildChatMessages(request), cancellationToken);
+        await foreach (var chunk in StreamWithFormatDispatchAsync(
+            BuildChatMessages(request), cancellationToken).ConfigureAwait(false))
+        {
+            yield return chunk;
+        }
     }
 
     /// <summary>
     /// Stream grammar correction output using OpenAI-compatible API.
     /// Reuses the same dispatch+probe logic as translation.
     /// </summary>
-    public virtual IAsyncEnumerable<string> CorrectGrammarStreamAsync(
+    public virtual async IAsyncEnumerable<string> CorrectGrammarStreamAsync(
         GrammarCorrectionRequest request,
-        CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ValidateConfiguration();
-        return StreamWithFormatDispatchAsync(BuildGrammarCorrectionMessages(request), cancellationToken);
+        await foreach (var chunk in StreamWithFormatDispatchAsync(
+            BuildGrammarCorrectionMessages(request), cancellationToken).ConfigureAwait(false))
+        {
+            yield return chunk;
+        }
     }
 
     /// <summary>

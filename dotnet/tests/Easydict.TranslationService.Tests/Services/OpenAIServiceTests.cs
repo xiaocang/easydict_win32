@@ -58,10 +58,11 @@ public class OpenAIServiceTests
     [Fact]
     public void AvailableModels_ContainsExpectedModels()
     {
+        OpenAIService.AvailableModels.Should().Contain("gpt-5-mini");
+        OpenAIService.AvailableModels.Should().Contain("gpt-5-nano");
+        OpenAIService.AvailableModels.Should().Contain("gpt-5");
         OpenAIService.AvailableModels.Should().Contain("gpt-4o-mini");
         OpenAIService.AvailableModels.Should().Contain("gpt-4o");
-        OpenAIService.AvailableModels.Should().Contain("gpt-4-turbo");
-        OpenAIService.AvailableModels.Should().Contain("gpt-3.5-turbo");
     }
 
     [Fact]

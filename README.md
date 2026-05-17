@@ -240,6 +240,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Linguee | REST | — | Not tested |
 | Google Dict | REST | ✅ | |
 | Ollama | OpenAI API | — | Requires local Ollama setup |
+| Windows Local AI | Local runtime | ✅ | TranslationManager routing tested; real inference requires Phi Silica, Foundry Local, or OpenVINO model |
 | BuiltIn AI | OpenAI API | — | Embedded key |
 | Custom OpenAI | OpenAI API | — | OpenAI-compatible, user-defined endpoint |
 

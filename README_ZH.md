@@ -240,6 +240,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | Linguee | REST | — | 未测试 |
 | Google 词典 | REST | ✅ | |
 | Ollama | OpenAI API | — | 需要本地 Ollama 环境 |
+| Windows Local AI | 本地运行时 | ✅ | 已测试 TranslationManager 路由；真实推理需要 Phi Silica、Foundry Local 或 OpenVINO 模型 |
 | 内置 AI | OpenAI API | — | 内置密钥 |
 | 自定义 OpenAI | OpenAI API | — | OpenAI 兼容，用户自定义端点 |
 

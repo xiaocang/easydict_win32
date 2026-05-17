@@ -590,7 +590,7 @@
                                     <ComboBoxItem Content="gpt-4o"
                                             Tag="gpt-4o"/>
                                 </ComboBox>
-                                <TextBlock Text="Auto-detect picks /responses or /chat/completions from the endpoint URL (with a one-shot probe fallback). You can type a custom model name directly."
+                                <TextBlock Text="Auto-detect picks /responses when the endpoint URL ends with that suffix; otherwise it uses /chat/completions. You can type a custom model name directly."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                 <Button x:Name="TestOpenAIButton"

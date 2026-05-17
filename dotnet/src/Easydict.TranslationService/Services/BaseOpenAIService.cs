@@ -12,8 +12,10 @@ namespace Easydict.TranslationService.Services;
 /// Mirrors macOS BaseOpenAIService pattern with SSE streaming support.
 /// Supports both Chat Completions and Responses API formats; the format
 /// is chosen per request based on the endpoint URL suffix
-/// (<c>/responses</c> vs <c>/chat/completions</c>) — Chat Completions is
-/// the default when the URL is unrecognized.
+/// (<c>/responses</c> → Responses, anything else → Chat Completions) or
+/// by an explicit override via <see cref="PinFormat"/>. Pinning bypasses
+/// URL inspection — the caller is responsible for ensuring the endpoint
+/// accepts the pinned format.
 /// </summary>
 public abstract class BaseOpenAIService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
 {

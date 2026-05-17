@@ -88,7 +88,8 @@ public sealed class SettingsService
     public string OpenAIModel { get; set; } = "gpt-5-mini";
     public double OpenAITemperature { get; set; } = 0.3;
     /// <summary>
-    /// API format override for OpenAI: "Auto" (default, detect from URL + probe),
+    /// API format override for OpenAI: "Auto" (default, infer from endpoint URL —
+    /// <c>/responses</c> → Responses, anything else → Chat Completions),
     /// "Responses", or "ChatCompletions". Persisted as the enum string value of
     /// <c>Easydict.TranslationService.Services.OpenAIApiFormat</c>.
     /// </summary>

@@ -55,8 +55,10 @@ public sealed class OpenAIService : BaseOpenAIService
     /// <param name="model">Model to use (optional, defaults to <see cref="DefaultModel"/>).</param>
     /// <param name="temperature">Generation temperature (optional, defaults to 0.3).</param>
     /// <param name="formatOverride">
-    /// Pin the API format. <see cref="OpenAIApiFormat.Auto"/> (default) keeps the
-    /// URL-then-probe detection; any other value bypasses detection entirely.
+    /// Pin the API format. <see cref="OpenAIApiFormat.Auto"/> (default) infers the
+    /// format from the endpoint URL suffix (<c>/responses</c> → Responses, anything
+    /// else → Chat Completions). Any other value bypasses URL inspection — the
+    /// caller is responsible for ensuring the endpoint accepts the pinned format.
     /// </param>
     public void Configure(
         string apiKey,

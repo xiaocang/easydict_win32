@@ -358,12 +358,18 @@ public sealed class FoundryLocalServiceTests
             var resolver = new FoundryLocalCliEndpointResolver(
                 scriptPath,
                 startCommandTimeout: TimeSpan.FromMilliseconds(100));
+            var stopwatch = Stopwatch.StartNew();
 
             var act = async () => await resolver.StartServiceAsync(CancellationToken.None);
 
             var exception = await act.Should().ThrowAsync<FoundryLocalCliCommandException>();
+            stopwatch.Stop();
             exception.Which.ExitCode.Should().Be(-2);
             exception.Which.Message.Should().Contain("Timed out");
+            // The configured cancellation deadline is 100ms; allow plenty of headroom
+            // for process-tree kill latency on slow CI runners (observed ~13s on
+            // windows-latest), but still well under any "actually broken" threshold.
+            stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
         }
         finally
         {

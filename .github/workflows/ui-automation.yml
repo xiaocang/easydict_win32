@@ -213,7 +213,14 @@ jobs:
             $name = $t.GetAttribute("testName")
             $msgNode = $t.SelectSingleNode("t:Output/t:ErrorInfo/t:Message", $ns)
             $msg = if ($msgNode) { $msgNode.InnerText } else { "" }
-            $msg = $msg -replace "`r?`n", "%0A" -replace ":", "%3A" -replace ",", "%2C"
+            # GitHub Actions workflow command escaping: % must be escaped first
+            # (otherwise the later %0A / %0D / %3A / %2C escapes get corrupted),
+            # then newlines/carriage returns, then the syntactic separators.
+            $msg = $msg -replace "%", "%25" `
+                        -replace "`r", "%0D" `
+                        -replace "`n", "%0A" `
+                        -replace ":", "%3A" `
+                        -replace ",", "%2C"
             if ($msg.Length -gt 1500) { $msg = $msg.Substring(0, 1500) + "..." }
             Write-Host "::error title=WinUI test failed::$name%0A$msg"
           }

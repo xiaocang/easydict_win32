@@ -1172,10 +1172,19 @@
   <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
   <data name="FoundryLocal_ConfigDescription" xml:space="preserve"><value>留空端点时会通过 foundry service status 自动发现；如果本地服务使用固定的 OpenAI 兼容端点，也可以手动填写。</value></data>
   <data name="FoundryLocal_InstallLinkText" xml:space="preserve"><value>安装 Foundry Local</value></data>
+  <data name="FoundryLocal_DocsLinkText" xml:space="preserve"><value>安装/使用文档</value></data>
+  <data name="FoundryLocal_StartButton" xml:space="preserve"><value>启动 Foundry Local</value></data>
+  <data name="FoundryLocal_Title_Ready" xml:space="preserve"><value>Foundry Local 已就绪</value></data>
+  <data name="FoundryLocal_Title_Unavailable" xml:space="preserve"><value>Foundry Local 不可用</value></data>
+  <data name="FoundryLocal_Status_Checking" xml:space="preserve"><value>正在检查 Foundry Local 状态...</value></data>
+  <data name="FoundryLocal_Status_NotInstalled" xml:space="preserve"><value>未安装 Foundry Local CLI，或当前 PATH 中不可用。</value></data>
   <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local 模型未配置。</value></data>
   <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>通过 foundry service status 自动发现</value></data>
   <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>模型</value></data>
   <data name="FoundryLocal_Status_NotRunning" xml:space="preserve"><value>Foundry Local 未运行。请启动 Foundry Local 服务，或手动设置端点。</value></data>
+  <data name="FoundryLocal_Status_Starting" xml:space="preserve"><value>正在启动 Foundry Local 服务...</value></data>
+  <data name="FoundryLocal_Status_LoadingModel" xml:space="preserve"><value>正在加载配置的 Foundry Local 模型...</value></data>
+  <data name="FoundryLocal_Status_StartFailed" xml:space="preserve"><value>无法启动 Foundry Local。</value></data>
   <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
   <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>通过 Microsoft Foundry Local 的 OpenAI 兼容本地端点运行本地模型。需要安装 Foundry Local 并准备好本地模型。</value></data>
   <data name="FoundryLocal_Status_Ready" xml:space="preserve"><value>Foundry Local 已配置。运行时会使用本地端点或自动发现端点。</value></data>

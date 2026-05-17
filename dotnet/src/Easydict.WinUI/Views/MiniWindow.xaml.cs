@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Easydict.TranslationService;
+using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
@@ -439,7 +440,8 @@ public sealed partial class MiniWindow : Window
                 ResultsPanel,
                 OnServiceCollapseToggled,
                 OnServiceQueryRequested,
-                Content as FrameworkElement);
+                Content as FrameworkElement,
+                OnFoundryLocalStartRequested);
         }
 
         ReorderResultsPanel();
@@ -458,7 +460,8 @@ public sealed partial class MiniWindow : Window
             ResultsPanel,
             OnServiceCollapseToggled,
             OnServiceQueryRequested,
-            Content as FrameworkElement);
+            Content as FrameworkElement,
+            OnFoundryLocalStartRequested);
 
         ReorderResultsPanel();
         RequestResize();
@@ -470,7 +473,8 @@ public sealed partial class MiniWindow : Window
             _resultControls,
             ResultsPanel,
             OnServiceCollapseToggled,
-            OnServiceQueryRequested);
+            OnServiceQueryRequested,
+            OnFoundryLocalStartRequested);
 
         if (clearResults)
         {
@@ -491,6 +495,11 @@ public sealed partial class MiniWindow : Window
     /// Handle query request from a manual-query service that user clicked to expand.
     /// </summary>
     private async void OnServiceQueryRequested(object? sender, ServiceQueryResult serviceResult)
+    {
+        await OnServiceQueryRequestedAsync(sender, serviceResult);
+    }
+
+    private async Task OnServiceQueryRequestedAsync(object? sender, ServiceQueryResult serviceResult)
     {
         if (_isClosing || _detectionService is null)
         {
@@ -617,6 +626,16 @@ public sealed partial class MiniWindow : Window
             Interlocked.CompareExchange(ref _manualQueryCts, null, cts);
             cts.Dispose();
         }
+    }
+
+    private async void OnFoundryLocalStartRequested(object? sender, ServiceQueryResult serviceResult)
+    {
+        await FoundryLocalRecoveryCoordinator.StartAndRetryAsync(
+            serviceResult,
+            ct => TranslationManagerService.Instance.PrepareFoundryLocalAsync(ct),
+            (_, ct) => OnServiceQueryRequestedAsync(sender, serviceResult),
+            _ => RequestResize(),
+            isAborted: () => _isClosing);
     }
 
     /// <summary>
@@ -1420,6 +1439,14 @@ public sealed partial class MiniWindow : Window
 
         // Final update with complete result
         var finalText = sb.ToString().Trim();
+        if (string.IsNullOrWhiteSpace(finalText))
+        {
+            throw new TranslationException("Streaming service returned an empty response")
+            {
+                ErrorCode = TranslationErrorCode.InvalidResponse,
+                ServiceId = serviceResult.ServiceId
+            };
+        }
 
         // Create initial result
         var result = new TranslationResult
@@ -1446,6 +1473,7 @@ public sealed partial class MiniWindow : Window
         DispatcherQueue.TryEnqueue(() =>
         {
             if (_isClosing) return;
+            serviceResult.IsLoading = false;
             serviceResult.IsStreaming = false;
             serviceResult.StreamingText = "";
             serviceResult.Result = result;

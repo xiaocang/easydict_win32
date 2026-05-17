@@ -1127,10 +1127,19 @@
   <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>
   <data name="FoundryLocal_ConfigDescription" xml:space="preserve"><value>留空端點時會透過 foundry service status 自動探索；如果本機服務使用固定的 OpenAI 相容端點，也可以手動填寫。</value></data>
   <data name="FoundryLocal_InstallLinkText" xml:space="preserve"><value>安裝 Foundry Local</value></data>
+  <data name="FoundryLocal_DocsLinkText" xml:space="preserve"><value>安裝/使用文件</value></data>
+  <data name="FoundryLocal_StartButton" xml:space="preserve"><value>啟動 Foundry Local</value></data>
+  <data name="FoundryLocal_Title_Ready" xml:space="preserve"><value>Foundry Local 已就緒</value></data>
+  <data name="FoundryLocal_Title_Unavailable" xml:space="preserve"><value>Foundry Local 不可用</value></data>
+  <data name="FoundryLocal_Status_Checking" xml:space="preserve"><value>正在檢查 Foundry Local 狀態...</value></data>
+  <data name="FoundryLocal_Status_NotInstalled" xml:space="preserve"><value>未安裝 Foundry Local CLI，或目前 PATH 中無法使用。</value></data>
   <data name="FoundryLocal_Status_NotConfigured" xml:space="preserve"><value>Foundry Local 模型未設定。</value></data>
   <data name="FoundryLocal_EndpointPlaceholder" xml:space="preserve"><value>透過 foundry service status 自動探索</value></data>
   <data name="FoundryLocal_ModelLabel" xml:space="preserve"><value>模型</value></data>
   <data name="FoundryLocal_Status_NotRunning" xml:space="preserve"><value>Foundry Local 未執行。請啟動 Foundry Local 服務，或手動設定端點。</value></data>
+  <data name="FoundryLocal_Status_Starting" xml:space="preserve"><value>正在啟動 Foundry Local 服務...</value></data>
+  <data name="FoundryLocal_Status_LoadingModel" xml:space="preserve"><value>正在載入設定的 Foundry Local 模型...</value></data>
+  <data name="FoundryLocal_Status_StartFailed" xml:space="preserve"><value>無法啟動 Foundry Local。</value></data>
   <data name="LocalAI_Provider_FoundryLocal" xml:space="preserve"><value>Foundry Local</value></data>
   <data name="LocalAI_Description_FoundryLocal" xml:space="preserve"><value>透過 Microsoft Foundry Local 的 OpenAI 相容本機端點執行本機模型。需要安裝 Foundry Local 並備妥本機模型。</value></data>
   <data name="FoundryLocal_Status_Ready" xml:space="preserve"><value>Foundry Local 已設定。執行時會使用本機端點或自動探索端點。</value></data>

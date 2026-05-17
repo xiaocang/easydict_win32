@@ -15,20 +15,20 @@ public static class PhiSilicaAvailability
 
     /// <summary>
     /// Resource-key suffix for the user-facing message describing the current state.
-    /// Settings page maps this to a Resources.resw entry like "WindowsLocalAI_Status_Ready".
+    /// Settings page maps this to a Resources.resw entry like PhiSilicaResources.StatusKeys.Ready.
     /// </summary>
     public static string GetStatusResourceKey(WindowsAIReadyState state) => state switch
     {
-        WindowsAIReadyState.Ready => "WindowsLocalAI_Status_Ready",
-        WindowsAIReadyState.NotReady => "WindowsLocalAI_Status_NotReady",
-        WindowsAIReadyState.CapabilityMissing => "WindowsLocalAI_Status_CapabilityMissing",
-        WindowsAIReadyState.NotCompatibleWithSystemHardware => "WindowsLocalAI_Status_NotCompatibleHardware",
-        WindowsAIReadyState.OSUpdateNeeded => "WindowsLocalAI_Status_OSUpdateNeeded",
-        WindowsAIReadyState.DisabledByUser => "WindowsLocalAI_Status_DisabledByUser",
+        WindowsAIReadyState.Ready => PhiSilicaResources.StatusKeys.Ready,
+        WindowsAIReadyState.NotReady => PhiSilicaResources.StatusKeys.NotReady,
+        WindowsAIReadyState.CapabilityMissing => PhiSilicaResources.StatusKeys.CapabilityMissing,
+        WindowsAIReadyState.NotCompatibleWithSystemHardware => PhiSilicaResources.StatusKeys.NotCompatibleHardware,
+        WindowsAIReadyState.OSUpdateNeeded => PhiSilicaResources.StatusKeys.OSUpdateNeeded,
+        WindowsAIReadyState.DisabledByUser => PhiSilicaResources.StatusKeys.DisabledByUser,
         WindowsAIReadyState.UnsupportedWindowsAIBaseline =>
             WindowsAIBaselineDiagnostics.UnsupportedWindowsAIBaselineResourceKey,
-        WindowsAIReadyState.NotSupportedOnCurrentSystem => "WindowsLocalAI_Status_NotSupported",
-        _ => "WindowsLocalAI_Status_NotSupported",
+        WindowsAIReadyState.NotSupportedOnCurrentSystem => PhiSilicaResources.StatusKeys.NotSupported,
+        _ => PhiSilicaResources.StatusKeys.NotSupported,
     };
 }
 

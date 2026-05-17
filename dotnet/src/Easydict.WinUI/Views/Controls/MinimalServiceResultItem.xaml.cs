@@ -32,6 +32,12 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     public event EventHandler<ServiceQueryResult>? QueryRequested;
 
+    event EventHandler<ServiceQueryResult>? IServiceResultView.FoundryLocalStartRequested
+    {
+        add { }
+        remove { }
+    }
+
     public ServiceQueryResult? ServiceResult
     {
         get => _serviceResult;

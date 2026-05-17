@@ -12,6 +12,12 @@ installer-output/
 bin/
 obj/
 
+# MSBuild/IDE per-project lockfile caches
+*.lscache
+
+# Generated Phi Silica probe archives
+tools/PhiSilicaProbe/*.zip
+
 # User-specific files
 *.user
 *.suo

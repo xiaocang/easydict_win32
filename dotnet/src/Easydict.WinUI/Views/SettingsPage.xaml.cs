@@ -10,6 +10,8 @@ using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
+using Easydict.OpenVINO.Services;
+using Easydict.WindowsAI.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml.Automation;
@@ -668,65 +670,67 @@ public sealed partial class SettingsPage : Page
 
         // Local AI configuration
         if (WindowsLocalAITitleText != null)
-            WindowsLocalAITitleText.Text = loc.GetString("LocalAI_Title");
+            WindowsLocalAITitleText.Text = loc.GetString(LocalAIResources.UiKeys.Title);
         if (LocalAIProviderLabelText != null)
-            LocalAIProviderLabelText.Text = loc.GetString("LocalAI_ProviderLabel");
+            LocalAIProviderLabelText.Text = loc.GetString(LocalAIResources.UiKeys.ProviderLabel);
         if (LocalAIProviderCombo != null)
-            AutomationProperties.SetName(LocalAIProviderCombo, loc.GetString("LocalAI_ProviderAutomationName"));
+            AutomationProperties.SetName(LocalAIProviderCombo, loc.GetString(LocalAIResources.UiKeys.ProviderAutomationName));
         if (LocalAIProviderAutoItem != null)
-            LocalAIProviderAutoItem.Content = loc.GetString("LocalAI_Provider_Auto");
+            LocalAIProviderAutoItem.Content = loc.GetString(LocalAIResources.ProviderKeys.Auto);
         if (LocalAIProviderWindowsAILabelText != null)
-            LocalAIProviderWindowsAILabelText.Text = loc.GetString("LocalAI_Provider_WindowsAI");
+            LocalAIProviderWindowsAILabelText.Text = loc.GetString(LocalAIResources.ProviderKeys.WindowsAI);
         if (LocalAIProviderFoundryLocalLabelText != null)
-            LocalAIProviderFoundryLocalLabelText.Text = loc.GetString("LocalAI_Provider_FoundryLocal");
+            LocalAIProviderFoundryLocalLabelText.Text = loc.GetString(LocalAIResources.ProviderKeys.FoundryLocal);
         if (LocalAIProviderOpenVINOLabelText != null)
-            LocalAIProviderOpenVINOLabelText.Text = loc.GetString("LocalAI_Provider_OpenVINO");
+            LocalAIProviderOpenVINOLabelText.Text = loc.GetString(LocalAIResources.ProviderKeys.OpenVINO);
 
-        var windowsAIRating = loc.GetString("LocalAI_Rating_WindowsAI");
-        var windowsAIRatingTip = loc.GetString("LocalAI_Rating_WindowsAI_Tooltip");
+        var windowsAIRating = loc.GetString(LocalAIResources.RatingKeys.WindowsAI);
+        var windowsAIRatingTip = loc.GetString(LocalAIResources.RatingTooltipKeys.WindowsAI);
         SetLocalAiRating(LocalAIProviderWindowsAIRatingText, windowsAIRating, windowsAIRatingTip);
         SetLocalAiRating(WindowsLocalAISectionRatingText, windowsAIRating, windowsAIRatingTip);
 
-        var foundryLocalRating = loc.GetString("LocalAI_Rating_FoundryLocal");
-        var foundryLocalRatingTip = loc.GetString("LocalAI_Rating_FoundryLocal_Tooltip");
+        var foundryLocalRating = loc.GetString(LocalAIResources.RatingKeys.FoundryLocal);
+        var foundryLocalRatingTip = loc.GetString(LocalAIResources.RatingTooltipKeys.FoundryLocal);
         SetLocalAiRating(LocalAIProviderFoundryLocalRatingText, foundryLocalRating, foundryLocalRatingTip);
         SetLocalAiRating(FoundryLocalRatingText, foundryLocalRating, foundryLocalRatingTip);
 
-        var openVinoRating = loc.GetString("LocalAI_Rating_OpenVINO");
-        var openVinoRatingTip = loc.GetString("LocalAI_Rating_OpenVINO_Tooltip");
+        var openVinoRating = loc.GetString(LocalAIResources.RatingKeys.OpenVINO);
+        var openVinoRatingTip = loc.GetString(LocalAIResources.RatingTooltipKeys.OpenVINO);
         SetLocalAiRating(LocalAIProviderOpenVINORatingText, openVinoRating, openVinoRatingTip);
         SetLocalAiRating(OpenVinoRatingText, openVinoRating, openVinoRatingTip);
         if (WindowsLocalAIDescriptionText != null)
             UpdateLocalAIProviderDescription();
         if (WindowsLocalAISectionTitleText != null)
-            WindowsLocalAISectionTitleText.Text = loc.GetString("LocalAI_WindowsAISectionTitle");
+            WindowsLocalAISectionTitleText.Text = loc.GetString(LocalAIResources.UiKeys.WindowsAISectionTitle);
         if (WindowsLocalAIPrepareButton != null)
-            WindowsLocalAIPrepareButton.Content = loc.GetString("WindowsLocalAI_PrepareButton");
+            WindowsLocalAIPrepareButton.Content = loc.GetString(PhiSilicaResources.UiKeys.PrepareButton);
         if (WindowsLocalAIWindowsUpdateLink != null)
         {
-            WindowsLocalAIWindowsUpdateLink.Content = loc.GetString("PhiSilicaPreparationProgress_WindowsUpdateLink");
+            WindowsLocalAIWindowsUpdateLink.Content = loc.GetString(PhiSilicaResources.ProgressKeys.WindowsUpdateLink);
             WindowsLocalAIWindowsUpdateLink.NavigateUri = new Uri("ms-settings:windowsupdate");
         }
         if (FoundryLocalTitleText != null)
-            FoundryLocalTitleText.Text = loc.GetString("FoundryLocal_ConfigTitle");
+            FoundryLocalTitleText.Text = loc.GetString(FoundryLocalResources.UiKeys.ConfigTitle);
         if (FoundryLocalEndpointBox != null)
         {
-            FoundryLocalEndpointBox.Header = loc.GetString("FoundryLocal_EndpointLabel");
-            FoundryLocalEndpointBox.PlaceholderText = loc.GetString("FoundryLocal_EndpointPlaceholder");
+            FoundryLocalEndpointBox.Header = loc.GetString(FoundryLocalResources.UiKeys.EndpointLabel);
+            FoundryLocalEndpointBox.PlaceholderText = loc.GetString(FoundryLocalResources.UiKeys.EndpointPlaceholder);
         }
         if (FoundryLocalModelBox != null)
-            FoundryLocalModelBox.Header = loc.GetString("FoundryLocal_ModelLabel");
+            FoundryLocalModelBox.Header = loc.GetString(FoundryLocalResources.UiKeys.ModelLabel);
+        if (FoundryLocalStartButton != null)
+            FoundryLocalStartButton.Content = loc.GetString(FoundryLocalResources.UiKeys.StartButton);
         if (FoundryLocalDescriptionText != null)
-            FoundryLocalDescriptionText.Text = loc.GetString("FoundryLocal_ConfigDescription");
+            FoundryLocalDescriptionText.Text = loc.GetString(FoundryLocalResources.UiKeys.ConfigDescription);
         if (FoundryLocalInstallLink != null)
         {
-            FoundryLocalInstallLink.Content = loc.GetString("FoundryLocal_InstallLinkText");
-            FoundryLocalInstallLink.NavigateUri = new Uri(FoundryLocalService.InstallDocumentationUrl);
+            FoundryLocalInstallLink.Content = loc.GetString(FoundryLocalResources.UiKeys.DocsLinkText);
+            FoundryLocalInstallLink.NavigateUri = new Uri(FoundryLocalResources.InstallDocumentationUrl);
         }
         if (OpenVinoTitleText != null)
-            OpenVinoTitleText.Text = loc.GetString("OpenVINO_ConfigTitle");
+            OpenVinoTitleText.Text = loc.GetString(OpenVinoResources.UiKeys.ConfigTitle);
         if (OpenVinoDescriptionText != null)
-            OpenVinoDescriptionText.Text = loc.GetString("OpenVINO_ConfigDescription");
+            OpenVinoDescriptionText.Text = loc.GetString(OpenVinoResources.UiKeys.ConfigDescription);
 
         // Service configuration controls (API Keys, Endpoints, Models, etc.)
         // TextBox/PasswordBox headers for each service
@@ -1262,6 +1266,7 @@ public sealed partial class SettingsPage : Page
         UnregisterChangeHandlers();
         UnregisterLanguageCheckboxHandlers();
         TeardownPhiSilicaPanel();
+        TeardownFoundryLocalPanel();
         TeardownOpenVinoPanel();
 
         try { _currentDialog?.Hide(); } catch (COMException) { }
@@ -1754,6 +1759,7 @@ public sealed partial class SettingsPage : Page
             // Probe Windows AI (Phi Silica) availability and attach to any
             // shared preparation task started from another surface.
             InitializePhiSilicaPanel();
+            InitializeFoundryLocalPanel();
 
             // Same for the OpenVINO local NLLB provider: read cache status and
             // subscribe to status-change events for download progress.

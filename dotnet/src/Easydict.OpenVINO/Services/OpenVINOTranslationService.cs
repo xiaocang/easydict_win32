@@ -232,10 +232,10 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
     {
         if (_downloader.IsModelInstalled())
         {
-            return new LocalModelStatus(LocalModelState.Ready, "OpenVINO_Status_Ready");
+            return new LocalModelStatus(LocalModelState.Ready, OpenVinoResources.StatusKeys.Ready);
         }
 
-        return new LocalModelStatus(LocalModelState.NeedsPreparation, "OpenVINO_Status_NotDownloaded");
+        return new LocalModelStatus(LocalModelState.NeedsPreparation, OpenVinoResources.StatusKeys.NotDownloaded);
     }
 
     public async Task<LocalModelStatus> PrepareAsync(CancellationToken cancellationToken)
@@ -245,7 +245,7 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
         {
             if (_downloader.IsModelInstalled())
             {
-                var ready = new LocalModelStatus(LocalModelState.Ready, "OpenVINO_Status_Ready");
+                var ready = new LocalModelStatus(LocalModelState.Ready, OpenVinoResources.StatusKeys.Ready);
                 RaiseStatusChanged(ready);
                 return ready;
             }
@@ -254,20 +254,20 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
             {
                 RaiseStatusChanged(new LocalModelStatus(
                     LocalModelState.Preparing,
-                    "OpenVINO_Status_Downloading",
+                    OpenVinoResources.StatusKeys.Downloading,
                     ProgressPercent: p.OverallPercent,
                     DetailMessage: p.CurrentFile));
             });
 
             RaiseStatusChanged(new LocalModelStatus(
                 LocalModelState.Preparing,
-                "OpenVINO_Status_Downloading",
+                OpenVinoResources.StatusKeys.Downloading,
                 ProgressPercent: 0));
 
             try
             {
                 await _downloader.DownloadAsync(progress, cancellationToken);
-                var ready = new LocalModelStatus(LocalModelState.Ready, "OpenVINO_Status_Ready");
+                var ready = new LocalModelStatus(LocalModelState.Ready, OpenVinoResources.StatusKeys.Ready);
                 RaiseStatusChanged(ready);
                 return ready;
             }
@@ -282,7 +282,7 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
                 Debug.WriteLine($"[OpenVINOTranslationService] Download failed: {ex.Message}");
                 var status = new LocalModelStatus(
                     LocalModelState.Failed,
-                    "OpenVINO_Status_DownloadFailed",
+                    OpenVinoResources.StatusKeys.DownloadFailed,
                     DetailMessage: ex.Message);
                 RaiseStatusChanged(status);
                 return status;

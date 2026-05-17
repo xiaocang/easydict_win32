@@ -59,8 +59,8 @@ public sealed partial class SettingsPage
         OpenVinoStatusBar.Message = loc.GetString(status.ResourceKey);
         OpenVinoStatusBar.Title = loc.GetString(
             status.State == LocalModelState.Ready
-                ? "OpenVINO_Title_Ready"
-                : "OpenVINO_Title_Unavailable");
+                ? OpenVinoResources.TitleKeys.Ready
+                : OpenVinoResources.TitleKeys.Unavailable);
 
         OpenVinoStatusBar.Severity = status.State switch
         {

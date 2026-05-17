@@ -76,11 +76,11 @@ internal static class PhiSilicaModelPreparationPromptService
         var loc = LocalizationService.Instance;
         var dialog = new ContentDialog
         {
-            Title = loc.GetString("PhiSilicaModelPrompt_Title"),
-            Content = loc.GetString("PhiSilicaModelPrompt_Message"),
-            PrimaryButtonText = loc.GetString("PhiSilicaModelPrompt_DownloadNow"),
-            SecondaryButtonText = loc.GetString("PhiSilicaModelPrompt_Disable"),
-            CloseButtonText = loc.GetString("PhiSilicaModelPrompt_NotNow"),
+            Title = loc.GetString(PhiSilicaResources.PromptKeys.Title),
+            Content = loc.GetString(PhiSilicaResources.PromptKeys.Message),
+            PrimaryButtonText = loc.GetString(PhiSilicaResources.PromptKeys.DownloadNow),
+            SecondaryButtonText = loc.GetString(PhiSilicaResources.PromptKeys.Disable),
+            CloseButtonText = loc.GetString(PhiSilicaResources.PromptKeys.NotNow),
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot
         };

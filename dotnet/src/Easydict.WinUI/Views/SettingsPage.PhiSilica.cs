@@ -177,10 +177,10 @@ public sealed partial class SettingsPage
 
         var key = (selectedMode ?? GetSelectedLocalAIProviderMode()) switch
         {
-            LocalAIProviderMode.WindowsAI => "LocalAI_Description_WindowsAI",
-            LocalAIProviderMode.FoundryLocal => "LocalAI_Description_FoundryLocal",
-            LocalAIProviderMode.OpenVINO => "LocalAI_Description_OpenVINO",
-            _ => "LocalAI_Description_Auto",
+            LocalAIProviderMode.WindowsAI => LocalAIResources.DescriptionKeys.WindowsAI,
+            LocalAIProviderMode.FoundryLocal => LocalAIResources.DescriptionKeys.FoundryLocal,
+            LocalAIProviderMode.OpenVINO => LocalAIResources.DescriptionKeys.OpenVINO,
+            _ => LocalAIResources.DescriptionKeys.Auto,
         };
 
         WindowsLocalAIDescriptionText.Text = LocalizationService.Instance.GetString(key);
@@ -211,6 +211,11 @@ public sealed partial class SettingsPage
 
     private bool IsFoundryLocalConfigured()
     {
+        if (_foundryLocalLastStatus is not null)
+        {
+            return _foundryLocalLastStatus.State == LocalModelState.Ready;
+        }
+
         if (FoundryLocalModelBox is null)
         {
             return !string.IsNullOrWhiteSpace(_settings.FoundryLocalModel);
@@ -243,8 +248,8 @@ public sealed partial class SettingsPage
 
         var isReady = status.State == LocalModelState.Ready;
         var titleKey = isReady
-            ? "WindowsLocalAI_Title_Ready"
-            : "WindowsLocalAI_Title_Unavailable";
+            ? PhiSilicaResources.TitleKeys.Ready
+            : PhiSilicaResources.TitleKeys.Unavailable;
         WindowsLocalAIStatusBar.Title = loc.GetString(titleKey);
 
         var message = loc.GetString(status.ResourceKey);
@@ -287,21 +292,21 @@ public sealed partial class SettingsPage
         var loc = LocalizationService.Instance;
         var originalContent = WindowsLocalAIPrepareButton.Content;
         WindowsLocalAIPrepareButton.IsEnabled = false;
-        WindowsLocalAIPrepareButton.Content = loc.GetString("WindowsLocalAI_Preparing");
+        WindowsLocalAIPrepareButton.Content = loc.GetString(PhiSilicaResources.UiKeys.Preparing);
         var shouldRefreshStatusAfterPreparing = false;
         WindowsAIReadyState? completedState = null;
 
         try
         {
-            ShowPhiSilicaPrepareProgress("PhiSilicaPreparationProgress_Checking");
+            ShowPhiSilicaPrepareProgress(PhiSilicaResources.ProgressKeys.Checking);
             await Task.Yield();
-            ShowPhiSilicaPrepareProgress("PhiSilicaPreparationProgress_Requesting");
+            ShowPhiSilicaPrepareProgress(PhiSilicaResources.ProgressKeys.Requesting);
             await Task.Yield();
-            ShowPhiSilicaPrepareProgress("PhiSilicaPreparationProgress_Waiting");
+            ShowPhiSilicaPrepareProgress(PhiSilicaResources.ProgressKeys.Waiting);
             var newState = await PhiSilicaModelPreparationCoordinator.Instance.EnsureReadyAsync(
                 ShowPhiSilicaPrepareProgress,
                 _lifetimeCts.Token);
-            ShowPhiSilicaPrepareProgress("PhiSilicaPreparationProgress_Finalizing");
+            ShowPhiSilicaPrepareProgress(PhiSilicaResources.ProgressKeys.Finalizing);
             UpdatePhiSilicaStatusUi(newState);
             shouldRefreshStatusAfterPreparing = true;
             completedState = newState;

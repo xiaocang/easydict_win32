@@ -57,7 +57,7 @@ public sealed class PhiSilicaBackendHealthMonitor
         return snapshot.State switch
         {
             PhiSilicaBackendHealthState.Healthy =>
-                new LocalModelStatus(LocalModelState.Ready, "WindowsLocalAI_Status_Ready"),
+                new LocalModelStatus(LocalModelState.Ready, PhiSilicaResources.StatusKeys.Ready),
 
             PhiSilicaBackendHealthState.Unhealthy =>
                 CreateUnhealthyStatus(snapshot),
@@ -65,12 +65,12 @@ public sealed class PhiSilicaBackendHealthMonitor
             PhiSilicaBackendHealthState.EnsuringPackage
                 or PhiSilicaBackendHealthState.CreatingSession
                 or PhiSilicaBackendHealthState.WarmingUp =>
-                    new LocalModelStatus(LocalModelState.Preparing, "WindowsLocalAI_Status_WarmingUp"),
+                    new LocalModelStatus(LocalModelState.Preparing, PhiSilicaResources.StatusKeys.WarmingUp),
 
             _ =>
                 new LocalModelStatus(
                     LocalModelState.NeedsPreparation,
-                    "WindowsLocalAI_Status_WarmupRequired",
+                    PhiSilicaResources.StatusKeys.WarmupRequired,
                     DetailMessage: snapshot.Fingerprint?.ToString()),
         };
     }

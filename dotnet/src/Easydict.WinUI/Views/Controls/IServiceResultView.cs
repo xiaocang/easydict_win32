@@ -26,6 +26,8 @@ public interface IServiceResultView
 
     event EventHandler<ServiceQueryResult>? QueryRequested;
 
+    event EventHandler<ServiceQueryResult>? FoundryLocalStartRequested;
+
     void RefreshDemotionState();
 
     void RefreshThemeChrome()

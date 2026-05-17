@@ -224,7 +224,7 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
     {
         RaiseStatusChanged(new LocalModelStatus(
             LocalModelState.Preparing,
-            "WindowsLocalAI_Status_Preparing"));
+            PhiSilicaResources.StatusKeys.Preparing));
         _healthMonitor.Reset();
 
         try
@@ -234,7 +234,7 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
             {
                 var failed = new LocalModelStatus(
                     LocalModelState.Failed,
-                    "WindowsLocalAI_Status_PrepareFailed",
+                    PhiSilicaResources.StatusKeys.PrepareFailed,
                     DetailMessage: "Windows reported that the model is still not ready after the preparation request completed.");
                 RaiseStatusChanged(failed);
                 return failed;
@@ -281,22 +281,22 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
     public static LocalModelStatus MapReadyStateToStatus(WindowsAIReadyState state) => state switch
     {
         WindowsAIReadyState.Ready =>
-            new LocalModelStatus(LocalModelState.Ready, "WindowsLocalAI_Status_Ready"),
+            new LocalModelStatus(LocalModelState.Ready, PhiSilicaResources.StatusKeys.Ready),
 
         WindowsAIReadyState.NotReady =>
-            new LocalModelStatus(LocalModelState.NeedsPreparation, "WindowsLocalAI_Status_NotReady"),
+            new LocalModelStatus(LocalModelState.NeedsPreparation, PhiSilicaResources.StatusKeys.NotReady),
 
         WindowsAIReadyState.CapabilityMissing =>
-            new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_CapabilityMissing"),
+            new LocalModelStatus(LocalModelState.NotCompatible, PhiSilicaResources.StatusKeys.CapabilityMissing),
 
         WindowsAIReadyState.NotCompatibleWithSystemHardware =>
-            new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_NotCompatibleHardware"),
+            new LocalModelStatus(LocalModelState.NotCompatible, PhiSilicaResources.StatusKeys.NotCompatibleHardware),
 
         WindowsAIReadyState.OSUpdateNeeded =>
-            new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_OSUpdateNeeded"),
+            new LocalModelStatus(LocalModelState.NotCompatible, PhiSilicaResources.StatusKeys.OSUpdateNeeded),
 
         WindowsAIReadyState.DisabledByUser =>
-            new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_DisabledByUser"),
+            new LocalModelStatus(LocalModelState.NotCompatible, PhiSilicaResources.StatusKeys.DisabledByUser),
 
         WindowsAIReadyState.UnsupportedWindowsAIBaseline =>
             new LocalModelStatus(
@@ -304,7 +304,7 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
                 WindowsAIBaselineDiagnostics.UnsupportedWindowsAIBaselineResourceKey),
 
         _ =>
-            new LocalModelStatus(LocalModelState.NotCompatible, "WindowsLocalAI_Status_NotSupported"),
+            new LocalModelStatus(LocalModelState.NotCompatible, PhiSilicaResources.StatusKeys.NotSupported),
     };
 
     public static LocalModelStatus CreatePreparationFailureStatus(
@@ -318,7 +318,7 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
                 DetailMessage: detailMessage)
             : new LocalModelStatus(
                 LocalModelState.Failed,
-                "WindowsLocalAI_Status_PrepareFailed",
+                PhiSilicaResources.StatusKeys.PrepareFailed,
                 DetailMessage: detailMessage);
     }
 
@@ -334,7 +334,7 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
                 DetailMessage: detail)
             : new LocalModelStatus(
                 LocalModelState.Failed,
-                "WindowsLocalAI_Status_RuntimeUnhealthy",
+                PhiSilicaResources.StatusKeys.RuntimeUnhealthy,
                 DetailMessage: detail);
     }
 
@@ -379,13 +379,13 @@ public sealed class PhiSilicaTranslationService : IStreamTranslationService, ILo
         return snapshot.State switch
         {
             PhiSilicaBackendHealthState.Healthy =>
-                new LocalModelStatus(LocalModelState.Ready, "WindowsLocalAI_Status_Ready"),
+                new LocalModelStatus(LocalModelState.Ready, PhiSilicaResources.StatusKeys.Ready),
 
             PhiSilicaBackendHealthState.Unhealthy =>
                 CreateRuntimeFailureStatus(snapshot.DetailMessage, snapshot.Fingerprint),
 
             _ =>
-                new LocalModelStatus(LocalModelState.Preparing, "WindowsLocalAI_Status_WarmingUp"),
+                new LocalModelStatus(LocalModelState.Preparing, PhiSilicaResources.StatusKeys.WarmingUp),
         };
     }
 

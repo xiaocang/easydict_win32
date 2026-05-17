@@ -1126,7 +1126,16 @@
 
   <data name="FoundryLocal_ConfigDescription" xml:space="preserve"><value>Leave endpoint empty to auto-detect it from foundry service status; set it manually if the local service uses a fixed OpenAI-compatible endpoint.</value></data>
   <data name="FoundryLocal_InstallLinkText" xml:space="preserve"><value>Install Foundry Local</value></data>
+  <data name="FoundryLocal_DocsLinkText" xml:space="preserve"><value>Install/use docs</value></data>
+  <data name="FoundryLocal_StartButton" xml:space="preserve"><value>Start Foundry Local</value></data>
+  <data name="FoundryLocal_Title_Ready" xml:space="preserve"><value>Foundry Local ready</value></data>
+  <data name="FoundryLocal_Title_Unavailable" xml:space="preserve"><value>Foundry Local unavailable</value></data>
+  <data name="FoundryLocal_Status_Checking" xml:space="preserve"><value>Checking Foundry Local status...</value></data>
+  <data name="FoundryLocal_Status_NotInstalled" xml:space="preserve"><value>Foundry Local CLI is not installed or is not available on PATH.</value></data>
   <data name="FoundryLocal_Status_NotRunning" xml:space="preserve"><value>Foundry Local is not running. Start the Foundry Local service or set the endpoint manually.</value></data>
+  <data name="FoundryLocal_Status_Starting" xml:space="preserve"><value>Starting Foundry Local service...</value></data>
+  <data name="FoundryLocal_Status_LoadingModel" xml:space="preserve"><value>Loading the configured Foundry Local model...</value></data>
+  <data name="FoundryLocal_Status_StartFailed" xml:space="preserve"><value>Foundry Local could not be started.</value></data>
   <data name="FoundryLocal_Status_Ready" xml:space="preserve"><value>Foundry Local is configured. The local endpoint will be used or auto-detected at runtime.</value></data>
   <data name="FoundryLocal_EndpointLabel" xml:space="preserve"><value>Endpoint (optional)</value></data>
   <data name="FoundryLocal_ConfigTitle" xml:space="preserve"><value>Foundry Local</value></data>

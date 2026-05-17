@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
+using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 using Microsoft.UI.Input;
@@ -28,6 +29,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private BitmapImage? _cachedIcon;
     private HashSet<string>? _alreadyShownPhonetics;
     private bool _webViewInitialized;
+    private string? _foundryLocalDocsUrl;
     private MdxDictionaryTranslationService? _currentMdxService;
     private FrameworkElement? _themeRoot;
 
@@ -77,12 +79,18 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// </summary>
     public event EventHandler<ServiceQueryResult>? QueryRequested;
 
+    public event EventHandler<ServiceQueryResult>? FoundryLocalStartRequested;
+
     public ServiceResultItem()
     {
         this.InitializeComponent();
         Loaded += OnLoaded;
         ActualThemeChanged += OnActualThemeChanged;
-        ToolTipService.SetToolTip(ReplaceButton, LocalizationService.Instance.GetString("InsertReplace"));
+        var loc = LocalizationService.Instance;
+        ToolTipService.SetToolTip(ReplaceButton, loc.GetString("InsertReplace"));
+        FoundryLocalStartButton.Content = loc.GetString(FoundryLocalResources.UiKeys.StartButton);
+        FoundryLocalDocsLink.Content = loc.GetString(FoundryLocalResources.UiKeys.DocsLinkText);
+        FoundryLocalDocsLink.NavigateUri = new Uri(FoundryLocalResources.InstallDocumentationUrl);
     }
 
     /// <summary>
@@ -151,6 +159,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         RetryButton.Visibility = Visibility.Collapsed;
         ReplaceButton.Visibility = Visibility.Collapsed;
         ResultText.Text = string.Empty;
+        ErrorPanel.Visibility = Visibility.Collapsed;
         ErrorText.Text = string.Empty;
         StatusText.Text = string.Empty;
         PhoneticPanel.Children.Clear();
@@ -161,6 +170,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         DictWebView.Visibility = Visibility.Collapsed;
         ResultText.Visibility = Visibility.Collapsed;
         ErrorText.Visibility = Visibility.Collapsed;
+        FoundryLocalRecoveryPanel.Visibility = Visibility.Collapsed;
+        FoundryLocalStartButton.Visibility = Visibility.Collapsed;
+        FoundryLocalDocsLink.Visibility = Visibility.Collapsed;
         ContentArea.Visibility = Visibility.Collapsed;
     }
 
@@ -418,7 +430,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 : _serviceResult.StreamingText;
             ResultText.Foreground = resultTextBrush;
             ResultText.Visibility = Visibility.Visible;
-            ErrorText.Visibility = Visibility.Collapsed;
+            HideErrorPanel();
             PhoneticPanel.Visibility = Visibility.Collapsed;
             DictionaryPanel.Visibility = Visibility.Collapsed;
             DictWebView.Visibility = Visibility.Collapsed;
@@ -433,7 +445,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 ResultText.Visibility = string.IsNullOrWhiteSpace(ResultText.Text)
                     ? Visibility.Collapsed
                     : Visibility.Visible;
-                ErrorText.Visibility = Visibility.Collapsed;
+                HideErrorPanel();
                 PhoneticPanel.Visibility = Visibility.Collapsed;
                 DictionaryPanel.Visibility = Visibility.Collapsed;
                 DictWebView.Visibility = Visibility.Collapsed;
@@ -447,7 +459,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 ShowRawHtmlPlainTextFallback(_serviceResult.Result, resultTextBrush);
                 PhoneticPanel.Visibility = Visibility.Collapsed;
                 DictionaryPanel.Visibility = Visibility.Collapsed;
-                ErrorText.Visibility = Visibility.Collapsed;
+                HideErrorPanel();
                 _ = RenderHtmlDefinitionAsync(_serviceResult.Result.RawHtml, _serviceResult.ServiceId);
                 ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
                 ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
@@ -474,7 +486,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                     ResultText.Visibility = Visibility.Visible;
                 }
 
-                ErrorText.Visibility = Visibility.Collapsed;
+                HideErrorPanel();
                 ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
                 ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
             }
@@ -482,7 +494,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         else if (_serviceResult.Error != null)
         {
             ErrorText.Text = GetErrorDisplayText(_serviceResult);
+            ErrorPanel.Visibility = Visibility.Visible;
             ErrorText.Visibility = Visibility.Visible;
+            UpdateFoundryLocalRecoveryUi(_serviceResult.Error);
             ResultText.Visibility = Visibility.Collapsed;
             PhoneticPanel.Visibility = Visibility.Collapsed;
             DictionaryPanel.Visibility = Visibility.Collapsed;
@@ -495,7 +509,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             ResultText.Text = "";
             ResultText.Visibility = Visibility.Collapsed;
-            ErrorText.Visibility = Visibility.Collapsed;
+            HideErrorPanel();
             PhoneticPanel.Visibility = Visibility.Collapsed;
             DictionaryPanel.Visibility = Visibility.Collapsed;
             DictWebView.Visibility = Visibility.Collapsed;
@@ -519,6 +533,41 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             : Visibility.Visible;
     }
 
+    private void HideErrorPanel()
+    {
+        ErrorPanel.Visibility = Visibility.Collapsed;
+        ErrorText.Visibility = Visibility.Collapsed;
+        FoundryLocalRecoveryPanel.Visibility = Visibility.Collapsed;
+        FoundryLocalStartButton.Visibility = Visibility.Collapsed;
+        FoundryLocalDocsLink.Visibility = Visibility.Collapsed;
+    }
+
+    private void UpdateFoundryLocalRecoveryUi(TranslationException error)
+    {
+        var action = error.RecoveryAction;
+        var showStart = string.Equals(
+            action,
+            FoundryLocalResources.StartRecoveryAction,
+            StringComparison.Ordinal)
+            && FoundryLocalStartRequested is not null;
+        var showDocs = showStart
+            || string.Equals(action, FoundryLocalResources.InstallRecoveryAction, StringComparison.Ordinal);
+
+        FoundryLocalRecoveryPanel.Visibility = showStart || showDocs
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        FoundryLocalStartButton.Visibility = showStart ? Visibility.Visible : Visibility.Collapsed;
+        FoundryLocalDocsLink.Visibility = showDocs ? Visibility.Visible : Visibility.Collapsed;
+        var docsUrl = string.IsNullOrWhiteSpace(error.DocumentationUrl)
+            ? FoundryLocalResources.InstallDocumentationUrl
+            : error.DocumentationUrl;
+        if (!string.Equals(_foundryLocalDocsUrl, docsUrl, StringComparison.Ordinal))
+        {
+            _foundryLocalDocsUrl = docsUrl;
+            FoundryLocalDocsLink.NavigateUri = new Uri(docsUrl);
+        }
+    }
+
     private void UpdateGrammarUI()
     {
         // Hide translation-specific elements
@@ -535,6 +584,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         if (_serviceResult!.IsStreaming)
         {
             GrammarResultPanel.Visibility = Visibility.Visible;
+            HideErrorPanel();
             CorrectedText.Text = string.IsNullOrEmpty(_serviceResult.StreamingText)
                 ? "Waiting for response..." : _serviceResult.StreamingText;
             OriginalText.Text = "";
@@ -546,7 +596,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             var gr = _serviceResult.GrammarResult;
             GrammarResultPanel.Visibility = Visibility.Visible;
-            ErrorText.Visibility = Visibility.Collapsed;
+            HideErrorPanel();
             CorrectedText.Text = gr.CorrectedText;
             OriginalText.Text = gr.OriginalText;
 
@@ -577,7 +627,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             GrammarResultPanel.Visibility = Visibility.Collapsed;
             ErrorText.Text = GetErrorDisplayText(_serviceResult);
+            ErrorPanel.Visibility = Visibility.Visible;
             ErrorText.Visibility = Visibility.Visible;
+            UpdateFoundryLocalRecoveryUi(_serviceResult.Error);
             ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
             ReplaceButton.Visibility = Visibility.Collapsed;
             PlayButton.Visibility = Visibility.Collapsed;
@@ -585,7 +637,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         else
         {
             GrammarResultPanel.Visibility = Visibility.Collapsed;
-            ErrorText.Visibility = Visibility.Collapsed;
+            HideErrorPanel();
             ActionButtons.Visibility = Visibility.Collapsed;
         }
     }
@@ -1103,6 +1155,16 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         _serviceResult.Error = null;
         _serviceResult.ClearQueried();
         QueryRequested?.Invoke(this, _serviceResult);
+    }
+
+    private void OnFoundryLocalStartClicked(object sender, RoutedEventArgs e)
+    {
+        if (_serviceResult == null || _serviceResult.IsLoading)
+        {
+            return;
+        }
+
+        FoundryLocalStartRequested?.Invoke(this, _serviceResult);
     }
 
     private void OnControlPointerEntered(object sender, PointerRoutedEventArgs e)

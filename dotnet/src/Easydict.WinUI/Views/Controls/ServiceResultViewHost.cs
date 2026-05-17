@@ -13,18 +13,23 @@ internal static class ServiceResultViewHost
         ServiceQueryResult result,
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
-        FrameworkElement? themeRoot = null)
+        FrameworkElement? themeRoot = null,
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
     {
         IServiceResultView control = MinimalThemeService.IsActive
             ? new MinimalServiceResultItem()
             : new ServiceResultItem();
 
         control.ThemeRoot = themeRoot;
+        control.CollapseToggled += collapseToggled;
+        control.QueryRequested += queryRequested;
+        if (foundryLocalStartRequested is not null)
+        {
+            control.FoundryLocalStartRequested += foundryLocalStartRequested;
+        }
         control.ServiceResult = result;
         ApplyAutomationProperties(control, result);
         control.RefreshThemeChrome();
-        control.CollapseToggled += collapseToggled;
-        control.QueryRequested += queryRequested;
         return control;
     }
 
@@ -34,9 +39,15 @@ internal static class ServiceResultViewHost
         ItemsControl resultsPanel,
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
-        FrameworkElement? themeRoot = null)
+        FrameworkElement? themeRoot = null,
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
     {
-        var control = Create(result, collapseToggled, queryRequested, themeRoot ?? resultsPanel);
+        var control = Create(
+            result,
+            collapseToggled,
+            queryRequested,
+            themeRoot ?? resultsPanel,
+            foundryLocalStartRequested);
         controls.Add(control);
         resultsPanel.Items.Add(control.Element);
         control.RefreshThemeChrome();
@@ -68,13 +79,21 @@ internal static class ServiceResultViewHost
         ItemsControl resultsPanel,
         EventHandler<ServiceQueryResult> collapseToggled,
         EventHandler<ServiceQueryResult> queryRequested,
-        FrameworkElement? themeRoot = null)
+        FrameworkElement? themeRoot = null,
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
     {
-        Release(controls, resultsPanel, collapseToggled, queryRequested);
+        Release(controls, resultsPanel, collapseToggled, queryRequested, foundryLocalStartRequested);
 
         foreach (var result in results)
         {
-            Add(result, controls, resultsPanel, collapseToggled, queryRequested, themeRoot);
+            Add(
+                result,
+                controls,
+                resultsPanel,
+                collapseToggled,
+                queryRequested,
+                themeRoot,
+                foundryLocalStartRequested);
         }
     }
 
@@ -82,12 +101,17 @@ internal static class ServiceResultViewHost
         IList<IServiceResultView> controls,
         ItemsControl resultsPanel,
         EventHandler<ServiceQueryResult> collapseToggled,
-        EventHandler<ServiceQueryResult> queryRequested)
+        EventHandler<ServiceQueryResult> queryRequested,
+        EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
     {
         foreach (var control in controls)
         {
             control.CollapseToggled -= collapseToggled;
             control.QueryRequested -= queryRequested;
+            if (foundryLocalStartRequested is not null)
+            {
+                control.FoundryLocalStartRequested -= foundryLocalStartRequested;
+            }
             control.Cleanup();
         }
 

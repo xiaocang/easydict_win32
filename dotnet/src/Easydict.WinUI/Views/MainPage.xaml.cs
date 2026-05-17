@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LongDocument;
+using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
@@ -1188,7 +1189,8 @@ namespace Easydict.WinUI.Views
                     ResultsPanel,
                     OnServiceCollapseToggled,
                     OnServiceQueryRequested,
-                    this);
+                    this,
+                    OnFoundryLocalStartRequested);
             }
 
             ReorderResultsPanel();
@@ -1217,7 +1219,8 @@ namespace Easydict.WinUI.Views
                 ResultsPanel,
                 OnServiceCollapseToggled,
                 OnServiceQueryRequested,
-                this);
+                this,
+                OnFoundryLocalStartRequested);
 
             ReorderResultsPanel();
         }
@@ -1233,7 +1236,8 @@ namespace Easydict.WinUI.Views
                 _resultControls,
                 ResultsPanel,
                 OnServiceCollapseToggled,
-                OnServiceQueryRequested);
+                OnServiceQueryRequested,
+                OnFoundryLocalStartRequested);
 
             if (clearResults)
             {
@@ -1341,6 +1345,11 @@ namespace Easydict.WinUI.Views
         /// Handle query request from a manual-query service that user clicked to expand.
         /// </summary>
         private async void OnServiceQueryRequested(object? sender, ServiceQueryResult serviceResult)
+        {
+            await OnServiceQueryRequestedAsync(sender, serviceResult);
+        }
+
+        private async Task OnServiceQueryRequestedAsync(object? sender, ServiceQueryResult serviceResult)
         {
             if (_isClosing || _detectionService is null)
             {
@@ -1476,6 +1485,16 @@ namespace Easydict.WinUI.Views
                 Interlocked.CompareExchange(ref _manualQueryCts, null, cts);
                 cts.Dispose();
             }
+        }
+
+        private async void OnFoundryLocalStartRequested(object? sender, ServiceQueryResult serviceResult)
+        {
+            await FoundryLocalRecoveryCoordinator.StartAndRetryAsync(
+                serviceResult,
+                ct => TranslationManagerService.Instance.PrepareFoundryLocalAsync(ct),
+                (_, ct) => OnServiceQueryRequestedAsync(sender, serviceResult),
+                RefreshServiceResultView,
+                isAborted: () => _isClosing);
         }
 
         private void UpdateStatus(bool? connected, string text)
@@ -2191,6 +2210,14 @@ namespace Easydict.WinUI.Views
 
             // Final update with complete result (apply same cleanup as non-streaming path)
             var finalText = CleanupStreamingResult(sb.ToString());
+            if (string.IsNullOrWhiteSpace(finalText))
+            {
+                throw new TranslationException("Streaming service returned an empty response")
+                {
+                    ErrorCode = TranslationErrorCode.InvalidResponse,
+                    ServiceId = serviceResult.ServiceId
+                };
+            }
 
             // Create initial result
             var result = new TranslationResult
@@ -2217,6 +2244,7 @@ namespace Easydict.WinUI.Views
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (_isClosing) return;
+                serviceResult.IsLoading = false;
                 serviceResult.IsStreaming = false;
                 serviceResult.StreamingText = "";
                 serviceResult.Result = result;

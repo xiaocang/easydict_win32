@@ -194,15 +194,40 @@
                                 DefaultBackgroundColor="Transparent"
                                 Visibility="Collapsed"/>
 
-                            <!-- Error Message -->
-                            <TextBlock
-                                x:Name="ErrorText"
+                            <!-- Error Message and Recovery Actions -->
+                            <StackPanel
+                                x:Name="ErrorPanel"
                                 Grid.Row="4"
-                                TextWrapping="Wrap"
-                                IsTextSelectionEnabled="True"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                FontSize="12"
-                                Visibility="Collapsed"/>
+                                Spacing="8"
+                                Visibility="Collapsed">
+                                <TextBlock
+                                    x:Name="ErrorText"
+                                    TextWrapping="Wrap"
+                                    IsTextSelectionEnabled="True"
+                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                    FontSize="12"/>
+                                <StackPanel
+                                    x:Name="FoundryLocalRecoveryPanel"
+                                    Orientation="Horizontal"
+                                    Spacing="6"
+                                    Visibility="Collapsed">
+                                    <Button
+                                        x:Name="FoundryLocalStartButton"
+                                        Content="Start Foundry Local"
+                                        Click="OnFoundryLocalStartClicked"
+                                        Padding="8,2"
+                                        MinHeight="24"
+                                        FontSize="11"
+                                        Visibility="Collapsed"/>
+                                    <HyperlinkButton
+                                        x:Name="FoundryLocalDocsLink"
+                                        Content="Foundry Local docs"
+                                        Padding="0"
+                                        MinHeight="24"
+                                        FontSize="11"
+                                        Visibility="Collapsed"/>
+                                </StackPanel>
+                            </StackPanel>
 
                             <!-- Grammar Correction Result (visible only in grammar mode) -->
                             <StackPanel

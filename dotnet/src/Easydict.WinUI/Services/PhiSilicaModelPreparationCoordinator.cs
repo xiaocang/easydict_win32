@@ -47,17 +47,17 @@ internal static class PhiSilicaModelPreparationProgressFormatter
             return text;
         }
 
-        var estimateTemplate = loc.GetString("PhiSilicaPreparationProgress_DeliveryOptimizationEstimate");
+        var estimateTemplate = loc.GetString(PhiSilicaResources.ProgressKeys.DeliveryOptimizationEstimate);
         if (string.IsNullOrWhiteSpace(estimateTemplate)
-            || estimateTemplate == "PhiSilicaPreparationProgress_DeliveryOptimizationEstimate")
+            || estimateTemplate == PhiSilicaResources.ProgressKeys.DeliveryOptimizationEstimate)
         {
             estimateTemplate = "Current package: {0}% ({1} of {2}), about {3} remaining. More Windows-managed components may follow.";
         }
 
         var eta = estimate.EstimatedTimeRemaining is { } remaining
             ? FormatDuration(remaining)
-            : loc.GetString("PhiSilicaPreparationProgress_TimeUnknown");
-        if (string.IsNullOrWhiteSpace(eta) || eta == "PhiSilicaPreparationProgress_TimeUnknown")
+            : loc.GetString(PhiSilicaResources.ProgressKeys.TimeUnknown);
+        if (string.IsNullOrWhiteSpace(eta) || eta == PhiSilicaResources.ProgressKeys.TimeUnknown)
         {
             eta = "unknown time";
         }
@@ -116,7 +116,7 @@ internal sealed class PhiSilicaModelPreparationCoordinator
     private readonly object _gate = new();
     private Task<WindowsAIReadyState>? _activePreparationTask;
     private PhiSilicaModelPreparationSnapshot _currentSnapshot =
-        new("PhiSilicaPreparationProgress_Checking", IsPreparing: false);
+        new(PhiSilicaResources.ProgressKeys.Checking, IsPreparing: false);
 
     private static readonly TimeSpan DeliveryOptimizationPollInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan DeliveryOptimizationQueryTimeout = TimeSpan.FromSeconds(4);
@@ -186,8 +186,8 @@ internal sealed class PhiSilicaModelPreparationCoordinator
 
         if (reusedExisting)
         {
-            Report("PhiSilicaPreparationProgress_ReusingExisting");
-            reportProgress?.Invoke("PhiSilicaPreparationProgress_ReusingExisting");
+            Report(PhiSilicaResources.ProgressKeys.ReusingExisting);
+            reportProgress?.Invoke(PhiSilicaResources.ProgressKeys.ReusingExisting);
         }
 
         var snapshot = CurrentSnapshot;
@@ -205,7 +205,7 @@ internal sealed class PhiSilicaModelPreparationCoordinator
 
         try
         {
-            Report("PhiSilicaPreparationProgress_Checking");
+            Report(PhiSilicaResources.ProgressKeys.Checking);
             PhiSilicaBackendHealthMonitor.Shared.Reset();
             await Task.Yield();
 
@@ -220,14 +220,14 @@ internal sealed class PhiSilicaModelPreparationCoordinator
             if (existingEstimate is not null)
             {
                 Report(CreateDeliveryOptimizationSnapshot(
-                    "PhiSilicaPreparationProgress_ReusingExisting",
+                    PhiSilicaResources.ProgressKeys.ReusingExisting,
                     existingEstimate));
             }
 
-            Report("PhiSilicaPreparationProgress_Requesting");
+            Report(PhiSilicaResources.ProgressKeys.Requesting);
             await Task.Yield();
 
-            Report("PhiSilicaPreparationProgress_Waiting");
+            Report(PhiSilicaResources.ProgressKeys.Waiting);
             var sdkProgress = new Progress<double>(ReportSdkProgress);
             var ensureReadyTask = PhiSilicaAvailability.Client.EnsureReadyAsync(
                 CancellationToken.None,
@@ -245,7 +245,7 @@ internal sealed class PhiSilicaModelPreparationCoordinator
                 try { await pollTask; } catch (OperationCanceledException) { }
             }
 
-            Report("PhiSilicaPreparationProgress_Finalizing");
+            Report(PhiSilicaResources.ProgressKeys.Finalizing);
             if (finalState == WindowsAIReadyState.Ready)
             {
                 await EnsurePhiSilicaBackendHealthyAsync();
@@ -319,7 +319,7 @@ internal sealed class PhiSilicaModelPreparationCoordinator
         var rounded = Math.Round(Math.Clamp(progressPercent, 0d, 100d), MidpointRounding.AwayFromZero);
 
         Report(new PhiSilicaModelPreparationSnapshot(
-            "PhiSilicaPreparationProgress_Waiting",
+            PhiSilicaResources.ProgressKeys.Waiting,
             IsPreparing: true,
             SdkProgressPercent: rounded));
     }
@@ -333,12 +333,12 @@ internal sealed class PhiSilicaModelPreparationCoordinator
                 var resourceKey = snapshot.State switch
                 {
                     PhiSilicaBackendHealthState.CreatingSession =>
-                        "PhiSilicaPreparationProgress_CreatingSession",
+                        PhiSilicaResources.ProgressKeys.CreatingSession,
                     PhiSilicaBackendHealthState.WarmingUp =>
-                        "PhiSilicaPreparationProgress_WarmingUp",
+                        PhiSilicaResources.ProgressKeys.WarmingUp,
                     PhiSilicaBackendHealthState.Healthy =>
-                        "PhiSilicaPreparationProgress_Finalizing",
-                    _ => "PhiSilicaPreparationProgress_Finalizing",
+                        PhiSilicaResources.ProgressKeys.Finalizing,
+                    _ => PhiSilicaResources.ProgressKeys.Finalizing,
                 };
                 Report(resourceKey);
             },
@@ -360,7 +360,7 @@ internal sealed class PhiSilicaModelPreparationCoordinator
             }
 
             Report(CreateDeliveryOptimizationSnapshot(
-                "PhiSilicaPreparationProgress_Waiting",
+                PhiSilicaResources.ProgressKeys.Waiting,
                 estimate));
         }
     }

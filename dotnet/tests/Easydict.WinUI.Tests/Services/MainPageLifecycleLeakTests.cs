@@ -142,8 +142,8 @@ public class MainPageLifecycleLeakTests
         coordinator.Should().Contain("DeliveryOptimizationPollInterval");
         coordinator.Should().Contain("CreateDeliveryOptimizationSnapshot");
         coordinator.Should().Contain("ProgressPercent");
-        coordinator.Should().Contain("PhiSilicaPreparationProgress_ReusingExisting");
-        coordinator.Should().Contain("PhiSilicaPreparationProgress_DeliveryOptimizationEstimate");
+        coordinator.Should().Contain("PhiSilicaResources.ProgressKeys.ReusingExisting");
+        coordinator.Should().Contain("PhiSilicaResources.ProgressKeys.DeliveryOptimizationEstimate");
         coordinator.Should().Contain("CancellationToken.None",
             "navigation/query cancellation should not cancel the Windows-managed model preparation job");
     }

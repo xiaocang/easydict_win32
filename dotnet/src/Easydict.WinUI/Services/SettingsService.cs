@@ -721,13 +721,14 @@ public sealed class SettingsService
         MiniWindowWidthDips = GetValue(nameof(MiniWindowWidthDips), 320.0);
         MiniWindowHeightDips = GetValue(nameof(MiniWindowHeightDips), 200.0);
         MiniWindowIsPinned = GetValue(nameof(MiniWindowIsPinned), false);
-        var phiSilicaReadyState = PhiSilicaAvailability.GetReadyState();
         var hasSavedEnabledServiceSettings = _settings.ContainsKey(nameof(MiniWindowEnabledServices))
             || _settings.ContainsKey(nameof(MainWindowEnabledServices))
             || _settings.ContainsKey(nameof(FixedWindowEnabledServices));
+        var hasUserConfiguredServices = GetValue(nameof(HasUserConfiguredServices), false);
         var defaultEnabledServices = GetDefaultEnabledServicesForProfile(
             hasSavedEnabledServiceSettings,
-            phiSilicaReadyState);
+            hasUserConfiguredServices,
+            PhiSilicaAvailability.GetReadyState);
         MiniWindowEnabledServices = GetStringList(nameof(MiniWindowEnabledServices), defaultEnabledServices);
         MainWindowEnabledServices = GetStringList(nameof(MainWindowEnabledServices), defaultEnabledServices);
         ImportedMdxDictionaries = GetImportedMdxDictionaries();
@@ -767,7 +768,7 @@ public sealed class SettingsService
 
         // Flag: true once user has explicitly saved settings from the Settings page.
         // Used by NotifyInternationalServiceFailed to avoid overriding user choices.
-        HasUserConfiguredServices = GetValue(nameof(HasUserConfiguredServices), false);
+        HasUserConfiguredServices = hasUserConfiguredServices;
 
         // HTTP Proxy settings
         ProxyEnabled = GetValue(nameof(ProxyEnabled), false);
@@ -1107,9 +1108,20 @@ public sealed class SettingsService
         bool hasSavedEnabledServiceSettings,
         WindowsAIReadyState phiSilicaReadyState)
     {
-        return hasSavedEnabledServiceSettings
+        return GetDefaultEnabledServicesForProfile(
+            hasSavedEnabledServiceSettings,
+            hasUserConfiguredServices: false,
+            () => phiSilicaReadyState);
+    }
+
+    internal static List<string> GetDefaultEnabledServicesForProfile(
+        bool hasSavedEnabledServiceSettings,
+        bool hasUserConfiguredServices,
+        Func<WindowsAIReadyState> getPhiSilicaReadyState)
+    {
+        return hasSavedEnabledServiceSettings || hasUserConfiguredServices
             ? [GoogleServiceId]
-            : GetDefaultEnabledServices(phiSilicaReadyState);
+            : GetDefaultEnabledServices(getPhiSilicaReadyState());
     }
 
     internal static bool IsPhiSilicaSupportedForDefaultEnable(WindowsAIReadyState phiSilicaReadyState)

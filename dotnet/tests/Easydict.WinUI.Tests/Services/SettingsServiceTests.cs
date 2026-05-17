@@ -415,21 +415,52 @@ public class SettingsServiceTests
     [Fact]
     public void GetDefaultEnabledServicesForProfile_AddsPhiSilica_ForFreshProfile()
     {
+        var probed = false;
         var services = SettingsService.GetDefaultEnabledServicesForProfile(
             hasSavedEnabledServiceSettings: false,
-            WindowsAIReadyState.NotReady);
+            hasUserConfiguredServices: false,
+            getPhiSilicaReadyState: () =>
+            {
+                probed = true;
+                return WindowsAIReadyState.NotReady;
+            });
 
         services.Should().Equal("google", "windows-local-ai");
+        probed.Should().BeTrue();
     }
 
     [Fact]
-    public void GetDefaultEnabledServicesForProfile_KeepsLegacyDefault_WhenAnyServiceSettingExists()
+    public void GetDefaultEnabledServicesForProfile_KeepsLegacyDefault_AndSkipsProbe_WhenAnyServiceSettingExists()
     {
+        var probed = false;
         var services = SettingsService.GetDefaultEnabledServicesForProfile(
             hasSavedEnabledServiceSettings: true,
-            WindowsAIReadyState.Ready);
+            hasUserConfiguredServices: false,
+            getPhiSilicaReadyState: () =>
+            {
+                probed = true;
+                return WindowsAIReadyState.Ready;
+            });
 
         services.Should().Equal("google");
+        probed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void GetDefaultEnabledServicesForProfile_KeepsLegacyDefault_AndSkipsProbe_WhenUserConfiguredHistoryExists()
+    {
+        var probed = false;
+        var services = SettingsService.GetDefaultEnabledServicesForProfile(
+            hasSavedEnabledServiceSettings: false,
+            hasUserConfiguredServices: true,
+            getPhiSilicaReadyState: () =>
+            {
+                probed = true;
+                return WindowsAIReadyState.Ready;
+            });
+
+        services.Should().Equal("google");
+        probed.Should().BeFalse();
     }
 
     [Fact]

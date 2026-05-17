@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Easydict.OpenVINO.Inference;
 using Easydict.OpenVINO.Services;
 using Easydict.TranslationService;
+using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Services;
 using Easydict.WindowsAI.Services;
 
@@ -60,6 +61,74 @@ public sealed class TranslationManagerService : IDisposable
                 return _openVinoService;
             }
         }
+    }
+
+    internal FoundryLocalService? FoundryLocalService
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _foundryLocalService;
+            }
+        }
+    }
+
+    public Task<LocalModelStatus> PrepareFoundryLocalAsync(CancellationToken cancellationToken)
+    {
+        FoundryLocalService? service;
+        lock (_lock)
+        {
+            _foundryLocalService ??= new FoundryLocalService(_translationManager.SharedHttpClient);
+            _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
+            service = _foundryLocalService;
+        }
+
+        return service.PrepareAsync(cancellationToken);
+    }
+
+    public Task<LocalModelStatus> PrepareFoundryLocalAsync(
+        string? endpoint,
+        string? model,
+        CancellationToken cancellationToken)
+    {
+        var service = CreateFoundryLocalProbeService(endpoint, model);
+        return service.PrepareAsync(cancellationToken);
+    }
+
+    public Task<LocalModelStatus> GetFoundryLocalStatusAsync(CancellationToken cancellationToken)
+    {
+        FoundryLocalService? service;
+        lock (_lock)
+        {
+            _foundryLocalService ??= new FoundryLocalService(_translationManager.SharedHttpClient);
+            _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
+            service = _foundryLocalService;
+        }
+
+        return service.CheckRuntimeStatusAsync(cancellationToken);
+    }
+
+    public Task<LocalModelStatus> GetFoundryLocalStatusAsync(
+        string? endpoint,
+        string? model,
+        CancellationToken cancellationToken)
+    {
+        var service = CreateFoundryLocalProbeService(endpoint, model);
+        return service.CheckRuntimeStatusAsync(cancellationToken);
+    }
+
+    private FoundryLocalService CreateFoundryLocalProbeService(string? endpoint, string? model)
+    {
+        HttpClient httpClient;
+        lock (_lock)
+        {
+            httpClient = _translationManager.SharedHttpClient;
+        }
+
+        var service = new FoundryLocalService(httpClient);
+        service.Configure(endpoint, model);
+        return service;
     }
 
     /// <summary>

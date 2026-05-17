@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using System.Collections;
 using System.Globalization;
+using Easydict.WindowsAI.Services;
 using Microsoft.Windows.AI;
 using Microsoft.Windows.AI.Text;
 using Microsoft.Win32;
@@ -39,14 +40,6 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
     /// non-UI consumers remain readable.
     /// </summary>
     public static Func<string, string?>? HintLocalizer { get; set; }
-
-    private static class HintKeys
-    {
-        public const string ServiceDisabled = "WindowsLocalAI_Hint_ServiceDisabled";
-        public const string PackageResourceInUse = "WindowsLocalAI_Hint_PackageResourceInUse";
-        public const string NpuRuntimeReset = "WindowsLocalAI_Hint_NpuRuntimeReset";
-        public const string NpuModelSessionInit = "WindowsLocalAI_Hint_NpuModelSessionInit";
-    }
 
     private static string Localize(string resourceKey, string defaultText)
     {
@@ -521,15 +514,15 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
     internal static string? GetPreparationHintForHResult(int hresult) => hresult switch
     {
         ServiceDisabledHResult => Localize(
-            HintKeys.ServiceDisabled,
+            PhiSilicaResources.HintKeys.ServiceDisabled,
             "A required Windows update/download service is disabled or cannot be started. " +
             "Enable Windows Update and Delivery Optimization, then try again."),
         PackageResourceInUseHResult => Localize(
-            HintKeys.PackageResourceInUse,
+            PhiSilicaResources.HintKeys.PackageResourceInUse,
             "Windows downloaded the model package but could not finish installing it because a related package or resource is in use. " +
             "Close Easydict and other Windows AI apps, or restart Windows, then try again."),
         UnspecifiedFailureHResult => Localize(
-            HintKeys.NpuRuntimeReset,
+            PhiSilicaResources.HintKeys.NpuRuntimeReset,
             "Windows returned a generic failure after the model reported ready. " +
             "This usually means the Windows AI model session or first inference failed after the model package was installed. " +
             "Close other Windows AI apps and heavy processes, restart Windows to reset the NPU/model runtime, then retry. " +
@@ -581,7 +574,7 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
         if (exception.HResult == UnspecifiedFailureHResult && HasNpuInitFailureMarker(exception))
         {
             return Localize(
-                HintKeys.NpuModelSessionInit,
+                PhiSilicaResources.HintKeys.NpuModelSessionInit,
                 "Windows AI downloaded the model but failed while initializing the Phi Silica model session or first inference. " +
                 "Close other Windows AI apps and heavy processes, restart Windows to reset the NPU/model runtime, then retry. " +
                 "If this persists, use Foundry Local or OpenVINO as the fallback.");

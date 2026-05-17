@@ -75,6 +75,16 @@ public class TranslationException : Exception
     /// The service that threw the error.
     /// </summary>
     public string? ServiceId { get; init; }
+
+    /// <summary>
+    /// Optional machine-readable recovery action that UI surfaces can render as a button.
+    /// </summary>
+    public string? RecoveryAction { get; init; }
+
+    /// <summary>
+    /// Optional documentation URL for user-recoverable failures.
+    /// </summary>
+    public string? DocumentationUrl { get; init; }
 }
 
 /// <summary>

@@ -295,7 +295,7 @@ public sealed class LocalAITranslationService : IStreamTranslationService, ILoca
     private LocalModelStatus GetFoundryLocalStatus()
     {
         return _foundryLocalModelProvider?.GetStatus()
-            ?? new LocalModelStatus(LocalModelState.Ready, "FoundryLocal_Status_Ready");
+            ?? new LocalModelStatus(LocalModelState.Ready, FoundryLocalResources.StatusKeys.Ready);
     }
 
     private void RaiseStatusChanged(LocalModelStatus status)

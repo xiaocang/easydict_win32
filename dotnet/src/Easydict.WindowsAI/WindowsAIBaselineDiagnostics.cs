@@ -1,9 +1,11 @@
+using Easydict.WindowsAI.Services;
+
 namespace Easydict.WindowsAI;
 
 public static class WindowsAIBaselineDiagnostics
 {
     public const string UnsupportedWindowsAIBaselineResourceKey =
-        "WindowsLocalAI_Status_UnsupportedWindowsAIBaseline";
+        PhiSilicaResources.StatusKeys.UnsupportedWindowsAIBaseline;
 
     public static readonly Version MinimumSupportedOsBaseline = new(10, 0, 26200, 7309);
 

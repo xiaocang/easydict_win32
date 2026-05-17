@@ -197,22 +197,34 @@ jobs:
         run: |
           $trx = Get-ChildItem -Recurse -Filter "winui-test-results.trx" | Select-Object -First 1
           if (-not $trx) {
-            Write-Host "::warning::No trx file produced"
+            Write-Host "::error::No trx file produced — test step likely crashed before any test ran"
             exit 0
           }
 
+          Write-Host "Parsing trx: $($trx.FullName) ($((Get-Item $trx.FullName).Length) bytes)"
           [xml]$xml = Get-Content $trx.FullName
 
-          # Find failed UnitTestResult nodes (namespace-aware)
           $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
           $ns.AddNamespace("t", "http://microsoft.com/schemas/VisualStudio/TeamTest/2010")
-          $failed = $xml.SelectNodes("//t:UnitTestResult[@outcome='Failed']", $ns)
 
-          Write-Host "Found $($failed.Count) failed tests"
-          foreach ($t in $failed) {
+          # Surface anything that isn't a clean pass — Failed, Error, NotExecuted, Timeout, etc.
+          $bad = $xml.SelectNodes("//t:UnitTestResult[@outcome and @outcome!='Passed' and @outcome!='NotRunnable']", $ns)
+          Write-Host "Found $($bad.Count) non-passing tests"
+
+          if ($bad.Count -eq 0) {
+            $counters = $xml.SelectSingleNode("//t:ResultSummary/t:Counters", $ns)
+            if ($counters) {
+              Write-Host "::error::No failing UnitTestResult nodes found in trx, but step exited non-zero. Counters: $($counters.OuterXml)"
+            } else {
+              Write-Host "::error::trx contains no UnitTestResult nodes — the test runner may have crashed during startup"
+            }
+          }
+
+          foreach ($t in $bad) {
             $name = $t.GetAttribute("testName")
+            $outcome = $t.GetAttribute("outcome")
             $msgNode = $t.SelectSingleNode("t:Output/t:ErrorInfo/t:Message", $ns)
-            $msg = if ($msgNode) { $msgNode.InnerText } else { "" }
+            $msg = if ($msgNode) { $msgNode.InnerText } else { "(no error message captured)" }
             # GitHub Actions workflow command escaping: % must be escaped first
             # (otherwise the later %0A / %0D / %3A / %2C escapes get corrupted),
             # then newlines/carriage returns, then the syntactic separators.
@@ -222,7 +234,7 @@ jobs:
                         -replace ":", "%3A" `
                         -replace ",", "%2C"
             if ($msg.Length -gt 1500) { $msg = $msg.Substring(0, 1500) + "..." }
-            Write-Host "::error title=WinUI test failed::$name%0A$msg"
+            Write-Host "::error title=WinUI test $outcome::$name%0A$msg"
           }
 
       - name: Upload test results
@@ -370,28 +382,40 @@ jobs:
         run: |
           $trx = Get-ChildItem -Recurse -Filter "ui-test-results.trx" | Select-Object -First 1
           if (-not $trx) {
-            Write-Host "::warning::No trx file produced"
+            Write-Host "::error::No trx file produced — test step likely crashed before any test ran"
             exit 0
           }
 
+          Write-Host "Parsing trx: $($trx.FullName) ($((Get-Item $trx.FullName).Length) bytes)"
           [xml]$xml = Get-Content $trx.FullName
 
           $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
           $ns.AddNamespace("t", "http://microsoft.com/schemas/VisualStudio/TeamTest/2010")
-          $failed = $xml.SelectNodes("//t:UnitTestResult[@outcome='Failed']", $ns)
 
-          Write-Host "Found $($failed.Count) failed UI tests"
-          foreach ($t in $failed) {
+          $bad = $xml.SelectNodes("//t:UnitTestResult[@outcome and @outcome!='Passed' and @outcome!='NotRunnable']", $ns)
+          Write-Host "Found $($bad.Count) non-passing UI tests"
+
+          if ($bad.Count -eq 0) {
+            $counters = $xml.SelectSingleNode("//t:ResultSummary/t:Counters", $ns)
+            if ($counters) {
+              Write-Host "::error::No failing UnitTestResult nodes found in trx, but step exited non-zero. Counters: $($counters.OuterXml)"
+            } else {
+              Write-Host "::error::trx contains no UnitTestResult nodes — the test runner may have crashed during startup"
+            }
+          }
+
+          foreach ($t in $bad) {
             $name = $t.GetAttribute("testName")
+            $outcome = $t.GetAttribute("outcome")
             $msgNode = $t.SelectSingleNode("t:Output/t:ErrorInfo/t:Message", $ns)
-            $msg = if ($msgNode) { $msgNode.InnerText } else { "" }
+            $msg = if ($msgNode) { $msgNode.InnerText } else { "(no error message captured)" }
             $msg = $msg -replace "%", "%25" `
                         -replace "`r", "%0D" `
                         -replace "`n", "%0A" `
                         -replace ":", "%3A" `
                         -replace ",", "%2C"
             if ($msg.Length -gt 1500) { $msg = $msg.Substring(0, 1500) + "..." }
-            Write-Host "::error title=UI test failed (${{ matrix.shard.name }})::$name%0A$msg"
+            Write-Host "::error title=UI test $outcome (${{ matrix.shard.name }})::$name%0A$msg"
           }
 
       - name: Upload screenshots

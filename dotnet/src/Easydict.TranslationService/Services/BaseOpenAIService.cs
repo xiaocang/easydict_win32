@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -11,8 +10,10 @@ namespace Easydict.TranslationService.Services;
 /// <summary>
 /// Base class for OpenAI-compatible streaming translation services.
 /// Mirrors macOS BaseOpenAIService pattern with SSE streaming support.
-/// Supports both Chat Completions and Responses API formats, auto-detected
-/// by URL path or by probing the endpoint at first request.
+/// Supports both Chat Completions and Responses API formats; the format
+/// is chosen per request based on the endpoint URL suffix
+/// (<c>/responses</c> vs <c>/chat/completions</c>) — Chat Completions is
+/// the default when the URL is unrecognized.
 /// </summary>
 public abstract class BaseOpenAIService : BaseTranslationService, IStreamTranslationService, IGrammarCorrectionService
 {
@@ -93,8 +94,7 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         You are a translation expert proficient in various languages, focusing solely on translating text without interpretation. You accurately understand the meanings of proper nouns, idioms, metaphors, allusions, and other obscure words in sentences, translating them appropriately based on the context and language environment. The translation should be natural and fluent. Only return the translated text, without including redundant quotes or additional notes.
         """;
 
-    private readonly object _formatLock = new();
-    private OpenAIApiFormat _detectedFormat = OpenAIApiFormat.Auto;
+    private OpenAIApiFormat? _formatOverride;
 
     protected BaseOpenAIService(HttpClient httpClient) : base(httpClient) { }
 
@@ -132,32 +132,21 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
     public bool IsStreaming => true;
 
     /// <summary>
-    /// Currently detected (or pinned) API format. Exposed for diagnostics and tests.
-    /// Returns <see cref="OpenAIApiFormat.Auto"/> until the first successful request
-    /// (or the URL is unambiguous and a request has been made).
+    /// Format that will be used for the next request — either the explicit
+    /// override (set via <see cref="PinFormat"/>) or the format inferred from
+    /// the endpoint URL.
     /// </summary>
-    public OpenAIApiFormat DetectedFormat
-    {
-        get
-        {
-            lock (_formatLock) { return _detectedFormat; }
-        }
-    }
+    public OpenAIApiFormat DetectedFormat => _formatOverride ?? DetectFormatFromUrl(Endpoint);
 
     /// <summary>
-    /// Reset the cached format detection. Subclasses MUST call this from their
-    /// Configure() methods so that an endpoint change re-triggers detection.
+    /// Clear any pinned format. The next request will infer the format from
+    /// the endpoint URL. Subclasses call this from their Configure() methods.
     /// </summary>
-    protected void ResetFormatDetection()
-    {
-        lock (_formatLock) { _detectedFormat = OpenAIApiFormat.Auto; }
-    }
+    protected void ResetFormatDetection() => _formatOverride = null;
 
     /// <summary>
-    /// Pin the API format, bypassing URL inspection and probe fallback for
-    /// subsequent requests. Subclasses call this from Configure() when the
-    /// user has explicitly chosen a format. Pass <see cref="OpenAIApiFormat.Auto"/>
-    /// to <see cref="ResetFormatDetection"/> instead.
+    /// Pin the API format, bypassing URL inspection. Subclasses call this
+    /// from Configure() when the user has explicitly chosen a format.
     /// </summary>
     protected void PinFormat(OpenAIApiFormat format)
     {
@@ -166,30 +155,25 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             throw new ArgumentException(
                 "Use ResetFormatDetection() to clear the pinned format.", nameof(format));
         }
-        lock (_formatLock) { _detectedFormat = format; }
-    }
-
-    private void CacheFormat(OpenAIApiFormat format)
-    {
-        lock (_formatLock) { _detectedFormat = format; }
+        _formatOverride = format;
     }
 
     /// <summary>
     /// Inspect the endpoint URL path to determine API format. Returns
-    /// <see cref="OpenAIApiFormat.Auto"/> when the URL doesn't end with a
-    /// recognized suffix (caller must then probe).
+    /// <see cref="OpenAIApiFormat.ChatCompletions"/> for any URL that
+    /// doesn't end with the Responses suffix — Chat Completions is the
+    /// safe default since it is supported by virtually every
+    /// OpenAI-compatible third-party provider.
     /// </summary>
     internal static OpenAIApiFormat DetectFormatFromUrl(string endpoint)
     {
         if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
-            return OpenAIApiFormat.Auto;
+            return OpenAIApiFormat.ChatCompletions;
 
         var path = uri.AbsolutePath.TrimEnd('/');
-        if (path.EndsWith("/responses", StringComparison.OrdinalIgnoreCase))
-            return OpenAIApiFormat.Responses;
-        if (path.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-            return OpenAIApiFormat.ChatCompletions;
-        return OpenAIApiFormat.Auto;
+        return path.EndsWith("/responses", StringComparison.OrdinalIgnoreCase)
+            ? OpenAIApiFormat.Responses
+            : OpenAIApiFormat.ChatCompletions;
     }
 
     /// <summary>
@@ -214,15 +198,19 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
 
     /// <summary>
     /// Stream translate text using OpenAI-compatible API.
-    /// Dispatches to Chat Completions or Responses path based on cached / detected format.
+    /// Dispatches to Chat Completions or Responses path based on the endpoint URL.
     /// </summary>
     public virtual async IAsyncEnumerable<string> TranslateStreamAsync(
         TranslationRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ValidateConfiguration();
-        await foreach (var chunk in StreamWithFormatDispatchAsync(
-            BuildChatMessages(request), cancellationToken).ConfigureAwait(false))
+
+        var strategy = OpenAIFormatStrategies.For(DetectedFormat);
+        var messages = BuildChatMessages(request);
+        var requestBody = strategy.BuildRequestBody(messages, Model, Temperature);
+
+        await foreach (var chunk in SendAndParseAsync(strategy, requestBody, cancellationToken).ConfigureAwait(false))
         {
             yield return chunk;
         }
@@ -230,15 +218,18 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
 
     /// <summary>
     /// Stream grammar correction output using OpenAI-compatible API.
-    /// Reuses the same dispatch+probe logic as translation.
     /// </summary>
     public virtual async IAsyncEnumerable<string> CorrectGrammarStreamAsync(
         GrammarCorrectionRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ValidateConfiguration();
-        await foreach (var chunk in StreamWithFormatDispatchAsync(
-            BuildGrammarCorrectionMessages(request), cancellationToken).ConfigureAwait(false))
+
+        var strategy = OpenAIFormatStrategies.For(DetectedFormat);
+        var messages = BuildGrammarCorrectionMessages(request);
+        var requestBody = strategy.BuildRequestBody(messages, Model, Temperature);
+
+        await foreach (var chunk in SendAndParseAsync(strategy, requestBody, cancellationToken).ConfigureAwait(false))
         {
             yield return chunk;
         }
@@ -319,36 +310,39 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
         }
     }
 
-    private async IAsyncEnumerable<string> StreamWithFormatDispatchAsync(
-        List<ChatMessage> messages,
+    private async IAsyncEnumerable<string> SendAndParseAsync(
+        IOpenAIFormatStrategy strategy,
+        object requestBody,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var cached = DetectedFormat;
-        var initial = cached != OpenAIApiFormat.Auto
-            ? cached
-            : DetectFormatFromUrl(Endpoint);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(requestBody),
+            Encoding.UTF8,
+            "application/json");
 
-        IOpenAIFormatStrategy strategy;
-        HttpResponseMessage response;
-
-        if (initial != OpenAIApiFormat.Auto)
+        if (!string.IsNullOrEmpty(ApiKey))
         {
-            strategy = OpenAIFormatStrategies.For(initial);
-            response = await SendWithStrategyAsync(strategy, messages, cancellationToken).ConfigureAwait(false);
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
         }
-        else
-        {
-            // Auto: probe with preferred strategy; if endpoint rejects the path,
-            // retry with the other strategy and cache whichever succeeds.
-            strategy = PreferredAutoProbeStrategy();
-            response = await SendWithStrategyAsync(strategy, messages, cancellationToken).ConfigureAwait(false);
 
-            if (ShouldFallback(response.StatusCode))
+        ConfigureHttpRequest(httpRequest);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await HttpClient.SendAsync(
+                httpRequest,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new TranslationException($"Network error: {ex.Message}", ex)
             {
-                response.Dispose();
-                strategy = OpenAIFormatStrategies.For(OtherFormat(strategy.Format));
-                response = await SendWithStrategyAsync(strategy, messages, cancellationToken).ConfigureAwait(false);
-            }
+                ErrorCode = TranslationErrorCode.NetworkError,
+                ServiceId = ServiceId
+            };
         }
 
         using (response)
@@ -359,8 +353,6 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
                 throw CreateErrorFromResponse(response.StatusCode, errorBody);
             }
 
-            CacheFormat(strategy.Format);
-
             var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             await foreach (var chunk in strategy.ParseStreamAsync(stream, cancellationToken).ConfigureAwait(false))
             {
@@ -368,64 +360,4 @@ public abstract class BaseOpenAIService : BaseTranslationService, IStreamTransla
             }
         }
     }
-
-    private async Task<HttpResponseMessage> SendWithStrategyAsync(
-        IOpenAIFormatStrategy strategy,
-        List<ChatMessage> messages,
-        CancellationToken cancellationToken)
-    {
-        var body = strategy.BuildRequestBody(messages, Model, Temperature);
-
-        var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
-        {
-            Content = new StringContent(
-                JsonSerializer.Serialize(body),
-                Encoding.UTF8,
-                "application/json")
-        };
-
-        if (!string.IsNullOrEmpty(ApiKey))
-        {
-            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
-        }
-
-        ConfigureHttpRequest(httpRequest);
-
-        try
-        {
-            return await HttpClient.SendAsync(
-                httpRequest,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken).ConfigureAwait(false);
-        }
-        catch (HttpRequestException ex)
-        {
-            httpRequest.Dispose();
-            throw new TranslationException($"Network error: {ex.Message}", ex)
-            {
-                ErrorCode = TranslationErrorCode.NetworkError,
-                ServiceId = ServiceId
-            };
-        }
-    }
-
-    private IOpenAIFormatStrategy PreferredAutoProbeStrategy()
-    {
-        // Official api.openai.com → try Responses (latest) first. Otherwise
-        // (third-party / self-hosted) → Chat Completions, which has wider support.
-        if (Uri.TryCreate(Endpoint, UriKind.Absolute, out var uri) &&
-            uri.Host.Equals("api.openai.com", StringComparison.OrdinalIgnoreCase))
-        {
-            return ResponsesFormatStrategy.Instance;
-        }
-        return ChatCompletionsFormatStrategy.Instance;
-    }
-
-    private static OpenAIApiFormat OtherFormat(OpenAIApiFormat format) =>
-        format == OpenAIApiFormat.Responses
-            ? OpenAIApiFormat.ChatCompletions
-            : OpenAIApiFormat.Responses;
-
-    private static bool ShouldFallback(HttpStatusCode status) =>
-        status == HttpStatusCode.NotFound || status == HttpStatusCode.MethodNotAllowed;
 }

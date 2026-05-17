@@ -9,7 +9,7 @@ using Xunit;
 namespace Easydict.TranslationService.Tests.Services;
 
 /// <summary>
-/// Tests for OpenAI API format auto-detection (URL prefix + endpoint probe).
+/// Tests for OpenAI API format auto-detection via URL inspection and explicit override.
 /// </summary>
 public class OpenAIApiFormatDetectionTests
 {
@@ -26,9 +26,9 @@ public class OpenAIApiFormatDetectionTests
     [InlineData("https://my-proxy.example.com/openai/v1/responses", OpenAIApiFormat.Responses)]
     [InlineData("https://api.openai.com/v1/chat/completions", OpenAIApiFormat.ChatCompletions)]
     [InlineData("http://localhost:11434/v1/chat/completions", OpenAIApiFormat.ChatCompletions)]
-    [InlineData("https://api.openai.com/v1/", OpenAIApiFormat.Auto)]
-    [InlineData("https://example.com/api", OpenAIApiFormat.Auto)]
-    [InlineData("not-a-url", OpenAIApiFormat.Auto)]
+    [InlineData("https://api.openai.com/v1/", OpenAIApiFormat.ChatCompletions)]
+    [InlineData("https://example.com/api", OpenAIApiFormat.ChatCompletions)]
+    [InlineData("not-a-url", OpenAIApiFormat.ChatCompletions)]
     public void DetectFormatFromUrl_RecognizesKnownSuffixes(string endpoint, OpenAIApiFormat expected)
     {
         BaseOpenAIService.DetectFormatFromUrl(endpoint).Should().Be(expected);
@@ -75,75 +75,26 @@ public class OpenAIApiFormatDetectionTests
     }
 
     [Fact]
-    public async Task TranslateStreamAsync_ProbeFallback_FromChatCompletionsToResponses_OnAmbiguousUrl()
-    {
-        var mockHandler = new MockHttpMessageHandler();
-        var httpClient = new HttpClient(mockHandler);
-        // Ambiguous URL on a non-openai host → preferred first format is ChatCompletions.
-        var service = new ConfigurableOpenAIService(httpClient)
-            .WithConfig("sk-test", "https://custom.example.com/v1/");
-
-        mockHandler.EnqueueErrorResponse(HttpStatusCode.NotFound, "Unknown route");
-        EnqueueResponsesStream(mockHandler, "Hello");
-
-        await ConsumeAsync(service.TranslateStreamAsync(SampleRequest));
-
-        mockHandler.Requests.Should().HaveCount(2);
-        service.DetectedFormat.Should().Be(OpenAIApiFormat.Responses);
-    }
-
-    [Fact]
-    public async Task TranslateStreamAsync_ProbeFallback_PrefersResponses_OnOfficialOpenAIHost()
-    {
-        var mockHandler = new MockHttpMessageHandler();
-        var httpClient = new HttpClient(mockHandler);
-        var service = new ConfigurableOpenAIService(httpClient)
-            .WithConfig("sk-test", "https://api.openai.com/v1/");
-
-        EnqueueResponsesStream(mockHandler, "Hi");
-
-        await ConsumeAsync(service.TranslateStreamAsync(SampleRequest));
-
-        mockHandler.Requests.Should().HaveCount(1);
-        service.DetectedFormat.Should().Be(OpenAIApiFormat.Responses);
-    }
-
-    [Fact]
-    public async Task TranslateStreamAsync_CachesFormat_AcrossCalls_UntilReset()
+    public async Task TranslateStreamAsync_DefaultsToChatCompletions_ForAmbiguousUrl()
     {
         var mockHandler = new MockHttpMessageHandler();
         var httpClient = new HttpClient(mockHandler);
         var service = new ConfigurableOpenAIService(httpClient)
             .WithConfig("sk-test", "https://custom.example.com/v1/");
-
-        // First call probes: ChatCompletions 404 → Responses succeeds.
-        mockHandler.EnqueueErrorResponse(HttpStatusCode.NotFound, "no route");
-        EnqueueResponsesStream(mockHandler, "first");
-
-        await ConsumeAsync(service.TranslateStreamAsync(SampleRequest));
-        service.DetectedFormat.Should().Be(OpenAIApiFormat.Responses);
-
-        // Second call: cached → no probe, just one request in Responses format.
-        EnqueueResponsesStream(mockHandler, "second");
-        await ConsumeAsync(service.TranslateStreamAsync(SampleRequest));
-
-        mockHandler.Requests.Should().HaveCount(3);
-        mockHandler.LastRequestBody!.Should().Contain("\"instructions\":");
-
-        // Reconfigure → cache reset.
-        service.WithConfig("sk-test", "https://other.example.com/v1/chat/completions");
-        service.DetectedFormat.Should().Be(OpenAIApiFormat.Auto);
 
         mockHandler.EnqueueStreamingResponse(new[]
         {
-            """{"choices":[{"delta":{"content":"third"}}]}"""
+            """{"choices":[{"delta":{"content":"Hi"}}]}"""
         });
+
         await ConsumeAsync(service.TranslateStreamAsync(SampleRequest));
+
+        mockHandler.LastRequestBody!.Should().Contain("\"messages\":");
         service.DetectedFormat.Should().Be(OpenAIApiFormat.ChatCompletions);
     }
 
     [Fact]
-    public void Pin_ResponsesFormat_SkipsAutoDetection()
+    public void Pin_ResponsesFormat_OverridesUrl()
     {
         var httpClient = new HttpClient(new MockHttpMessageHandler());
         var openai = new OpenAIService(httpClient);
@@ -154,7 +105,7 @@ public class OpenAIApiFormatDetectionTests
     }
 
     [Fact]
-    public void Pin_ChatCompletionsFormat_SkipsAutoDetection()
+    public void Pin_ChatCompletionsFormat_OverridesUrl()
     {
         var httpClient = new HttpClient(new MockHttpMessageHandler());
         var openai = new OpenAIService(httpClient);
@@ -165,15 +116,20 @@ public class OpenAIApiFormatDetectionTests
     }
 
     [Fact]
-    public void Pin_AutoFormat_ResetsCache()
+    public void Pin_AutoFormat_ClearsOverrideAndFallsBackToUrl()
     {
         var httpClient = new HttpClient(new MockHttpMessageHandler());
         var openai = new OpenAIService(httpClient);
-        openai.Configure("sk-test", formatOverride: OpenAIApiFormat.Responses);
-        openai.DetectedFormat.Should().Be(OpenAIApiFormat.Responses);
 
-        openai.Configure("sk-test", formatOverride: OpenAIApiFormat.Auto);
-        openai.DetectedFormat.Should().Be(OpenAIApiFormat.Auto);
+        openai.Configure("sk-test",
+            endpoint: "https://api.openai.com/v1/responses",
+            formatOverride: OpenAIApiFormat.ChatCompletions);
+        openai.DetectedFormat.Should().Be(OpenAIApiFormat.ChatCompletions);
+
+        openai.Configure("sk-test",
+            endpoint: "https://api.openai.com/v1/responses",
+            formatOverride: OpenAIApiFormat.Auto);
+        openai.DetectedFormat.Should().Be(OpenAIApiFormat.Responses);
     }
 
     [Fact]
@@ -199,38 +155,19 @@ public class OpenAIApiFormatDetectionTests
     }
 
     [Fact]
-    public async Task TranslateStreamAsync_DoesNotFallback_OnAuthError()
+    public async Task TranslateStreamAsync_PropagatesError_WithoutRetry()
     {
         var mockHandler = new MockHttpMessageHandler();
         var httpClient = new HttpClient(mockHandler);
         var service = new ConfigurableOpenAIService(httpClient)
-            .WithConfig("sk-test", "https://custom.example.com/v1/");
+            .WithConfig("sk-test", "https://api.openai.com/v1/chat/completions");
 
-        // First (probe) request returns 401 — should NOT fall back; should surface auth error.
         mockHandler.EnqueueErrorResponse(HttpStatusCode.Unauthorized, "Invalid API key");
 
         var act = async () => await ConsumeAsync(service.TranslateStreamAsync(SampleRequest));
 
         await act.Should().ThrowAsync<TranslationException>()
             .Where(e => e.ErrorCode == TranslationErrorCode.InvalidApiKey);
-        mockHandler.Requests.Should().HaveCount(1);
-        service.DetectedFormat.Should().Be(OpenAIApiFormat.Auto);
-    }
-
-    [Fact]
-    public async Task TranslateStreamAsync_DoesNotFallback_When404OnDeterministicUrl()
-    {
-        var mockHandler = new MockHttpMessageHandler();
-        var httpClient = new HttpClient(mockHandler);
-        // URL deterministically says ChatCompletions; a 404 should surface, not retry.
-        var service = new ConfigurableOpenAIService(httpClient)
-            .WithConfig("sk-test", "https://api.openai.com/v1/chat/completions");
-
-        mockHandler.EnqueueErrorResponse(HttpStatusCode.NotFound, "model not found");
-
-        var act = async () => await ConsumeAsync(service.TranslateStreamAsync(SampleRequest));
-
-        await act.Should().ThrowAsync<TranslationException>();
         mockHandler.Requests.Should().HaveCount(1);
     }
 

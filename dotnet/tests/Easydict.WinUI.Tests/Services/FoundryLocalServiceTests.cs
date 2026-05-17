@@ -373,7 +373,7 @@ public sealed class FoundryLocalServiceTests
         }
         finally
         {
-            Directory.Delete(tempDirectory, recursive: true);
+            await TryDeleteDirectoryAsync(tempDirectory);
         }
     }
 
@@ -413,7 +413,36 @@ public sealed class FoundryLocalServiceTests
         }
         finally
         {
-            Directory.Delete(tempDirectory, recursive: true);
+            await TryDeleteDirectoryAsync(tempDirectory);
+        }
+    }
+
+    /// <summary>
+    /// Delete a temp directory, retrying briefly on IOException — Windows may
+    /// hold file handles for a short window after a killed process exits even
+    /// though Process.HasExited has flipped to true.
+    /// </summary>
+    private static async Task TryDeleteDirectoryAsync(string path)
+    {
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            try
+            {
+                Directory.Delete(path, recursive: true);
+                return;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return;
+            }
+            catch (IOException) when (attempt < 9)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(200));
+            }
+            catch (UnauthorizedAccessException) when (attempt < 9)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(200));
+            }
         }
     }
 

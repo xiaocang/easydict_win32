@@ -593,6 +593,7 @@ public sealed class SettingsService
         DeepLApiKey = GetValue<string?>(nameof(DeepLApiKey), null);
         DeepLUseFreeApi = GetValue(nameof(DeepLUseFreeApi), true);
         DeepLUseQualityOptimized = GetValue(nameof(DeepLUseQualityOptimized), false);
+        NormalizeDeepLModeSettings();
 
         // OpenAI settings
         OpenAIApiKey = GetValue<string?>(nameof(OpenAIApiKey), null);
@@ -800,8 +801,18 @@ public sealed class SettingsService
         LongDocEnableDocumentContextPass = GetValue(nameof(LongDocEnableDocumentContextPass), true);
     }
 
+    private void NormalizeDeepLModeSettings()
+    {
+        if (DeepLUseQualityOptimized)
+        {
+            DeepLUseFreeApi = false;
+        }
+    }
+
     public void Save()
     {
+        NormalizeDeepLModeSettings();
+
         _settings[nameof(SourceLanguage)] = SourceLanguage;
 
         // Save language preferences

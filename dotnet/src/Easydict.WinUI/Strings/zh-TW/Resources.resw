@@ -319,6 +319,9 @@
   <data name="DeepLQualityOption" xml:space="preserve">
     <value>使用品質最佳化模型（僅 API；速度較慢，品質更高）</value>
   </data>
+  <data name="DeepLQualityApiKeyRequiredMessage" xml:space="preserve">
+    <value>DeepL 品質最佳化模式需要填寫 API 金鑰。</value>
+  </data>
   <data name="OpenAIDescription" xml:space="preserve">
     <value>您可以直接輸入自訂模型名稱。</value>
   </data>

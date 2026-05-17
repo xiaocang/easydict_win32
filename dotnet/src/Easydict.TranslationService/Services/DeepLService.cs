@@ -52,14 +52,14 @@ public sealed class DeepLService : BaseTranslationService
     /// <param name="apiKey">Optional API key for official API access.</param>
     /// <param name="useWebFirst">If true, try web translation first (default). If false, use API only.</param>
     /// <param name="useQualityOptimized">
-    /// If true, request DeepL's quality-optimized model (next-generation, web-translator-equivalent)
-    /// via <c>model_type=quality_optimized</c>. Only affects the official API path; the web path
-    /// already uses high-quality models. Default: false (DeepL's latency-optimized default).
+    /// If true, use the official API path and request DeepL's quality-optimized model
+    /// (next-generation, web-translator-equivalent) via <c>model_type=quality_optimized</c>.
+    /// Default: false (DeepL's latency-optimized default).
     /// </param>
     public void Configure(string? apiKey, bool useWebFirst = true, bool useQualityOptimized = false)
     {
         _apiKey = apiKey;
-        _useWebFirst = useWebFirst;
+        _useWebFirst = !useQualityOptimized && useWebFirst;
         _useQualityOptimized = useQualityOptimized;
     }
 

@@ -369,6 +369,29 @@ public class DeepLServiceMockTests
     }
 
     [Fact]
+    public async Task TranslateAsync_QualityOptimized_DisablesWebFirst()
+    {
+        // Arrange
+        _service.Configure("test-key:fx", useWebFirst: true, useQualityOptimized: true);
+        var apiResponse = """{"translations":[{"text":"Hi"}]}""";
+        _mockHandler.EnqueueJsonResponse(apiResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.SimplifiedChinese
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        _mockHandler.Requests.Should().HaveCount(1);
+        _mockHandler.LastRequest!.RequestUri!.Host.Should().Be("api-free.deepl.com");
+        _mockHandler.LastRequestBody.Should().Contain("model_type=quality_optimized");
+    }
+
+    [Fact]
     public async Task TranslateAsync_ApiMode_DetectsLanguageFromResponse()
     {
         // Arrange

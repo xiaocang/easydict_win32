@@ -66,8 +66,10 @@ public class TextSelectionServiceTests
         task.Should().NotBeNull();
         task.Should().BeAssignableTo<Task<string?>>();
 
-        // Should complete without hanging
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        // Should complete without hanging. A generous timeout accommodates cold-start
+        // FlaUI UIA initialization on fresh CI runners (Windows Server) where the very
+        // first call can exceed the warm-path ~1s observed for subsequent invocations.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await task.WaitAsync(cts.Token);
     }
 

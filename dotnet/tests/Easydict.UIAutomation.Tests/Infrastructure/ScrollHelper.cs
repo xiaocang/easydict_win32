@@ -1,5 +1,7 @@
 using System.Drawing;
+using System.Runtime.InteropServices;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Exceptions;
 using FlaUI.Core.Input;
 
 namespace Easydict.UIAutomation.Tests.Infrastructure;
@@ -25,6 +27,11 @@ public static class ScrollHelper
     /// </summary>
     private const int ScanSettleMs = 500;
 
+    private const int MouseFallbackScrollStep = 5;
+    private const int MouseFallbackSettleMs = 40;
+    private const int MouseFallbackMaxWheelTicks = 30;
+    private const double MouseFallbackPercentTolerance = 4;
+
     /// <summary>
     /// Scroll a ScrollViewer to the specified vertical percentage.
     /// </summary>
@@ -48,15 +55,13 @@ public static class ScrollHelper
             catch (InvalidOperationException ex)
             {
                 log?.Invoke($"ScrollPattern failed ({ex.Message}), falling back to Mouse.Scroll");
-                MoveMouseToScrollTarget(scrollViewer, log);
-                Mouse.Scroll(GetMouseScrollDeltaForTargetPercent(verticalPercent));
+                ScrollByMouseToPercent(scrollViewer, verticalPercent, log);
             }
         }
         else
         {
             log?.Invoke("ScrollPattern not available, falling back to Mouse.Scroll");
-            MoveMouseToScrollTarget(scrollViewer, log);
-            Mouse.Scroll(GetMouseScrollDeltaForTargetPercent(verticalPercent));
+            ScrollByMouseToPercent(scrollViewer, verticalPercent, log);
         }
 
         Thread.Sleep(ScrollSettleMs);
@@ -173,6 +178,87 @@ public static class ScrollHelper
 
     private static int GetMouseScrollDeltaForTargetPercent(double verticalPercent)
     {
-        return verticalPercent <= 0 ? 15 : -15;
+        return verticalPercent <= 0 ? MouseFallbackScrollStep : -MouseFallbackScrollStep;
+    }
+
+    private static int GetMouseScrollTickCountForTargetPercent(double verticalPercent)
+    {
+        if (verticalPercent <= 0)
+        {
+            return MouseFallbackMaxWheelTicks;
+        }
+
+        return Math.Clamp(
+            (int)Math.Ceiling(verticalPercent / ScanStepPercent),
+            1,
+            MouseFallbackMaxWheelTicks);
+    }
+
+    private static void ScrollByMouseToPercent(
+        AutomationElement scrollViewer,
+        double verticalPercent,
+        Action<string>? log)
+    {
+        var targetPercent = Math.Clamp(verticalPercent, 0, 100);
+        MoveMouseToScrollTarget(scrollViewer, log);
+
+        var fallbackDelta = GetMouseScrollDeltaForTargetPercent(targetPercent);
+        var wheelTicks = GetMouseScrollTickCountForTargetPercent(targetPercent);
+
+        for (var i = 0; i < wheelTicks; i++)
+        {
+            if (TryGetVerticalScrollPercent(scrollViewer, out var currentPercent))
+            {
+                var remaining = targetPercent - currentPercent;
+                if (Math.Abs(remaining) <= MouseFallbackPercentTolerance)
+                {
+                    log?.Invoke($"Mouse.Scroll fallback reached {currentPercent:F1}%");
+                    return;
+                }
+
+                fallbackDelta = remaining > 0
+                    ? -MouseFallbackScrollStep
+                    : MouseFallbackScrollStep;
+            }
+
+            Mouse.Scroll(fallbackDelta);
+            Thread.Sleep(MouseFallbackSettleMs);
+        }
+
+        if (TryGetVerticalScrollPercent(scrollViewer, out var finalPercent))
+        {
+            log?.Invoke($"Mouse.Scroll fallback stopped at {finalPercent:F1}% after {wheelTicks} wheel tick(s)");
+        }
+        else
+        {
+            log?.Invoke($"Mouse.Scroll fallback used {wheelTicks} wheel tick(s) toward {targetPercent}%");
+        }
+    }
+
+    private static bool TryGetVerticalScrollPercent(
+        AutomationElement scrollViewer,
+        out double verticalPercent)
+    {
+        verticalPercent = 0;
+        if (!scrollViewer.Patterns.Scroll.IsSupported)
+        {
+            return false;
+        }
+
+        try
+        {
+            var current = scrollViewer.Patterns.Scroll.Pattern.VerticalScrollPercent.Value;
+            if (double.IsNaN(current) || current < 0)
+            {
+                return false;
+            }
+
+            verticalPercent = current;
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or COMException or PropertyNotSupportedException)
+        {
+            return false;
+        }
     }
 }

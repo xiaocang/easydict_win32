@@ -1314,10 +1314,10 @@ namespace Easydict.WinUI.Views
 
             ReleaseServiceResultControls();
 
-            // If no services are enabled, show placeholder with guidance
+            // If no result descriptors are available, show mode-specific guidance.
             if (descriptors.Count == 0)
             {
-                PlaceholderText.Text = LocalizationService.Instance.GetString("NoServicesEnabled");
+                PlaceholderText.Text = GetEmptyServiceResultsMessage();
                 PlaceholderText.Visibility = Visibility.Visible;
 #if DEBUG
                 MemoryDiagnostics.LogDelta("MainPage.InitializeServiceResults retained after empty rebuild", initializeResultsBaseline);
@@ -1366,6 +1366,13 @@ namespace Easydict.WinUI.Views
             MemoryDiagnostics.LogSnapshot("MainPage.InitializeServiceResults complete");
             LogObjectState($"InitializeServiceResults complete (reason={reason})");
 #endif
+        }
+
+        private string GetEmptyServiceResultsMessage()
+        {
+            return _currentQuickQueryMode == QueryMode.GrammarCorrection
+                ? LocalizationService.Instance.GetString("GrammarPlaceholder")
+                : LocalizationService.Instance.GetString("NoServicesEnabled");
         }
 
         private List<ServiceResultDescriptor> GetMainWindowServiceResultDescriptors(
@@ -2134,7 +2141,7 @@ namespace Easydict.WinUI.Views
 
                 if (_serviceResults.Count == 0)
                 {
-                    SetStatusSummary(LocalizationService.Instance.GetString("NoServicesEnabled"), important: true);
+                    SetStatusSummary(GetEmptyServiceResultsMessage(), important: true);
                     return;
                 }
 

@@ -37,7 +37,17 @@ public sealed class AppLauncher : IDisposable
             throw new FileNotFoundException($"App executable not found: {exePath}");
 
         var resolvedTimeout = ResolveLaunchTimeout(timeout ?? TimeSpan.FromSeconds(30));
-        LaunchWithRetry(() => Application.Launch(exePath), resolvedTimeout);
+        LaunchWithRetry(() =>
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = exePath,
+                UseShellExecute = false,
+                WorkingDirectory = Path.GetDirectoryName(exePath) ?? Environment.CurrentDirectory
+            };
+            UiaSettingsIsolation.ApplyTo(startInfo);
+            return Application.Launch(startInfo);
+        }, resolvedTimeout);
     }
 
     /// <summary>

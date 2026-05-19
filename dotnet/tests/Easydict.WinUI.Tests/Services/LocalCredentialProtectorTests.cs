@@ -90,6 +90,53 @@ public sealed class LocalCredentialProtectorTests
     }
 
     [Fact]
+    public void UnprotectOrReturnPlaintext_WithNestedProtectedValue_ShouldReturnPlaintextAndRequestMigration()
+    {
+        var innerProtectedValue = LocalCredentialProtector.Protect("sk-test-local-api-key");
+        var nestedProtectedValue = LocalCredentialProtector.Protect(innerProtectedValue);
+
+        var value = LocalCredentialProtector.UnprotectOrReturnPlaintext(
+            nestedProtectedValue,
+            "stable-machine-id",
+            out var needsMigration,
+            out var decryptFailed);
+
+        value.Should().Be("sk-test-local-api-key");
+        needsMigration.Should().BeTrue();
+        decryptFailed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryUnprotect_WithNestedProtectedValue_ShouldReturnFinalPlaintext()
+    {
+        var innerProtectedValue = LocalCredentialProtector.Protect("sk-test-local-api-key");
+        var nestedProtectedValue = LocalCredentialProtector.Protect(innerProtectedValue);
+
+        LocalCredentialProtector.TryUnprotect(nestedProtectedValue, out var unprotected)
+            .Should().BeTrue();
+        unprotected.Should().Be("sk-test-local-api-key");
+    }
+
+    [Fact]
+    public void UnprotectOrReturnPlaintext_WithTooManyNestedProtectedValues_ShouldFail()
+    {
+        var nestedValue = "sk-test-local-api-key";
+        for (var i = 0; i <= LocalCredentialProtector.MaxNestedProtectedValueDepth; i++)
+        {
+            nestedValue = LocalCredentialProtector.Protect(nestedValue);
+        }
+
+        var value = LocalCredentialProtector.UnprotectOrReturnPlaintext(
+            nestedValue,
+            "stable-machine-id",
+            out _,
+            out var decryptFailed);
+
+        value.Should().BeNull();
+        decryptFailed.Should().BeTrue();
+    }
+
+    [Fact]
     public void UnprotectOrReturnPlaintext_WithLegacyProtectedValue_ShouldRequestMigration()
     {
         var protectedValue = LocalCredentialProtector.ProtectLegacy(

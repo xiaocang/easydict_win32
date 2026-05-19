@@ -1048,6 +1048,12 @@ public sealed class ThemeContrastTests : IDisposable
 
     private static IEnumerable<string> GetSettingsFileCandidates()
     {
+        if (UiaSettingsIsolation.TryGetSettingsFilePath() is { } isolatedSettingsPath)
+        {
+            yield return isolatedSettingsPath;
+            yield break;
+        }
+
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var packageFamilyName = Environment.GetEnvironmentVariable("EASYDICT_PACKAGE_FAMILY_NAME");
 

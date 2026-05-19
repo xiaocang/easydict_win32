@@ -16,6 +16,8 @@ namespace Easydict.WinUI.Services;
 public sealed class SettingsService
 {
     private const string GoogleServiceId = "google";
+    private const string SettingsDirectoryEnvironmentVariable = "EASYDICT_SETTINGS_DIR";
+    private static readonly JsonSerializerOptions SettingsJsonOptions = new() { WriteIndented = true };
 
     public sealed class ImportedMdxDictionary
     {
@@ -50,18 +52,28 @@ public sealed class SettingsService
     private readonly string _settingsFilePath;
     private Dictionary<string, object?> _settings = new();
     private volatile bool _needsRegionDetection;
-    private bool _needsSensitiveSettingsMigration;
+    private readonly HashSet<string> _sensitiveSettingsPendingMigration = new(StringComparer.Ordinal);
 
 
     private SettingsService()
     {
-        // Use AppData\Local\Easydict for settings
-        var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var easydictPath = Path.Combine(appDataPath, "Easydict");
+        var easydictPath = ResolveSettingsDirectory();
         Directory.CreateDirectory(easydictPath);
         _settingsFilePath = Path.Combine(easydictPath, "settings.json");
 
         LoadSettings();
+    }
+
+    private static string ResolveSettingsDirectory()
+    {
+        var settingsDirectory = Environment.GetEnvironmentVariable(SettingsDirectoryEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(settingsDirectory))
+        {
+            return Path.GetFullPath(Environment.ExpandEnvironmentVariables(settingsDirectory));
+        }
+
+        var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return Path.Combine(appDataPath, "Easydict");
     }
 
     // Translation settings
@@ -826,8 +838,12 @@ public sealed class SettingsService
     }
 
     public void Save()
+        => SaveCore(preserveUnmigratedSensitiveSettings: false);
+
+    private void SaveCore(bool preserveUnmigratedSensitiveSettings)
     {
         NormalizeDeepLModeSettings();
+        var previousJson = JsonSerializer.Serialize(_settings, SettingsJsonOptions);
 
         _settings[nameof(SourceLanguage)] = SourceLanguage;
 
@@ -837,12 +853,12 @@ public sealed class SettingsService
         _settings[nameof(AutoSelectTargetLanguage)] = AutoSelectTargetLanguage;
         _settings[nameof(SelectedLanguages)] = SelectedLanguages;
 
-        _settings[nameof(DeepLApiKey)] = ProtectSensitiveSetting(DeepLApiKey);
+        SaveSensitiveSetting(nameof(DeepLApiKey), DeepLApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(DeepLUseFreeApi)] = DeepLUseFreeApi;
         _settings[nameof(DeepLUseQualityOptimized)] = DeepLUseQualityOptimized;
 
         // OpenAI settings
-        _settings[nameof(OpenAIApiKey)] = ProtectSensitiveSetting(OpenAIApiKey);
+        SaveSensitiveSetting(nameof(OpenAIApiKey), OpenAIApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(OpenAIEndpoint)] = OpenAIEndpoint;
         _settings[nameof(OpenAIModel)] = OpenAIModel;
         _settings[nameof(OpenAIApiFormatOverride)] = OpenAIApiFormatOverride;
@@ -862,54 +878,54 @@ public sealed class SettingsService
 
         // Built-in AI settings
         _settings[nameof(BuiltInAIModel)] = BuiltInAIModel;
-        _settings[nameof(BuiltInAIApiKey)] = ProtectSensitiveSetting(BuiltInAIApiKey);
+        SaveSensitiveSetting(nameof(BuiltInAIApiKey), BuiltInAIApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(DeviceId)] = DeviceId;
         _settings[nameof(DeviceToken)] = DeviceToken;
 
         // DeepSeek settings
-        _settings[nameof(DeepSeekApiKey)] = ProtectSensitiveSetting(DeepSeekApiKey);
+        SaveSensitiveSetting(nameof(DeepSeekApiKey), DeepSeekApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(DeepSeekModel)] = DeepSeekModel;
 
         // Groq settings
-        _settings[nameof(GroqApiKey)] = ProtectSensitiveSetting(GroqApiKey);
+        SaveSensitiveSetting(nameof(GroqApiKey), GroqApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(GroqModel)] = GroqModel;
 
         // Zhipu settings
-        _settings[nameof(ZhipuApiKey)] = ProtectSensitiveSetting(ZhipuApiKey);
+        SaveSensitiveSetting(nameof(ZhipuApiKey), ZhipuApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(ZhipuModel)] = ZhipuModel;
 
         // GitHub Models settings
-        _settings[nameof(GitHubModelsToken)] = ProtectSensitiveSetting(GitHubModelsToken);
+        SaveSensitiveSetting(nameof(GitHubModelsToken), GitHubModelsToken, preserveUnmigratedSensitiveSettings);
         _settings[nameof(GitHubModelsModel)] = GitHubModelsModel;
 
         // Custom OpenAI settings
         _settings[nameof(CustomOpenAIEndpoint)] = CustomOpenAIEndpoint;
-        _settings[nameof(CustomOpenAIApiKey)] = ProtectSensitiveSetting(CustomOpenAIApiKey);
+        SaveSensitiveSetting(nameof(CustomOpenAIApiKey), CustomOpenAIApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(CustomOpenAIModel)] = CustomOpenAIModel;
 
         // Gemini settings
-        _settings[nameof(GeminiApiKey)] = ProtectSensitiveSetting(GeminiApiKey);
+        SaveSensitiveSetting(nameof(GeminiApiKey), GeminiApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(GeminiModel)] = GeminiModel;
 
         // Doubao settings
-        _settings[nameof(DoubaoApiKey)] = ProtectSensitiveSetting(DoubaoApiKey);
+        SaveSensitiveSetting(nameof(DoubaoApiKey), DoubaoApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(DoubaoEndpoint)] = DoubaoEndpoint;
         _settings[nameof(DoubaoModel)] = DoubaoModel;
 
         // Caiyun settings
-        _settings[nameof(CaiyunApiKey)] = ProtectSensitiveSetting(CaiyunApiKey);
+        SaveSensitiveSetting(nameof(CaiyunApiKey), CaiyunApiKey, preserveUnmigratedSensitiveSettings);
 
         // NiuTrans settings
-        _settings[nameof(NiuTransApiKey)] = ProtectSensitiveSetting(NiuTransApiKey);
+        SaveSensitiveSetting(nameof(NiuTransApiKey), NiuTransApiKey, preserveUnmigratedSensitiveSettings);
 
         // Youdao settings
-        _settings[nameof(YoudaoAppKey)] = ProtectSensitiveSetting(YoudaoAppKey);
-        _settings[nameof(YoudaoAppSecret)] = ProtectSensitiveSetting(YoudaoAppSecret);
+        SaveSensitiveSetting(nameof(YoudaoAppKey), YoudaoAppKey, preserveUnmigratedSensitiveSettings);
+        SaveSensitiveSetting(nameof(YoudaoAppSecret), YoudaoAppSecret, preserveUnmigratedSensitiveSettings);
         _settings[nameof(YoudaoUseOfficialApi)] = YoudaoUseOfficialApi;
 
         // Volcano settings
-        _settings[nameof(VolcanoAccessKeyId)] = ProtectSensitiveSetting(VolcanoAccessKeyId);
-        _settings[nameof(VolcanoSecretAccessKey)] = ProtectSensitiveSetting(VolcanoSecretAccessKey);
+        SaveSensitiveSetting(nameof(VolcanoAccessKeyId), VolcanoAccessKeyId, preserveUnmigratedSensitiveSettings);
+        SaveSensitiveSetting(nameof(VolcanoSecretAccessKey), VolcanoSecretAccessKey, preserveUnmigratedSensitiveSettings);
 
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
@@ -932,7 +948,7 @@ public sealed class SettingsService
 
         // Save OCR Engine settings
         _settings[nameof(OcrEngine)] = (int)OcrEngine;
-        _settings[nameof(OcrApiKey)] = ProtectSensitiveSetting(OcrApiKey);
+        SaveSensitiveSetting(nameof(OcrApiKey), OcrApiKey, preserveUnmigratedSensitiveSettings);
         _settings[nameof(OcrEndpoint)] = OcrEndpoint;
         _settings[nameof(OcrModel)] = OcrModel;
         _settings[nameof(OcrSystemPrompt)] = OcrSystemPrompt;
@@ -1011,9 +1027,17 @@ public sealed class SettingsService
 
         try
         {
-            var json = JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(_settings, SettingsJsonOptions);
+            if (File.Exists(_settingsFilePath)
+                && string.Equals(json, previousJson, StringComparison.Ordinal))
+            {
+                _sensitiveSettingsPendingMigration.Clear();
+                System.Diagnostics.Debug.WriteLine($"[SettingsService] Settings unchanged; save skipped for: {_settingsFilePath}");
+                return;
+            }
+
             File.WriteAllText(_settingsFilePath, json);
-            _needsSensitiveSettingsMigration = false;
+            _sensitiveSettingsPendingMigration.Clear();
 
             // Verify the file was written successfully
             System.Diagnostics.Debug.WriteLine($"[SettingsService] Settings saved successfully to: {_settingsFilePath}");
@@ -1466,7 +1490,7 @@ public sealed class SettingsService
             out var decryptFailed);
         if (needsMigration)
         {
-            _needsSensitiveSettingsMigration = true;
+            _sensitiveSettingsPendingMigration.Add(key);
         }
 
         if (decryptFailed)
@@ -1484,17 +1508,69 @@ public sealed class SettingsService
             : LocalCredentialProtector.Protect(plaintext);
     }
 
+    private void SaveSensitiveSetting(
+        string key,
+        string? plaintext,
+        bool preserveUnmigratedSensitiveSettings)
+    {
+        if (preserveUnmigratedSensitiveSettings
+            && !_sensitiveSettingsPendingMigration.Contains(key)
+            && TryGetStoredSensitiveSetting(key, out var storedValue)
+            && LocalCredentialProtector.IsProtected(storedValue))
+        {
+            _settings[key] = storedValue;
+            return;
+        }
+
+        if (!_sensitiveSettingsPendingMigration.Contains(key)
+            && TryGetStoredSensitiveSetting(key, out storedValue)
+            && LocalCredentialProtector.IsProtected(storedValue)
+            && LocalCredentialProtector.TryUnprotect(storedValue, out var storedPlaintext)
+            && string.Equals(storedPlaintext, plaintext ?? string.Empty, StringComparison.Ordinal))
+        {
+            _settings[key] = storedValue;
+            return;
+        }
+
+        _settings[key] = ProtectSensitiveSetting(plaintext);
+    }
+
+    private bool TryGetStoredSensitiveSetting(string key, out string storedValue)
+    {
+        storedValue = string.Empty;
+        if (!_settings.TryGetValue(key, out var value) || value is null)
+        {
+            return false;
+        }
+
+        if (value is string stringValue)
+        {
+            storedValue = stringValue;
+            return true;
+        }
+
+        if (value is JsonElement { ValueKind: JsonValueKind.String } jsonElement)
+        {
+            storedValue = jsonElement.GetString() ?? string.Empty;
+            return true;
+        }
+
+        return false;
+    }
+
     private void MigrateSensitiveSettingsIfNeeded()
     {
-        if (!_needsSensitiveSettingsMigration)
+        if (_sensitiveSettingsPendingMigration.Count == 0)
         {
             return;
         }
 
         try
         {
-            Save();
-            Debug.WriteLine("[SettingsService] Migrated plaintext sensitive settings to protected storage.");
+            var migratedCount = _sensitiveSettingsPendingMigration.Count;
+            SaveCore(preserveUnmigratedSensitiveSettings: true);
+            Debug.WriteLine(
+                $"[SettingsService] Migrated {migratedCount} plaintext or legacy sensitive settings to protected storage.");
         }
         catch (Exception ex)
         {

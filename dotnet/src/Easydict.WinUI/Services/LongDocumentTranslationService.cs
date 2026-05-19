@@ -187,6 +187,18 @@ public sealed class LongDocumentTranslationService : IDisposable
         string? visionModel = null,
         System.IProgress<LongDocumentTranslationProgress>? progress = null)
     {
+        // Worker mode: when SettingsService.UseLongDocWorker is on, run translation in
+        // a child process so MuPDF + ONNX native heap is reclaimed by process exit.
+        // The worker exits after each translate per the "exit on completion" lifecycle.
+        if (SettingsService.Instance.UseLongDocWorker)
+        {
+            using var worker = new Workers.LongDocWorkerClient(SettingsService.Instance);
+            return await worker.TranslateToPdfAsync(
+                mode, input, from, to, outputPath, serviceId, onProgress, cancellationToken,
+                layoutDetection, outputMode, pdfExportMode, visionEndpoint, visionApiKey, visionModel,
+                progress).ConfigureAwait(false);
+        }
+
         var pageRange = string.IsNullOrWhiteSpace(SettingsService.Instance.LongDocPageRange) ? null : SettingsService.Instance.LongDocPageRange;
 
         // Build source document (now natively async, CPU-bound work is wrapped inside)

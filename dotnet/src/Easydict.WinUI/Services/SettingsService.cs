@@ -195,6 +195,22 @@ public sealed class SettingsService
     public bool AutoTranslate { get; set; } = false;
 
     /// <summary>
+    /// When true, long-document translation runs in a child worker process
+    /// (Easydict.Workers.LongDoc.exe). Native MuPDF / ONNX heap is reclaimed
+    /// on each job by exiting the worker after completion. Off by default
+    /// while the worker pipeline bakes in.
+    /// </summary>
+    public bool UseLongDocWorker { get; set; } = false;
+
+    /// <summary>
+    /// When true, local AI translation routes through a child worker process
+    /// (Easydict.Workers.LocalAi.exe) instead of the in-proc LocalAITranslationService.
+    /// Off by default — PhiSilica health monitor / Foundry recovery coordinator
+    /// state needs longer bake time before this is safe to default-on.
+    /// </summary>
+    public bool UseLocalAiWorker { get; set; } = false;
+
+    /// <summary>
     /// Enable mouse selection translation: a floating translate button appears
     /// after selecting text in any application. Click the button to translate.
     /// </summary>
@@ -701,6 +717,8 @@ public sealed class SettingsService
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
+        UseLongDocWorker = GetValue(nameof(UseLongDocWorker), false);
+        UseLocalAiWorker = GetValue(nameof(UseLocalAiWorker), false);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
         MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
@@ -930,6 +948,8 @@ public sealed class SettingsService
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
+        _settings[nameof(UseLongDocWorker)] = UseLongDocWorker;
+        _settings[nameof(UseLocalAiWorker)] = UseLocalAiWorker;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
         _settings[nameof(MouseSelectionExcludedApps)] = MouseSelectionExcludedApps;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;

@@ -253,7 +253,37 @@
            via ONNX Runtime's OpenVINO Execution Provider. Model files are downloaded
            on first use into %LOCALAPPDATA%\Easydict\models, not bundled. -->
       <ProjectReference Include="..\Easydict.OpenVINO\Easydict.OpenVINO.csproj" />
+      <!-- Worker projects. ReferenceOutputAssembly=false because these are out-of-process
+           executables — host doesn't link them. They're built whenever WinUI is built and
+           their output is copied to bin\workers\{kind}\ by the CopyWorkerOutput target below.
+           For MSIX, those files must be included as Content in the package; this PR wires
+           the local build copy but leaves the MSIX Content packaging as a follow-up. -->
+      <ProjectReference Include="..\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj"
+                        ReferenceOutputAssembly="false"
+                        OutputItemType="WorkerOutput"
+                        SetTargetFramework="TargetFramework=net8.0-windows10.0.22621.0" />
+      <ProjectReference Include="..\Easydict.Workers.LocalAi\Easydict.Workers.LocalAi.csproj"
+                        ReferenceOutputAssembly="false"
+                        OutputItemType="WorkerOutput"
+                        SetTargetFramework="TargetFramework=net8.0-windows10.0.22621.0" />
     </ItemGroup>
+
+    <!-- Copy worker exe + dependencies into bin\workers\<kind>\ after build so the
+         WorkerSpawner can resolve them via AppContext.BaseDirectory. -->
+    <Target Name="CopyWorkerOutput" AfterTargets="Build">
+      <ItemGroup>
+        <LongDocWorkerFiles Include="..\Easydict.Workers.LongDoc\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*" />
+        <LocalAiWorkerFiles Include="..\Easydict.Workers.LocalAi\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*" />
+      </ItemGroup>
+      <Copy SourceFiles="@(LongDocWorkerFiles)"
+            DestinationFiles="@(LongDocWorkerFiles->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true"
+            Condition="'@(LongDocWorkerFiles)' != ''" />
+      <Copy SourceFiles="@(LocalAiWorkerFiles)"
+            DestinationFiles="@(LocalAiWorkerFiles->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true"
+            Condition="'@(LocalAiWorkerFiles)' != ''" />
+    </Target>
 
     <!-- FlaUI for proper UI Automation text selection -->
     <ItemGroup>

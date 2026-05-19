@@ -34,6 +34,10 @@ public sealed class TranslationManagerService : IDisposable
     private FoundryLocalService? _foundryLocalService;
     private OpenVINOTranslationService? _openVinoService;
     private LocalAITranslationService? _localAIService;
+    // When SettingsService.UseLocalAiWorker is true at startup, _localAIWorkerClient
+    // is registered instead of _localAIService. Toggling the setting at runtime
+    // requires an app restart (not auto-swappable).
+    private Workers.LocalAiWorkerClient? _localAIWorkerClient;
 
     public static TranslationManagerService Instance => _instance.Value;
 
@@ -286,7 +290,13 @@ public sealed class TranslationManagerService : IDisposable
         // monitor, FoundryLocal's CLI endpoint resolver, and OpenVINO's
         // ModelDownloadService all sit idle when a user picks Google or DeepL
         // as their provider and never touches local AI.
-        if (_localAIService == null)
+        if (_localAIWorkerClient == null && _settings.UseLocalAiWorker)
+        {
+            _localAIWorkerClient = new Workers.LocalAiWorkerClient(_settings);
+            _translationManager.UnregisterService(LocalAITranslationService.LegacyOpenVinoServiceId);
+            _translationManager.RegisterService(_localAIWorkerClient);
+        }
+        else if (_localAIService == null && !_settings.UseLocalAiWorker)
         {
             var phiSilicaLazy = new Lazy<PhiSilicaTranslationService>(
                 () =>
@@ -337,7 +347,11 @@ public sealed class TranslationManagerService : IDisposable
         {
             _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
         }
-        _localAIService.Configure(LocalAIProviderModeExtensions.Parse(_settings.LocalAIProvider));
+        // Either the in-proc service or the worker client is registered (never both).
+        // Configure the in-proc one with provider mode if it's the active path; the
+        // worker client reads provider mode from the SettingsSnapshot on each spawn,
+        // so no per-Configure call is needed.
+        _localAIService?.Configure(LocalAIProviderModeExtensions.Parse(_settings.LocalAIProvider));
 
         // Configure BuiltIn AI
         _translationManager.ConfigureService("builtin", service =>
@@ -630,6 +644,8 @@ public sealed class TranslationManagerService : IDisposable
             // alive and double-forward events to the new instance.
             _localAIService?.Dispose();
             _localAIService = null;
+            _localAIWorkerClient?.Dispose();
+            _localAIWorkerClient = null;
             ConfigureServices();
 
             // Check if the old manager has active handles
@@ -743,6 +759,8 @@ public sealed class TranslationManagerService : IDisposable
         // PhiSilica/OpenVINO instances don't retain the disposed wrapper.
         _localAIService?.Dispose();
         _localAIService = null;
+        _localAIWorkerClient?.Dispose();
+        _localAIWorkerClient = null;
         // FoundryLocalService isn't IDisposable but it caches a reference to
         // _translationManager.SharedHttpClient. Null it for parity with the
         // other provider fields so it can't be accidentally used after the

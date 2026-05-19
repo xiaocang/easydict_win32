@@ -145,6 +145,16 @@ public sealed class SidecarClient : IDisposable, IAsyncDisposable
             }
 
             var timeout = timeoutMs ?? _options.DefaultTimeoutMs;
+            // timeout <= 0 means "wait indefinitely" — used by long-running operations
+            // like document translation that have their own progress/cancellation channel.
+            if (timeout <= 0)
+            {
+                await using (cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken)))
+                {
+                    return await tcs.Task;
+                }
+            }
+
             using var timeoutCts = new CancellationTokenSource(timeout);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 

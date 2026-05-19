@@ -82,6 +82,7 @@ public sealed class WorkerProtocolSerializationTests
             PdfExportMode = "ContentStreamReplacement",
             LayoutDetection = "OnnxLocal",
             PageRange = "1-10",
+            ResultJsonPath = @"C:\Temp\easydict-result.json",
         };
         var json = JsonLineSerializer.Serialize(p);
         var back = JsonLineSerializer.Deserialize<TranslateDocumentParams>(json);
@@ -89,6 +90,45 @@ public sealed class WorkerProtocolSerializationTests
         back.Should().NotBeNull();
         back!.InputPath.Should().Be(@"C:\docs\paper.pdf");
         back.PageRange.Should().Be("1-10");
+        back.ResultJsonPath.Should().Be(@"C:\Temp\easydict-result.json");
+        json.Should().Contain("\"resultJsonPath\"");
+    }
+
+    [Fact]
+    public async Task TranslateDocumentResult_WritesAndReadsThroughResultJsonPath()
+    {
+        var path = LongDocResultFileStore.CreateTempPath();
+        try
+        {
+            var result = new TranslateDocumentResult
+            {
+                State = "Completed",
+                OutputPath = @"C:\docs\paper_zh.pdf",
+                BilingualOutputPath = @"C:\docs\paper_bilingual.pdf",
+                TotalChunks = 3,
+                SucceededChunks = 2,
+                FailedChunkIndexes = [1],
+                QualityReport = "{\"totalBlocks\":3}",
+            };
+
+            await LongDocResultFileStore.WriteAsync(path, result);
+            var back = await LongDocResultFileStore.ReadAsync(path);
+
+            back.State.Should().Be("Completed");
+            back.OutputPath.Should().Be(@"C:\docs\paper_zh.pdf");
+            back.BilingualOutputPath.Should().Be(@"C:\docs\paper_bilingual.pdf");
+            back.TotalChunks.Should().Be(3);
+            back.SucceededChunks.Should().Be(2);
+            back.FailedChunkIndexes.Should().Equal(1);
+            back.QualityReport.Should().Be("{\"totalBlocks\":3}");
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
     }
 
     [Fact]
@@ -115,6 +155,57 @@ public sealed class WorkerProtocolSerializationTests
         var back = JsonLineSerializer.Deserialize<LocalModelStatusDto>(json);
         back.Should().NotBeNull();
         back!.State.Should().Be("Ready");
+    }
+
+    [Fact]
+    public void OcrRecognizeParams_RoundTrips()
+    {
+        var p = new OcrRecognizeParams
+        {
+            PixelDataPath = @"C:\Temp\capture.bgra",
+            PixelWidth = 320,
+            PixelHeight = 200,
+            PreferredLanguageTag = "en-US",
+        };
+
+        var json = JsonLineSerializer.Serialize(p);
+        var back = JsonLineSerializer.Deserialize<OcrRecognizeParams>(json);
+
+        back.Should().NotBeNull();
+        back!.PixelDataPath.Should().Be(@"C:\Temp\capture.bgra");
+        back.PixelWidth.Should().Be(320);
+        back.PixelHeight.Should().Be(200);
+        back.PreferredLanguageTag.Should().Be("en-US");
+        json.Should().Contain("\"pixelDataPath\"");
+    }
+
+    [Fact]
+    public void OcrResultDto_RoundTrips()
+    {
+        var result = new OcrResultDto
+        {
+            Text = "hello",
+            TextAngle = 1.5,
+            DetectedLanguage = new OcrLanguageDto { Tag = "en-US", DisplayName = "English" },
+            Lines =
+            [
+                new OcrLineDto
+                {
+                    Text = "hello",
+                    BoundingRect = new OcrRectDto(1, 2, 3, 4),
+                },
+            ],
+        };
+
+        var json = JsonLineSerializer.Serialize(result);
+        var back = JsonLineSerializer.Deserialize<OcrResultDto>(json);
+
+        back.Should().NotBeNull();
+        back!.Text.Should().Be("hello");
+        back.TextAngle.Should().Be(1.5);
+        back.DetectedLanguage!.Tag.Should().Be("en-US");
+        back.Lines.Should().ContainSingle();
+        back.Lines[0].BoundingRect.Width.Should().Be(3);
     }
 
     [Fact]

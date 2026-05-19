@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Easydict.SidecarClient.Protocol;
@@ -89,6 +90,14 @@ public sealed class TranslateDocumentParams
 
     [JsonPropertyName("visionModel")]
     public string? VisionModel { get; init; }
+
+    /// <summary>
+    /// Host-created temp JSON path where the worker should write the final
+    /// TranslateDocumentResult. This keeps large result payloads out of the IPC
+    /// response; the response can return only <see cref="TranslateDocumentResult.ResultJsonPath"/>.
+    /// </summary>
+    [JsonPropertyName("resultJsonPath")]
+    public string? ResultJsonPath { get; init; }
 }
 
 /// <summary>
@@ -119,6 +128,76 @@ public sealed class TranslateDocumentResult
 
     [JsonPropertyName("qualityReport")]
     public string? QualityReport { get; init; }
+
+    /// <summary>
+    /// Optional path to a JSON-serialized TranslateDocumentResult. When present,
+    /// host clients should read the full result from disk and treat this response
+    /// as a lightweight pointer envelope.
+    /// </summary>
+    [JsonPropertyName("resultJsonPath")]
+    public string? ResultJsonPath { get; init; }
+}
+
+public static class LongDocResultFileStore
+{
+    private const int BufferSize = 64 * 1024;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+    };
+
+    public static string CreateTempPath()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "Easydict", "longdoc-results");
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, $"{Guid.NewGuid():N}.json");
+    }
+
+    public static async Task WriteAsync(
+        string path,
+        TranslateDocumentResult result,
+        CancellationToken cancellationToken = default)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await using var stream = new FileStream(
+            path,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.Read,
+            BufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await JsonSerializer.SerializeAsync(stream, result, JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public static async Task<TranslateDocumentResult> ReadAsync(
+        string path,
+        CancellationToken cancellationToken = default)
+    {
+        await using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            BufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        var result = await JsonSerializer.DeserializeAsync<TranslateDocumentResult>(
+                stream,
+                JsonOptions,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return result ?? throw new InvalidDataException($"Long-document result file was empty: {path}");
+    }
 }
 
 /// <summary>

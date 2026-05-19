@@ -184,11 +184,10 @@
                                 Foreground="{ThemeResource QueryTextBrush}"
                                 FontSize="13"/>
 
-                            <!-- Dictionary HTML Rendering (WebView2, for MDX with MDD resources) -->
-                            <WebView2
-                                x:Name="DictWebView"
+                            <!-- Dictionary HTML Rendering host (WebView2 is created lazily for MDX with MDD resources) -->
+                            <Grid
+                                x:Name="DictWebViewHost"
                                 Grid.Row="3"
-                                DefaultBackgroundColor="Transparent"
                                 Visibility="Collapsed"/>
 
                             <!-- Error Message and Recovery Actions -->

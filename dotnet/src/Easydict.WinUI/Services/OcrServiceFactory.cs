@@ -30,6 +30,19 @@ public static class OcrServiceFactory
         var resolved = options ?? OcrServiceOptions.FromSettings(SettingsService.Instance);
         var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
 
+        if (SettingsService.Instance.UseOcrWorker && resolved.Engine == OcrEngineType.WindowsNative)
+        {
+            return new Workers.OcrWorkerClient(
+                SettingsService.Instance,
+                CreateInProc(resolved, client));
+        }
+
+        return CreateInProc(resolved, client);
+    }
+
+    internal static IOcrService CreateInProc(OcrServiceOptions resolved, HttpClient? httpClient = null)
+    {
+        var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
         return resolved.Engine switch
         {
             OcrEngineType.Ollama => new OllamaOcrService(client, resolved),

@@ -1667,16 +1667,9 @@ public sealed partial class SettingsPage : Page
 #endif
         _isLoading = true;
         InitializeSettingsTabs();
-        var deferLazyTabData = MinimalThemeService.IsActive;
+        var deferLazyTabData = true;
         _initializedSettingsTabData.Clear();
         _initializedSettingsTabData.Add(SettingsTabId.General);
-        if (!deferLazyTabData)
-        {
-            foreach (var tabId in Enum.GetValues<SettingsTabId>())
-            {
-                _initializedSettingsTabData.Add(tabId);
-            }
-        }
 
         // Snapshot original SelectedLanguages for discard/restore
         _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);

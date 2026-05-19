@@ -115,6 +115,50 @@ public sealed class LocalDictionaryIndexServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RegisterDescriptor_UsesExistingIndexWithoutOpeningDictionaryService()
+    {
+        var sourcePath = CreateSourceFile("dict-existing.mdx", "seed");
+        var dictionary = CreateDictionary("mdx::existing", "Existing Dictionary", sourcePath);
+        var service = CreateQueryableService(
+            dictionary.ServiceId,
+            dictionary.DisplayName,
+            sourcePath,
+            () => ["apple", "application"]);
+        var builder = new LocalDictionaryIndexService(_tempRoot);
+        await builder.EnsureIndexAsync(dictionary, service);
+
+        var sut = new LocalDictionaryIndexService(_tempRoot);
+        sut.RegisterDescriptor(dictionary);
+
+        var results = await sut.CompleteAsync("app", [dictionary.ServiceId], 10);
+
+        results.Select(item => item.Key).Should().Equal("apple", "application");
+        results.Select(item => item.DictDisplayName).Should().OnlyContain(name => name == dictionary.DisplayName);
+    }
+
+    [Fact]
+    public async Task RegisterDescriptor_BlocksEncryptedDictionaryWithoutCredentials()
+    {
+        var sourcePath = CreateSourceFile("dict-existing-encrypted.mdx", "seed");
+        var dictionary = CreateDictionary("mdx::existing-encrypted", "Encrypted Existing Dictionary", sourcePath);
+        var service = CreateQueryableService(
+            dictionary.ServiceId,
+            dictionary.DisplayName,
+            sourcePath,
+            () => ["apple", "application"]);
+        var builder = new LocalDictionaryIndexService(_tempRoot);
+        await builder.EnsureIndexAsync(dictionary, service);
+
+        dictionary.IsEncrypted = true;
+        var sut = new LocalDictionaryIndexService(_tempRoot);
+        sut.RegisterDescriptor(dictionary);
+
+        var results = await sut.CompleteAsync("app", [dictionary.ServiceId], 10);
+
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task CompleteAsync_MergesServiceResultsInRequestedOrder_AndDeduplicatesKeys()
     {
         var sourceA = CreateSourceFile("dict-d-a.mdx", "a");

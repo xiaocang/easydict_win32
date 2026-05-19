@@ -33,7 +33,7 @@ internal sealed class IsAvailableHandler
         {
             Available = status.State == LocalModelState.Ready,
             State = status.State.ToString(),
-            Detail = status.Detail,
+            Detail = status.DetailMessage,
         });
     }
 

@@ -76,6 +76,7 @@ public static class WorkerKinds
 {
     public const string LongDoc = "longdoc";
     public const string LocalAi = "localai";
+    public const string Ocr = "ocr";
 }
 
 /// <summary>

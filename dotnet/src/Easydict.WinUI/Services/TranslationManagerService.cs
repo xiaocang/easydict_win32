@@ -290,52 +290,21 @@ public sealed class TranslationManagerService : IDisposable
         // monitor, FoundryLocal's CLI endpoint resolver, and OpenVINO's
         // ModelDownloadService all sit idle when a user picks Google or DeepL
         // as their provider and never touches local AI.
+        _localAIService ??= CreateLocalAITranslationService();
         if (_localAIWorkerClient == null && _settings.UseLocalAiWorker)
         {
-            _localAIWorkerClient = new Workers.LocalAiWorkerClient(_settings);
-            _translationManager.UnregisterService(LocalAITranslationService.LegacyOpenVinoServiceId);
-            _translationManager.RegisterService(_localAIWorkerClient);
+            _localAIWorkerClient = new Workers.LocalAiWorkerClient(
+                _settings,
+                _localAIService,
+                _localAIService,
+                _localAIService);
         }
-        else if (_localAIService == null && !_settings.UseLocalAiWorker)
-        {
-            var phiSilicaLazy = new Lazy<PhiSilicaTranslationService>(
-                () =>
-                {
-                    lock (_lock)
-                    {
-                        return _phiSilicaService ??= new PhiSilicaTranslationService();
-                    }
-                },
-                LazyThreadSafetyMode.ExecutionAndPublication);
 
-            var foundryLocalLazy = new Lazy<IStreamTranslationService>(
-                () =>
-                {
-                    lock (_lock)
-                    {
-                        _foundryLocalService ??= new FoundryLocalService(_translationManager.SharedHttpClient);
-                        _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
-                        return _foundryLocalService;
-                    }
-                },
-                LazyThreadSafetyMode.ExecutionAndPublication);
-
-            var openVinoLazy = new Lazy<OpenVINOTranslationService>(
-                () =>
-                {
-                    lock (_lock)
-                    {
-                        _openVinoService ??= new OpenVINOTranslationService();
-                        _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
-                        return _openVinoService;
-                    }
-                },
-                LazyThreadSafetyMode.ExecutionAndPublication);
-
-            _localAIService = new LocalAITranslationService(phiSilicaLazy, foundryLocalLazy, openVinoLazy);
-            _translationManager.UnregisterService(LocalAITranslationService.LegacyOpenVinoServiceId);
-            _translationManager.RegisterService(_localAIService);
-        }
+        _translationManager.UnregisterService(LocalAITranslationService.LegacyOpenVinoServiceId);
+        ITranslationService localAiRegistration = _settings.UseLocalAiWorker && _localAIWorkerClient is not null
+            ? _localAIWorkerClient
+            : _localAIService;
+        _translationManager.RegisterService(localAiRegistration);
 
         // Re-apply settings to already-materialized sub-services so a settings
         // change picks up new endpoint/device values without forcing materialization.
@@ -347,10 +316,8 @@ public sealed class TranslationManagerService : IDisposable
         {
             _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
         }
-        // Either the in-proc service or the worker client is registered (never both).
-        // Configure the in-proc one with provider mode if it's the active path; the
-        // worker client reads provider mode from the SettingsSnapshot on each spawn,
-        // so no per-Configure call is needed.
+        // Configure the in-proc service even when the worker is active; it is the
+        // fallback path if the worker exe is missing or cannot complete handshake.
         _localAIService?.Configure(LocalAIProviderModeExtensions.Parse(_settings.LocalAIProvider));
 
         // Configure BuiltIn AI
@@ -489,6 +456,45 @@ public sealed class TranslationManagerService : IDisposable
         Debug.WriteLine("[TranslationManagerService] Services configured");
     }
 
+    private LocalAITranslationService CreateLocalAITranslationService()
+    {
+        var phiSilicaLazy = new Lazy<PhiSilicaTranslationService>(
+            () =>
+            {
+                lock (_lock)
+                {
+                    return _phiSilicaService ??= new PhiSilicaTranslationService();
+                }
+            },
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+        var foundryLocalLazy = new Lazy<IStreamTranslationService>(
+            () =>
+            {
+                lock (_lock)
+                {
+                    _foundryLocalService ??= new FoundryLocalService(_translationManager.SharedHttpClient);
+                    _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
+                    return _foundryLocalService;
+                }
+            },
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+        var openVinoLazy = new Lazy<OpenVINOTranslationService>(
+            () =>
+            {
+                lock (_lock)
+                {
+                    _openVinoService ??= new OpenVINOTranslationService();
+                    _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
+                    return _openVinoService;
+                }
+            },
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+        return new LocalAITranslationService(phiSilicaLazy, foundryLocalLazy, openVinoLazy);
+    }
+
     private void RegisterImportedMdxServices()
     {
         foreach (var dictionary in _settings.ImportedMdxDictionaries)
@@ -505,7 +511,9 @@ public sealed class TranslationManagerService : IDisposable
                     dictionary.DisplayName,
                     dictionary.FilePath,
                     dictionary.Regcode,
-                    dictionary.Email);
+                    dictionary.Email,
+                    deferLoad: true,
+                    isEncryptedHint: dictionary.IsEncrypted);
 
                 // Load MDD resource files (from stored paths, or re-discover for migration)
                 var mddPaths = dictionary.MddFilePaths;
@@ -524,8 +532,9 @@ public sealed class TranslationManagerService : IDisposable
                     service.LoadMddFiles(mddPaths);
                 }
 
+                service.DictionaryLoaded += loadedService => QueueMdxIndexBuild(dictionary, loadedService);
                 _translationManager.RegisterService(service);
-                QueueMdxIndexBuild(dictionary, service);
+                LocalDictionaryIndexService.Instance.RegisterDescriptor(dictionary);
             }
             catch (Exception ex)
             {
@@ -601,12 +610,15 @@ public sealed class TranslationManagerService : IDisposable
         {
             var service = new MdxDictionaryTranslationService(
                 dictionary.ServiceId, dictionary.DisplayName, dictionary.FilePath,
-                dictionary.Regcode, dictionary.Email);
+                dictionary.Regcode, dictionary.Email,
+                deferLoad: false,
+                isEncryptedHint: dictionary.IsEncrypted);
             lock (_lock)
             {
                 _translationManager.RegisterService(service);
             }
 
+            service.DictionaryLoaded += loadedService => QueueMdxIndexBuild(dictionary, loadedService);
             QueueMdxIndexBuild(dictionary, service);
             return true;
         }

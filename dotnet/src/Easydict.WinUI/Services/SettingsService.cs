@@ -205,10 +205,17 @@ public sealed class SettingsService
     /// <summary>
     /// When true, local AI translation routes through a child worker process
     /// (Easydict.Workers.LocalAi.exe) instead of the in-proc LocalAITranslationService.
-    /// Off by default — PhiSilica health monitor / Foundry recovery coordinator
-    /// state needs longer bake time before this is safe to default-on.
+    /// On by default to isolate local model native memory; worker startup failures
+    /// fall back to the in-proc LocalAITranslationService.
     /// </summary>
-    public bool UseLocalAiWorker { get; set; } = false;
+    public bool UseLocalAiWorker { get; set; } = true;
+
+    /// <summary>
+    /// When true, Windows Native OCR runs in a short-lived child worker process
+    /// so WinRT OCR/bitmap resources are reclaimed by process exit. API-based OCR
+    /// engines continue to use their existing in-proc HTTP path.
+    /// </summary>
+    public bool UseOcrWorker { get; set; } = true;
 
     /// <summary>
     /// Enable mouse selection translation: a floating translate button appears
@@ -718,7 +725,8 @@ public sealed class SettingsService
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
         UseLongDocWorker = GetValue(nameof(UseLongDocWorker), false);
-        UseLocalAiWorker = GetValue(nameof(UseLocalAiWorker), false);
+        UseLocalAiWorker = GetValue(nameof(UseLocalAiWorker), true);
+        UseOcrWorker = GetValue(nameof(UseOcrWorker), true);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
         MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
@@ -950,6 +958,7 @@ public sealed class SettingsService
         _settings[nameof(AutoTranslate)] = AutoTranslate;
         _settings[nameof(UseLongDocWorker)] = UseLongDocWorker;
         _settings[nameof(UseLocalAiWorker)] = UseLocalAiWorker;
+        _settings[nameof(UseOcrWorker)] = UseOcrWorker;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
         _settings[nameof(MouseSelectionExcludedApps)] = MouseSelectionExcludedApps;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;

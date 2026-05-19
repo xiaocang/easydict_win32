@@ -1380,7 +1380,7 @@ public class LongDocumentTranslationServiceReviewFixTests
     }
 
     [SkippableFact]
-    public async Task MuPdfExportService_ExportFixturePdf_ShouldPreservePage4FormulasAndEmitReviewPng()
+    public async Task MuPdfExportService_ExportFixturePdf_ShouldPreservePage4FormulasAndOptionallyEmitReviewPng()
     {
         var pdfPath = GetPdfFixturePath("1706.03762v7.pdf");
         Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
@@ -1417,6 +1417,14 @@ public class LongDocumentTranslationServiceReviewFixTests
             compactPage4Text.Should().Contain("√dk",
                 "the page 4 display equation should preserve its square-root denominator");
 
+            Console.WriteLine($"Page 4 formula review PDF: {outputPdfPath}");
+
+            if (!VisualReviewArtifacts.ShouldEmitPngs())
+            {
+                Console.WriteLine(VisualReviewArtifacts.OptInMessage);
+                return;
+            }
+
             var muDoc = new Document(outputPdfPath);
             try
             {
@@ -1425,15 +1433,14 @@ public class LongDocumentTranslationServiceReviewFixTests
                 var page4 = muDoc[3];
                 var pix = page4.GetPixmap(new Matrix(1.5f, 1.5f));
                 pix.Save(outputPngPath, "png");
+
+                File.Exists(outputPngPath).Should().BeTrue();
+                Console.WriteLine($"Page 4 formula review PNG: {outputPngPath}");
             }
             finally
             {
                 muDoc.Close();
             }
-
-            File.Exists(outputPngPath).Should().BeTrue();
-            Console.WriteLine($"Page 4 formula review PDF: {outputPdfPath}");
-            Console.WriteLine($"Page 4 formula review PNG: {outputPngPath}");
         }
         catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException)
         {

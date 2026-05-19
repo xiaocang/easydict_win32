@@ -114,26 +114,41 @@ internal sealed class LongDocWorkerClient : IDisposable
                     }
                 });
 
-                var result = await client.SendRequestAsync<TranslateDocumentResult>(
-                    LongDocMethods.TranslateDocument,
-                    new TranslateDocumentParams
+                var resultJsonPath = LongDocResultFileStore.CreateTempPath();
+                TranslateDocumentResult? result;
+                try
+                {
+                    result = await client.SendRequestAsync<TranslateDocumentResult>(
+                        LongDocMethods.TranslateDocument,
+                        new TranslateDocumentParams
+                        {
+                            InputPath = input,
+                            OutputPath = outputPath,
+                            InputMode = mode.ToString(),
+                            From = from.ToString(),
+                            To = to.ToString(),
+                            ServiceId = serviceId,
+                            OutputMode = outputMode.ToString(),
+                            PdfExportMode = pdfExportMode.ToString(),
+                            LayoutDetection = layoutDetection.ToString(),
+                            PageRange = _settings.LongDocPageRange,
+                            VisionEndpoint = visionEndpoint,
+                            VisionApiKey = visionApiKey,
+                            VisionModel = visionModel,
+                            ResultJsonPath = resultJsonPath,
+                        },
+                        timeoutMs: 0, // No host-side timeout for long ops; cancellation is the escape hatch.
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                    if (result is not null)
                     {
-                        InputPath = input,
-                        OutputPath = outputPath,
-                        InputMode = mode.ToString(),
-                        From = from.ToString(),
-                        To = to.ToString(),
-                        ServiceId = serviceId,
-                        OutputMode = outputMode.ToString(),
-                        PdfExportMode = pdfExportMode.ToString(),
-                        LayoutDetection = layoutDetection.ToString(),
-                        PageRange = _settings.LongDocPageRange,
-                        VisionEndpoint = visionEndpoint,
-                        VisionApiKey = visionApiKey,
-                        VisionModel = visionModel,
-                    },
-                    timeoutMs: 0, // No host-side timeout for long ops; cancellation is the escape hatch.
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                        result = await HydrateResultAsync(result, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    TryDeleteResultFile(resultJsonPath);
+                }
 
                 if (result is null)
                 {
@@ -206,6 +221,27 @@ internal sealed class LongDocWorkerClient : IDisposable
         };
     }
 
+    internal static async Task<TranslateDocumentResult> HydrateResultAsync(
+        TranslateDocumentResult result,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(result.ResultJsonPath))
+        {
+            return result;
+        }
+
+        if (!File.Exists(result.ResultJsonPath))
+        {
+            throw new TranslationException($"Worker result file was not found: {result.ResultJsonPath}")
+            {
+                ErrorCode = TranslationErrorCode.InvalidResponse,
+            };
+        }
+
+        return await LongDocResultFileStore.ReadAsync(result.ResultJsonPath, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private static LongDocumentTranslationResult MapResult(TranslateDocumentResult result)
     {
         // FIXME(p1a-follow-up): the worker's TranslateDocumentResult is a flat envelope
@@ -226,6 +262,21 @@ internal sealed class LongDocWorkerClient : IDisposable
     /// SendRequestAsync. For now cancel is best-effort.
     /// </summary>
     private static StrongBox<string?> TryExtractRequestIdLater(SidecarClient.SidecarClient _) => new(null);
+
+    private static void TryDeleteResultFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Temp result files are best-effort cleanup only.
+        }
+    }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

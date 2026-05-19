@@ -266,6 +266,10 @@
                         ReferenceOutputAssembly="false"
                         OutputItemType="WorkerOutput"
                         SetTargetFramework="TargetFramework=net8.0-windows10.0.22621.0" />
+      <ProjectReference Include="..\Easydict.Workers.Ocr\Easydict.Workers.Ocr.csproj"
+                        ReferenceOutputAssembly="false"
+                        OutputItemType="WorkerOutput"
+                        SetTargetFramework="TargetFramework=net8.0-windows10.0.22621.0" />
     </ItemGroup>
 
     <!-- Copy worker build outputs into $(TargetDir)workers\<kind>\ so dev runs from
@@ -288,6 +292,10 @@
                                      Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
         <_LocalAiWorkerFilesAnyCpu  Include="..\Easydict.Workers.LocalAi\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
                                      Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
+        <_OcrWorkerFilesPlatform Include="..\Easydict.Workers.Ocr\bin\$(Platform)\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
+        <_OcrWorkerFilesAnyCpu  Include="..\Easydict.Workers.Ocr\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
       </ItemGroup>
       <Copy SourceFiles="@(_LongDocWorkerFilesPlatform);@(_LongDocWorkerFilesAnyCpu)"
             DestinationFiles="@(_LongDocWorkerFilesPlatform->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)');@(_LongDocWorkerFilesAnyCpu->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)')"
@@ -297,6 +305,10 @@
             DestinationFiles="@(_LocalAiWorkerFilesPlatform->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)');@(_LocalAiWorkerFilesAnyCpu->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true"
             Condition="'@(_LocalAiWorkerFilesPlatform)@(_LocalAiWorkerFilesAnyCpu)' != ''" />
+      <Copy SourceFiles="@(_OcrWorkerFilesPlatform);@(_OcrWorkerFilesAnyCpu)"
+            DestinationFiles="@(_OcrWorkerFilesPlatform->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)');@(_OcrWorkerFilesAnyCpu->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true"
+            Condition="'@(_OcrWorkerFilesPlatform)@(_OcrWorkerFilesAnyCpu)' != ''" />
     </Target>
 
     <!-- FlaUI for proper UI Automation text selection -->

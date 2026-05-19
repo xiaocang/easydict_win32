@@ -38,6 +38,7 @@ namespace Easydict.WinUI.Views
         private readonly SettingsService _settings = SettingsService.Instance;
         private readonly List<ServiceQueryResult> _serviceResults = new();
         private readonly List<IServiceResultView> _resultControls = new();
+        private string? _staticUiSettingsSignature;
         private readonly TargetLanguageSelector _targetLanguageSelector;
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
         private bool _isLoaded;
@@ -52,6 +53,7 @@ namespace Easydict.WinUI.Views
         private Services.LongDocumentTranslationService? _longDocumentService;
         private LongDocumentDeduplicationService? _longDocDedupService;
         private bool _longDocFeaturesInitialized;
+        private bool _isModeSwitching;
         private LongDocumentTranslationCheckpoint? _longDocCheckpoint;
         private TranslationLanguage _longDocLastFrom = TranslationLanguage.Auto;
         private TranslationLanguage _longDocLastTo = TranslationLanguage.English;
@@ -90,6 +92,8 @@ namespace Easydict.WinUI.Views
         private const int QueryShutdownTimeoutSeconds = 2;
         private const int InputFocusRetryDelayMs = 50;
         private const int InputFocusMaxAttempts = 10;
+        private const int ModeSwitchRenderDelayMs = 50;
+        private const int ModeSwitchMinimumDurationMs = 180;
         private static readonly TimeSpan MinimalLanguageDetectionTimeout = TimeSpan.FromMilliseconds(800);
 
         private Services.LongDocumentTranslationService LongDocumentService =>
@@ -244,18 +248,27 @@ namespace Easydict.WinUI.Views
             }
             SetLoading(false);
 
-            // Apply localization first (populates combos), then settings (selects saved language)
-            ApplyLocalization(reinitializeServiceResults: false);
-            ApplySettings();
+            // Apply localization first (populates combos), then settings (selects saved language).
+            // Cached navigation back from Settings should not rebuild static combo/tool-tip state
+            // unless language/theme settings changed.
+            var staticUiSettingsSignature = BuildStaticUiSettingsSignature();
+            if (!string.Equals(_staticUiSettingsSignature, staticUiSettingsSignature, StringComparison.Ordinal))
+            {
+                ApplyLocalization(reinitializeServiceResults: false);
+                ApplySettings();
+                _staticUiSettingsSignature = staticUiSettingsSignature;
+            }
+#if DEBUG
+            else
+            {
+                Debug.WriteLine("[MainPage] Static UI settings unchanged; skipped ApplyLocalization/ApplySettings");
+            }
+#endif
 
             // Initialize service result controls based on enabled services
             InitializeServiceResults(skipRebuildWhenDebugFlagSet: true, reason: "OnPageLoaded");
 
             SettingsService.Instance.HideEmptyServiceResultsChanged += OnHideEmptyServiceResultsChanged;
-            if (!MinimalThemeService.IsActive)
-            {
-                EnsureLongDocFeaturesInitialized();
-            }
             ApplyThemeChrome();
             SyncLocalModelPreparationProgressFromCoordinator();
 #if DEBUG
@@ -289,6 +302,7 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
+            PopulateLongDocLanguageCombos(LocalizationService.Instance);
             InitializeLongDocServices();
             InitializeLongDocOutputDefaults();
             OnLongDocInputModeChanged(LongDocInputModeCombo, null!);
@@ -1062,6 +1076,23 @@ namespace Easydict.WinUI.Views
 #endif
         }
 
+        private string BuildStaticUiSettingsSignature()
+        {
+            var sb = new StringBuilder();
+            sb.Append("ui=").Append(LocalizationService.Instance.CurrentLanguage)
+                .Append("|minimal=").Append(MinimalThemeService.IsActive ? "1" : "0")
+                .Append("|first=").Append(_settings.FirstLanguage)
+                .Append("|second=").Append(_settings.SecondLanguage)
+                .Append("|selected=");
+
+            foreach (var language in _settings.SelectedLanguages)
+            {
+                sb.Append(language).Append(',');
+            }
+
+            return sb.ToString();
+        }
+
         /// <summary>
         /// Apply localization to all UI elements using LocalizationService.
         /// Also dynamically populates language combo boxes from user's selected languages.
@@ -1080,13 +1111,10 @@ namespace Easydict.WinUI.Views
                 LanguageComboHelper.PopulateTargetCombo(TargetLangCombo, loc);
                 LanguageComboHelper.PopulateTargetCombo(TargetLangComboNarrow, loc);
 
-                // Long Doc language combos — default source to Auto, target to user's FirstLanguage
-                LanguageComboHelper.PopulateSourceCombo(LongDocSourceLangCombo, loc);
-                LanguageComboHelper.PopulateTargetCombo(
-                    LongDocTargetLangCombo,
-                    loc,
-                    _settings.FirstLanguage,
-                    includeAuto: false);
+                if (_longDocFeaturesInitialized || _currentMode == QueryMode.LongDocument)
+                {
+                    PopulateLongDocLanguageCombos(loc);
+                }
             }
             finally
             {
@@ -1132,6 +1160,17 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(LongDocOutputModeHint, loc.GetString("LongDoc_OutputModeHelpTip"));
             ToolTipService.SetToolTip(LongDocConcurrencyHint, loc.GetString("LongDoc_ConcurrencyHelpTip"));
             ToolTipService.SetToolTip(LongDocPageRangeHint, loc.GetString("LongDoc_PageRangeHelpTip"));
+        }
+
+        private void PopulateLongDocLanguageCombos(LocalizationService loc)
+        {
+            // Long Doc language combos default source to Auto and target to user's FirstLanguage.
+            LanguageComboHelper.PopulateSourceCombo(LongDocSourceLangCombo, loc);
+            LanguageComboHelper.PopulateTargetCombo(
+                LongDocTargetLangCombo,
+                loc,
+                _settings.FirstLanguage,
+                includeAuto: false);
         }
 
         /// <summary>
@@ -1211,6 +1250,95 @@ namespace Easydict.WinUI.Views
             ApplyThemeChrome();
         }
 
+        private async Task<bool> SwitchModeAsync(QueryMode newMode)
+        {
+            if (!_isLoaded || _isClosing)
+            {
+                return false;
+            }
+
+            if (newMode == _currentMode)
+            {
+                SyncModeMenuSelection();
+                return true;
+            }
+
+            if (_isModeSwitching)
+            {
+                SyncModeMenuSelection();
+                return false;
+            }
+
+            var showLoading = IsTranslationLongDocSwitch(_currentMode, newMode);
+            _isModeSwitching = true;
+            SetModeSwitchCommandsEnabled(false);
+
+            try
+            {
+                if (showLoading)
+                {
+                    await ShowModeSwitchLoadingAsync();
+                }
+
+                _currentMode = newMode;
+                SyncModeMenuSelection();
+                ApplyModeState();
+
+                if (showLoading)
+                {
+                    await Task.Delay(ModeSwitchMinimumDurationMs);
+                }
+
+                return _currentMode == newMode;
+            }
+            finally
+            {
+                if (showLoading)
+                {
+                    HideModeSwitchLoading();
+                }
+
+                SetModeSwitchCommandsEnabled(true);
+                _isModeSwitching = false;
+            }
+        }
+
+        private static bool IsTranslationLongDocSwitch(QueryMode currentMode, QueryMode newMode)
+        {
+            return currentMode != newMode &&
+                (currentMode == QueryMode.Translation || currentMode == QueryMode.LongDocument) &&
+                (newMode == QueryMode.Translation || newMode == QueryMode.LongDocument);
+        }
+
+        private async Task ShowModeSwitchLoadingAsync()
+        {
+            ModeSwitchLoadingText.Text = LocalizationService.Instance.GetString("StatusInitializing") ?? "Loading...";
+            ModeSwitchLoadingOverlay.Opacity = 1;
+            ModeSwitchLoadingOverlay.Visibility = Visibility.Visible;
+            ModeSwitchLoadingRing.IsActive = true;
+
+            await Task.Delay(ModeSwitchRenderDelayMs);
+        }
+
+        private void HideModeSwitchLoading()
+        {
+            ModeSwitchLoadingRing.IsActive = false;
+            ModeSwitchLoadingOverlay.Opacity = 0;
+            ModeSwitchLoadingOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void SetModeSwitchCommandsEnabled(bool isEnabled)
+        {
+            ModeTranslationItem.IsEnabled = isEnabled;
+            ModeLongDocItem.IsEnabled = isEnabled;
+        }
+
+        private void SyncModeMenuSelection()
+        {
+            ModeTranslationItem.IsChecked = _currentMode == QueryMode.Translation;
+            ModeLongDocItem.IsChecked = _currentMode == QueryMode.LongDocument;
+        }
+
         private void OnClipboardTextReceived(string text)
         {
             if (_isClosing)
@@ -1238,9 +1366,11 @@ namespace Easydict.WinUI.Views
                 // Switch out of Long Document mode for quick translate
                 if (_currentMode == QueryMode.LongDocument)
                 {
-                    _currentMode = QueryMode.Translation;
-                    ModeTranslationItem.IsChecked = true;
-                    ApplyModeState();
+                    var switched = await SwitchModeAsync(QueryMode.Translation);
+                    if (!switched)
+                    {
+                        return;
+                    }
                 }
 
                 InputTextBox.Text = text;
@@ -3956,7 +4086,7 @@ namespace Easydict.WinUI.Views
             }
         }
 
-        private void OnModeMenuItemClick(object sender, RoutedEventArgs e)
+        private async void OnModeMenuItemClick(object sender, RoutedEventArgs e)
         {
             if (!_isLoaded) return;
 
@@ -3969,8 +4099,7 @@ namespace Easydict.WinUI.Views
                 return;
 
             if (newMode == _currentMode) return;
-            _currentMode = newMode;
-            ApplyModeState();
+            await SwitchModeAsync(newMode);
         }
 
         private void OnSettingsClicked(object sender, RoutedEventArgs e)
@@ -3983,13 +4112,21 @@ namespace Easydict.WinUI.Views
         /// </summary>
         public void SetTextAndTranslate(string text)
         {
+            _ = SetTextAndTranslateAsync(text);
+        }
+
+        private async Task SetTextAndTranslateAsync(string text)
+        {
             // Switch out of Long Document mode for quick translate
             if (_currentMode == QueryMode.LongDocument)
             {
-                _currentMode = QueryMode.Translation;
-                ModeTranslationItem.IsChecked = true;
-                ApplyModeState();
+                var switched = await SwitchModeAsync(QueryMode.Translation);
+                if (!switched)
+                {
+                    return;
+                }
             }
+
             _targetLanguageSelector.Reset();
             HideSuggestionPopup();
             InputTextBox.Text = text;

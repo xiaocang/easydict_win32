@@ -91,9 +91,8 @@ internal sealed class TranslateDocumentHandler
             //      worker-compatible builder that takes a SettingsSnapshot parameter
             //      instead of reaching for SettingsService.Instance. Suggested home:
             //      Easydict.TranslationService/LongDocument/SourceDocumentBuilder.cs.
-            //   2. Replace WinUI-side service references with the source-shared classes
-            //      this csproj already pulls in via <Compile Include Link=..>
-            //      (DocLayoutYoloService, LayoutModelDownloadService, VisionLayoutDetectionService).
+            //   2. Replace WinUI-side service references with worker-compatible
+            //      layout/download services that do not reach for SettingsService.Instance.
             //   3. Then below: var sourceDoc = await SourceDocumentBuilder.BuildAsync(p, _state.Settings, status: msg =>
             //          _writer.WriteEventAsync(LongDocEvents.Status, new StatusEventData { Message = msg }, requestId),
             //          progress: progress, cancellationToken);

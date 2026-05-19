@@ -1,0 +1,85 @@
+name: Memory Gate
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'dotnet/src/**'
+      - 'dotnet/tests/**'
+      - 'dotnet/scripts/memory/**'
+      - '.github/workflows/memory-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  pr-memory-gate:
+    name: PR Memory Gate
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: dotnet/global.json
+
+      - name: Install Windows App Runtime
+        shell: pwsh
+        run: |
+          $url = "https://aka.ms/windowsappsdk/2.0/latest/windowsappruntimeinstall-x64.exe"
+          $installer = Join-Path $env:TEMP "windowsappruntimeinstall-x64.exe"
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "--quiet","--force" -Wait -NoNewWindow
+
+      - name: Restore WinUI app
+        working-directory: dotnet
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-x64
+
+      - name: Publish WinUI app
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --no-restore `
+            --output ./publish/x64 `
+            -p:Platform=x64 `
+            -p:PublishTrimmed=false `
+            -p:WindowsAppSDKSelfContained=false
+
+      - name: Build UIAutomation tests
+        working-directory: dotnet
+        run: |
+          dotnet build tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
+            --configuration Release `
+            -p:Platform=x64
+
+      - name: Run PR memory gate
+        shell: pwsh
+        run: |
+          dotnet/scripts/memory/Invoke-PrMemoryGate.ps1 `
+            -AppExePath "dotnet/publish/x64/Easydict.WinUI.exe" `
+            -TestProject "dotnet/tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj" `
+            -OutputDir "artifacts/memory-gate/pr" `
+            -SkipBuild
+
+      - name: Upload memory artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-memory-gate
+          path: artifacts/memory-gate/pr
+          retention-days: 7

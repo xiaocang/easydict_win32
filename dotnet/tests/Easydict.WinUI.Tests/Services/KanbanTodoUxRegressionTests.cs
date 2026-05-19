@@ -247,7 +247,7 @@ public class KanbanTodoUxRegressionTests
             "dictionary navigation should not walk the entire DOM on the UI thread after every query");
         code.Should().Contain("var targetHeight = height + 8;",
             "dictionary WebView sizing should still derive from measured content height");
-        code.Should().Contain("DictWebView.CoreWebView2.WebMessageReceived += OnDictWebViewWebMessageReceived;",
+        code.Should().Contain("dictWebView.CoreWebView2.WebMessageReceived += OnDictWebViewWebMessageReceived;",
             "the host should subscribe to WebView messages so wheel-boundary events can escape the dictionary surface");
         code.Should().Contain("window.chrome?.webview?.postMessage({",
             "dictionary HTML should signal top/bottom wheel-boundary events back to the host");
@@ -332,7 +332,7 @@ public class KanbanTodoUxRegressionTests
 
         code.Should().Contain("private void ShowRawHtmlPlainTextFallback",
             "MDX dictionary rendering should keep a dedicated plain-text fallback helper");
-        code.Should().Contain("ShowRawHtmlPlainTextFallback(_serviceResult.Result, resultTextBrush);",
+        code.Should().Contain("ShowRawHtmlPlainTextFallback(_serviceResult.Result, resultTextBrush, scheduleWebViewRelease: false);",
             "the RawHtml branch should seed visible plain text before WebView2 finishes loading");
         code.Should().Contain("ShowRawHtmlPlainTextFallback(_serviceResult.Result);",
             "navigation and sizing failures should restore the plain-text fallback instead of leaving the result blank");

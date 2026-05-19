@@ -217,6 +217,124 @@ dotnet-dump analyze easydict.dmp
 > gcroot <address>                  # Find what keeps an object alive
 ```
 
+## CI Memory Gates
+
+### PR Gate
+
+Every PR that touches app, test, or memory-script code runs `.github/workflows/memory-gate.yml`.
+The workflow publishes the WinUI app, runs the `MemoryGate` UIAutomation scenario, and collects:
+
+- `typeperf.csv`: `Private Bytes`, `Handle Count`, `Working Set`, and `Thread Count`.
+- `dotnet-counters.json`: `System.Runtime` counters in JSON format.
+- `baseline.gcdump` / `final.gcdump` plus `*.heapstat.txt`.
+- `summary.json`: parsed thresholds and pass/fail details.
+
+Scenario:
+
+1. Launch the app.
+2. Idle for 30 seconds.
+3. Open/use the main window.
+4. Run the mock selection path in `InputTextBox`.
+5. Close the window.
+6. Idle for 15 seconds.
+
+Thresholds:
+
+- Final idle `Private Bytes` must stay within baseline + 10%.
+- `Handle Count` must not show sustained tail growth.
+- Parsed `GC Heap Size` from `dotnet-counters` must stay within baseline + 10% when available.
+- Final `dotnet-gcdump` heapstat is always captured so managed heap rollback can be inspected even when counter parsing changes.
+
+Local run:
+
+```powershell
+dotnet publish dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj `
+  -c Release -r win-x64 --self-contained true `
+  -o dotnet/publish/x64 -p:Platform=x64 -p:WindowsAppSDKSelfContained=false
+
+dotnet build dotnet/tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
+  -c Release -p:Platform=x64
+
+dotnet/scripts/memory/Invoke-PrMemoryGate.ps1 `
+  -AppExePath dotnet/publish/x64/Easydict.WinUI.exe `
+  -SkipBuild
+```
+
+Use `-RunRealTranslation` only when the runner is configured with deterministic local/mock translation services.
+The default PR path intentionally avoids real network/model translation so the memory budget is about app lifecycle, UI state, and window cleanup.
+
+### Nightly Profile
+
+The nightly profile is implemented by `.github/workflows/memory-nightly.yml` and `dotnet/scripts/memory/Invoke-NightlyMemoryProfile.ps1`. The GitHub workflow intentionally has one scheduled trigger and no `workflow_dispatch` entry, so CI wakes up at most once per day. Before doing any heavy work, `dotnet/scripts/memory/Test-MemoryProfileShouldRun.ps1` compares the current `GITHUB_SHA` with the latest `sourceSha` stored on the `scratch/memory-nightly` branch; if there is no new commit, the build, app launch, memory collection, artifact upload, and branch publish steps are skipped. The workflow publishes comparable lightweight results to the scratch branch through `dotnet/scripts/memory/Publish-MemoryProfileScratchBranch.ps1`; scratch-branch results are kept for 60 days, and old `memory-nightly/runs/*` directories are deleted before the new commit is pushed. Large `.nettrace`, `.etl`, `.dmp`, and `.gcdump` files stay in workflow artifacts only, with GitHub artifact retention currently set to 14 days. It is artifact-first, not a tight PR blocker. Run these scenarios on a pinned Windows image with stable display scaling and preinstalled optional tools:
+
+- OCR 20 times.
+- MDX lookup 100 times.
+- Long-document translation against a mock provider.
+- Local AI translation when the runner has a supported model/runtime.
+- Open/close main, mini, fixed, settings, and long-document windows 100 times.
+- Language switching.
+- TTS.
+
+Collect:
+
+- `dotnet-trace` with GC verbose events.
+- WPR reference set.
+- WPR heap and VirtualAlloc ETL.
+- ProcDump threshold dump.
+- VMMap snapshots.
+- The same `typeperf`, `dotnet-counters`, and `dotnet-gcdump` artifacts as the PR gate.
+
+Local baseline capture:
+
+```powershell
+dotnet publish dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj `
+  -c Release -r win-x64 --self-contained true `
+  -o dotnet/publish/x64 -p:Platform=x64 -p:WindowsAppSDKSelfContained=false
+
+dotnet/scripts/memory/Invoke-NightlyMemoryProfile.ps1 `
+  -AppExePath dotnet/publish/x64/Easydict.WinUI.exe `
+  -OutputDir artifacts/memory-gate/nightly `
+  -DurationSeconds 300 `
+  -EnableWprReferenceSet
+```
+
+Optional native drilldown capture:
+
+```powershell
+dotnet/scripts/memory/Invoke-NightlyMemoryProfile.ps1 `
+  -AppExePath dotnet/publish/x64/Easydict.WinUI.exe `
+  -OutputDir artifacts/memory-gate/native `
+  -DurationSeconds 300 `
+  -EnableWprReferenceSet `
+  -EnableWprHeapVirtualAlloc `
+  -EnableProcDump `
+  -ProcDumpPath C:\Sysinternals\procdump.exe `
+  -EnableVmMap `
+  -VmMapPath C:\Sysinternals\vmmap.exe
+```
+
+`Invoke-NightlyMemoryProfile.ps1` always collects `typeperf`, `dotnet-counters`, and `dotnet-trace --profile gc-verbose`. WPR, ProcDump, and VMMap are opt-in so local runs do not require admin/tooling setup. Use `-ScenarioCommand` to drive a custom UIAutomation or scripted workflow while the collectors are running.
+
+Nightly failures should be triaged by trend first:
+
+- `Private Bytes` grows while `GC Heap Size` stays flat -> prioritize native heap, COM, WebView2, OCR/model runtime, bitmap, mapped-file, or thread-stack investigations.
+- Closing windows does not reduce `Working Set` or commit -> inspect native caches and mapped allocations before chasing managed roots.
+- Local AI or OCR leaves memory high after forced idle -> isolate model runtime and image buffer lifetimes.
+
+### Native / Interop Drilldown
+
+Enter this lane when process memory grows without matching managed heap growth, or when native-heavy features keep memory after shutdown of their UI surface.
+
+Recommended tooling:
+
+- UMDH with GFlags user-stack traces.
+- Application Verifier.
+- WPR VirtualAlloc and Heap profiles.
+- ProcDump full dump at threshold.
+- VMMap before/after snapshots.
+
+Treat these symptoms as native/interop first, not C# object leaks, until evidence says otherwise: `Private Bytes` up with flat `GC Heap`, post-close commit not falling, or memory retained after OCR/local-AI/model/WebView2 operations.
+
 ## CI Memory Regression Tests
 
 Memory budget tests run as part of the `Performance` test category:

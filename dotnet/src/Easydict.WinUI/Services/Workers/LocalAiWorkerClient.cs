@@ -32,11 +32,33 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
 
     private readonly SettingsService _settings;
     private readonly WorkerSpawner _spawner = new();
+    private readonly IStreamTranslationService? _fallbackTranslationService;
+    private readonly IGrammarCorrectionService? _fallbackGrammarService;
+    private readonly ILocalModelProvider? _fallbackModelProvider;
+    private readonly Func<CancellationToken, Task<SidecarClient.SidecarClient>>? _spawnOverride;
     private bool _disposed;
 
-    public LocalAiWorkerClient(SettingsService settings)
+    public LocalAiWorkerClient(
+        SettingsService settings,
+        IStreamTranslationService? fallbackTranslationService = null,
+        IGrammarCorrectionService? fallbackGrammarService = null,
+        ILocalModelProvider? fallbackModelProvider = null)
     {
         _settings = settings;
+        _fallbackTranslationService = fallbackTranslationService;
+        _fallbackGrammarService = fallbackGrammarService;
+        _fallbackModelProvider = fallbackModelProvider;
+    }
+
+    internal LocalAiWorkerClient(
+        SettingsService settings,
+        IStreamTranslationService? fallbackTranslationService,
+        IGrammarCorrectionService? fallbackGrammarService,
+        ILocalModelProvider? fallbackModelProvider,
+        Func<CancellationToken, Task<SidecarClient.SidecarClient>> spawnOverride)
+        : this(settings, fallbackTranslationService, fallbackGrammarService, fallbackModelProvider)
+    {
+        _spawnOverride = spawnOverride;
     }
 
     public string ServiceId => ServiceIdValue;
@@ -59,7 +81,18 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
     {
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
-        await using var client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
+        SidecarClient.SidecarClient client;
+        try
+        {
+            client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (CanFallbackToInProc(ex) && _fallbackTranslationService is not null)
+        {
+            Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc TranslateAsync: {ex.Message}");
+            return await _fallbackTranslationService.TranslateAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var clientLease = client.ConfigureAwait(false);
         try
         {
             var result = await client.SendRequestAsync<LocalAiTranslateResult>(
@@ -108,7 +141,38 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
     {
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
-        await using var client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
+        var fallbackTranslationService = _fallbackTranslationService;
+        SidecarClient.SidecarClient? client = null;
+        Exception? fallbackException = null;
+        try
+        {
+            client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (CanFallbackToInProc(ex) && fallbackTranslationService is not null)
+        {
+            fallbackException = ex;
+        }
+
+        if (client is null)
+        {
+            if (fallbackTranslationService is null)
+            {
+                throw fallbackException ?? new WorkerStartFailedException("Local AI worker did not start.");
+            }
+
+            Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc TranslateStreamAsync: {fallbackException?.Message}");
+            await foreach (var chunk in fallbackTranslationService
+                               .TranslateStreamAsync(request, cancellationToken)
+                               .WithCancellation(cancellationToken)
+                               .ConfigureAwait(false))
+            {
+                yield return chunk;
+            }
+
+            yield break;
+        }
+
+        await using var clientLease = client.ConfigureAwait(false);
 
         var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
         {
@@ -141,11 +205,11 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         {
             try
             {
-                _ = await client.SendRequestAsync<TranslateStreamResult>(
-                    LocalAiMethods.TranslateStream,
-                    BuildParams(request),
-                    timeoutMs: 0,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                    _ = await client.SendRequestAsync<TranslateStreamResult>(
+                        LocalAiMethods.TranslateStream,
+                        BuildParams(request),
+                        timeoutMs: 0,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
                 channel.Writer.TryComplete();
             }
             catch (Exception ex)
@@ -191,7 +255,38 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         // different method name.
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
-        await using var client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
+        var fallbackGrammarService = _fallbackGrammarService;
+        SidecarClient.SidecarClient? client = null;
+        Exception? fallbackException = null;
+        try
+        {
+            client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (CanFallbackToInProc(ex) && fallbackGrammarService is not null)
+        {
+            fallbackException = ex;
+        }
+
+        if (client is null)
+        {
+            if (fallbackGrammarService is null)
+            {
+                throw fallbackException ?? new WorkerStartFailedException("Local AI worker did not start.");
+            }
+
+            Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc CorrectGrammarStreamAsync: {fallbackException?.Message}");
+            await foreach (var chunk in fallbackGrammarService
+                               .CorrectGrammarStreamAsync(request, cancellationToken)
+                               .WithCancellation(cancellationToken)
+                               .ConfigureAwait(false))
+            {
+                yield return chunk;
+            }
+
+            yield break;
+        }
+
+        await using var clientLease = client.ConfigureAwait(false);
 
         var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
         {
@@ -272,7 +367,18 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
     {
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
-        await using var client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
+        SidecarClient.SidecarClient client;
+        try
+        {
+            client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (CanFallbackToInProc(ex) && _fallbackModelProvider is not null)
+        {
+            Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc PrepareAsync: {ex.Message}");
+            return await _fallbackModelProvider.PrepareAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var clientLease = client.ConfigureAwait(false);
         var providerMode = _settings.LocalAIProvider ?? LocalAiProviderModes.Auto;
         var provider = providerMode == LocalAiProviderModes.Auto
             ? LocalAiProviderModes.WindowsAI // pick a concrete one for prepare
@@ -289,6 +395,11 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
 
     private async Task<SidecarClient.SidecarClient> SpawnConfiguredAsync(CancellationToken ct)
     {
+        if (_spawnOverride is not null)
+        {
+            return await _spawnOverride(ct).ConfigureAwait(false);
+        }
+
         var snapshot = WorkerSpawner.BuildSnapshot(_settings);
         return await _spawner.StartAndConfigureAsync(
             WorkerKinds.LocalAi, WorkerSubdir, WorkerExeName, snapshot, ct).ConfigureAwait(false);
@@ -319,6 +430,13 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
             ErrorCode = code,
             ServiceId = ServiceId,
         };
+    }
+
+    private static bool CanFallbackToInProc(Exception ex)
+    {
+        return ex is WorkerStartFailedException
+            or WorkerVersionMismatchException
+            or FileNotFoundException;
     }
 
     private static LocalModelStatus MapStatus(LocalModelStatusDto? dto)

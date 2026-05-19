@@ -182,6 +182,19 @@ public class SettingsPageLifecycleLeakTests
             "only RunDeferredSettingsIo should emit the ONNX start marker");
     }
 
+    [Fact]
+    public void SettingsPage_InitialLoadOnlyInitializesGeneralTabData()
+    {
+        var content = File.ReadAllText(SettingsPagePath);
+
+        content.Should().Contain("var deferLazyTabData = true;",
+            "opening Settings should not populate hidden tab data or start Advanced-tab I/O before the user asks for those tabs");
+        content.Should().Contain("if (deferLazyTabData && !ShouldLoadSettingsTab(SettingsTabId.Advanced, deferLazyTabData))",
+            "Advanced deferred I/O should stay parked until the Advanced tab is initialized");
+        content.Should().NotContain("foreach (var tabId in Enum.GetValues<SettingsTabId>())\r\n            {\r\n                _initializedSettingsTabData.Add(tabId);\r\n            }",
+            "initial Settings open should not mark every tab as initialized");
+    }
+
     private static string FindProjectRoot()
     {
         var current = AppDomain.CurrentDomain.BaseDirectory;

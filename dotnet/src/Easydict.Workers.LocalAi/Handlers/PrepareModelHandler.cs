@@ -34,8 +34,8 @@ internal sealed class PrepareModelHandler
         return new LocalModelStatusDto
         {
             State = status.State.ToString(),
-            StatusKey = status.StatusKey,
-            Detail = status.Detail,
+            StatusKey = status.ResourceKey,
+            Detail = status.DetailMessage,
         };
     }
 

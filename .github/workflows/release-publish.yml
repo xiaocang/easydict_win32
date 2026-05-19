@@ -269,6 +269,29 @@ jobs:
             "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix" `
             --allow-unsigned
 
+      # Windows App Certification Kit — required for Microsoft Store submission.
+      # Both x64 and arm64 hard-fail on WACK violations: cross-arch validation on the
+      # x64 runner still does the static checks (manifest, capabilities, files, banned
+      # APIs); launch-tests are auto-skipped by appcert when it sees -arch arm64, so
+      # the arm64 run isn't expected to fail purely on cross-arch grounds.
+      - name: Run Windows App Certification Kit
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          ./scripts/Run-Wack.ps1 `
+            -MsixPath "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix" `
+            -Arch "${{ matrix.platform }}" `
+            -ReportPath "msix/wack-report-${{ matrix.platform }}.xml"
+
+      # Always upload the report so we can inspect failures without re-running CI.
+      - name: Upload WACK report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wack-report-${{ matrix.platform }}
+          path: dotnet/msix/wack-report-${{ matrix.platform }}.xml
+          if-no-files-found: warn
+
       # Also create ZIP archive for portable distribution
       - name: Create ZIP archive
         shell: pwsh

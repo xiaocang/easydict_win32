@@ -41,6 +41,14 @@ internal sealed class WorkerSpawner
             // 0 = no default timeout for long-running ops; per-call timeouts are passed
             // explicitly. Workers themselves report ready inside HandshakeTimeoutMs.
             DefaultTimeoutMs = 0,
+            // Workers are published framework-dependent to share a single .NET 8 runtime
+            // copy across both workers (instead of bundling the runtime per-worker).
+            // The runtime lives at <install>/dotnet, populated at publish time by
+            // scripts/Extract-DotnetRuntime.ps1. Point the apphost at it explicitly via
+            // every DOTNET_ROOT variant the .NET host loader consults — DOTNET_ROOT for
+            // the legacy path, and DOTNET_ROOT_<ARCH> for per-arch hosts on systems where
+            // a different arch's runtime is also installed.
+            EnvironmentVariables = BuildEnvironmentVariables(),
         };
 
         var client = new SidecarClient.SidecarClient(options);
@@ -139,6 +147,27 @@ internal sealed class WorkerSpawner
     public static string ResolveWorkerExePath(string workerSubdir, string workerExeName)
     {
         return Path.Combine(AppContext.BaseDirectory, "workers", workerSubdir, workerExeName);
+    }
+
+    /// <summary>
+    /// Build the DOTNET_ROOT environment block for the worker. Points every variant
+    /// at the bundled runtime at &lt;install&gt;/dotnet so the framework-dependent
+    /// worker apphost finds it regardless of which probe order the local .NET host
+    /// loader uses.
+    /// </summary>
+    private static Dictionary<string, string> BuildEnvironmentVariables()
+    {
+        var dotnetRoot = Path.Combine(AppContext.BaseDirectory, "dotnet");
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["DOTNET_ROOT"] = dotnetRoot,
+            ["DOTNET_ROOT_X64"] = dotnetRoot,
+            ["DOTNET_ROOT_ARM64"] = dotnetRoot,
+            // Suppress global telemetry from the worker apphost (the host itself
+            // already opts out via its csproj). Worker startup cost is on the
+            // critical path of every translate request — skip the network sniff.
+            ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
+        };
     }
 
     /// <summary>

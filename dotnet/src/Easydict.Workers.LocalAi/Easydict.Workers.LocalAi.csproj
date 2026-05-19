@@ -11,7 +11,14 @@
     <AssemblyName>Easydict.Workers.LocalAi</AssemblyName>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <Platforms>x64;arm64</Platforms>
+    <!-- See Easydict.Workers.LongDoc.csproj for the rationale on the framework-
+         dependent + no-R2R + no-PDB combo: keeps the worker publish output small
+         so the bundled .NET 8 runtime in <package>/dotnet/ pays back across both
+         workers. -->
     <SelfContained>false</SelfContained>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
     <WindowsAppSdkAutoInitialize>false</WindowsAppSdkAutoInitialize>
     <UseWinUI>false</UseWinUI>
   </PropertyGroup>

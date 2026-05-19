@@ -16,9 +16,19 @@
          Don't hardcode here — that would force cross-arch publish to fail with a
          RID/Platform mismatch on arm64 runners. -->
     <Platforms>x64;arm64</Platforms>
-    <!-- The worker uses the same .NET runtime as the host (set DOTNET_ROOT in WorkerSpawner)
-         to avoid shipping a per-RID self-contained runtime per worker (~30 MB each). -->
+    <!-- Framework-dependent so the worker reuses the shared .NET 8 runtime bundled
+         once into <package>/dotnet/ by Extract-DotnetRuntime.ps1. WorkerSpawner sets
+         DOTNET_ROOT_<arch> when launching so the apphost finds it. CLI publish flag
+         can override (--self-contained true) for local one-off testing. -->
     <SelfContained>false</SelfContained>
+    <!-- R2R bakes architecture-specific native code into managed DLLs (~20% size hit).
+         Workers run short-lived translation jobs where startup is dwarfed by the
+         translation itself, so the size cost isn't worth the marginal startup gain. -->
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- Skip PDBs in publish output. Workers don't need symbol files in production —
+         crashes are surfaced through IPC error responses, not a debugger attach. -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
     <!-- Same suppression as Easydict.WinUI.Tests: the WinAppSDK module constructor would
          throw on machines without the SDK runtime; the worker only consumes the SDK
          management abstractions via shared classes that already handle that gracefully. -->

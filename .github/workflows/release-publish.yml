@@ -150,6 +150,9 @@ jobs:
       # Publish LongDoc worker (out-of-process PDF + ONNX layout detection).
       # Resolved by host via AppContext.BaseDirectory + "workers/longdoc/Easydict.Workers.LongDoc.exe".
       # No trimming — MuPDF.NET and ONNX Runtime use reflection that breaks under IL trim.
+      # Portable artifacts ship outside the MSIX framework-dependency umbrella, so
+      # workers self-contain both .NET and WindowsAppSDK. The MSIX path below strips
+      # this back to a shared .NET 8 runtime via Extract-DotnetRuntime.ps1.
       - name: Publish LongDoc Worker
         working-directory: dotnet
         run: |
@@ -161,7 +164,6 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
-      # Publish LocalAi worker (out-of-process Phi Silica / Foundry Local / OpenVINO).
       - name: Publish LocalAi Worker
         working-directory: dotnet
         run: |
@@ -222,7 +224,7 @@ jobs:
           dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj `
             --configuration Release `
             --runtime win-${{ matrix.platform }} `
-            --self-contained true `
+            --no-self-contained `
             --output ./publish-msix/${{ matrix.platform }}/workers/longdoc `
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false `
@@ -234,11 +236,19 @@ jobs:
           dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj `
             --configuration Release `
             --runtime win-${{ matrix.platform }} `
-            --self-contained true `
+            --no-self-contained `
             --output ./publish-msix/${{ matrix.platform }}/workers/localai `
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
+
+      - name: Bundle .NET 8 Runtime (MSIX)
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          ./scripts/Extract-DotnetRuntime.ps1 `
+            -Rid win-${{ matrix.platform }} `
+            -OutputDir ./publish-msix/${{ matrix.platform }}/dotnet
 
       - name: Package MSIX (shared script)
         shell: pwsh

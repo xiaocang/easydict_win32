@@ -133,6 +133,100 @@ public class MdxDictionaryTranslationServiceTests
         act.Should().Throw<FileNotFoundException>();
     }
 
+    [Fact]
+    public void Constructor_WithExistingFile_DefersDictionaryOpenByDefault()
+    {
+        var path = CreateTempFile("not a real mdx file");
+        try
+        {
+            var service = new MdxDictionaryTranslationService(
+                "mdx::lazy",
+                "Lazy Dictionary",
+                path);
+
+            service.HasAttemptedLoad.Should().BeFalse();
+            service.CanEnumerateKeys.Should().BeFalse();
+            service.IsConfigured.Should().BeTrue();
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
+    [Fact]
+    public void Constructor_WithDeferLoadFalse_ValidatesImmediately()
+    {
+        var path = CreateTempFile("not a real mdx file");
+        try
+        {
+            var act = () => new MdxDictionaryTranslationService(
+                "mdx::eager",
+                "Eager Dictionary",
+                path,
+                deferLoad: false);
+
+            act.Should().Throw<Exception>();
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
+    [Fact]
+    public async Task EncryptedHint_WithoutCredentials_ReturnsCredentialsMessageWithoutOpeningFile()
+    {
+        var path = CreateTempFile("not a real mdx file");
+        try
+        {
+            var service = new MdxDictionaryTranslationService(
+                "mdx::encrypted-lazy",
+                "Encrypted Lazy Dictionary",
+                path,
+                isEncryptedHint: true);
+
+            var result = await service.TranslateAsync(new TranslationRequest
+            {
+                Text = "hello",
+                FromLanguage = Language.English,
+                ToLanguage = Language.SimplifiedChinese
+            });
+
+            service.HasAttemptedLoad.Should().BeFalse();
+            result.ResultKind.Should().Be(TranslationResultKind.NoResult);
+            result.InfoMessage.Should().Contain("encrypted");
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
+    [Fact]
+    public void LoadMddFiles_BeforeDictionaryLoad_DefersMddOpen()
+    {
+        var mdxPath = CreateTempFile("not a real mdx file");
+        var mddPath = CreateTempFile("not a real mdd file");
+        try
+        {
+            var service = new MdxDictionaryTranslationService(
+                "mdx::lazy-mdd",
+                "Lazy MDD Dictionary",
+                mdxPath);
+
+            service.LoadMddFiles([mddPath]);
+
+            service.HasAttemptedLoad.Should().BeFalse();
+            service.HasMddResources.Should().BeTrue();
+        }
+        finally
+        {
+            TryDelete(mdxPath);
+            TryDelete(mddPath);
+        }
+    }
+
     // ---- Encryption-related tests ----
 
     [Fact]
@@ -326,9 +420,11 @@ public class MdxDictionaryTranslationServiceTests
         result.ServiceName.Should().Be("Test Dict");
         result.OriginalText.Should().Be("word");
         result.WordResult.Should().NotBeNull();
-        result.WordResult!.Definitions.Should().HaveCount(1);
-        result.WordResult.Definitions[0].PartOfSpeech.Should().Be("dictionary");
-        result.WordResult.Definitions[0].Meanings.Should().Contain("definition text");
+        var wordResult = result.WordResult!;
+        var definitions = wordResult.Definitions!;
+        definitions.Should().HaveCount(1);
+        definitions[0].PartOfSpeech.Should().Be("dictionary");
+        definitions[0].Meanings.Should().Contain("definition text");
     }
 
     [Fact]
@@ -399,5 +495,24 @@ public class MdxDictionaryTranslationServiceTests
         plain.IsEncrypted.Should().BeFalse();
         encrypted.RequiresApiKey.Should().BeTrue();
         encrypted.IsEncrypted.Should().BeTrue();
+    }
+
+    private static string CreateTempFile(string content)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"easydict-mdx-{Guid.NewGuid():N}.mdx");
+        File.WriteAllText(path, content);
+        return path;
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // Best effort test cleanup.
+        }
     }
 }

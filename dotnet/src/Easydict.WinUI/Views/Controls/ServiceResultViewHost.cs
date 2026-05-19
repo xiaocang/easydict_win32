@@ -82,6 +82,8 @@ internal static class ServiceResultViewHost
         FrameworkElement? themeRoot = null,
         EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.RebuildForCurrentTheme");
+
         Release(controls, resultsPanel, collapseToggled, queryRequested, foundryLocalStartRequested);
 
         foreach (var result in results)
@@ -104,6 +106,8 @@ internal static class ServiceResultViewHost
         EventHandler<ServiceQueryResult> queryRequested,
         EventHandler<ServiceQueryResult>? foundryLocalStartRequested = null)
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.Release");
+
         foreach (var control in controls)
         {
             control.CollapseToggled -= collapseToggled;
@@ -126,6 +130,8 @@ internal static class ServiceResultViewHost
         bool hideEmptySetting,
         bool pinGrammarCapable = false)
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.Reorder");
+
         if (controls.Count == 0)
         {
             return;
@@ -170,6 +176,8 @@ internal static class ServiceResultViewHost
         IReadOnlyList<IServiceResultView> controls,
         FrameworkElement viewport)
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.UpdateStickyHeaders");
+
         if (MinimalThemeService.IsActive || controls.Count == 0)
         {
             return;
@@ -207,10 +215,14 @@ internal static class ServiceResultViewHost
 
     public static void UpdatePhoneticDeduplication(IEnumerable<IServiceResultView> controls)
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.UpdatePhoneticDeduplication");
+
         var shownPhonetics = new HashSet<string>();
+        var controlCount = 0;
 
         foreach (var control in controls)
         {
+            controlCount++;
             control.AlreadyShownPhonetics = shownPhonetics.Count > 0
                 ? new HashSet<string>(shownPhonetics)
                 : null;
@@ -220,12 +232,18 @@ internal static class ServiceResultViewHost
                 shownPhonetics.Add(key);
             }
         }
+
+        UiThreadHotspotDiagnostics.LogCounter(
+            "ServiceResultViewHost.UpdatePhoneticDeduplication.Controls",
+            controlCount);
     }
 
     public static void RefreshThemeChrome(
         IEnumerable<IServiceResultView> controls,
         FrameworkElement? themeRoot = null)
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.RefreshThemeChrome");
+
         foreach (var control in controls)
         {
             if (themeRoot is not null)

@@ -44,6 +44,12 @@ namespace Easydict.WinUI
         private static bool IsMouseSelectionTranslateDisabledForDebug()
             => IsDebugEnvFlagEnabled("EASYDICT_DEBUG_DISABLE_MOUSE_SELECTION_TRANSLATE");
 
+        private static bool IsMemoryAbVariantB()
+        {
+            var mode = Environment.GetEnvironmentVariable("EASYDICT_UIA_MEMORY_AB_MODE");
+            return string.Equals(mode, "B", StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// Gets the main window instance.
         /// </summary>
@@ -233,12 +239,10 @@ namespace Easydict.WinUI
                 _appWindow.Closing += OnWindowClosing;
             }
 
-            if (_window.Content is not Frame rootFrame)
+            var rootFrame = EnsureRootFrame();
+            if (rootFrame is null)
             {
-                rootFrame = new Frame();
-                rootFrame.NavigationFailed += OnNavigationFailed;
-                rootFrame.Navigated += OnRootFrameNavigated;
-                _window.Content = rootFrame;
+                return;
             }
 
             LogToFile("[OnLaunched] Navigating to MainPage...");
@@ -265,7 +269,7 @@ namespace Easydict.WinUI
 
             // If cold-launched via protocol activation (easydict://ocr-translate) or
             // --ocr-translate when app wasn't running, trigger OCR after initialization.
-            if (Program.PendingOcrTranslate && _ocrTranslateService != null)
+            if (Program.PendingOcrTranslate)
             {
                 _window.DispatcherQueue.TryEnqueue(async () =>
                 {
@@ -273,7 +277,11 @@ namespace Easydict.WinUI
                     await Task.Delay(500);
                     try
                     {
-                        await _ocrTranslateService.OcrTranslateAsync();
+                        var ocrService = EnsureOcrTranslateService();
+                        if (ocrService != null)
+                        {
+                            await ocrService.OcrTranslateAsync();
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -334,19 +342,15 @@ namespace Easydict.WinUI
                 System.Diagnostics.Debug.WriteLine($"[App] HotkeyService initialization failed: {ex}");
             }
 
-            // Initialize OCR translate service
-            try
-            {
-                _ocrTranslateService = new OcrTranslateService(_window.DispatcherQueue);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[App] OcrTranslateService initialization failed: {ex}");
-            }
-
-            // Start named-event listener for Shell context menu --ocr-translate IPC.
-            // A second process launched from File Explorer signals this event and exits;
-            // the background thread wakes up and triggers OCR on the UI thread.
+            // OCR translate service is created lazily on first hotkey/tray/signal trigger.
+            // Skipping eager construction at startup avoids the OcrTranslateService +
+            // ScreenCaptureService allocation when the user never uses OCR. First-trigger
+            // latency is negligible (cheap ctors; the real OCR engine is created per-call
+            // inside OcrServiceFactory.Create()).
+            //
+            // The named-event listener still starts eagerly because external processes
+            // (shell context menu, browser extension native bridge) signal it at any
+            // time. The signal handler ensures the service exists before invoking it.
             try
             {
                 _ocrSignalEvent = new EventWaitHandle(false, EventResetMode.AutoReset,
@@ -359,18 +363,15 @@ namespace Easydict.WinUI
                         while (_ocrSignalEvent.WaitOne())
                         {
                             System.Diagnostics.Debug.WriteLine("[App] OCR signal received from context menu");
-                            var ocrService = _ocrTranslateService;
-                            if (ocrService is null)
-                            {
-                                System.Diagnostics.Debug.WriteLine("[App] OCR service not available, ignoring signal");
-                                continue;
-                            }
-
                             _window.DispatcherQueue.TryEnqueue(async () =>
                             {
                                 try
                                 {
-                                    await ocrService.OcrTranslateAsync();
+                                    var ocrService = EnsureOcrTranslateService();
+                                    if (ocrService != null)
+                                    {
+                                        await ocrService.OcrTranslateAsync();
+                                    }
                                 }
                                 catch (Exception ex)
                                 {
@@ -473,18 +474,24 @@ namespace Easydict.WinUI
             // Apply saved theme setting
             ApplyTheme(settings.AppTheme);
 
-            // Pre-warm TTS service to avoid first-use delay
-            _ = Task.Run(() =>
+            // Pre-warm TTS service to avoid first-use delay, but only when the user
+            // is likely to use it. If AutoPlayTranslation is off the user clicks Speak
+            // explicitly — first-click latency is acceptable, and skipping warmup keeps
+            // SpeechSynthesizer + voice list out of the working set.
+            if (settings.AutoPlayTranslation)
             {
-                try
+                _ = Task.Run(() =>
                 {
-                    TextToSpeechService.Instance.WarmUp();
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[App] TTS pre-warm failed: {ex.Message}");
-                }
-            });
+                    try
+                    {
+                        TextToSpeechService.Instance.WarmUp();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[App] TTS pre-warm failed: {ex.Message}");
+                    }
+                });
+            }
 
         }
 
@@ -553,22 +560,9 @@ namespace Easydict.WinUI
                 // Capture source window before getting text (which may change focus)
                 TextInsertionService.CaptureSourceWindow();
 
-                // Get selected text via intelligent method (clipboard for Electron, UIA with ClipWait fallback for others)
-                var text = await TextSelectionService.GetSelectedTextAsync();
-
-                _window?.DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        // Selected text takes precedence — always show with the new text.
-                        MiniWindowService.Instance.ShowWithText(text);
-                    }
-                    else
-                    {
-                        // Show or raise from background (#129).
-                        MiniWindowService.Instance.Show();
-                    }
-                });
+                await RaceShowWindowWithSelectionAsync(
+                    showEmpty: MiniWindowService.Instance.Show,
+                    showWithText: MiniWindowService.Instance.ShowWithText).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -593,27 +587,75 @@ namespace Easydict.WinUI
                 // Capture source window before getting text (which may change focus)
                 TextInsertionService.CaptureSourceWindow();
 
-                // Get selected text via intelligent method (clipboard for Electron, UIA with ClipWait fallback for others)
-                var text = await TextSelectionService.GetSelectedTextAsync();
-
-                _window?.DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        // Selected text takes precedence — always show with the new text.
-                        FixedWindowService.Instance.ShowWithText(text);
-                    }
-                    else
-                    {
-                        // Show or raise from background (#129).
-                        FixedWindowService.Instance.Show();
-                    }
-                });
+                await RaceShowWindowWithSelectionAsync(
+                    showEmpty: FixedWindowService.Instance.Show,
+                    showWithText: FixedWindowService.Instance.ShowWithText).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[Hotkey] OnShowFixedWindowHotkey error: {ex.Message}");
             }
+        }
+
+        // Budget for the fast path. Long enough to catch clipboard-pre-staged paths
+        // (Electron / web apps typically return inside 30-60ms), short enough that a
+        // stalled UIA fallback can't make the window feel frozen on Word / PowerPoint /
+        // PDF readers (which routinely take 400-1200ms).
+        private const int SelectionFastPathBudgetMs = 80;
+
+        /// <summary>
+        /// Race a TextSelectionService.GetSelectedTextAsync call against a short timer.
+        /// If the selection arrives inside the budget the window opens once with the text
+        /// inline (no flash). Otherwise the window opens immediately with no text so the
+        /// user sees instant response, and the translation is filled in when the selection
+        /// eventually arrives. Keeps the UI thread free of UIA / ClipWait waits during the
+        /// hotkey-to-Activated path.
+        /// </summary>
+        private async Task RaceShowWindowWithSelectionAsync(
+            Action showEmpty,
+            Action<string> showWithText)
+        {
+            var dispatcher = _window?.DispatcherQueue;
+            if (dispatcher is null) return;
+
+            var textTask = TextSelectionService.GetSelectedTextAsync();
+            var winner = await Task.WhenAny(textTask, Task.Delay(SelectionFastPathBudgetMs))
+                .ConfigureAwait(false);
+
+            if (winner == textTask)
+            {
+                string? text = null;
+                try { text = await textTask.ConfigureAwait(false); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[Hotkey] GetSelectedTextAsync failed (fast path): {ex.Message}");
+                }
+
+                dispatcher.TryEnqueue(() =>
+                {
+                    if (!string.IsNullOrWhiteSpace(text)) showWithText(text);
+                    else showEmpty();
+                });
+                return;
+            }
+
+            // Slow path: open the window now so it appears immediately, then overwrite with
+            // the selected text once the selection fetch completes. Wrap in a lambda —
+            // DispatcherQueue.TryEnqueue takes a DispatcherQueueHandler, not an Action,
+            // and the two delegate types don't implicitly convert even with matching
+            // signatures.
+            dispatcher.TryEnqueue(() => showEmpty());
+
+            // Fire-and-forget continuation. Exceptions are already logged inside
+            // GetSelectedTextAsync; guard with status check anyway.
+            _ = textTask.ContinueWith(t =>
+            {
+                if (t.Status != TaskStatus.RanToCompletion) return;
+                var text = t.Result;
+                if (string.IsNullOrWhiteSpace(text)) return;
+                dispatcher.TryEnqueue(() => showWithText(text));
+            }, TaskScheduler.Default);
         }
 
         private void OnToggleMiniWindowHotkey()
@@ -634,7 +676,8 @@ namespace Easydict.WinUI
 
         private async void OnOcrTranslateHotkey()
         {
-            if (_ocrTranslateService is null)
+            var ocrService = EnsureOcrTranslateService();
+            if (ocrService is null)
             {
                 System.Diagnostics.Debug.WriteLine("[Hotkey] OCR service not available");
                 return;
@@ -645,7 +688,7 @@ namespace Easydict.WinUI
                 // Wait briefly for the user to release physical keys and for the mouse drag selection to finalize in the OS.
                 await Task.Delay(150);
 
-                await _ocrTranslateService.OcrTranslateAsync();
+                await ocrService.OcrTranslateAsync();
             }
             catch (Exception ex)
             {
@@ -655,7 +698,8 @@ namespace Easydict.WinUI
 
         private async void OnSilentOcrHotkey()
         {
-            if (_ocrTranslateService is null)
+            var ocrService = EnsureOcrTranslateService();
+            if (ocrService is null)
             {
                 System.Diagnostics.Debug.WriteLine("[Hotkey] OCR service not available");
                 return;
@@ -666,7 +710,7 @@ namespace Easydict.WinUI
                 // Wait briefly for the user to release physical keys and for the mouse drag selection to finalize in the OS.
                 await Task.Delay(150);
 
-                await _ocrTranslateService.SilentOcrAsync();
+                await ocrService.SilentOcrAsync();
             }
             catch (Exception ex)
             {
@@ -693,7 +737,8 @@ namespace Easydict.WinUI
 
         private async void OnTrayOcrTranslate()
         {
-            if (_ocrTranslateService is null)
+            var ocrService = EnsureOcrTranslateService();
+            if (ocrService is null)
             {
                 System.Diagnostics.Debug.WriteLine("[Tray] OCR service not available");
                 return;
@@ -701,12 +746,31 @@ namespace Easydict.WinUI
 
             try
             {
-                await _ocrTranslateService.OcrTranslateAsync();
+                await ocrService.OcrTranslateAsync();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[Tray] OnTrayOcrTranslate error: {ex.Message}");
             }
+        }
+
+        // Lazily instantiate OcrTranslateService on first use. Must run on UI thread because
+        // OcrTranslateService captures DispatcherQueue. Called from all OCR entry points
+        // (hotkeys, tray menu, shell context menu signal, browser extension signal,
+        // protocol activation).
+        private OcrTranslateService? EnsureOcrTranslateService()
+        {
+            if (_ocrTranslateService != null) return _ocrTranslateService;
+            if (_window == null) return null;
+            try
+            {
+                _ocrTranslateService ??= new OcrTranslateService(_window.DispatcherQueue);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] OcrTranslateService lazy init failed: {ex}");
+            }
+            return _ocrTranslateService;
         }
 
         private async void OnBrowserSupportAction(string browser, bool isInstall)
@@ -829,6 +893,8 @@ namespace Easydict.WinUI
         {
             if (_window == null) return;
 
+            EnsureMainPageContent();
+
             // Show the window
             _appWindow?.Show();
 
@@ -851,6 +917,39 @@ namespace Easydict.WinUI
             }
 
             _window.Activate();
+        }
+
+        private void EnsureMainPageContent()
+        {
+            var frame = EnsureRootFrame();
+            if (frame is null)
+            {
+                return;
+            }
+
+            if (frame.Content is null)
+            {
+                _ = frame.Navigate(typeof(MainPage));
+            }
+        }
+
+        private Frame? EnsureRootFrame()
+        {
+            if (_window is null)
+            {
+                return null;
+            }
+
+            if (_window.Content is Frame frame)
+            {
+                return frame;
+            }
+
+            var rootFrame = new Frame();
+            rootFrame.NavigationFailed += OnNavigationFailed;
+            rootFrame.Navigated += OnRootFrameNavigated;
+            _window.Content = rootFrame;
+            return rootFrame;
         }
 
         private void FocusMainWindowInputForTyping()
@@ -885,6 +984,29 @@ namespace Easydict.WinUI
         {
             TextToSpeechService.Instance.Stop();
             _appWindow?.Hide();
+            ReleaseMainWindowContentForMemoryGate();
+        }
+
+        private void ReleaseMainWindowContentForMemoryGate()
+        {
+            if (!IsMemoryAbVariantB())
+            {
+                return;
+            }
+
+            if (_window?.Content is not Frame frame)
+            {
+                LogToFile($"[MemoryGate] Root frame release skipped: content={_window?.Content?.GetType().FullName ?? "<null>"}");
+                return;
+            }
+
+            frame.NavigationFailed -= OnNavigationFailed;
+            frame.Navigated -= OnRootFrameNavigated;
+            frame.BackStack.Clear();
+            frame.ForwardStack.Clear();
+            frame.Content = null;
+            _window.Content = null;
+            LogToFile("[MemoryGate] Root frame released after hiding main window");
         }
 
         private void OnWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
@@ -897,12 +1019,14 @@ namespace Easydict.WinUI
             if (settings.MinimizeToTray)
             {
                 // Minimize to tray instead of closing
+                LogToFile($"[WindowClosing] MinimizeToTray=True, memoryAbB={IsMemoryAbVariantB()}");
                 args.Cancel = true;
                 HideWindow();
             }
             else
             {
                 // Actually close and cleanup
+                LogToFile($"[WindowClosing] MinimizeToTray=False, memoryAbB={IsMemoryAbVariantB()}");
                 CleanupServices();
             }
         }
@@ -1096,22 +1220,37 @@ namespace Easydict.WinUI
         private static void ApplyFrameTheme(
             Frame frame,
             string theme,
-            bool forceThemeResourceRefresh)
+            bool forceThemeResourceRefresh,
+            bool deferContentChrome = false)
         {
             var elementTheme = MinimalThemeService.ToElementTheme(theme);
             MinimalThemeService.ApplyRequestedTheme(
                 frame,
                 elementTheme,
                 forceThemeResourceRefresh);
+
+            if (deferContentChrome)
+            {
+                QueueFrameContentThemeRefresh(frame);
+                return;
+            }
+
             ApplyFrameContentTheme(frame, elementTheme, forceThemeResourceRefresh);
             RefreshFrameContentThemeChrome(frame);
-            frame.DispatcherQueue.TryEnqueue(() =>
-            {
-                var currentTheme = SettingsService.Instance.AppTheme;
-                var currentElementTheme = MinimalThemeService.ToElementTheme(currentTheme);
-                ApplyFrameContentTheme(frame, currentElementTheme, forceThemeResourceRefresh: false);
-                RefreshFrameContentThemeChrome(frame);
-            });
+            QueueFrameContentThemeRefresh(frame);
+        }
+
+        private static void QueueFrameContentThemeRefresh(Frame frame)
+        {
+            frame.DispatcherQueue.TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () =>
+                {
+                    var currentTheme = SettingsService.Instance.AppTheme;
+                    var currentElementTheme = MinimalThemeService.ToElementTheme(currentTheme);
+                    ApplyFrameContentTheme(frame, currentElementTheme, forceThemeResourceRefresh: false);
+                    RefreshFrameContentThemeChrome(frame);
+                });
         }
 
         private static void ApplyFrameContentTheme(
@@ -1537,7 +1676,12 @@ namespace Easydict.WinUI
         {
             if (sender is Frame frame)
             {
-                ApplyFrameTheme(frame, SettingsService.Instance.AppTheme, forceThemeResourceRefresh: false);
+                var deferContentChrome = e.NavigationMode == NavigationMode.Back && frame.Content is MainPage;
+                ApplyFrameTheme(
+                    frame,
+                    SettingsService.Instance.AppTheme,
+                    forceThemeResourceRefresh: false,
+                    deferContentChrome);
             }
         }
     }

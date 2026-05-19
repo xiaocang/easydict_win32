@@ -12,6 +12,7 @@ using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.DocumentExport;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI.Input;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI.Xaml.Input;
@@ -38,6 +39,7 @@ namespace Easydict.WinUI.Views
         private readonly SettingsService _settings = SettingsService.Instance;
         private readonly List<ServiceQueryResult> _serviceResults = new();
         private readonly List<IServiceResultView> _resultControls = new();
+        private string? _staticUiSettingsSignature;
         private readonly TargetLanguageSelector _targetLanguageSelector;
         private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
         private bool _isLoaded;
@@ -52,6 +54,7 @@ namespace Easydict.WinUI.Views
         private Services.LongDocumentTranslationService? _longDocumentService;
         private LongDocumentDeduplicationService? _longDocDedupService;
         private bool _longDocFeaturesInitialized;
+        private bool _isModeSwitching;
         private LongDocumentTranslationCheckpoint? _longDocCheckpoint;
         private TranslationLanguage _longDocLastFrom = TranslationLanguage.Auto;
         private TranslationLanguage _longDocLastTo = TranslationLanguage.English;
@@ -69,6 +72,11 @@ namespace Easydict.WinUI.Views
         private ContentDialog? _currentDialog;
         private readonly bool _useMemoryAbVariantB;
         private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _suggestionDebounceTimer;
+
+        // Frame-rate streaming text applicator — see StreamingTextCoalescer.
+        // Created on first translation since DispatcherQueue.GetForCurrentThread is
+        // only valid after the page is loaded onto a dispatcher.
+        private StreamingTextCoalescer? _streamingCoalescer;
         private object? _translateButtonDefaultContent;
         private object? _translateButtonNarrowDefaultContent;
         private object? _longDocTranslateButtonDefaultContent;
@@ -80,6 +88,8 @@ namespace Easydict.WinUI.Views
         private bool _suppressSuggestionTextChanged;
         private int _suggestionRequestId;
         private bool _isSuggestionNavigationActive;
+        private bool _themeChromeRefreshQueued;
+        private bool _deferLoadedThemeChrome;
         private SuggestionTokenContext? _activeSuggestionToken;
         private (int StartIndex, string Replacement)? _lastAcceptedSuggestion;
 
@@ -90,6 +100,9 @@ namespace Easydict.WinUI.Views
         private const int QueryShutdownTimeoutSeconds = 2;
         private const int InputFocusRetryDelayMs = 50;
         private const int InputFocusMaxAttempts = 10;
+        private const int ModeSwitchRenderDelayMs = 50;
+        private const int ModeSwitchMinimumDurationMs = 180;
+        private const int PageNavigationRenderDelayMs = 50;
         private static readonly TimeSpan MinimalLanguageDetectionTimeout = TimeSpan.FromMilliseconds(800);
 
         private Services.LongDocumentTranslationService LongDocumentService =>
@@ -242,21 +255,41 @@ namespace Easydict.WinUI.Views
             {
                 _detectionService = new LanguageDetectionService(_settings);
             }
+            // Build the streaming coalescer on the page's dispatcher. Disposed in
+            // CleanupResourcesAsync. Idempotent across cached-navigation re-loads.
+            _streamingCoalescer ??= new StreamingTextCoalescer(DispatcherQueue);
             SetLoading(false);
 
-            // Apply localization first (populates combos), then settings (selects saved language)
-            ApplyLocalization(reinitializeServiceResults: false);
-            ApplySettings();
+            // Apply localization first (populates combos), then settings (selects saved language).
+            // Cached navigation back from Settings should not rebuild static combo/tool-tip state
+            // unless language/theme settings changed.
+            var staticUiSettingsSignature = BuildStaticUiSettingsSignature();
+            if (!string.Equals(_staticUiSettingsSignature, staticUiSettingsSignature, StringComparison.Ordinal))
+            {
+                ApplyLocalization(reinitializeServiceResults: false);
+                ApplySettings();
+                _staticUiSettingsSignature = staticUiSettingsSignature;
+            }
+#if DEBUG
+            else
+            {
+                Debug.WriteLine("[MainPage] Static UI settings unchanged; skipped ApplyLocalization/ApplySettings");
+            }
+#endif
 
             // Initialize service result controls based on enabled services
             InitializeServiceResults(skipRebuildWhenDebugFlagSet: true, reason: "OnPageLoaded");
 
             SettingsService.Instance.HideEmptyServiceResultsChanged += OnHideEmptyServiceResultsChanged;
-            if (!MinimalThemeService.IsActive)
+            if (_deferLoadedThemeChrome)
             {
-                EnsureLongDocFeaturesInitialized();
+                _deferLoadedThemeChrome = false;
+                QueueApplyThemeChrome(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
             }
-            ApplyThemeChrome();
+            else
+            {
+                ApplyThemeChrome();
+            }
             SyncLocalModelPreparationProgressFromCoordinator();
 #if DEBUG
             MemoryDiagnostics.LogDelta("MainPage.OnPageLoaded retained after init", loadBaseline);
@@ -267,12 +300,20 @@ namespace Easydict.WinUI.Views
 
         private void OnActualThemeChanged(FrameworkElement sender, object args)
         {
-            DispatcherQueue.TryEnqueue(ApplyThemeChrome);
+            QueueApplyThemeChrome();
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+            HidePageNavigationLoading();
+            if (e.NavigationMode == NavigationMode.Back)
+            {
+                _deferLoadedThemeChrome = true;
+                QueueApplyThemeChrome(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+                return;
+            }
+
             App.ApplyTheme(SettingsService.Instance.AppTheme);
             DispatcherQueue.TryEnqueue(() =>
             {
@@ -282,6 +323,28 @@ namespace Easydict.WinUI.Views
             });
         }
 
+        private void QueueApplyThemeChrome(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority priority =
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal)
+        {
+            if (_themeChromeRefreshQueued)
+            {
+                return;
+            }
+
+            _themeChromeRefreshQueued = true;
+            if (!DispatcherQueue.TryEnqueue(
+                    priority,
+                    () =>
+                    {
+                        _themeChromeRefreshQueued = false;
+                        ApplyThemeChrome();
+                    }))
+            {
+                _themeChromeRefreshQueued = false;
+            }
+        }
+
         private void EnsureLongDocFeaturesInitialized()
         {
             if (_longDocFeaturesInitialized)
@@ -289,13 +352,14 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
+            PopulateLongDocLanguageCombos(LocalizationService.Instance);
             InitializeLongDocServices();
             InitializeLongDocOutputDefaults();
             OnLongDocInputModeChanged(LongDocInputModeCombo, null!);
             _longDocFeaturesInitialized = true;
         }
 
-        public void ApplyThemeChrome()
+        public void ApplyThemeChrome(bool refreshServiceResults = true)
         {
             if (!_isLoaded && XamlRoot is null)
             {
@@ -318,13 +382,16 @@ namespace Easydict.WinUI.Views
                 ? Visibility.Collapsed
                 : Visibility.Visible;
 
-            if (ServiceResultViewHost.NeedsThemeRebuild(_resultControls, minimal))
+            if (refreshServiceResults)
             {
-                RebuildServiceResultControlsForCurrentTheme();
-            }
-            else
-            {
-                ServiceResultViewHost.RefreshThemeChrome(_resultControls, this);
+                if (ServiceResultViewHost.NeedsThemeRebuild(_resultControls, minimal))
+                {
+                    RebuildServiceResultControlsForCurrentTheme();
+                }
+                else
+                {
+                    ServiceResultViewHost.RefreshThemeChrome(_resultControls, this);
+                }
             }
 
             ApplyMainWindowBorderChrome(minimal);
@@ -333,6 +400,11 @@ namespace Easydict.WinUI.Views
             ApplyStatusSummaryChrome();
             ApplyTranslateButtonsChrome();
             RefreshMainControlChrome();
+
+            if (!refreshServiceResults)
+            {
+                return;
+            }
 
             foreach (var control in _resultControls)
             {
@@ -540,6 +612,7 @@ namespace Easydict.WinUI.Views
             ApplyComboBoxChrome(LongDocServiceCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
             ApplyComboBoxChrome(LongDocInputModeCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
             ApplyComboBoxChrome(LongDocOutputModeCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
+            RefreshLongDocServiceItemChrome();
         }
 
         private void ClearMainControlChromeOverrides()
@@ -558,6 +631,7 @@ namespace Easydict.WinUI.Views
             ClearComboBoxChrome(LongDocServiceCombo);
             ClearComboBoxChrome(LongDocInputModeCombo);
             ClearComboBoxChrome(LongDocOutputModeCombo);
+            RefreshLongDocServiceItemChrome();
 
             ModeSelectorButton.ClearValue(Control.ForegroundProperty);
             ModeTitleText.ClearValue(TextBlock.ForegroundProperty);
@@ -643,6 +717,13 @@ namespace Easydict.WinUI.Views
             SetResourceIfNotNull(comboBox.Resources, "ComboBoxBorderBrush", border);
             SetResourceIfNotNull(comboBox.Resources, "ComboBoxBorderBrushPointerOver", border);
             SetResourceIfNotNull(comboBox.Resources, "ComboBoxBorderBrushFocused", border);
+
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForeground", foreground);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForegroundPointerOver", foreground);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForegroundPressed", foreground);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForegroundSelected", foreground);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForegroundSelectedPointerOver", foreground);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxItemForegroundSelectedPressed", foreground);
         }
 
         private static void SetResourceIfNotNull(ResourceDictionary resources, string key, object? value)
@@ -668,6 +749,13 @@ namespace Easydict.WinUI.Views
             RemoveResource(comboBox.Resources, "ComboBoxBorderBrush");
             RemoveResource(comboBox.Resources, "ComboBoxBorderBrushPointerOver");
             RemoveResource(comboBox.Resources, "ComboBoxBorderBrushFocused");
+
+            RemoveResource(comboBox.Resources, "ComboBoxItemForeground");
+            RemoveResource(comboBox.Resources, "ComboBoxItemForegroundPointerOver");
+            RemoveResource(comboBox.Resources, "ComboBoxItemForegroundPressed");
+            RemoveResource(comboBox.Resources, "ComboBoxItemForegroundSelected");
+            RemoveResource(comboBox.Resources, "ComboBoxItemForegroundSelectedPointerOver");
+            RemoveResource(comboBox.Resources, "ComboBoxItemForegroundSelectedPressed");
         }
 
         private static void RemoveResource(ResourceDictionary resources, string key)
@@ -961,6 +1049,8 @@ namespace Easydict.WinUI.Views
 #endif
             CancelTransientQueriesForNavigation();
             ReleaseServiceResultControls();
+            _streamingCoalescer?.Dispose();
+            _streamingCoalescer = null;
             _longDocumentService?.Dispose();
             _longDocumentService = null;
             _longDocDedupService = null;
@@ -1062,6 +1152,23 @@ namespace Easydict.WinUI.Views
 #endif
         }
 
+        private string BuildStaticUiSettingsSignature()
+        {
+            var sb = new StringBuilder();
+            sb.Append("ui=").Append(LocalizationService.Instance.CurrentLanguage)
+                .Append("|minimal=").Append(MinimalThemeService.IsActive ? "1" : "0")
+                .Append("|first=").Append(_settings.FirstLanguage)
+                .Append("|second=").Append(_settings.SecondLanguage)
+                .Append("|selected=");
+
+            foreach (var language in _settings.SelectedLanguages)
+            {
+                sb.Append(language).Append(',');
+            }
+
+            return sb.ToString();
+        }
+
         /// <summary>
         /// Apply localization to all UI elements using LocalizationService.
         /// Also dynamically populates language combo boxes from user's selected languages.
@@ -1080,13 +1187,10 @@ namespace Easydict.WinUI.Views
                 LanguageComboHelper.PopulateTargetCombo(TargetLangCombo, loc);
                 LanguageComboHelper.PopulateTargetCombo(TargetLangComboNarrow, loc);
 
-                // Long Doc language combos — default source to Auto, target to user's FirstLanguage
-                LanguageComboHelper.PopulateSourceCombo(LongDocSourceLangCombo, loc);
-                LanguageComboHelper.PopulateTargetCombo(
-                    LongDocTargetLangCombo,
-                    loc,
-                    _settings.FirstLanguage,
-                    includeAuto: false);
+                if (_longDocFeaturesInitialized || _currentMode == QueryMode.LongDocument)
+                {
+                    PopulateLongDocLanguageCombos(loc);
+                }
             }
             finally
             {
@@ -1134,10 +1238,24 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(LongDocPageRangeHint, loc.GetString("LongDoc_PageRangeHelpTip"));
         }
 
+        private void PopulateLongDocLanguageCombos(LocalizationService loc)
+        {
+            // Long Doc language combos default source to Auto and target to user's FirstLanguage.
+            LanguageComboHelper.PopulateSourceCombo(LongDocSourceLangCombo, loc);
+            LanguageComboHelper.PopulateTargetCombo(
+                LongDocTargetLangCombo,
+                loc,
+                _settings.FirstLanguage,
+                includeAuto: false);
+        }
+
         /// <summary>
         /// Apply all UI state for the current mode (emoji, subtitle, content visibility, grammar-specific controls).
         /// </summary>
-        private void ApplyModeState(bool reinitializeServiceResults = true)
+        private void ApplyModeState(
+            bool reinitializeServiceResults = true,
+            bool initializeLongDocFeatures = true,
+            bool refreshServiceResultChrome = true)
         {
             var loc = LocalizationService.Instance;
             HideSuggestionPopup();
@@ -1163,11 +1281,14 @@ namespace Easydict.WinUI.Views
 
             // Toggle main content areas
             var isLongDoc = _currentMode == QueryMode.LongDocument;
-            if (isLongDoc)
+            if (isLongDoc && initializeLongDocFeatures)
             {
                 EnsureLongDocFeaturesInitialized();
             }
 
+            AutomationProperties.SetName(
+                ModeSelectorButton,
+                isLongDoc ? "Mode: Long Document" : "Mode: Translation");
             QuickTranslateContent.Visibility = isLongDoc ? Visibility.Collapsed : Visibility.Visible;
             LongDocContent.Visibility = isLongDoc ? Visibility.Visible : Visibility.Collapsed;
 
@@ -1208,7 +1329,157 @@ namespace Easydict.WinUI.Views
                 InitializeServiceResults(reason: "ApplyModeState");
             }
 
-            ApplyThemeChrome();
+            ApplyThemeChrome(refreshServiceResults: refreshServiceResultChrome);
+        }
+
+        private async Task<bool> SwitchModeAsync(QueryMode newMode)
+        {
+            if (!_isLoaded || _isClosing)
+            {
+                return false;
+            }
+
+            if (newMode == _currentMode)
+            {
+                SyncModeMenuSelection();
+                return true;
+            }
+
+            if (_isModeSwitching)
+            {
+                SyncModeMenuSelection();
+                return false;
+            }
+
+            var showLoading = IsTranslationLongDocSwitch(_currentMode, newMode);
+            _isModeSwitching = true;
+            SetModeSwitchCommandsEnabled(false);
+
+            try
+            {
+                if (showLoading)
+                {
+                    await ShowModeSwitchLoadingAsync();
+                }
+
+                _currentMode = newMode;
+                SyncModeMenuSelection();
+
+                if (showLoading)
+                {
+                    await ApplyModeStateForModeSwitchAsync(newMode);
+                }
+                else
+                {
+                    ApplyModeState();
+                }
+
+                if (showLoading)
+                {
+                    await Task.Delay(ModeSwitchMinimumDurationMs);
+                }
+
+                return _currentMode == newMode;
+            }
+            finally
+            {
+                if (showLoading)
+                {
+                    HideModeSwitchLoading();
+                }
+
+                SetModeSwitchCommandsEnabled(true);
+                _isModeSwitching = false;
+            }
+        }
+
+        private async Task ApplyModeStateForModeSwitchAsync(QueryMode expectedMode)
+        {
+            var isLongDoc = expectedMode == QueryMode.LongDocument;
+
+            ApplyModeState(
+                reinitializeServiceResults: false,
+                initializeLongDocFeatures: false,
+                refreshServiceResultChrome: false);
+
+            await YieldToDispatcherAsync(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal);
+            if (_isClosing || _currentMode != expectedMode)
+            {
+                return;
+            }
+
+            if (isLongDoc)
+            {
+                EnsureLongDocFeaturesInitialized();
+
+                await YieldToDispatcherAsync(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+                if (_isClosing || _currentMode != expectedMode)
+                {
+                    return;
+                }
+
+                ApplyThemeChrome(refreshServiceResults: false);
+                return;
+            }
+
+            InitializeServiceResults(reason: "ApplyModeState");
+
+            await YieldToDispatcherAsync(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+            if (_isClosing || _currentMode != expectedMode)
+            {
+                return;
+            }
+
+            ApplyThemeChrome(refreshServiceResults: true);
+        }
+
+        private Task YieldToDispatcherAsync(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority priority =
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal)
+        {
+            var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!DispatcherQueue.TryEnqueue(priority, () => tcs.TrySetResult()))
+            {
+                tcs.TrySetResult();
+            }
+
+            return tcs.Task;
+        }
+
+        private static bool IsTranslationLongDocSwitch(QueryMode currentMode, QueryMode newMode)
+        {
+            return currentMode != newMode &&
+                (currentMode == QueryMode.Translation || currentMode == QueryMode.LongDocument) &&
+                (newMode == QueryMode.Translation || newMode == QueryMode.LongDocument);
+        }
+
+        private async Task ShowModeSwitchLoadingAsync()
+        {
+            ModeSwitchLoadingText.Text = LocalizationService.Instance.GetString("StatusInitializing") ?? "Loading...";
+            ModeSwitchLoadingOverlay.Opacity = 1;
+            ModeSwitchLoadingOverlay.Visibility = Visibility.Visible;
+            ModeSwitchLoadingRing.IsActive = true;
+
+            await Task.Delay(ModeSwitchRenderDelayMs);
+        }
+
+        private void HideModeSwitchLoading()
+        {
+            ModeSwitchLoadingRing.IsActive = false;
+            ModeSwitchLoadingOverlay.Opacity = 0;
+            ModeSwitchLoadingOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void SetModeSwitchCommandsEnabled(bool isEnabled)
+        {
+            ModeTranslationItem.IsEnabled = isEnabled;
+            ModeLongDocItem.IsEnabled = isEnabled;
+        }
+
+        private void SyncModeMenuSelection()
+        {
+            ModeTranslationItem.IsChecked = _currentMode == QueryMode.Translation;
+            ModeLongDocItem.IsChecked = _currentMode == QueryMode.LongDocument;
         }
 
         private void OnClipboardTextReceived(string text)
@@ -1238,9 +1509,11 @@ namespace Easydict.WinUI.Views
                 // Switch out of Long Document mode for quick translate
                 if (_currentMode == QueryMode.LongDocument)
                 {
-                    _currentMode = QueryMode.Translation;
-                    ModeTranslationItem.IsChecked = true;
-                    ApplyModeState();
+                    var switched = await SwitchModeAsync(QueryMode.Translation);
+                    if (!switched)
+                    {
+                        return;
+                    }
                 }
 
                 InputTextBox.Text = text;
@@ -1302,7 +1575,7 @@ namespace Easydict.WinUI.Views
                 manager,
                 grammarSourceLanguage);
 
-            if (skipRebuildWhenDebugFlagSet && TryReuseServiceResultControls(descriptors, reason))
+            if (TryReuseServiceResultControls(descriptors, reason))
             {
 #if DEBUG
                 MemoryDiagnostics.LogDelta("MainPage.InitializeServiceResults retained after reuse", initializeResultsBaseline);
@@ -2662,14 +2935,12 @@ namespace Easydict.WinUI.Views
                     RefreshServiceResultView(serviceResult);
                 });
 
+                // See ExecuteStreamingTranslationForServiceAsync for the rationale.
                 await foreach (var chunk in grammarService
                     .CorrectGrammarStreamAsync(request, ct).ConfigureAwait(false))
                 {
                     sb.Append(chunk);
 
-                    // Scale throttle by accumulated length: Measure cost ~ O(chars) for
-                    // wrapped TextBlocks, so slow down updates as the buffer grows to
-                    // keep UI thread responsive for scroll/input dispatch.
                     var throttleMs = sb.Length switch
                     {
                         < 512 => 50,
@@ -2680,15 +2951,7 @@ namespace Easydict.WinUI.Views
                     var now = DateTime.UtcNow;
                     if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
                     {
-                        var currentText = sb.ToString();
-                        DispatcherQueue.TryEnqueue(() =>
-                        {
-                            if (_isClosing) return;
-                            // StreamingText PropertyChanged → coalesced UpdateUI in
-                            // ServiceResultItem, which takes a fast path during streaming.
-                            // No need to call RefreshServiceResultView here.
-                            serviceResult.StreamingText = currentText;
-                        });
+                        _streamingCoalescer?.Update(serviceResult, sb.ToString());
                         lastUpdateTime = now;
                     }
                 }
@@ -2702,6 +2965,7 @@ namespace Easydict.WinUI.Views
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     if (_isClosing) return;
+                    _streamingCoalescer?.Forget(serviceResult);
                     serviceResult.IsStreaming = false;
                     serviceResult.StreamingText = "";
                     serviceResult.GrammarResult = grammarResult;
@@ -2769,16 +3033,19 @@ namespace Easydict.WinUI.Views
                 RefreshServiceResultView(serviceResult);
             });
 
-            // Use ConfigureAwait(false) to avoid resuming on UI thread for each chunk.
-            // DispatcherQueue.TryEnqueue is safe to call from any thread.
+            // Snapshots flow through the coalescer instead of dispatcher.TryEnqueue
+            // per chunk. With N services translating in parallel the dispatcher
+            // would otherwise see N × 1/throttleMs callbacks per second, each
+            // invalidating a wrapped-TextBlock measure pass. The coalescer collapses
+            // all N services into ≤1 UI callback per frame (~16ms).
             await foreach (var chunk in manager.TranslateStreamAsync(
                 request, ct, serviceResult.ServiceId).ConfigureAwait(false))
             {
                 sb.Append(chunk);
 
-                // Scale throttle by accumulated length: Measure cost ~ O(chars) for
-                // wrapped TextBlocks, so slow down updates as the buffer grows to
-                // keep UI thread responsive for scroll/input dispatch.
+                // Per-stream snapshot rate caps sb.ToString() allocations on the
+                // background thread; scaling with text length stays from the original
+                // design since Measure cost ~ O(chars).
                 var throttleMs = sb.Length switch
                 {
                     < 512 => 50,
@@ -2789,15 +3056,7 @@ namespace Easydict.WinUI.Views
                 var now = DateTime.UtcNow;
                 if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
                 {
-                    var currentText = sb.ToString();
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
-                        if (_isClosing) return;
-                        // StreamingText PropertyChanged → coalesced UpdateUI in
-                        // ServiceResultItem, which takes a fast path during streaming.
-                        // No need to call RefreshServiceResultView here.
-                        serviceResult.StreamingText = currentText;
-                    });
+                    _streamingCoalescer?.Update(serviceResult, sb.ToString());
                     lastUpdateTime = now;
                 }
             }
@@ -2840,6 +3099,7 @@ namespace Easydict.WinUI.Views
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (_isClosing) return;
+                _streamingCoalescer?.Forget(serviceResult);
                 serviceResult.IsLoading = false;
                 serviceResult.IsStreaming = false;
                 serviceResult.StreamingText = "";
@@ -3092,7 +3352,7 @@ namespace Easydict.WinUI.Views
                 };
                 if (!isReady)
                 {
-                    item.Foreground = ThemeResourceService.GetBrush("TextFillColorSecondaryBrush", this);
+                    item.Foreground = CreateLongDocUnavailableServiceForeground();
                 }
                 LongDocServiceCombo.Items.Add(item);
             }
@@ -3121,6 +3381,29 @@ namespace Easydict.WinUI.Views
             return !string.IsNullOrWhiteSpace(serviceId);
         }
 
+        private void RefreshLongDocServiceItemChrome()
+        {
+            var unavailableForeground = CreateLongDocUnavailableServiceForeground();
+            foreach (var item in LongDocServiceCombo.Items.OfType<ComboBoxItem>())
+            {
+                if (item.FontStyle == Windows.UI.Text.FontStyle.Italic)
+                {
+                    item.Foreground = unavailableForeground;
+                }
+                else
+                {
+                    item.ClearValue(Control.ForegroundProperty);
+                }
+            }
+        }
+
+        private Brush? CreateLongDocUnavailableServiceForeground()
+        {
+            return CreateThemeBrush("ServiceResultHeaderSecondaryForegroundColor")
+                ?? CreateThemeBrush("QueryTextColor")
+                ?? ThemeResourceService.GetBrush("ComboBoxForeground", this)
+                ?? ThemeResourceService.GetBrush("TextFillColorPrimaryBrush", this);
+        }
 
         private void InitializeLongDocOutputDefaults()
         {
@@ -3575,8 +3858,11 @@ namespace Easydict.WinUI.Views
                     _ => new[] { ".pdf" },
                 };
 
+                var mainWindow = App.MainWindow;
+                if (mainWindow is null) return;
+
                 var paths = await Services.Storage.PickerFactory.PickMultipleFilesAsync(
-                    App.MainWindow,
+                    mainWindow,
                     Services.Storage.PickerFactory.SettingsIdentifiers.LongDocImport,
                     filter);
 
@@ -3648,8 +3934,11 @@ namespace Easydict.WinUI.Views
         {
             try
             {
+                var mainWindow = App.MainWindow;
+                if (mainWindow is null) return;
+
                 var path = await Services.Storage.PickerFactory.PickFolderAsync(
-                    App.MainWindow,
+                    mainWindow,
                     Services.Storage.PickerFactory.SettingsIdentifiers.LongDocOutput);
                 if (string.IsNullOrEmpty(path)) return;
 
@@ -3803,7 +4092,7 @@ namespace Easydict.WinUI.Views
                     progress: progress);
 
                 _longDocCheckpoint = result.Checkpoint;
-                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
+                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess && result.Checkpoint is not null;
                 LongDocStatusText.Text = result.State == LongDocumentJobState.Completed
                     ? $"Completed: {result.OutputPath}"
                     : $"Partial success: {result.SucceededChunks}/{result.TotalChunks} chunks succeeded, failed chunks: {string.Join(",", result.FailedChunkIndexes.Select(i => i + 1))}.";
@@ -3920,7 +4209,7 @@ namespace Easydict.WinUI.Views
                     progress: progress);
 
                 _longDocCheckpoint = result.Checkpoint;
-                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
+                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess && result.Checkpoint is not null;
                 LongDocStatusText.Text = result.State == LongDocumentJobState.Completed
                     ? $"Retry completed: {result.OutputPath}"
                     : $"Still partial: {result.SucceededChunks}/{result.TotalChunks} chunks succeeded, remaining failed chunks: {string.Join(",", result.FailedChunkIndexes.Select(i => i + 1))}.";
@@ -3956,26 +4245,87 @@ namespace Easydict.WinUI.Views
             }
         }
 
-        private void OnModeMenuItemClick(object sender, RoutedEventArgs e)
+        private async void OnModeMenuItemClick(object sender, RoutedEventArgs e)
+        {
+            await SwitchModeFromMenuItemAsync(sender);
+        }
+
+        private async void OnModeMenuItemTapped(object sender, TappedRoutedEventArgs e)
+        {
+            await SwitchModeFromMenuItemAsync(sender);
+        }
+
+        private async Task SwitchModeFromMenuItemAsync(object sender)
         {
             if (!_isLoaded) return;
 
+            var senderName = sender is FrameworkElement element ? element.Name : string.Empty;
             QueryMode newMode;
-            if (ReferenceEquals(sender, ModeTranslationItem))
+            if (ReferenceEquals(sender, ModeTranslationItem) ||
+                string.Equals(senderName, nameof(ModeTranslationItem), StringComparison.Ordinal))
+            {
                 newMode = QueryMode.Translation;
-            else if (ReferenceEquals(sender, ModeLongDocItem))
+            }
+            else if (ReferenceEquals(sender, ModeLongDocItem) ||
+                     string.Equals(senderName, nameof(ModeLongDocItem), StringComparison.Ordinal))
+            {
                 newMode = QueryMode.LongDocument;
+            }
             else
+            {
                 return;
+            }
 
-            if (newMode == _currentMode) return;
-            _currentMode = newMode;
-            ApplyModeState();
+            if (newMode == _currentMode)
+            {
+                return;
+            }
+
+            await SwitchModeAsync(newMode);
         }
 
-        private void OnSettingsClicked(object sender, RoutedEventArgs e)
+        private async void OnSettingsClicked(object sender, RoutedEventArgs e)
         {
-            Frame.Navigate(typeof(SettingsPage));
+            await ShowPageNavigationLoadingAsync();
+            try
+            {
+                if (!Frame.Navigate(typeof(SettingsPage)))
+                {
+                    HidePageNavigationLoading();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainPage] Failed to navigate to settings: {ex.Message}");
+                HidePageNavigationLoading();
+            }
+        }
+
+        private async Task ShowPageNavigationLoadingAsync()
+        {
+            if (PageNavigationLoadingOverlay is null || PageNavigationLoadingRing is null)
+            {
+                return;
+            }
+
+            PageNavigationLoadingOverlay.Visibility = Visibility.Visible;
+            PageNavigationLoadingRing.Visibility = Visibility.Visible;
+            PageNavigationLoadingRing.IsActive = true;
+            SettingsButton.IsEnabled = false;
+
+            await Task.Delay(PageNavigationRenderDelayMs);
+        }
+
+        private void HidePageNavigationLoading()
+        {
+            if (PageNavigationLoadingOverlay is null || PageNavigationLoadingRing is null)
+            {
+                return;
+            }
+
+            PageNavigationLoadingRing.IsActive = false;
+            PageNavigationLoadingOverlay.Visibility = Visibility.Collapsed;
+            SettingsButton.IsEnabled = true;
         }
 
         /// <summary>
@@ -3983,13 +4333,21 @@ namespace Easydict.WinUI.Views
         /// </summary>
         public void SetTextAndTranslate(string text)
         {
+            _ = SetTextAndTranslateAsync(text);
+        }
+
+        private async Task SetTextAndTranslateAsync(string text)
+        {
             // Switch out of Long Document mode for quick translate
             if (_currentMode == QueryMode.LongDocument)
             {
-                _currentMode = QueryMode.Translation;
-                ModeTranslationItem.IsChecked = true;
-                ApplyModeState();
+                var switched = await SwitchModeAsync(QueryMode.Translation);
+                if (!switched)
+                {
+                    return;
+                }
             }
+
             _targetLanguageSelector.Reset();
             HideSuggestionPopup();
             InputTextBox.Text = text;

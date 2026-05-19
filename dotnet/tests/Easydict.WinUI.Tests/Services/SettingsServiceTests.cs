@@ -163,6 +163,38 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void UseLocalAiWorker_DefaultsToTrue()
+    {
+        var current = AppDomain.CurrentDomain.BaseDirectory;
+        while (!string.IsNullOrEmpty(current) &&
+               !File.Exists(Path.Combine(current, "Easydict.Win32.sln")))
+        {
+            current = Path.GetDirectoryName(current);
+        }
+
+        current.Should().NotBeNullOrEmpty();
+        var source = File.ReadAllText(Path.Combine(current!, "src", "Easydict.WinUI", "Services", "SettingsService.cs"));
+        source.Should().Contain("public bool UseLocalAiWorker { get; set; } = true;");
+        source.Should().Contain("UseLocalAiWorker = GetValue(nameof(UseLocalAiWorker), true);");
+    }
+
+    [Fact]
+    public void UseOcrWorker_DefaultsToTrue()
+    {
+        var current = AppDomain.CurrentDomain.BaseDirectory;
+        while (!string.IsNullOrEmpty(current) &&
+               !File.Exists(Path.Combine(current, "Easydict.Win32.sln")))
+        {
+            current = Path.GetDirectoryName(current);
+        }
+
+        current.Should().NotBeNullOrEmpty();
+        var source = File.ReadAllText(Path.Combine(current!, "src", "Easydict.WinUI", "Services", "SettingsService.cs"));
+        source.Should().Contain("public bool UseOcrWorker { get; set; } = true;");
+        source.Should().Contain("UseOcrWorker = GetValue(nameof(UseOcrWorker), true);");
+    }
+
+    [Fact]
     public void DeepLUseFreeApi_HasDefaultValue()
     {
         // Default should be true (use free API)

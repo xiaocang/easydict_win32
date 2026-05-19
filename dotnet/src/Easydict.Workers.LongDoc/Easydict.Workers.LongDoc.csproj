@@ -1,0 +1,89 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- 22621 matches Easydict.WinUI / Microsoft.WindowsAppSDK requirements; long-doc worker
+         doesn't actually use WinAppSDK but it pulls in shared assemblies that target this TFM. -->
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <DefineConstants>$(DefineConstants);EASYDICT_LONGDOC_WORKER</DefineConstants>
+    <RootNamespace>Easydict.Workers.LongDoc</RootNamespace>
+    <AssemblyName>Easydict.Workers.LongDoc</AssemblyName>
+    <!-- MuPDF.NET does not ship a stable x86 runtime; drop x86 from the worker RIDs. -->
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- Platform is set by the calling build/publish (CI passes -p:Platform=x64|arm64).
+         Don't hardcode here — that would force cross-arch publish to fail with a
+         RID/Platform mismatch on arm64 runners. -->
+    <Platforms>x64;arm64</Platforms>
+    <!-- Framework-dependent so the worker reuses the shared .NET 8 runtime bundled
+         once into <package>/dotnet/ by Extract-DotnetRuntime.ps1. WorkerSpawner sets
+         DOTNET_ROOT_<arch> when launching so the apphost finds it. CLI publish flag
+         can override it with /p:SelfContained=true for local one-off testing. -->
+    <SelfContained>false</SelfContained>
+    <!-- R2R bakes architecture-specific native code into managed DLLs (~20% size hit).
+         Workers run short-lived translation jobs where startup is dwarfed by the
+         translation itself, so the size cost isn't worth the marginal startup gain. -->
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- Skip PDBs in publish output. Workers don't need symbol files in production —
+         crashes are surfaced through IPC error responses, not a debugger attach. -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <!-- Same suppression as Easydict.WinUI.Tests: the WinAppSDK module constructor would
+         throw on machines without the SDK runtime; the worker only consumes the SDK
+         management abstractions via shared classes that already handle that gracefully. -->
+    <WindowsAppSdkAutoInitialize>false</WindowsAppSdkAutoInitialize>
+    <!-- Match the WinUI host: build only the PdfPig target this worker consumes. -->
+    <PdfPigTargetFrameworksOverride>net8.0</PdfPigTargetFrameworksOverride>
+  </PropertyGroup>
+
+  <!-- Dedupe onnxruntime.dll (mirrors Easydict.WinUI.csproj). Intel.ML.OnnxRuntime.OpenVino
+       1.21.0 (via Easydict.OpenVINO) ships its own runtimes/win-x64/native/onnxruntime.dll
+       while Microsoft.Windows.AI.MachineLearning 2.0.300 (transitive from WindowsAppSDK)
+       ships another. We keep the Intel build because it carries the OpenVINO EP. -->
+  <Target Name="DedupeOnnxRuntime"
+          AfterTargets="ResolveAssemblyReferences;ResolvePackageAssets;ResolveRuntimePackAssets;_ResolveCopyLocalAssetsForRuntimeDependencies"
+          BeforeTargets="_CopyFilesMarkedCopyLocal;ComputeFilesToPublish;_ComputeResolvedFilesToPublishTypes">
+    <ItemGroup>
+      <ReferenceCopyLocalPaths
+          Remove="@(ReferenceCopyLocalPaths)"
+          Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                     $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+      <ResolvedFileToPublish
+          Remove="@(ResolvedFileToPublish)"
+          Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                     $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+      <RuntimeCopyLocalItems
+          Remove="@(RuntimeCopyLocalItems)"
+          Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                     $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Easydict.WinUI.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Easydict.WinUI\Services\ModelDownloadClient.cs" Link="Shared\ModelDownloadClient.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\LayoutModelDownloadService.cs" Link="Shared\LayoutModelDownloadService.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\DocLayoutYoloService.cs" Link="Shared\DocLayoutYoloService.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\TableStructureRecognitionService.cs" Link="Shared\TableStructureRecognitionService.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\VisionLayoutDetectionService.cs" Link="Shared\VisionLayoutDetectionService.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\LayoutDetectionStrategy.cs" Link="Shared\LayoutDetectionStrategy.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\Memory\PooledDenseTensor.cs" Link="Shared\Memory\PooledDenseTensor.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Easydict.DocumentExport\Easydict.DocumentExport.csproj" />
+    <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
+    <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
+    <ProjectReference Include="..\..\..\lib\PdfPig\src\UglyToad.PdfPig\UglyToad.PdfPig.csproj" />
+  </ItemGroup>
+
+</Project>

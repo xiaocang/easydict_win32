@@ -82,6 +82,7 @@
                             Spacing="12">
                         <Button x:Name="BackButton"
                                 AutomationProperties.AutomationId="BackButton"
+                                AutomationProperties.Name="Back"
                                 Click="OnBackClick"
                                 Style="{StaticResource SettingsAccentButtonStyle}"
                                 Padding="8">
@@ -98,72 +99,88 @@
                 </Grid>
 
                 <!-- Settings Tabs -->
-                <ItemsControl x:Name="SettingsTabsHost"
-                              HorizontalAlignment="Stretch">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <ItemsWrapGrid Orientation="Horizontal"
-                                           MaximumRowsOrColumns="7"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Button Click="OnSettingsTabClick"
-                                    Tag="{Binding Id}"
-                                    AutomationProperties.AutomationId="{Binding AutomationId}"
-                                    Style="{StaticResource SettingsTabButtonStyle}"
-                                    Width="86"
-                                    Height="76"
-                                    Margin="0,0,10,10"
-                                    Padding="0"
-                                    Background="{Binding Background}"
-                                    BorderBrush="{Binding BorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                                    Foreground="{Binding Foreground}"
-                                    HorizontalAlignment="Left"
-                                    ToolTipService.ToolTip="{Binding Tooltip}">
-                                <Grid>
-                                    <StackPanel Spacing="6"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center">
-                                        <FontIcon Glyph="{Binding IconGlyph}"
-                                                  FontSize="22"
-                                                  Foreground="{Binding Foreground}"
-                                                  HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{Binding Label}"
-                                                   FontSize="12"
-                                                   Foreground="{Binding Foreground}"
-                                                   TextAlignment="Center"
-                                                   HorizontalAlignment="Center"/>
-                                    </StackPanel>
-
-                                    <Border
-                                        Background="{Binding SelectedBackground}"
-                                        BorderBrush="{Binding SelectedBorderBrush}"
+                <Grid>
+                    <ItemsControl x:Name="SettingsTabsHost"
+                                  HorizontalAlignment="Stretch">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal"
+                                               MaximumRowsOrColumns="7"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Click="OnSettingsTabClick"
+                                        Loaded="OnSettingsTabButtonLoaded"
+                                        Tag="{Binding Id}"
+                                        AutomationProperties.AutomationId="{Binding AutomationId}"
+                                        AutomationProperties.Name="{Binding Label}"
+                                        Style="{StaticResource SettingsTabButtonStyle}"
+                                        Width="86"
+                                        Height="76"
+                                        Margin="0,0,10,10"
+                                        Padding="0"
+                                        Background="{Binding Background}"
+                                        BorderBrush="{Binding BorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                                        Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        Foreground="{Binding Foreground}"
+                                        HorizontalAlignment="Left"
+                                        ToolTipService.ToolTip="{Binding Tooltip}">
+                                    <Grid>
+                                        <StackPanel Spacing="6"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center">
+                                            <FontIcon Glyph="{Binding IconGlyph}"
+                                                      FontSize="22"
+                                                      Foreground="{Binding Foreground}"
+                                                      HorizontalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Label}"
+                                                       FontSize="12"
+                                                       Foreground="{Binding Foreground}"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"/>
+                                        </StackPanel>
 
-                                    <StackPanel Spacing="6"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}">
-                                        <FontIcon Glyph="{Binding IconGlyph}"
-                                                  FontSize="22"
-                                                  Foreground="{Binding SelectedForeground}"
-                                                  HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{Binding Label}"
-                                                   FontSize="12"
-                                                   Foreground="{Binding SelectedForeground}"
-                                                   TextAlignment="Center"
-                                                   HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                                        <Border
+                                            Background="{Binding SelectedBackground}"
+                                            BorderBrush="{Binding SelectedBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                                            Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                        <StackPanel Spacing="6"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <FontIcon Glyph="{Binding IconGlyph}"
+                                                      FontSize="22"
+                                                      Foreground="{Binding SelectedForeground}"
+                                                      HorizontalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Label}"
+                                                       FontSize="12"
+                                                       Foreground="{Binding SelectedForeground}"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <ProgressRing x:Name="SettingsTabSwitchRing"
+                                  Width="20"
+                                  Height="20"
+                                  Margin="0,6,4,0"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Top"
+                                  IsActive="False"
+                                  IsHitTestVisible="False"
+                                  Canvas.ZIndex="1"
+                                  Visibility="Collapsed"
+                                  AutomationProperties.Name="Loading settings tab"/>
+                </Grid>
 
                 <Grid x:Name="TabContentHost">
                     <StackPanel x:Name="ServicesTabContent"

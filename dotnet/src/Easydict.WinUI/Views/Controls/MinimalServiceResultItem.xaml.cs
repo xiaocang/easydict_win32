@@ -10,6 +10,8 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 {
     private ServiceQueryResult? _serviceResult;
     private bool _updateUIPending;
+    private int _updateUIRequestVersion;
+    private int _renderedUpdateUIVersion;
 
     public MinimalServiceResultItem()
     {
@@ -60,7 +62,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         }
     }
 
-    public void RefreshDemotionState() => UpdateUI();
+    public void RefreshDemotionState() => QueueUpdateUI();
 
     public IEnumerable<string> GetDisplayedPhoneticKeys() => Array.Empty<string>();
 
@@ -72,6 +74,9 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         }
 
         _serviceResult = null;
+        _updateUIPending = false;
+        _updateUIRequestVersion = 0;
+        _renderedUpdateUIVersion = 0;
         ThemeRoot = null;
         ServiceNameText.Text = string.Empty;
         StatusText.Text = string.Empty;
@@ -82,21 +87,42 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     private void OnServiceResultPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        QueueUpdateUI();
+    }
+
+    private void QueueUpdateUI()
+    {
+        unchecked
+        {
+            _updateUIRequestVersion++;
+        }
+
         if (_updateUIPending)
         {
             return;
         }
 
         _updateUIPending = true;
-        DispatcherQueue.TryEnqueue(() =>
+        if (!DispatcherQueue.TryEnqueue(() =>
+            {
+                _updateUIPending = false;
+                if (_renderedUpdateUIVersion == _updateUIRequestVersion)
+                {
+                    return;
+                }
+
+                UpdateUI();
+            }))
         {
             _updateUIPending = false;
-            UpdateUI();
-        });
+        }
     }
 
     private void UpdateUI()
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("MinimalServiceResultItem.UpdateUI");
+        _renderedUpdateUIVersion = _updateUIRequestVersion;
+
         if (_serviceResult is null)
         {
             return;

@@ -35,11 +35,11 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore Easydict.Win32.sln -p:Platform=x64
+        run: dotnet restore Easydict.Win32.sln -p:Platform=x64 -p:BuildWorkerOutputs=false
 
       - name: Build
         working-directory: dotnet
-        run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore -p:Platform=x64
+        run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore -p:Platform=x64 -p:BuildWorkerOutputs=false
 
       - name: Run tests
         working-directory: dotnet

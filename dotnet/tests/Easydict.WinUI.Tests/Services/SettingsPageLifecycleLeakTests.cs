@@ -83,9 +83,9 @@ public class SettingsPageLifecycleLeakTests
     public void SettingsPage_UsesNamedTopTabClickHandler()
     {
         var content = File.ReadAllText(SettingsPagePath);
-        content.Should().Contain("private void OnSettingsTabClick",
+        content.Should().Contain("private async void OnSettingsTabClick",
             "top settings tabs should use a named handler so tab selection remains auditable");
-        content.Should().Contain("SelectSettingsTab(tabId, resetScroll: true);",
+        content.Should().Contain("await SelectSettingsTabAsync(tabId, resetScroll: true);",
             "the named click handler should delegate selection to a single tab state updater");
         content.Should().NotContain("PointerEntered += OnNavIconPointerEntered;",
             "the old floating nav rail pointer handlers should stay removed");
@@ -180,6 +180,23 @@ public class SettingsPageLifecycleLeakTests
             "the queue callback should log dispatch instead of duplicating the runner's ONNX start message");
         CountOccurrences(content, "Deferred I/O: begin UpdateOnnxModelStatus").Should().Be(1,
             "only RunDeferredSettingsIo should emit the ONNX start marker");
+    }
+
+    [Fact]
+    public void SettingsPage_FirstPaintOnlyInitializesGeneralTabDataBeforeIdleWarmup()
+    {
+        var content = File.ReadAllText(SettingsPagePath);
+
+        content.Should().Contain("var deferLazyTabData = true;",
+            "opening Settings should keep first paint focused on the General tab before background warm-up runs");
+        content.Should().Contain("_initializedSettingsTabData.Add(SettingsTabId.General);",
+            "the initial synchronous load should only mark General as initialized");
+        content.Should().Contain("QueueSettingsTabWarmup(cancellationToken);",
+            "hidden tab data should be warmed after content is visible so frequent in-page tab switches stay fast");
+        content.Should().Contain("if (deferLazyTabData && !ShouldLoadSettingsTab(SettingsTabId.Advanced, deferLazyTabData))",
+            "Advanced deferred I/O should stay parked until the Advanced tab is initialized by user navigation or warm-up");
+        content.Should().NotContain("foreach (var tabId in Enum.GetValues<SettingsTabId>())\r\n            {\r\n                _initializedSettingsTabData.Add(tabId);\r\n            }",
+            "initial Settings open should not synchronously mark every tab as initialized");
     }
 
     private static string FindProjectRoot()

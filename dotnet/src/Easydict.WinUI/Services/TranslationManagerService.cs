@@ -34,6 +34,10 @@ public sealed class TranslationManagerService : IDisposable
     private FoundryLocalService? _foundryLocalService;
     private OpenVINOTranslationService? _openVinoService;
     private LocalAITranslationService? _localAIService;
+    // When SettingsService.UseLocalAiWorker is true at startup, _localAIWorkerClient
+    // is registered instead of _localAIService. Toggling the setting at runtime
+    // requires an app restart (not auto-swappable).
+    private Workers.LocalAiWorkerClient? _localAIWorkerClient;
 
     public static TranslationManagerService Instance => _instance.Value;
 
@@ -280,15 +284,41 @@ public sealed class TranslationManagerService : IDisposable
         // Local AI is exposed as one user-facing service. Auto mode tries
         // Phi Silica first, then Foundry Local, then OpenVINO/NLLB as the
         // hardware-accelerated translation fallback.
-        _phiSilicaService ??= new PhiSilicaTranslationService();
-        _foundryLocalService ??= new FoundryLocalService(_translationManager.SharedHttpClient);
-        _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
-        _openVinoService ??= new OpenVINOTranslationService();
-        _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
-        _localAIService ??= new LocalAITranslationService(_phiSilicaService, _foundryLocalService, _openVinoService);
-        _localAIService.Configure(LocalAIProviderModeExtensions.Parse(_settings.LocalAIProvider));
+        //
+        // The three providers are wrapped in Lazy<> so they don't materialize
+        // until the user actually translates via local AI. PhiSilica's health
+        // monitor, FoundryLocal's CLI endpoint resolver, and OpenVINO's
+        // ModelDownloadService all sit idle when a user picks Google or DeepL
+        // as their provider and never touches local AI.
+        _localAIService ??= CreateLocalAITranslationService();
+        if (_localAIWorkerClient == null && _settings.UseLocalAiWorker)
+        {
+            _localAIWorkerClient = new Workers.LocalAiWorkerClient(
+                _settings,
+                _localAIService,
+                _localAIService,
+                _localAIService);
+        }
+
         _translationManager.UnregisterService(LocalAITranslationService.LegacyOpenVinoServiceId);
-        _translationManager.RegisterService(_localAIService);
+        ITranslationService localAiRegistration = _settings.UseLocalAiWorker && _localAIWorkerClient is not null
+            ? _localAIWorkerClient
+            : _localAIService;
+        _translationManager.RegisterService(localAiRegistration);
+
+        // Re-apply settings to already-materialized sub-services so a settings
+        // change picks up new endpoint/device values without forcing materialization.
+        if (_foundryLocalService != null)
+        {
+            _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
+        }
+        if (_openVinoService != null)
+        {
+            _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
+        }
+        // Configure the in-proc service even when the worker is active; it is the
+        // fallback path if the worker exe is missing or cannot complete handshake.
+        _localAIService?.Configure(LocalAIProviderModeExtensions.Parse(_settings.LocalAIProvider));
 
         // Configure BuiltIn AI
         _translationManager.ConfigureService("builtin", service =>
@@ -426,6 +456,45 @@ public sealed class TranslationManagerService : IDisposable
         Debug.WriteLine("[TranslationManagerService] Services configured");
     }
 
+    private LocalAITranslationService CreateLocalAITranslationService()
+    {
+        var phiSilicaLazy = new Lazy<PhiSilicaTranslationService>(
+            () =>
+            {
+                lock (_lock)
+                {
+                    return _phiSilicaService ??= new PhiSilicaTranslationService();
+                }
+            },
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+        var foundryLocalLazy = new Lazy<IStreamTranslationService>(
+            () =>
+            {
+                lock (_lock)
+                {
+                    _foundryLocalService ??= new FoundryLocalService(_translationManager.SharedHttpClient);
+                    _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
+                    return _foundryLocalService;
+                }
+            },
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+        var openVinoLazy = new Lazy<OpenVINOTranslationService>(
+            () =>
+            {
+                lock (_lock)
+                {
+                    _openVinoService ??= new OpenVINOTranslationService();
+                    _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
+                    return _openVinoService;
+                }
+            },
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+        return new LocalAITranslationService(phiSilicaLazy, foundryLocalLazy, openVinoLazy);
+    }
+
     private void RegisterImportedMdxServices()
     {
         foreach (var dictionary in _settings.ImportedMdxDictionaries)
@@ -442,7 +511,9 @@ public sealed class TranslationManagerService : IDisposable
                     dictionary.DisplayName,
                     dictionary.FilePath,
                     dictionary.Regcode,
-                    dictionary.Email);
+                    dictionary.Email,
+                    deferLoad: true,
+                    isEncryptedHint: dictionary.IsEncrypted);
 
                 // Load MDD resource files (from stored paths, or re-discover for migration)
                 var mddPaths = dictionary.MddFilePaths;
@@ -461,8 +532,9 @@ public sealed class TranslationManagerService : IDisposable
                     service.LoadMddFiles(mddPaths);
                 }
 
+                service.DictionaryLoaded += loadedService => QueueMdxIndexBuild(dictionary, loadedService);
                 _translationManager.RegisterService(service);
-                QueueMdxIndexBuild(dictionary, service);
+                LocalDictionaryIndexService.Instance.RegisterDescriptor(dictionary);
             }
             catch (Exception ex)
             {
@@ -538,12 +610,15 @@ public sealed class TranslationManagerService : IDisposable
         {
             var service = new MdxDictionaryTranslationService(
                 dictionary.ServiceId, dictionary.DisplayName, dictionary.FilePath,
-                dictionary.Regcode, dictionary.Email);
+                dictionary.Regcode, dictionary.Email,
+                deferLoad: false,
+                isEncryptedHint: dictionary.IsEncrypted);
             lock (_lock)
             {
                 _translationManager.RegisterService(service);
             }
 
+            service.DictionaryLoaded += loadedService => QueueMdxIndexBuild(dictionary, loadedService);
             QueueMdxIndexBuild(dictionary, service);
             return true;
         }
@@ -581,6 +656,8 @@ public sealed class TranslationManagerService : IDisposable
             // alive and double-forward events to the new instance.
             _localAIService?.Dispose();
             _localAIService = null;
+            _localAIWorkerClient?.Dispose();
+            _localAIWorkerClient = null;
             ConfigureServices();
 
             // Check if the old manager has active handles
@@ -694,6 +771,8 @@ public sealed class TranslationManagerService : IDisposable
         // PhiSilica/OpenVINO instances don't retain the disposed wrapper.
         _localAIService?.Dispose();
         _localAIService = null;
+        _localAIWorkerClient?.Dispose();
+        _localAIWorkerClient = null;
         // FoundryLocalService isn't IDisposable but it caches a reference to
         // _translationManager.SharedHttpClient. Null it for parity with the
         // other provider fields so it can't be accidentally used after the

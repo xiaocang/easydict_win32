@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- 22621 required by Microsoft.Windows.AI.Text.LanguageModel / Phi Silica. -->
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <WindowsSdkPackageVersion>10.0.22621.57</WindowsSdkPackageVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Easydict.Workers.LocalAi</RootNamespace>
+    <AssemblyName>Easydict.Workers.LocalAi</AssemblyName>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <Platforms>x64;arm64</Platforms>
+    <!-- See Easydict.Workers.LongDoc.csproj for the rationale on the framework-
+         dependent + no-R2R + no-PDB combo: keeps the worker publish output small
+         so the bundled .NET 8 runtime in <package>/dotnet/ pays back across both
+         workers. -->
+    <SelfContained>false</SelfContained>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <WindowsAppSdkAutoInitialize>false</WindowsAppSdkAutoInitialize>
+    <UseWinUI>false</UseWinUI>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- Same onnxruntime.dll dedupe as the host. -->
+  <Target Name="DedupeOnnxRuntime"
+          AfterTargets="ResolveAssemblyReferences;ResolvePackageAssets;ResolveRuntimePackAssets;_ResolveCopyLocalAssetsForRuntimeDependencies"
+          BeforeTargets="_CopyFilesMarkedCopyLocal;ComputeFilesToPublish;_ComputeResolvedFilesToPublishTypes">
+    <ItemGroup>
+      <ReferenceCopyLocalPaths
+          Remove="@(ReferenceCopyLocalPaths)"
+          Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                     $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+      <ResolvedFileToPublish
+          Remove="@(ResolvedFileToPublish)"
+          Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                     $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+      <RuntimeCopyLocalItems
+          Remove="@(RuntimeCopyLocalItems)"
+          Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                     $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
+    <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
+    <ProjectReference Include="..\Easydict.WindowsAI\Easydict.WindowsAI.csproj" />
+    <ProjectReference Include="..\Easydict.OpenVINO\Easydict.OpenVINO.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WindowsAppSDK needed by PhiSilicaTranslationService (Microsoft.Windows.AI.Text). -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.*" />
+    <PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.0.*">
+      <ExcludeAssets>runtime;native</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

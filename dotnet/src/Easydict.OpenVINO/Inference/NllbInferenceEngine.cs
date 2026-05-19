@@ -142,22 +142,25 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
             cancellationToken.ThrowIfCancellationRequested();
 
             // Encoder forward (once per translation).
-            var (encoderHidden, encoderAttentionMask, srcLen) = RunEncoder(encoderInputIds);
+            using var encoder = RunEncoder(encoderInputIds);
 
             // Decoder greedy loop. NLLB's decoding convention: prime with
             // [</s>, <tgt_lang>]; the model generates the actual translation
             // after this two-token seed (we don't yield the seed to the caller).
-            var decoderInput = new List<long>(maxNewTokens + 2)
-            {
-                EosTokenId,
-                forcedBosTokenId,
-            };
+            var decoderInput = new long[maxNewTokens + 2];
+            decoderInput[0] = EosTokenId;
+            decoderInput[1] = forcedBosTokenId;
+            var decoderLength = 2;
 
             for (var step = 0; step < maxNewTokens; step++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var nextToken = RunDecoderStep(encoderHidden, encoderAttentionMask, srcLen, decoderInput);
+                var nextToken = RunDecoderStep(
+                    encoder.Hidden,
+                    encoder.AttentionMask,
+                    encoder.SrcLen,
+                    decoderInput.AsMemory(0, decoderLength));
 
                 if (nextToken == EosTokenId || nextToken == PadTokenId)
                 {
@@ -165,7 +168,7 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
                 }
 
                 writer.TryWrite(nextToken);
-                decoderInput.Add(nextToken);
+                decoderInput[decoderLength++] = nextToken;
             }
 
             writer.TryComplete();
@@ -211,7 +214,7 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
 
     // ── Encoder ─────────────────────────────────────────────────────────
 
-    private (DenseTensor<float> hidden, DenseTensor<long> attentionMask, int srcLen) RunEncoder(
+    private EncoderRunResult RunEncoder(
         IReadOnlyList<int> encoderInputIds)
     {
         var srcLen = encoderInputIds.Count;
@@ -296,7 +299,7 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
         }
     }
 
-    private (DenseTensor<float> hidden, DenseTensor<long> attentionMask, int srcLen) RunEncoderWithSession(
+    private EncoderRunResult RunEncoderWithSession(
         InferenceSession session,
         IReadOnlyCollection<NamedOnnxValue> inputs,
         DenseTensor<long> attentionTensor,
@@ -308,8 +311,8 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
             .AsTensor<float>();
 
         // Copy out so we can reuse across decoder steps without re-running encoder.
-        var hiddenDense = hidden.ToDenseTensor();
-        return (hiddenDense, attentionTensor, srcLen);
+        var hiddenOwner = PooledDenseTensor<float>.CopyFrom(hidden);
+        return new EncoderRunResult(hiddenOwner, attentionTensor, srcLen);
     }
 
     // ── Decoder (single greedy step) ────────────────────────────────────
@@ -318,11 +321,10 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
         DenseTensor<float> encoderHidden,
         DenseTensor<long> encoderAttentionMask,
         int srcLen,
-        IReadOnlyList<long> decoderInputSoFar)
+        Memory<long> decoderInputSoFar)
     {
-        var tgtLen = decoderInputSoFar.Count;
-        var decoderInputData = decoderInputSoFar.ToArray();
-        var decoderInputTensor = new DenseTensor<long>(decoderInputData, new[] { 1, tgtLen });
+        var tgtLen = decoderInputSoFar.Length;
+        var decoderInputTensor = new DenseTensor<long>(decoderInputSoFar, new[] { 1, tgtLen });
 
         var inputs = new List<NamedOnnxValue>
         {
@@ -336,13 +338,9 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
             .First(o => o.Name == _decoderLogitsOutputName)
             .AsTensor<float>();
 
-        // logits shape: [1, tgtLen, vocab_size]. Argmax over the LAST position's
-        // vocab vector. We materialize a DenseTensor and walk its row-major
-        // buffer directly — using Tensor.GetValue(int) only worked accidentally
-        // (it relies on a row-major linear layout that Tensor<T> doesn't actually
-        // promise) and isn't future-proof. A span walk is also faster than
-        // calling the 3D indexer in a 256k-iteration loop.
-        var dense = logits.ToDenseTensor();
+        // logits shape: [1, tgtLen, vocab_size]. Prefer direct dense-buffer access;
+        // fall back to materialization only if ORT returns a non-dense tensor.
+        var dense = logits as DenseTensor<float> ?? logits.ToDenseTensor();
         var buffer = dense.Buffer.Span;
         var vocabSize = (int)dense.Dimensions[2];
         var lastPosBase = (tgtLen - 1) * vocabSize;
@@ -360,6 +358,27 @@ public sealed class NllbInferenceEngine : INllbInferenceEngine, IDisposable
         }
 
         return bestId;
+    }
+
+    private sealed class EncoderRunResult : IDisposable
+    {
+        private readonly PooledDenseTensor<float> _hiddenOwner;
+
+        public EncoderRunResult(
+            PooledDenseTensor<float> hiddenOwner,
+            DenseTensor<long> attentionMask,
+            int srcLen)
+        {
+            _hiddenOwner = hiddenOwner;
+            AttentionMask = attentionMask;
+            SrcLen = srcLen;
+        }
+
+        public DenseTensor<float> Hidden => _hiddenOwner.Tensor;
+        public DenseTensor<long> AttentionMask { get; }
+        public int SrcLen { get; }
+
+        public void Dispose() => _hiddenOwner.Dispose();
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────

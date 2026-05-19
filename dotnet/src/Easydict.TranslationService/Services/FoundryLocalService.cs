@@ -1098,7 +1098,7 @@ public sealed class FoundryLocalCliEndpointResolver : IFoundryLocalRuntimeContro
         var text = string.Join(
                 Environment.NewLine,
                 output
-                    .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Select(SanitizeStatusLine)
                     .Where(line => !string.IsNullOrWhiteSpace(line)))
             .Trim();
@@ -1158,7 +1158,7 @@ public sealed class FoundryLocalCliEndpointResolver : IFoundryLocalRuntimeContro
         }
 
         var lines = output.Split(
-            ['\r', '\n'],
+            new[] { '\r', '\n' },
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         for (var i = lines.Length - 1; i >= 0; i--)
         {

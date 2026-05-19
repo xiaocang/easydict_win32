@@ -42,11 +42,11 @@ public class OllamaOcrServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RecognizeAsync_ThrowsArgumentNullException_WhenBufferIsNull()
+    public async Task RecognizeAsync_ThrowsArgumentException_WhenBufferIsDefault()
     {
-        var act = async () => await _service.RecognizeAsync(null!, 10, 10);
+        var act = async () => await _service.RecognizeAsync(default, 10, 10);
 
-        await act.Should().ThrowAsync<ArgumentNullException>()
+        await act.Should().ThrowAsync<ArgumentException>()
             .Where(ex => ex.ParamName == "pixelData");
     }
 

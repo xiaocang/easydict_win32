@@ -11,9 +11,13 @@ on:
       - 'dotnet/tests/Easydict.WinUI.Tests/Services/SelectionPerformanceTests.cs'
       - 'dotnet/src/Easydict.WinUI/Services/SettingsService.cs'
       - 'dotnet/src/Easydict.WinUI/Services/TranslationManagerService.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/LocalAITranslationService.cs'
+      - 'dotnet/src/Easydict.WinUI/App.xaml.cs'
+      - 'dotnet/src/Easydict.WinUI/runtimeconfig.template.json'
       - 'dotnet/src/Easydict.TranslationService/TranslationManager.cs'
       - 'dotnet/tests/Easydict.TranslationService.Tests/StartupPerformanceTests.cs'
       - 'dotnet/tests/Easydict.TranslationService.Tests/MemoryBudgetTests.cs'
+      - 'dotnet/tests/Easydict.WinUI.Tests/Services/LocalAITranslationServiceLazyInitTests.cs'
   pull_request:
     branches: [master]
     paths:
@@ -24,9 +28,13 @@ on:
       - 'dotnet/tests/Easydict.WinUI.Tests/Services/SelectionPerformanceTests.cs'
       - 'dotnet/src/Easydict.WinUI/Services/SettingsService.cs'
       - 'dotnet/src/Easydict.WinUI/Services/TranslationManagerService.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/LocalAITranslationService.cs'
+      - 'dotnet/src/Easydict.WinUI/App.xaml.cs'
+      - 'dotnet/src/Easydict.WinUI/runtimeconfig.template.json'
       - 'dotnet/src/Easydict.TranslationService/TranslationManager.cs'
       - 'dotnet/tests/Easydict.TranslationService.Tests/StartupPerformanceTests.cs'
       - 'dotnet/tests/Easydict.TranslationService.Tests/MemoryBudgetTests.cs'
+      - 'dotnet/tests/Easydict.WinUI.Tests/Services/LocalAITranslationServiceLazyInitTests.cs'
   workflow_dispatch:
 
 jobs:
@@ -46,7 +54,7 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore Easydict.Win32.sln -p:Platform=x64
+        run: dotnet restore Easydict.Win32.sln -p:Platform=x64 -p:BuildWorkerOutputs=false
 
       - name: Build (Release)
         working-directory: dotnet
@@ -54,7 +62,7 @@ jobs:
         # constructor that tries to initialize the Windows App SDK runtime. Without this,
         # loading the Easydict.WinUI assembly on CI (which lacks the SDK runtime) throws
         # TypeInitializationException before any test can run.
-        run: dotnet build tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj -c Release -p:Platform=x64 -p:WindowsAppSdkAutoInitialize=false
+        run: dotnet build tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj -c Release -p:Platform=x64 -p:BuildWorkerOutputs=false -p:WindowsAppSdkAutoInitialize=false
 
       - name: Run performance benchmarks
         working-directory: dotnet

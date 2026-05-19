@@ -1,6 +1,7 @@
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
+using Easydict.WinUI.Services.Workers;
 using FluentAssertions;
 using Xunit;
 
@@ -19,16 +20,18 @@ public class OcrServiceFactoryTests
     private readonly SettingsService _settings = SettingsService.Instance;
 
     [Theory]
-    [InlineData(OcrEngineType.WindowsNative, typeof(WindowsOcrService))]
+    [InlineData(OcrEngineType.WindowsNative, typeof(OcrWorkerClient))]
     [InlineData(OcrEngineType.Ollama, typeof(OllamaOcrService))]
     [InlineData(OcrEngineType.CustomApi, typeof(CustomApiOcrService))]
     public void Create_ReturnsImplementationMatchingSelectedEngine(
         OcrEngineType engine, System.Type expected)
     {
         var original = _settings.OcrEngine;
+        var originalUseWorker = _settings.UseOcrWorker;
         try
         {
             _settings.OcrEngine = engine;
+            _settings.UseOcrWorker = true;
 
             var svc = OcrServiceFactory.Create();
 
@@ -37,6 +40,28 @@ public class OcrServiceFactoryTests
         finally
         {
             _settings.OcrEngine = original;
+            _settings.UseOcrWorker = originalUseWorker;
+        }
+    }
+
+    [Fact]
+    public void Create_ReturnsInProcWindowsOcr_WhenWorkerDisabled()
+    {
+        var original = _settings.OcrEngine;
+        var originalUseWorker = _settings.UseOcrWorker;
+        try
+        {
+            _settings.OcrEngine = OcrEngineType.WindowsNative;
+            _settings.UseOcrWorker = false;
+
+            var svc = OcrServiceFactory.Create();
+
+            svc.Should().BeOfType<WindowsOcrService>();
+        }
+        finally
+        {
+            _settings.OcrEngine = original;
+            _settings.UseOcrWorker = originalUseWorker;
         }
     }
 
@@ -59,16 +84,18 @@ public class OcrServiceFactoryTests
     }
 
     [Theory]
-    [InlineData(OcrEngineType.WindowsNative, typeof(WindowsOcrService))]
+    [InlineData(OcrEngineType.WindowsNative, typeof(OcrWorkerClient))]
     [InlineData(OcrEngineType.Ollama, typeof(OllamaOcrService))]
     [InlineData(OcrEngineType.CustomApi, typeof(CustomApiOcrService))]
     public void Create_WithOptions_UsesProvidedEngineIndependentOfSavedSetting(
         OcrEngineType engine, System.Type expected)
     {
         var original = _settings.OcrEngine;
+        var originalUseWorker = _settings.UseOcrWorker;
         try
         {
             _settings.OcrEngine = OcrEngineType.WindowsNative;
+            _settings.UseOcrWorker = true;
             var options = new OcrServiceOptions(engine, null, null, null, null);
 
             var svc = OcrServiceFactory.Create(options);
@@ -78,6 +105,7 @@ public class OcrServiceFactoryTests
         finally
         {
             _settings.OcrEngine = original;
+            _settings.UseOcrWorker = originalUseWorker;
         }
     }
 

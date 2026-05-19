@@ -261,10 +261,10 @@ public static class ContentStreamInterpreter
                 PointSize = letter.PointSize,
                 TextMatrix = letter.TextMatrix,
                 CurrentTransformationMatrix = letter.CurrentTransformationMatrix,
-                X0 = letter.GlyphRectangle.Left,
-                Y0 = letter.GlyphRectangle.Bottom,
-                X1 = letter.GlyphRectangle.Right,
-                Y1 = letter.GlyphRectangle.Top,
+                X0 = letter.BoundingBox.Left,
+                Y0 = letter.BoundingBox.Bottom,
+                X1 = letter.BoundingBox.Right,
+                Y1 = letter.BoundingBox.Top,
             });
         }
 

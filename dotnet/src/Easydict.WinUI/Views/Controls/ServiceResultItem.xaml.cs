@@ -6,6 +6,7 @@ using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Services;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -27,8 +28,13 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     private string? _cachedServiceId;
     private ElementTheme _cachedIconTheme;
     private BitmapImage? _cachedIcon;
+    private bool _cachedIconMissing;
+    private bool _iconLoadPending;
     private HashSet<string>? _alreadyShownPhonetics;
+    private WebView2? _dictWebView;
+    private DispatcherQueueTimer? _webViewReleaseTimer;
     private bool _webViewInitialized;
+    private int _dictWebViewRenderVersion;
     private string? _foundryLocalDocsUrl;
     private MdxDictionaryTranslationService? _currentMdxService;
     private FrameworkElement? _themeRoot;
@@ -49,6 +55,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             }
 
             _themeRoot = value;
+            InvalidateRenderedResultCaches();
         }
     }
 
@@ -100,7 +107,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// Re-runs <see cref="UpdateUI"/> to pick up changes in the demotion state (e.g., when
     /// <see cref="SettingsService.HideEmptyServiceResults"/> is toggled at runtime).
     /// </summary>
-    public void RefreshDemotionState() => UpdateUI();
+    public void RefreshDemotionState() => QueueUpdateUI();
 
     public void RefreshThemeChrome()
     {
@@ -120,28 +127,12 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             _serviceResult.PropertyChanged -= OnServiceResultPropertyChanged;
         }
 
-        try
+        CancelDictionaryWebViewRelease();
+        ReleaseDictionaryWebView();
+        if (_webViewReleaseTimer is not null)
         {
-            DictWebView.NavigationCompleted -= OnDictWebViewNavigationCompleted;
-
-            if (_webViewInitialized && DictWebView.CoreWebView2 != null)
-            {
-                DictWebView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
-                DictWebView.CoreWebView2.WebMessageReceived -= OnDictWebViewWebMessageReceived;
-
-                try
-                {
-                    DictWebView.NavigateToString("<html><body></body></html>");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[ServiceResultItem] Cleanup navigate reset failed: {ex.Message}");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[ServiceResultItem] Cleanup WebView2 teardown failed: {ex.Message}");
+            _webViewReleaseTimer.Tick -= OnDictionaryWebViewReleaseTimerTick;
+            _webViewReleaseTimer = null;
         }
 
         _serviceResult = null;
@@ -150,9 +141,16 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         _cachedServiceId = null;
         _cachedIconTheme = ElementTheme.Default;
         _cachedIcon = null;
+        _cachedIconMissing = false;
+        _iconLoadPending = false;
         _alreadyShownPhonetics = null;
         _updateUIPending = false;
+        _updateUIRequestVersion = 0;
+        _renderedUpdateUIVersion = 0;
+        _streamingFastPathPending = false;
+        InvalidateRenderedResultCaches();
         _webViewInitialized = false;
+        _dictWebViewRenderVersion++;
 
         ServiceNameText.Text = string.Empty;
         ServiceIcon.Source = null;
@@ -170,7 +168,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         DictionaryPanel.Children.Clear();
         DictionaryPanel.Visibility = Visibility.Collapsed;
         PendingQueryText.Visibility = Visibility.Collapsed;
-        DictWebView.Visibility = Visibility.Collapsed;
+        DictWebViewHost.Visibility = Visibility.Collapsed;
         ResultText.Visibility = Visibility.Collapsed;
         ErrorText.Visibility = Visibility.Collapsed;
         FoundryLocalRecoveryPanel.Visibility = Visibility.Collapsed;
@@ -193,6 +191,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             }
 
             _serviceResult = value;
+            InvalidateRenderedResultCaches();
 
             if (_serviceResult != null)
             {
@@ -212,7 +211,15 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         get => _alreadyShownPhonetics;
         set
         {
-            _alreadyShownPhonetics = value;
+            if (IsSamePhoneticDeduplication(_alreadyShownPhonetics, value))
+            {
+                return;
+            }
+
+            _alreadyShownPhonetics = value is { Count: > 0 }
+                ? new HashSet<string>(value)
+                : null;
+            _phoneticsRenderValid = false;
             // Re-render phonetics when this changes
             if (_serviceResult?.Result != null)
             {
@@ -245,6 +252,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// ContentVisibility) — without coalescing, each enqueues a redundant full UpdateUI().
     /// </summary>
     private bool _updateUIPending;
+    private int _updateUIRequestVersion;
+    private int _renderedUpdateUIVersion;
 
     private void OnServiceResultPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -270,21 +279,97 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             return;
         }
 
-        if (!_updateUIPending)
-        {
-            _updateUIPending = true;
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                _updateUIPending = false;
-                UpdateUI();
-            });
-        }
+        QueueUpdateUI();
     }
 
     private bool _streamingFastPathPending;
+    private bool _phoneticsRenderValid;
+    private TranslationResult? _phoneticsRenderedResult;
+    private string? _phoneticsRenderedDeduplicationKey;
+    private ElementTheme _phoneticsRenderedTheme;
+    private bool _dictionaryRenderValid;
+    private TranslationResult? _dictionaryRenderedResult;
+    private ElementTheme _dictionaryRenderedTheme;
+    private bool _dictionaryRenderedHasDefinitions;
+    private string? _dictWebViewRenderedRawHtml;
+    private string? _dictWebViewRenderedServiceId;
+    private ElementTheme _dictWebViewRenderedTheme;
+    private bool _dictWebViewRenderedHtmlReady;
+    private bool _serviceChromeApplied;
+    private ElementTheme _serviceChromeAppliedTheme;
+
+    private void QueueUpdateUI()
+    {
+        unchecked
+        {
+            _updateUIRequestVersion++;
+        }
+
+        if (_updateUIPending)
+        {
+            return;
+        }
+
+        _updateUIPending = true;
+        if (!DispatcherQueue.TryEnqueue(() =>
+            {
+                _updateUIPending = false;
+                if (_renderedUpdateUIVersion == _updateUIRequestVersion)
+                {
+                    return;
+                }
+
+                UpdateUI();
+            }))
+        {
+            _updateUIPending = false;
+        }
+    }
+
+    private void InvalidateRenderedResultCaches()
+    {
+        _phoneticsRenderValid = false;
+        _phoneticsRenderedResult = null;
+        _phoneticsRenderedDeduplicationKey = null;
+        _dictionaryRenderValid = false;
+        _dictionaryRenderedResult = null;
+        _dictionaryRenderedHasDefinitions = false;
+        _dictWebViewRenderedRawHtml = null;
+        _dictWebViewRenderedServiceId = null;
+        _dictWebViewRenderedHtmlReady = false;
+        _serviceChromeApplied = false;
+    }
+
+    private static bool IsSamePhoneticDeduplication(
+        HashSet<string>? current,
+        HashSet<string>? next)
+    {
+        var currentCount = current?.Count ?? 0;
+        var nextCount = next?.Count ?? 0;
+        if (currentCount != nextCount)
+        {
+            return false;
+        }
+
+        return currentCount == 0 || current!.SetEquals(next!);
+    }
+
+    private static string? CreatePhoneticDeduplicationKey(HashSet<string>? phonetics)
+    {
+        if (phonetics is null || phonetics.Count == 0)
+        {
+            return null;
+        }
+
+        return string.Join(
+            "\u001F",
+            phonetics.OrderBy(static key => key, StringComparer.Ordinal));
+    }
 
     private void UpdateStreamingTextOnly()
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.UpdateStreamingTextOnly");
+
         if (_serviceResult == null || !_serviceResult.IsStreaming)
         {
             return;
@@ -306,6 +391,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private void UpdateUI()
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.UpdateUI");
+        _renderedUpdateUIVersion = _updateUIRequestVersion;
+
         if (_serviceResult == null)
         {
             return;
@@ -333,31 +421,11 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         // Load service icon only when ServiceId changes (avoid repeated allocations during streaming)
         if (minimal)
         {
-            _cachedServiceId = null;
-            _cachedIconTheme = ElementTheme.Default;
-            _cachedIcon = null;
-            ServiceIcon.Source = null;
-            ServiceIcon.Visibility = Visibility.Collapsed;
+            HideServiceIcon();
         }
-        else if (_cachedServiceId != _serviceResult.ServiceId
-                 || _cachedIconTheme != iconTheme
-                 || _cachedIcon is null)
+        else
         {
-            _cachedServiceId = _serviceResult.ServiceId;
-            _cachedIconTheme = iconTheme;
-            try
-            {
-                _cachedIcon = new BitmapImage(ServiceIconAssetResolver.GetIconUri(_serviceResult.ServiceId, iconTheme));
-                ServiceIcon.Source = _cachedIcon;
-                ServiceIcon.Visibility = Visibility.Visible;
-            }
-            catch
-            {
-                // Icon not found, hide it and release previous image reference
-                _cachedIcon = null;
-                ServiceIcon.Source = null;
-                ServiceIcon.Visibility = Visibility.Collapsed;
-            }
+            EnsureServiceIcon(_serviceResult.ServiceId, iconTheme);
         }
 
         // Loading state
@@ -412,19 +480,115 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ApplyServiceChromeForCurrentTheme();
+        ApplyServiceChromeForCurrentTheme(force: true);
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
     {
         _cachedIcon = null;
+        _cachedIconMissing = false;
+        _iconLoadPending = false;
+        InvalidateRenderedResultCaches();
         UpdateUI();
-        ApplyServiceChromeForCurrentTheme();
+        if (_serviceResult is null)
+        {
+            ApplyServiceChromeForCurrentTheme(force: true);
+        }
     }
 
     private ElementTheme GetEffectiveIconTheme()
     {
         return ThemeRoot?.ActualTheme ?? ActualTheme;
+    }
+
+    private void HideServiceIcon()
+    {
+        _cachedServiceId = null;
+        _cachedIconTheme = ElementTheme.Default;
+        _cachedIcon = null;
+        _cachedIconMissing = false;
+        _iconLoadPending = false;
+        ServiceIcon.Source = null;
+        ServiceIcon.Visibility = Visibility.Collapsed;
+    }
+
+    private void EnsureServiceIcon(string serviceId, ElementTheme iconTheme)
+    {
+        if (string.Equals(_cachedServiceId, serviceId, StringComparison.Ordinal) &&
+            _cachedIconTheme == iconTheme)
+        {
+            ServiceIcon.Source = _cachedIcon;
+            ServiceIcon.Visibility = _cachedIcon is not null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            if (_cachedIcon is null && !_cachedIconMissing)
+            {
+                QueueServiceIconLoad();
+            }
+
+            return;
+        }
+
+        _cachedServiceId = serviceId;
+        _cachedIconTheme = iconTheme;
+        _cachedIcon = null;
+        _cachedIconMissing = false;
+        ServiceIcon.Source = null;
+        ServiceIcon.Visibility = Visibility.Collapsed;
+        QueueServiceIconLoad();
+    }
+
+    private void QueueServiceIconLoad()
+    {
+        if (_iconLoadPending || _cachedIconMissing)
+        {
+            return;
+        }
+
+        _iconLoadPending = true;
+        if (!DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, LoadServiceIconIfCurrent))
+        {
+            _iconLoadPending = false;
+        }
+    }
+
+    private void LoadServiceIconIfCurrent()
+    {
+        _iconLoadPending = false;
+
+        var serviceId = _cachedServiceId;
+        if (string.IsNullOrEmpty(serviceId) || _cachedIcon is not null || _cachedIconMissing)
+        {
+            return;
+        }
+
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.LoadServiceIcon");
+
+        try
+        {
+            var iconTheme = _cachedIconTheme;
+            var icon = new BitmapImage(ServiceIconAssetResolver.GetIconUri(serviceId, iconTheme));
+            if (!string.Equals(_cachedServiceId, serviceId, StringComparison.Ordinal) ||
+                _cachedIconTheme != iconTheme)
+            {
+                return;
+            }
+
+            _cachedIcon = icon;
+            ServiceIcon.Source = icon;
+            ServiceIcon.Visibility = Visibility.Visible;
+        }
+        catch
+        {
+            if (string.Equals(_cachedServiceId, serviceId, StringComparison.Ordinal))
+            {
+                _cachedIcon = null;
+                _cachedIconMissing = true;
+                ServiceIcon.Source = null;
+                ServiceIcon.Visibility = Visibility.Collapsed;
+            }
+        }
     }
 
     private void ApplyMinimalChrome()
@@ -469,7 +633,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             HideErrorPanel();
             PhoneticPanel.Visibility = Visibility.Collapsed;
             DictionaryPanel.Visibility = Visibility.Collapsed;
-            DictWebView.Visibility = Visibility.Collapsed;
+            HideDictionaryWebView(scheduleRelease: true);
             ActionButtons.Visibility = Visibility.Collapsed; // Don't show buttons during streaming
         }
         else if (_serviceResult.Result != null)
@@ -484,7 +648,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 HideErrorPanel();
                 PhoneticPanel.Visibility = Visibility.Collapsed;
                 DictionaryPanel.Visibility = Visibility.Collapsed;
-                DictWebView.Visibility = Visibility.Collapsed;
+                HideDictionaryWebView(scheduleRelease: true);
                 ActionButtons.Visibility = Visibility.Collapsed;
                 ReplaceButton.Visibility = Visibility.Collapsed;
                 PlayButton.Visibility = Visibility.Collapsed;
@@ -492,18 +656,35 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             else if (!string.IsNullOrEmpty(_serviceResult.Result.RawHtml))
             {
                 // Rich HTML from MDX dictionary with MDD resources — render in WebView2
-                ShowRawHtmlPlainTextFallback(_serviceResult.Result, resultTextBrush);
                 PhoneticPanel.Visibility = Visibility.Collapsed;
                 DictionaryPanel.Visibility = Visibility.Collapsed;
                 HideErrorPanel();
-                _ = RenderHtmlDefinitionAsync(_serviceResult.Result.RawHtml, _serviceResult.ServiceId);
+                if (IsCurrentDictionaryWebViewHtml(_serviceResult.Result.RawHtml, _serviceResult.ServiceId)
+                    && _dictWebViewRenderedHtmlReady)
+                {
+                    ResultText.Visibility = Visibility.Collapsed;
+                    DictWebViewHost.Visibility = Visibility.Visible;
+                    if (_dictWebView is { } dictWebView)
+                    {
+                        dictWebView.Visibility = Visibility.Visible;
+                    }
+                }
+                else if (IsCurrentDictionaryWebViewHtml(_serviceResult.Result.RawHtml, _serviceResult.ServiceId))
+                {
+                    ShowRawHtmlTextOnly(_serviceResult.Result, resultTextBrush);
+                }
+                else
+                {
+                    ShowRawHtmlPlainTextFallback(_serviceResult.Result, resultTextBrush, scheduleWebViewRelease: false);
+                    _ = RenderHtmlDefinitionAsync(_serviceResult.Result.RawHtml, _serviceResult.ServiceId);
+                }
                 ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
                 ReplaceButton.Visibility = TextInsertionService.HasSourceWindow ? Visibility.Visible : Visibility.Collapsed;
             }
             else
             {
                 // Hide WebView2 for non-HTML results
-                DictWebView.Visibility = Visibility.Collapsed;
+                HideDictionaryWebView(scheduleRelease: true);
 
                 UpdatePhonetics(_serviceResult.Result);
                 var hasDefinitions = UpdateDictionary(_serviceResult.Result);
@@ -536,7 +717,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             ResultText.Visibility = Visibility.Collapsed;
             PhoneticPanel.Visibility = Visibility.Collapsed;
             DictionaryPanel.Visibility = Visibility.Collapsed;
-            DictWebView.Visibility = Visibility.Collapsed;
+            HideDictionaryWebView(scheduleRelease: true);
             ActionButtons.Visibility = _isHovering ? Visibility.Visible : Visibility.Collapsed;
             ReplaceButton.Visibility = Visibility.Collapsed;
             PlayButton.Visibility = Visibility.Collapsed;
@@ -548,16 +729,22 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             HideErrorPanel();
             PhoneticPanel.Visibility = Visibility.Collapsed;
             DictionaryPanel.Visibility = Visibility.Collapsed;
-            DictWebView.Visibility = Visibility.Collapsed;
+            HideDictionaryWebView(scheduleRelease: true);
             ActionButtons.Visibility = Visibility.Collapsed;
         }
     }
 
-    private void ShowRawHtmlPlainTextFallback(TranslationResult result, Brush? foreground = null)
+    private void ShowRawHtmlPlainTextFallback(
+        TranslationResult result,
+        Brush? foreground = null,
+        bool scheduleWebViewRelease = true)
     {
-        DictWebView.Visibility = Visibility.Collapsed;
-        DictWebView.Height = 0;
+        HideDictionaryWebView(scheduleWebViewRelease);
+        ShowRawHtmlTextOnly(result, foreground);
+    }
 
+    private void ShowRawHtmlTextOnly(TranslationResult result, Brush? foreground = null)
+    {
         ResultText.Text = result.TranslatedText;
         if (foreground != null)
         {
@@ -567,6 +754,134 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         ResultText.Visibility = string.IsNullOrWhiteSpace(ResultText.Text)
             ? Visibility.Collapsed
             : Visibility.Visible;
+    }
+
+    private bool IsCurrentDictionaryWebViewHtml(string rawHtml, string serviceId)
+    {
+        return _dictWebView is not null
+            && string.Equals(_dictWebViewRenderedRawHtml, rawHtml, StringComparison.Ordinal)
+            && string.Equals(_dictWebViewRenderedServiceId, serviceId, StringComparison.Ordinal)
+            && _dictWebViewRenderedTheme == GetEffectiveIconTheme();
+    }
+
+    private WebView2 EnsureDictionaryWebView()
+    {
+        CancelDictionaryWebViewRelease();
+
+        if (_dictWebView is not null)
+        {
+            return _dictWebView;
+        }
+
+        var webView = new WebView2
+        {
+            DefaultBackgroundColor = Microsoft.UI.Colors.Transparent,
+            Visibility = Visibility.Collapsed,
+            Height = 0,
+        };
+        webView.SetValue(Grid.RowProperty, 3);
+
+        DictWebViewHost.Children.Clear();
+        DictWebViewHost.Children.Add(webView);
+        _dictWebView = webView;
+        return webView;
+    }
+
+    private void HideDictionaryWebView(bool scheduleRelease)
+    {
+        DictWebViewHost.Visibility = Visibility.Collapsed;
+        _currentMdxService = null;
+
+        if (_dictWebView is { } webView)
+        {
+            webView.Visibility = Visibility.Collapsed;
+            webView.Height = 0;
+        }
+
+        if (scheduleRelease)
+        {
+            _dictWebViewRenderedRawHtml = null;
+            _dictWebViewRenderedServiceId = null;
+            _dictWebViewRenderedHtmlReady = false;
+            ScheduleDictionaryWebViewRelease();
+        }
+    }
+
+    private void ScheduleDictionaryWebViewRelease()
+    {
+        if (_dictWebView is null)
+        {
+            return;
+        }
+
+        _webViewReleaseTimer ??= DispatcherQueue.CreateTimer();
+        _webViewReleaseTimer.Stop();
+        _webViewReleaseTimer.Interval = TimeSpan.FromSeconds(20);
+        _webViewReleaseTimer.IsRepeating = false;
+        _webViewReleaseTimer.Tick -= OnDictionaryWebViewReleaseTimerTick;
+        _webViewReleaseTimer.Tick += OnDictionaryWebViewReleaseTimerTick;
+        _webViewReleaseTimer.Start();
+    }
+
+    private void CancelDictionaryWebViewRelease()
+    {
+        _webViewReleaseTimer?.Stop();
+    }
+
+    private void OnDictionaryWebViewReleaseTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        ReleaseDictionaryWebView();
+    }
+
+    private void ReleaseDictionaryWebView()
+    {
+        if (_dictWebView is not { } webView)
+        {
+            return;
+        }
+
+        _dictWebViewRenderVersion++;
+
+        try
+        {
+            if (_webViewInitialized && webView.CoreWebView2 != null)
+            {
+                webView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
+                webView.CoreWebView2.WebMessageReceived -= OnDictWebViewWebMessageReceived;
+
+                try
+                {
+                    webView.NavigateToString("<html><body></body></html>");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[ServiceResultItem] WebView2 navigate reset failed: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[ServiceResultItem] WebView2 event detach failed: {ex.Message}");
+        }
+
+        try
+        {
+            webView.Close();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[ServiceResultItem] WebView2 close failed: {ex.Message}");
+        }
+
+        DictWebViewHost.Children.Clear();
+        DictWebViewHost.Visibility = Visibility.Collapsed;
+        _dictWebView = null;
+        _webViewInitialized = false;
+        _currentMdxService = null;
+        _dictWebViewRenderedRawHtml = null;
+        _dictWebViewRenderedServiceId = null;
+        _dictWebViewRenderedHtmlReady = false;
     }
 
     private void HideErrorPanel()
@@ -610,6 +925,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         ResultText.Visibility = Visibility.Collapsed;
         PhoneticPanel.Visibility = Visibility.Collapsed;
         DictionaryPanel.Visibility = Visibility.Collapsed;
+        HideDictionaryWebView(scheduleRelease: true);
 
         // Localize labels
         var loc = LocalizationService.Instance;
@@ -686,10 +1002,31 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// </summary>
     private void UpdatePhonetics(TranslationResult result)
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.UpdatePhonetics");
+
+        var theme = GetEffectiveIconTheme();
+        var deduplicationKey = CreatePhoneticDeduplicationKey(_alreadyShownPhonetics);
+        if (_phoneticsRenderValid
+            && ReferenceEquals(_phoneticsRenderedResult, result)
+            && string.Equals(_phoneticsRenderedDeduplicationKey, deduplicationKey, StringComparison.Ordinal)
+            && _phoneticsRenderedTheme == theme)
+        {
+            PhoneticPanel.Visibility = PhoneticPanel.Children.Count > 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            return;
+        }
+
+        _phoneticsRenderValid = true;
+        _phoneticsRenderedResult = result;
+        _phoneticsRenderedDeduplicationKey = deduplicationKey;
+        _phoneticsRenderedTheme = theme;
+
         // Only show phonetics when target language is English
         // US/UK phonetics are English pronunciation, only meaningful for English translations
         if (result.TargetLanguage != TranslationLanguage.English)
         {
+            PhoneticPanel.Children.Clear();
             PhoneticPanel.Visibility = Visibility.Collapsed;
             return;
         }
@@ -697,6 +1034,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         var phonetics = result.WordResult?.Phonetics;
         if (phonetics == null || phonetics.Count == 0)
         {
+            PhoneticPanel.Children.Clear();
             PhoneticPanel.Visibility = Visibility.Collapsed;
             return;
         }
@@ -728,6 +1066,23 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// </summary>
     private bool UpdateDictionary(TranslationResult result)
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.UpdateDictionary");
+
+        var theme = GetEffectiveIconTheme();
+        if (_dictionaryRenderValid
+            && ReferenceEquals(_dictionaryRenderedResult, result)
+            && _dictionaryRenderedTheme == theme)
+        {
+            DictionaryPanel.Visibility = DictionaryPanel.Children.Count > 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            return _dictionaryRenderedHasDefinitions;
+        }
+
+        _dictionaryRenderValid = true;
+        _dictionaryRenderedResult = result;
+        _dictionaryRenderedTheme = theme;
+
         var definitions = result.WordResult?.Definitions;
         var examples = result.WordResult?.Examples;
         var wordForms = result.WordResult?.WordForms;
@@ -740,7 +1095,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
         if (!hasDefinitions && !hasExamples && !hasWordForms && !hasSynonyms)
         {
+            DictionaryPanel.Children.Clear();
             DictionaryPanel.Visibility = Visibility.Collapsed;
+            _dictionaryRenderedHasDefinitions = false;
             return false;
         }
 
@@ -791,6 +1148,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
 
         DictionaryPanel.Visibility = Visibility.Visible;
+        _dictionaryRenderedHasDefinitions = hasDefinitions;
         return hasDefinitions;
     }
 
@@ -1300,8 +1658,16 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         return FindThemeColor(key);
     }
 
-    private void ApplyServiceChromeForCurrentTheme()
+    private void ApplyServiceChromeForCurrentTheme(bool force = false)
     {
+        var theme = GetEffectiveIconTheme();
+        if (!force && _serviceChromeApplied && _serviceChromeAppliedTheme == theme)
+        {
+            return;
+        }
+
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.ApplyServiceChromeForCurrentTheme");
+
         if (FindServiceChromeColorOrBrush(
                 "ResultViewBackgroundColor",
                 "ResultViewBackgroundBrush") is Brush rootBackground)
@@ -1326,10 +1692,14 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
 
         ApplyHeaderForegroundForCurrentChrome();
+        _serviceChromeApplied = true;
+        _serviceChromeAppliedTheme = theme;
     }
 
     private void ApplyHeaderForegroundForCurrentChrome()
     {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.ApplyHeaderForegroundForCurrentChrome");
+
         var primaryBrush = FindServiceChromeColorOrBrush(
             "ServiceResultHeaderForegroundColor",
             "ServiceResultHeaderForegroundBrush",
@@ -1384,7 +1754,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
 
         // Restore opaque background instead of clearing it to maintain sticky header visibility.
-        ApplyServiceChromeForCurrentTheme();
+        ApplyServiceChromeForCurrentTheme(force: true);
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
     }
 
@@ -1514,24 +1884,32 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     {
         try
         {
-            DictWebView.Height = 1;
-            DictWebView.Visibility = Visibility.Visible;
+            var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultItem.RenderHtmlDefinitionAsync.Start");
+
+            var dictWebView = EnsureDictionaryWebView();
+            _dictWebViewRenderedRawHtml = rawHtml;
+            _dictWebViewRenderedServiceId = serviceId;
+            _dictWebViewRenderedTheme = GetEffectiveIconTheme();
+            _dictWebViewRenderedHtmlReady = false;
+            dictWebView.Height = 1;
+            dictWebView.Visibility = Visibility.Visible;
+            DictWebViewHost.Visibility = Visibility.Visible;
+            hotspot.Dispose();
 
             if (!_webViewInitialized)
             {
-                await DictWebView.EnsureCoreWebView2Async();
+                await dictWebView.EnsureCoreWebView2Async();
                 _webViewInitialized = true;
 
-                DictWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
-                DictWebView.CoreWebView2.Settings.IsScriptEnabled = true;
-                DictWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-                DictWebView.CoreWebView2.Settings.IsWebMessageEnabled = true;
+                dictWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                dictWebView.CoreWebView2.Settings.IsScriptEnabled = true;
+                dictWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+                dictWebView.CoreWebView2.Settings.IsWebMessageEnabled = true;
 
                 // Register resource request filter for MDD resources
-                DictWebView.CoreWebView2.AddWebResourceRequestedFilter("https://dictassets/*", CoreWebView2WebResourceContext.All);
-                DictWebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
-                DictWebView.CoreWebView2.WebMessageReceived += OnDictWebViewWebMessageReceived;
-                DictWebView.NavigationCompleted += OnDictWebViewNavigationCompleted;
+                dictWebView.CoreWebView2.AddWebResourceRequestedFilter("https://dictassets/*", CoreWebView2WebResourceContext.All);
+                dictWebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
+                dictWebView.CoreWebView2.WebMessageReceived += OnDictWebViewWebMessageReceived;
 
                 ConfigureWebViewContentDrag();
             }
@@ -1549,7 +1927,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                     // Map dictionary directory for loose file access (images, CSS on disk)
                     if (!string.IsNullOrEmpty(mdxSvc.DictionaryDirectory) && Directory.Exists(mdxSvc.DictionaryDirectory))
                     {
-                        DictWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                        dictWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                             "dictassets", mdxSvc.DictionaryDirectory,
                             CoreWebView2HostResourceAccessKind.Allow);
                     }
@@ -1686,10 +2064,15 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 </html>
                 """;
 
-            DictWebView.NavigateToString(html);
+            var renderVersion = ++_dictWebViewRenderVersion;
+            dictWebView.NavigateToString(html);
+            _ = ResizeDictionaryWebViewAfterNavigationAsync(dictWebView, renderVersion);
         }
         catch (Exception ex)
         {
+            _dictWebViewRenderedRawHtml = null;
+            _dictWebViewRenderedServiceId = null;
+            _dictWebViewRenderedHtmlReady = false;
             Debug.WriteLine($"[ServiceResultItem] WebView2 rendering failed: {ex.Message}");
             if (_serviceResult?.Result != null)
             {
@@ -1777,25 +2160,25 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
     }
 
-    private async void OnDictWebViewNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    private async Task ResizeDictionaryWebViewAfterNavigationAsync(WebView2 sender, int renderVersion)
     {
-        if (!args.IsSuccess)
-        {
-            Debug.WriteLine($"[ServiceResultItem] WebView2 navigation failed: {args.WebErrorStatus}");
-            if (_serviceResult?.Result != null)
-            {
-                ShowRawHtmlPlainTextFallback(_serviceResult.Result);
-            }
-            return;
-        }
-
         try
         {
             // Let the browser settle the CSS-first overflow normalization before
             // measuring content height for the host ScrollViewer.
             await Task.Delay(50);
 
+            if (renderVersion != _dictWebViewRenderVersion || !ReferenceEquals(sender, _dictWebView))
+            {
+                return;
+            }
+
             var heightStr = await MeasureDictionaryHeightAsync(sender);
+            if (renderVersion != _dictWebViewRenderVersion || !ReferenceEquals(sender, _dictWebView))
+            {
+                return;
+            }
+
             if (int.TryParse(heightStr.Trim('"'), out var height) && height > 0)
             {
                 var targetHeight = height + 8;
@@ -1803,8 +2186,14 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 {
                     sender.DispatcherQueue.TryEnqueue(() =>
                     {
+                        if (renderVersion != _dictWebViewRenderVersion || !ReferenceEquals(sender, _dictWebView))
+                        {
+                            return;
+                        }
+
                         ResultText.Visibility = Visibility.Collapsed;
                         sender.Visibility = Visibility.Visible;
+                        _dictWebViewRenderedHtmlReady = true;
                         if (Math.Abs(sender.Height - targetHeight) > 1)
                         {
                             sender.Height = targetHeight;
@@ -1816,6 +2205,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             }
 
             Debug.WriteLine("[ServiceResultItem] WebView2 measured zero height; falling back to plain text");
+            _dictWebViewRenderedHtmlReady = false;
             if (_serviceResult?.Result != null)
             {
                 ShowRawHtmlPlainTextFallback(_serviceResult.Result);
@@ -1823,7 +2213,8 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[ServiceResultItem] Failed to auto-size WebView2: {ex.Message}");
+            Debug.WriteLine($"[ServiceResultItem] Failed to size WebView2 after navigation: {ex.Message}");
+            _dictWebViewRenderedHtmlReady = false;
             if (_serviceResult?.Result != null)
             {
                 ShowRawHtmlPlainTextFallback(_serviceResult.Result);
@@ -1854,7 +2245,10 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
                 return;
             }
 
-            var hostScrollViewer = ResultContentScrollViewer ?? FindAncestorScrollViewer(DictWebView);
+            var scrollStart = _dictWebView is not null
+                ? (DependencyObject)_dictWebView
+                : DictWebViewHost;
+            var hostScrollViewer = ResultContentScrollViewer ?? FindAncestorScrollViewer(scrollStart);
             TryScrollViewerChain(hostScrollViewer, deltaY);
         }
         catch (Exception ex)

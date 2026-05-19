@@ -40,7 +40,7 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-x64
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-x64 -p:BuildWorkerOutputs=false
 
       - name: Publish WinUI App (x64)
         working-directory: dotnet
@@ -52,6 +52,7 @@ jobs:
             --no-restore `
             --output ./publish/x64 `
             -p:Platform=x64 `
+            -p:BuildWorkerOutputs=false `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
 
@@ -176,6 +177,7 @@ jobs:
           dotnet build tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj `
             --configuration Release `
             -p:Platform=x64 `
+            -p:BuildWorkerOutputs=false `
             -p:WindowsAppSdkAutoInitialize=true
 
       - name: Run WinUI Unit Tests

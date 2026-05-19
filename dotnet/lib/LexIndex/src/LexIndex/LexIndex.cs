@@ -40,16 +40,35 @@ public sealed class LexIndex : ILexIndex
     public static LexIndex Open(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        using var stream = File.OpenRead(path);
-        return Open(stream);
+        var fileInfo = new FileInfo(path);
+        if (fileInfo.Length > int.MaxValue)
+        {
+            throw new InvalidDataException("LexIndex file is too large to load into memory.");
+        }
+
+        var bytes = File.ReadAllBytes(path);
+        return Open(bytes);
     }
 
     public static LexIndex Open(Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
+        if (stream.CanSeek)
+        {
+            var remaining = checked(stream.Length - stream.Position);
+            if (remaining > int.MaxValue)
+            {
+                throw new InvalidDataException("LexIndex stream is too large to load into memory.");
+            }
+
+            var bytes = new byte[(int)remaining];
+            stream.ReadExactly(bytes);
+            return Open(bytes);
+        }
+
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
-        return Open(memory.ToArray());
+        return Open(memory.GetBuffer().AsSpan(0, checked((int)memory.Length)).ToArray());
     }
 
     public IReadOnlyList<string> Complete(string prefix, int limit)

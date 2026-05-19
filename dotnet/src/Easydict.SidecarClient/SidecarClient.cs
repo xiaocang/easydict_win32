@@ -113,7 +113,8 @@ public sealed class SidecarClient : IDisposable, IAsyncDisposable
         string method,
         object? parameters = null,
         int? timeoutMs = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<string>? onRequestId = null)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(SidecarClient));
         if (!IsRunning) throw new SidecarNotRunningException();
@@ -143,14 +144,25 @@ public sealed class SidecarClient : IDisposable, IAsyncDisposable
             {
                 _writeLock.Release();
             }
+            onRequestId?.Invoke(requestId);
 
             var timeout = timeoutMs ?? _options.DefaultTimeoutMs;
+            // timeout <= 0 means "wait indefinitely" — used by long-running operations
+            // like document translation that have their own progress/cancellation channel.
+            if (timeout <= 0)
+            {
+                using (cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken)))
+                {
+                    return await tcs.Task;
+                }
+            }
+
             using var timeoutCts = new CancellationTokenSource(timeout);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
             try
             {
-                await using (linkedCts.Token.Register(() => tcs.TrySetCanceled(linkedCts.Token)))
+                using (linkedCts.Token.Register(() => tcs.TrySetCanceled(linkedCts.Token)))
                 {
                     return await tcs.Task;
                 }
@@ -173,9 +185,10 @@ public sealed class SidecarClient : IDisposable, IAsyncDisposable
         string method,
         object? parameters = null,
         int? timeoutMs = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<string>? onRequestId = null)
     {
-        var response = await SendRequestAsync(method, parameters, timeoutMs, cancellationToken);
+        var response = await SendRequestAsync(method, parameters, timeoutMs, cancellationToken, onRequestId);
 
         if (response.IsError)
             throw new SidecarErrorException(response.Error!);

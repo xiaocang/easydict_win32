@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'UglyToad.PdfPig'">
+    <!-- PdfPig is consumed as a source submodule. Keep third-party nullable/XML-doc
+         warning noise out of Easydict CI while preserving warnings in owned projects. -->
+    <NoWarn>$(NoWarn);CS0618;CS1573;CS1591;CS8600;CS8601;CS8602;CS8604;CS8618;CS8625;CS8767</NoWarn>
+  </PropertyGroup>
+</Project>

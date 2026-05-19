@@ -16,6 +16,7 @@ public class SettingsPageSplitTabsTests
     private static readonly string SettingsPageCodeBehindPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml.cs");
     private static readonly string SettingsPagePhiSilicaPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.PhiSilica.cs");
     private static readonly string SettingsPageFoundryLocalPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.FoundryLocal.cs");
+    private static readonly string AppCodeBehindPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "App.xaml.cs");
     private static readonly string ServiceResultItemXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml");
     private static readonly string ServiceResultItemCodeBehindPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml.cs");
     private static readonly string MainPageCodeBehindPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "MainPage.xaml.cs");
@@ -153,6 +154,27 @@ public class SettingsPageSplitTabsTests
     }
 
     [Fact]
+    public void SettingsPage_TabSwitchingUsesInlineLoadingRing()
+    {
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var onSettingsTabClick = GetMethodBody(codeBehind, "OnSettingsTabClick");
+        var selectSettingsTabAsync = GetMethodBody(codeBehind, "SelectSettingsTabAsync");
+
+        xaml.Should().Contain("x:Name=\"SettingsTabSwitchRing\"");
+        xaml.Should().Contain("<ProgressRing x:Name=\"SettingsTabSwitchRing\"");
+        xaml.Should().Contain("Width=\"20\"");
+        xaml.Should().Contain("Visibility=\"Collapsed\"");
+        xaml.Should().NotContain("x:Name=\"SettingsTabSwitchOverlay\"",
+            "tab switching should show a lightweight inline indicator, not a masking overlay");
+        onSettingsTabClick.Should().Contain("await SelectSettingsTabAsync(tabId, resetScroll: true);");
+        selectSettingsTabAsync.Should().Contain("ShouldShowSettingsTabSwitchProgress(tabId)");
+        selectSettingsTabAsync.Should().Contain("ShowSettingsTabSwitchProgress();");
+        selectSettingsTabAsync.Should().Contain("await Task.Delay(SettingsTabSwitchIndicatorDelayMs)");
+        selectSettingsTabAsync.Should().Contain("HideSettingsTabSwitchProgress();");
+    }
+
+    [Fact]
     public void SettingsPage_DefinesExpectedTopLevelTabsInOrder()
     {
         var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
@@ -200,6 +222,25 @@ public class SettingsPageSplitTabsTests
         codeBehind.Should().NotContain("FindName(nameof(MainTabContent))");
         codeBehind.Should().NotContain("FindName(nameof(MiniTabContent))");
         codeBehind.Should().NotContain("FindName(nameof(FixedTabContent))");
+    }
+
+    [Fact]
+    public void SettingsPage_KeepsDeferredViewsTabLoadedDuringSettingsSession()
+    {
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var initializeSettingsContent = GetMethodBody(codeBehind, "InitializeSettingsContent");
+        var selectSettingsTab = GetMethodBody(codeBehind, "SelectSettingsTab");
+        var teardownOnUnload = GetMethodBody(codeBehind, "TeardownOnUnload");
+
+        codeBehind.Should().Contain("SettingsTabFastSwitchWarmupOrder",
+            "Settings tab contents should be warmed after first paint for fast in-page tab switching");
+        initializeSettingsContent.Should().Contain("QueueSettingsTabWarmup(cancellationToken);",
+            "the warm-up should be scoped to a live SettingsPage instance");
+        selectSettingsTab.Should().Contain("ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;");
+        selectSettingsTab.Should().NotContain("ReleaseViewsTabContent();",
+            "high-frequency tab switches should not rebuild the Views tab after it has been loaded");
+        teardownOnUnload.Should().Contain("ReleaseViewsTabContent();",
+            "leaving SettingsPage should still release lazily loaded tab content");
     }
 
     [Fact]
@@ -538,6 +579,46 @@ public class SettingsPageSplitTabsTests
     }
 
     [Fact]
+    public void SettingsPage_BackNavigationDefersUnloadTeardown()
+    {
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var onPageUnloaded = GetMethodBody(codeBehind, "OnPageUnloaded");
+        var queueTeardown = GetMethodBody(codeBehind, "QueueTeardownOnUnload");
+        var completeTeardown = GetMethodBody(codeBehind, "CompleteTeardownOnUnloadAsync");
+
+        codeBehind.Should().Contain("DeferredUnloadTeardownDelayMs",
+            "SettingsPage should keep the main-window return path responsive before reclaiming tab content");
+        onPageUnloaded.Should().Contain("QueueTeardownOnUnload();");
+        onPageUnloaded.Should().NotContain("        TeardownOnUnload();",
+            "the unload handler should not synchronously walk and clear the full Settings visual tree");
+        queueTeardown.Should().Contain("_lifetimeCts.Cancel();",
+            "queued warm-up/deferred I/O work should stop immediately after navigation starts");
+        completeTeardown.Should().Contain("await Task.Delay(DeferredUnloadTeardownDelayMs)");
+        completeTeardown.Should().Contain("DispatcherQueuePriority.Low");
+        completeTeardown.Should().Contain("TeardownOnUnload();",
+            "the existing release path should still run after the main page has rendered");
+    }
+
+    [Fact]
+    public void MainPage_BackNavigationDefersThemeChromeRefresh()
+    {
+        var mainPage = File.ReadAllText(MainPageCodeBehindPath);
+        var app = File.ReadAllText(AppCodeBehindPath);
+        var onNavigatedTo = GetMethodBody(mainPage, "OnNavigatedTo");
+        var onPageLoaded = GetMethodBody(mainPage, "OnPageLoaded");
+        var onRootFrameNavigated = GetMethodBody(app, "OnRootFrameNavigated");
+
+        mainPage.Should().Contain("QueueApplyThemeChrome",
+            "theme chrome refresh should be coalesced instead of run several times during Settings -> Main navigation");
+        onNavigatedTo.Should().Contain("e.NavigationMode == NavigationMode.Back");
+        onNavigatedTo.Should().Contain("_deferLoadedThemeChrome = true");
+        onNavigatedTo.Should().Contain("DispatcherQueuePriority.Low");
+        onPageLoaded.Should().Contain("_deferLoadedThemeChrome");
+        onPageLoaded.Should().Contain("QueueApplyThemeChrome(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low)");
+        onRootFrameNavigated.Should().Contain("e.NavigationMode == NavigationMode.Back && frame.Content is MainPage");
+    }
+
+    [Fact]
     public void AllLanguages_HaveSettingsTabResources()
     {
         foreach (var languageDir in Directory.GetDirectories(StringsPath))
@@ -580,11 +661,18 @@ public class SettingsPageSplitTabsTests
 
     private static string GetMethodBody(string codeBehind, string methodName)
     {
-        var start = codeBehind.IndexOf($"private void {methodName}", StringComparison.Ordinal);
-        if (start < 0)
+        var prefixes = new[]
         {
-            start = codeBehind.IndexOf($"private async void {methodName}", StringComparison.Ordinal);
-        }
+            "private void",
+            "private async void",
+            "private async Task",
+            "protected override void"
+        };
+        var start = prefixes
+            .Select(prefix => codeBehind.IndexOf($"{prefix} {methodName}(", StringComparison.Ordinal))
+            .Where(index => index >= 0)
+            .DefaultIfEmpty(-1)
+            .Min();
         start.Should().BeGreaterOrEqualTo(0, $"{methodName} should exist");
 
         var braceStart = codeBehind.IndexOf('{', start);

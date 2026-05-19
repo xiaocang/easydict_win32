@@ -202,11 +202,14 @@ internal static class LongDocumentCliCommand
                         // Build lookup from SourceBlockId → source text using the checkpoint
                         // to show a short preview of each failing chunk.
                         var sourceTextByBlockId = new Dictionary<string, string>(StringComparer.Ordinal);
-                        for (var i = 0; i < result.Checkpoint.ChunkMetadata.Count; i++)
+                        if (result.Checkpoint is { } checkpoint)
                         {
-                            var meta = result.Checkpoint.ChunkMetadata[i];
-                            if (i < result.Checkpoint.SourceChunks.Count)
-                                sourceTextByBlockId[meta.SourceBlockId] = result.Checkpoint.SourceChunks[i];
+                            for (var i = 0; i < checkpoint.ChunkMetadata.Count; i++)
+                            {
+                                var meta = checkpoint.ChunkMetadata[i];
+                                if (i < checkpoint.SourceChunks.Count)
+                                    sourceTextByBlockId[meta.SourceBlockId] = checkpoint.SourceChunks[i];
+                            }
                         }
 
                         foreach (var failure in failures

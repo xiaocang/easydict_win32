@@ -6,10 +6,28 @@ namespace Easydict.WinUI.Models;
 /// </summary>
 public sealed class ScreenCaptureResult : IDisposable
 {
+    private OwnedPixelBuffer? _pixelBuffer;
+
     /// <summary>
     /// Raw BGRA8 pixel data of the captured region.
     /// </summary>
-    public byte[] PixelData { get; init; } = [];
+    public ReadOnlyMemory<byte> PixelMemory
+    {
+        get
+        {
+            var pixelBuffer = _pixelBuffer ?? throw new ObjectDisposedException(nameof(ScreenCaptureResult));
+            return pixelBuffer.Memory;
+        }
+    }
+
+    /// <summary>
+    /// Owns the raw BGRA8 pixel data for this capture.
+    /// </summary>
+    public required OwnedPixelBuffer PixelBuffer
+    {
+        get => _pixelBuffer ?? throw new ObjectDisposedException(nameof(ScreenCaptureResult));
+        init => _pixelBuffer = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     /// <summary>
     /// Width of the captured image in physical pixels.
@@ -28,6 +46,7 @@ public sealed class ScreenCaptureResult : IDisposable
 
     public void Dispose()
     {
-        // Currently no unmanaged resources; placeholder for future bitmap handle cleanup.
+        var pixelBuffer = Interlocked.Exchange(ref _pixelBuffer, null);
+        pixelBuffer?.Dispose();
     }
 }

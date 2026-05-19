@@ -4,6 +4,7 @@ using FlaUI.Core.Definitions;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Tools;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -124,7 +125,7 @@ public class SettingsPageTests : IDisposable
 
             _output.WriteLine($"[MemoryLoop] Iteration {i}: opened Settings page. Check Debug Output for [Memory] SettingsPage markers.");
 
-            var backButton = FindTopLeftBackButton(window);
+            var backButton = WaitForBackButton(window, TimeSpan.FromSeconds(15));
             backButton.Should().NotBeNull($"iteration {i}: should find the Settings back button");
             ClickElement(backButton!, $"MemoryLoop.BackButton iteration={i}");
             Thread.Sleep(1200);
@@ -161,12 +162,49 @@ public class SettingsPageTests : IDisposable
             timeout).Result;
     }
 
+    private AutomationElement? WaitForBackButton(Window window, TimeSpan timeout)
+    {
+        return Retry.WhileNull(
+            () => TryFindBackButton(window),
+            timeout).Result;
+    }
+
     private static AutomationElement? TryFindSettingsButton(Window window)
     {
-        return window.FindFirstDescendant(cf => cf.ByAutomationId("SettingsButton"))
-            ?? window.FindFirstDescendant(cf => cf.ByName("SettingsButton"))
-            ?? window.FindFirstDescendant(cf => cf.ByName("Settings"))
-            ?? FindTopRightLikelySettingsButton(window);
+        try
+        {
+            return window.FindFirstDescendant(cf => cf.ByAutomationId("SettingsButton"))
+                ?? window.FindFirstDescendant(cf => cf.ByName("SettingsButton"))
+                ?? window.FindFirstDescendant(cf => cf.ByName("Settings"))
+                ?? FindTopRightLikelySettingsButton(window);
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    private static AutomationElement? TryFindBackButton(Window window)
+    {
+        try
+        {
+            return window.FindFirstDescendant(cf => cf.ByAutomationId("BackButton"))
+                ?? window.FindFirstDescendant(cf => cf.ByName("BackButton"))
+                ?? window.FindFirstDescendant(cf => cf.ByName("Back"))
+                ?? FindTopLeftBackButton(window);
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
     }
 
     private static AutomationElement? FindTopLeftBackButton(Window window)

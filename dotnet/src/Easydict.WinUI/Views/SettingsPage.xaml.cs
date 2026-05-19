@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -150,6 +151,18 @@ public sealed partial class SettingsPage : Page
     private const double PasswordTailHintMaxWidth = 72;
     private const double PasswordTailHintTrailingMargin = 44;
     private const string PasswordTailHintPrefix = "...";
+    private const int SettingsTabSwitchIndicatorDelayMs = 50;
+    private const int SettingsTabSwitchIndicatorFrameDelayMs = 16;
+    private const int DeferredUnloadTeardownDelayMs = 250;
+    private static readonly SettingsTabId[] SettingsTabFastSwitchWarmupOrder =
+    [
+        SettingsTabId.Services,
+        SettingsTabId.Views,
+        SettingsTabId.Hotkeys,
+        SettingsTabId.Advanced,
+        SettingsTabId.Language,
+        SettingsTabId.About
+    ];
     private static readonly (string BrushKey, string ColorKey)[] ScopedThemeResourceBrushes =
     [
         ("ApplicationPageBackgroundThemeBrush", "FloatingWindowBackgroundColor"),
@@ -226,6 +239,10 @@ public sealed partial class SettingsPage : Page
     private bool _isMiniWindowReorderModeEnabled;
     private bool _isFixedWindowReorderModeEnabled;
     private bool _themeChromeRefreshQueued;
+    private bool _settingsTabWarmupQueued;
+    private bool _deferredSettingsIoStarted;
+    private bool _teardownQueued;
+    private int _settingsTabSwitchVersion;
     private readonly Dictionary<PasswordBox, bool> _visiblePasswordBoxes = new();
     private readonly Dictionary<PasswordBox, PasswordTailHint> _passwordTailHints = new();
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
@@ -880,7 +897,7 @@ public sealed partial class SettingsPage : Page
 #endif
     }
 
-    private static bool TryGetLivePage(WeakReference<SettingsPage> pageReference, out SettingsPage? page)
+    private static bool TryGetLivePage(WeakReference<SettingsPage> pageReference, [NotNullWhen(true)] out SettingsPage? page)
     {
         if (pageReference.TryGetTarget(out page) && !page._isUnloaded)
         {
@@ -903,14 +920,103 @@ public sealed partial class SettingsPage : Page
         SelectSettingsTab(SettingsTabId.General, resetScroll: false);
     }
 
-    private void OnSettingsTabClick(object sender, RoutedEventArgs e)
+    private async void OnSettingsTabClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: SettingsTabId tabId })
         {
             return;
         }
 
-        SelectSettingsTab(tabId, resetScroll: true);
+        await SelectSettingsTabAsync(tabId, resetScroll: true);
+    }
+
+    private void OnSettingsTabButtonLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.DataContext is not SettingsTabItem tab)
+        {
+            return;
+        }
+
+        AutomationProperties.SetAutomationId(button, tab.AutomationId);
+        AutomationProperties.SetName(button, tab.Label);
+    }
+
+    private async Task SelectSettingsTabAsync(SettingsTabId tabId, bool resetScroll)
+    {
+        if (_isUnloaded || _isTornDown)
+        {
+            return;
+        }
+
+        var switchVersion = ++_settingsTabSwitchVersion;
+        var showProgress = ShouldShowSettingsTabSwitchProgress(tabId);
+        if (showProgress)
+        {
+            ShowSettingsTabSwitchProgress();
+            var delayMs = RequiresSettingsTabSwitchPreRenderDelay(tabId)
+                ? SettingsTabSwitchIndicatorDelayMs
+                : SettingsTabSwitchIndicatorFrameDelayMs;
+            await Task.Delay(delayMs);
+
+            if (_isUnloaded || _isTornDown || switchVersion != _settingsTabSwitchVersion)
+            {
+                return;
+            }
+        }
+        else
+        {
+            HideSettingsTabSwitchProgress();
+        }
+
+        try
+        {
+            SelectSettingsTab(tabId, resetScroll);
+        }
+        finally
+        {
+            if (showProgress && switchVersion == _settingsTabSwitchVersion)
+            {
+                HideSettingsTabSwitchProgress();
+            }
+        }
+    }
+
+    private bool ShouldShowSettingsTabSwitchProgress(SettingsTabId tabId)
+    {
+        if (!_isInitialized || _settingsTabs.FirstOrDefault(tab => tab.IsSelected)?.Id == tabId)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool RequiresSettingsTabSwitchPreRenderDelay(SettingsTabId tabId)
+    {
+        return !_initializedSettingsTabData.Contains(tabId)
+            || tabId == SettingsTabId.Views && ViewsTabContent == null;
+    }
+
+    private void ShowSettingsTabSwitchProgress()
+    {
+        if (SettingsTabSwitchRing is null)
+        {
+            return;
+        }
+
+        SettingsTabSwitchRing.Visibility = Visibility.Visible;
+        SettingsTabSwitchRing.IsActive = true;
+    }
+
+    private void HideSettingsTabSwitchProgress()
+    {
+        if (SettingsTabSwitchRing is null)
+        {
+            return;
+        }
+
+        SettingsTabSwitchRing.IsActive = false;
+        SettingsTabSwitchRing.Visibility = Visibility.Collapsed;
     }
 
     private void SelectSettingsTab(SettingsTabId tabId, bool resetScroll)
@@ -942,7 +1048,11 @@ public sealed partial class SettingsPage : Page
             MainScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
         }
 
-        ApplyThemeChrome();
+        // Theme chrome is refreshed on actual theme changes (OnActualThemeChanged →
+        // QueueApplyThemeChrome) and when a tab's XAML is first inflated
+        // (EnsureTabContentLoaded above). Visibility-toggle switches reuse the brushes
+        // already assigned on the inflated subtrees, so re-walking the visual tree here
+        // costs ~ms-to-tens-of-ms on the Services tab for no observable change.
     }
 
     private void EnsureTabContentLoaded(SettingsTabId tabId)
@@ -953,8 +1063,39 @@ public sealed partial class SettingsPage : Page
                 FindName(nameof(ViewsTabContent));
                 BindWindowServicePanels();
                 ApplyWindowResultsLocalization(LocalizationService.Instance);
+                // Chrome the newly-inflated subtree — the rest of the page already has
+                // brushes assigned from the initial ctor pass. ApplyThemeChrome walks the
+                // entire visual tree (~thousands of elements on the Services tab), so
+                // confining it to this inflation site avoids paying the cost on every
+                // visibility-toggle switch in SelectSettingsTab below.
+                ApplyThemeChrome();
                 break;
         }
+    }
+
+    private void ReleaseViewsTabContent()
+    {
+        if (ViewsTabContent == null)
+        {
+            return;
+        }
+
+        if (MainWindowServicesPanel != null)
+        {
+            MainWindowServicesPanel.ItemsSource = null;
+        }
+
+        if (MiniWindowServicesPanel != null)
+        {
+            MiniWindowServicesPanel.ItemsSource = null;
+        }
+
+        if (FixedWindowServicesPanel != null)
+        {
+            FixedWindowServicesPanel.ItemsSource = null;
+        }
+
+        UnloadObject(ViewsTabContent);
     }
 
     private bool ShouldLoadSettingsTab(SettingsTabId tabId, bool deferLazyTabData)
@@ -1667,16 +1808,9 @@ public sealed partial class SettingsPage : Page
 #endif
         _isLoading = true;
         InitializeSettingsTabs();
-        var deferLazyTabData = MinimalThemeService.IsActive;
+        var deferLazyTabData = true;
         _initializedSettingsTabData.Clear();
         _initializedSettingsTabData.Add(SettingsTabId.General);
-        if (!deferLazyTabData)
-        {
-            foreach (var tabId in Enum.GetValues<SettingsTabId>())
-            {
-                _initializedSettingsTabData.Add(tabId);
-            }
-        }
 
         // Snapshot original SelectedLanguages for discard/restore
         _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
@@ -1740,6 +1874,8 @@ public sealed partial class SettingsPage : Page
         LogDebugState("InitializeSettingsContent complete");
 #endif
 
+        QueueSettingsTabWarmup(cancellationToken);
+
         // Defer disk I/O (ONNX model check, SQLite cache) to after content is visible
         DispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
@@ -1777,8 +1913,59 @@ public sealed partial class SettingsPage : Page
                 UpdateDeferredIoState("io-dispatched");
                 PerfLog("Deferred I/O: dispatching queued work");
 #endif
+                if (!TryBeginDeferredSettingsIo(cancellationToken))
+                {
+                    return;
+                }
+
                 RunDeferredSettingsIo(cancellationToken);
             });
+    }
+
+    private void QueueSettingsTabWarmup(CancellationToken cancellationToken)
+    {
+        if (_settingsTabWarmupQueued)
+        {
+            return;
+        }
+
+        _settingsTabWarmupQueued = true;
+#if DEBUG
+        PerfLog("Settings tab warm-up: queued");
+#endif
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => WarmNextSettingsTabForFastSwitching(cancellationToken, 0));
+    }
+
+    private void WarmNextSettingsTabForFastSwitching(CancellationToken cancellationToken, int tabIndex)
+    {
+        if (_isUnloaded || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (tabIndex >= SettingsTabFastSwitchWarmupOrder.Length)
+        {
+#if DEBUG
+            PerfLog("Settings tab warm-up: complete");
+#endif
+            return;
+        }
+
+        var tabId = SettingsTabFastSwitchWarmupOrder[tabIndex];
+#if DEBUG
+        PerfLog($"Settings tab warm-up: {tabId}");
+#endif
+        EnsureTabContentLoaded(tabId);
+        if (_isInitialized)
+        {
+            EnsureSettingsTabDataInitialized(tabId);
+        }
+
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => WarmNextSettingsTabForFastSwitching(cancellationToken, tabIndex + 1));
     }
 
     private void QueueDeferredSettingsIo(CancellationToken cancellationToken)
@@ -1792,8 +1979,24 @@ public sealed partial class SettingsPage : Page
                     return;
                 }
 
+                if (!TryBeginDeferredSettingsIo(cancellationToken))
+                {
+                    return;
+                }
+
                 RunDeferredSettingsIo(cancellationToken);
             });
+    }
+
+    private bool TryBeginDeferredSettingsIo(CancellationToken cancellationToken)
+    {
+        if (_deferredSettingsIoStarted || _isUnloaded || cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        _deferredSettingsIoStarted = true;
+        return true;
     }
 
     private void RunDeferredSettingsIo(CancellationToken cancellationToken)
@@ -1818,20 +2021,64 @@ public sealed partial class SettingsPage : Page
     private void OnPageUnloaded(object sender, RoutedEventArgs e)
     {
 #if DEBUG
-        LogDebugState("OnPageUnloaded before teardown");
-        MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded (before teardown)");
-        var baseline = MemoryDiagnostics.GetTotalMemoryForDiagnostics();
+        LogDebugState("OnPageUnloaded queued deferred teardown");
+        MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded (deferred teardown queued)");
 #endif
-        TeardownOnUnload();
+        QueueTeardownOnUnload();
+    }
+
+    private void QueueTeardownOnUnload()
+    {
+        if (_isTornDown || _teardownQueued)
+        {
+            return;
+        }
+
+        _teardownQueued = true;
+        _isUnloaded = true;
+        _isLoading = true;
 #if DEBUG
-        MemoryDiagnostics.LogDelta("SettingsPage.OnPageUnloaded retained after full GC", baseline);
-        MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded (after teardown)");
-        LogDebugState(
-            "OnPageUnloaded after teardown",
-            forceFullCollection: MemoryDiagnostics.ForceFullGcForDiagnostics);
-        ScheduleDelayedLifetimeCheck("OnPageUnloaded delayed full GC (250ms)", 250);
-        ScheduleDelayedLifetimeCheck("OnPageUnloaded delayed full GC (1000ms)", 1000);
+        UpdateDeferredIoState("teardown-queued");
 #endif
+
+        try
+        {
+            _lifetimeCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Ignore if already disposed by shutdown path.
+        }
+
+        // Stop new UI callbacks immediately; release the heavy visual tree after
+        // MainPage has had a chance to present its first frame.
+        this.Loaded -= OnPageLoaded;
+        this.Unloaded -= OnPageUnloaded;
+        this.ActualThemeChanged -= OnActualThemeChanged;
+
+        _ = CompleteTeardownOnUnloadAsync();
+    }
+
+    private async Task CompleteTeardownOnUnloadAsync()
+    {
+        await Task.Delay(DeferredUnloadTeardownDelayMs).ConfigureAwait(false);
+
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () =>
+            {
+#if DEBUG
+                PerfLog("OnPageUnloaded: deferred teardown begin");
+                MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded deferred teardown begin");
+#endif
+                TeardownOnUnload();
+#if DEBUG
+                MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded deferred teardown complete");
+                LogDebugState("OnPageUnloaded deferred teardown complete");
+                ScheduleDelayedLifetimeCheck("OnPageUnloaded delayed full GC (250ms)", 250);
+                ScheduleDelayedLifetimeCheck("OnPageUnloaded delayed full GC (1000ms)", 1000);
+#endif
+            });
     }
 
     private void TeardownOnUnload()
@@ -1869,22 +2116,12 @@ public sealed partial class SettingsPage : Page
         TeardownPhiSilicaPanel();
         TeardownFoundryLocalPanel();
         TeardownOpenVinoPanel();
+        HideSettingsTabSwitchProgress();
 
         try { _currentDialog?.Hide(); } catch (COMException) { }
         _currentDialog = null;
 
-        if (MainWindowServicesPanel != null)
-        {
-            MainWindowServicesPanel.ItemsSource = null;
-        }
-        if (MiniWindowServicesPanel != null)
-        {
-            MiniWindowServicesPanel.ItemsSource = null;
-        }
-        if (FixedWindowServicesPanel != null)
-        {
-            FixedWindowServicesPanel.ItemsSource = null;
-        }
+        ReleaseViewsTabContent();
         LanguageCheckboxGrid.ItemsSource = null;
         SettingsTabsHost.ItemsSource = null;
 
@@ -2797,8 +3034,11 @@ public sealed partial class SettingsPage : Page
             {
                 try
                 {
+                    var mainWindow = App.MainWindow;
+                    if (mainWindow is null) return;
+
                     var path = await Services.Storage.PickerFactory.PickSingleFileAsync(
-                        App.MainWindow,
+                        mainWindow,
                         Services.Storage.PickerFactory.SettingsIdentifiers.MddAdd,
                         new[] { ".mdd" });
                     if (string.IsNullOrWhiteSpace(path)) return;
@@ -3150,8 +3390,11 @@ public sealed partial class SettingsPage : Page
     {
         try
         {
+            var mainWindow = App.MainWindow;
+            if (mainWindow is null) return;
+
             var path = await Services.Storage.PickerFactory.PickSingleFileAsync(
-                App.MainWindow,
+                mainWindow,
                 Services.Storage.PickerFactory.SettingsIdentifiers.MdxImport,
                 new[] { ".mdx" });
             if (string.IsNullOrWhiteSpace(path))
@@ -4772,7 +5015,10 @@ public sealed partial class SettingsPage : Page
                     return;
                 }
 
-                activePage.CacheStatusText.Text = $"{count} cached entries";
+                if (activePage.CacheStatusText is not null)
+                {
+                    activePage.CacheStatusText.Text = $"{count} cached entries";
+                }
 
 #if DEBUG
                 activePage.UpdateDeferredIoState("cache-complete");

@@ -195,6 +195,29 @@ public sealed class SettingsService
     public bool AutoTranslate { get; set; } = false;
 
     /// <summary>
+    /// When true, long-document translation runs in a child worker process
+    /// (Easydict.Workers.LongDoc.exe). Native MuPDF / ONNX heap is reclaimed
+    /// on each job by exiting the worker after completion. On by default
+    /// with in-process fallback on startup/internal worker failures.
+    /// </summary>
+    public bool UseLongDocWorker { get; set; } = true;
+
+    /// <summary>
+    /// When true, local AI translation routes through a child worker process
+    /// (Easydict.Workers.LocalAi.exe) instead of the in-proc LocalAITranslationService.
+    /// On by default to isolate local model native memory; worker startup failures
+    /// fall back to the in-proc LocalAITranslationService.
+    /// </summary>
+    public bool UseLocalAiWorker { get; set; } = true;
+
+    /// <summary>
+    /// When true, Windows Native OCR runs in a short-lived child worker process
+    /// so WinRT OCR/bitmap resources are reclaimed by process exit. API-based OCR
+    /// engines continue to use their existing in-proc HTTP path.
+    /// </summary>
+    public bool UseOcrWorker { get; set; } = true;
+
+    /// <summary>
     /// Enable mouse selection translation: a floating translate button appears
     /// after selecting text in any application. Click the button to translate.
     /// </summary>
@@ -701,6 +724,9 @@ public sealed class SettingsService
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
+        UseLongDocWorker = GetValue(nameof(UseLongDocWorker), true);
+        UseLocalAiWorker = GetValue(nameof(UseLocalAiWorker), true);
+        UseOcrWorker = GetValue(nameof(UseOcrWorker), true);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
         MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
@@ -930,6 +956,9 @@ public sealed class SettingsService
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
+        _settings[nameof(UseLongDocWorker)] = UseLongDocWorker;
+        _settings[nameof(UseLocalAiWorker)] = UseLocalAiWorker;
+        _settings[nameof(UseOcrWorker)] = UseOcrWorker;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
         _settings[nameof(MouseSelectionExcludedApps)] = MouseSelectionExcludedApps;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;

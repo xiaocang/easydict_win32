@@ -16,17 +16,32 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
     private static readonly Regex ScriptStyleRegex = new("<(script|style)[^>]*>[\\s\\S]*?</\\1>", RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
     private static readonly Regex TagRegex = new("<[^>]+>", RegexOptions.Compiled);
     private static readonly Regex LinkRedirectRegex = new(@"^@@@LINK=(.+)", RegexOptions.Compiled);
+    private readonly object _loadLock = new();
     private Func<string, (string KeyText, string? Definition)>? _lookup;
     private Func<IEnumerable<string>>? _enumerateKeys;
     private readonly List<MddDict> _mddDicts = [];
+    private readonly List<string> _pendingMddPaths = [];
+    private string? _regcode;
+    private string? _email;
+    private bool _isEncrypted;
+    private bool _loadAttempted;
+    private bool _loadedEventRaised;
+
+    internal event Action<MdxDictionaryTranslationService>? DictionaryLoaded;
 
     /// <summary>
     /// Creates a service for an MDX dictionary file.
     /// If the dictionary is encrypted and no credentials are provided, the service is created
     /// in an unconfigured state — queries will return a "needs credentials" message.
     /// </summary>
-    public MdxDictionaryTranslationService(string serviceId, string displayName, string filePath,
-        string? regcode = null, string? email = null)
+    public MdxDictionaryTranslationService(
+        string serviceId,
+        string displayName,
+        string filePath,
+        string? regcode = null,
+        string? email = null,
+        bool deferLoad = true,
+        bool? isEncryptedHint = null)
     {
         if (!File.Exists(filePath))
         {
@@ -36,34 +51,13 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
         ServiceId = serviceId;
         DisplayName = displayName;
         FilePath = filePath;
+        _regcode = regcode;
+        _email = email;
+        _isEncrypted = isEncryptedHint == true;
 
-        try
+        if (!deferLoad)
         {
-            var options = new MDictOptions();
-            if (!string.IsNullOrEmpty(regcode) && !string.IsNullOrEmpty(email))
-            {
-                options.Passcode = $"{regcode}\t{email}";
-            }
-
-            var dict = new MdxDict(filePath, options);
-            _lookup = dict.Lookup;
-            _enumerateKeys = dict.EnumerateKeys;
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("credentials required", StringComparison.OrdinalIgnoreCase))
-        {
-            // Encrypted dictionary without valid credentials — register in unconfigured state
-            IsEncrypted = true;
-            _lookup = null;
-            _enumerateKeys = null;
-        }
-        catch (Exception ex) when (
-            !string.IsNullOrEmpty(regcode) &&
-            (ex is InvalidOperationException || ex is FormatException))
-        {
-            // Encrypted dictionary with invalid credentials
-            IsEncrypted = true;
-            _lookup = null;
-            _enumerateKeys = null;
+            EnsureLoaded();
         }
     }
 
@@ -79,6 +73,7 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
         FilePath = filePath;
         _lookup = lookup ?? throw new ArgumentNullException(nameof(lookup));
         _enumerateKeys = enumerateKeys;
+        _loadAttempted = true;
     }
 
     /// <summary>
@@ -93,7 +88,8 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
         ServiceId = serviceId;
         DisplayName = displayName;
         FilePath = filePath;
-        IsEncrypted = isEncrypted;
+        _isEncrypted = isEncrypted;
+        _loadAttempted = true;
         _lookup = isEncrypted ? null : throw new ArgumentException("Use other constructor for non-encrypted dicts");
         _enumerateKeys = null;
     }
@@ -107,13 +103,51 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
     /// <summary>
     /// True if the underlying MDX file uses type-2 encryption (Salsa20/8).
     /// </summary>
-    public bool IsEncrypted { get; }
+    public bool IsEncrypted
+    {
+        get
+        {
+            lock (_loadLock)
+            {
+                return _isEncrypted;
+            }
+        }
+    }
 
     public bool RequiresApiKey => IsEncrypted;
 
-    public bool IsConfigured => _lookup != null;
+    public bool IsConfigured
+    {
+        get
+        {
+            lock (_loadLock)
+            {
+                return _lookup != null || !_isEncrypted || HasCredentials;
+            }
+        }
+    }
 
-    public bool CanEnumerateKeys => _enumerateKeys != null;
+    public bool CanEnumerateKeys
+    {
+        get
+        {
+            lock (_loadLock)
+            {
+                return _enumerateKeys != null;
+            }
+        }
+    }
+
+    internal bool HasAttemptedLoad
+    {
+        get
+        {
+            lock (_loadLock)
+            {
+                return _loadAttempted;
+            }
+        }
+    }
 
     public IReadOnlyList<Language> SupportedLanguages { get; } = Enum.GetValues<Language>();
 
@@ -122,7 +156,16 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
     /// <summary>
     /// Whether any MDD resource files are loaded.
     /// </summary>
-    public bool HasMddResources => _mddDicts.Count > 0;
+    public bool HasMddResources
+    {
+        get
+        {
+            lock (_loadLock)
+            {
+                return _mddDicts.Count > 0 || _pendingMddPaths.Count > 0;
+            }
+        }
+    }
 
     /// <summary>
     /// Directory containing the MDX file (used for virtual host mapping of loose resources).
@@ -165,23 +208,20 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
     /// </summary>
     public void LoadMddFiles(IReadOnlyList<string> mddPaths)
     {
-        foreach (var path in mddPaths)
+        lock (_loadLock)
         {
-            try
+            if (_loadAttempted)
             {
-                if (File.Exists(path))
-                {
-                    _mddDicts.Add(new MddDict(path));
-                    Debug.WriteLine($"[MdxDictionary] Loaded MDD: {path}");
-                }
-                else
-                {
-                    Debug.WriteLine($"[MdxDictionary] MDD file not found: {path}");
-                }
+                LoadMddFilesCore(mddPaths);
+                return;
             }
-            catch (Exception ex)
+
+            foreach (var path in mddPaths)
             {
-                Debug.WriteLine($"[MdxDictionary] Failed to load MDD '{path}': {ex.Message}");
+                if (!_pendingMddPaths.Contains(path, StringComparer.OrdinalIgnoreCase))
+                {
+                    _pendingMddPaths.Add(path);
+                }
             }
         }
     }
@@ -192,6 +232,8 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
     /// </summary>
     public byte[]? LookupResource(string resourceKey)
     {
+        EnsureLoaded();
+
         if (_mddDicts.Count == 0 || string.IsNullOrEmpty(resourceKey))
             return null;
 
@@ -225,23 +267,40 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
     /// </summary>
     public void Configure(string regcode, string email)
     {
-        var options = new MDictOptions
+        bool loaded;
+        lock (_loadLock)
         {
-            Passcode = $"{regcode}\t{email}"
-        };
-        var dict = new MdxDict(FilePath, options);
-        _lookup = dict.Lookup;
-        _enumerateKeys = dict.EnumerateKeys;
+            _regcode = regcode;
+            _email = email;
+            _loadAttempted = false;
+            _lookup = null;
+            _enumerateKeys = null;
+            _isEncrypted = true;
+            loaded = EnsureLoadedCore();
+        }
+
+        if (loaded)
+        {
+            RaiseDictionaryLoaded();
+        }
     }
 
     public IEnumerable<string> EnumerateKeys()
     {
-        if (_enumerateKeys is null)
+        EnsureLoaded();
+
+        Func<IEnumerable<string>>? enumerateKeys;
+        lock (_loadLock)
+        {
+            enumerateKeys = _enumerateKeys;
+        }
+
+        if (enumerateKeys is null)
         {
             throw new InvalidOperationException("Dictionary keys are not available until the dictionary is configured.");
         }
 
-        return _enumerateKeys();
+        return enumerateKeys();
     }
 
     public async Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default)
@@ -269,6 +328,20 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
             {
                 ErrorCode = TranslationErrorCode.Unknown,
                 ServiceId = ServiceId
+            };
+        }
+
+        if (!EnsureLoaded())
+        {
+            return new TranslationResult
+            {
+                OriginalText = request.Text,
+                TranslatedText = string.Empty,
+                TargetLanguage = request.ToLanguage,
+                DetectedLanguage = request.FromLanguage,
+                ServiceName = DisplayName,
+                ResultKind = TranslationResultKind.NoResult,
+                InfoMessage = "🔒 This dictionary is encrypted. Please configure credentials in Settings → Service Configuration."
             };
         }
 
@@ -323,10 +396,16 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
     /// </summary>
     private string? ResolveDefinition(string query, int maxHops = 5)
     {
+        Func<string, (string KeyText, string? Definition)> lookup;
+        lock (_loadLock)
+        {
+            lookup = _lookup ?? throw new InvalidOperationException("Dictionary is not configured.");
+        }
+
         var current = query;
         for (int i = 0; i < maxHops; i++)
         {
-            var entry = _lookup!(current);
+            var entry = lookup(current);
             var definition = entry.Definition;
             if (string.IsNullOrWhiteSpace(definition))
                 return null;
@@ -343,6 +422,112 @@ public sealed class MdxDictionaryTranslationService : ITranslationService
 
         Debug.WriteLine($"[MdxDictionary] Too many @@@LINK redirections for '{query}'");
         return null;
+    }
+
+    private bool EnsureLoaded()
+    {
+        bool loaded;
+        lock (_loadLock)
+        {
+            loaded = EnsureLoadedCore();
+        }
+
+        if (loaded)
+        {
+            RaiseDictionaryLoaded();
+        }
+
+        return loaded;
+    }
+
+    private bool EnsureLoadedCore()
+    {
+        if (_lookup != null)
+        {
+            return true;
+        }
+
+        if (_loadAttempted && _isEncrypted)
+        {
+            return false;
+        }
+
+        _loadAttempted = true;
+
+        try
+        {
+            var options = new MDictOptions();
+            if (HasCredentials)
+            {
+                options.Passcode = $"{_regcode}\t{_email}";
+            }
+
+            var dict = new MdxDict(FilePath, options);
+            _lookup = dict.Lookup;
+            _enumerateKeys = dict.EnumerateKeys;
+            LoadMddFilesCore(_pendingMddPaths);
+            _pendingMddPaths.Clear();
+            return true;
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("credentials required", StringComparison.OrdinalIgnoreCase))
+        {
+            _isEncrypted = true;
+            _lookup = null;
+            _enumerateKeys = null;
+            return false;
+        }
+        catch (Exception ex) when (
+            HasCredentials &&
+            (ex is InvalidOperationException || ex is FormatException))
+        {
+            _isEncrypted = true;
+            _lookup = null;
+            _enumerateKeys = null;
+            return false;
+        }
+    }
+
+    private bool HasCredentials =>
+        !string.IsNullOrEmpty(_regcode) && !string.IsNullOrEmpty(_email);
+
+    private void LoadMddFilesCore(IReadOnlyList<string> mddPaths)
+    {
+        foreach (var path in mddPaths)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    _mddDicts.Add(new MddDict(path));
+                    Debug.WriteLine($"[MdxDictionary] Loaded MDD: {path}");
+                }
+                else
+                {
+                    Debug.WriteLine($"[MdxDictionary] MDD file not found: {path}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MdxDictionary] Failed to load MDD '{path}': {ex.Message}");
+            }
+        }
+    }
+
+    private void RaiseDictionaryLoaded()
+    {
+        Action<MdxDictionaryTranslationService>? handler;
+        lock (_loadLock)
+        {
+            if (_loadedEventRaised || _enumerateKeys is null)
+            {
+                return;
+            }
+
+            _loadedEventRaised = true;
+            handler = DictionaryLoaded;
+        }
+
+        handler?.Invoke(this);
     }
 
     internal static string ToReadableText(string html)

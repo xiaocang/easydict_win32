@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -6,6 +8,7 @@ using Easydict.UIAutomation.Tests.Infrastructure;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
+using FlaUI.Core.WindowsAPI;
 using FluentAssertions;
 using Microsoft.Win32;
 using Xunit;
@@ -31,6 +34,16 @@ public sealed class ThemeContrastTests : IDisposable
         new("dark", false, "light", "Light", 1, true),
         new("dark", false, "dark", "Dark", 2, false)
     ];
+    public static IEnumerable<object[]> LongDocServiceDropdownThemeMatrixCases =>
+        ThemeMatrixCases.Select(testCase => new object[]
+        {
+            testCase.OsSlug,
+            testCase.WindowsLight,
+            testCase.AppSlug,
+            testCase.AppTheme,
+            testCase.ThemeIndex,
+            testCase.ExpectedLight
+        });
     private static readonly SettingsTabScreenshot[] ThemeMatrixSettingsTabs =
     [
         new(
@@ -49,7 +62,9 @@ public sealed class ThemeContrastTests : IDisposable
     private readonly ITestOutputHelper _output;
     private readonly Dictionary<string, int?> _originalThemeValues = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string?> _settingsSnapshots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<ThemeMatrixMemorySample> _themeMatrixMemorySamples = [];
     private AppLauncher? _launcher;
+    private string? _themeMatrixMemoryCsvPath;
 
     public ThemeContrastTests(ITestOutputHelper output)
     {
@@ -69,7 +84,7 @@ public sealed class ThemeContrastTests : IDisposable
         Thread.Sleep(2000);
 
         var themeCombo = FindAppThemeCombo(window);
-        SelectThemeComboItem(themeCombo, themeIndex: 1);
+        SelectThemeComboItem(themeCombo, "Light", themeIndex: 1);
 
         WaitForPersistedAppTheme("Light", TimeSpan.FromSeconds(5))
             .Should().Be("Light", "explicit Light must persist before screenshot validation");
@@ -130,7 +145,7 @@ public sealed class ThemeContrastTests : IDisposable
         Thread.Sleep(2000);
 
         var themeCombo = FindAppThemeCombo(window);
-        SelectThemeComboItem(themeCombo, themeIndex: 1);
+        SelectThemeComboItem(themeCombo, "Light", themeIndex: 1);
 
         WaitForPersistedAppTheme("Light", TimeSpan.FromSeconds(5))
             .Should().Be("Light", "explicit Light must persist before main-window screenshot validation");
@@ -148,11 +163,43 @@ public sealed class ThemeContrastTests : IDisposable
         AssertMainLightPalette(window, path);
     }
 
+    [Theory]
+    [MemberData(nameof(LongDocServiceDropdownThemeMatrixCases))]
+    public void LongDocServiceCombo_ThemeMatrix_ShouldRenderUnavailableServicesInDropdown(
+        string osSlug,
+        bool windowsLight,
+        string appSlug,
+        string appTheme,
+        int themeIndex,
+        bool expectedLight)
+    {
+        var testCase = new ThemeMatrixCase(
+            osSlug,
+            windowsLight,
+            appSlug,
+            appTheme,
+            themeIndex,
+            expectedLight);
+
+        SnapshotAndSetPersistedAppTheme(testCase.AppTheme);
+        ClearPersistedServiceTestStatus();
+        ForceWindowsTheme(testCase.WindowsLight);
+
+        _launcher = new AppLauncher();
+        _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+
+        var window = _launcher.GetMainWindow();
+        WaitForMainPage(window);
+        CaptureThemeMatrixLongDocServiceDropdown(window, testCase);
+    }
+
     [Fact]
     public void ThemeMatrix_LightAndDarkAppThemes_OnLightAndDarkWindowsThemes_ShouldCaptureNamedScreenshots()
     {
         var previousOutputDir = ScreenshotHelper.OutputDir;
         ScreenshotHelper.OutputDir = PrepareThemeMatrixScreenshotDirectory();
+        _themeMatrixMemoryCsvPath = PrepareThemeMatrixMemoryCsv(ScreenshotHelper.OutputDir);
+        _themeMatrixMemorySamples.Clear();
 
         try
         {
@@ -160,10 +207,13 @@ public sealed class ThemeContrastTests : IDisposable
             {
                 CaptureThemeMatrixCase(testCase);
             }
+
+            EmitThemeMatrixMemorySummary();
         }
         finally
         {
             ScreenshotHelper.OutputDir = previousOutputDir;
+            _themeMatrixMemoryCsvPath = null;
         }
     }
 
@@ -183,9 +233,10 @@ public sealed class ThemeContrastTests : IDisposable
 
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
+        CaptureThemeMatrixMemory(testCase, "after-launch");
 
         var themeCombo = FindAppThemeCombo(window);
-        SelectThemeComboItem(themeCombo, testCase.ThemeIndex);
+        SelectThemeComboItem(themeCombo, testCase.AppTheme, testCase.ThemeIndex);
 
         WaitForPersistedAppTheme(testCase.AppTheme, TimeSpan.FromSeconds(5))
             .Should().Be(
@@ -193,10 +244,13 @@ public sealed class ThemeContrastTests : IDisposable
                 "the app theme must persist before theme-matrix screenshots are captured");
 
         Thread.Sleep(1200);
+        CaptureThemeMatrixMemory(testCase, "after-theme-select");
         CaptureThemeMatrixSettingsGeneral(window, testCase);
+        CaptureThemeMatrixMemory(testCase, "after-settings-general");
         foreach (var tab in ThemeMatrixSettingsTabs)
         {
             CaptureThemeMatrixSettingsTab(window, testCase, tab);
+            CaptureThemeMatrixMemory(testCase, $"after-{tab.PageSlug}");
         }
 
         NavigateBackToMain(window);
@@ -208,9 +262,72 @@ public sealed class ThemeContrastTests : IDisposable
             $"{testCase.ScreenshotPrefix}_page-main");
         _output.WriteLine($"Theme matrix main screenshot saved: {mainPath}");
         AssertMainPalette(window, mainPath, testCase.ExpectedLight);
+        CaptureThemeMatrixMemory(testCase, "after-main");
 
         _launcher.Dispose();
         _launcher = null;
+    }
+
+    private void CaptureThemeMatrixLongDocServiceDropdown(
+        Window window,
+        ThemeMatrixCase testCase)
+    {
+        SwitchToLongDocumentMode(window);
+        PrepareLongDocDropdownWindowForScreenshot(window);
+
+        var combo = FindRequired(window, "LongDocServiceCombo").AsComboBox();
+        combo.Should().NotBeNull("LongDocServiceCombo must be available in Long Document mode");
+
+        combo!.Expand();
+        Thread.Sleep(1000);
+
+        try
+        {
+            var unavailableItem = FindVisibleComboItem(combo, "OpenAI")
+                ?? FindVisibleComboItem(combo, "Windows Local AI")
+                ?? FindVisibleComboItem(combo, "DeepSeek");
+            unavailableItem.Should().NotBeNull("at least one known unavailable long-doc service must be visible in the expanded dropdown");
+
+            var path = ScreenshotHelper.CaptureScreen(
+                $"{testCase.ScreenshotPrefix}_page-longdoc-service-dropdown");
+            _output.WriteLine($"Theme matrix Long Doc service dropdown screenshot saved: {path}");
+
+            using var bitmap = new Bitmap(path);
+            var dpiScale = ScreenshotHelper.GetWindowDpiScale(window);
+            AssertElementRelativeRegionMatchesForegroundPalette(
+                $"Long Doc unavailable service item '{unavailableItem!.Name}'",
+                unavailableItem!,
+                bitmap,
+                Rectangle.Empty,
+                dpiScale,
+                relativeX: 0.06,
+                relativeY: 0.18,
+                relativeWidth: 0.46,
+                relativeHeight: 0.64,
+                expectedLight: testCase.ExpectedLight,
+                minForegroundPixelRatio: 0.015);
+
+            var selectedItem = FindSelectedVisibleComboItem(combo)
+                ?? FindVisibleComboItem(combo, "Windows Local AI");
+            selectedItem.Should().NotBeNull("the expanded Long Doc service dropdown must expose the selected service item");
+
+            AssertElementRelativeRegionMatchesForegroundPalette(
+                $"Long Doc selected service item '{selectedItem!.Name}'",
+                selectedItem!,
+                bitmap,
+                Rectangle.Empty,
+                dpiScale,
+                relativeX: 0.06,
+                relativeY: 0.18,
+                relativeWidth: 0.46,
+                relativeHeight: 0.64,
+                expectedLight: testCase.ExpectedLight,
+                minForegroundPixelRatio: 0.015);
+        }
+        finally
+        {
+            combo.Collapse();
+        }
     }
 
     private void CaptureThemeMatrixSettingsGeneral(Window window, ThemeMatrixCase testCase)
@@ -333,8 +450,9 @@ public sealed class ThemeContrastTests : IDisposable
         }
     }
 
-    private void SelectThemeComboItem(ComboBox themeCombo, int themeIndex)
+    private void SelectThemeComboItem(ComboBox themeCombo, string themeName, int themeIndex)
     {
+        themeCombo.Focus();
         themeCombo.Expand();
         Thread.Sleep(500);
 
@@ -342,8 +460,11 @@ public sealed class ThemeContrastTests : IDisposable
         _output.WriteLine(
             $"AppThemeCombo exposed {items.Length} item(s): {string.Join(", ", items.Select(i => $"'{i.Name}'"))}");
 
-        items.Length.Should().BeGreaterThan(themeIndex, "Light theme item must be available at index 1");
-        items[themeIndex].Click();
+        items.Length.Should().BeGreaterThan(themeIndex, "requested theme item must be available");
+        Keyboard.Type(themeName[..1]);
+        Thread.Sleep(200);
+        Keyboard.Press(VirtualKeyShort.ENTER);
+        Thread.Sleep(500);
     }
 
     private void PrepareSettingsWindowForScreenshot(Window window)
@@ -478,6 +599,15 @@ public sealed class ThemeContrastTests : IDisposable
         Thread.Sleep(500);
     }
 
+    private void PrepareLongDocDropdownWindowForScreenshot(Window window)
+    {
+        ScreenshotHelper.TrySetWindowPhysicalBounds(window, new Rectangle(-400, 0, 1200, 900));
+        Thread.Sleep(500);
+        window.SetForeground();
+        MovePointerAwayFromTabs(window);
+        Thread.Sleep(500);
+    }
+
     private static void MovePointerAwayFromTabs(Window window)
     {
         try
@@ -535,6 +665,90 @@ public sealed class ThemeContrastTests : IDisposable
 
         settingsButton.Should().NotBeNull("SettingsButton must be visible on the main page before screenshot validation");
         Thread.Sleep(700);
+    }
+
+    private void SwitchToLongDocumentMode(Window window)
+    {
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var modeButton = Retry.WhileNull(
+                () => window.FindFirstDescendant(cf => cf.ByAutomationId("ModeMenuButton")),
+                TimeSpan.FromSeconds(5)).Result;
+            modeButton.Should().NotBeNull("mode selector button must be visible before switching to Long Document");
+
+            InvokeOrClick(modeButton!);
+            Thread.Sleep(800);
+
+            var longDocItem = Retry.WhileNull(
+                () => FindByAutomationIdOrName(window, "ModeLongDocItem", "Long Document"),
+                TimeSpan.FromSeconds(5)).Result;
+
+            if (longDocItem is null)
+            {
+                _output.WriteLine($"Attempt {attempt}: ModeLongDocItem did not appear in the mode flyout");
+                Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
+                Thread.Sleep(300);
+                continue;
+            }
+
+            InvokeOrClick(longDocItem);
+
+            var serviceCombo = Retry.WhileNull(
+                () => window.FindFirstDescendant(cf => cf.ByAutomationId("LongDocServiceCombo")),
+                TimeSpan.FromSeconds(8)).Result;
+            if (serviceCombo is not null)
+            {
+                Thread.Sleep(1000);
+                return;
+            }
+
+            _output.WriteLine($"Attempt {attempt}: clicked Long Document mode but service combo did not appear");
+            Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
+            Thread.Sleep(300);
+        }
+
+        FindRequired(window, "LongDocServiceCombo");
+    }
+
+    private static AutomationElement? FindByAutomationIdOrName(
+        Window window,
+        string automationId,
+        string fallbackName)
+    {
+        return window.FindFirstDescendant(cf => cf.ByAutomationId(automationId))
+            ?? window.FindFirstDescendant(cf => cf.ByName(fallbackName));
+    }
+
+    private AutomationElement? FindVisibleComboItem(ComboBox combo, string itemName)
+    {
+        var item = Retry.WhileNull(
+            () => combo.Items.FirstOrDefault(item =>
+                string.Equals(item.Name, itemName, StringComparison.OrdinalIgnoreCase)
+                && !item.IsOffscreen),
+            TimeSpan.FromSeconds(5)).Result;
+
+        if (item is null)
+        {
+            _output.WriteLine($"Visible combo item not found: {itemName}");
+        }
+
+        return item;
+    }
+
+    private AutomationElement? FindSelectedVisibleComboItem(ComboBox combo)
+    {
+        var item = Retry.WhileNull(
+            () => combo.Items.FirstOrDefault(item =>
+                !item.IsOffscreen
+                && item.Patterns.SelectionItem.PatternOrDefault?.IsSelected.Value == true),
+            TimeSpan.FromSeconds(5)).Result;
+
+        if (item is null)
+        {
+            _output.WriteLine("Visible selected combo item not found");
+        }
+
+        return item;
     }
 
     private void DismissUnsavedChangesDialog(Window window)
@@ -820,6 +1034,57 @@ public sealed class ThemeContrastTests : IDisposable
             $"{label} must use the explicit Dark palette");
     }
 
+    private void AssertElementRelativeRegionMatchesForegroundPalette(
+        string label,
+        AutomationElement element,
+        Bitmap bitmap,
+        Rectangle windowBounds,
+        double dpiScale,
+        double relativeX,
+        double relativeY,
+        double relativeWidth,
+        double relativeHeight,
+        bool expectedLight,
+        double minForegroundPixelRatio)
+    {
+        var elementRect = ToScreenshotPixelRect(bitmap, element.BoundingRectangle, windowBounds, dpiScale);
+        var sampleRect = ToRelativeSampleRect(
+            bitmap,
+            elementRect,
+            relativeX,
+            relativeY,
+            relativeWidth,
+            relativeHeight);
+
+        var foregroundPixels = 0;
+        var count = 0;
+        for (var y = sampleRect.Top; y < sampleRect.Bottom; y++)
+        {
+            for (var x = sampleRect.Left; x < sampleRect.Right; x++)
+            {
+                var color = bitmap.GetPixel(x, y);
+                var brightness = (0.299 * color.R) + (0.587 * color.G) + (0.114 * color.B);
+                var isForegroundPixel = expectedLight
+                    ? brightness < 130
+                    : brightness > 170;
+                if (isForegroundPixel)
+                {
+                    foregroundPixels++;
+                }
+
+                count++;
+            }
+        }
+
+        var ratio = count == 0 ? 0 : foregroundPixels / (double)count;
+        _output.WriteLine(
+            $"{label}: element={elementRect}, sample={sampleRect}, foreground-pixel ratio={ratio:0.000}, expected={(expectedLight ? "Light" : "Dark")}");
+
+        ratio.Should().BeGreaterThan(
+            minForegroundPixelRatio,
+            $"{label} must render readable foreground text on the explicit {(expectedLight ? "Light" : "Dark")} dropdown");
+    }
+
     private void AssertElementRegionHasDarkPixels(
         string label,
         AutomationElement element,
@@ -981,6 +1246,31 @@ public sealed class ThemeContrastTests : IDisposable
         }
     }
 
+    private void ClearPersistedServiceTestStatus()
+    {
+        var candidates = GetSettingsFileCandidates()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var path in candidates)
+        {
+            if (!_settingsSnapshots.ContainsKey(path))
+            {
+                _settingsSnapshots[path] = File.Exists(path) ? File.ReadAllText(path) : null;
+            }
+
+            if (File.Exists(path))
+            {
+                WriteEmptyServiceTestStatus(path);
+            }
+        }
+
+        if (candidates.LastOrDefault() is { } localSettingsPath)
+        {
+            WriteEmptyServiceTestStatus(localSettingsPath);
+        }
+    }
+
     private static void WriteAppTheme(string path, string theme)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -996,6 +1286,24 @@ public sealed class ThemeContrastTests : IDisposable
         }
 
         root["AppTheme"] = theme;
+        File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static void WriteEmptyServiceTestStatus(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        JsonNode root;
+        try
+        {
+            root = JsonNode.Parse(File.ReadAllText(path)) ?? new JsonObject();
+        }
+        catch
+        {
+            root = new JsonObject();
+        }
+
+        root["ServiceTestStatus"] = new JsonObject();
         File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
@@ -1128,6 +1436,107 @@ public sealed class ThemeContrastTests : IDisposable
 
         return outputDir;
     }
+
+    private static string PrepareThemeMatrixMemoryCsv(string outputDir)
+    {
+        var path = Path.Combine(outputDir, $"{ThemeContrastScreenshotFilePrefix}_memory.csv");
+        File.WriteAllText(
+            path,
+            "timestampUtc,case,marker,pid,workingSetMb,privateMb,pagedMb" + Environment.NewLine);
+        return path;
+    }
+
+    private ThemeMatrixMemorySample? CaptureThemeMatrixMemory(ThemeMatrixCase testCase, string marker)
+    {
+        if (_launcher is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var pid = _launcher.Application.ProcessId;
+            using var process = Process.GetProcessById(pid);
+            process.Refresh();
+
+            var sample = new ThemeMatrixMemorySample(
+                TimestampUtc: DateTimeOffset.UtcNow,
+                CaseSlug: $"{testCase.OsSlug}/{testCase.AppSlug}",
+                Marker: marker,
+                ProcessId: pid,
+                WorkingSetMb: ToMb(process.WorkingSet64),
+                PrivateMb: ToMb(process.PrivateMemorySize64),
+                PagedMb: ToMb(process.PagedMemorySize64));
+
+            _themeMatrixMemorySamples.Add(sample);
+            AppendThemeMatrixMemorySample(sample);
+            _output.WriteLine(
+                $"[ThemeMatrix][Memory][{sample.CaseSlug}][{marker}] PID={pid} " +
+                $"WS={sample.WorkingSetMb:F1}MB Private={sample.PrivateMb:F1}MB Paged={sample.PagedMb:F1}MB");
+
+            return sample;
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"[ThemeMatrix][Memory][{testCase.OsSlug}/{testCase.AppSlug}][{marker}] Failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private void AppendThemeMatrixMemorySample(ThemeMatrixMemorySample sample)
+    {
+        if (string.IsNullOrWhiteSpace(_themeMatrixMemoryCsvPath))
+        {
+            return;
+        }
+
+        File.AppendAllText(
+            _themeMatrixMemoryCsvPath,
+            string.Join(
+                ',',
+                sample.TimestampUtc.ToString("O", CultureInfo.InvariantCulture),
+                Csv(sample.CaseSlug),
+                Csv(sample.Marker),
+                sample.ProcessId.ToString(CultureInfo.InvariantCulture),
+                FormatMb(sample.WorkingSetMb),
+                FormatMb(sample.PrivateMb),
+                FormatMb(sample.PagedMb)) + Environment.NewLine);
+    }
+
+    private void EmitThemeMatrixMemorySummary()
+    {
+        if (_themeMatrixMemorySamples.Count == 0)
+        {
+            _output.WriteLine("[ThemeMatrix][Memory] Summary unavailable; no process samples were captured.");
+            return;
+        }
+
+        _output.WriteLine($"[ThemeMatrix][Memory] Samples written to: {_themeMatrixMemoryCsvPath}");
+
+        foreach (var group in _themeMatrixMemorySamples.GroupBy(sample => sample.CaseSlug))
+        {
+            var samples = group.ToArray();
+            var first = samples[0];
+            var last = samples[^1];
+            var peakWorkingSet = samples.Max(sample => sample.WorkingSetMb);
+            var peakPrivate = samples.Max(sample => sample.PrivateMb);
+            var workingSetDelta = last.WorkingSetMb - first.WorkingSetMb;
+            var privateDelta = last.PrivateMb - first.PrivateMb;
+
+            _output.WriteLine(
+                $"[ThemeMatrix][Memory][{group.Key}] Summary: " +
+                $"FirstWS={first.WorkingSetMb:F1}MB LastWS={last.WorkingSetMb:F1}MB " +
+                $"PeakWS={peakWorkingSet:F1}MB DeltaWS={workingSetDelta:+0.0;-0.0;0.0}MB " +
+                $"FirstPrivate={first.PrivateMb:F1}MB LastPrivate={last.PrivateMb:F1}MB " +
+                $"PeakPrivate={peakPrivate:F1}MB DeltaPrivate={privateDelta:+0.0;-0.0;0.0}MB");
+        }
+    }
+
+    private static string Csv(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
+
+    private static string FormatMb(double value) => value.ToString("F1", CultureInfo.InvariantCulture);
+
+    private static double ToMb(long bytes) => bytes / 1024d / 1024d;
 
     private static string FindRepositoryRoot()
     {
@@ -1274,6 +1683,15 @@ public sealed class ThemeContrastTests : IDisposable
         string Label,
         string? ExpanderAutomationId = null,
         double? InitialScrollPercent = null);
+
+    private readonly record struct ThemeMatrixMemorySample(
+        DateTimeOffset TimestampUtc,
+        string CaseSlug,
+        string Marker,
+        int ProcessId,
+        double WorkingSetMb,
+        double PrivateMb,
+        double PagedMb);
 
     private readonly record struct PaletteSample(
         double R,

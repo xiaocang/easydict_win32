@@ -1,7 +1,9 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Easydict.TranslationService.LongDocument;
 
 namespace Easydict.WinUI.Services;
 
@@ -58,7 +60,7 @@ public sealed class VisionLayoutDetectionService
     /// <param name="ct">Cancellation token.</param>
     /// <returns>List of detected layout regions.</returns>
     public async Task<List<LayoutDetection>> DetectAsync(
-        byte[] imagePixels,
+        ReadOnlyMemory<byte> imagePixels,
         int width,
         int height,
         string endpoint,
@@ -185,47 +187,63 @@ public sealed class VisionLayoutDetectionService
     /// Convert BGRA8 pixel data to a base64-encoded BMP string.
     /// Uses a simple uncompressed BMP → base64 approach for portability.
     /// </summary>
-    private static string ConvertBgraToBase64Bmp(byte[] bgra, int width, int height)
+    private static string ConvertBgraToBase64Bmp(ReadOnlyMemory<byte> bgraMemory, int width, int height)
     {
+        var bgra = bgraMemory.Span;
         // Create a BMP file in memory (simpler than PNG, widely supported by vision APIs)
         var bmpHeaderSize = 54;
         var rowStride = ((width * 3 + 3) / 4) * 4; // BMP rows are 4-byte aligned
         var imageDataSize = rowStride * height;
         var bmpSize = bmpHeaderSize + imageDataSize;
 
-        var bmp = new byte[bmpSize];
-
-        // BMP file header
-        bmp[0] = 0x42; bmp[1] = 0x4D; // 'BM'
-        BitConverter.GetBytes(bmpSize).CopyTo(bmp, 2);
-        BitConverter.GetBytes(bmpHeaderSize).CopyTo(bmp, 10);
-
-        // DIB header (BITMAPINFOHEADER)
-        BitConverter.GetBytes(40).CopyTo(bmp, 14); // header size
-        BitConverter.GetBytes(width).CopyTo(bmp, 18);
-        BitConverter.GetBytes(height).CopyTo(bmp, 22); // positive = bottom-up
-        BitConverter.GetBytes((short)1).CopyTo(bmp, 26); // planes
-        BitConverter.GetBytes((short)24).CopyTo(bmp, 28); // bpp
-        BitConverter.GetBytes(imageDataSize).CopyTo(bmp, 34);
-
-        // Pixel data (BGRA8 → BGR24, bottom-up)
-        for (var y = 0; y < height; y++)
+        var bmp = ArrayPool<byte>.Shared.Rent(bmpSize);
+        try
         {
-            var srcRow = y * width * 4;
-            var dstRow = bmpHeaderSize + (height - 1 - y) * rowStride;
-            for (var x = 0; x < width; x++)
+            bmp.AsSpan(0, bmpHeaderSize).Clear();
+
+            // BMP file header
+            bmp[0] = 0x42; bmp[1] = 0x4D; // 'BM'
+            BitConverter.GetBytes(bmpSize).CopyTo(bmp, 2);
+            BitConverter.GetBytes(bmpHeaderSize).CopyTo(bmp, 10);
+
+            // DIB header (BITMAPINFOHEADER)
+            BitConverter.GetBytes(40).CopyTo(bmp, 14); // header size
+            BitConverter.GetBytes(width).CopyTo(bmp, 18);
+            BitConverter.GetBytes(height).CopyTo(bmp, 22); // positive = bottom-up
+            BitConverter.GetBytes((short)1).CopyTo(bmp, 26); // planes
+            BitConverter.GetBytes((short)24).CopyTo(bmp, 28); // bpp
+            BitConverter.GetBytes(imageDataSize).CopyTo(bmp, 34);
+
+            // Pixel data (BGRA8 → BGR24, bottom-up)
+            for (var y = 0; y < height; y++)
             {
-                var srcIdx = srcRow + x * 4;
-                var dstIdx = dstRow + x * 3;
-                if (srcIdx + 2 < bgra.Length && dstIdx + 2 < bmp.Length)
+                var srcRow = y * width * 4;
+                var dstRow = bmpHeaderSize + (height - 1 - y) * rowStride;
+                var paddingStart = dstRow + width * 3;
+                var paddingLength = rowStride - width * 3;
+                if (paddingLength > 0)
                 {
-                    bmp[dstIdx] = bgra[srcIdx];         // B
-                    bmp[dstIdx + 1] = bgra[srcIdx + 1]; // G
-                    bmp[dstIdx + 2] = bgra[srcIdx + 2]; // R
+                    bmp.AsSpan(paddingStart, paddingLength).Clear();
+                }
+
+                for (var x = 0; x < width; x++)
+                {
+                    var srcIdx = srcRow + x * 4;
+                    var dstIdx = dstRow + x * 3;
+                    if (srcIdx + 2 < bgra.Length && dstIdx + 2 < bmpSize)
+                    {
+                        bmp[dstIdx] = bgra[srcIdx];         // B
+                        bmp[dstIdx + 1] = bgra[srcIdx + 1]; // G
+                        bmp[dstIdx + 2] = bgra[srcIdx + 2]; // R
+                    }
                 }
             }
-        }
 
-        return Convert.ToBase64String(bmp);
+            return Convert.ToBase64String(bmp, 0, bmpSize);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(bmp, clearArray: true);
+        }
     }
 }

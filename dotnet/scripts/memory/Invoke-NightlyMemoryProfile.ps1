@@ -93,11 +93,64 @@ function Stop-IfRunning($Process) {
     try {
         if (-not $Process.HasExited) {
             Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
-            $Process.WaitForExit(5000)
+            $Process.WaitForExit(5000) | Out-Null
         }
     }
     catch {
         Write-Warning "Failed to stop process $($Process.Id): $($_.Exception.Message)"
+    }
+}
+
+function Normalize-TypeperfCounters([object]$Counters) {
+    $items = @($Counters)
+    if ($items.Count -eq 1 -and $items[0] -is [string] -and $items[0] -match "\s+\\Process\(") {
+        $items = [regex]::Split([string]$items[0], "\s+(?=\\Process\()") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    }
+
+    return [string[]]$items
+}
+
+function Start-TypeperfJob([string[]]$Counters, [string]$CsvPath, [string]$OutLogPath, [string]$ErrLogPath) {
+    Remove-Item -LiteralPath $CsvPath -Force -ErrorAction SilentlyContinue
+    $counterList = Normalize-TypeperfCounters $Counters
+    $countersJson = ConvertTo-Json -InputObject @($counterList) -Compress
+
+    return Start-Job -ScriptBlock {
+        param(
+            [string]$CountersJson,
+            [string]$CsvPath,
+            [string]$OutLogPath,
+            [string]$ErrLogPath
+        )
+
+        $parsedCounters = ConvertFrom-Json $CountersJson
+        $Counters = [string[]]@($parsedCounters)
+        if ($Counters.Count -eq 1 -and $Counters[0] -match "\s+\\Process\(") {
+            $Counters = [string[]]([regex]::Split($Counters[0], "\s+(?=\\Process\()") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        }
+
+        $quotedCounters = $Counters | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' }
+        $quotedCsvPath = '"' + $CsvPath.Replace('"', '\"') + '"'
+        $command = (@("typeperf.exe") + $quotedCounters + @("-si", "1", "-f", "CSV", "-y", "-o", $quotedCsvPath)) -join " "
+        Set-Content -LiteralPath $OutLogPath -Value "COMMAND: $command"
+        cmd.exe /d /c $command >> $OutLogPath 2> $ErrLogPath
+    } -ArgumentList $countersJson, $CsvPath, $OutLogPath, $ErrLogPath
+}
+
+function Stop-JobIfRunning($Job) {
+    if ($null -eq $Job) {
+        return
+    }
+
+    try {
+        if ($Job.State -eq "Running") {
+            Stop-Job -Job $Job -ErrorAction SilentlyContinue
+        }
+
+        Receive-Job -Job $Job -ErrorAction SilentlyContinue | Out-Null
+    }
+    finally {
+        Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -154,9 +207,11 @@ $typeperfCounters = @(
     "\Process($instance)\Handle Count",
     "\Process($instance)\Thread Count"
 )
-$quotedCounters = $typeperfCounters | ForEach-Object { '"' + $_ + '"' }
-$typeperfArgs = ($quotedCounters + @("-si", "1", "-f", "CSV", "-o", '"' + $typeperfCsv + '"')) -join " "
-$typeperfProcess = Start-Process -FilePath "typeperf.exe" -ArgumentList $typeperfArgs -RedirectStandardOutput (Join-Path $OutputDir "typeperf.out.log") -RedirectStandardError (Join-Path $OutputDir "typeperf.err.log") -PassThru -WindowStyle Hidden
+$typeperfJob = Start-TypeperfJob `
+    -Counters $typeperfCounters `
+    -CsvPath $typeperfCsv `
+    -OutLogPath (Join-Path $OutputDir "typeperf.out.log") `
+    -ErrLogPath (Join-Path $OutputDir "typeperf.err.log")
 
 $counterArgs = "collect --process-id $processId --counters System.Runtime --format json --output `"$counterJson`""
 $counterProcess = Start-Process -FilePath $dotnetCounters -ArgumentList $counterArgs -RedirectStandardOutput (Join-Path $OutputDir "dotnet-counters.out.log") -RedirectStandardError (Join-Path $OutputDir "dotnet-counters.err.log") -PassThru -WindowStyle Hidden
@@ -220,7 +275,7 @@ if ($EnableVmMap -and (Get-Command $VmMapPath -ErrorAction SilentlyContinue)) {
 
 Stop-IfRunning $procDumpProcess
 Stop-IfRunning $counterProcess
-Stop-IfRunning $typeperfProcess
+Stop-JobIfRunning $typeperfJob
 $traceProcess.WaitForExit([Math]::Max(30000, ($DurationSeconds + 30) * 1000)) | Out-Null
 Stop-IfRunning $traceProcess
 

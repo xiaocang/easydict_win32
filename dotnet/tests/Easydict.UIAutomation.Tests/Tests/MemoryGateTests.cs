@@ -1,6 +1,9 @@
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
+using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
+using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;
 using Xunit;
 using Xunit.Abstractions;
@@ -9,8 +12,9 @@ namespace Easydict.UIAutomation.Tests.Tests;
 
 /// <summary>
 /// Lightweight scenario used by the PR memory gate.
-/// The default path exercises launch, idle, main-window text selection, close,
-/// and post-close idle without invoking real translation services.
+/// The default path exercises launch, idle, quick-translate text entry,
+/// mode switching, settings navigation, close, and post-close idle without
+/// invoking real translation services.
 /// </summary>
 [Trait("Category", "UIAutomation")]
 [Trait("Category", "MemoryGate")]
@@ -27,6 +31,8 @@ public sealed class MemoryGateTests : IDisposable
         _output = output;
         _launcher = new AppLauncher();
         _launcher.LaunchAuto(TimeSpan.FromSeconds(60));
+        WriteProcessIdMarker();
+        WritePhaseMarker("00-process-started");
     }
 
     [Fact]
@@ -38,37 +44,57 @@ public sealed class MemoryGateTests : IDisposable
 
         var window = _launcher.GetMainWindow(TimeSpan.FromSeconds(60));
         window.Should().NotBeNull("main window must be available for the memory gate scenario");
+        WritePhaseMarker("01-main-window-observed");
 
         _output.WriteLine($"[MemoryGate] Initial idle: {initialIdle}s");
         Thread.Sleep(TimeSpan.FromSeconds(initialIdle));
+        WritePhaseMarker("02-initial-idle-complete");
 
         window.SetForeground();
         Thread.Sleep(500);
+        WritePhaseMarker("03-main-window-focused");
 
         var inputBox = UITestHelper.FindInputTextBox(window, TimeSpan.FromSeconds(15));
         inputBox.Should().NotBeNull("InputTextBox must exist on main window");
 
         inputBox!.Click();
         Thread.Sleep(250);
+        WritePhaseMarker("04-input-focused");
+
         inputBox.Text = GateInputText;
         Thread.Sleep(500);
+        WritePhaseMarker("05-input-text-entered");
 
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
         Thread.Sleep(300);
+        WritePhaseMarker("06-input-text-selected");
 
         if (runRealTranslation)
         {
             _output.WriteLine("[MemoryGate] EASYDICT_MEMORY_GATE_RUN_TRANSLATION enabled; pressing Enter.");
             Keyboard.Type(VirtualKeyShort.ENTER);
             Thread.Sleep(TimeSpan.FromSeconds(5));
+            WritePhaseMarker("07-translation-submitted");
         }
+        else
+        {
+            WritePhaseMarker("07-translation-submit-skipped");
+        }
+
+        SwitchToLongDocMode(window);
+        ExerciseLongDocControls(window);
+        SwitchToQuickTranslateMode(window);
+        OpenSettingsAndReturn(window);
 
         _output.WriteLine("[MemoryGate] Closing main window");
         window.Close();
+        Thread.Sleep(TimeSpan.FromSeconds(1));
+        WritePhaseMarker("18-main-window-closed");
 
         _output.WriteLine($"[MemoryGate] Post-close idle: {postCloseIdle}s");
         WriteMarker("EASYDICT_MEMORY_GATE_CLOSED_MARKER_PATH");
         WaitForReleaseOrIdle(postCloseIdle);
+        WritePhaseMarker("19-post-close-idle-complete");
     }
 
     private static int ResolveDelaySeconds(string name, int defaultValue)
@@ -91,6 +117,11 @@ public sealed class MemoryGateTests : IDisposable
 
     private static void WriteMarker(string envName)
     {
+        WriteMarker(envName, DateTimeOffset.UtcNow.ToString("O"));
+    }
+
+    private static void WriteMarker(string envName, string content)
+    {
         var path = Environment.GetEnvironmentVariable(envName);
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -103,7 +134,33 @@ public sealed class MemoryGateTests : IDisposable
             Directory.CreateDirectory(directory);
         }
 
-        File.WriteAllText(path, DateTimeOffset.UtcNow.ToString("O"));
+        File.WriteAllText(path, content);
+    }
+
+    private void WritePhaseMarker(string phaseName)
+    {
+        var phaseDir = Environment.GetEnvironmentVariable("EASYDICT_MEMORY_GATE_PHASE_DIR");
+        if (string.IsNullOrWhiteSpace(phaseDir))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(phaseDir);
+        var markerPath = Path.Combine(phaseDir, $"{phaseName}.marker");
+        File.WriteAllText(markerPath, DateTimeOffset.UtcNow.ToString("O"));
+        _output.WriteLine($"[MemoryGate] Phase: {phaseName}");
+    }
+
+    private void WriteProcessIdMarker()
+    {
+        try
+        {
+            WriteMarker("EASYDICT_MEMORY_GATE_PROCESS_ID_PATH", _launcher.Application.ProcessId.ToString());
+        }
+        catch
+        {
+            // The script still has process-name fallback if FlaUI cannot expose the PID.
+        }
     }
 
     private static void WaitForReleaseOrIdle(int seconds)
@@ -125,6 +182,489 @@ public sealed class MemoryGateTests : IDisposable
             }
 
             Thread.Sleep(250);
+        }
+    }
+
+    private void SwitchToLongDocMode(Window window)
+    {
+        WritePhaseMarker("08-long-doc-switch-start");
+        ClickModeMenuItem(window, "ModeLongDocItem");
+
+        var longDocSourceCombo = Retry.WhileNull(
+            () => FindByAutomationIdOrName(window, "LongDocSourceLangCombo"),
+            TimeSpan.FromSeconds(10)).Result;
+
+        longDocSourceCombo.Should().NotBeNull("LongDocSourceLangCombo should appear after switching to long document mode");
+        Thread.Sleep(500);
+        WritePhaseMarker("09-long-doc-mode-ready");
+    }
+
+    private void ExerciseLongDocControls(Window window)
+    {
+        TryExerciseComboBox(window, "LongDocInputModeCombo", "Text", 0, "10-long-doc-input-mode-text");
+        TryExerciseComboBox(window, "LongDocOutputModeCombo", "Bilingual", 1, "11-long-doc-output-mode-bilingual");
+
+        TryTypeIntoControl(window, "LongDocConcurrencyBox", "4", "12-long-doc-concurrency-set");
+        TryTypeIntoControl(window, "LongDocPageRangeBox", "1-3", "13-long-doc-page-range-set");
+    }
+
+    private void SwitchToQuickTranslateMode(Window window)
+    {
+        WritePhaseMarker("14-quick-translate-switch-start");
+        ClickModeMenuItem(window, "ModeTranslationItem");
+
+        var inputBox = UITestHelper.FindInputTextBox(window, TimeSpan.FromSeconds(10));
+        inputBox.Should().NotBeNull("InputTextBox should appear after switching back to quick translation mode");
+        Thread.Sleep(500);
+        WritePhaseMarker("15-quick-translate-mode-ready");
+    }
+
+    private void OpenSettingsAndReturn(Window window)
+    {
+        var settingsButton = Retry.WhileNull(
+            () => FindByAutomationIdOrName(window, "SettingsButton"),
+            TimeSpan.FromSeconds(10)).Result;
+
+        settingsButton.Should().NotBeNull("SettingsButton must be available before settings navigation");
+        InvokeOrClick(settingsButton!);
+        Thread.Sleep(1500);
+
+        var settingsScrollViewer = Retry.WhileNull(
+            () => FindByAutomationIdOrName(window, "MainScrollViewer"),
+            TimeSpan.FromSeconds(15)).Result;
+
+        settingsScrollViewer.Should().NotBeNull("settings page should expose MainScrollViewer after navigation");
+        WritePhaseMarker("16-settings-opened");
+
+        var backButton = FindByAutomationIdOrName(window, "FloatingBackButton")
+            ?? FindByAutomationIdOrName(window, "BackButton");
+
+        backButton.Should().NotBeNull("settings page must expose a back button");
+        InvokeOrClick(backButton!);
+        Thread.Sleep(1500);
+
+        var returnedSettingsButton = Retry.WhileNull(
+            () => FindByAutomationIdOrName(window, "SettingsButton"),
+            TimeSpan.FromSeconds(10)).Result;
+
+        returnedSettingsButton.Should().NotBeNull("main page should be visible after returning from settings");
+        WritePhaseMarker("17-settings-returned");
+    }
+
+    private void ClickModeMenuItem(Window window, string menuItemAutomationId)
+    {
+        var expectedModeName = GetExpectedModeButtonName(menuItemAutomationId);
+
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var titleButton = Retry.WhileNull(
+                () => FindTitleButton(window),
+                TimeSpan.FromSeconds(10)).Result;
+
+            titleButton.Should().NotBeNull("title mode dropdown button should exist");
+            _output.WriteLine(
+                $"[MemoryGate] Attempt {attempt}: mode button Name='{SafeName(titleButton!)}' " +
+                $"AutomationId='{SafeAutomationId(titleButton!)}' Bounds={SafeBounds(titleButton!)}");
+            var menuOpened = OpenModeMenu(window, titleButton!, menuItemAutomationId);
+            if (menuOpened)
+            {
+                SelectModeMenuItemWithKeyboard(menuItemAutomationId);
+            }
+
+            var modeButton = Retry.WhileNull(
+                () => FindModeButtonWithName(window, expectedModeName),
+                TimeSpan.FromSeconds(5)).Result;
+
+            if (modeButton != null)
+            {
+                _output.WriteLine($"[MemoryGate] Attempt {attempt}: switched via {menuItemAutomationId} keyboard selection.");
+                return;
+            }
+
+            titleButton = Retry.WhileNull(
+                () => FindTitleButton(window),
+                TimeSpan.FromSeconds(5)).Result;
+
+            if (titleButton == null)
+            {
+                _output.WriteLine($"[MemoryGate] Attempt {attempt}: title mode dropdown button disappeared.");
+                Keyboard.Press(VirtualKeyShort.ESCAPE);
+                Thread.Sleep(250);
+                continue;
+            }
+
+            OpenModeMenu(window, titleButton, menuItemAutomationId);
+
+            var menuItem = Retry.WhileNull(
+                () => FindModeMenuItem(window, menuItemAutomationId),
+                TimeSpan.FromSeconds(5)).Result;
+
+            if (menuItem == null)
+            {
+                _output.WriteLine($"[MemoryGate] Attempt {attempt}: {menuItemAutomationId} did not appear.");
+                Keyboard.Press(VirtualKeyShort.ESCAPE);
+                Thread.Sleep(250);
+                continue;
+            }
+
+            _output.WriteLine(
+                $"[MemoryGate] Attempt {attempt}: target {menuItemAutomationId} " +
+                $"Name='{SafeName(menuItem)}' AutomationId='{SafeAutomationId(menuItem)}' " +
+                $"Bounds={SafeBounds(menuItem)} Offscreen={SafeOffscreen(menuItem)} Enabled={SafeIsEnabled(menuItem)}");
+            ClickElementAtPoint(menuItem);
+            Thread.Sleep(700);
+
+            modeButton = Retry.WhileNull(
+                () => FindModeButtonWithName(window, expectedModeName),
+                TimeSpan.FromSeconds(5)).Result;
+
+            if (modeButton != null)
+            {
+                _output.WriteLine($"[MemoryGate] Attempt {attempt}: switched via {menuItemAutomationId}.");
+                return;
+            }
+
+            _output.WriteLine($"[MemoryGate] Attempt {attempt}: clicked {menuItemAutomationId}, mode button did not become '{expectedModeName}'.");
+            Keyboard.Press(VirtualKeyShort.ESCAPE);
+            Thread.Sleep(250);
+        }
+
+        FindModeButtonWithName(window, expectedModeName)
+            .Should()
+            .NotBeNull($"mode button should report '{expectedModeName}' after clicking {menuItemAutomationId}");
+    }
+
+    private static void SelectModeMenuItemWithKeyboard(string menuItemAutomationId)
+    {
+        var targetKey = menuItemAutomationId == "ModeTranslationItem"
+            ? VirtualKeyShort.HOME
+            : VirtualKeyShort.END;
+
+        Keyboard.Press(targetKey);
+        Thread.Sleep(100);
+        Keyboard.Press(VirtualKeyShort.ENTER);
+        Thread.Sleep(700);
+    }
+
+    private bool OpenModeMenu(Window window, AutomationElement titleButton, string targetMenuItemAutomationId)
+    {
+        ClickElementAtPoint(titleButton);
+        Thread.Sleep(500);
+        if (FindModeMenuItem(window, targetMenuItemAutomationId) != null)
+        {
+            return true;
+        }
+
+        try
+        {
+            if (titleButton.Patterns.Invoke.IsSupported)
+            {
+                titleButton.Patterns.Invoke.Pattern.Invoke();
+                Thread.Sleep(500);
+            }
+        }
+        catch
+        {
+            // Fall through to the caller's normal retry path.
+        }
+
+        return FindModeMenuItem(window, targetMenuItemAutomationId) != null;
+    }
+
+    private AutomationElement? FindModeMenuItem(Window window, string menuItemAutomationId)
+    {
+        var candidates = new List<AutomationElement>();
+
+        try
+        {
+            candidates.AddRange(window.FindAllDescendants(cf => cf.ByControlType(ControlType.MenuItem)));
+        }
+        catch
+        {
+            // Popup menus can move in the UIA tree while the flyout is opening.
+        }
+
+        try
+        {
+            candidates.AddRange(_launcher.Automation.GetDesktop().FindAllDescendants(cf => cf.ByControlType(ControlType.MenuItem)));
+        }
+        catch
+        {
+            // Desktop enumeration is best-effort; the window subtree is the primary source.
+        }
+
+        var matches = candidates
+            .Where(e => IsModeMenuItemMatch(e, menuItemAutomationId))
+            .DistinctBy(e => $"{SafeAutomationId(e)}|{SafeName(e)}|{SafeBounds(e)}")
+            .ToArray();
+
+        return matches.FirstOrDefault(IsVisibleOnScreen)
+            ?? matches.FirstOrDefault();
+    }
+
+    private static bool IsModeMenuItemMatch(AutomationElement element, string menuItemAutomationId)
+    {
+        var automationId = SafeAutomationId(element);
+        if (string.Equals(automationId, menuItemAutomationId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var name = SafeName(element);
+        return menuItemAutomationId switch
+        {
+            "ModeTranslationItem" => name.Contains("Translation", StringComparison.OrdinalIgnoreCase) ||
+                                     name.Contains("Translate", StringComparison.OrdinalIgnoreCase) ||
+                                     name.Contains("翻译", StringComparison.OrdinalIgnoreCase),
+            "ModeLongDocItem" => name.Contains("Long", StringComparison.OrdinalIgnoreCase) ||
+                                 name.Contains("Document", StringComparison.OrdinalIgnoreCase) ||
+                                 name.Contains("文档", StringComparison.OrdinalIgnoreCase),
+            _ => false,
+        };
+    }
+
+    private static bool IsVisibleOnScreen(AutomationElement element)
+    {
+        try
+        {
+            var bounds = element.BoundingRectangle;
+            return !element.IsOffscreen && bounds.Width > 0 && bounds.Height > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string SafeAutomationId(AutomationElement element)
+    {
+        try
+        {
+            return element.AutomationId ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeName(AutomationElement element)
+    {
+        try
+        {
+            return element.Name ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeBounds(AutomationElement element)
+    {
+        try
+        {
+            return element.BoundingRectangle.ToString();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeOffscreen(AutomationElement element)
+    {
+        try
+        {
+            return element.IsOffscreen.ToString();
+        }
+        catch
+        {
+            return "<unknown>";
+        }
+    }
+
+    private static string SafeIsEnabled(AutomationElement element)
+    {
+        try
+        {
+            return element.IsEnabled.ToString();
+        }
+        catch
+        {
+            return "<unknown>";
+        }
+    }
+
+    private static string GetExpectedModeButtonName(string menuItemAutomationId)
+    {
+        return menuItemAutomationId switch
+        {
+            "ModeLongDocItem" => "Long Document",
+            "ModeTranslationItem" => "Translation",
+            _ => throw new ArgumentOutOfRangeException(nameof(menuItemAutomationId), menuItemAutomationId, "Unsupported mode menu item"),
+        };
+    }
+
+    private void TryExerciseComboBox(Window window, string automationId, string itemName, int fallbackIndex, string phaseName)
+    {
+        var combo = Retry.WhileNull(
+            () => FindByAutomationIdOrName(window, automationId)?.AsComboBox(),
+            TimeSpan.FromSeconds(5)).Result;
+
+        if (combo == null)
+        {
+            _output.WriteLine($"[MemoryGate] Skipping {automationId}; combo not found.");
+            WritePhaseMarker($"{phaseName}-skipped");
+            return;
+        }
+
+        try
+        {
+            combo.Expand();
+            Thread.Sleep(500);
+            var item = combo.Items.FirstOrDefault(i => string.Equals(i.Name, itemName, StringComparison.OrdinalIgnoreCase));
+            if (item != null)
+            {
+                item.Click();
+            }
+            else
+            {
+                combo.Select(fallbackIndex);
+            }
+
+            Thread.Sleep(500);
+            WritePhaseMarker(phaseName);
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"[MemoryGate] Skipping {automationId}; selection failed: {ex.Message}");
+            Keyboard.Press(VirtualKeyShort.ESCAPE);
+            Thread.Sleep(200);
+            WritePhaseMarker($"{phaseName}-skipped");
+        }
+    }
+
+    private void TryTypeIntoControl(Window window, string automationId, string text, string phaseName)
+    {
+        var control = Retry.WhileNull(
+            () => FindByAutomationIdOrName(window, automationId),
+            TimeSpan.FromSeconds(5)).Result;
+
+        if (control == null)
+        {
+            _output.WriteLine($"[MemoryGate] Skipping {automationId}; control not found.");
+            WritePhaseMarker($"{phaseName}-skipped");
+            return;
+        }
+
+        try
+        {
+            control.Click();
+            Thread.Sleep(250);
+            Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
+            Thread.Sleep(100);
+            Keyboard.Type(text);
+            Keyboard.Press(VirtualKeyShort.TAB);
+            Thread.Sleep(500);
+            WritePhaseMarker(phaseName);
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"[MemoryGate] Skipping {automationId}; text entry failed: {ex.Message}");
+            WritePhaseMarker($"{phaseName}-skipped");
+        }
+    }
+
+    private static AutomationElement? FindTitleButton(Window window)
+    {
+        var modeButton = FindVisibleByAutomationIdOrName(window, "ModeMenuButton");
+        if (modeButton != null)
+        {
+            return modeButton;
+        }
+
+        var easydictText = FindByAutomationIdOrName(window, "Easydict");
+        var current = easydictText;
+        while (current != null)
+        {
+            if (current.ControlType == ControlType.Button)
+            {
+                return current;
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
+    }
+
+    private static AutomationElement? FindModeButtonWithName(Window window, string expectedNamePart)
+    {
+        var modeButton = FindVisibleByAutomationIdOrName(window, "ModeMenuButton");
+        if (modeButton == null)
+        {
+            return null;
+        }
+
+        var name = SafeName(modeButton);
+        return name.Contains(expectedNamePart, StringComparison.OrdinalIgnoreCase)
+            ? modeButton
+            : null;
+    }
+
+    private static AutomationElement? FindByAutomationIdOrName(Window window, string name)
+    {
+        try
+        {
+            return window.FindFirstDescendant(cf => cf.ByAutomationId(name))
+                ?? window.FindFirstDescendant(cf => cf.ByName(name));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static AutomationElement? FindVisibleByAutomationIdOrName(Window window, string name)
+    {
+        var element = FindByAutomationIdOrName(window, name);
+        if (element == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return element.IsOffscreen ? null : element;
+        }
+        catch
+        {
+            return element;
+        }
+    }
+
+    private static void InvokeOrClick(AutomationElement element)
+    {
+        if (element.Patterns.Invoke.IsSupported)
+        {
+            element.Patterns.Invoke.Pattern.Invoke();
+            return;
+        }
+
+        element.Click();
+    }
+
+    private static void ClickElementAtPoint(AutomationElement element)
+    {
+        try
+        {
+            Mouse.Click(element.GetClickablePoint());
+            return;
+        }
+        catch
+        {
+            element.Click();
         }
     }
 

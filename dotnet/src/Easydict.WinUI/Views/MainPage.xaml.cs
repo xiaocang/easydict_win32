@@ -12,6 +12,7 @@ using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.DocumentExport;
 using Easydict.WinUI.Views.Controls;
 using Microsoft.UI.Input;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI.Xaml.Input;
@@ -1207,6 +1208,9 @@ namespace Easydict.WinUI.Views
                 EnsureLongDocFeaturesInitialized();
             }
 
+            AutomationProperties.SetName(
+                ModeSelectorButton,
+                isLongDoc ? "Mode: Long Document" : "Mode: Translation");
             QuickTranslateContent.Visibility = isLongDoc ? Visibility.Collapsed : Visibility.Visible;
             LongDocContent.Visibility = isLongDoc ? Visibility.Visible : Visibility.Collapsed;
 
@@ -4090,15 +4094,28 @@ namespace Easydict.WinUI.Views
         {
             if (!_isLoaded) return;
 
+            var senderName = sender is FrameworkElement element ? element.Name : string.Empty;
             QueryMode newMode;
-            if (ReferenceEquals(sender, ModeTranslationItem))
+            if (ReferenceEquals(sender, ModeTranslationItem) ||
+                string.Equals(senderName, nameof(ModeTranslationItem), StringComparison.Ordinal))
+            {
                 newMode = QueryMode.Translation;
-            else if (ReferenceEquals(sender, ModeLongDocItem))
+            }
+            else if (ReferenceEquals(sender, ModeLongDocItem) ||
+                     string.Equals(senderName, nameof(ModeLongDocItem), StringComparison.Ordinal))
+            {
                 newMode = QueryMode.LongDocument;
+            }
             else
+            {
                 return;
+            }
 
-            if (newMode == _currentMode) return;
+            if (newMode == _currentMode)
+            {
+                return;
+            }
+
             await SwitchModeAsync(newMode);
         }
 

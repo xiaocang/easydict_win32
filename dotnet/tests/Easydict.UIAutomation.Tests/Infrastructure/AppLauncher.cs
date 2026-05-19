@@ -214,6 +214,13 @@ public sealed class AppLauncher : IDisposable
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < timeout)
         {
+            if (_application != null && HasLaunchedApplicationExited(_application, out var processId))
+            {
+                var processLabel = processId.HasValue ? processId.Value.ToString() : "unknown";
+                throw new InvalidOperationException(
+                    $"Easydict process {processLabel} exited before the main window appeared.");
+            }
+
             try
             {
                 var window = Application.GetMainWindow(Automation);
@@ -227,6 +234,28 @@ public sealed class AppLauncher : IDisposable
             Thread.Sleep(500);
         }
         throw new TimeoutException($"Main window did not appear within {timeout.TotalSeconds}s");
+    }
+
+    private static bool HasLaunchedApplicationExited(Application application, out int? processId)
+    {
+        processId = null;
+        try
+        {
+            processId = application.ProcessId;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
+
+        try
+        {
+            return application.HasExited;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
     }
 
     private static (string? FamilyName, string? ExePath) FindInstalledPackageInfo()

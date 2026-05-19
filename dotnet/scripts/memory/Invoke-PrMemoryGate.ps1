@@ -113,11 +113,64 @@ function Stop-IfRunning($Process) {
     try {
         if (-not $Process.HasExited) {
             Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
-            $Process.WaitForExit(5000)
+            $Process.WaitForExit(5000) | Out-Null
         }
     }
     catch {
         Write-Warning "Failed to stop process $($Process.Id): $($_.Exception.Message)"
+    }
+}
+
+function Normalize-TypeperfCounters([object]$Counters) {
+    $items = @($Counters)
+    if ($items.Count -eq 1 -and $items[0] -is [string] -and $items[0] -match "\s+\\Process\(") {
+        $items = [regex]::Split([string]$items[0], "\s+(?=\\Process\()") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    }
+
+    return [string[]]$items
+}
+
+function Start-TypeperfJob([string[]]$Counters, [string]$CsvPath, [string]$OutLogPath, [string]$ErrLogPath) {
+    Remove-Item -LiteralPath $CsvPath -Force -ErrorAction SilentlyContinue
+    $counterList = Normalize-TypeperfCounters $Counters
+    $countersJson = ConvertTo-Json -InputObject @($counterList) -Compress
+
+    return Start-Job -ScriptBlock {
+        param(
+            [string]$CountersJson,
+            [string]$CsvPath,
+            [string]$OutLogPath,
+            [string]$ErrLogPath
+        )
+
+        $parsedCounters = ConvertFrom-Json $CountersJson
+        $Counters = [string[]]@($parsedCounters)
+        if ($Counters.Count -eq 1 -and $Counters[0] -match "\s+\\Process\(") {
+            $Counters = [string[]]([regex]::Split($Counters[0], "\s+(?=\\Process\()") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        }
+
+        $quotedCounters = $Counters | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' }
+        $quotedCsvPath = '"' + $CsvPath.Replace('"', '\"') + '"'
+        $command = (@("typeperf.exe") + $quotedCounters + @("-si", "1", "-f", "CSV", "-y", "-o", $quotedCsvPath)) -join " "
+        Set-Content -LiteralPath $OutLogPath -Value "COMMAND: $command"
+        cmd.exe /d /c $command >> $OutLogPath 2> $ErrLogPath
+    } -ArgumentList $countersJson, $CsvPath, $OutLogPath, $ErrLogPath
+}
+
+function Stop-JobIfRunning($Job) {
+    if ($null -eq $Job) {
+        return
+    }
+
+    try {
+        if ($Job.State -eq "Running") {
+            Stop-Job -Job $Job -ErrorAction SilentlyContinue
+        }
+
+        Receive-Job -Job $Job -ErrorAction SilentlyContinue | Out-Null
+    }
+    finally {
+        Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -228,13 +281,45 @@ function Read-DotnetCounterValues([string]$JsonPath) {
 
     $text = Get-Content -LiteralPath $JsonPath -Raw
     $values = New-Object System.Collections.Generic.List[double]
+    try {
+        $json = ConvertFrom-Json $text
+        foreach ($event in @($json.Events)) {
+            if ($null -eq $event) {
+                continue
+            }
+
+            $name = [string]$event.name
+            if ([string]::IsNullOrWhiteSpace($name)) {
+                $name = [string]$event.Name
+            }
+
+            if ($name -notmatch "GC Heap Size|gc-heap-size") {
+                continue
+            }
+
+            $rawValue = if ($null -ne $event.value) { $event.value } else { $event.Value }
+            $value = Convert-ToDouble $rawValue
+            if ($null -ne $value) {
+                $values.Add($value)
+            }
+        }
+    }
+    catch {
+        $values.Clear()
+    }
+
+    if ($values.Count -gt 0) {
+        return $values.ToArray()
+    }
+
     $patterns = @(
-        '"(?:Name|CounterName|DisplayName)"\s*:\s*"[^"]*(?:GC Heap Size|gc-heap-size)[^"]*".{0,800}?"(?:Mean|Value|CounterValue)"\s*:\s*(?<value>-?\d+(?:\.\d+)?)',
-        '"(?:Mean|Value|CounterValue)"\s*:\s*(?<value>-?\d+(?:\.\d+)?).{0,800}?"(?:Name|CounterName|DisplayName)"\s*:\s*"[^"]*(?:GC Heap Size|gc-heap-size)[^"]*"'
+        '"(?:Name|name|CounterName|counterName|DisplayName|displayName)"\s*:\s*"[^"]*(?:GC Heap Size|gc-heap-size)[^"]*".{0,800}?"(?:Mean|mean|Value|value|CounterValue|counterValue)"\s*:\s*(?<value>-?\d+(?:\.\d+)?)',
+        '"(?:Mean|mean|Value|value|CounterValue|counterValue)"\s*:\s*(?<value>-?\d+(?:\.\d+)?).{0,800}?"(?:Name|name|CounterName|counterName|DisplayName|displayName)"\s*:\s*"[^"]*(?:GC Heap Size|gc-heap-size)[^"]*"'
     )
 
     foreach ($pattern in $patterns) {
-        foreach ($match in [regex]::Matches($text, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)) {
+        $options = [System.Text.RegularExpressions.RegexOptions]::Singleline -bor [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+        foreach ($match in [regex]::Matches($text, $pattern, $options)) {
             $value = Convert-ToDouble $match.Groups["value"].Value
             if ($null -ne $value) {
                 $values.Add($value)
@@ -243,6 +328,228 @@ function Read-DotnetCounterValues([string]$JsonPath) {
     }
 
     return $values.ToArray()
+}
+
+function Read-GcdumpHeapBytes([string]$ReportPath) {
+    if (-not (Test-Path -LiteralPath $ReportPath)) {
+        return $null
+    }
+
+    foreach ($line in Get-Content -LiteralPath $ReportPath) {
+        if ($line -match "^\s*(?<bytes>[\d,]+)\s+GC Heap bytes\s*$") {
+            $text = $Matches["bytes"].Replace(",", "")
+            $value = 0.0
+            if ([double]::TryParse(
+                $text,
+                [System.Globalization.NumberStyles]::Float,
+                [System.Globalization.CultureInfo]::InvariantCulture,
+                [ref]$value)) {
+                return $value
+            }
+        }
+    }
+
+    return $null
+}
+
+function Convert-TypeperfTimestampToUtc([object]$Value) {
+    $text = ([string]$Value).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $null
+    }
+
+    $culture = [System.Globalization.CultureInfo]::InvariantCulture
+    $styles = [System.Globalization.DateTimeStyles]::AssumeLocal
+    $formats = @(
+        "MM/dd/yyyy HH:mm:ss.fff",
+        "M/d/yyyy H:mm:ss.fff",
+        "MM/dd/yyyy HH:mm:ss",
+        "M/d/yyyy H:mm:ss"
+    )
+
+    $dateTime = [DateTime]::MinValue
+    foreach ($format in $formats) {
+        if ([DateTime]::TryParseExact($text, $format, $culture, $styles, [ref]$dateTime)) {
+            return ([DateTimeOffset]$dateTime).ToUniversalTime()
+        }
+    }
+
+    if ([DateTime]::TryParse($text, $culture, $styles, [ref]$dateTime)) {
+        return ([DateTimeOffset]$dateTime).ToUniversalTime()
+    }
+
+    return $null
+}
+
+function Read-PhaseMarkerUtc([string]$Path) {
+    $text = ""
+    try {
+        $text = (Get-Content -LiteralPath $Path -Raw).Trim()
+    }
+    catch {
+        $text = ""
+    }
+
+    $timestamp = [DateTimeOffset]::MinValue
+    if (-not [string]::IsNullOrWhiteSpace($text) -and
+        [DateTimeOffset]::TryParse(
+            $text,
+            [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::AssumeUniversal,
+            [ref]$timestamp)) {
+        return $timestamp.ToUniversalTime()
+    }
+
+    return [DateTimeOffset]::new((Get-Item -LiteralPath $Path).LastWriteTimeUtc)
+}
+
+function Get-CsvTimeColumn($Rows) {
+    if ($Rows.Count -eq 0) {
+        return $null
+    }
+
+    return $Rows[0].PSObject.Properties.Name | Select-Object -First 1
+}
+
+function Get-RowDouble($Row, [string]$ColumnName) {
+    if ([string]::IsNullOrWhiteSpace($ColumnName)) {
+        return $null
+    }
+
+    $property = $Row.PSObject.Properties[$ColumnName]
+    if ($null -eq $property) {
+        return $null
+    }
+
+    return Convert-ToDouble $property.Value
+}
+
+function Get-NearestTypeperfRowIndex($Rows, [string]$TimeColumn, [DateTimeOffset]$TargetUtc) {
+    if ($Rows.Count -eq 0 -or [string]::IsNullOrWhiteSpace($TimeColumn)) {
+        return $null
+    }
+
+    $bestIndex = $null
+    $bestDeltaMs = [double]::MaxValue
+    for ($i = 0; $i -lt $Rows.Count; $i++) {
+        $sampleUtc = Convert-TypeperfTimestampToUtc $Rows[$i].$TimeColumn
+        if ($null -eq $sampleUtc) {
+            continue
+        }
+
+        $deltaMs = [Math]::Abs(($sampleUtc.UtcDateTime - $TargetUtc.UtcDateTime).TotalMilliseconds)
+        if ($deltaMs -lt $bestDeltaMs) {
+            $bestDeltaMs = $deltaMs
+            $bestIndex = $i
+        }
+    }
+
+    return $bestIndex
+}
+
+function New-PhaseSnapshots(
+    [string]$PhaseDir,
+    $Rows,
+    [string]$TimeColumn,
+    [string]$PrivateColumn,
+    [string]$WorkingSetColumn,
+    [string]$HandleColumn,
+    [string]$ThreadColumn) {
+
+    $snapshots = New-Object System.Collections.Generic.List[object]
+    if (-not (Test-Path -LiteralPath $PhaseDir)) {
+        return $snapshots.ToArray()
+    }
+
+    $phaseFiles = @(Get-ChildItem -LiteralPath $PhaseDir -Filter "*.marker" -ErrorAction SilentlyContinue |
+        Sort-Object Name)
+    if ($phaseFiles.Count -eq 0) {
+        return $snapshots.ToArray()
+    }
+
+    $firstPrivate = $null
+    $previousPrivate = $null
+    $firstWorkingSet = $null
+    $previousWorkingSet = $null
+    foreach ($file in $phaseFiles) {
+        $markerUtc = Read-PhaseMarkerUtc $file.FullName
+        $sampleIndex = Get-NearestTypeperfRowIndex $Rows $TimeColumn $markerUtc
+        $sampleUtc = $null
+        $privateBytes = $null
+        $workingSet = $null
+        $handleCount = $null
+        $threadCount = $null
+
+        if ($null -ne $sampleIndex) {
+            $row = $Rows[$sampleIndex]
+            $sampleUtc = Convert-TypeperfTimestampToUtc $row.$TimeColumn
+            $privateBytes = Get-RowDouble $row $PrivateColumn
+            $workingSet = Get-RowDouble $row $WorkingSetColumn
+            $handleCount = Get-RowDouble $row $HandleColumn
+            $threadCount = Get-RowDouble $row $ThreadColumn
+        }
+
+        if ($null -eq $firstPrivate -and $null -ne $privateBytes) {
+            $firstPrivate = $privateBytes
+        }
+
+        if ($null -eq $firstWorkingSet -and $null -ne $workingSet) {
+            $firstWorkingSet = $workingSet
+        }
+
+        $privateDeltaFromPrevious = if ($null -ne $previousPrivate -and $null -ne $privateBytes) {
+            $privateBytes - $previousPrivate
+        }
+        else {
+            $null
+        }
+
+        $privateDeltaFromFirst = if ($null -ne $firstPrivate -and $null -ne $privateBytes) {
+            $privateBytes - $firstPrivate
+        }
+        else {
+            $null
+        }
+
+        $workingSetDeltaFromPrevious = if ($null -ne $previousWorkingSet -and $null -ne $workingSet) {
+            $workingSet - $previousWorkingSet
+        }
+        else {
+            $null
+        }
+
+        $workingSetDeltaFromFirst = if ($null -ne $firstWorkingSet -and $null -ne $workingSet) {
+            $workingSet - $firstWorkingSet
+        }
+        else {
+            $null
+        }
+
+        $snapshots.Add([pscustomobject]@{
+            phase = $file.BaseName
+            markerUtc = $markerUtc.ToString("O")
+            sampleIndex = $sampleIndex
+            sampleUtc = if ($null -ne $sampleUtc) { $sampleUtc.ToString("O") } else { $null }
+            privateBytes = $privateBytes
+            privateBytesDeltaFromPrevious = $privateDeltaFromPrevious
+            privateBytesDeltaFromFirstPhase = $privateDeltaFromFirst
+            workingSet = $workingSet
+            workingSetDeltaFromPrevious = $workingSetDeltaFromPrevious
+            workingSetDeltaFromFirstPhase = $workingSetDeltaFromFirst
+            handleCount = $handleCount
+            threadCount = $threadCount
+        })
+
+        if ($null -ne $privateBytes) {
+            $previousPrivate = $privateBytes
+        }
+
+        if ($null -ne $workingSet) {
+            $previousWorkingSet = $workingSet
+        }
+    }
+
+    return $snapshots.ToArray()
 }
 
 function Invoke-Gcdump([string]$GcdumpTool, [int]$ProcessId, [string]$DumpPath, [string]$ReportPath, [string]$LogPath) {
@@ -265,6 +572,15 @@ function Invoke-Gcdump([string]$GcdumpTool, [int]$ProcessId, [string]$DumpPath, 
     }
 
     return $true
+}
+
+function Write-LogTail([string]$Path, [int]$Count) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    Write-Host "----- tail: $Path -----"
+    Get-Content -LiteralPath $Path -Tail $Count | Write-Host
 }
 
 $OutputDir = Get-FullPath $OutputDir
@@ -300,22 +616,31 @@ $env:EASYDICT_MEMORY_GATE_INITIAL_IDLE_SECONDS = [string]$InitialIdleSeconds
 $env:EASYDICT_MEMORY_GATE_POST_CLOSE_IDLE_SECONDS = [string]$PostCloseIdleSeconds
 $env:EASYDICT_MEMORY_GATE_RUN_TRANSLATION = if ($RunRealTranslation) { "1" } else { "0" }
 $env:EASYDICT_DEBUG_DISABLE_MOUSE_SELECTION_TRANSLATE = "1"
+$env:EASYDICT_UIA_MEMORY_AB_MODE = "B"
 
 $typeperfCsv = Join-Path $OutputDir "typeperf.csv"
 $counterJson = Join-Path $OutputDir "dotnet-counters.json"
 $markerDir = Join-Path $OutputDir "markers"
+$phaseDir = Join-Path $markerDir "phases"
+$processIdMarker = Join-Path $markerDir "process-id.marker"
 $closedMarker = Join-Path $markerDir "main-window-closed.marker"
 $releaseMarker = Join-Path $markerDir "release.marker"
 $baselineGcdump = Join-Path $OutputDir "baseline.gcdump"
 $baselineHeapstat = Join-Path $OutputDir "baseline.heapstat.txt"
 $finalGcdump = Join-Path $OutputDir "final.gcdump"
 $finalHeapstat = Join-Path $OutputDir "final.heapstat.txt"
+$phaseSnapshotsPath = Join-Path $OutputDir "phase-snapshots.json"
 $testOut = Join-Path $OutputDir "dotnet-test.out.log"
 $testErr = Join-Path $OutputDir "dotnet-test.err.log"
 New-Directory $markerDir
-Remove-Item -LiteralPath $closedMarker, $releaseMarker -Force -ErrorAction SilentlyContinue
+New-Directory $phaseDir
+Remove-Item -LiteralPath $processIdMarker, $closedMarker, $releaseMarker -Force -ErrorAction SilentlyContinue
+Get-ChildItem -LiteralPath $phaseDir -Filter "*.marker" -ErrorAction SilentlyContinue |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+$env:EASYDICT_MEMORY_GATE_PROCESS_ID_PATH = $processIdMarker
 $env:EASYDICT_MEMORY_GATE_CLOSED_MARKER_PATH = $closedMarker
 $env:EASYDICT_MEMORY_GATE_RELEASE_MARKER_PATH = $releaseMarker
+$env:EASYDICT_MEMORY_GATE_PHASE_DIR = $phaseDir
 
 $testArgs = @(
     "test", $TestProject,
@@ -330,7 +655,36 @@ $testArgs = @(
 
 Write-Host "Starting memory gate scenario..."
 $testProcess = Start-Process -FilePath "dotnet" -ArgumentList $testArgs -RedirectStandardOutput $testOut -RedirectStandardError $testErr -PassThru -WindowStyle Hidden
-$appProcess = Wait-TargetProcess "Easydict.WinUI" $AppExePath 120 $testProcess
+$null = $testProcess.Handle
+try {
+    $appProcess = $null
+    if (Wait-File $processIdMarker 120 $testProcess) {
+        $processIdText = (Get-Content -LiteralPath $processIdMarker -Raw).Trim()
+        $markerProcessId = 0
+        if ([int]::TryParse($processIdText, [ref]$markerProcessId)) {
+            $appProcess = Get-Process -Id $markerProcessId -ErrorAction SilentlyContinue
+            if ($null -ne $appProcess -and $AppExePath) {
+                try {
+                    if (-not [string]::Equals($appProcess.Path, $AppExePath, [StringComparison]::OrdinalIgnoreCase)) {
+                        $appProcess = $null
+                    }
+                }
+                catch {
+                    $appProcess = $null
+                }
+            }
+        }
+    }
+
+    if ($null -eq $appProcess) {
+        $appProcess = Wait-TargetProcess "Easydict.WinUI" $AppExePath 120 $testProcess
+    }
+}
+catch {
+    Write-LogTail $testOut 120
+    Write-LogTail $testErr 120
+    throw
+}
 $processId = $appProcess.Id
 $instance = Get-ProcessCounterInstance $processId
 Write-Host "Monitoring process $processId ($instance)"
@@ -341,9 +695,11 @@ $typeperfCounters = @(
     "\Process($instance)\Working Set",
     "\Process($instance)\Thread Count"
 )
-$quotedCounters = $typeperfCounters | ForEach-Object { '"' + $_ + '"' }
-$typeperfArgs = ($quotedCounters + @("-si", "1", "-f", "CSV", "-o", '"' + $typeperfCsv + '"')) -join " "
-$typeperfProcess = Start-Process -FilePath "typeperf.exe" -ArgumentList $typeperfArgs -RedirectStandardOutput (Join-Path $OutputDir "typeperf.out.log") -RedirectStandardError (Join-Path $OutputDir "typeperf.err.log") -PassThru -WindowStyle Hidden
+$typeperfJob = Start-TypeperfJob `
+    -Counters $typeperfCounters `
+    -CsvPath $typeperfCsv `
+    -OutLogPath (Join-Path $OutputDir "typeperf.out.log") `
+    -ErrLogPath (Join-Path $OutputDir "typeperf.err.log")
 
 $counterArgs = "collect --process-id $processId --counters System.Runtime --format json --output `"$counterJson`""
 $counterProcess = Start-Process -FilePath $dotnetCounters -ArgumentList $counterArgs -RedirectStandardOutput (Join-Path $OutputDir "dotnet-counters.out.log") -RedirectStandardError (Join-Path $OutputDir "dotnet-counters.err.log") -PassThru -WindowStyle Hidden
@@ -365,6 +721,7 @@ else {
 }
 
 $testProcess.WaitForExit()
+$testProcess.Refresh()
 $testExitCode = $testProcess.ExitCode
 
 if (-not $closedObserved -and -not (Test-Path -LiteralPath $finalGcdump)) {
@@ -372,10 +729,17 @@ if (-not $closedObserved -and -not (Test-Path -LiteralPath $finalGcdump)) {
 }
 
 Stop-IfRunning $counterProcess
-Stop-IfRunning $typeperfProcess
+Stop-JobIfRunning $typeperfJob
 
 if ($testExitCode -ne 0) {
     throw "Memory gate UIAutomation scenario failed with exit code $testExitCode. See '$testOut' and '$testErr'."
+}
+
+if (Test-Path -LiteralPath $testOut) {
+    $testLog = Get-Content -LiteralPath $testOut -Raw
+    if ($testLog -match "Fatal error\.|AccessViolationException") {
+        throw "Memory gate app process emitted a fatal runtime error. See '$testOut'."
+    }
 }
 
 if (-not (Test-Path -LiteralPath $typeperfCsv)) {
@@ -383,9 +747,11 @@ if (-not (Test-Path -LiteralPath $typeperfCsv)) {
 }
 
 $rows = @(Import-Csv -LiteralPath $typeperfCsv)
+$timeColumn = Get-CsvTimeColumn $rows
 $privateColumn = Get-CsvColumn $rows "\Private Bytes"
 $handleColumn = Get-CsvColumn $rows "\Handle Count"
 $workingSetColumn = Get-CsvColumn $rows "\Working Set"
+$threadColumn = Get-CsvColumn $rows "\Thread Count"
 if (-not $privateColumn -or -not $handleColumn) {
     throw "typeperf output is missing Private Bytes or Handle Count columns."
 }
@@ -405,6 +771,18 @@ $finalWorkingSet = Get-TailAverage $workingSet 5
 $gcHeap = Read-DotnetCounterValues $counterJson
 $baselineGcHeap = Get-SampleAt $gcHeap $baselineIndex
 $finalGcHeap = Get-TailAverage $gcHeap 5
+$baselineManagedHeapBytes = Read-GcdumpHeapBytes $baselineHeapstat
+$finalManagedHeapBytes = Read-GcdumpHeapBytes $finalHeapstat
+$phaseSnapshots = New-PhaseSnapshots `
+    -PhaseDir $phaseDir `
+    -Rows $rows `
+    -TimeColumn $timeColumn `
+    -PrivateColumn $privateColumn `
+    -WorkingSetColumn $workingSetColumn `
+    -HandleColumn $handleColumn `
+    -ThreadColumn $threadColumn
+ConvertTo-Json -InputObject @($phaseSnapshots) -Depth 8 |
+    Set-Content -LiteralPath $phaseSnapshotsPath -Encoding UTF8
 
 $failures = New-Object System.Collections.Generic.List[string]
 $privateLimit = $baselinePrivate * (1.0 + ($ThresholdPercent / 100.0))
@@ -416,7 +794,13 @@ if ($handleTailSlope -gt 0.25 -and $finalHandles -gt $baselineHandles) {
     $failures.Add(("Handle Count is still growing: baseline={0:N1}, final={1:N1}, tailSlope={2:N3} handles/sample" -f $baselineHandles, $finalHandles, $handleTailSlope))
 }
 
-if ($null -ne $baselineGcHeap -and $null -ne $finalGcHeap -and $gcHeap.Count -gt 0) {
+if ($null -ne $baselineManagedHeapBytes -and $null -ne $finalManagedHeapBytes) {
+    $managedHeapLimit = $baselineManagedHeapBytes * (1.0 + ($ThresholdPercent / 100.0))
+    if ($finalManagedHeapBytes -gt $managedHeapLimit) {
+        $failures.Add(("Managed heap bytes exceeded threshold after close: baseline={0:N0}, final={1:N0}, limit={2:N0}" -f $baselineManagedHeapBytes, $finalManagedHeapBytes, $managedHeapLimit))
+    }
+}
+elseif ($null -ne $baselineGcHeap -and $null -ne $finalGcHeap -and $gcHeap.Count -gt 0) {
     $gcLimit = $baselineGcHeap * (1.0 + ($ThresholdPercent / 100.0))
     if ($finalGcHeap -gt $gcLimit) {
         $failures.Add(("GC Heap Size exceeded threshold: baseline={0:N2}, final={1:N2}, limit={2:N2}" -f $baselineGcHeap, $finalGcHeap, $gcLimit))
@@ -451,6 +835,11 @@ $summary = [pscustomobject]@{
         baseline = $baselineGcHeap
         finalTailAverage = $finalGcHeap
     }
+    managedHeapBytes = [pscustomobject]@{
+        baseline = $baselineManagedHeapBytes
+        final = $finalManagedHeapBytes
+    }
+    phaseSnapshots = $phaseSnapshots
     artifacts = [pscustomobject]@{
         typeperfCsv = $typeperfCsv
         dotnetCountersJson = $counterJson
@@ -458,6 +847,7 @@ $summary = [pscustomobject]@{
         baselineHeapstat = $baselineHeapstat
         finalGcdump = $finalGcdump
         finalHeapstat = $finalHeapstat
+        phaseSnapshots = $phaseSnapshotsPath
     }
     failures = $failures.ToArray()
 }

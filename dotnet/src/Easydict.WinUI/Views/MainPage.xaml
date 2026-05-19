@@ -49,6 +49,8 @@
                            VerticalAlignment="Center"/>
                 <StackPanel VerticalAlignment="Center">
                     <Button x:Name="ModeSelectorButton"
+                            AutomationProperties.AutomationId="ModeMenuButton"
+                            AutomationProperties.Name="Mode: Translation"
                             Background="Transparent"
                             BorderThickness="0"
                             CornerRadius="{ThemeResource EasydictControlCornerRadius}"

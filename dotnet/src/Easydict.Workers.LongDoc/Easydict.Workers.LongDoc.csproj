@@ -12,7 +12,10 @@
     <AssemblyName>Easydict.Workers.LongDoc</AssemblyName>
     <!-- MuPDF.NET does not ship a stable x86 runtime; drop x86 from the worker RIDs. -->
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
-    <Platform>x64</Platform>
+    <!-- Platform is set by the calling build/publish (CI passes -p:Platform=x64|arm64).
+         Don't hardcode here — that would force cross-arch publish to fail with a
+         RID/Platform mismatch on arm64 runners. -->
+    <Platforms>x64;arm64</Platforms>
     <!-- The worker uses the same .NET runtime as the host (set DOTNET_ROOT in WorkerSpawner)
          to avoid shipping a per-RID self-contained runtime per worker (~30 MB each). -->
     <SelfContained>false</SelfContained>

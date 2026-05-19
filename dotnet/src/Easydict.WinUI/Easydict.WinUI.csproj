@@ -268,21 +268,35 @@
                         SetTargetFramework="TargetFramework=net8.0-windows10.0.22621.0" />
     </ItemGroup>
 
-    <!-- Copy worker exe + dependencies into bin\workers\<kind>\ after build so the
-         WorkerSpawner can resolve them via AppContext.BaseDirectory. -->
+    <!-- Copy worker build outputs into $(TargetDir)workers\<kind>\ so dev runs from
+         bin\ can spawn the worker exe. For publish/MSIX builds, the workers are
+         published independently into ./publish[-msix]/{arch}/workers/{kind}/ by the
+         Makefile (matching the NativeBridge / BrowserRegistrar pattern); this Build
+         target only handles the local-dev codepath.
+
+         The Condition guards against missing worker bin output when someone builds
+         WinUI before either worker has been built — without the guard MSBuild emits
+         a warning. The worker ProjectReferences above ensure both workers are built
+         first, but we accept the no-op fallback to keep CI clean. -->
     <Target Name="CopyWorkerOutput" AfterTargets="Build">
       <ItemGroup>
-        <LongDocWorkerFiles Include="..\Easydict.Workers.LongDoc\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*" />
-        <LocalAiWorkerFiles Include="..\Easydict.Workers.LocalAi\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*" />
+        <_LongDocWorkerFilesPlatform Include="..\Easydict.Workers.LongDoc\bin\$(Platform)\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
+        <_LongDocWorkerFilesAnyCpu  Include="..\Easydict.Workers.LongDoc\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
+        <_LocalAiWorkerFilesPlatform Include="..\Easydict.Workers.LocalAi\bin\$(Platform)\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
+        <_LocalAiWorkerFilesAnyCpu  Include="..\Easydict.Workers.LocalAi\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
       </ItemGroup>
-      <Copy SourceFiles="@(LongDocWorkerFiles)"
-            DestinationFiles="@(LongDocWorkerFiles->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)')"
+      <Copy SourceFiles="@(_LongDocWorkerFilesPlatform);@(_LongDocWorkerFilesAnyCpu)"
+            DestinationFiles="@(_LongDocWorkerFilesPlatform->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)');@(_LongDocWorkerFilesAnyCpu->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true"
-            Condition="'@(LongDocWorkerFiles)' != ''" />
-      <Copy SourceFiles="@(LocalAiWorkerFiles)"
-            DestinationFiles="@(LocalAiWorkerFiles->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)')"
+            Condition="'@(_LongDocWorkerFilesPlatform)@(_LongDocWorkerFilesAnyCpu)' != ''" />
+      <Copy SourceFiles="@(_LocalAiWorkerFilesPlatform);@(_LocalAiWorkerFilesAnyCpu)"
+            DestinationFiles="@(_LocalAiWorkerFilesPlatform->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)');@(_LocalAiWorkerFilesAnyCpu->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true"
-            Condition="'@(LocalAiWorkerFiles)' != ''" />
+            Condition="'@(_LocalAiWorkerFilesPlatform)@(_LocalAiWorkerFilesAnyCpu)' != ''" />
     </Target>
 
     <!-- FlaUI for proper UI Automation text selection -->

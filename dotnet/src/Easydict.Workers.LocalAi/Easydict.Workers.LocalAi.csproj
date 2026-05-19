@@ -10,7 +10,7 @@
     <RootNamespace>Easydict.Workers.LocalAi</RootNamespace>
     <AssemblyName>Easydict.Workers.LocalAi</AssemblyName>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
-    <Platform>x64</Platform>
+    <Platforms>x64;arm64</Platforms>
     <SelfContained>false</SelfContained>
     <WindowsAppSdkAutoInitialize>false</WindowsAppSdkAutoInitialize>
     <UseWinUI>false</UseWinUI>

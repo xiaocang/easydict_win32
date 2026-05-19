@@ -11,9 +11,13 @@ on:
       - 'dotnet/tests/Easydict.WinUI.Tests/Services/SelectionPerformanceTests.cs'
       - 'dotnet/src/Easydict.WinUI/Services/SettingsService.cs'
       - 'dotnet/src/Easydict.WinUI/Services/TranslationManagerService.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/LocalAITranslationService.cs'
+      - 'dotnet/src/Easydict.WinUI/App.xaml.cs'
+      - 'dotnet/src/Easydict.WinUI/runtimeconfig.template.json'
       - 'dotnet/src/Easydict.TranslationService/TranslationManager.cs'
       - 'dotnet/tests/Easydict.TranslationService.Tests/StartupPerformanceTests.cs'
       - 'dotnet/tests/Easydict.TranslationService.Tests/MemoryBudgetTests.cs'
+      - 'dotnet/tests/Easydict.WinUI.Tests/Services/LocalAITranslationServiceLazyInitTests.cs'
   pull_request:
     branches: [master]
     paths:
@@ -24,9 +28,13 @@ on:
       - 'dotnet/tests/Easydict.WinUI.Tests/Services/SelectionPerformanceTests.cs'
       - 'dotnet/src/Easydict.WinUI/Services/SettingsService.cs'
       - 'dotnet/src/Easydict.WinUI/Services/TranslationManagerService.cs'
+      - 'dotnet/src/Easydict.WinUI/Services/LocalAITranslationService.cs'
+      - 'dotnet/src/Easydict.WinUI/App.xaml.cs'
+      - 'dotnet/src/Easydict.WinUI/runtimeconfig.template.json'
       - 'dotnet/src/Easydict.TranslationService/TranslationManager.cs'
       - 'dotnet/tests/Easydict.TranslationService.Tests/StartupPerformanceTests.cs'
       - 'dotnet/tests/Easydict.TranslationService.Tests/MemoryBudgetTests.cs'
+      - 'dotnet/tests/Easydict.WinUI.Tests/Services/LocalAITranslationServiceLazyInitTests.cs'
   workflow_dispatch:
 
 jobs:

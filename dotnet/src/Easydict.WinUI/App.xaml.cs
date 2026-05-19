@@ -265,7 +265,7 @@ namespace Easydict.WinUI
 
             // If cold-launched via protocol activation (easydict://ocr-translate) or
             // --ocr-translate when app wasn't running, trigger OCR after initialization.
-            if (Program.PendingOcrTranslate && _ocrTranslateService != null)
+            if (Program.PendingOcrTranslate)
             {
                 _window.DispatcherQueue.TryEnqueue(async () =>
                 {
@@ -273,7 +273,11 @@ namespace Easydict.WinUI
                     await Task.Delay(500);
                     try
                     {
-                        await _ocrTranslateService.OcrTranslateAsync();
+                        var ocrService = EnsureOcrTranslateService();
+                        if (ocrService != null)
+                        {
+                            await ocrService.OcrTranslateAsync();
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -334,19 +338,15 @@ namespace Easydict.WinUI
                 System.Diagnostics.Debug.WriteLine($"[App] HotkeyService initialization failed: {ex}");
             }
 
-            // Initialize OCR translate service
-            try
-            {
-                _ocrTranslateService = new OcrTranslateService(_window.DispatcherQueue);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[App] OcrTranslateService initialization failed: {ex}");
-            }
-
-            // Start named-event listener for Shell context menu --ocr-translate IPC.
-            // A second process launched from File Explorer signals this event and exits;
-            // the background thread wakes up and triggers OCR on the UI thread.
+            // OCR translate service is created lazily on first hotkey/tray/signal trigger.
+            // Skipping eager construction at startup avoids the OcrTranslateService +
+            // ScreenCaptureService allocation when the user never uses OCR. First-trigger
+            // latency is negligible (cheap ctors; the real OCR engine is created per-call
+            // inside OcrServiceFactory.Create()).
+            //
+            // The named-event listener still starts eagerly because external processes
+            // (shell context menu, browser extension native bridge) signal it at any
+            // time. The signal handler ensures the service exists before invoking it.
             try
             {
                 _ocrSignalEvent = new EventWaitHandle(false, EventResetMode.AutoReset,
@@ -359,18 +359,15 @@ namespace Easydict.WinUI
                         while (_ocrSignalEvent.WaitOne())
                         {
                             System.Diagnostics.Debug.WriteLine("[App] OCR signal received from context menu");
-                            var ocrService = _ocrTranslateService;
-                            if (ocrService is null)
-                            {
-                                System.Diagnostics.Debug.WriteLine("[App] OCR service not available, ignoring signal");
-                                continue;
-                            }
-
                             _window.DispatcherQueue.TryEnqueue(async () =>
                             {
                                 try
                                 {
-                                    await ocrService.OcrTranslateAsync();
+                                    var ocrService = EnsureOcrTranslateService();
+                                    if (ocrService != null)
+                                    {
+                                        await ocrService.OcrTranslateAsync();
+                                    }
                                 }
                                 catch (Exception ex)
                                 {
@@ -473,18 +470,24 @@ namespace Easydict.WinUI
             // Apply saved theme setting
             ApplyTheme(settings.AppTheme);
 
-            // Pre-warm TTS service to avoid first-use delay
-            _ = Task.Run(() =>
+            // Pre-warm TTS service to avoid first-use delay, but only when the user
+            // is likely to use it. If AutoPlayTranslation is off the user clicks Speak
+            // explicitly — first-click latency is acceptable, and skipping warmup keeps
+            // SpeechSynthesizer + voice list out of the working set.
+            if (settings.AutoPlayTranslation)
             {
-                try
+                _ = Task.Run(() =>
                 {
-                    TextToSpeechService.Instance.WarmUp();
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[App] TTS pre-warm failed: {ex.Message}");
-                }
-            });
+                    try
+                    {
+                        TextToSpeechService.Instance.WarmUp();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[App] TTS pre-warm failed: {ex.Message}");
+                    }
+                });
+            }
 
         }
 
@@ -634,7 +637,8 @@ namespace Easydict.WinUI
 
         private async void OnOcrTranslateHotkey()
         {
-            if (_ocrTranslateService is null)
+            var ocrService = EnsureOcrTranslateService();
+            if (ocrService is null)
             {
                 System.Diagnostics.Debug.WriteLine("[Hotkey] OCR service not available");
                 return;
@@ -645,7 +649,7 @@ namespace Easydict.WinUI
                 // Wait briefly for the user to release physical keys and for the mouse drag selection to finalize in the OS.
                 await Task.Delay(150);
 
-                await _ocrTranslateService.OcrTranslateAsync();
+                await ocrService.OcrTranslateAsync();
             }
             catch (Exception ex)
             {
@@ -655,7 +659,8 @@ namespace Easydict.WinUI
 
         private async void OnSilentOcrHotkey()
         {
-            if (_ocrTranslateService is null)
+            var ocrService = EnsureOcrTranslateService();
+            if (ocrService is null)
             {
                 System.Diagnostics.Debug.WriteLine("[Hotkey] OCR service not available");
                 return;
@@ -666,7 +671,7 @@ namespace Easydict.WinUI
                 // Wait briefly for the user to release physical keys and for the mouse drag selection to finalize in the OS.
                 await Task.Delay(150);
 
-                await _ocrTranslateService.SilentOcrAsync();
+                await ocrService.SilentOcrAsync();
             }
             catch (Exception ex)
             {
@@ -693,7 +698,8 @@ namespace Easydict.WinUI
 
         private async void OnTrayOcrTranslate()
         {
-            if (_ocrTranslateService is null)
+            var ocrService = EnsureOcrTranslateService();
+            if (ocrService is null)
             {
                 System.Diagnostics.Debug.WriteLine("[Tray] OCR service not available");
                 return;
@@ -701,12 +707,31 @@ namespace Easydict.WinUI
 
             try
             {
-                await _ocrTranslateService.OcrTranslateAsync();
+                await ocrService.OcrTranslateAsync();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[Tray] OnTrayOcrTranslate error: {ex.Message}");
             }
+        }
+
+        // Lazily instantiate OcrTranslateService on first use. Must run on UI thread because
+        // OcrTranslateService captures DispatcherQueue. Called from all OCR entry points
+        // (hotkeys, tray menu, shell context menu signal, browser extension signal,
+        // protocol activation).
+        private OcrTranslateService? EnsureOcrTranslateService()
+        {
+            if (_ocrTranslateService != null) return _ocrTranslateService;
+            if (_window == null) return null;
+            try
+            {
+                _ocrTranslateService ??= new OcrTranslateService(_window.DispatcherQueue);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] OcrTranslateService lazy init failed: {ex}");
+            }
+            return _ocrTranslateService;
         }
 
         private async void OnBrowserSupportAction(string browser, bool isInstall)

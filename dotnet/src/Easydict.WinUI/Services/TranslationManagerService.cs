@@ -280,15 +280,64 @@ public sealed class TranslationManagerService : IDisposable
         // Local AI is exposed as one user-facing service. Auto mode tries
         // Phi Silica first, then Foundry Local, then OpenVINO/NLLB as the
         // hardware-accelerated translation fallback.
-        _phiSilicaService ??= new PhiSilicaTranslationService();
-        _foundryLocalService ??= new FoundryLocalService(_translationManager.SharedHttpClient);
-        _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
-        _openVinoService ??= new OpenVINOTranslationService();
-        _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
-        _localAIService ??= new LocalAITranslationService(_phiSilicaService, _foundryLocalService, _openVinoService);
+        //
+        // The three providers are wrapped in Lazy<> so they don't materialize
+        // until the user actually translates via local AI. PhiSilica's health
+        // monitor, FoundryLocal's CLI endpoint resolver, and OpenVINO's
+        // ModelDownloadService all sit idle when a user picks Google or DeepL
+        // as their provider and never touches local AI.
+        if (_localAIService == null)
+        {
+            var phiSilicaLazy = new Lazy<PhiSilicaTranslationService>(
+                () =>
+                {
+                    lock (_lock)
+                    {
+                        return _phiSilicaService ??= new PhiSilicaTranslationService();
+                    }
+                },
+                LazyThreadSafetyMode.ExecutionAndPublication);
+
+            var foundryLocalLazy = new Lazy<IStreamTranslationService>(
+                () =>
+                {
+                    lock (_lock)
+                    {
+                        _foundryLocalService ??= new FoundryLocalService(_translationManager.SharedHttpClient);
+                        _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
+                        return _foundryLocalService;
+                    }
+                },
+                LazyThreadSafetyMode.ExecutionAndPublication);
+
+            var openVinoLazy = new Lazy<OpenVINOTranslationService>(
+                () =>
+                {
+                    lock (_lock)
+                    {
+                        _openVinoService ??= new OpenVINOTranslationService();
+                        _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
+                        return _openVinoService;
+                    }
+                },
+                LazyThreadSafetyMode.ExecutionAndPublication);
+
+            _localAIService = new LocalAITranslationService(phiSilicaLazy, foundryLocalLazy, openVinoLazy);
+            _translationManager.UnregisterService(LocalAITranslationService.LegacyOpenVinoServiceId);
+            _translationManager.RegisterService(_localAIService);
+        }
+
+        // Re-apply settings to already-materialized sub-services so a settings
+        // change picks up new endpoint/device values without forcing materialization.
+        if (_foundryLocalService != null)
+        {
+            _foundryLocalService.Configure(_settings.FoundryLocalEndpoint, _settings.FoundryLocalModel);
+        }
+        if (_openVinoService != null)
+        {
+            _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
+        }
         _localAIService.Configure(LocalAIProviderModeExtensions.Parse(_settings.LocalAIProvider));
-        _translationManager.UnregisterService(LocalAITranslationService.LegacyOpenVinoServiceId);
-        _translationManager.RegisterService(_localAIService);
 
         // Configure BuiltIn AI
         _translationManager.ConfigureService("builtin", service =>

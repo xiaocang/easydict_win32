@@ -94,6 +94,35 @@
     <value>Error</value>
   </data>
 
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>Click to query</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>Click header to query</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>Checking...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>Streaming...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>No result</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>cached</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>Waiting for response...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>Translation error</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>Retry</value>
+  </data>
+
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>Auto Detect</value>

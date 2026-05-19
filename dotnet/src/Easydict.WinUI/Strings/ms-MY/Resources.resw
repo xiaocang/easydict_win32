@@ -47,6 +47,35 @@
   <data name="StatusReady" xml:space="preserve"><value>Sedia</value></data>
   <data name="StatusTranslating" xml:space="preserve"><value>Menterjemah...</value></data>
   <data name="StatusError" xml:space="preserve"><value>Ralat</value></data>
+
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>Klik untuk tanya</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>Klik pengepala untuk tanya</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>Menyemak...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>Menstrim...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>Tiada hasil</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>cache</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>Menunggu respons...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>Ralat terjemahan</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>Cuba lagi</value>
+  </data>
   <data name="LangAutoDetect" xml:space="preserve"><value>Kesan Automatik</value></data>
   <data name="LangEnglish" xml:space="preserve"><value>Inggeris</value></data>
   <data name="LangChinese" xml:space="preserve"><value>Cina</value></data>

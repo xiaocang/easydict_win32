@@ -14,6 +14,7 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
     public MinimalServiceResultItem()
     {
         InitializeComponent();
+        PendingQueryText.Text = ServiceResultStatusTextProvider.GetPendingQueryHintText();
     }
 
     public FrameworkElement Element => this;
@@ -129,14 +130,15 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         {
             if (_serviceResult.HasError && !_serviceResult.IsLoading)
             {
-                ErrorText.Text = _serviceResult.Error?.Message ?? "Error";
+                ErrorText.Text = _serviceResult.Error?.Message
+                    ?? ServiceResultStatusTextProvider.GetErrorFallbackText();
                 ErrorText.Visibility = Visibility.Visible;
             }
             else if (_serviceResult.IsStreaming)
             {
                 var displayText = _serviceResult.DisplayText;
                 ResultText.Text = string.IsNullOrWhiteSpace(displayText)
-                    ? "Waiting for response..."
+                    ? ServiceResultStatusTextProvider.GetWaitingForResponseText()
                     : displayText;
                 ResultText.Foreground = ResolveTextBrush(isInfoResult: false)
                     ?? ResultText.Foreground;
@@ -163,12 +165,8 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         ContentArea.Visibility = hasVisibleContent ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private static string GetStatusText(ServiceQueryResult serviceResult)
-    {
-        if (serviceResult.ShowPendingQueryHint) return "Click to query";
-        if (serviceResult.IsLoading) return "Loading";
-        return serviceResult.StatusText;
-    }
+    private static string GetStatusText(ServiceQueryResult serviceResult) =>
+        ServiceResultStatusTextProvider.GetStatusText(serviceResult);
 
     private static string GetMinimalDisplayText(ServiceQueryResult serviceResult)
     {

@@ -47,6 +47,35 @@
   <data name="StatusReady" xml:space="preserve"><value>Klar</value></data>
   <data name="StatusTranslating" xml:space="preserve"><value>Oversætter...</value></data>
   <data name="StatusError" xml:space="preserve"><value>Fejl</value></data>
+
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>Klik for at forespørge</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>Klik på overskriften for at forespørge</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>Kontrollerer...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>Streamer...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>Intet resultat</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>cachelagret</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>Venter på svar...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>Oversættelsesfejl</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>Prøv igen</value>
+  </data>
   <data name="LangAutoDetect" xml:space="preserve"><value>Automatisk registrering</value></data>
   <data name="LangEnglish" xml:space="preserve"><value>Engelsk</value></data>
   <data name="LangChinese" xml:space="preserve"><value>Kinesisk</value></data>

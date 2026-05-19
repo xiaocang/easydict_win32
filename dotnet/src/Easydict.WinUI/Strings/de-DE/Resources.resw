@@ -91,6 +91,35 @@
     <value>Fehler</value>
   </data>
 
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>Zum Abfragen klicken</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>Kopfzeile zum Abfragen klicken</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>Prüfen...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>Streaming...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>Kein Ergebnis</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>zwischengespeichert</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>Warte auf Antwort...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>Übersetzungsfehler</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>Erneut versuchen</value>
+  </data>
+
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>Automatisch erkennen</value>

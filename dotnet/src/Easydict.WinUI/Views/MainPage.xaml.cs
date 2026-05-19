@@ -100,6 +100,11 @@ namespace Easydict.WinUI.Views
 
         internal readonly record struct SuggestionTokenContext(string QueryText, int StartIndex, int Length);
 
+        private readonly record struct ServiceResultDescriptor(
+            string ServiceId,
+            string DisplayName,
+            bool EnabledQuery);
+
         internal enum SuggestionNavigationCommand
         {
             None,
@@ -327,6 +332,7 @@ namespace Easydict.WinUI.Views
             ApplyStatusChrome();
             ApplyStatusSummaryChrome();
             ApplyTranslateButtonsChrome();
+            RefreshMainControlChrome();
 
             foreach (var control in _resultControls)
             {
@@ -424,10 +430,10 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush", this)
+            Background = CreateThemeBrush("FloatingWindowBackgroundColor")
                 ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            MainWindowBorder.Background = ThemeResourceService.GetBrush("ApplicationPageBackgroundThemeBrush", this);
-            MainWindowBorder.BorderBrush = ThemeResourceService.GetBrush("MainBorderBrush", this);
+            MainWindowBorder.Background = CreateThemeBrush("FloatingWindowBackgroundColor");
+            MainWindowBorder.BorderBrush = CreateThemeBrush("MainBorderColor");
             MainWindowBorder.BorderThickness = new Thickness(0);
             MainWindowBorder.CornerRadius = new CornerRadius(0);
             MainWindowBorder.Padding = new Thickness(16);
@@ -454,12 +460,11 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            var textBackground = ThemeResourceService.GetBrush("TextControlBackground", this)
+            var textBackground = CreateThemeBrush("FloatingInputBackgroundColor")
                 ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            var textBorder = ThemeResourceService.GetBrush("TextControlBorderBrush", this)
+            var textBorder = CreateThemeBrush("FloatingInputBorderColor")
                 ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            var textForeground = ThemeResourceService.GetBrush("TextControlForeground", this)
-                ?? ThemeResourceService.GetBrush("QueryTextBrush", this);
+            var textForeground = CreateThemeBrush("QueryTextColor");
             var placeholderForeground = ThemeResourceService.GetBrush("TextControlPlaceholderForeground", this)
                 ?? ThemeResourceService.GetBrush("TextFillColorTertiaryBrush", this);
             var transparentBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
@@ -493,6 +498,184 @@ namespace Easydict.WinUI.Views
             }
 
             SetTextBoxChromeResources(InputTextBox, textBackground, transparentBrush);
+        }
+
+        private void RefreshMainControlChrome()
+        {
+            if (MinimalThemeService.IsActive)
+            {
+                ClearMainControlChromeOverrides();
+                return;
+            }
+
+            var pageBackground = CreateThemeBrush("FloatingWindowBackgroundColor")
+                ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            var pageBorder = CreateThemeBrush("MainBorderColor");
+            var cardBackground = CreateThemeBrush("EasydictCardBackgroundColor");
+            var cardBorder = CreateThemeBrush("EasydictCardBorderColor");
+            var comboBackground = CreateThemeBrush("EasydictCardBackgroundColor");
+            var comboHoverBackground = CreateThemeBrush("FloatingInputBackgroundColor");
+            var comboForeground = CreateThemeBrush("QueryTextColor");
+            var comboBorder = CreateThemeBrush("FloatingInputBorderColor");
+            var foreground = CreateThemeBrush("QueryTextColor");
+            var secondaryForeground = CreateThemeBrush("ServiceResultHeaderSecondaryForegroundColor");
+            var iconForeground = CreateThemeBrush("FloatingIconForegroundColor");
+
+            Background = pageBackground;
+            MainWindowBorder.Background = pageBackground;
+            MainWindowBorder.BorderBrush = pageBorder;
+
+            ApplyHeaderChrome(foreground, secondaryForeground ?? iconForeground);
+            ApplyCardChrome(QuickInputCard, cardBackground, cardBorder);
+            ApplyCardChrome(QuickOutputCard, cardBackground, cardBorder);
+            ApplyCardChrome(LongDocInputCard, cardBackground, cardBorder);
+            ApplyCardChrome(LongDocOutputCard, cardBackground, cardBorder);
+
+            ApplyComboBoxChrome(SourceLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
+            ApplyComboBoxChrome(TargetLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
+            ApplyComboBoxChrome(SourceLangComboNarrow, comboBackground, comboHoverBackground, comboForeground, comboBorder);
+            ApplyComboBoxChrome(TargetLangComboNarrow, comboBackground, comboHoverBackground, comboForeground, comboBorder);
+            ApplyComboBoxChrome(LongDocSourceLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
+            ApplyComboBoxChrome(LongDocTargetLangCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
+            ApplyComboBoxChrome(LongDocServiceCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
+            ApplyComboBoxChrome(LongDocInputModeCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
+            ApplyComboBoxChrome(LongDocOutputModeCombo, comboBackground, comboHoverBackground, comboForeground, comboBorder);
+        }
+
+        private void ClearMainControlChromeOverrides()
+        {
+            ClearCardChrome(QuickInputCard);
+            ClearCardChrome(QuickOutputCard);
+            ClearCardChrome(LongDocInputCard);
+            ClearCardChrome(LongDocOutputCard);
+
+            ClearComboBoxChrome(SourceLangCombo);
+            ClearComboBoxChrome(TargetLangCombo);
+            ClearComboBoxChrome(SourceLangComboNarrow);
+            ClearComboBoxChrome(TargetLangComboNarrow);
+            ClearComboBoxChrome(LongDocSourceLangCombo);
+            ClearComboBoxChrome(LongDocTargetLangCombo);
+            ClearComboBoxChrome(LongDocServiceCombo);
+            ClearComboBoxChrome(LongDocInputModeCombo);
+            ClearComboBoxChrome(LongDocOutputModeCombo);
+
+            ModeSelectorButton.ClearValue(Control.ForegroundProperty);
+            ModeTitleText.ClearValue(TextBlock.ForegroundProperty);
+            ModeChevronIcon.ClearValue(FontIcon.ForegroundProperty);
+            ModeSubtitle.ClearValue(TextBlock.ForegroundProperty);
+            LangHelpIcon.ClearValue(FontIcon.ForegroundProperty);
+            LangHelpIconNarrow.ClearValue(FontIcon.ForegroundProperty);
+            InputHelpIcon.ClearValue(FontIcon.ForegroundProperty);
+        }
+
+        private void ApplyHeaderChrome(Brush? foreground, Brush? secondaryForeground)
+        {
+            if (foreground is not null)
+            {
+                ModeSelectorButton.Foreground = foreground;
+                ModeTitleText.Foreground = foreground;
+            }
+
+            if (secondaryForeground is not null)
+            {
+                ModeChevronIcon.Foreground = secondaryForeground;
+                ModeSubtitle.Foreground = secondaryForeground;
+                LangHelpIcon.Foreground = secondaryForeground;
+                LangHelpIconNarrow.Foreground = secondaryForeground;
+                InputHelpIcon.Foreground = secondaryForeground;
+            }
+        }
+
+        private Brush? CreateThemeBrush(string colorKey)
+        {
+            return ThemeResourceService.GetColor(colorKey, this) is { } color
+                ? new SolidColorBrush(color)
+                : null;
+        }
+
+        private static void ApplyCardChrome(Border card, Brush? background, Brush? border)
+        {
+            if (background is not null)
+            {
+                card.Background = background;
+            }
+
+            if (border is not null)
+            {
+                card.BorderBrush = border;
+            }
+        }
+
+        private static void ClearCardChrome(Border card)
+        {
+            card.ClearValue(Border.BackgroundProperty);
+            card.ClearValue(Border.BorderBrushProperty);
+        }
+
+        private static void ApplyComboBoxChrome(
+            ComboBox comboBox,
+            Brush? background,
+            Brush? hoverBackground,
+            Brush? foreground,
+            Brush? border)
+        {
+            if (background is not null)
+            {
+                comboBox.Background = background;
+            }
+
+            if (foreground is not null)
+            {
+                comboBox.Foreground = foreground;
+            }
+
+            if (border is not null)
+            {
+                comboBox.BorderBrush = border;
+            }
+
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBackground", background);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBackgroundPointerOver", hoverBackground ?? background);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBackgroundFocused", background);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxForeground", foreground);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxForegroundPointerOver", foreground);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxForegroundFocused", foreground);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBorderBrush", border);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBorderBrushPointerOver", border);
+            SetResourceIfNotNull(comboBox.Resources, "ComboBoxBorderBrushFocused", border);
+        }
+
+        private static void SetResourceIfNotNull(ResourceDictionary resources, string key, object? value)
+        {
+            if (value is not null)
+            {
+                resources[key] = value;
+            }
+        }
+
+        private static void ClearComboBoxChrome(ComboBox comboBox)
+        {
+            comboBox.ClearValue(Control.BackgroundProperty);
+            comboBox.ClearValue(Control.ForegroundProperty);
+            comboBox.ClearValue(Control.BorderBrushProperty);
+
+            RemoveResource(comboBox.Resources, "ComboBoxBackground");
+            RemoveResource(comboBox.Resources, "ComboBoxBackgroundPointerOver");
+            RemoveResource(comboBox.Resources, "ComboBoxBackgroundFocused");
+            RemoveResource(comboBox.Resources, "ComboBoxForeground");
+            RemoveResource(comboBox.Resources, "ComboBoxForegroundPointerOver");
+            RemoveResource(comboBox.Resources, "ComboBoxForegroundFocused");
+            RemoveResource(comboBox.Resources, "ComboBoxBorderBrush");
+            RemoveResource(comboBox.Resources, "ComboBoxBorderBrushPointerOver");
+            RemoveResource(comboBox.Resources, "ComboBoxBorderBrushFocused");
+        }
+
+        private static void RemoveResource(ResourceDictionary resources, string key)
+        {
+            if (resources.ContainsKey(key))
+            {
+                resources.Remove(key);
+            }
         }
 
         private static void SetTextBoxChromeResources(TextBox textBox, Brush background, Brush border)
@@ -1107,14 +1290,32 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            ReleaseServiceResultControls();
-
             // Get enabled services and EnabledQuery settings from settings
             var enabledServices = _settings.MainWindowEnabledServices;
             var enabledQuerySettings = _settings.MainWindowServiceEnabledQuery;
+            var manager = TranslationManagerService.Instance.Manager;
+            var grammarSourceLanguage = _lastQuickQueryResolution?.EffectiveSourceLanguage
+                ?? TranslationLanguage.Auto;
+            var descriptors = GetMainWindowServiceResultDescriptors(
+                enabledServices,
+                enabledQuerySettings,
+                manager,
+                grammarSourceLanguage);
+
+            if (skipRebuildWhenDebugFlagSet && TryReuseServiceResultControls(descriptors, reason))
+            {
+#if DEBUG
+                MemoryDiagnostics.LogDelta("MainPage.InitializeServiceResults retained after reuse", initializeResultsBaseline);
+                MemoryDiagnostics.LogSnapshot("MainPage.InitializeServiceResults reused");
+                LogObjectState($"InitializeServiceResults reused (reason={reason})");
+#endif
+                return;
+            }
+
+            ReleaseServiceResultControls();
 
             // If no services are enabled, show placeholder with guidance
-            if (enabledServices.Count == 0)
+            if (descriptors.Count == 0)
             {
                 PlaceholderText.Text = LocalizationService.Instance.GetString("NoServicesEnabled");
                 PlaceholderText.Visibility = Visibility.Visible;
@@ -1126,33 +1327,17 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            // Get display names from TranslationManager (single source of truth)
-            var manager = TranslationManagerService.Instance.Manager;
-            var grammarSourceLanguage = _lastQuickQueryResolution?.EffectiveSourceLanguage
-                ?? TranslationLanguage.Auto;
-
-            foreach (var serviceId in enabledServices)
+            foreach (var descriptor in descriptors)
             {
-                // Use service-provided DisplayName, fallback to serviceId if not found
-                var displayName = serviceId;
-                ITranslationService? service = null;
-                if (manager.Services.TryGetValue(serviceId, out service))
-                {
-                    displayName = service.DisplayName;
-                }
-
-                var isGrammarCapable = service is not null
+                var isGrammarCapable = manager.Services.TryGetValue(descriptor.ServiceId, out var service)
                     && GrammarCorrectionServiceAvailability.IsAvailable(service, grammarSourceLanguage);
-
-                // Get EnabledQuery setting (default true if not found)
-                var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
 
                 var result = new ServiceQueryResult
                 {
-                    ServiceId = serviceId,
-                    ServiceDisplayName = displayName,
-                    EnabledQuery = enabledQuery,
-                    IsExpanded = enabledQuery, // Manual-query services start collapsed
+                    ServiceId = descriptor.ServiceId,
+                    ServiceDisplayName = descriptor.DisplayName,
+                    EnabledQuery = descriptor.EnabledQuery,
+                    IsExpanded = descriptor.EnabledQuery, // Manual-query services start collapsed
                     CurrentMode = _currentQuickQueryMode,
                     IsGrammarCapable = isGrammarCapable,
                 };
@@ -1181,6 +1366,85 @@ namespace Easydict.WinUI.Views
             MemoryDiagnostics.LogSnapshot("MainPage.InitializeServiceResults complete");
             LogObjectState($"InitializeServiceResults complete (reason={reason})");
 #endif
+        }
+
+        private List<ServiceResultDescriptor> GetMainWindowServiceResultDescriptors(
+            IEnumerable<string> enabledServices,
+            IReadOnlyDictionary<string, bool> enabledQuerySettings,
+            TranslationManager manager,
+            TranslationLanguage grammarSourceLanguage)
+        {
+            var descriptors = new List<ServiceResultDescriptor>();
+
+            foreach (var serviceId in enabledServices)
+            {
+                var displayName = serviceId;
+                if (manager.Services.TryGetValue(serviceId, out var service))
+                {
+                    displayName = service.DisplayName;
+
+                    // In grammar correction, only show services that can correct grammar.
+                    if (_currentQuickQueryMode == QueryMode.GrammarCorrection &&
+                        !GrammarCorrectionServiceAvailability.IsAvailable(service, grammarSourceLanguage))
+                    {
+                        continue;
+                    }
+                }
+                else if (_currentQuickQueryMode == QueryMode.GrammarCorrection)
+                {
+                    continue;
+                }
+
+                // Get EnabledQuery setting (default true if not found)
+                var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
+                descriptors.Add(new ServiceResultDescriptor(serviceId, displayName, enabledQuery));
+            }
+
+            return descriptors;
+        }
+
+        private bool TryReuseServiceResultControls(
+            IReadOnlyList<ServiceResultDescriptor> descriptors,
+            string reason)
+        {
+            if (_useMemoryAbVariantB ||
+                descriptors.Count == 0 ||
+                _serviceResults.Count != descriptors.Count ||
+                _resultControls.Count != descriptors.Count ||
+                ResultsPanel.Items.Count != descriptors.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < descriptors.Count; i++)
+            {
+                var descriptor = descriptors[i];
+                var current = _serviceResults[i];
+                if (!string.Equals(current.ServiceId, descriptor.ServiceId, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(current.ServiceDisplayName, descriptor.DisplayName, StringComparison.Ordinal) ||
+                    current.EnabledQuery != descriptor.EnabledQuery)
+                {
+                    return false;
+                }
+            }
+
+            foreach (var serviceResult in _serviceResults)
+            {
+                serviceResult.CurrentMode = _currentQuickQueryMode;
+                RefreshServiceResultView(serviceResult);
+            }
+
+            ReorderResultsPanel();
+
+            PlaceholderText.Text = _currentQuickQueryMode == QueryMode.GrammarCorrection
+                ? LocalizationService.Instance.GetString("GrammarPlaceholder")
+                : LocalizationService.Instance.GetString("TranslationPlaceholder");
+            PlaceholderText.Visibility = Visibility.Collapsed;
+
+#if DEBUG
+            Debug.WriteLine($"[MainPage] InitializeServiceResults reused cached controls (reason={reason})");
+#endif
+            return true;
         }
 
         private void RebuildServiceResultControlsForCurrentTheme()
@@ -1637,6 +1901,16 @@ namespace Easydict.WinUI.Views
             _isQuerying = loading;
 
             var loc = LocalizationService.Instance;
+            var translatingStatus = loc.GetString("StatusTranslating");
+            if (loading)
+            {
+                UpdateStatus(null, translatingStatus);
+            }
+            else if (string.Equals(_lastStatusText, translatingStatus, StringComparison.Ordinal))
+            {
+                UpdateStatus(true, loc.GetString("StatusReady"));
+            }
+
             var tooltip = loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip");
             ToolTipService.SetToolTip(TranslateButton, tooltip);
             ToolTipService.SetToolTip(TranslateButtonNarrow, tooltip);
@@ -1833,6 +2107,9 @@ namespace Easydict.WinUI.Views
             {
                 if (_isClosing) return;
 
+                SetLoading(true);
+                PrepareServiceResultsForQueryStart();
+
                 // Resolve the effective quick-query mode before prompting services so
                 // grammar mode only prepares/runs grammar-capable services.
                 var detectedLanguage = await DetectSourceLanguageForQueryAsync(inputText, detectionService, ct);
@@ -1867,6 +2144,7 @@ namespace Easydict.WinUI.Views
                     SetStatusSummary(
                         LocalizationService.Instance.GetString("NoAvailableTargetLanguage"),
                         important: true);
+                    ResetAllServiceResultsLoadingState();
                     return;
                 }
 
@@ -1914,16 +2192,17 @@ namespace Easydict.WinUI.Views
                         SetStatusSummary(
                             LocalizationService.Instance.GetString("NoAvailableTargetLanguage"),
                             important: true);
+                        ResetAllServiceResultsLoadingState();
                         return;
                     }
 
                     if (!_serviceResults.Any(result => result.EnabledQuery))
                     {
+                        ResetAllServiceResultsLoadingState();
                         return;
                     }
                 }
 
-                SetLoading(true);
                 _hasAutoPlayedCurrentQuery = false;
 
                 // Reset all service results
@@ -2143,6 +2422,28 @@ namespace Easydict.WinUI.Views
             }
 
             return trackedTask;
+        }
+
+        private void PrepareServiceResultsForQueryStart()
+        {
+            if (_serviceResults.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var serviceResult in _serviceResults)
+            {
+                serviceResult.Reset();
+                if (serviceResult.EnabledQuery)
+                {
+                    serviceResult.IsLoading = true;
+                }
+
+                RefreshServiceResultView(serviceResult);
+            }
+
+            PlaceholderText.Visibility = Visibility.Collapsed;
+            ReorderResultsPanel();
         }
 
         /// <summary>

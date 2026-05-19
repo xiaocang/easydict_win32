@@ -91,6 +91,35 @@
     <value>錯誤</value>
   </data>
 
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>點擊查詢</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>點擊服務標題查詢</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>檢查中...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>串流輸出中...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>無結果</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>已快取</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>等待回應...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>翻譯錯誤</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>重試</value>
+  </data>
+
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>自動偵測</value>

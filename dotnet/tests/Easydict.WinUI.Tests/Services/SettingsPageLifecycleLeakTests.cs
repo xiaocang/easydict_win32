@@ -171,6 +171,17 @@ public class SettingsPageLifecycleLeakTests
             "deferred I/O logging should distinguish dispatcher scheduling from actual cache execution");
     }
 
+    [Fact]
+    public void SettingsPage_LogsDeferredOnnxStartOnlyFromRunner()
+    {
+        var content = File.ReadAllText(SettingsPagePath);
+
+        content.Should().Contain("Deferred I/O: dispatching queued work",
+            "the queue callback should log dispatch instead of duplicating the runner's ONNX start message");
+        CountOccurrences(content, "Deferred I/O: begin UpdateOnnxModelStatus").Should().Be(1,
+            "only RunDeferredSettingsIo should emit the ONNX start marker");
+    }
+
     private static string FindProjectRoot()
     {
         var current = AppDomain.CurrentDomain.BaseDirectory;
@@ -186,5 +197,18 @@ public class SettingsPageLifecycleLeakTests
         }
 
         return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..");
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
     }
 }

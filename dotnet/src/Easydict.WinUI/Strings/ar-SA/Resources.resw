@@ -94,6 +94,35 @@
     <value>خطأ</value>
   </data>
 
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>انقر للاستعلام</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>انقر على الرأس للاستعلام</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>جارٍ التحقق...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>جارٍ البث...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>لا توجد نتيجة</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>مخزّن مؤقتًا</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>في انتظار الاستجابة...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>خطأ في الترجمة</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>إعادة المحاولة</value>
+  </data>
+
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>اكتشاف تلقائي</value>

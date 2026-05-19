@@ -86,6 +86,17 @@ public class LanguageDetectionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DetectAsync_WhenCancellationRequested_ThrowsOperationCanceledException()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = () => _service.DetectAsync("This text is long enough to trigger language detection.", cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
     public void GetTargetLanguage_WhenSourceMatchesFirst_ReturnsSecond()
     {
         var firstLang = LanguageExtensions.FromCode(_settings.FirstLanguage);

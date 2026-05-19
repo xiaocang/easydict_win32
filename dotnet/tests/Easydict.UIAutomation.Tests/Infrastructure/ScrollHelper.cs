@@ -1,3 +1,4 @@
+using System.Drawing;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
 
@@ -37,16 +38,25 @@ public static class ScrollHelper
     {
         if (scrollViewer.Patterns.Scroll.IsSupported)
         {
-            var scrollPattern = scrollViewer.Patterns.Scroll.Pattern;
-            // -1 means "do not change" for horizontal scroll
-            scrollPattern.SetScrollPercent(-1, verticalPercent);
-            log?.Invoke($"ScrollPattern: scrolled to {verticalPercent}%");
+            try
+            {
+                var scrollPattern = scrollViewer.Patterns.Scroll.Pattern;
+                // -1 means "do not change" for horizontal scroll
+                scrollPattern.SetScrollPercent(-1, verticalPercent);
+                log?.Invoke($"ScrollPattern: scrolled to {verticalPercent}%");
+            }
+            catch (InvalidOperationException ex)
+            {
+                log?.Invoke($"ScrollPattern failed ({ex.Message}), falling back to Mouse.Scroll");
+                MoveMouseToScrollTarget(scrollViewer, log);
+                Mouse.Scroll(GetMouseScrollDeltaForTargetPercent(verticalPercent));
+            }
         }
         else
         {
             log?.Invoke("ScrollPattern not available, falling back to Mouse.Scroll");
-            Mouse.MoveTo(scrollViewer.GetClickablePoint());
-            Mouse.Scroll(-15);
+            MoveMouseToScrollTarget(scrollViewer, log);
+            Mouse.Scroll(GetMouseScrollDeltaForTargetPercent(verticalPercent));
         }
 
         Thread.Sleep(ScrollSettleMs);
@@ -70,56 +80,99 @@ public static class ScrollHelper
         Func<AutomationElement?> finder,
         Action<string>? log = null)
     {
+        var currentResult = finder();
+        if (IsVisible(currentResult))
+        {
+            return currentResult;
+        }
+
         if (scrollViewer.Patterns.Scroll.IsSupported)
         {
-            var scrollPattern = scrollViewer.Patterns.Scroll.Pattern;
-
-            // Jump to the expected location first
-            scrollPattern.SetScrollPercent(-1, startPercent);
-            log?.Invoke($"ScrollPattern: jumped to {startPercent}%");
-            Thread.Sleep(ScrollSettleMs);
-
-            var result = finder();
-            if (result != null) return result;
-
-            // Scan forward from startPercent to 100% in small steps
-            for (var percent = startPercent + ScanStepPercent; percent <= 100; percent += ScanStepPercent)
+            try
             {
-                scrollPattern.SetScrollPercent(-1, percent);
-                log?.Invoke($"ScrollPattern: scanning at {percent}%");
-                Thread.Sleep(ScanSettleMs);
+                var scrollPattern = scrollViewer.Patterns.Scroll.Pattern;
 
-                result = finder();
-                if (result != null) return result;
-            }
-
-            // If not found scanning forward, scan backward from startPercent to 0%
-            for (var percent = startPercent - ScanStepPercent; percent >= 0; percent -= ScanStepPercent)
-            {
-                scrollPattern.SetScrollPercent(-1, percent);
-                log?.Invoke($"ScrollPattern: scanning back at {percent}%");
-                Thread.Sleep(ScanSettleMs);
-
-                result = finder();
-                if (result != null) return result;
-            }
-        }
-        else
-        {
-            log?.Invoke("ScrollPattern not available, falling back to Mouse.Scroll");
-            Mouse.MoveTo(scrollViewer.GetClickablePoint());
-
-            // Scroll down incrementally and check at each step
-            for (int i = 0; i < 20; i++)
-            {
-                Mouse.Scroll(-5);
-                Thread.Sleep(ScanSettleMs);
+                scrollPattern.SetScrollPercent(-1, startPercent);
+                log?.Invoke($"ScrollPattern: jumped to {startPercent}%");
+                Thread.Sleep(ScrollSettleMs);
 
                 var result = finder();
-                if (result != null) return result;
+                if (IsVisible(result)) return result;
+
+                for (var percent = startPercent + ScanStepPercent; percent <= 100; percent += ScanStepPercent)
+                {
+                    scrollPattern.SetScrollPercent(-1, percent);
+                    log?.Invoke($"ScrollPattern: scanning at {percent}%");
+                    Thread.Sleep(ScanSettleMs);
+
+                    result = finder();
+                    if (IsVisible(result)) return result;
+                }
+
+                for (var percent = startPercent - ScanStepPercent; percent >= 0; percent -= ScanStepPercent)
+                {
+                    scrollPattern.SetScrollPercent(-1, percent);
+                    log?.Invoke($"ScrollPattern: scanning back at {percent}%");
+                    Thread.Sleep(ScanSettleMs);
+
+                    result = finder();
+                    if (IsVisible(result)) return result;
+                }
             }
+            catch (InvalidOperationException ex)
+            {
+                log?.Invoke($"ScrollPattern failed ({ex.Message}), falling back to Mouse.Scroll");
+            }
+        }
+
+        log?.Invoke("ScrollPattern not available or failed, falling back to Mouse.Scroll");
+        MoveMouseToScrollTarget(scrollViewer, log);
+
+        // Scroll down incrementally and check at each step
+        for (int i = 0; i < 20; i++)
+        {
+            Mouse.Scroll(-5);
+            Thread.Sleep(ScanSettleMs);
+
+            var result = finder();
+            if (IsVisible(result)) return result;
         }
 
         return null;
+    }
+
+    private static bool IsVisible(AutomationElement? element)
+    {
+        return element is { IsOffscreen: false };
+    }
+
+    private static void MoveMouseToScrollTarget(
+        AutomationElement scrollViewer,
+        Action<string>? log)
+    {
+        try
+        {
+            Mouse.MoveTo(scrollViewer.GetClickablePoint());
+            return;
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"Clickable point unavailable ({ex.Message}), using element center");
+        }
+
+        var bounds = scrollViewer.BoundingRectangle;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        Mouse.MoveTo(new Point(
+            bounds.Left + (bounds.Width / 2),
+            bounds.Top + (bounds.Height / 2)));
+    }
+
+    private static int GetMouseScrollDeltaForTargetPercent(double verticalPercent)
+    {
+        return verticalPercent <= 0 ? 15 : -15;
     }
 }

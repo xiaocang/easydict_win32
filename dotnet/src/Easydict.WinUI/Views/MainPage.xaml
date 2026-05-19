@@ -48,7 +48,8 @@
                            FontSize="26"
                            VerticalAlignment="Center"/>
                 <StackPanel VerticalAlignment="Center">
-                    <Button Background="Transparent"
+                    <Button x:Name="ModeSelectorButton"
+                            Background="Transparent"
                             BorderThickness="0"
                             CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                             Padding="4,2"
@@ -70,11 +71,14 @@
                         </Button.Flyout>
                         <StackPanel Orientation="Horizontal"
                                     Spacing="4">
-                            <TextBlock Text="Easydict"
+                            <TextBlock x:Name="ModeTitleText"
+                                       AutomationProperties.AutomationId="ModeTitleText"
+                                       Text="Easydict"
                                        FontSize="22"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
-                            <FontIcon Glyph="&#xE70D;"
+                            <FontIcon x:Name="ModeChevronIcon"
+                                      Glyph="&#xE70D;"
                                       FontSize="10"
                                       VerticalAlignment="Center"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -194,6 +198,7 @@
                     <!-- Source Language -->
                     <ComboBox
                         x:Name="SourceLangCombo"
+                        AutomationProperties.AutomationId="SourceLangCombo"
                         Grid.Column="0"
                         MinWidth="130"
                         MaxWidth="200"
@@ -218,6 +223,7 @@
                     <!-- Target Language -->
                     <ComboBox
                         x:Name="TargetLangCombo"
+                        AutomationProperties.AutomationId="TargetLangCombo"
                         Grid.Column="2"
                         MinWidth="130"
                         MaxWidth="200"
@@ -277,6 +283,7 @@
 
                         <ComboBox
                             x:Name="SourceLangComboNarrow"
+                            AutomationProperties.AutomationId="SourceLangComboNarrow"
                             Grid.Column="0"
                             HorizontalAlignment="Stretch"
                             SelectionChanged="OnSourceLanguageChanged"
@@ -297,6 +304,7 @@
 
                         <ComboBox
                             x:Name="TargetLangComboNarrow"
+                            AutomationProperties.AutomationId="TargetLangComboNarrow"
                             Grid.Column="2"
                             HorizontalAlignment="Stretch"
                             SelectionChanged="OnTargetLanguageChanged"
@@ -337,6 +345,8 @@
 
                 <!-- Input Card -->
                 <Border x:Name="QuickInputCard"
+                        AutomationProperties.AutomationId="QuickInputCard"
+                        AutomationProperties.AccessibilityView="Control"
                         Grid.Row="0"
                         MaxHeight="480"
                         Style="{StaticResource CardStyle}"

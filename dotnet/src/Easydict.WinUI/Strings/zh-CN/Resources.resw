@@ -94,6 +94,35 @@
     <value>错误</value>
   </data>
 
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>点击查询</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>点击服务标题查询</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>检查中...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>流式输出中...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>无结果</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>已缓存</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>等待响应...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>翻译错误</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>重试</value>
+  </data>
+
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>自动检测</value>

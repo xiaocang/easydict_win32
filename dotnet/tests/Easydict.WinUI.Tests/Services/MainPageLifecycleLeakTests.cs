@@ -15,6 +15,11 @@ public class MainPageLifecycleLeakTests
     private static readonly string PhiSilicaPromptServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "PhiSilicaModelPreparationPromptService.cs");
     private static readonly string PhiSilicaPreparationCoordinatorPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "PhiSilicaModelPreparationCoordinator.cs");
     private static readonly string ServiceResultViewHostPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultViewHost.cs");
+    private static readonly string ServiceResultStatusTextProviderPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultStatusTextProvider.cs");
+    private static readonly string ServiceResultItemXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml");
+    private static readonly string ServiceResultItemPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml.cs");
+    private static readonly string MinimalServiceResultItemXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "MinimalServiceResultItem.xaml");
+    private static readonly string MinimalServiceResultItemPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "MinimalServiceResultItem.xaml.cs");
 
     [Fact]
     public void MainPage_ReleasesServiceResultControlsBeforeRebuild()
@@ -48,6 +53,78 @@ public class MainPageLifecycleLeakTests
             "profiling should be able to isolate MainPage result-panel rebuild costs");
         content.Should().Contain("InitializeServiceResults(skipRebuildWhenDebugFlagSet: true, reason: \"OnPageLoaded\");",
             "MainPage reload should explicitly opt into the debug rebuild-skip behavior");
+    }
+
+    [Fact]
+    public void MainPage_ReusesCachedResultControlsWhenServicesAreUnchanged()
+    {
+        var content = File.ReadAllText(MainPagePath);
+
+        content.Should().Contain("TryReuseServiceResultControls(descriptors, reason)",
+            "cached MainPage navigation should avoid releasing and recreating result controls when settings still match");
+        content.Should().Contain("InitializeServiceResults reused cached controls",
+            "reuse decisions should be explicit in DEBUG output");
+    }
+
+    [Fact]
+    public void MainPage_EntersTranslatingStateBeforeDetection()
+    {
+        var content = File.ReadAllText(MainPagePath);
+
+        content.Should().Contain("var translatingStatus = loc.GetString(\"StatusTranslating\");",
+            "SetLoading should use the localized translating status");
+        content.Should().Contain("UpdateStatus(null, translatingStatus);",
+            "the header status should show translating while a query is active");
+        content.Should().Contain("PrepareServiceResultsForQueryStart();",
+            "service rows should also enter their loading state before language detection can block");
+        content.Should().Contain("serviceResult.IsLoading = true;",
+            "auto-query service rows should show their StatusText loading label immediately");
+
+        var loadingIndex = content.IndexOf("SetLoading(true);", StringComparison.Ordinal);
+        var rowLoadingIndex = content.IndexOf("PrepareServiceResultsForQueryStart();", StringComparison.Ordinal);
+        var detectionIndex = content.IndexOf("DetectSourceLanguageForQueryAsync(inputText, detectionService, ct)", StringComparison.Ordinal);
+        loadingIndex.Should().BeGreaterThanOrEqualTo(0);
+        rowLoadingIndex.Should().BeGreaterThanOrEqualTo(0);
+        detectionIndex.Should().BeGreaterThanOrEqualTo(0);
+        loadingIndex.Should().BeLessThan(detectionIndex,
+            "clicking Translate or pressing Enter should enter the querying UI before language detection can block");
+        rowLoadingIndex.Should().BeLessThan(detectionIndex,
+            "service rows should show Translating before language detection can block");
+    }
+
+    [Fact]
+    public void ServiceRowsUseLocalizedStatusTextProvider()
+    {
+        var richControl = File.ReadAllText(ServiceResultItemPath);
+        var richXaml = File.ReadAllText(ServiceResultItemXamlPath);
+        var minimalControl = File.ReadAllText(MinimalServiceResultItemPath);
+        var minimalXaml = File.ReadAllText(MinimalServiceResultItemXamlPath);
+        var provider = File.ReadAllText(ServiceResultStatusTextProviderPath);
+
+        richControl.Should().Contain("StatusText.Text = ServiceResultStatusTextProvider.GetStatusText(_serviceResult);",
+            "rich service rows should localize StatusText from the UI layer");
+        minimalControl.Should().Contain("ServiceResultStatusTextProvider.GetStatusText(serviceResult)",
+            "minimal service rows should share the same localized status mapping");
+        provider.Should().Contain("StatusTranslating",
+            "translation loading rows should reuse the existing localized translating status");
+        provider.Should().Contain("ServiceResult_Checking",
+            "grammar checking rows should have a resource-backed status");
+        provider.Should().Contain("ServiceResult_WaitingForResponse",
+            "streaming placeholders should be resource-backed");
+        richControl.Should().NotContain("StatusText.Text = _serviceResult.StatusText;",
+            "model-layer status text is English-only and should not be displayed directly");
+        minimalControl.Should().NotContain("return serviceResult.StatusText;",
+            "model-layer status text is English-only and should not be displayed directly");
+        richControl.Should().NotContain("\"Click to query\"");
+        minimalControl.Should().NotContain("\"Click to query\"");
+        richControl.Should().NotContain("\"Waiting for response...\"");
+        minimalControl.Should().NotContain("\"Waiting for response...\"");
+        richXaml.Should().NotContain("Click header to query");
+        minimalXaml.Should().NotContain("Click header to query");
+        richControl.Should().NotContain("StatusText.Text = \"Loading\";",
+            "loading rows should not replace Translating... with a generic label");
+        minimalControl.Should().NotContain("return \"Loading\";",
+            "minimal rows should not replace Translating... with a generic label");
     }
 
     [Fact]

@@ -91,6 +91,35 @@
     <value>エラー</value>
   </data>
 
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>クリックして照会</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>ヘッダーをクリックして照会</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>チェック中...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>ストリーミング中...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>結果なし</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>キャッシュ済み</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>応答待ち...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>翻訳エラー</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>再試行</value>
+  </data>
+
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>自動検出</value>

@@ -66,6 +66,8 @@ public sealed class LanguageDetectionService : IDisposable
             return Language.Auto;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Check cache (guard against disposed cache)
         var cacheKey = GetCacheKey(text);
         try
@@ -110,6 +112,11 @@ public sealed class LanguageDetectionService : IDisposable
 
             Debug.WriteLine($"[Detection] Detected language: {detected.GetDisplayName()}");
             return detected;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Debug.WriteLine("[Detection] Canceled");
+            throw;
         }
         catch (Exception ex)
         {

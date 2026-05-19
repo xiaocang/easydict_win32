@@ -79,6 +79,35 @@
   <data name="StatusError" xml:space="preserve">
     <value>Kesalahan</value>
   </data>
+
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>Klik untuk kueri</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>Klik header untuk kueri</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>Memeriksa...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>Streaming...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>Tidak ada hasil</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>cache</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>Menunggu respons...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>Kesalahan terjemahan</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>Coba lagi</value>
+  </data>
   <data name="LangAutoDetect" xml:space="preserve">
     <value>Deteksi Otomatis</value>
   </data>

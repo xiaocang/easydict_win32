@@ -92,15 +92,13 @@
                         FontSize="12"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         Visibility="Collapsed"
-                        Margin="0,0,4,0"
-                        ToolTipService.ToolTip="Translation error"/>
+                        Margin="0,0,4,0"/>
 
                     <!-- Retry Button (visible on error) -->
                     <Button
                         x:Name="RetryButton"
                         Grid.Column="4"
                         Click="OnRetryClicked"
-                        ToolTipService.ToolTip="Retry"
                         Background="Transparent"
                         BorderThickness="0"
                         Width="24"
@@ -151,7 +149,6 @@
                             <TextBlock
                                 x:Name="PendingQueryText"
                                 Grid.Row="0"
-                                Text="Click header to query"
                                 FontStyle="Italic"
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"

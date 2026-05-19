@@ -150,6 +150,15 @@ public class LocalizationServiceTests
     [InlineData("EnableInternationalServices")]
     [InlineData("EnableInternationalServicesDescription")]
     [InlineData("InternationalServiceUnavailableHint")]
+    [InlineData("ServiceResult_PendingQueryStatus")]
+    [InlineData("ServiceResult_PendingQueryHint")]
+    [InlineData("ServiceResult_Checking")]
+    [InlineData("ServiceResult_Streaming")]
+    [InlineData("ServiceResult_NoResult")]
+    [InlineData("ServiceResult_Cached")]
+    [InlineData("ServiceResult_WaitingForResponse")]
+    [InlineData("ServiceResult_TranslationErrorTooltip")]
+    [InlineData("ServiceResult_Retry")]
     public void AllLanguages_HaveRequiredKey(string key)
     {
         foreach (var lang in SupportedLanguages)

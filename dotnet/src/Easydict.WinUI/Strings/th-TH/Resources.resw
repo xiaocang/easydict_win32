@@ -87,6 +87,35 @@
   <data name="StatusError" xml:space="preserve">
     <value>&#xE02;&#xE49;&#xE2D;&#xE1C;&#xE34;&#xE14;&#xE1E;&#xE25;&#xE32;&#xE14;</value>
   </data>
+
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>คลิกเพื่อค้นหา</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>คลิกส่วนหัวเพื่อค้นหา</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>กำลังตรวจสอบ...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>กำลังสตรีม...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>ไม่มีผลลัพธ์</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>จากแคช</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>กำลังรอการตอบกลับ...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>ข้อผิดพลาดการแปล</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>ลองอีกครั้ง</value>
+  </data>
   <data name="LangAutoDetect" xml:space="preserve">
     <value>&#xE15;&#xE23;&#xE27;&#xE08;&#xE08;&#xE31;&#xE1A;&#xE2D;&#xE31;&#xE15;&#xE42;&#xE19;&#xE21;&#xE31;&#xE15;&#xE34;</value>
   </data>

@@ -88,6 +88,9 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         ActualThemeChanged += OnActualThemeChanged;
         var loc = LocalizationService.Instance;
         ToolTipService.SetToolTip(ReplaceButton, loc.GetString("InsertReplace"));
+        ToolTipService.SetToolTip(ErrorIcon, ServiceResultStatusTextProvider.GetTranslationErrorTooltipText());
+        ToolTipService.SetToolTip(RetryButton, ServiceResultStatusTextProvider.GetRetryText());
+        PendingQueryText.Text = ServiceResultStatusTextProvider.GetPendingQueryHintText();
         FoundryLocalStartButton.Content = loc.GetString(FoundryLocalResources.UiKeys.StartButton);
         FoundryLocalDocsLink.Content = loc.GetString(FoundryLocalResources.UiKeys.DocsLinkText);
         FoundryLocalDocsLink.NavigateUri = new Uri(FoundryLocalResources.InstallDocumentationUrl);
@@ -288,7 +291,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         }
 
         var text = string.IsNullOrEmpty(_serviceResult.StreamingText)
-            ? "Waiting for response..."
+            ? ServiceResultStatusTextProvider.GetWaitingForResponseText()
             : _serviceResult.StreamingText;
 
         if (_serviceResult.IsGrammarMode)
@@ -367,19 +370,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         RetryButton.Visibility = hasError && !_serviceResult.IsStreaming
             ? Visibility.Visible : Visibility.Collapsed;
 
-        // Status text - show "Click to query" hint for pending manual-query services
-        if (_serviceResult.ShowPendingQueryHint)
-        {
-            StatusText.Text = "Click to query";
-        }
-        else if (minimal && _serviceResult.IsLoading)
-        {
-            StatusText.Text = "Loading";
-        }
-        else
-        {
-            StatusText.Text = _serviceResult.StatusText;
-        }
+        StatusText.Text = ServiceResultStatusTextProvider.GetStatusText(_serviceResult);
 
         // Arrow direction
         ArrowIcon.Glyph = _serviceResult.ArrowGlyph;
@@ -471,7 +462,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             // Show streaming text or placeholder while waiting for first chunk
             ResultText.Text = string.IsNullOrEmpty(_serviceResult.StreamingText)
-                ? "Waiting for response..."
+                ? ServiceResultStatusTextProvider.GetWaitingForResponseText()
                 : _serviceResult.StreamingText;
             ResultText.Foreground = resultTextBrush;
             ResultText.Visibility = Visibility.Visible;
@@ -631,7 +622,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
             GrammarResultPanel.Visibility = Visibility.Visible;
             HideErrorPanel();
             CorrectedText.Text = string.IsNullOrEmpty(_serviceResult.StreamingText)
-                ? "Waiting for response..." : _serviceResult.StreamingText;
+                ? ServiceResultStatusTextProvider.GetWaitingForResponseText() : _serviceResult.StreamingText;
             OriginalText.Text = "";
             ExplanationPanel.Visibility = Visibility.Collapsed;
             NoCorrectionsText.Visibility = Visibility.Collapsed;

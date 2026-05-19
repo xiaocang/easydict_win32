@@ -47,6 +47,35 @@
   <data name="StatusReady" xml:space="preserve"><value>तैयार</value></data>
   <data name="StatusTranslating" xml:space="preserve"><value>अनुवाद हो रहा है...</value></data>
   <data name="StatusError" xml:space="preserve"><value>त्रुटि</value></data>
+
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>क्वेरी करने के लिए क्लिक करें</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>क्वेरी करने के लिए शीर्षक पर क्लिक करें</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>जाँच हो रही है...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>स्ट्रीम हो रहा है...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>कोई परिणाम नहीं</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>कैश किया गया</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>जवाब की प्रतीक्षा...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>अनुवाद त्रुटि</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>पुनः प्रयास करें</value>
+  </data>
   <data name="LangAutoDetect" xml:space="preserve"><value>स्वतः पहचान</value></data>
   <data name="LangEnglish" xml:space="preserve"><value>अंग्रेज़ी</value></data>
   <data name="LangChinese" xml:space="preserve"><value>चीनी</value></data>

@@ -91,6 +91,35 @@
     <value>오류</value>
   </data>
 
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>클릭하여 조회</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>헤더를 클릭하여 조회</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>검사 중...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>스트리밍 중...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>결과 없음</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>캐시됨</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>응답 대기 중...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>번역 오류</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>다시 시도</value>
+  </data>
+
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>자동 감지</value>

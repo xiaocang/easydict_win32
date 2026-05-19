@@ -62,7 +62,6 @@
                 <StackPanel Spacing="4">
                     <TextBlock
                         x:Name="PendingQueryText"
-                        Text="Click header to query"
                         FontSize="12"
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                         Visibility="Collapsed"/>

@@ -91,6 +91,35 @@
     <value>Erreur</value>
   </data>
 
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>Cliquer pour interroger</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>Cliquer sur l&apos;en-tête pour interroger</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>Vérification...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>Diffusion...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>Aucun résultat</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>en cache</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>En attente de réponse...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>Erreur de traduction</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>Réessayer</value>
+  </data>
+
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>Détection automatique</value>

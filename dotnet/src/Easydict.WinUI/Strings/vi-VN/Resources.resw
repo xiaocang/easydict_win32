@@ -94,6 +94,35 @@
     <value>L&#x1ED7;i</value>
   </data>
 
+  <!-- Service Result Status -->
+  <data name="ServiceResult_PendingQueryStatus" xml:space="preserve">
+    <value>Nhấp để truy vấn</value>
+  </data>
+  <data name="ServiceResult_PendingQueryHint" xml:space="preserve">
+    <value>Nhấp vào tiêu đề để truy vấn</value>
+  </data>
+  <data name="ServiceResult_Checking" xml:space="preserve">
+    <value>Đang kiểm tra...</value>
+  </data>
+  <data name="ServiceResult_Streaming" xml:space="preserve">
+    <value>Đang truyền...</value>
+  </data>
+  <data name="ServiceResult_NoResult" xml:space="preserve">
+    <value>Không có kết quả</value>
+  </data>
+  <data name="ServiceResult_Cached" xml:space="preserve">
+    <value>đã lưu cache</value>
+  </data>
+  <data name="ServiceResult_WaitingForResponse" xml:space="preserve">
+    <value>Đang chờ phản hồi...</value>
+  </data>
+  <data name="ServiceResult_TranslationErrorTooltip" xml:space="preserve">
+    <value>Lỗi dịch</value>
+  </data>
+  <data name="ServiceResult_Retry" xml:space="preserve">
+    <value>Thử lại</value>
+  </data>
+
   <!-- Languages -->
   <data name="LangAutoDetect" xml:space="preserve">
     <value>T&#x1EF1; &#x111;&#x1ED9;ng ph&#xE1;t hi&#x1EC7;n</value>

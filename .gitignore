@@ -69,6 +69,7 @@ nul
 
 # Local test artifacts (screenshots, captures from local test runs)
 artifacts/
+screenshots/
 
 # Local review and package files
 packages-microsoft-prod.deb

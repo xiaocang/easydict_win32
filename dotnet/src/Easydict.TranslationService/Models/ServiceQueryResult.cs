@@ -37,6 +37,13 @@ public sealed class ServiceQueryResult : INotifyPropertyChanged
     public string ServiceIconPath => $"ms-appx:///Assets/ServiceIcons/{ServiceId}.png";
 
     /// <summary>
+    /// Whether this service is capable of grammar correction for the source
+    /// language under which this row was initialized. Set once at row creation
+    /// time by the window's InitializeServiceResults().
+    /// </summary>
+    public bool IsGrammarCapable { get; init; }
+
+    /// <summary>
     /// The translation result if successful.
     /// </summary>
     public TranslationResult? Result

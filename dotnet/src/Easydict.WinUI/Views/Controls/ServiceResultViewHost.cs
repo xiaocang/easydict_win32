@@ -123,14 +123,16 @@ internal static class ServiceResultViewHost
         IReadOnlyList<ServiceQueryResult> results,
         IReadOnlyList<IServiceResultView> controls,
         ItemsControl resultsPanel,
-        bool hideEmptySetting)
+        bool hideEmptySetting,
+        bool pinGrammarCapable = false)
     {
         if (controls.Count == 0)
         {
             return;
         }
 
-        var order = ServiceResultDemotionHelper.StablePartitionIndices(results, hideEmptySetting);
+        var order = ServiceResultDemotionHelper.StablePartitionIndices(
+            results, hideEmptySetting, pinGrammarCapable);
 
         var orderMatches = resultsPanel.Items.Count == controls.Count;
         for (int i = 0; orderMatches && i < order.Count; i++)

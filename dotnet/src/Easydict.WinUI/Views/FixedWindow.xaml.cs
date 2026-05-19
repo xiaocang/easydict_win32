@@ -328,10 +328,8 @@ public sealed partial class FixedWindow : Window
                 ? service.DisplayName
                 : serviceId;
 
-            if (_currentMode == QueryMode.GrammarCorrection &&
-                (service is null ||
-                 !GrammarCorrectionServiceAvailability.IsAvailable(service, grammarSourceLanguage)))
-                continue;
+            var isGrammarCapable = service is not null
+                && GrammarCorrectionServiceAvailability.IsAvailable(service, grammarSourceLanguage);
 
             // Get EnabledQuery setting (default true if not found)
             var enabledQuery = enabledQuerySettings.TryGetValue(serviceId, out var eq) ? eq : true;
@@ -342,7 +340,8 @@ public sealed partial class FixedWindow : Window
                 ServiceDisplayName = displayName,
                 EnabledQuery = enabledQuery,
                 IsExpanded = enabledQuery, // Manual-query services start collapsed
-                CurrentMode = _currentMode
+                CurrentMode = _currentMode,
+                IsGrammarCapable = isGrammarCapable,
             };
 
             _serviceResults.Add(result);
@@ -567,7 +566,8 @@ public sealed partial class FixedWindow : Window
                 HasEnabledGrammarCorrectionService(detectedLanguage));
             serviceResult.CurrentMode = resolution.EffectiveMode;
 
-            if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
+            if (resolution.EffectiveMode == QueryMode.GrammarCorrection
+                && serviceResult.IsGrammarCapable)
             {
                 var grammarRequest = new GrammarCorrectionRequest
                 {
@@ -987,7 +987,8 @@ public sealed partial class FixedWindow : Window
 
             if (resolution.EffectiveMode == QueryMode.GrammarCorrection)
             {
-                await StartGrammarCorrectionInternalAsync(inputText, detectedLanguage, ct);
+                await StartGrammarCorrectionInternalAsync(
+                    inputText, detectedLanguage, targetLanguage, ct);
                 return;
             }
 
@@ -1156,23 +1157,35 @@ public sealed partial class FixedWindow : Window
     }
 
     /// <summary>
-    /// Execute grammar correction for all enabled LLM services in parallel.
+    /// Execute the correction-mode query in parallel. Grammar-capable services
+    /// run grammar correction; remaining services fall back to normal translation
+    /// using the user-selected target language.
     /// </summary>
     private async Task StartGrammarCorrectionInternalAsync(
         string inputText,
         TranslationLanguage detectedLang,
+        TranslationLanguage targetLanguage,
         CancellationToken ct)
     {
-        var request = new GrammarCorrectionRequest
+        var grammarRequest = new GrammarCorrectionRequest
         {
             Text = inputText,
             Language = detectedLang,
             IncludeExplanations = _settings.GrammarIncludeExplanations,
         };
 
+        var translationRequest = new TranslationRequest
+        {
+            Text = inputText,
+            FromLanguage = detectedLang,
+            ToLanguage = targetLanguage,
+        };
+
         var tasks = _serviceResults
             .Where(sr => sr.EnabledQuery)
-            .Select(sr => ExecuteGrammarCorrectionForServiceAsync(sr, request, ct))
+            .Select(sr => sr.IsGrammarCapable
+                ? ExecuteGrammarCorrectionForServiceAsync(sr, grammarRequest, ct)
+                : ExecuteTranslationForServiceAsync(sr, translationRequest, detectedLang, targetLanguage, ct))
             .ToArray();
 
         var taskResults = await Task.WhenAll(tasks);
@@ -1184,6 +1197,93 @@ public sealed partial class FixedWindow : Window
         StatusText.Text = successCount > 0
             ? string.Format(loc.GetString("ServiceResultsComplete") ?? "{0} service(s) completed", successCount)
             : errorCount > 0 ? (loc.GetString("TranslationFailed") ?? "Check failed") : "";
+    }
+
+    /// <summary>
+    /// Execute regular translation for a single service inside the mixed
+    /// correction-mode flow. Mirrors <see cref="ExecuteGrammarCorrectionForServiceAsync"/>'s
+    /// return contract: true on success, false on error, null on cancelled/skipped.
+    /// </summary>
+    private async Task<bool?> ExecuteTranslationForServiceAsync(
+        ServiceQueryResult serviceResult,
+        TranslationRequest request,
+        TranslationLanguage detectedLanguage,
+        TranslationLanguage targetLanguage,
+        CancellationToken ct)
+    {
+        serviceResult.MarkQueried();
+
+        try
+        {
+            using var handle = TranslationManagerService.Instance.AcquireHandle();
+            var manager = handle.Manager;
+
+            if (manager.IsStreamingService(serviceResult.ServiceId))
+            {
+                await ExecuteStreamingTranslationForServiceAsync(
+                    manager, serviceResult, request, detectedLanguage, targetLanguage, ct);
+                return true;
+            }
+
+            var result = await Task.Run(
+                () => manager.TranslateAsync(request, ct, serviceResult.ServiceId), ct);
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                serviceResult.Result = result;
+                serviceResult.IsLoading = false;
+                serviceResult.ApplyAutoCollapseLogic();
+                UpdatePhoneticDeduplication();
+                ReorderResultsPanel();
+                RequestResize();
+            });
+
+            return result.ResultKind == TranslationResultKind.Success;
+        }
+        catch (OperationCanceledException)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = false;
+                serviceResult.ClearQueried();
+            });
+            return null;
+        }
+        catch (TranslationException ex)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                serviceResult.Error = ex;
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = false;
+                serviceResult.ApplyAutoCollapseLogic();
+                RequestResize();
+            });
+            SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_isClosing) return;
+                serviceResult.Error = new TranslationException(ex.Message, ex)
+                {
+                    ErrorCode = TranslationErrorCode.Unknown,
+                    ServiceId = serviceResult.ServiceId,
+                };
+                serviceResult.IsLoading = false;
+                serviceResult.IsStreaming = false;
+                serviceResult.ApplyAutoCollapseLogic();
+                RequestResize();
+            });
+            SettingsService.Instance.ClearServiceTestStatus(serviceResult.ServiceId);
+            return false;
+        }
     }
 
     /// <summary>
@@ -1855,7 +1955,8 @@ public sealed partial class FixedWindow : Window
             _serviceResults,
             _resultControls,
             ResultsPanel,
-            SettingsService.Instance.HideEmptyServiceResults);
+            SettingsService.Instance.HideEmptyServiceResults,
+            pinGrammarCapable: _currentMode == QueryMode.GrammarCorrection);
     }
 
     private void OnHideEmptyServiceResultsChanged(object? sender, EventArgs e)

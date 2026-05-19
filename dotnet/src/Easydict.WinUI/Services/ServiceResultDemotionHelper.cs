@@ -42,4 +42,42 @@ internal static class ServiceResultDemotionHelper
         kept.AddRange(demoted);
         return kept;
     }
+
+    /// <summary>
+    /// Stable partition with optional grammar-capable pinning. When
+    /// <paramref name="pinGrammarCapable"/> is true (correction mode active),
+    /// produces a four-bucket order:
+    /// grammar+kept → non-grammar+kept → grammar+demoted → non-grammar+demoted.
+    /// Order within each bucket follows the input order.
+    /// When false, falls back to the two-bucket overload.
+    /// </summary>
+    public static IReadOnlyList<int> StablePartitionIndices(
+        IReadOnlyList<ServiceQueryResult> results,
+        bool hideEmptySetting,
+        bool pinGrammarCapable)
+    {
+        if (!pinGrammarCapable)
+        {
+            return StablePartitionIndices(results, hideEmptySetting);
+        }
+
+        var grammarKept = new List<int>();
+        var otherKept = new List<int>();
+        var grammarDemoted = new List<int>();
+        var otherDemoted = new List<int>();
+        for (int i = 0; i < results.Count; i++)
+        {
+            var r = results[i];
+            var demoted = IsDemoted(r, hideEmptySetting);
+            var grammar = r?.IsGrammarCapable == true;
+            if (!demoted && grammar) grammarKept.Add(i);
+            else if (!demoted) otherKept.Add(i);
+            else if (grammar) grammarDemoted.Add(i);
+            else otherDemoted.Add(i);
+        }
+        grammarKept.AddRange(otherKept);
+        grammarKept.AddRange(grammarDemoted);
+        grammarKept.AddRange(otherDemoted);
+        return grammarKept;
+    }
 }

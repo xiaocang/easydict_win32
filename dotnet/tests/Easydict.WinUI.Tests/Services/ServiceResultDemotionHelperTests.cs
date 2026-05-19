@@ -12,13 +12,15 @@ public class ServiceResultDemotionHelperTests
         TranslationResultKind? kind = TranslationResultKind.NoResult,
         bool isLoading = false,
         bool isStreaming = false,
-        bool hasError = false)
+        bool hasError = false,
+        bool isGrammarCapable = false)
     {
         var r = new ServiceQueryResult
         {
             ServiceId = "test",
             IsLoading = isLoading,
             IsStreaming = isStreaming,
+            IsGrammarCapable = isGrammarCapable,
         };
         if (hasError)
         {
@@ -126,5 +128,80 @@ public class ServiceResultDemotionHelperTests
         var reordered = first.Select(i => results[i]).ToArray();
         var second = ServiceResultDemotionHelper.StablePartitionIndices(reordered, hideEmptySetting: true);
         second.Should().Equal(new[] { 0, 1, 2 });
+    }
+
+    [Fact]
+    public void StablePartitionIndices_PinsGrammarCapableFirst_PreservesOrderWithinBuckets()
+    {
+        var results = new[]
+        {
+            MakeResult(TranslationResultKind.Success, isGrammarCapable: false), // 0 non-grammar
+            MakeResult(TranslationResultKind.Success, isGrammarCapable: true),  // 1 grammar
+            MakeResult(TranslationResultKind.Success, isGrammarCapable: false), // 2 non-grammar
+            MakeResult(TranslationResultKind.Success, isGrammarCapable: true),  // 3 grammar
+        };
+
+        var order = ServiceResultDemotionHelper.StablePartitionIndices(
+            results, hideEmptySetting: false, pinGrammarCapable: true);
+
+        order.Should().Equal(new[] { 1, 3, 0, 2 });
+    }
+
+    [Fact]
+    public void StablePartitionIndices_LayersDemotionUnderGrammarPinning()
+    {
+        var results = new[]
+        {
+            MakeResult(TranslationResultKind.Success,  isGrammarCapable: false), // 0 NG kept
+            MakeResult(TranslationResultKind.NoResult, isGrammarCapable: true),  // 1 G  demoted
+            MakeResult(TranslationResultKind.Success,  isGrammarCapable: true),  // 2 G  kept
+            MakeResult(TranslationResultKind.NoResult, isGrammarCapable: false), // 3 NG demoted
+            MakeResult(TranslationResultKind.Success,  isGrammarCapable: true),  // 4 G  kept
+            MakeResult(TranslationResultKind.NoResult, isGrammarCapable: true),  // 5 G  demoted
+        };
+
+        var order = ServiceResultDemotionHelper.StablePartitionIndices(
+            results, hideEmptySetting: true, pinGrammarCapable: true);
+
+        // Four buckets: G-kept, NG-kept, G-demoted, NG-demoted
+        order.Should().Equal(new[] { 2, 4, 0, 1, 5, 3 });
+    }
+
+    [Fact]
+    public void StablePartitionIndices_FallsBackToTwoBucketWhenPinDisabled()
+    {
+        var results = new[]
+        {
+            MakeResult(TranslationResultKind.Success,  isGrammarCapable: false), // 0 kept
+            MakeResult(TranslationResultKind.NoResult, isGrammarCapable: true),  // 1 demoted
+            MakeResult(TranslationResultKind.Success,  isGrammarCapable: true),  // 2 kept
+            MakeResult(TranslationResultKind.NoResult, isGrammarCapable: false), // 3 demoted
+        };
+
+        var order = ServiceResultDemotionHelper.StablePartitionIndices(
+            results, hideEmptySetting: true, pinGrammarCapable: false);
+
+        // Grammar capability ignored; only demotion partitions.
+        order.Should().Equal(new[] { 0, 2, 1, 3 });
+    }
+
+    [Fact]
+    public void StablePartitionIndices_GrammarPinning_Idempotent()
+    {
+        var results = new[]
+        {
+            MakeResult(TranslationResultKind.Success,  isGrammarCapable: false),
+            MakeResult(TranslationResultKind.NoResult, isGrammarCapable: true),
+            MakeResult(TranslationResultKind.Success,  isGrammarCapable: true),
+            MakeResult(TranslationResultKind.NoResult, isGrammarCapable: false),
+        };
+
+        var first = ServiceResultDemotionHelper.StablePartitionIndices(
+            results, hideEmptySetting: true, pinGrammarCapable: true);
+        var reordered = first.Select(i => results[i]).ToArray();
+        var second = ServiceResultDemotionHelper.StablePartitionIndices(
+            reordered, hideEmptySetting: true, pinGrammarCapable: true);
+
+        second.Should().Equal(new[] { 0, 1, 2, 3 });
     }
 }

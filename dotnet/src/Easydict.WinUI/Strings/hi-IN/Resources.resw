@@ -104,6 +104,15 @@
   <data name="ServiceConfigurationDescription" xml:space="preserve"><value>प्रत्येक अनुवाद सेवा के लिए API key, endpoint और model कॉन्फ़िगर करें।</value></data>
   <data name="ApiKey" xml:space="preserve"><value>API Key</value></data>
   <data name="ApiKeyOptional" xml:space="preserve"><value>API Key (वैकल्पिक)</value></data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>GitHub टोकन</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>{0} दिखाएं</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>{0} छिपाएं</value>
+  </data>
   <data name="Endpoint" xml:space="preserve"><value>Endpoint</value></data>
   <data name="EndpointOptional" xml:space="preserve"><value>Endpoint (वैकल्पिक)</value></data>
   <data name="EndpointRequired" xml:space="preserve"><value>Endpoint (आवश्यक)</value></data>

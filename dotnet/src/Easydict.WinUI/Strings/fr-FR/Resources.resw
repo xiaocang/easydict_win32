@@ -322,6 +322,15 @@
   <data name="ApiKeyOptional" xml:space="preserve">
     <value>Clé API (optionnel)</value>
   </data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>Jeton GitHub</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>Afficher {0}</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>Masquer {0}</value>
+  </data>
   <data name="Endpoint" xml:space="preserve">
     <value>Point de terminaison</value>
   </data>

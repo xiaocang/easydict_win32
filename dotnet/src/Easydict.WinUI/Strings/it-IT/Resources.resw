@@ -206,6 +206,15 @@
   <data name="ApiKeyOptional" xml:space="preserve">
     <value>Chiave API (Opzionale)</value>
   </data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>Token GitHub</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>Mostra {0}</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>Nascondi {0}</value>
+  </data>
   <data name="Endpoint" xml:space="preserve">
     <value>Endpoint</value>
   </data>

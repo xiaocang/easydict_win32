@@ -104,6 +104,15 @@
   <data name="ServiceConfigurationDescription" xml:space="preserve"><value>Konfigurer API-nøgler, endpoints og modeller for hver oversættelsestjeneste.</value></data>
   <data name="ApiKey" xml:space="preserve"><value>API-nøgle</value></data>
   <data name="ApiKeyOptional" xml:space="preserve"><value>API-nøgle (valgfri)</value></data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>GitHub-token</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>Vis {0}</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>Skjul {0}</value>
+  </data>
   <data name="Endpoint" xml:space="preserve"><value>Endpoint</value></data>
   <data name="EndpointOptional" xml:space="preserve"><value>Endpoint (valgfri)</value></data>
   <data name="EndpointRequired" xml:space="preserve"><value>Endpoint (påkrævet)</value></data>

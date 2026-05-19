@@ -322,6 +322,15 @@
   <data name="ApiKeyOptional" xml:space="preserve">
     <value>API 金鑰（選填）</value>
   </data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>GitHub 權杖</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>顯示{0}</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>隱藏{0}</value>
+  </data>
   <data name="Endpoint" xml:space="preserve">
     <value>端點</value>
   </data>

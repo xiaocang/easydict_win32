@@ -192,6 +192,15 @@
   <data name="ApiKeyOptional" xml:space="preserve">
     <value>API Key (Opsional)</value>
   </data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>Token GitHub</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>Tampilkan {0}</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>Sembunyikan {0}</value>
+  </data>
   <data name="Endpoint" xml:space="preserve">
     <value>Endpoint</value>
   </data>

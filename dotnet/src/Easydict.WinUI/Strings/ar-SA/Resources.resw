@@ -214,6 +214,15 @@
   <data name="ApiKeyOptional" xml:space="preserve">
     <value>مفتاح API (اختياري)</value>
   </data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>رمز GitHub المميز</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>إظهار {0}</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>إخفاء {0}</value>
+  </data>
   <data name="Endpoint" xml:space="preserve">
     <value>نقطة الاتصال</value>
   </data>

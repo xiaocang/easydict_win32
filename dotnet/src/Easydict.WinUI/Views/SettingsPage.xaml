@@ -19,6 +19,16 @@
         <Style x:Key="SettingsSectionStyle" TargetType="Border" BasedOn="{StaticResource EasydictSurfaceStyle}">
             <Setter Property="Padding" Value="16"/>
         </Style>
+        <Style x:Key="SettingsInlineIconButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictIconButtonStyle}">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
         <Style x:Key="SettingsTabButtonStyle" TargetType="Button">
             <Setter Property="MinWidth" Value="0"/>
             <Setter Property="MinHeight" Value="0"/>
@@ -100,16 +110,17 @@
                         <DataTemplate>
                             <Button Click="OnSettingsTabClick"
                                     Tag="{Binding Id}"
+                                    AutomationProperties.AutomationId="{Binding AutomationId}"
                                     Style="{StaticResource SettingsTabButtonStyle}"
                                     Width="86"
                                     Height="76"
                                     Margin="0,0,10,10"
                                     Padding="0"
-                                    Background="{ThemeResource SettingsTabBackgroundBrush}"
-                                    BorderBrush="{ThemeResource SettingsTabBorderBrush}"
+                                    Background="{Binding Background}"
+                                    BorderBrush="{Binding BorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="{ThemeResource EasydictControlCornerRadius}"
-                                    Foreground="{ThemeResource SettingsTabForegroundBrush}"
+                                    Foreground="{Binding Foreground}"
                                     HorizontalAlignment="Left"
                                     ToolTipService.ToolTip="{Binding Tooltip}">
                                 <Grid>
@@ -118,18 +129,18 @@
                                                 VerticalAlignment="Center">
                                         <FontIcon Glyph="{Binding IconGlyph}"
                                                   FontSize="22"
-                                                  Foreground="{ThemeResource SettingsTabForegroundBrush}"
+                                                  Foreground="{Binding Foreground}"
                                                   HorizontalAlignment="Center"/>
                                         <TextBlock Text="{Binding Label}"
                                                    FontSize="12"
-                                                   Foreground="{ThemeResource SettingsTabForegroundBrush}"
+                                                   Foreground="{Binding Foreground}"
                                                    TextAlignment="Center"
                                                    HorizontalAlignment="Center"/>
                                     </StackPanel>
 
                                     <Border
-                                        Background="{ThemeResource SettingsTabSelectedBackgroundBrush}"
-                                        BorderBrush="{ThemeResource SettingsTabSelectedBorderBrush}"
+                                        Background="{Binding SelectedBackground}"
+                                        BorderBrush="{Binding SelectedBorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                                         Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
@@ -140,11 +151,11 @@
                                                 Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}">
                                         <FontIcon Glyph="{Binding IconGlyph}"
                                                   FontSize="22"
-                                                  Foreground="{ThemeResource SettingsTabSelectedForegroundBrush}"
+                                                  Foreground="{Binding SelectedForeground}"
                                                   HorizontalAlignment="Center"/>
                                         <TextBlock Text="{Binding Label}"
                                                    FontSize="12"
-                                                   Foreground="{ThemeResource SettingsTabSelectedForegroundBrush}"
+                                                   Foreground="{Binding SelectedForeground}"
                                                    TextAlignment="Center"
                                                    HorizontalAlignment="Center"/>
                                     </StackPanel>
@@ -239,7 +250,8 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
 
                         <!-- DeepL -->
-                        <Expander HorizontalAlignment="Stretch"
+                        <Expander AutomationProperties.AutomationId="DeepLServiceExpander"
+                                HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
                                 Tag="DeepL">
                             <Expander.Header>
@@ -258,11 +270,31 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="DeepLKeyBox"
-                                        Header="API Key (Optional)"
-                                        Width="350"
-                                        PlaceholderText="Enter your DeepL API key"
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="DeepLKeyHeaderText"
+                                               Text="API Key (Optional)"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="DeepLKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your DeepL API key"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="DeepLKeyRevealButton"
+                                                AutomationProperties.AutomationId="DeepLKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=DeepLKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <CheckBox x:Name="DeepLFreeCheck"/>
                                 <CheckBox x:Name="DeepLQualityCheck"/>
                                 <TextBlock x:Name="DeepLDescriptionText"
@@ -547,11 +579,31 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="OpenAIKeyBox"
-                                        Header="API Key"
-                                        Width="350"
-                                        PlaceholderText="sk-..."
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="OpenAIKeyHeaderText"
+                                               Text="API Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="OpenAIKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="sk-..."
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="OpenAIKeyRevealButton"
+                                                AutomationProperties.AutomationId="OpenAIKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=OpenAIKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <TextBox x:Name="OpenAIEndpointBox"
                                         Header="Endpoint (Optional)"
                                         Width="450"
@@ -620,11 +672,31 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="DeepSeekKeyBox"
-                                        Header="API Key"
-                                        Width="350"
-                                        PlaceholderText="sk-..."
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="DeepSeekKeyHeaderText"
+                                               Text="API Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="DeepSeekKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="sk-..."
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="DeepSeekKeyRevealButton"
+                                                AutomationProperties.AutomationId="DeepSeekKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=DeepSeekKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <ComboBox x:Name="DeepSeekModelCombo"
                                         Header="Model"
                                         Width="280"
@@ -665,11 +737,31 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="GroqKeyBox"
-                                        Header="API Key"
-                                        Width="350"
-                                        PlaceholderText="gsk_..."
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="GroqKeyHeaderText"
+                                               Text="API Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="GroqKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="gsk_..."
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="GroqKeyRevealButton"
+                                                AutomationProperties.AutomationId="GroqKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=GroqKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <ComboBox x:Name="GroqModelCombo"
                                         Header="Model"
                                         Width="280"
@@ -712,11 +804,31 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="ZhipuKeyBox"
-                                        Header="API Key"
-                                        Width="350"
-                                        PlaceholderText="Enter your Zhipu API key"
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="ZhipuKeyHeaderText"
+                                               Text="API Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="ZhipuKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your Zhipu API key"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="ZhipuKeyRevealButton"
+                                                AutomationProperties.AutomationId="ZhipuKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=ZhipuKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <ComboBox x:Name="ZhipuModelCombo"
                                         Header="Model"
                                         Width="280"
@@ -761,11 +873,31 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="GitHubModelsTokenBox"
-                                        Header="GitHub Token"
-                                        Width="350"
-                                        PlaceholderText="ghp_..."
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="GitHubModelsTokenHeaderText"
+                                               Text="GitHub Token"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="GitHubModelsTokenBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="ghp_..."
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="GitHubModelsTokenRevealButton"
+                                                AutomationProperties.AutomationId="GitHubModelsTokenRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=GitHubModelsTokenBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <ComboBox x:Name="GitHubModelsModelCombo"
                                         Header="Model"
                                         Width="280"
@@ -814,11 +946,31 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="GeminiKeyBox"
-                                        Header="API Key"
-                                        Width="350"
-                                        PlaceholderText="Enter your Gemini API key"
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="GeminiKeyHeaderText"
+                                               Text="API Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="GeminiKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your Gemini API key"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="GeminiKeyRevealButton"
+                                                AutomationProperties.AutomationId="GeminiKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=GeminiKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <ComboBox x:Name="GeminiModelCombo"
                                         Header="Model"
                                         Width="280"
@@ -876,11 +1028,31 @@
                                         Width="450"
                                          PlaceholderText="https://your-api.example.com/v1/chat/completions"
                                         HorizontalAlignment="Left"/>
-                                <PasswordBox x:Name="CustomOpenAIKeyBox"
-                                        Header="API Key (Optional)"
-                                        Width="350"
-                                        PlaceholderText="Enter API key if required"
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="CustomOpenAIKeyHeaderText"
+                                               Text="API Key (Optional)"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="CustomOpenAIKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter API key if required"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="CustomOpenAIKeyRevealButton"
+                                                AutomationProperties.AutomationId="CustomOpenAIKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=CustomOpenAIKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <TextBox x:Name="CustomOpenAIModelBox"
                                         Header="Model"
                                         Width="200"
@@ -936,11 +1108,31 @@
                                     <ComboBoxItem Content="llama-3.1-8b-instant (Groq)"
                                             Tag="llama-3.1-8b-instant"/>
                                 </ComboBox>
-                                <PasswordBox x:Name="BuiltInApiKeyBox"
-                                        Header="API Key (Optional)"
-                                        Width="350"
-                                             PlaceholderText="Leave empty to use built-in key"
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="BuiltInApiKeyHeaderText"
+                                               Text="API Key (Optional)"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="BuiltInApiKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Leave empty to use built-in key"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="BuiltInApiKeyRevealButton"
+                                                AutomationProperties.AutomationId="BuiltInApiKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=BuiltInApiKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <TextBlock x:Name="BuiltInDescriptionText"
                                            Text="Uses GLM (Zhipu AI) or Groq free models. You can provide your own API key from open.bigmodel.cn (GLM) or console.groq.com (Groq)."
                                            FontSize="12"
@@ -973,11 +1165,31 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="DoubaoKeyBox"
-                                        Header="API Key"
-                                        Width="350"
-                                        PlaceholderText="Enter your Doubao API key"
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="DoubaoKeyHeaderText"
+                                               Text="API Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="DoubaoKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your Doubao API key"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="DoubaoKeyRevealButton"
+                                                AutomationProperties.AutomationId="DoubaoKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=DoubaoKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <TextBox x:Name="DoubaoEndpointBox"
                                         Header="Endpoint"
                                         Width="450"
@@ -1019,11 +1231,31 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="CaiyunKeyBox"
-                                        Header="API Key"
-                                        Width="350"
-                                        PlaceholderText="Enter your Caiyun API key"
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="CaiyunKeyHeaderText"
+                                               Text="API Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="CaiyunKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your Caiyun API key"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="CaiyunKeyRevealButton"
+                                                AutomationProperties.AutomationId="CaiyunKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=CaiyunKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <TextBlock Text="Get your API key from fanyi.caiyunapp.com"
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -1054,11 +1286,31 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="NiuTransKeyBox"
-                                        Header="API Key"
-                                        Width="350"
-                                        PlaceholderText="Enter your NiuTrans API key"
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="NiuTransKeyHeaderText"
+                                               Text="API Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="NiuTransKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your NiuTrans API key"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="NiuTransKeyRevealButton"
+                                                AutomationProperties.AutomationId="NiuTransKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=NiuTransKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <TextBlock Text="NiuTrans supports 450+ language pairs. Get your API key from niutrans.com"
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -1080,16 +1332,56 @@
                             </Expander.Header>
                             <StackPanel Spacing="12"
                                     Padding="0,8">
-                                <PasswordBox x:Name="YoudaoAppKeyBox"
-                                        Header="App Key"
-                                        Width="350"
-                                        PlaceholderText="Enter your Youdao App Key"
-                                        HorizontalAlignment="Left"/>
-                                <PasswordBox x:Name="YoudaoAppSecretBox"
-                                        Header="App Secret"
-                                        Width="350"
-                                        PlaceholderText="Enter your Youdao App Secret"
-                                        HorizontalAlignment="Left"/>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="YoudaoAppKeyHeaderText"
+                                               Text="App Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="YoudaoAppKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your Youdao App Key"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="YoudaoAppKeyRevealButton"
+                                                AutomationProperties.AutomationId="YoudaoAppKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=YoudaoAppKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="YoudaoAppSecretHeaderText"
+                                               Text="App Secret"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="YoudaoAppSecretBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your Youdao App Secret"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="YoudaoAppSecretRevealButton"
+                                                AutomationProperties.AutomationId="YoudaoAppSecretRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=YoudaoAppSecretBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                                 <ToggleSwitch x:Name="YoudaoUseOfficialApiToggle"
                                         Header="Use Official API"/>
                                 <TextBlock Text="Youdao provides phonetic transcriptions for English words. Without API keys, uses free web dictionary. With API keys, enables official API for higher limits. Get API keys from ai.youdao.com"
@@ -1849,27 +2141,47 @@
                                 <StackPanel x:Name="AdvancedOcrPanel"
                                         Spacing="12"
                                         Visibility="Collapsed">
-                                    <TextBox x:Name="OcrApiKeyBox"
-                                            Header="API Key (Optional)"
-                                            Width="450"
-                                            HorizontalAlignment="Left"
-                                            PlaceholderText="Enter API key if required"/>
+                                    <StackPanel Width="350"
+                                                HorizontalAlignment="Left"
+                                                Spacing="4">
+                                        <TextBlock x:Name="OcrApiKeyHeaderText"
+                                                   Text="API Key (Optional)"
+                                                   FontSize="14"/>
+                                        <Grid>
+                                            <PasswordBox x:Name="OcrApiKeyBox"
+                                                         HorizontalAlignment="Stretch"
+                                                         Padding="12,5,40,5"
+                                                         PlaceholderText="Enter API key if required"
+                                                         PasswordRevealMode="Hidden"/>
+                                            <Button x:Name="OcrApiKeyRevealButton"
+                                                    AutomationProperties.AutomationId="OcrApiKeyRevealButton"
+                                                    Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    Margin="0,0,6,0"
+                                                    Tag="{Binding ElementName=OcrApiKeyBox}"
+                                                    Click="OnPasswordRevealButtonClick">
+                                                <FontIcon Glyph="&#xE890;"
+                                                          FontSize="14"/>
+                                            </Button>
+                                        </Grid>
+                                    </StackPanel>
 
                                     <TextBox x:Name="OcrEndpointBox"
                                             Header="Endpoint"
-                                            Width="450"
+                                            Width="350"
                                             HorizontalAlignment="Left"
                                             PlaceholderText="http://localhost:11434/api/generate"/>
 
                                     <TextBox x:Name="OcrModelBox"
                                             Header="Model"
-                                            Width="450"
+                                            Width="350"
                                             HorizontalAlignment="Left"
                                             PlaceholderText="glm-ocr"/>
 
                                     <TextBox x:Name="OcrSystemPromptBox"
                                             Header="System Prompt"
-                                            Width="450"
+                                            Width="350"
                                             Height="100"
                                             AcceptsReturn="True"
                                             TextWrapping="Wrap"
@@ -1883,7 +2195,7 @@
                                     <TextBox x:Name="OcrTestStatusBox"
                                             Header="Test Result"
                                             IsReadOnly="True"
-                                            Width="450"
+                                            Width="350"
                                             MinHeight="32"
                                             AcceptsReturn="True"
                                             TextWrapping="Wrap"

@@ -322,6 +322,15 @@
   <data name="ApiKeyOptional" xml:space="preserve">
     <value>APIキー（オプション）</value>
   </data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>GitHub トークン</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>{0}を表示</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>{0}を非表示</value>
+  </data>
   <data name="Endpoint" xml:space="preserve">
     <value>エンドポイント</value>
   </data>

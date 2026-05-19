@@ -104,6 +104,15 @@
   <data name="ServiceConfigurationDescription" xml:space="preserve"><value>Konfigurasikan kunci API, endpoint dan model untuk setiap perkhidmatan terjemahan.</value></data>
   <data name="ApiKey" xml:space="preserve"><value>Kunci API</value></data>
   <data name="ApiKeyOptional" xml:space="preserve"><value>Kunci API (Pilihan)</value></data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>Token GitHub</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>Tunjukkan {0}</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>Sembunyikan {0}</value>
+  </data>
   <data name="Endpoint" xml:space="preserve"><value>Endpoint</value></data>
   <data name="EndpointOptional" xml:space="preserve"><value>Endpoint (Pilihan)</value></data>
   <data name="EndpointRequired" xml:space="preserve"><value>Endpoint (Wajib)</value></data>

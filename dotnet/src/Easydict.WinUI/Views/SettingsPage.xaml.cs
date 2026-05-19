@@ -32,65 +32,106 @@ internal enum SettingsTabId
     About
 }
 
+internal sealed record SettingsTabBrushes(
+    Brush? Background,
+    Brush? BorderBrush,
+    Brush? Foreground,
+    Brush? SelectedBackground,
+    Brush? SelectedBorderBrush,
+    Brush? SelectedForeground);
+
 internal sealed class SettingsTabItem : INotifyPropertyChanged
 {
     private bool _isSelected;
     private string _label = string.Empty;
     private string _tooltip = string.Empty;
+    private Brush? _background;
+    private Brush? _borderBrush;
+    private Brush? _foreground;
+    private Brush? _selectedBackground;
+    private Brush? _selectedBorderBrush;
+    private Brush? _selectedForeground;
 
     public required SettingsTabId Id { get; init; }
     public required string IconGlyph { get; init; }
+    public string AutomationId => $"SettingsTab_{Id}";
 
     public string Label
     {
         get => _label;
-        set
-        {
-            if (_label == value)
-            {
-                return;
-            }
-
-            _label = value;
-            OnPropertyChanged();
-        }
+        set => SetField(ref _label, value);
     }
 
     public string Tooltip
     {
         get => _tooltip;
-        set
-        {
-            if (_tooltip == value)
-            {
-                return;
-            }
+        set => SetField(ref _tooltip, value);
+    }
 
-            _tooltip = value;
-            OnPropertyChanged();
-        }
+    public Brush? Background
+    {
+        get => _background;
+        private set => SetField(ref _background, value);
+    }
+
+    public Brush? BorderBrush
+    {
+        get => _borderBrush;
+        private set => SetField(ref _borderBrush, value);
+    }
+
+    public Brush? Foreground
+    {
+        get => _foreground;
+        private set => SetField(ref _foreground, value);
+    }
+
+    public Brush? SelectedBackground
+    {
+        get => _selectedBackground;
+        private set => SetField(ref _selectedBackground, value);
+    }
+
+    public Brush? SelectedBorderBrush
+    {
+        get => _selectedBorderBrush;
+        private set => SetField(ref _selectedBorderBrush, value);
+    }
+
+    public Brush? SelectedForeground
+    {
+        get => _selectedForeground;
+        private set => SetField(ref _selectedForeground, value);
     }
 
     public bool IsSelected
     {
         get => _isSelected;
-        set
-        {
-            if (_isSelected == value)
-            {
-                return;
-            }
-
-            _isSelected = value;
-            OnPropertyChanged();
-        }
+        set => SetField(ref _isSelected, value);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public void RefreshThemeBindings()
+    public void RefreshThemeBindings(SettingsTabBrushes brushes)
     {
+        Background = brushes.Background;
+        BorderBrush = brushes.BorderBrush;
+        Foreground = brushes.Foreground;
+        SelectedBackground = brushes.SelectedBackground;
+        SelectedBorderBrush = brushes.SelectedBorderBrush;
+        SelectedForeground = brushes.SelectedForeground;
         OnPropertyChanged(nameof(IsSelected));
+    }
+
+    private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+        {
+            return;
+        }
+
+        field = value;
+        OnPropertyChanged(propertyName);
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -105,6 +146,48 @@ public sealed partial class SettingsPage : Page
     private static readonly Regex NonServiceIdCharRegex = new("[^a-z0-9-]", RegexOptions.Compiled);
     private const string ServiceConfigurationIconTag = "ServiceConfigurationIcon";
     private const string ReorderButtonEmoji = "\u2195\uFE0F";
+    private static readonly (string BrushKey, string ColorKey)[] ScopedThemeResourceBrushes =
+    [
+        ("ApplicationPageBackgroundThemeBrush", "FloatingWindowBackgroundColor"),
+        ("CardBackgroundFillColorDefaultBrush", "EasydictCardBackgroundColor"),
+        ("CardStrokeColorDefaultBrush", "EasydictCardBorderColor"),
+        ("ControlFillColorDefaultBrush", "EasydictCardBackgroundColor"),
+        ("ControlFillColorSecondaryBrush", "FloatingInputBackgroundColor"),
+        ("ControlFillColorTertiaryBrush", "EasydictCardBackgroundColor"),
+        ("ControlStrokeColorDefaultBrush", "FloatingInputBorderColor"),
+        ("ControlStrokeColorSecondaryBrush", "MainBorderColor"),
+        ("TextFillColorPrimaryBrush", "QueryTextColor"),
+        ("TextFillColorSecondaryBrush", "ServiceResultHeaderSecondaryForegroundColor"),
+        ("TextFillColorTertiaryBrush", "ServiceResultHeaderSecondaryForegroundColor"),
+        ("ButtonBackground", "EasydictCardBackgroundColor"),
+        ("ButtonBackgroundPointerOver", "FloatingInputBackgroundColor"),
+        ("ButtonBackgroundPressed", "FloatingInputBackgroundColor"),
+        ("ButtonForeground", "FloatingIconForegroundColor"),
+        ("ButtonBorderBrush", "FloatingInputBorderColor"),
+        ("ButtonBorderBrushPointerOver", "MainBorderColor"),
+        ("ButtonBorderBrushPressed", "MainBorderColor"),
+        ("ComboBoxBackground", "EasydictCardBackgroundColor"),
+        ("ComboBoxBackgroundPointerOver", "FloatingInputBackgroundColor"),
+        ("ComboBoxBorderBrush", "FloatingInputBorderColor"),
+        ("ComboBoxForeground", "QueryTextColor"),
+        ("TextControlBackground", "FloatingInputBackgroundColor"),
+        ("TextControlBorderBrush", "FloatingInputBorderColor"),
+        ("TextControlForeground", "QueryTextColor"),
+        ("AccentBrush", "AccentColor"),
+        ("AccentTextFillColorPrimaryBrush", "AccentForegroundColor"),
+        ("AccentForegroundBrush", "AccentForegroundColor"),
+        ("AccentPointerOverBrush", "AccentPointerOverColor"),
+        ("AccentPressedBrush", "AccentPressedColor"),
+        ("BlueAccentBrush", "BlueAccentColor"),
+        ("FloatingWindowBackgroundBrush", "FloatingWindowBackgroundColor"),
+        ("FloatingWindowBorderBrush", "FloatingWindowBorderColor"),
+        ("FloatingInputBackgroundBrush", "FloatingInputBackgroundColor"),
+        ("FloatingInputBorderBrush", "FloatingInputBorderColor"),
+        ("FloatingIconForegroundBrush", "FloatingIconForegroundColor"),
+        ("EasydictCardBackgroundBrush", "EasydictCardBackgroundColor"),
+        ("EasydictCardBorderBrush", "EasydictCardBorderColor")
+    ];
+
     private static readonly Dictionary<string, int> PreferredServiceDisplayOrder = new(StringComparer.OrdinalIgnoreCase)
     {
         ["bing"] = 0,
@@ -138,6 +221,8 @@ public sealed partial class SettingsPage : Page
     private bool _isMainWindowReorderModeEnabled;
     private bool _isMiniWindowReorderModeEnabled;
     private bool _isFixedWindowReorderModeEnabled;
+    private bool _themeChromeRefreshQueued;
+    private readonly Dictionary<PasswordBox, bool> _visiblePasswordBoxes = new();
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
     private readonly CancellationTokenSource _lifetimeCts = new();
 
@@ -418,6 +503,9 @@ public sealed partial class SettingsPage : Page
     public void ApplyThemeChrome()
     {
         var minimal = MinimalThemeService.IsActive;
+        RefreshScopedThemeResources();
+        var chrome = CreateSettingsThemeChrome();
+        Background = chrome.PageBackground;
         SaveButton.Shadow = minimal ? null : new ThemeShadow();
         if (LoadingOverlayRing is not null)
         {
@@ -431,16 +519,345 @@ public sealed partial class SettingsPage : Page
             NavigationLoadingRing.Visibility = Visibility.Visible;
         }
 
+        var tabBrushes = CreateSettingsTabBrushes();
         foreach (var tab in _settingsTabs)
         {
-            tab.RefreshThemeBindings();
+            tab.RefreshThemeBindings(tabBrushes);
+        }
+
+        RefreshSettingsControlChrome(chrome);
+    }
+
+    private void RefreshSettingsControlChrome(SettingsThemeChrome chrome)
+    {
+        var tabStyle = Resources["SettingsTabButtonStyle"] as Style;
+        var accentButtonStyle = Resources["SettingsAccentButtonStyle"] as Style;
+        var inlineIconButtonStyle = Resources["SettingsInlineIconButtonStyle"] as Style;
+        var sectionStyle = Resources["SettingsSectionStyle"] as Style;
+        var placeholderForeground = ThemeResourceService.GetBrush("TextControlPlaceholderForeground", this);
+
+        var pending = new Queue<DependencyObject>();
+        pending.Enqueue(this);
+        while (pending.Count > 0)
+        {
+            var current = pending.Dequeue();
+
+            if (current is Button { Style: { } buttonStyle } && ReferenceEquals(buttonStyle, tabStyle))
+            {
+                continue;
+            }
+
+            if (current is Border border && ReferenceEquals(border.Style, sectionStyle))
+            {
+                border.Background = chrome.CardBackground;
+                border.BorderBrush = chrome.CardBorder;
+            }
+            else if (current is ComboBox comboBox)
+            {
+                comboBox.Background = chrome.CardBackground;
+                comboBox.Foreground = chrome.PrimaryForeground;
+                comboBox.BorderBrush = chrome.InputBorder;
+            }
+            else if (current is TextBox textBox)
+            {
+                textBox.Background = chrome.InputBackground;
+                textBox.Foreground = chrome.PrimaryForeground;
+                textBox.BorderBrush = chrome.InputBorder;
+                textBox.PlaceholderForeground = placeholderForeground;
+            }
+            else if (current is PasswordBox passwordBox)
+            {
+                passwordBox.Background = chrome.InputBackground;
+                passwordBox.Foreground = chrome.PrimaryForeground;
+                passwordBox.BorderBrush = chrome.InputBorder;
+            }
+            else if (current is TextBlock textBlock)
+            {
+                textBlock.Foreground = GetSettingsTextForeground(
+                    textBlock,
+                    chrome.PrimaryForeground,
+                    chrome.SecondaryForeground);
+            }
+            else if (current is FontIcon fontIcon)
+            {
+                fontIcon.Foreground = chrome.SecondaryForeground;
+            }
+            else if (current is HyperlinkButton hyperlinkButton)
+            {
+                hyperlinkButton.Foreground = chrome.HyperlinkForeground;
+                SetResourceIfNotNull(hyperlinkButton.Resources, "TextFillColorPrimaryBrush", chrome.HyperlinkForeground);
+                SetResourceIfNotNull(hyperlinkButton.Resources, "TextFillColorSecondaryBrush", chrome.HyperlinkForeground);
+                continue;
+            }
+            else if (current is Button button && !ReferenceEquals(button.Style, tabStyle))
+            {
+                if (ReferenceEquals(button.Style, accentButtonStyle) ||
+                    ReferenceEquals(button, BackButton) ||
+                    ReferenceEquals(button, SaveButton))
+                {
+                    ApplyButtonChrome(
+                        button,
+                        chrome.AccentBackground,
+                        chrome.AccentHoverBackground,
+                        chrome.AccentPressedBackground,
+                        chrome.AccentForeground,
+                        chrome.InputBorder);
+                }
+                else if (ReferenceEquals(button.Style, inlineIconButtonStyle))
+                {
+                    if (chrome.ButtonForeground is not null)
+                    {
+                        button.Foreground = chrome.ButtonForeground;
+                    }
+
+                    SetResourceIfNotNull(button.Resources, "ButtonForeground", chrome.ButtonForeground);
+                    SetResourceIfNotNull(button.Resources, "ButtonForegroundPointerOver", chrome.ButtonForeground);
+                    SetResourceIfNotNull(button.Resources, "ButtonForegroundPressed", chrome.ButtonForeground);
+                }
+                else
+                {
+                    ApplyButtonChrome(
+                        button,
+                        chrome.CardBackground,
+                        chrome.InputBackground,
+                        chrome.InputBackground,
+                        chrome.ButtonForeground,
+                        chrome.InputBorder);
+                }
+
+                continue;
+            }
+            else if (current is ToggleSwitch toggleSwitch)
+            {
+                toggleSwitch.Foreground = chrome.PrimaryForeground;
+                SetResourceIfNotNull(toggleSwitch.Resources, "ToggleSwitchContentForeground", chrome.PrimaryForeground);
+                SetResourceIfNotNull(toggleSwitch.Resources, "ToggleSwitchContentForegroundPointerOver", chrome.PrimaryForeground);
+                SetResourceIfNotNull(toggleSwitch.Resources, "ToggleSwitchContentForegroundPressed", chrome.PrimaryForeground);
+            }
+            else if (current is CheckBox checkBox)
+            {
+                checkBox.Foreground = chrome.PrimaryForeground;
+            }
+            else if (current is RadioButton radioButton)
+            {
+                radioButton.Foreground = chrome.PrimaryForeground;
+            }
+            else if (current is ComboBoxItem comboBoxItem)
+            {
+                comboBoxItem.Background = chrome.CardBackground;
+                comboBoxItem.Foreground = chrome.PrimaryForeground;
+            }
+
+            EnqueueVisualChildren(current, pending);
+        }
+    }
+
+    private void RefreshScopedThemeResources()
+    {
+        var brushCache = new Dictionary<string, Brush?>(StringComparer.Ordinal);
+        foreach (var (brushKey, colorKey) in ScopedThemeResourceBrushes)
+        {
+            SetResourceBrush(brushCache, brushKey, colorKey);
+        }
+    }
+
+    private SettingsTabBrushes CreateSettingsTabBrushes()
+    {
+        return new SettingsTabBrushes(
+            Background: CreateThemeBrush("SettingsTabBackgroundColor"),
+            BorderBrush: CreateThemeBrush("SettingsTabBorderColor"),
+            Foreground: CreateThemeBrush("SettingsTabForegroundColor"),
+            SelectedBackground: CreateThemeBrush("SettingsTabSelectedBackgroundColor"),
+            SelectedBorderBrush: CreateThemeBrush("SettingsTabSelectedBorderColor"),
+            SelectedForeground: CreateThemeBrush("SettingsTabSelectedForegroundColor"));
+    }
+
+    private SettingsThemeChrome CreateSettingsThemeChrome()
+    {
+        var primaryForeground = CreateThemeBrush("QueryTextColor");
+        var inputBackground = CreateThemeBrush("FloatingInputBackgroundColor");
+        var inputBorder = CreateThemeBrush("FloatingInputBorderColor");
+        var accentBackground = CreateThemeBrush("AccentColor");
+
+        return new SettingsThemeChrome(
+            PageBackground: CreateThemeBrush("FloatingWindowBackgroundColor"),
+            CardBackground: CreateThemeBrush("EasydictCardBackgroundColor"),
+            CardBorder: CreateThemeBrush("EasydictCardBorderColor"),
+            InputBackground: inputBackground,
+            InputBorder: inputBorder,
+            PrimaryForeground: primaryForeground,
+            SecondaryForeground: CreateThemeBrush("ServiceResultHeaderSecondaryForegroundColor")
+                ?? primaryForeground,
+            ButtonForeground: CreateThemeBrush("FloatingIconForegroundColor")
+                ?? primaryForeground,
+            AccentBackground: accentBackground,
+            AccentForeground: CreateThemeBrush("AccentForegroundColor"),
+            AccentHoverBackground: CreateThemeBrush("AccentPointerOverColor") ?? accentBackground,
+            AccentPressedBackground: CreateThemeBrush("AccentPressedColor") ?? accentBackground,
+            HyperlinkForeground: CreateThemeBrush("BlueAccentColor"));
+    }
+
+    private static Brush? GetSettingsTextForeground(
+        TextBlock textBlock,
+        Brush? primaryForeground,
+        Brush? secondaryForeground)
+    {
+        if (IsStatusOrSuccessText(textBlock))
+        {
+            return textBlock.Foreground;
+        }
+
+        if (!HasLocalValue(textBlock, TextBlock.ForegroundProperty) || IsPrimarySettingsText(textBlock))
+        {
+            return primaryForeground;
+        }
+
+        return secondaryForeground ?? primaryForeground;
+    }
+
+    private static bool IsPrimarySettingsText(TextBlock textBlock)
+    {
+        return textBlock.FontWeight.Weight >= 600 || textBlock.FontSize >= 18;
+    }
+
+    private static bool IsStatusOrSuccessText(TextBlock textBlock)
+    {
+        return string.Equals(textBlock.Text, "✓", StringComparison.Ordinal);
+    }
+
+    private sealed record SettingsThemeChrome(
+        Brush? PageBackground,
+        Brush? CardBackground,
+        Brush? CardBorder,
+        Brush? InputBackground,
+        Brush? InputBorder,
+        Brush? PrimaryForeground,
+        Brush? SecondaryForeground,
+        Brush? ButtonForeground,
+        Brush? AccentBackground,
+        Brush? AccentForeground,
+        Brush? AccentHoverBackground,
+        Brush? AccentPressedBackground,
+        Brush? HyperlinkForeground);
+
+    private void SetResourceBrush(
+        Dictionary<string, Brush?> brushCache,
+        string brushKey,
+        string colorKey)
+    {
+        if (!brushCache.TryGetValue(colorKey, out var brush))
+        {
+            brush = CreateThemeBrush(colorKey);
+            brushCache[colorKey] = brush;
+        }
+
+        SetResourceIfNotNull(Resources, brushKey, brush);
+    }
+
+    private Brush? CreateThemeBrush(string colorKey)
+    {
+        return ThemeResourceService.GetColor(colorKey, this) is { } color
+            ? new SolidColorBrush(color)
+            : null;
+    }
+
+    private static void ApplyButtonChrome(
+        Button button,
+        Brush? background,
+        Brush? hoverBackground,
+        Brush? pressedBackground,
+        Brush? foreground,
+        Brush? border)
+    {
+        if (background is not null)
+        {
+            button.Background = background;
+        }
+
+        if (foreground is not null)
+        {
+            button.Foreground = foreground;
+        }
+
+        if (border is not null)
+        {
+            button.BorderBrush = border;
+        }
+
+        SetResourceIfNotNull(button.Resources, "ButtonBackground", background);
+        SetResourceIfNotNull(button.Resources, "ButtonBackgroundPointerOver", hoverBackground ?? background);
+        SetResourceIfNotNull(button.Resources, "ButtonBackgroundPressed", pressedBackground ?? hoverBackground ?? background);
+        SetResourceIfNotNull(button.Resources, "ButtonForeground", foreground);
+        SetResourceIfNotNull(button.Resources, "ButtonForegroundPointerOver", foreground);
+        SetResourceIfNotNull(button.Resources, "ButtonForegroundPressed", foreground);
+        SetResourceIfNotNull(button.Resources, "ButtonBorderBrush", border);
+        SetResourceIfNotNull(button.Resources, "ButtonBorderBrushPointerOver", border);
+        SetResourceIfNotNull(button.Resources, "ButtonBorderBrushPressed", border);
+        SetResourceIfNotNull(button.Resources, "AccentTextFillColorPrimaryBrush", foreground);
+    }
+
+    private static void SetResourceIfNotNull(ResourceDictionary resources, string key, object? value)
+    {
+        if (value is not null)
+        {
+            resources[key] = value;
+        }
+    }
+
+    private static bool HasLocalValue(DependencyObject obj, DependencyProperty property)
+    {
+        return !ReferenceEquals(obj.ReadLocalValue(property), DependencyProperty.UnsetValue);
+    }
+
+    private static void EnqueueVisualChildren(
+        DependencyObject parent,
+        Queue<DependencyObject> pending)
+    {
+        int count;
+        try
+        {
+            count = VisualTreeHelper.GetChildrenCount(parent);
+        }
+        catch (COMException)
+        {
+            return;
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            pending.Enqueue(VisualTreeHelper.GetChild(parent, i));
         }
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
     {
         UpdateServiceConfigurationHeaderIconSources();
-        DispatcherQueue.TryEnqueue(ApplyThemeChrome);
+        QueueApplyThemeChrome();
+    }
+
+    private void QueueApplyThemeChrome()
+    {
+        if (_themeChromeRefreshQueued || _isUnloaded || _isTornDown)
+        {
+            return;
+        }
+
+        _themeChromeRefreshQueued = true;
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            _themeChromeRefreshQueued = false;
+            if (!_isUnloaded && !_isTornDown)
+            {
+                ApplyThemeChrome();
+            }
+        }))
+        {
+            _themeChromeRefreshQueued = false;
+        }
     }
 
     private static bool IsDeferredIoDisabledForDebug()
@@ -515,6 +932,8 @@ public sealed partial class SettingsPage : Page
         {
             MainScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
         }
+
+        ApplyThemeChrome();
     }
 
     private void EnsureTabContentLoaded(SettingsTabId tabId)
@@ -733,41 +1152,40 @@ public sealed partial class SettingsPage : Page
             OpenVinoDescriptionText.Text = loc.GetString(OpenVinoResources.UiKeys.ConfigDescription);
 
         // Service configuration controls (API Keys, Endpoints, Models, etc.)
-        // TextBox/PasswordBox headers for each service
         DeepLFreeCheck.Content = loc.GetString("DeepLFreeOption");
         DeepLQualityCheck.Content = loc.GetString("DeepLQualityOption");
         DeepLDescriptionText.Text = loc.GetString("DeepLDescription");
         UpdateDeepLApiKeyRequirementUi();
-        OpenAIKeyBox.Header = loc.GetString("ApiKey");
+        OpenAIKeyHeaderText.Text = loc.GetString("ApiKey");
         OpenAIEndpointBox.Header = loc.GetString("EndpointOptional");
         OpenAIModelCombo.Header = loc.GetString("Model");
-        DeepSeekKeyBox.Header = loc.GetString("ApiKey");
+        DeepSeekKeyHeaderText.Text = loc.GetString("ApiKey");
         DeepSeekModelCombo.Header = loc.GetString("Model");
-        GroqKeyBox.Header = loc.GetString("ApiKey");
+        GroqKeyHeaderText.Text = loc.GetString("ApiKey");
         GroqModelCombo.Header = loc.GetString("Model");
-        ZhipuKeyBox.Header = loc.GetString("ApiKey");
+        ZhipuKeyHeaderText.Text = loc.GetString("ApiKey");
         ZhipuModelCombo.Header = loc.GetString("Model");
-        GitHubModelsTokenBox.Header = loc.GetString("ApiKey");
+        GitHubModelsTokenHeaderText.Text = loc.GetString("GitHubToken");
         GitHubModelsModelCombo.Header = loc.GetString("Model");
-        GeminiKeyBox.Header = loc.GetString("ApiKey");
+        GeminiKeyHeaderText.Text = loc.GetString("ApiKey");
         GeminiModelCombo.Header = loc.GetString("Model");
-        CustomOpenAIKeyBox.Header = loc.GetString("ApiKeyOptional");
+        CustomOpenAIKeyHeaderText.Text = loc.GetString("ApiKeyOptional");
         CustomOpenAIEndpointBox.Header = loc.GetString("EndpointRequired");
         CustomOpenAIModelBox.Header = loc.GetString("Model");
         OllamaEndpointBox.Header = loc.GetString("EndpointOptional");
         OllamaModelCombo.Header = loc.GetString("Model");
         BuiltInModelCombo.Header = loc.GetString("Model");
-        BuiltInApiKeyBox.Header = loc.GetString("ApiKeyOptional");
+        BuiltInApiKeyHeaderText.Text = loc.GetString("ApiKeyOptional");
         BuiltInAIHintBar.Title = loc.GetString("Hint");
         BuiltInAIHintBar.Message = loc.GetString("BuiltInAIHint");
         BuiltInDescriptionText.Text = loc.GetString("BuiltInAIDescription");
-        DoubaoKeyBox.Header = loc.GetString("ApiKey");
+        DoubaoKeyHeaderText.Text = loc.GetString("ApiKey");
         DoubaoEndpointBox.Header = loc.GetString("EndpointOptional");
         DoubaoModelBox.Header = loc.GetString("Model");
-        CaiyunKeyBox.Header = loc.GetString("ApiKey");
-        NiuTransKeyBox.Header = loc.GetString("ApiKey");
-        YoudaoAppKeyBox.Header = loc.GetString("AppKey");
-        YoudaoAppSecretBox.Header = loc.GetString("AppSecret");
+        CaiyunKeyHeaderText.Text = loc.GetString("ApiKey");
+        NiuTransKeyHeaderText.Text = loc.GetString("ApiKey");
+        YoudaoAppKeyHeaderText.Text = loc.GetString("AppKey");
+        YoudaoAppSecretHeaderText.Text = loc.GetString("AppSecret");
         YoudaoUseOfficialApiToggle.Header = loc.GetString("UseOfficialApi");
         YoudaoUseOfficialApiToggle.OnContent = loc.GetString("OfficialApi");
         YoudaoUseOfficialApiToggle.OffContent = loc.GetString("WebFree");
@@ -926,6 +1344,7 @@ public sealed partial class SettingsPage : Page
         ApplyUILanguageLocalization(loc);
         ApplyOcrLocalization(loc);
         ApplyLayoutDetectionLocalization(loc);
+        ApplyPasswordRevealLocalization(loc);
     }
 
     private static void SetLocalAiRating(TextBlock? ratingText, string rating, string tooltip)
@@ -975,12 +1394,83 @@ public sealed partial class SettingsPage : Page
         OcrEngineCombo.Header = loc.GetString("OcrEngine");
         OcrEngineNativeItem.Content = loc.GetString("OcrEngineNative");
         OcrEngineCustomApiItem.Content = loc.GetString("OcrEngineCustomApi");
-        OcrApiKeyBox.Header = loc.GetString("OcrApiKey");
+        OcrApiKeyHeaderText.Text = loc.GetString("OcrApiKey");
         OcrEndpointBox.Header = loc.GetString("OcrEndpoint");
         OcrModelBox.Header = loc.GetString("OcrModel");
         OcrSystemPromptBox.Header = loc.GetString("OcrSystemPrompt");
         TestOcrConnectionButton.Content = loc.GetString("TestOcrConnection");
         OcrTestStatusBox.Header = loc.GetString("OcrTestResult");
+    }
+
+    private void ApplyPasswordRevealLocalization(LocalizationService loc)
+    {
+        foreach (var button in GetPasswordRevealButtons())
+        {
+            UpdatePasswordRevealButtonState(button, loc);
+        }
+    }
+
+    private IEnumerable<Button> GetPasswordRevealButtons()
+    {
+        yield return DeepLKeyRevealButton;
+        yield return OpenAIKeyRevealButton;
+        yield return DeepSeekKeyRevealButton;
+        yield return GroqKeyRevealButton;
+        yield return ZhipuKeyRevealButton;
+        yield return GitHubModelsTokenRevealButton;
+        yield return GeminiKeyRevealButton;
+        yield return CustomOpenAIKeyRevealButton;
+        yield return BuiltInApiKeyRevealButton;
+        yield return DoubaoKeyRevealButton;
+        yield return CaiyunKeyRevealButton;
+        yield return NiuTransKeyRevealButton;
+        yield return YoudaoAppKeyRevealButton;
+        yield return YoudaoAppSecretRevealButton;
+        yield return OcrApiKeyRevealButton;
+    }
+
+    private void UpdatePasswordRevealButtonState(Button button, LocalizationService loc)
+    {
+        if (button.Tag is not PasswordBox passwordBox)
+        {
+            return;
+        }
+
+        var isVisible = _visiblePasswordBoxes.TryGetValue(passwordBox, out var visible) && visible;
+        if (button.Content is FontIcon icon)
+        {
+            icon.Glyph = isVisible ? "\uE8F5" : "\uE890";
+        }
+
+        var secretName = loc.GetString(GetPasswordRevealSecretResourceKey(passwordBox));
+        var label = loc.GetString(isVisible ? "HideSecretFormat" : "ShowSecretFormat", secretName);
+        AutomationProperties.SetName(button, label);
+        ToolTipService.SetToolTip(button, label);
+    }
+
+    private string GetPasswordRevealSecretResourceKey(PasswordBox passwordBox)
+    {
+        if (ReferenceEquals(passwordBox, GitHubModelsTokenBox))
+        {
+            return "GitHubToken";
+        }
+
+        if (ReferenceEquals(passwordBox, YoudaoAppKeyBox))
+        {
+            return "AppKey";
+        }
+
+        if (ReferenceEquals(passwordBox, YoudaoAppSecretBox))
+        {
+            return "AppSecret";
+        }
+
+        if (ReferenceEquals(passwordBox, OcrApiKeyBox))
+        {
+            return "OcrApiKey";
+        }
+
+        return "ApiKey";
     }
 
     private void ApplyLayoutDetectionLocalization(LocalizationService loc)
@@ -1177,8 +1667,8 @@ public sealed partial class SettingsPage : Page
                 }
 
 #if DEBUG
-                UpdateDeferredIoState("onnx-running");
-                PerfLog("Deferred I/O: begin UpdateOnnxModelStatus");
+                UpdateDeferredIoState("io-dispatched");
+                PerfLog("Deferred I/O: dispatching queued work");
 #endif
                 RunDeferredSettingsIo(cancellationToken);
             });
@@ -1367,7 +1857,7 @@ public sealed partial class SettingsPage : Page
         OcrTranslateHotkeyEnabledToggle.Toggled += OnSettingChanged;
         SilentOcrHotkeyEnabledToggle.Toggled += OnSettingChanged;
         OcrEngineCombo.SelectionChanged += OnOcrEngineChanged;
-        OcrApiKeyBox.TextChanged += OnSettingChanged;
+        OcrApiKeyBox.PasswordChanged += OnSettingChanged;
         OcrEndpointBox.TextChanged += OnSettingChanged;
         OcrModelBox.TextChanged += OnSettingChanged;
         OcrSystemPromptBox.TextChanged += OnSettingChanged;
@@ -1463,7 +1953,7 @@ public sealed partial class SettingsPage : Page
         OcrTranslateHotkeyEnabledToggle.Toggled -= OnSettingChanged;
         SilentOcrHotkeyEnabledToggle.Toggled -= OnSettingChanged;
         OcrEngineCombo.SelectionChanged -= OnOcrEngineChanged;
-        OcrApiKeyBox.TextChanged -= OnSettingChanged;
+        OcrApiKeyBox.PasswordChanged -= OnSettingChanged;
         OcrEndpointBox.TextChanged -= OnSettingChanged;
         OcrModelBox.TextChanged -= OnSettingChanged;
         OcrSystemPromptBox.TextChanged -= OnSettingChanged;
@@ -1718,7 +2208,7 @@ public sealed partial class SettingsPage : Page
 
     private void UpdateDeepLApiKeyRequirementUi()
     {
-        DeepLKeyBox.Header = LocalizationService.Instance.GetString(
+        DeepLKeyHeaderText.Text = LocalizationService.Instance.GetString(
             DeepLQualityCheck.IsChecked == true ? "ApiKey" : "ApiKeyOptional");
     }
 
@@ -1883,7 +2373,7 @@ public sealed partial class SettingsPage : Page
         {
             // OCR Engine settings
             SelectComboByTag(OcrEngineCombo, _settings.OcrEngine.ToString());
-            OcrApiKeyBox.Text = _settings.OcrApiKey ?? string.Empty;
+            OcrApiKeyBox.Password = _settings.OcrApiKey ?? string.Empty;
             OcrEndpointBox.Text = _settings.OcrEndpoint;
             OcrModelBox.Text = _settings.OcrModel;
             OcrSystemPromptBox.Text = _settings.OcrSystemPrompt;
@@ -2685,7 +3175,7 @@ public sealed partial class SettingsPage : Page
 
         return new OcrServiceOptions(
             engine,
-            OcrApiKeyBox.Text,
+            OcrApiKeyBox.Password,
             OcrEndpointBox.Text,
             OcrModelBox.Text,
             OcrSystemPromptBox.Text);
@@ -3209,6 +3699,20 @@ public sealed partial class SettingsPage : Page
         AdvancedOcrPanel.Visibility = isAdvanced ? Visibility.Visible : Visibility.Collapsed;
         OcrEndpointBox.PlaceholderText = OcrServiceOptions.GetDefaultEndpoint(engine);
         OcrModelBox.PlaceholderText = OcrServiceOptions.GetDefaultModel(engine);
+    }
+
+    private void OnPasswordRevealButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not PasswordBox passwordBox)
+        {
+            return;
+        }
+
+        var isVisible = !_visiblePasswordBoxes.TryGetValue(passwordBox, out var wasVisible) || !wasVisible;
+        _visiblePasswordBoxes[passwordBox] = isVisible;
+        passwordBox.PasswordRevealMode = isVisible ? PasswordRevealMode.Visible : PasswordRevealMode.Hidden;
+
+        UpdatePasswordRevealButtonState(button, LocalizationService.Instance);
     }
 
     private OcrEngineType GetSelectedOcrEngine()

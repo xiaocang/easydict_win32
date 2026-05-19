@@ -200,6 +200,15 @@
   <data name="ApiKeyOptional" xml:space="preserve">
     <value>API Key (&#xE44;&#xE21;&#xE48;&#xE1A;&#xE31;&#xE07;&#xE04;&#xE31;&#xE1A;)</value>
   </data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>โทเค็น GitHub</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>แสดง {0}</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>ซ่อน {0}</value>
+  </data>
   <data name="Endpoint" xml:space="preserve">
     <value>Endpoint</value>
   </data>

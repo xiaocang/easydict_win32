@@ -50,6 +50,7 @@ public sealed class SettingsService
     private readonly string _settingsFilePath;
     private Dictionary<string, object?> _settings = new();
     private volatile bool _needsRegionDetection;
+    private bool _needsSensitiveSettingsMigration;
 
 
     private SettingsService()
@@ -597,13 +598,13 @@ public sealed class SettingsService
             SecondLanguage = "en";
         }
 
-        DeepLApiKey = GetValue<string?>(nameof(DeepLApiKey), null);
+        DeepLApiKey = GetSensitiveSetting(nameof(DeepLApiKey));
         DeepLUseFreeApi = GetValue(nameof(DeepLUseFreeApi), true);
         DeepLUseQualityOptimized = GetValue(nameof(DeepLUseQualityOptimized), false);
         NormalizeDeepLModeSettings();
 
         // OpenAI settings
-        OpenAIApiKey = GetValue<string?>(nameof(OpenAIApiKey), null);
+        OpenAIApiKey = GetSensitiveSetting(nameof(OpenAIApiKey));
         OpenAIEndpoint = GetValue(nameof(OpenAIEndpoint), OpenAIService.DefaultEndpoint);
         OpenAIModel = GetValue(nameof(OpenAIModel), OpenAIService.DefaultModel);
         OpenAITemperature = GetValue(nameof(OpenAITemperature), 0.3);
@@ -623,7 +624,7 @@ public sealed class SettingsService
 
         // Built-in AI settings
         BuiltInAIModel = GetValue(nameof(BuiltInAIModel), "glm-4-flash-250414");
-        BuiltInAIApiKey = GetValue<string?>(nameof(BuiltInAIApiKey), null);
+        BuiltInAIApiKey = GetSensitiveSetting(nameof(BuiltInAIApiKey));
         // Try hardware-bound ID; fall back to persisted random UUID
         var hardwareId = GetHardwareDeviceId();
         if (!string.IsNullOrEmpty(hardwareId))
@@ -641,44 +642,49 @@ public sealed class SettingsService
         DeviceToken = GetValue(nameof(DeviceToken), "");
 
         // DeepSeek settings
-        DeepSeekApiKey = GetValue<string?>(nameof(DeepSeekApiKey), null);
+        DeepSeekApiKey = GetSensitiveSetting(nameof(DeepSeekApiKey));
         DeepSeekModel = GetValue(nameof(DeepSeekModel), "deepseek-chat");
 
         // Groq settings
-        GroqApiKey = GetValue<string?>(nameof(GroqApiKey), null);
+        GroqApiKey = GetSensitiveSetting(nameof(GroqApiKey));
         GroqModel = GetValue(nameof(GroqModel), "llama-3.3-70b-versatile");
 
         // Zhipu settings
-        ZhipuApiKey = GetValue<string?>(nameof(ZhipuApiKey), null);
+        ZhipuApiKey = GetSensitiveSetting(nameof(ZhipuApiKey));
         ZhipuModel = GetValue(nameof(ZhipuModel), "glm-4.5-flash");
 
         // GitHub Models settings
-        GitHubModelsToken = GetValue<string?>(nameof(GitHubModelsToken), null);
+        GitHubModelsToken = GetSensitiveSetting(nameof(GitHubModelsToken));
         GitHubModelsModel = GetValue(nameof(GitHubModelsModel), "gpt-4.1");
 
         // Custom OpenAI settings
         CustomOpenAIEndpoint = GetValue(nameof(CustomOpenAIEndpoint), "");
-        CustomOpenAIApiKey = GetValue<string?>(nameof(CustomOpenAIApiKey), null);
+        CustomOpenAIApiKey = GetSensitiveSetting(nameof(CustomOpenAIApiKey));
         CustomOpenAIModel = GetValue(nameof(CustomOpenAIModel), "gpt-3.5-turbo");
 
         // Gemini settings
-        GeminiApiKey = GetValue<string?>(nameof(GeminiApiKey), null);
+        GeminiApiKey = GetSensitiveSetting(nameof(GeminiApiKey));
         GeminiModel = GetValue(nameof(GeminiModel), "gemini-2.5-flash");
 
         // Doubao settings
-        DoubaoApiKey = GetValue<string?>(nameof(DoubaoApiKey), null);
+        DoubaoApiKey = GetSensitiveSetting(nameof(DoubaoApiKey));
         DoubaoEndpoint = GetValue(nameof(DoubaoEndpoint), "https://ark.cn-beijing.volces.com/api/v3/responses");
         DoubaoModel = GetValue(nameof(DoubaoModel), "doubao-seed-translation-250915");
 
         // Caiyun settings
-        CaiyunApiKey = GetValue<string?>(nameof(CaiyunApiKey), null);
+        CaiyunApiKey = GetSensitiveSetting(nameof(CaiyunApiKey));
 
         // NiuTrans settings
-        NiuTransApiKey = GetValue<string?>(nameof(NiuTransApiKey), null);
+        NiuTransApiKey = GetSensitiveSetting(nameof(NiuTransApiKey));
+
+        // Youdao settings
+        YoudaoAppKey = GetSensitiveSetting(nameof(YoudaoAppKey));
+        YoudaoAppSecret = GetSensitiveSetting(nameof(YoudaoAppSecret));
+        YoudaoUseOfficialApi = GetValue(nameof(YoudaoUseOfficialApi), false);
 
         // Volcano settings
-        VolcanoAccessKeyId = GetValue<string?>(nameof(VolcanoAccessKeyId), null);
-        VolcanoSecretAccessKey = GetValue<string?>(nameof(VolcanoSecretAccessKey), null);
+        VolcanoAccessKeyId = GetSensitiveSetting(nameof(VolcanoAccessKeyId));
+        VolcanoSecretAccessKey = GetSensitiveSetting(nameof(VolcanoSecretAccessKey));
 
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
@@ -701,7 +707,7 @@ public sealed class SettingsService
 
         // Load OCR Engine settings
         OcrEngine = (OcrEngineType)GetValue(nameof(OcrEngine), (int)OcrEngineType.WindowsNative);
-        OcrApiKey = GetValue<string?>(nameof(OcrApiKey), null);
+        OcrApiKey = GetSensitiveSetting(nameof(OcrApiKey));
         OcrEndpoint = GetValue(nameof(OcrEndpoint), OcrServiceOptions.DefaultEndpoint);
         OcrModel = GetValue(nameof(OcrModel), OcrServiceOptions.DefaultModel);
         OcrSystemPrompt = GetValue(nameof(OcrSystemPrompt), "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.");
@@ -807,6 +813,8 @@ public sealed class SettingsService
         DocumentOutputMode = GetValue(nameof(DocumentOutputMode), "Monolingual");
         LongDocMaxConcurrency = GetValue(nameof(LongDocMaxConcurrency), 4);
         LongDocEnableDocumentContextPass = GetValue(nameof(LongDocEnableDocumentContextPass), true);
+
+        MigrateSensitiveSettingsIfNeeded();
     }
 
     private void NormalizeDeepLModeSettings()
@@ -829,12 +837,12 @@ public sealed class SettingsService
         _settings[nameof(AutoSelectTargetLanguage)] = AutoSelectTargetLanguage;
         _settings[nameof(SelectedLanguages)] = SelectedLanguages;
 
-        _settings[nameof(DeepLApiKey)] = DeepLApiKey ?? string.Empty;
+        _settings[nameof(DeepLApiKey)] = ProtectSensitiveSetting(DeepLApiKey);
         _settings[nameof(DeepLUseFreeApi)] = DeepLUseFreeApi;
         _settings[nameof(DeepLUseQualityOptimized)] = DeepLUseQualityOptimized;
 
         // OpenAI settings
-        _settings[nameof(OpenAIApiKey)] = OpenAIApiKey ?? string.Empty;
+        _settings[nameof(OpenAIApiKey)] = ProtectSensitiveSetting(OpenAIApiKey);
         _settings[nameof(OpenAIEndpoint)] = OpenAIEndpoint;
         _settings[nameof(OpenAIModel)] = OpenAIModel;
         _settings[nameof(OpenAIApiFormatOverride)] = OpenAIApiFormatOverride;
@@ -854,49 +862,54 @@ public sealed class SettingsService
 
         // Built-in AI settings
         _settings[nameof(BuiltInAIModel)] = BuiltInAIModel;
-        _settings[nameof(BuiltInAIApiKey)] = BuiltInAIApiKey ?? string.Empty;
+        _settings[nameof(BuiltInAIApiKey)] = ProtectSensitiveSetting(BuiltInAIApiKey);
         _settings[nameof(DeviceId)] = DeviceId;
         _settings[nameof(DeviceToken)] = DeviceToken;
 
         // DeepSeek settings
-        _settings[nameof(DeepSeekApiKey)] = DeepSeekApiKey ?? string.Empty;
+        _settings[nameof(DeepSeekApiKey)] = ProtectSensitiveSetting(DeepSeekApiKey);
         _settings[nameof(DeepSeekModel)] = DeepSeekModel;
 
         // Groq settings
-        _settings[nameof(GroqApiKey)] = GroqApiKey ?? string.Empty;
+        _settings[nameof(GroqApiKey)] = ProtectSensitiveSetting(GroqApiKey);
         _settings[nameof(GroqModel)] = GroqModel;
 
         // Zhipu settings
-        _settings[nameof(ZhipuApiKey)] = ZhipuApiKey ?? string.Empty;
+        _settings[nameof(ZhipuApiKey)] = ProtectSensitiveSetting(ZhipuApiKey);
         _settings[nameof(ZhipuModel)] = ZhipuModel;
 
         // GitHub Models settings
-        _settings[nameof(GitHubModelsToken)] = GitHubModelsToken ?? string.Empty;
+        _settings[nameof(GitHubModelsToken)] = ProtectSensitiveSetting(GitHubModelsToken);
         _settings[nameof(GitHubModelsModel)] = GitHubModelsModel;
 
         // Custom OpenAI settings
         _settings[nameof(CustomOpenAIEndpoint)] = CustomOpenAIEndpoint;
-        _settings[nameof(CustomOpenAIApiKey)] = CustomOpenAIApiKey ?? string.Empty;
+        _settings[nameof(CustomOpenAIApiKey)] = ProtectSensitiveSetting(CustomOpenAIApiKey);
         _settings[nameof(CustomOpenAIModel)] = CustomOpenAIModel;
 
         // Gemini settings
-        _settings[nameof(GeminiApiKey)] = GeminiApiKey ?? string.Empty;
+        _settings[nameof(GeminiApiKey)] = ProtectSensitiveSetting(GeminiApiKey);
         _settings[nameof(GeminiModel)] = GeminiModel;
 
         // Doubao settings
-        _settings[nameof(DoubaoApiKey)] = DoubaoApiKey ?? string.Empty;
+        _settings[nameof(DoubaoApiKey)] = ProtectSensitiveSetting(DoubaoApiKey);
         _settings[nameof(DoubaoEndpoint)] = DoubaoEndpoint;
         _settings[nameof(DoubaoModel)] = DoubaoModel;
 
         // Caiyun settings
-        _settings[nameof(CaiyunApiKey)] = CaiyunApiKey ?? string.Empty;
+        _settings[nameof(CaiyunApiKey)] = ProtectSensitiveSetting(CaiyunApiKey);
 
         // NiuTrans settings
-        _settings[nameof(NiuTransApiKey)] = NiuTransApiKey ?? string.Empty;
+        _settings[nameof(NiuTransApiKey)] = ProtectSensitiveSetting(NiuTransApiKey);
+
+        // Youdao settings
+        _settings[nameof(YoudaoAppKey)] = ProtectSensitiveSetting(YoudaoAppKey);
+        _settings[nameof(YoudaoAppSecret)] = ProtectSensitiveSetting(YoudaoAppSecret);
+        _settings[nameof(YoudaoUseOfficialApi)] = YoudaoUseOfficialApi;
 
         // Volcano settings
-        _settings[nameof(VolcanoAccessKeyId)] = VolcanoAccessKeyId ?? string.Empty;
-        _settings[nameof(VolcanoSecretAccessKey)] = VolcanoSecretAccessKey ?? string.Empty;
+        _settings[nameof(VolcanoAccessKeyId)] = ProtectSensitiveSetting(VolcanoAccessKeyId);
+        _settings[nameof(VolcanoSecretAccessKey)] = ProtectSensitiveSetting(VolcanoSecretAccessKey);
 
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
@@ -919,7 +932,7 @@ public sealed class SettingsService
 
         // Save OCR Engine settings
         _settings[nameof(OcrEngine)] = (int)OcrEngine;
-        _settings[nameof(OcrApiKey)] = OcrApiKey ?? string.Empty;
+        _settings[nameof(OcrApiKey)] = ProtectSensitiveSetting(OcrApiKey);
         _settings[nameof(OcrEndpoint)] = OcrEndpoint;
         _settings[nameof(OcrModel)] = OcrModel;
         _settings[nameof(OcrSystemPrompt)] = OcrSystemPrompt;
@@ -1000,6 +1013,7 @@ public sealed class SettingsService
         {
             var json = JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_settingsFilePath, json);
+            _needsSensitiveSettingsMigration = false;
 
             // Verify the file was written successfully
             System.Diagnostics.Debug.WriteLine($"[SettingsService] Settings saved successfully to: {_settingsFilePath}");
@@ -1441,6 +1455,51 @@ public sealed class SettingsService
             catch { }
         }
         return defaultValue;
+    }
+
+    private string? GetSensitiveSetting(string key)
+    {
+        var storedValue = GetValue<string?>(key, null);
+        var plaintext = LocalCredentialProtector.UnprotectOrReturnPlaintext(
+            storedValue,
+            out var needsMigration,
+            out var decryptFailed);
+        if (needsMigration)
+        {
+            _needsSensitiveSettingsMigration = true;
+        }
+
+        if (decryptFailed)
+        {
+            Debug.WriteLine($"[SettingsService] Failed to decrypt protected setting: {key}");
+        }
+
+        return plaintext;
+    }
+
+    private static string ProtectSensitiveSetting(string? plaintext)
+    {
+        return string.IsNullOrEmpty(plaintext)
+            ? string.Empty
+            : LocalCredentialProtector.Protect(plaintext);
+    }
+
+    private void MigrateSensitiveSettingsIfNeeded()
+    {
+        if (!_needsSensitiveSettingsMigration)
+        {
+            return;
+        }
+
+        try
+        {
+            Save();
+            Debug.WriteLine("[SettingsService] Migrated plaintext sensitive settings to protected storage.");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[SettingsService] Failed to migrate sensitive settings: {ex.Message}");
+        }
     }
 
     private List<string> GetStringList(string key, List<string> defaultValue)

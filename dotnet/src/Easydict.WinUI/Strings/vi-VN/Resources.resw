@@ -214,6 +214,15 @@
   <data name="ApiKeyOptional" xml:space="preserve">
     <value>API Key (T&#xF9;y ch&#x1ECD;n)</value>
   </data>
+  <data name="GitHubToken" xml:space="preserve">
+    <value>Mã thông báo GitHub</value>
+  </data>
+  <data name="ShowSecretFormat" xml:space="preserve">
+    <value>Hiển thị {0}</value>
+  </data>
+  <data name="HideSecretFormat" xml:space="preserve">
+    <value>Ẩn {0}</value>
+  </data>
   <data name="Endpoint" xml:space="preserve">
     <value>Endpoint</value>
   </data>

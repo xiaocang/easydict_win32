@@ -21,6 +21,7 @@ internal static class LocalCredentialProtector
     private const string LegacyMachineIdFileName = "local-machine-id";
     private const int NonceSizeBytes = 12;
     private const int TagSizeBytes = 16;
+    internal const int MaxNestedProtectedValueDepth = 4;
     private static readonly Lazy<string> MachineId = new(GetMachineId);
     private const CredentialProtectionScope DefaultProtectionScope = CredentialProtectionScope.CurrentUser;
 
@@ -102,13 +103,66 @@ internal static class LocalCredentialProtector
 
     public static bool TryUnprotect(string protectedValue, out string plaintext)
     {
+        plaintext = string.Empty;
+        return IsProtected(protectedValue) &&
+            TryUnprotectNested(protectedValue, MachineId.Value, out plaintext, out _);
+    }
+
+    private static bool TryUnprotectNested(
+        string protectedValue,
+        string machineId,
+        out string plaintext,
+        out bool needsNormalization)
+    {
+        plaintext = string.Empty;
+        needsNormalization = false;
+        var currentValue = protectedValue;
+
+        for (var depth = 0; depth < MaxNestedProtectedValueDepth; depth++)
+        {
+            if (!TryUnprotectSingle(currentValue, machineId, out var unprotectedValue, out var usedLegacyProtection))
+            {
+                return false;
+            }
+
+            if (usedLegacyProtection || depth > 0)
+            {
+                needsNormalization = true;
+            }
+
+            currentValue = unprotectedValue;
+            if (!IsProtected(currentValue))
+            {
+                plaintext = currentValue;
+                return true;
+            }
+
+            needsNormalization = true;
+        }
+
+        return false;
+    }
+
+    private static bool TryUnprotectSingle(
+        string protectedValue,
+        string machineId,
+        out string plaintext,
+        out bool usedLegacyProtection)
+    {
+        usedLegacyProtection = false;
         if (TryUnprotectDpapi(protectedValue, out plaintext))
         {
             return true;
         }
 
-        return IsLegacyProtected(protectedValue) &&
-            TryUnprotectLegacy(protectedValue, MachineId.Value, out plaintext);
+        if (IsLegacyProtected(protectedValue) &&
+            TryUnprotectLegacy(protectedValue, machineId, out plaintext))
+        {
+            usedLegacyProtection = true;
+            return true;
+        }
+
+        return false;
     }
 
     internal static string? UnprotectOrReturnPlaintext(
@@ -124,20 +178,13 @@ internal static class LocalCredentialProtector
             return null;
         }
 
-        if (TryUnprotectDpapi(storedValue, out var plaintext))
-        {
-            return string.IsNullOrEmpty(plaintext) ? null : plaintext;
-        }
-
-        if (IsLegacyProtected(storedValue) &&
-            TryUnprotectLegacy(storedValue, MachineId.Value, out plaintext))
-        {
-            needsMigration = true;
-            return string.IsNullOrEmpty(plaintext) ? null : plaintext;
-        }
-
         if (IsProtected(storedValue))
         {
+            if (TryUnprotectNested(storedValue, MachineId.Value, out var plaintext, out needsMigration))
+            {
+                return string.IsNullOrEmpty(plaintext) ? null : plaintext;
+            }
+
             decryptFailed = true;
             return null;
         }
@@ -160,20 +207,13 @@ internal static class LocalCredentialProtector
             return null;
         }
 
-        if (TryUnprotectDpapi(storedValue, out var plaintext))
-        {
-            return string.IsNullOrEmpty(plaintext) ? null : plaintext;
-        }
-
-        if (IsLegacyProtected(storedValue) &&
-            TryUnprotectLegacy(storedValue, machineId, out plaintext))
-        {
-            needsMigration = true;
-            return string.IsNullOrEmpty(plaintext) ? null : plaintext;
-        }
-
         if (IsProtected(storedValue))
         {
+            if (TryUnprotectNested(storedValue, machineId, out var plaintext, out needsMigration))
+            {
+                return string.IsNullOrEmpty(plaintext) ? null : plaintext;
+            }
+
             decryptFailed = true;
             return null;
         }

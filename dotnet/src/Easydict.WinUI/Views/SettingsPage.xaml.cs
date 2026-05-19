@@ -146,6 +146,10 @@ public sealed partial class SettingsPage : Page
     private static readonly Regex NonServiceIdCharRegex = new("[^a-z0-9-]", RegexOptions.Compiled);
     private const string ServiceConfigurationIconTag = "ServiceConfigurationIcon";
     private const string ReorderButtonEmoji = "\u2195\uFE0F";
+    private const int PasswordTailVisibleLength = 3;
+    private const double PasswordTailHintMaxWidth = 72;
+    private const double PasswordTailHintTrailingMargin = 44;
+    private const string PasswordTailHintPrefix = "...";
     private static readonly (string BrushKey, string ColorKey)[] ScopedThemeResourceBrushes =
     [
         ("ApplicationPageBackgroundThemeBrush", "FloatingWindowBackgroundColor"),
@@ -223,6 +227,7 @@ public sealed partial class SettingsPage : Page
     private bool _isFixedWindowReorderModeEnabled;
     private bool _themeChromeRefreshQueued;
     private readonly Dictionary<PasswordBox, bool> _visiblePasswordBoxes = new();
+    private readonly Dictionary<PasswordBox, PasswordTailHint> _passwordTailHints = new();
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
     private readonly CancellationTokenSource _lifetimeCts = new();
 
@@ -252,6 +257,8 @@ public sealed partial class SettingsPage : Page
         new() { Id = SettingsTabId.About, IconGlyph = "\uE946" }
     ];
     private readonly HashSet<SettingsTabId> _initializedSettingsTabData = [];
+
+    private sealed record PasswordTailHint(Border Container, TextBlock Text);
 
 
 #if DEBUG
@@ -381,6 +388,7 @@ public sealed partial class SettingsPage : Page
         this.InitializeComponent();
         ApplyThemeChrome();
         InitializeServiceConfigurationHeaderIcons();
+        InitializePasswordTailHints();
 #if DEBUG
         PerfLog("ctor: end InitializeComponent");
         MemoryDiagnostics.LogSnapshot("SettingsPage.ctor after InitializeComponent");
@@ -526,6 +534,7 @@ public sealed partial class SettingsPage : Page
         }
 
         RefreshSettingsControlChrome(chrome);
+        UpdateAllPasswordTailHints();
     }
 
     private void RefreshSettingsControlChrome(SettingsThemeChrome chrome)
@@ -1429,6 +1438,48 @@ public sealed partial class SettingsPage : Page
         yield return OcrApiKeyRevealButton;
     }
 
+    private void InitializePasswordTailHints()
+    {
+        foreach (var button in GetPasswordRevealButtons())
+        {
+            if (button.Tag is not PasswordBox passwordBox
+                || _passwordTailHints.ContainsKey(passwordBox)
+                || passwordBox.Parent is not Grid grid)
+            {
+                continue;
+            }
+
+            var hintText = new TextBlock
+            {
+                FontSize = 12,
+                MaxWidth = PasswordTailHintMaxWidth,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            AutomationProperties.SetAccessibilityView(hintText, AccessibilityView.Raw);
+
+            var hintContainer = new Border
+            {
+                Child = hintText,
+                CornerRadius = new CornerRadius(2),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                IsHitTestVisible = false,
+                Margin = new Thickness(0, 0, PasswordTailHintTrailingMargin, 0),
+                Padding = new Thickness(4, 0, 4, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Visibility = Visibility.Collapsed
+            };
+            AutomationProperties.SetAccessibilityView(hintContainer, AccessibilityView.Raw);
+
+            Canvas.SetZIndex(hintContainer, 1);
+            Canvas.SetZIndex(button, 2);
+            grid.Children.Add(hintContainer);
+            _passwordTailHints[passwordBox] = new PasswordTailHint(hintContainer, hintText);
+            passwordBox.PasswordChanged += OnPasswordTailHintPasswordChanged;
+            UpdatePasswordTailHint(passwordBox);
+        }
+    }
+
     private void UpdatePasswordRevealButtonState(Button button, LocalizationService loc)
     {
         if (button.Tag is not PasswordBox passwordBox)
@@ -1446,6 +1497,60 @@ public sealed partial class SettingsPage : Page
         var label = loc.GetString(isVisible ? "HideSecretFormat" : "ShowSecretFormat", secretName);
         AutomationProperties.SetName(button, label);
         ToolTipService.SetToolTip(button, label);
+        UpdatePasswordTailHint(passwordBox);
+    }
+
+    private void OnPasswordTailHintPasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox)
+        {
+            UpdatePasswordTailHint(passwordBox);
+        }
+    }
+
+    private void UpdateAllPasswordTailHints()
+    {
+        foreach (var passwordBox in _passwordTailHints.Keys)
+        {
+            UpdatePasswordTailHint(passwordBox);
+        }
+    }
+
+    private void UpdatePasswordTailHint(PasswordBox passwordBox)
+    {
+        if (!_passwordTailHints.TryGetValue(passwordBox, out var hint))
+        {
+            return;
+        }
+
+        var password = passwordBox.Password ?? string.Empty;
+        var isFullyVisible = _visiblePasswordBoxes.TryGetValue(passwordBox, out var visible) && visible;
+        if (isFullyVisible || password.Length == 0)
+        {
+            hint.Container.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var tailLength = Math.Min(PasswordTailVisibleLength, password.Length);
+        hint.Text.Text = PasswordTailHintPrefix + password.Substring(password.Length - tailLength);
+        hint.Text.Foreground = CreateThemeBrush("ServiceResultHeaderSecondaryForegroundColor")
+            ?? CreateThemeBrush("QueryTextColor");
+        hint.Container.Background = CreateThemeBrush("FloatingInputBackgroundColor");
+        hint.Container.Visibility = Visibility.Visible;
+    }
+
+    private void UnregisterPasswordTailHints()
+    {
+        foreach (var (passwordBox, hint) in _passwordTailHints.ToList())
+        {
+            passwordBox.PasswordChanged -= OnPasswordTailHintPasswordChanged;
+            if (hint.Container.Parent is Grid grid)
+            {
+                grid.Children.Remove(hint.Container);
+            }
+        }
+
+        _passwordTailHints.Clear();
     }
 
     private string GetPasswordRevealSecretResourceKey(PasswordBox passwordBox)
@@ -1513,6 +1618,8 @@ public sealed partial class SettingsPage : Page
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
     {
+        InitializePasswordTailHints();
+
         if (_isUnloaded || _isInitialized)
         {
             return;
@@ -1756,6 +1863,7 @@ public sealed partial class SettingsPage : Page
         this.Unloaded -= OnPageUnloaded;
         this.ActualThemeChanged -= OnActualThemeChanged;
 
+        UnregisterPasswordTailHints();
         UnregisterChangeHandlers();
         UnregisterLanguageCheckboxHandlers();
         TeardownPhiSilicaPanel();

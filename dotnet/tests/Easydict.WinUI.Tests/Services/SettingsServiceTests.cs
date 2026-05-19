@@ -3,6 +3,8 @@ using Easydict.WindowsAI;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using FluentAssertions;
+using System.Reflection;
+using System.Text.Json;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
@@ -21,6 +23,91 @@ public class SettingsServiceTests
     public SettingsServiceTests()
     {
         _settings = SettingsService.Instance;
+    }
+
+    [Fact]
+    public void Migration_ShouldPreserveAlreadyProtectedSensitiveSettings()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        var settingsPath = Path.Combine(testDirectory.Path, "settings.json");
+        var alreadyProtected = LocalCredentialProtector.Protect("sk-already-protected");
+        var nestedProtected = LocalCredentialProtector.Protect(
+            LocalCredentialProtector.Protect("sk-nested-protected"));
+
+        File.WriteAllText(
+            settingsPath,
+            JsonSerializer.Serialize(
+                new Dictionary<string, object?>
+                {
+                    [nameof(SettingsService.OpenAIApiKey)] = alreadyProtected,
+                    [nameof(SettingsService.CustomOpenAIApiKey)] = nestedProtected,
+                    [nameof(SettingsService.DeepLApiKey)] = "plain-legacy-key"
+                },
+                new JsonSerializerOptions { WriteIndented = true }));
+
+        var previousSettingsDirectory = Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR");
+        try
+        {
+            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", testDirectory.Path);
+            CreateIsolatedSettingsService();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", previousSettingsDirectory);
+        }
+
+        using var migratedSettings = JsonDocument.Parse(File.ReadAllText(settingsPath));
+        var root = migratedSettings.RootElement;
+        var openAiValue = root.GetProperty(nameof(SettingsService.OpenAIApiKey)).GetString();
+        var customOpenAiValue = root.GetProperty(nameof(SettingsService.CustomOpenAIApiKey)).GetString();
+        var deepLValue = root.GetProperty(nameof(SettingsService.DeepLApiKey)).GetString();
+
+        openAiValue.Should().Be(alreadyProtected);
+        customOpenAiValue.Should().NotBe(nestedProtected);
+        customOpenAiValue.Should().StartWith("edcred1:user:");
+        var customOpenAiPlaintext = LocalCredentialProtector.UnprotectOrReturnPlaintext(
+            customOpenAiValue,
+            "stable-machine-id",
+            out var customOpenAiNeedsMigration,
+            out var customOpenAiDecryptFailed);
+        customOpenAiPlaintext.Should().Be("sk-nested-protected");
+        customOpenAiNeedsMigration.Should().BeFalse();
+        customOpenAiDecryptFailed.Should().BeFalse();
+        deepLValue.Should().NotBe("plain-legacy-key");
+        deepLValue.Should().StartWith("edcred1:user:");
+        LocalCredentialProtector.TryUnprotect(deepLValue!, out var migratedDeepL)
+            .Should().BeTrue();
+        migratedDeepL.Should().Be("plain-legacy-key");
+    }
+
+    [Fact]
+    public void Save_WithNoChanges_ShouldNotRewriteSettingsFile()
+    {
+        using var testDirectory = new TemporaryDirectory();
+        var settingsPath = Path.Combine(testDirectory.Path, "settings.json");
+        var previousSettingsDirectory = Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR");
+        SettingsService settings;
+        try
+        {
+            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", testDirectory.Path);
+            settings = CreateIsolatedSettingsService();
+            settings.OpenAIApiKey = "sk-stable-no-rewrite";
+            settings.Save();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", previousSettingsDirectory);
+        }
+
+        var savedJson = File.ReadAllText(settingsPath);
+        var fixedTimestamp = new DateTime(2024, 01, 01, 00, 00, 00, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(settingsPath, fixedTimestamp);
+        var unchangedTimestamp = File.GetLastWriteTimeUtc(settingsPath);
+
+        settings.Save();
+
+        File.ReadAllText(settingsPath).Should().Be(savedJson);
+        File.GetLastWriteTimeUtc(settingsPath).Should().Be(unchangedTimestamp);
     }
 
     [Fact]
@@ -846,4 +933,42 @@ public class SettingsServiceTests
     }
 
     #endregion
+
+    private static SettingsService CreateIsolatedSettingsService()
+    {
+        var constructor = typeof(SettingsService).GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            Type.EmptyTypes,
+            modifiers: null);
+
+        constructor.Should().NotBeNull();
+        return (SettingsService)constructor!.Invoke(null);
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "Easydict.WinUI.Tests",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+            catch
+            {
+                // Best-effort cleanup only.
+            }
+        }
+    }
 }

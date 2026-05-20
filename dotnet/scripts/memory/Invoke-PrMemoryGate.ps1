@@ -617,10 +617,12 @@ New-Directory $ToolDir
 $AppExePath = Get-FullPath $AppExePath
 $TestProject = Get-FullPath $TestProject
 if (-not (Test-Path -LiteralPath $AppExePath)) {
+    Write-Host "::error title=PR Memory Gate::App executable not found at $AppExePath"
     throw "App executable not found: $AppExePath"
 }
 
 if (-not (Test-Path -LiteralPath $TestProject)) {
+    Write-Host "::error title=PR Memory Gate::Test project not found at $TestProject"
     throw "Test project not found: $TestProject"
 }
 
@@ -775,17 +777,38 @@ Stop-IfRunning $counterProcess
 Stop-JobIfRunning $typeperfJob
 
 if ($testExitCode -ne 0) {
+    # Surface the test runner output so the CI annotation is informative without
+    # needing artifact download. The PS script ran the UIAutomation scenario in a
+    # background process and captured stdout/stderr into $testOut/$testErr — print
+    # both so the workflow annotation shows the real test failure.
+    Write-Host "::group::dotnet test stdout ($testOut)"
+    if (Test-Path -LiteralPath $testOut) {
+        Get-Content -LiteralPath $testOut -Raw | Write-Host
+    } else {
+        Write-Host "(file missing)"
+    }
+    Write-Host "::endgroup::"
+    Write-Host "::group::dotnet test stderr ($testErr)"
+    if (Test-Path -LiteralPath $testErr) {
+        Get-Content -LiteralPath $testErr -Raw | Write-Host
+    } else {
+        Write-Host "(file missing)"
+    }
+    Write-Host "::endgroup::"
+    Write-Host "::error title=PR Memory Gate::Memory gate UIAutomation scenario failed with exit code $testExitCode"
     throw "Memory gate UIAutomation scenario failed with exit code $testExitCode. See '$testOut' and '$testErr'."
 }
 
 if (Test-Path -LiteralPath $testOut) {
     $testLog = Get-Content -LiteralPath $testOut -Raw
     if ($testLog -match "Fatal error\.|AccessViolationException") {
+        Write-Host "::error title=PR Memory Gate::Fatal runtime error detected in app log"
         throw "Memory gate app process emitted a fatal runtime error. See '$testOut'."
     }
 }
 
 if (-not (Test-Path -LiteralPath $typeperfCsv)) {
+    Write-Host "::error title=PR Memory Gate::typeperf csv missing at $typeperfCsv"
     throw "typeperf did not produce '$typeperfCsv'."
 }
 
@@ -796,6 +819,7 @@ $handleColumn = Get-CsvColumn $rows "\Handle Count"
 $workingSetColumn = Get-CsvColumn $rows "\Working Set"
 $threadColumn = Get-CsvColumn $rows "\Thread Count"
 if (-not $privateColumn -or -not $handleColumn) {
+    Write-Host "::error title=PR Memory Gate::typeperf csv missing required Private Bytes / Handle Count columns"
     throw "typeperf output is missing Private Bytes or Handle Count columns."
 }
 
@@ -936,9 +960,14 @@ $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryPath -Enco
 Write-Host "Memory gate summary written to $summaryPath"
 
 if ($failures.Count -gt 0) {
+    # Use the workflow-command form so each violation lands as a CI annotation
+    # we can inspect from the check-runs annotations API without needing the
+    # uploaded artifact. Each failure entry is a single line with the
+    # baseline/final/limit numbers, which is exactly what we want surfaced.
     foreach ($failure in $failures) {
-        Write-Error $failure
+        Write-Host "::error title=PR Memory Gate threshold::$failure"
     }
+    Write-Host "::error title=PR Memory Gate::Memory gate failed — $($failures.Count) threshold(s) exceeded"
     throw "Memory gate failed."
 }
 

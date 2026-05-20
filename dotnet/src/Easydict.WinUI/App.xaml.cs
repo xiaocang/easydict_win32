@@ -560,22 +560,9 @@ namespace Easydict.WinUI
                 // Capture source window before getting text (which may change focus)
                 TextInsertionService.CaptureSourceWindow();
 
-                // Get selected text via intelligent method (clipboard for Electron, UIA with ClipWait fallback for others)
-                var text = await TextSelectionService.GetSelectedTextAsync();
-
-                _window?.DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        // Selected text takes precedence — always show with the new text.
-                        MiniWindowService.Instance.ShowWithText(text);
-                    }
-                    else
-                    {
-                        // Show or raise from background (#129).
-                        MiniWindowService.Instance.Show();
-                    }
-                });
+                await RaceShowWindowWithSelectionAsync(
+                    showEmpty: MiniWindowService.Instance.Show,
+                    showWithText: MiniWindowService.Instance.ShowWithText).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -600,27 +587,72 @@ namespace Easydict.WinUI
                 // Capture source window before getting text (which may change focus)
                 TextInsertionService.CaptureSourceWindow();
 
-                // Get selected text via intelligent method (clipboard for Electron, UIA with ClipWait fallback for others)
-                var text = await TextSelectionService.GetSelectedTextAsync();
-
-                _window?.DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        // Selected text takes precedence — always show with the new text.
-                        FixedWindowService.Instance.ShowWithText(text);
-                    }
-                    else
-                    {
-                        // Show or raise from background (#129).
-                        FixedWindowService.Instance.Show();
-                    }
-                });
+                await RaceShowWindowWithSelectionAsync(
+                    showEmpty: FixedWindowService.Instance.Show,
+                    showWithText: FixedWindowService.Instance.ShowWithText).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[Hotkey] OnShowFixedWindowHotkey error: {ex.Message}");
             }
+        }
+
+        // Budget for the fast path. Long enough to catch clipboard-pre-staged paths
+        // (Electron / web apps typically return inside 30-60ms), short enough that a
+        // stalled UIA fallback can't make the window feel frozen on Word / PowerPoint /
+        // PDF readers (which routinely take 400-1200ms).
+        private const int SelectionFastPathBudgetMs = 80;
+
+        /// <summary>
+        /// Race a TextSelectionService.GetSelectedTextAsync call against a short timer.
+        /// If the selection arrives inside the budget the window opens once with the text
+        /// inline (no flash). Otherwise the window opens immediately with no text so the
+        /// user sees instant response, and the translation is filled in when the selection
+        /// eventually arrives. Keeps the UI thread free of UIA / ClipWait waits during the
+        /// hotkey-to-Activated path.
+        /// </summary>
+        private async Task RaceShowWindowWithSelectionAsync(
+            Action showEmpty,
+            Action<string> showWithText)
+        {
+            var dispatcher = _window?.DispatcherQueue;
+            if (dispatcher is null) return;
+
+            var textTask = TextSelectionService.GetSelectedTextAsync();
+            var winner = await Task.WhenAny(textTask, Task.Delay(SelectionFastPathBudgetMs))
+                .ConfigureAwait(false);
+
+            if (winner == textTask)
+            {
+                string? text = null;
+                try { text = await textTask.ConfigureAwait(false); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[Hotkey] GetSelectedTextAsync failed (fast path): {ex.Message}");
+                }
+
+                dispatcher.TryEnqueue(() =>
+                {
+                    if (!string.IsNullOrWhiteSpace(text)) showWithText(text);
+                    else showEmpty();
+                });
+                return;
+            }
+
+            // Slow path: open the window now so it appears immediately, then overwrite with
+            // the selected text once the selection fetch completes.
+            dispatcher.TryEnqueue(showEmpty);
+
+            // Fire-and-forget continuation. Exceptions are already logged inside
+            // GetSelectedTextAsync; guard with status check anyway.
+            _ = textTask.ContinueWith(t =>
+            {
+                if (t.Status != TaskStatus.RanToCompletion) return;
+                var text = t.Result;
+                if (string.IsNullOrWhiteSpace(text)) return;
+                dispatcher.TryEnqueue(() => showWithText(text));
+            }, TaskScheduler.Default);
         }
 
         private void OnToggleMiniWindowHotkey()

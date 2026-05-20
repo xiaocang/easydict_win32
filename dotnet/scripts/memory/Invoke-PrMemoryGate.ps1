@@ -631,14 +631,14 @@ function Write-LogTail([string]$Path, [int]$Count) {
 }
 
 # Scan a test-runner log file and re-emit notable lines (exceptions, failed asserts,
-# launch errors) as workflow annotations so they're visible in the check-runs API
-# without artifact download.
+# launch errors, stack frames) as workflow annotations so they're visible in the
+# check-runs API without artifact download.
 function Annotate-TestLogHighlights([string]$Path, [string]$Label) {
     if (-not (Test-Path -LiteralPath $Path)) {
         return
     }
 
-    $patterns = @(
+    $errorPatterns = @(
         'Exception',
         'FAIL',
         'Failed',
@@ -650,17 +650,31 @@ function Annotate-TestLogHighlights([string]$Path, [string]$Label) {
         'AccessViolationException',
         'Process exited',
         'Could not load',
-        'Cannot find Easydict app'
+        'Cannot find Easydict app',
+        'Unhandled exception'
     )
-    $regex = "($($patterns -join '|'))"
+    # Stack-frame lines look like `   at Namespace.Type.Method(...) in file:line N`.
+    $stackPattern = '^\s+(at |---)'
+    $errorRegex = "($($errorPatterns -join '|'))"
 
-    $hits = Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue |
-            Select-String -Pattern $regex |
-            Select-Object -First 12
-    foreach ($hit in $hits) {
-        # Strip GitHub workflow-command characters that would break annotation parsing.
-        $line = $hit.Line -replace '[\r\n]', ' ' -replace '::', ':-:'
-        Write-Host "::error title=PR Memory Gate [$Label]::$line"
+    $lines = @(Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue)
+    $emitted = 0
+    # Take the FIRST N lines that look interesting, but also pull stack frames
+    # following any error-like line so the trace is visible end-to-end.
+    $inStack = $false
+    for ($i = 0; $i -lt $lines.Count -and $emitted -lt 30; $i++) {
+        $line = $lines[$i]
+        $isError = $line -match $errorRegex
+        $isStack = $line -match $stackPattern
+        if ($isError -or ($inStack -and $isStack)) {
+            # Strip GitHub workflow-command characters that would break annotation parsing.
+            $clean = $line -replace '[\r\n]', ' ' -replace '::', ':-:'
+            Write-Host "::error title=PR Memory Gate [$Label]::$clean"
+            $emitted++
+            $inStack = $isError -or ($inStack -and $isStack)
+        } else {
+            $inStack = $false
+        }
     }
 }
 

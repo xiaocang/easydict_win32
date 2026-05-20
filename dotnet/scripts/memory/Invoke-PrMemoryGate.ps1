@@ -625,8 +625,43 @@ function Write-LogTail([string]$Path, [int]$Count) {
         return
     }
 
-    Write-Host "----- tail: $Path -----"
+    Write-Host "::group::tail: $Path"
     Get-Content -LiteralPath $Path -Tail $Count | Write-Host
+    Write-Host "::endgroup::"
+}
+
+# Scan a test-runner log file and re-emit notable lines (exceptions, failed asserts,
+# launch errors) as workflow annotations so they're visible in the check-runs API
+# without artifact download.
+function Annotate-TestLogHighlights([string]$Path, [string]$Label) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    $patterns = @(
+        'Exception',
+        'FAIL',
+        'Failed',
+        'Assert\.',
+        'TimeoutException',
+        'COMException',
+        'FileNotFoundException',
+        'InvalidOperationException',
+        'AccessViolationException',
+        'Process exited',
+        'Could not load',
+        'Cannot find Easydict app'
+    )
+    $regex = "($($patterns -join '|'))"
+
+    $hits = Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue |
+            Select-String -Pattern $regex |
+            Select-Object -First 12
+    foreach ($hit in $hits) {
+        # Strip GitHub workflow-command characters that would break annotation parsing.
+        $line = $hit.Line -replace '[\r\n]', ' ' -replace '::', ':-:'
+        Write-Host "::error title=PR Memory Gate [$Label]::$line"
+    }
 }
 
 $OutputDir = Get-FullPath $OutputDir
@@ -730,6 +765,11 @@ try {
     }
 }
 catch {
+    # Surface FlaUI / dotnet test output as annotations so the precise failure
+    # (e.g. main window never appeared, app crashed on launch, AppLauncher threw)
+    # is visible from the check-runs annotations API without artifact access.
+    Annotate-TestLogHighlights $testOut "test stdout"
+    Annotate-TestLogHighlights $testErr "test stderr"
     Write-LogTail $testOut 120
     Write-LogTail $testErr 120
     throw

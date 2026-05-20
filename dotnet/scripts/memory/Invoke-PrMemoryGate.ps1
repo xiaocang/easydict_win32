@@ -19,6 +19,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Top-level trap converts any uncaught error into a workflow annotation that the
+# check-runs annotations API surfaces, so PR Memory Gate failures are diagnosable
+# from outside the workflow without artifact-download auth.
+trap {
+    $err = $_
+    $msg = $err.Exception.Message
+    $line = if ($err.InvocationInfo) { $err.InvocationInfo.ScriptLineNumber } else { '?' }
+    $script = if ($err.InvocationInfo -and $err.InvocationInfo.ScriptName) {
+        Split-Path $err.InvocationInfo.ScriptName -Leaf
+    } else { '?' }
+    Write-Host "::error title=PR Memory Gate uncaught error::[$script`:$line] $msg"
+    if ($err.ScriptStackTrace) {
+        Write-Host "::group::PowerShell stack trace"
+        Write-Host $err.ScriptStackTrace
+        Write-Host "::endgroup::"
+    }
+    # Re-throw so PowerShell still exits non-zero (the trap only annotates).
+    break
+}
+
 function Get-FullPath([string]$Path) {
     if ([System.IO.Path]::IsPathRooted($Path)) {
         return [System.IO.Path]::GetFullPath($Path)

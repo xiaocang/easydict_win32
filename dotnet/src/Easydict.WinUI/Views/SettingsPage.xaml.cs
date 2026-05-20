@@ -964,7 +964,11 @@ public sealed partial class SettingsPage : Page
             MainScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
         }
 
-        ApplyThemeChrome();
+        // Theme chrome is refreshed on actual theme changes (OnActualThemeChanged →
+        // QueueApplyThemeChrome) and when a tab's XAML is first inflated
+        // (EnsureTabContentLoaded above). Visibility-toggle switches reuse the brushes
+        // already assigned on the inflated subtrees, so re-walking the visual tree here
+        // costs ~ms-to-tens-of-ms on the Services tab for no observable change.
     }
 
     private void EnsureTabContentLoaded(SettingsTabId tabId)
@@ -975,6 +979,12 @@ public sealed partial class SettingsPage : Page
                 FindName(nameof(ViewsTabContent));
                 BindWindowServicePanels();
                 ApplyWindowResultsLocalization(LocalizationService.Instance);
+                // Chrome the newly-inflated subtree — the rest of the page already has
+                // brushes assigned from the initial ctor pass. ApplyThemeChrome walks the
+                // entire visual tree (~thousands of elements on the Services tab), so
+                // confining it to this inflation site avoids paying the cost on every
+                // visibility-toggle switch in SelectSettingsTab below.
+                ApplyThemeChrome();
                 break;
         }
     }

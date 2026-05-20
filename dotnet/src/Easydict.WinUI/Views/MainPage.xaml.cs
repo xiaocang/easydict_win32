@@ -72,6 +72,11 @@ namespace Easydict.WinUI.Views
         private ContentDialog? _currentDialog;
         private readonly bool _useMemoryAbVariantB;
         private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _suggestionDebounceTimer;
+
+        // Frame-rate streaming text applicator — see StreamingTextCoalescer.
+        // Created on first translation since DispatcherQueue.GetForCurrentThread is
+        // only valid after the page is loaded onto a dispatcher.
+        private StreamingTextCoalescer? _streamingCoalescer;
         private object? _translateButtonDefaultContent;
         private object? _translateButtonNarrowDefaultContent;
         private object? _longDocTranslateButtonDefaultContent;
@@ -247,6 +252,9 @@ namespace Easydict.WinUI.Views
             {
                 _detectionService = new LanguageDetectionService(_settings);
             }
+            // Build the streaming coalescer on the page's dispatcher. Disposed in
+            // CleanupResourcesAsync. Idempotent across cached-navigation re-loads.
+            _streamingCoalescer ??= new StreamingTextCoalescer(DispatcherQueue);
             SetLoading(false);
 
             // Apply localization first (populates combos), then settings (selects saved language).
@@ -976,6 +984,8 @@ namespace Easydict.WinUI.Views
 #endif
             CancelTransientQueriesForNavigation();
             ReleaseServiceResultControls();
+            _streamingCoalescer?.Dispose();
+            _streamingCoalescer = null;
             _longDocumentService?.Dispose();
             _longDocumentService = null;
             _longDocDedupService = null;
@@ -2796,14 +2806,12 @@ namespace Easydict.WinUI.Views
                     RefreshServiceResultView(serviceResult);
                 });
 
+                // See ExecuteStreamingTranslationForServiceAsync for the rationale.
                 await foreach (var chunk in grammarService
                     .CorrectGrammarStreamAsync(request, ct).ConfigureAwait(false))
                 {
                     sb.Append(chunk);
 
-                    // Scale throttle by accumulated length: Measure cost ~ O(chars) for
-                    // wrapped TextBlocks, so slow down updates as the buffer grows to
-                    // keep UI thread responsive for scroll/input dispatch.
                     var throttleMs = sb.Length switch
                     {
                         < 512 => 50,
@@ -2814,15 +2822,7 @@ namespace Easydict.WinUI.Views
                     var now = DateTime.UtcNow;
                     if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
                     {
-                        var currentText = sb.ToString();
-                        DispatcherQueue.TryEnqueue(() =>
-                        {
-                            if (_isClosing) return;
-                            // StreamingText PropertyChanged → coalesced UpdateUI in
-                            // ServiceResultItem, which takes a fast path during streaming.
-                            // No need to call RefreshServiceResultView here.
-                            serviceResult.StreamingText = currentText;
-                        });
+                        _streamingCoalescer?.Update(serviceResult, sb.ToString());
                         lastUpdateTime = now;
                     }
                 }
@@ -2836,6 +2836,7 @@ namespace Easydict.WinUI.Views
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     if (_isClosing) return;
+                    _streamingCoalescer?.Forget(serviceResult);
                     serviceResult.IsStreaming = false;
                     serviceResult.StreamingText = "";
                     serviceResult.GrammarResult = grammarResult;
@@ -2903,16 +2904,19 @@ namespace Easydict.WinUI.Views
                 RefreshServiceResultView(serviceResult);
             });
 
-            // Use ConfigureAwait(false) to avoid resuming on UI thread for each chunk.
-            // DispatcherQueue.TryEnqueue is safe to call from any thread.
+            // Snapshots flow through the coalescer instead of dispatcher.TryEnqueue
+            // per chunk. With N services translating in parallel the dispatcher
+            // would otherwise see N × 1/throttleMs callbacks per second, each
+            // invalidating a wrapped-TextBlock measure pass. The coalescer collapses
+            // all N services into ≤1 UI callback per frame (~16ms).
             await foreach (var chunk in manager.TranslateStreamAsync(
                 request, ct, serviceResult.ServiceId).ConfigureAwait(false))
             {
                 sb.Append(chunk);
 
-                // Scale throttle by accumulated length: Measure cost ~ O(chars) for
-                // wrapped TextBlocks, so slow down updates as the buffer grows to
-                // keep UI thread responsive for scroll/input dispatch.
+                // Per-stream snapshot rate caps sb.ToString() allocations on the
+                // background thread; scaling with text length stays from the original
+                // design since Measure cost ~ O(chars).
                 var throttleMs = sb.Length switch
                 {
                     < 512 => 50,
@@ -2923,15 +2927,7 @@ namespace Easydict.WinUI.Views
                 var now = DateTime.UtcNow;
                 if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
                 {
-                    var currentText = sb.ToString();
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
-                        if (_isClosing) return;
-                        // StreamingText PropertyChanged → coalesced UpdateUI in
-                        // ServiceResultItem, which takes a fast path during streaming.
-                        // No need to call RefreshServiceResultView here.
-                        serviceResult.StreamingText = currentText;
-                    });
+                    _streamingCoalescer?.Update(serviceResult, sb.ToString());
                     lastUpdateTime = now;
                 }
             }
@@ -2974,6 +2970,7 @@ namespace Easydict.WinUI.Views
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (_isClosing) return;
+                _streamingCoalescer?.Forget(serviceResult);
                 serviceResult.IsLoading = false;
                 serviceResult.IsStreaming = false;
                 serviceResult.StreamingText = "";

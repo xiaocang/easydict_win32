@@ -51,6 +51,10 @@ public sealed partial class FixedWindow : Window
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _resizeThrottleTimer;
     private bool _resizePending;      // resize requested but not yet executed
     private bool _resizeThrottling;   // inside cooldown window
+
+    // See StreamingTextCoalescer / MiniWindow for the rationale.
+    private StreamingTextCoalescer? _streamingCoalescer;
+
     private const int ResizeThrottleMs = 150;
     private const int InputFocusRetryDelayMs = 50;
     private const int InputFocusMaxAttempts = 10;
@@ -64,6 +68,9 @@ public sealed partial class FixedWindow : Window
     {
         _targetLanguageSelector = new TargetLanguageSelector(_settings);
         this.InitializeComponent();
+
+        // Frame-rate streaming text applicator — see StreamingTextCoalescer.
+        _streamingCoalescer = new StreamingTextCoalescer(DispatcherQueue);
 
         // Get AppWindow for window management
         var hWnd = WindowNative.GetWindowHandle(this);
@@ -776,6 +783,9 @@ public sealed partial class FixedWindow : Window
             _resizeThrottleTimer = null;
         }
 
+        _streamingCoalescer?.Dispose();
+        _streamingCoalescer = null;
+
         // Clean up title bar drag region helper
         _titleBarHelper?.Dispose();
         _titleBarHelper = null;
@@ -1325,13 +1335,7 @@ public sealed partial class FixedWindow : Window
                 var now = DateTime.UtcNow;
                 if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
                 {
-                    var currentText = sb.ToString();
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
-                        if (_isClosing) return;
-                        serviceResult.StreamingText = currentText;
-                        RequestResize();
-                    });
+                    _streamingCoalescer?.Update(serviceResult, sb.ToString());
                     lastUpdateTime = now;
                 }
             }
@@ -1345,6 +1349,7 @@ public sealed partial class FixedWindow : Window
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (_isClosing) return;
+                _streamingCoalescer?.Forget(serviceResult);
                 serviceResult.IsStreaming = false;
                 serviceResult.StreamingText = "";
                 serviceResult.GrammarResult = grammarResult;
@@ -1411,24 +1416,21 @@ public sealed partial class FixedWindow : Window
             serviceResult.StreamingText = "";
         });
 
-        // Use ConfigureAwait(false) to avoid resuming on UI thread for each chunk.
-        // DispatcherQueue.TryEnqueue is safe to call from any thread.
+        // Snapshots flow through the coalescer so N parallel services collapse to
+        // ≤1 UI callback per frame, instead of N×20 dispatcher.TryEnqueue/sec which
+        // would invalidate wrapped-TextBlock measures faster than the UI thread can
+        // process them. The original double-TryEnqueue + RequestResize per chunk
+        // was the worst offender — full content.Measure() per snapshot. Window
+        // resize now happens once in the final-state lambda below.
         await foreach (var chunk in manager.TranslateStreamAsync(
             request, ct, serviceResult.ServiceId).ConfigureAwait(false))
         {
             sb.Append(chunk);
 
-            // Throttle UI updates
             var now = DateTime.UtcNow;
             if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
             {
-                var currentText = sb.ToString();
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (_isClosing) return;
-                    serviceResult.StreamingText = currentText;
-                    DispatcherQueue.TryEnqueue(() => RequestResize());
-                });
+                _streamingCoalescer?.Update(serviceResult, sb.ToString());
                 lastUpdateTime = now;
             }
         }
@@ -1471,6 +1473,8 @@ public sealed partial class FixedWindow : Window
         DispatcherQueue.TryEnqueue(() =>
         {
             if (_isClosing) return;
+            // Drop any pending streaming snapshot before flipping IsStreaming → false.
+            _streamingCoalescer?.Forget(serviceResult);
             serviceResult.IsLoading = false;
             serviceResult.IsStreaming = false;
             serviceResult.StreamingText = "";

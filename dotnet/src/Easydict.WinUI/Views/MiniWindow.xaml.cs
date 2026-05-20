@@ -69,6 +69,13 @@ public sealed partial class MiniWindow : Window
     private bool _resizeThrottling;   // inside cooldown window
     private bool _isSourceTextExpanded = false;
 
+    // Frame-rate-coalesced streaming text applicator. See StreamingTextCoalescer for
+    // the rationale; nutshell: multiple services pushing StreamingText updates every
+    // 50ms saturate the dispatcher with measure-invalidating callbacks, stuttering
+    // the mouse cursor on the window. Coalescing collapses N services into ≤1 UI
+    // callback per frame.
+    private StreamingTextCoalescer? _streamingCoalescer;
+
     private const int ResizeThrottleMs = 150;
     private const int InputFocusRetryDelayMs = 50;
     private const int InputFocusMaxAttempts = 10;
@@ -82,6 +89,11 @@ public sealed partial class MiniWindow : Window
     {
         _targetLanguageSelector = new TargetLanguageSelector(_settings);
         this.InitializeComponent();
+
+        // Construct the streaming coalescer on the UI dispatcher — its timer is
+        // thread-affine. Built here (not lazily in the streaming loop) so the
+        // background streaming tasks never touch DispatcherQueueTimer themselves.
+        _streamingCoalescer = new StreamingTextCoalescer(DispatcherQueue);
 
         // Get AppWindow for window management
         var hWnd = WindowNative.GetWindowHandle(this);
@@ -917,6 +929,12 @@ public sealed partial class MiniWindow : Window
             _resizeThrottleTimer = null;
         }
 
+        // Tear down the streaming coalescer (stops its frame-rate timer). Late
+        // streaming snapshots arriving from in-flight Task.Run loops after this
+        // point are dropped by the coalescer's _disposed guard.
+        _streamingCoalescer?.Dispose();
+        _streamingCoalescer = null;
+
         // Clean up title bar drag region helper
         _titleBarHelper?.Dispose();
         _titleBarHelper = null;
@@ -1506,6 +1524,8 @@ public sealed partial class MiniWindow : Window
                 serviceResult.StreamingText = "";
             });
 
+            // See ExecuteStreamingTranslationForServiceAsync above for the rationale —
+            // grammar correction shares the same streaming/measure cost profile.
             await foreach (var chunk in grammarService
                 .CorrectGrammarStreamAsync(request, ct).ConfigureAwait(false))
             {
@@ -1514,13 +1534,7 @@ public sealed partial class MiniWindow : Window
                 var now = DateTime.UtcNow;
                 if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
                 {
-                    var currentText = sb.ToString();
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
-                        if (_isClosing) return;
-                        serviceResult.StreamingText = currentText;
-                        RequestResize();
-                    });
+                    _streamingCoalescer?.Update(serviceResult, sb.ToString());
                     lastUpdateTime = now;
                 }
             }
@@ -1534,6 +1548,7 @@ public sealed partial class MiniWindow : Window
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (_isClosing) return;
+                _streamingCoalescer?.Forget(serviceResult);
                 serviceResult.IsStreaming = false;
                 serviceResult.StreamingText = "";
                 serviceResult.GrammarResult = grammarResult;
@@ -1601,24 +1616,29 @@ public sealed partial class MiniWindow : Window
         });
 
         // Use ConfigureAwait(false) to avoid resuming on UI thread for each chunk.
-        // DispatcherQueue.TryEnqueue is safe to call from any thread.
+        // Snapshots are handed to the coalescer instead of dispatcher-enqueueing per
+        // chunk: with N services streaming in parallel the dispatcher would otherwise
+        // get N×20 callbacks/sec, each invalidating a wrapped TextBlock's O(text)
+        // measure pass. The coalescer caps UI work at one callback per frame.
+        //
+        // No per-chunk RequestResize either — ResizeWindowToContent runs a full
+        // content.Measure() that compounds the measure cost across all visible
+        // service result panels. The final-state lambda below still calls
+        // RequestResize() once the result is committed, so the window fits the
+        // finished content; during streaming the existing ScrollViewer handles
+        // overflow.
         await foreach (var chunk in manager.TranslateStreamAsync(
             request, ct, serviceResult.ServiceId).ConfigureAwait(false))
         {
             sb.Append(chunk);
 
-            // Throttle UI updates
+            // Per-stream snapshot rate — bounds sb.ToString() allocations on the
+            // background thread. UI-side smoothing is handled by the coalescer's
+            // frame-rate timer.
             var now = DateTime.UtcNow;
             if ((now - lastUpdateTime).TotalMilliseconds >= throttleMs)
             {
-                var currentText = sb.ToString();
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (_isClosing) return;
-                    serviceResult.StreamingText = currentText;
-                    // RequestResize() enqueues to next tick so ServiceResultItem.UpdateUI() completes first
-                    RequestResize();
-                });
+                _streamingCoalescer?.Update(serviceResult, sb.ToString());
                 lastUpdateTime = now;
             }
         }
@@ -1661,6 +1681,10 @@ public sealed partial class MiniWindow : Window
         DispatcherQueue.TryEnqueue(() =>
         {
             if (_isClosing) return;
+            // Drop any pending streaming snapshot before flipping IsStreaming →
+            // false; otherwise a coalescer tick scheduled after this lambda could
+            // overwrite the committed result with stale streaming text.
+            _streamingCoalescer?.Forget(serviceResult);
             serviceResult.IsLoading = false;
             serviceResult.IsStreaming = false;
             serviceResult.StreamingText = "";

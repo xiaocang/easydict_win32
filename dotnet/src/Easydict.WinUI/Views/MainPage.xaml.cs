@@ -3937,7 +3937,7 @@ namespace Easydict.WinUI.Views
                     progress: progress);
 
                 _longDocCheckpoint = result.Checkpoint;
-                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
+                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess && result.Checkpoint is not null;
                 LongDocStatusText.Text = result.State == LongDocumentJobState.Completed
                     ? $"Completed: {result.OutputPath}"
                     : $"Partial success: {result.SucceededChunks}/{result.TotalChunks} chunks succeeded, failed chunks: {string.Join(",", result.FailedChunkIndexes.Select(i => i + 1))}.";
@@ -4054,7 +4054,7 @@ namespace Easydict.WinUI.Views
                     progress: progress);
 
                 _longDocCheckpoint = result.Checkpoint;
-                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess;
+                LongDocRetryButton.IsEnabled = result.State == LongDocumentJobState.PartialSuccess && result.Checkpoint is not null;
                 LongDocStatusText.Text = result.State == LongDocumentJobState.Completed
                     ? $"Retry completed: {result.OutputPath}"
                     : $"Still partial: {result.SucceededChunks}/{result.TotalChunks} chunks succeeded, remaining failed chunks: {string.Join(",", result.FailedChunkIndexes.Select(i => i + 1))}.";
@@ -4091,6 +4091,16 @@ namespace Easydict.WinUI.Views
         }
 
         private async void OnModeMenuItemClick(object sender, RoutedEventArgs e)
+        {
+            await SwitchModeFromMenuItemAsync(sender);
+        }
+
+        private async void OnModeMenuItemTapped(object sender, TappedRoutedEventArgs e)
+        {
+            await SwitchModeFromMenuItemAsync(sender);
+        }
+
+        private async Task SwitchModeFromMenuItemAsync(object sender)
         {
             if (!_isLoaded) return;
 

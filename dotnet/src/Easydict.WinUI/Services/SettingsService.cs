@@ -198,9 +198,9 @@ public sealed class SettingsService
     /// When true, long-document translation runs in a child worker process
     /// (Easydict.Workers.LongDoc.exe). Native MuPDF / ONNX heap is reclaimed
     /// on each job by exiting the worker after completion. Off by default
-    /// while the worker pipeline bakes in.
+    /// with in-process fallback on startup/internal worker failures.
     /// </summary>
-    public bool UseLongDocWorker { get; set; } = false;
+    public bool UseLongDocWorker { get; set; } = true;
 
     /// <summary>
     /// When true, local AI translation routes through a child worker process
@@ -724,7 +724,7 @@ public sealed class SettingsService
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
-        UseLongDocWorker = GetValue(nameof(UseLongDocWorker), false);
+        UseLongDocWorker = GetValue(nameof(UseLongDocWorker), true);
         UseLocalAiWorker = GetValue(nameof(UseLocalAiWorker), true);
         UseOcrWorker = GetValue(nameof(UseOcrWorker), true);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);

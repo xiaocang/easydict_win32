@@ -33,6 +33,8 @@
          throw on machines without the SDK runtime; the worker only consumes the SDK
          management abstractions via shared classes that already handle that gracefully. -->
     <WindowsAppSdkAutoInitialize>false</WindowsAppSdkAutoInitialize>
+    <!-- Match the WinUI host: build only the PdfPig target this worker consumes. -->
+    <PdfPigTargetFrameworksOverride>net8.0</PdfPigTargetFrameworksOverride>
   </PropertyGroup>
 
   <!-- Dedupe onnxruntime.dll (mirrors Easydict.WinUI.csproj). Intel.ML.OnnxRuntime.OpenVino
@@ -59,8 +61,14 @@
   </Target>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Easydict.WinUI.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PdfSharpCore" Version="1.3.67" />
     <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
     <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
+    <ProjectReference Include="..\..\..\lib\PdfPig\src\UglyToad.PdfPig\UglyToad.PdfPig.csproj" />
   </ItemGroup>
 
 </Project>

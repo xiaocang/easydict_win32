@@ -6,15 +6,18 @@ namespace Easydict.OpenVINO.Inference;
 internal sealed class PooledDenseTensor<T> : IDisposable
 {
     private T[]? _buffer;
+    private readonly DenseTensor<T> _tensor;
 
     private PooledDenseTensor(T[] buffer, int length, int[] dimensions)
     {
         _buffer = buffer;
         Length = length;
-        Tensor = new DenseTensor<T>(buffer.AsMemory(0, length), dimensions);
+        _tensor = new DenseTensor<T>(buffer.AsMemory(0, length), dimensions);
     }
 
-    public DenseTensor<T> Tensor { get; }
+    public DenseTensor<T> Tensor => _buffer is null
+        ? throw new ObjectDisposedException(nameof(PooledDenseTensor<T>))
+        : _tensor;
 
     public int Length { get; }
 

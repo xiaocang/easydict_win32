@@ -64,10 +64,12 @@
                                                      Text="🌐  Quick Translation"
                                                      GroupName="AppMode"
                                                      IsChecked="True"
+                                                     Tapped="OnModeMenuItemTapped"
                                                      Click="OnModeMenuItemClick"/>
                                 <RadioMenuFlyoutItem x:Name="ModeLongDocItem"
                                                      Text="📄  Long Document"
                                                      GroupName="AppMode"
+                                                     Tapped="OnModeMenuItemTapped"
                                                      Click="OnModeMenuItemClick"/>
                             </MenuFlyout>
                         </Button.Flyout>

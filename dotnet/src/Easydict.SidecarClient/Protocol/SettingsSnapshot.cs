@@ -153,6 +153,12 @@ public sealed class SettingsSnapshot
     [JsonPropertyName("formulaFontPattern")]
     public string? FormulaFontPattern { get; init; }
 
+    [JsonPropertyName("formulaCharPattern")]
+    public string? FormulaCharPattern { get; init; }
+
+    [JsonPropertyName("longDocCustomPrompt")]
+    public string? LongDocCustomPrompt { get; init; }
+
     [JsonPropertyName("layoutDetectionMode")]
     public string? LayoutDetectionMode { get; init; }
 

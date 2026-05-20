@@ -60,7 +60,6 @@ internal sealed class TranslateDocumentHandler
                 requestId);
 
             using var manager = WorkerTranslationManagerFactory.Build(_state.Settings!);
-            var coreService = new LongDocumentTranslationService(manager);
 
             // Progress callback — streams every IProgress<T> tick as a "progress" event.
             var progress = new Progress<LongDocumentTranslationProgress>(p =>
@@ -77,40 +76,21 @@ internal sealed class TranslateDocumentHandler
                 }, requestId);
             });
 
-            // ────────────────────────────────────────────────────────────────────────
-            // FIXME(p1a-follow-up): Wire the PDF/Markdown/TXT source-document builder.
-            //
-            // The existing WinUI-side orchestrator
-            //   Easydict.WinUI/Services/LongDocumentTranslationService.cs:BuildSourceDocumentAsync
-            // owns PDF parsing (MuPDF.NET), Markdown/TXT chunking, and layout detection
-            // (DocLayoutYOLO / TATR / Vision LLM). It reads dozens of SettingsService.Instance
-            // properties directly, which is why it can't be invoked verbatim from the worker.
-            //
-            // To finish this handler:
-            //   1. Extract BuildSourceDocumentAsync (and its private helpers) into a
-            //      worker-compatible builder that takes a SettingsSnapshot parameter
-            //      instead of reaching for SettingsService.Instance. Suggested home:
-            //      Easydict.TranslationService/LongDocument/SourceDocumentBuilder.cs.
-            //   2. Replace WinUI-side service references with worker-compatible
-            //      layout/download services that do not reach for SettingsService.Instance.
-            //   3. Then below: var sourceDoc = await SourceDocumentBuilder.BuildAsync(p, _state.Settings, status: msg =>
-            //          _writer.WriteEventAsync(LongDocEvents.Status, new StatusEventData { Message = msg }, requestId),
-            //          progress: progress, cancellationToken);
-            //      var coreOptions = new LongDocumentTranslationOptions { ... };
-            //      var coreResult = await coreService.TranslateAsync(sourceDoc, coreOptions, cancellationToken);
-            //   4. Build the export via the source-shared DocumentExport pipeline,
-            //      write to outputPath, return TranslateDocumentResult.
-            //
-            // For this commit the handler reports a clear, structured error so the
-            // host code path (LongDocWorkerClient) can fall back to in-proc execution
-            // via SettingsService.UseLongDocWorker = false. The scaffolding around it
-            // (IPC, dispatch, cancellation, progress streaming, error mapping, exit
-            // semantics) is fully wired and exercised by the test suite.
-            // ────────────────────────────────────────────────────────────────────────
+            var pipeline = new WorkerLongDocumentPipeline(
+                (request, serviceId, ct) => manager.TranslateAsync(request, ct, serviceId));
+            var result = await pipeline.TranslateAsync(
+                    p,
+                    _state.Settings!,
+                    progress,
+                    cancellationToken,
+                    (block, ct) => _writer.WriteEventAsync(LongDocEvents.BlockTranslated, block, requestId))
+                .ConfigureAwait(false);
 
-            throw new WorkerHandlerException(WorkerErrorCodes.Internal,
-                "translate_document is not yet plumbed in this worker build. " +
-                "Toggle Settings.UseLongDocWorker=false to fall back to the in-proc path.");
+            await _writer.WriteEventAsync(LongDocEvents.Status,
+                new StatusEventData { Message = "Translation worker completed." },
+                requestId);
+
+            return result;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -44,6 +44,12 @@ namespace Easydict.WinUI
         private static bool IsMouseSelectionTranslateDisabledForDebug()
             => IsDebugEnvFlagEnabled("EASYDICT_DEBUG_DISABLE_MOUSE_SELECTION_TRANSLATE");
 
+        private static bool IsMemoryAbVariantB()
+        {
+            var mode = Environment.GetEnvironmentVariable("EASYDICT_UIA_MEMORY_AB_MODE");
+            return string.Equals(mode, "B", StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// Gets the main window instance.
         /// </summary>
@@ -233,12 +239,10 @@ namespace Easydict.WinUI
                 _appWindow.Closing += OnWindowClosing;
             }
 
-            if (_window.Content is not Frame rootFrame)
+            var rootFrame = EnsureRootFrame();
+            if (rootFrame is null)
             {
-                rootFrame = new Frame();
-                rootFrame.NavigationFailed += OnNavigationFailed;
-                rootFrame.Navigated += OnRootFrameNavigated;
-                _window.Content = rootFrame;
+                return;
             }
 
             LogToFile("[OnLaunched] Navigating to MainPage...");
@@ -854,6 +858,8 @@ namespace Easydict.WinUI
         {
             if (_window == null) return;
 
+            EnsureMainPageContent();
+
             // Show the window
             _appWindow?.Show();
 
@@ -876,6 +882,39 @@ namespace Easydict.WinUI
             }
 
             _window.Activate();
+        }
+
+        private void EnsureMainPageContent()
+        {
+            var frame = EnsureRootFrame();
+            if (frame is null)
+            {
+                return;
+            }
+
+            if (frame.Content is null)
+            {
+                _ = frame.Navigate(typeof(MainPage));
+            }
+        }
+
+        private Frame? EnsureRootFrame()
+        {
+            if (_window is null)
+            {
+                return null;
+            }
+
+            if (_window.Content is Frame frame)
+            {
+                return frame;
+            }
+
+            var rootFrame = new Frame();
+            rootFrame.NavigationFailed += OnNavigationFailed;
+            rootFrame.Navigated += OnRootFrameNavigated;
+            _window.Content = rootFrame;
+            return rootFrame;
         }
 
         private void FocusMainWindowInputForTyping()
@@ -910,6 +949,29 @@ namespace Easydict.WinUI
         {
             TextToSpeechService.Instance.Stop();
             _appWindow?.Hide();
+            ReleaseMainWindowContentForMemoryGate();
+        }
+
+        private void ReleaseMainWindowContentForMemoryGate()
+        {
+            if (!IsMemoryAbVariantB())
+            {
+                return;
+            }
+
+            if (_window?.Content is not Frame frame)
+            {
+                LogToFile($"[MemoryGate] Root frame release skipped: content={_window?.Content?.GetType().FullName ?? "<null>"}");
+                return;
+            }
+
+            frame.NavigationFailed -= OnNavigationFailed;
+            frame.Navigated -= OnRootFrameNavigated;
+            frame.BackStack.Clear();
+            frame.ForwardStack.Clear();
+            frame.Content = null;
+            _window.Content = null;
+            LogToFile("[MemoryGate] Root frame released after hiding main window");
         }
 
         private void OnWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
@@ -922,12 +984,14 @@ namespace Easydict.WinUI
             if (settings.MinimizeToTray)
             {
                 // Minimize to tray instead of closing
+                LogToFile($"[WindowClosing] MinimizeToTray=True, memoryAbB={IsMemoryAbVariantB()}");
                 args.Cancel = true;
                 HideWindow();
             }
             else
             {
                 // Actually close and cleanup
+                LogToFile($"[WindowClosing] MinimizeToTray=False, memoryAbB={IsMemoryAbVariantB()}");
                 CleanupServices();
             }
         }

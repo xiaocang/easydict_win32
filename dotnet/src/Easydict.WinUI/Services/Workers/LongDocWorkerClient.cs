@@ -101,15 +101,16 @@ internal sealed class LongDocWorkerClient : IDisposable
             {
                 // Forward cancellation to the worker by sending a "cancel" request
                 // alongside cancelling the local SendRequestAsync.
-                var inflightRequestId = TryExtractRequestIdLater(client);
+                string? inflightRequestId = null;
 
                 using var cancelReg = cancellationToken.Register(() =>
                 {
-                    if (!string.IsNullOrEmpty(inflightRequestId.Value))
+                    var requestId = Volatile.Read(ref inflightRequestId);
+                    if (!string.IsNullOrEmpty(requestId))
                     {
                         _ = client.SendRequestAsync(
                             WorkerMethods.Cancel,
-                            new CancelRequestParams { TargetRequestId = inflightRequestId.Value! },
+                            new CancelRequestParams { TargetRequestId = requestId! },
                             timeoutMs: 5000);
                     }
                 });
@@ -138,7 +139,8 @@ internal sealed class LongDocWorkerClient : IDisposable
                             ResultJsonPath = resultJsonPath,
                         },
                         timeoutMs: 0, // No host-side timeout for long ops; cancellation is the escape hatch.
-                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                        cancellationToken: cancellationToken,
+                        onRequestId: requestId => Volatile.Write(ref inflightRequestId, requestId)).ConfigureAwait(false);
 
                     if (result is not null)
                     {
@@ -242,26 +244,95 @@ internal sealed class LongDocWorkerClient : IDisposable
             .ConfigureAwait(false);
     }
 
-    private static LongDocumentTranslationResult MapResult(TranslateDocumentResult result)
+    internal static LongDocumentTranslationResult MapResult(TranslateDocumentResult result)
     {
-        // FIXME(p1a-follow-up): the worker's TranslateDocumentResult is a flat envelope
-        // (output path, chunk counts, quality report serialized as a string). The in-proc
-        // LongDocumentTranslationResult is a record holding the full DocumentIr +
-        // TranslatedDocumentPages + LongDocumentQualityReport. The wire format needs to
-        // carry the rich in-memory model OR the calling layer needs to be refactored to
-        // accept the flat envelope. Today this throws because TranslateDocumentHandler
-        // is not yet plumbed — the host's UseLongDocWorker=false fallback covers prod.
-        throw new NotImplementedException(
-            "Worker result mapping requires LongDocumentTranslationResult refactor; " +
-            "toggle Settings.UseLongDocWorker=false to fall back to the in-proc path.");
+        var failed = result.FailedChunkIndexes?.OrderBy(i => i).ToList() ?? [];
+        return new LongDocumentTranslationResult
+        {
+            State = MapState(result.State, failed),
+            OutputPath = result.OutputPath ?? string.Empty,
+            BilingualOutputPath = result.BilingualOutputPath,
+            TotalChunks = result.TotalChunks,
+            SucceededChunks = result.SucceededChunks,
+            FailedChunkIndexes = failed,
+            QualityReport = ParseQualityReport(result.QualityReport, result.TotalChunks, result.SucceededChunks, failed),
+            Checkpoint = null,
+        };
     }
 
-    /// <summary>
-    /// Looks up the in-flight translate_document request id so cancel can target it.
-    /// Currently a no-op placeholder; the proper way is to bubble the id out of
-    /// SendRequestAsync. For now cancel is best-effort.
-    /// </summary>
-    private static StrongBox<string?> TryExtractRequestIdLater(SidecarClient.SidecarClient _) => new(null);
+    internal static bool CanFallbackToInProc(Exception ex)
+    {
+        if (ex is OperationCanceledException)
+        {
+            return false;
+        }
+
+        if (ex is WorkerStartFailedException or WorkerVersionMismatchException or FileNotFoundException)
+        {
+            return true;
+        }
+
+        return ex is TranslationException { InnerException: SidecarErrorException sidecarError } &&
+            sidecarError.Error.Code == WorkerErrorCodes.Internal;
+    }
+
+    private static LongDocumentJobState MapState(string? state, IReadOnlyCollection<int> failed)
+    {
+        if (state?.Equals("Failed", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return LongDocumentJobState.Failed;
+        }
+
+        if (state?.Equals("PartiallyCompleted", StringComparison.OrdinalIgnoreCase) == true ||
+            state?.Equals("PartialSuccess", StringComparison.OrdinalIgnoreCase) == true ||
+            failed.Count > 0)
+        {
+            return LongDocumentJobState.PartialSuccess;
+        }
+
+        return LongDocumentJobState.Completed;
+    }
+
+    private static LongDocumentQualityReport ParseQualityReport(
+        string? qualityReportJson,
+        int totalChunks,
+        int succeededChunks,
+        IReadOnlyList<int> failed)
+    {
+        if (!string.IsNullOrWhiteSpace(qualityReportJson))
+        {
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<LongDocumentQualityReport>(qualityReportJson, JsonOptions);
+                if (parsed is not null)
+                {
+                    return parsed;
+                }
+            }
+            catch (JsonException ex)
+            {
+                Debug.WriteLine($"[LongDocWorker] Failed to parse quality report: {ex.Message}");
+            }
+        }
+
+        return new LongDocumentQualityReport
+        {
+            StageTimingsMs = new Dictionary<string, long>(),
+            TotalBlocks = totalChunks,
+            TranslatedBlocks = succeededChunks,
+            SkippedBlocks = 0,
+            FailedBlocks = failed
+                .Select(index => new FailedBlockInfo
+                {
+                    IrBlockId = $"worker-flat-{index}",
+                    SourceBlockId = $"chunk-{index}",
+                    PageNumber = 0,
+                    RetryCount = 0,
+                    Error = "Worker returned a flat failed-chunk index without block details.",
+                })
+                .ToList(),
+        };
+    }
 
     private static void TryDeleteResultFile(string path)
     {
@@ -281,6 +352,7 @@ internal sealed class LongDocWorkerClient : IDisposable
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
     };
 
     public void Dispose()
@@ -290,9 +362,4 @@ internal sealed class LongDocWorkerClient : IDisposable
         try { _activeClient?.Dispose(); } catch { /* swallow */ }
     }
 
-    private sealed class StrongBox<T>
-    {
-        public T Value { get; set; }
-        public StrongBox(T value) { Value = value; }
-    }
 }

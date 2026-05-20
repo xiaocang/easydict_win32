@@ -21,11 +21,6 @@ public sealed class ScreenCaptureResult : IDisposable
     }
 
     /// <summary>
-    /// Compatibility view for OCR services that still accept byte arrays.
-    /// </summary>
-    public byte[] PixelData => PixelMemory.ToArray();
-
-    /// <summary>
     /// Owns the raw BGRA8 pixel data for this capture.
     /// </summary>
     public required OwnedPixelBuffer PixelBuffer

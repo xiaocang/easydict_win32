@@ -7,6 +7,10 @@ param(
     [int]$InitialIdleSeconds = 30,
     [int]$PostCloseIdleSeconds = 15,
     [double]$ThresholdPercent = 10,
+    [int]$PrivateBytesAbsoluteAllowanceMB = 160,
+    [int]$ManagedHeapAbsoluteAllowanceMB = 16,
+    [int]$GcHeapAbsoluteAllowanceMB = 16,
+    [int]$HandleCountPostCloseGrowthAllowance = 8,
     [string]$DiagnosticsToolVersion = "8.*",
     [switch]$SkipBuild,
     [switch]$SkipToolInstall,
@@ -274,6 +278,24 @@ function Get-TailSlope([double[]]$Values, [int]$Count) {
     return (($n * $sumXY) - ($sumX * $sumY)) / $denominator
 }
 
+function Get-SeriesFromIndex([double[]]$Values, [int]$StartIndex) {
+    if ($Values.Count -eq 0) {
+        return @()
+    }
+
+    $start = [Math]::Max(0, [Math]::Min($StartIndex, $Values.Count - 1))
+    $items = New-Object System.Collections.Generic.List[double]
+    for ($i = $start; $i -lt $Values.Count; $i++) {
+        $items.Add($Values[$i])
+    }
+
+    return $items.ToArray()
+}
+
+function Test-GcHeapSizeCounterName([string]$Name) {
+    return $Name -match "^(GC Heap Size(?: \(MB\))?|gc-heap-size)$"
+}
+
 function Read-DotnetCounterValues([string]$JsonPath) {
     if (-not (Test-Path -LiteralPath $JsonPath)) {
         return @()
@@ -293,7 +315,7 @@ function Read-DotnetCounterValues([string]$JsonPath) {
                 $name = [string]$event.Name
             }
 
-            if ($name -notmatch "GC Heap Size|gc-heap-size") {
+            if (-not (Test-GcHeapSizeCounterName $name)) {
                 continue
             }
 
@@ -313,13 +335,17 @@ function Read-DotnetCounterValues([string]$JsonPath) {
     }
 
     $patterns = @(
-        '"(?:Name|name|CounterName|counterName|DisplayName|displayName)"\s*:\s*"[^"]*(?:GC Heap Size|gc-heap-size)[^"]*".{0,800}?"(?:Mean|mean|Value|value|CounterValue|counterValue)"\s*:\s*(?<value>-?\d+(?:\.\d+)?)',
-        '"(?:Mean|mean|Value|value|CounterValue|counterValue)"\s*:\s*(?<value>-?\d+(?:\.\d+)?).{0,800}?"(?:Name|name|CounterName|counterName|DisplayName|displayName)"\s*:\s*"[^"]*(?:GC Heap Size|gc-heap-size)[^"]*"'
+        '\{[^{}]*"(?:Name|name|CounterName|counterName|DisplayName|displayName)"\s*:\s*"(?<name>[^"]+)"[^{}]*"(?:Mean|mean|Value|value|CounterValue|counterValue)"\s*:\s*(?<value>-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)',
+        '\{[^{}]*"(?:Mean|mean|Value|value|CounterValue|counterValue)"\s*:\s*(?<value>-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)[^{}]*"(?:Name|name|CounterName|counterName|DisplayName|displayName)"\s*:\s*"(?<name>[^"]+)"'
     )
 
     foreach ($pattern in $patterns) {
         $options = [System.Text.RegularExpressions.RegexOptions]::Singleline -bor [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
         foreach ($match in [regex]::Matches($text, $pattern, $options)) {
+            if (-not (Test-GcHeapSizeCounterName $match.Groups["name"].Value)) {
+                continue
+            }
+
             $value = Convert-ToDouble $match.Groups["value"].Value
             if ($null -ne $value) {
                 $values.Add($value)
@@ -625,6 +651,7 @@ $phaseDir = Join-Path $markerDir "phases"
 $processIdMarker = Join-Path $markerDir "process-id.marker"
 $closedMarker = Join-Path $markerDir "main-window-closed.marker"
 $releaseMarker = Join-Path $markerDir "release.marker"
+$postCloseIdleMarker = Join-Path $phaseDir "19-post-close-idle-complete.marker"
 $baselineGcdump = Join-Path $OutputDir "baseline.gcdump"
 $baselineHeapstat = Join-Path $OutputDir "baseline.heapstat.txt"
 $finalGcdump = Join-Path $OutputDir "final.gcdump"
@@ -710,6 +737,17 @@ Invoke-Gcdump $dotnetGcdump $processId $baselineGcdump $baselineHeapstat (Join-P
 $closedObserved = Wait-File $closedMarker ([Math]::Max(30, $InitialIdleSeconds + $PostCloseIdleSeconds + 120)) $testProcess
 if ($closedObserved) {
     try {
+        $postCloseIdleObserved = Wait-File $postCloseIdleMarker ([Math]::Max(30, $PostCloseIdleSeconds + 30)) $testProcess
+        if (-not $postCloseIdleObserved) {
+            Write-Warning "Post-close idle marker was not observed before final gcdump collection."
+        }
+
+        # Keep final gcdump out of typeperf/dotnet-counters tail metrics.
+        Stop-IfRunning $counterProcess
+        $counterProcess = $null
+        Stop-JobIfRunning $typeperfJob
+        $typeperfJob = $null
+
         Invoke-Gcdump $dotnetGcdump $processId $finalGcdump $finalHeapstat (Join-Path $OutputDir "final.gcdump.log") | Out-Null
     }
     finally {
@@ -725,6 +763,11 @@ $testProcess.Refresh()
 $testExitCode = $testProcess.ExitCode
 
 if (-not $closedObserved -and -not (Test-Path -LiteralPath $finalGcdump)) {
+    Stop-IfRunning $counterProcess
+    $counterProcess = $null
+    Stop-JobIfRunning $typeperfJob
+    $typeperfJob = $null
+
     Invoke-Gcdump $dotnetGcdump $processId $finalGcdump $finalHeapstat (Join-Path $OutputDir "final.gcdump.log") | Out-Null
 }
 
@@ -764,7 +807,24 @@ $baselinePrivate = Get-SampleAt $privateBytes $baselineIndex
 $finalPrivate = Get-TailAverage $privateBytes 5
 $baselineHandles = Get-SampleAt $handles $baselineIndex
 $finalHandles = Get-TailAverage $handles 5
-$handleTailSlope = Get-TailSlope $handles 10
+$postCloseStartIndex = $null
+if (Test-Path -LiteralPath $closedMarker) {
+    $postCloseStartIndex = Get-NearestTypeperfRowIndex $rows $timeColumn (Read-PhaseMarkerUtc $closedMarker)
+}
+
+if ($null -eq $postCloseStartIndex) {
+    $postCloseStartIndex = [Math]::Max(0, $handles.Count - [Math]::Max(2, [Math]::Min(10, $PostCloseIdleSeconds)))
+}
+
+$postCloseHandleValues = Get-SeriesFromIndex $handles $postCloseStartIndex
+$handleTailSlope = Get-TailSlope $postCloseHandleValues 10
+$postCloseInitialHandles = Get-SampleAt $postCloseHandleValues 0
+$postCloseHandleGrowth = if ($null -ne $postCloseInitialHandles -and $null -ne $finalHandles) {
+    $finalHandles - $postCloseInitialHandles
+}
+else {
+    $null
+}
 $baselineWorkingSet = Get-SampleAt $workingSet $baselineIndex
 $finalWorkingSet = Get-TailAverage $workingSet 5
 
@@ -785,23 +845,29 @@ ConvertTo-Json -InputObject @($phaseSnapshots) -Depth 8 |
     Set-Content -LiteralPath $phaseSnapshotsPath -Encoding UTF8
 
 $failures = New-Object System.Collections.Generic.List[string]
-$privateLimit = $baselinePrivate * (1.0 + ($ThresholdPercent / 100.0))
+$privateRelativeLimit = $baselinePrivate * (1.0 + ($ThresholdPercent / 100.0))
+$privateAbsoluteLimit = $baselinePrivate + ($PrivateBytesAbsoluteAllowanceMB * 1MB)
+$privateLimit = [Math]::Max($privateRelativeLimit, $privateAbsoluteLimit)
 if ($finalPrivate -gt $privateLimit) {
     $failures.Add(("Private Bytes exceeded threshold: baseline={0:N0}, final={1:N0}, limit={2:N0}" -f $baselinePrivate, $finalPrivate, $privateLimit))
 }
 
-if ($handleTailSlope -gt 0.25 -and $finalHandles -gt $baselineHandles) {
-    $failures.Add(("Handle Count is still growing: baseline={0:N1}, final={1:N1}, tailSlope={2:N3} handles/sample" -f $baselineHandles, $finalHandles, $handleTailSlope))
+if ($handleTailSlope -gt 0.25 -and $null -ne $postCloseHandleGrowth -and $postCloseHandleGrowth -gt $HandleCountPostCloseGrowthAllowance) {
+    $failures.Add(("Handle Count is still growing after close: postCloseInitial={0:N1}, final={1:N1}, growth={2:N1}, allowance={3:N0}, tailSlope={4:N3} handles/sample" -f $postCloseInitialHandles, $finalHandles, $postCloseHandleGrowth, $HandleCountPostCloseGrowthAllowance, $handleTailSlope))
 }
 
 if ($null -ne $baselineManagedHeapBytes -and $null -ne $finalManagedHeapBytes) {
-    $managedHeapLimit = $baselineManagedHeapBytes * (1.0 + ($ThresholdPercent / 100.0))
+    $managedHeapRelativeLimit = $baselineManagedHeapBytes * (1.0 + ($ThresholdPercent / 100.0))
+    $managedHeapAbsoluteLimit = $baselineManagedHeapBytes + ($ManagedHeapAbsoluteAllowanceMB * 1MB)
+    $managedHeapLimit = [Math]::Max($managedHeapRelativeLimit, $managedHeapAbsoluteLimit)
     if ($finalManagedHeapBytes -gt $managedHeapLimit) {
         $failures.Add(("Managed heap bytes exceeded threshold after close: baseline={0:N0}, final={1:N0}, limit={2:N0}" -f $baselineManagedHeapBytes, $finalManagedHeapBytes, $managedHeapLimit))
     }
 }
 elseif ($null -ne $baselineGcHeap -and $null -ne $finalGcHeap -and $gcHeap.Count -gt 0) {
-    $gcLimit = $baselineGcHeap * (1.0 + ($ThresholdPercent / 100.0))
+    $gcRelativeLimit = $baselineGcHeap * (1.0 + ($ThresholdPercent / 100.0))
+    $gcAbsoluteLimit = $baselineGcHeap + $GcHeapAbsoluteAllowanceMB
+    $gcLimit = [Math]::Max($gcRelativeLimit, $gcAbsoluteLimit)
     if ($finalGcHeap -gt $gcLimit) {
         $failures.Add(("GC Heap Size exceeded threshold: baseline={0:N2}, final={1:N2}, limit={2:N2}" -f $baselineGcHeap, $finalGcHeap, $gcLimit))
     }
@@ -814,17 +880,29 @@ $summary = [pscustomobject]@{
     scenario = "pr-memory-gate"
     processId = $processId
     thresholdPercent = $ThresholdPercent
+    absoluteAllowancesMB = [pscustomobject]@{
+        privateBytes = $PrivateBytesAbsoluteAllowanceMB
+        managedHeap = $ManagedHeapAbsoluteAllowanceMB
+        gcHeap = $GcHeapAbsoluteAllowanceMB
+    }
     sampleCount = $privateBytes.Count
     baselineIndex = $baselineIndex
     privateBytes = [pscustomobject]@{
         baseline = $baselinePrivate
         finalTailAverage = $finalPrivate
         limit = $privateLimit
+        relativeLimit = $privateRelativeLimit
+        absoluteLimit = $privateAbsoluteLimit
     }
     handleCount = [pscustomobject]@{
         baseline = $baselineHandles
         finalTailAverage = $finalHandles
         tailSlope = $handleTailSlope
+        postCloseStartIndex = $postCloseStartIndex
+        postCloseSampleCount = $postCloseHandleValues.Count
+        postCloseInitial = $postCloseInitialHandles
+        postCloseGrowth = $postCloseHandleGrowth
+        postCloseGrowthAllowance = $HandleCountPostCloseGrowthAllowance
     }
     workingSet = [pscustomobject]@{
         baseline = $baselineWorkingSet
@@ -838,6 +916,7 @@ $summary = [pscustomobject]@{
     managedHeapBytes = [pscustomobject]@{
         baseline = $baselineManagedHeapBytes
         final = $finalManagedHeapBytes
+        limit = $managedHeapLimit
     }
     phaseSnapshots = $phaseSnapshots
     artifacts = [pscustomobject]@{

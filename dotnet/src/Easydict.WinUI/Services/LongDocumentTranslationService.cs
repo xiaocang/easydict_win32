@@ -16,87 +16,6 @@ using LetterGeometry = Easydict.TranslationService.ContentPreservation.FormulaAw
 
 namespace Easydict.WinUI.Services;
 
-public enum LongDocumentInputMode
-{
-    PlainText,
-    Markdown,
-    Pdf
-}
-
-public enum LongDocumentJobState
-{
-    Completed,
-    PartialSuccess,
-    Failed
-}
-
-public enum LayoutRegionType
-{
-    Unknown,
-    Header,
-    Footer,
-    Body,
-    LeftColumn,
-    RightColumn,
-    TableLike,
-    // ML-detected types (DocLayout-YOLO)
-    Figure,
-    Table,
-    Formula,
-    Caption,
-    Title,
-    IsolatedFormula
-}
-
-
-public enum LayoutRegionSource
-{
-    Unknown,
-    Heuristic,
-    BlockIdFallback,
-    OnnxModel,
-    VisionLLM
-}
-
-public sealed class LongDocumentTranslationCheckpoint
-{
-    public required LongDocumentInputMode InputMode { get; init; }
-    public string? SourceFilePath { get; init; }
-    public Language? TargetLanguage { get; init; }
-    public string? PageRange { get; init; }
-    public required List<string> SourceChunks { get; init; }
-    public required List<LongDocumentChunkMetadata> ChunkMetadata { get; init; }
-    public required Dictionary<int, string> TranslatedChunks { get; init; }
-    public required HashSet<int> FailedChunkIndexes { get; init; }
-    /// <summary>
-    /// Optional per-chunk annotations for source-fallback blocks. The default PDF export
-    /// pipeline does not currently populate or render these.
-    /// </summary>
-    public Dictionary<int, IReadOnlyList<WordAnnotation>>? WordAnnotations { get; set; }
-}
-
-public sealed class LongDocumentChunkMetadata
-{
-    public required int ChunkIndex { get; init; }
-    public required int PageNumber { get; init; }
-    public required string SourceBlockId { get; init; }
-    public required SourceBlockType SourceBlockType { get; init; }
-    public bool IsFormulaLike { get; init; }
-    public required int OrderInPage { get; init; }
-    public required LayoutRegionType RegionType { get; init; }
-    public double RegionConfidence { get; init; }
-    public LayoutRegionSource RegionSource { get; init; }
-    public double ReadingOrderScore { get; init; }
-    public BlockRect? BoundingBox { get; init; }
-    public BlockTextStyle? TextStyle { get; init; }
-    public BlockFormulaCharacters? FormulaCharacters { get; init; }
-    public bool TranslationSkipped { get; init; }
-    public bool PreserveOriginalTextInPdfExport { get; init; }
-    public int RetryCount { get; set; }
-    public string? FallbackText { get; init; }
-    public IReadOnlyList<string>? DetectedFontNames { get; init; }
-}
-
 public sealed class LongDocumentTranslationResult
 {
     public required LongDocumentJobState State { get; init; }
@@ -106,7 +25,7 @@ public sealed class LongDocumentTranslationResult
     public required int SucceededChunks { get; init; }
     public required IReadOnlyList<int> FailedChunkIndexes { get; init; }
     public required LongDocumentQualityReport QualityReport { get; init; }
-    public required LongDocumentTranslationCheckpoint Checkpoint { get; init; }
+    public LongDocumentTranslationCheckpoint? Checkpoint { get; init; }
 }
 
 public sealed class LongDocumentTranslationService : IDisposable
@@ -192,11 +111,19 @@ public sealed class LongDocumentTranslationService : IDisposable
         // The worker exits after each translate per the "exit on completion" lifecycle.
         if (SettingsService.Instance.UseLongDocWorker)
         {
-            using var worker = new Workers.LongDocWorkerClient(SettingsService.Instance);
-            return await worker.TranslateToPdfAsync(
-                mode, input, from, to, outputPath, serviceId, onProgress, cancellationToken,
-                layoutDetection, outputMode, pdfExportMode, visionEndpoint, visionApiKey, visionModel,
-                progress).ConfigureAwait(false);
+            try
+            {
+                using var worker = new Workers.LongDocWorkerClient(SettingsService.Instance);
+                return await worker.TranslateToPdfAsync(
+                    mode, input, from, to, outputPath, serviceId, onProgress, cancellationToken,
+                    layoutDetection, outputMode, pdfExportMode, visionEndpoint, visionApiKey, visionModel,
+                    progress).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (Workers.LongDocWorkerClient.CanFallbackToInProc(ex))
+            {
+                System.Diagnostics.Debug.WriteLine($"[LongDocWorker] Falling back to in-proc translation: {ex.Message}");
+                onProgress?.Invoke("Long-document worker unavailable; falling back to in-process translation...");
+            }
         }
 
         var pageRange = string.IsNullOrWhiteSpace(SettingsService.Instance.LongDocPageRange) ? null : SettingsService.Instance.LongDocPageRange;

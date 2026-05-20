@@ -84,7 +84,8 @@ public sealed class MemoryGateTests : IDisposable
         SwitchToLongDocMode(window);
         ExerciseLongDocControls(window);
         SwitchToQuickTranslateMode(window);
-        OpenSettingsAndReturn(window);
+        OpenSettingsExerciseTabsAndReturn(window);
+        ExerciseFloatingWindows(window);
 
         _output.WriteLine("[MemoryGate] Closing main window");
         window.Close();
@@ -219,7 +220,17 @@ public sealed class MemoryGateTests : IDisposable
         WritePhaseMarker("15-quick-translate-mode-ready");
     }
 
-    private void OpenSettingsAndReturn(Window window)
+    private void OpenSettingsExerciseTabsAndReturn(Window window)
+    {
+        OpenSettingsPage(window, "16-settings-opened");
+        ExerciseSettingsTabs(window);
+        ReturnFromSettings(window, "17-settings-returned");
+
+        OpenSettingsPage(window, "17a-settings-reopened");
+        ReturnFromSettings(window, "17b-settings-returned-again");
+    }
+
+    private void OpenSettingsPage(Window window, string phaseName)
     {
         var settingsButton = Retry.WhileNull(
             () => FindByAutomationIdOrName(window, "SettingsButton"),
@@ -230,25 +241,280 @@ public sealed class MemoryGateTests : IDisposable
         Thread.Sleep(1500);
 
         var settingsScrollViewer = Retry.WhileNull(
-            () => FindByAutomationIdOrName(window, "MainScrollViewer"),
+            () => FindVisibleByAutomationIdOrName(window, "MainScrollViewer"),
+            TimeSpan.FromSeconds(30)).Result;
+
+        settingsScrollViewer.Should().NotBeNull("settings page should expose visible MainScrollViewer after navigation");
+
+        var backButton = Retry.WhileNull(
+            () => FindVisibleByAutomationIdOrName(window, "BackButton"),
             TimeSpan.FromSeconds(15)).Result;
 
-        settingsScrollViewer.Should().NotBeNull("settings page should expose MainScrollViewer after navigation");
-        WritePhaseMarker("16-settings-opened");
+        backButton.Should().NotBeNull("settings page should expose a visible back button after loading");
+        WritePhaseMarker(phaseName);
+    }
 
-        var backButton = FindByAutomationIdOrName(window, "FloatingBackButton")
-            ?? FindByAutomationIdOrName(window, "BackButton");
+    private void ExerciseSettingsTabs(Window window)
+    {
+        var tabs = new[]
+        {
+            "General",
+            "Services",
+            "Views",
+            "Hotkeys",
+            "Advanced",
+            "Language",
+            "About",
+            "General"
+        };
+
+        foreach (var tab in tabs)
+        {
+            var automationId = $"SettingsTab_{tab}";
+            var tabButton = Retry.WhileNull(
+                () => FindVisibleByAutomationIdOrName(window, automationId)
+                      ?? FindVisibleByAutomationIdOrName(window, tab),
+                TimeSpan.FromSeconds(15)).Result;
+
+            if (tabButton == null)
+            {
+                _output.WriteLine($"[MemoryGate] Skipping settings tab {tab}; {automationId} not found.");
+                WritePhaseMarker($"16a-settings-tab-{tab.ToLowerInvariant()}-skipped");
+                continue;
+            }
+
+            InvokeOrClick(tabButton);
+            Thread.Sleep(TimeSpan.FromMilliseconds(tab is "Advanced" or "Language" or "Views" ? 1200 : 700));
+            WritePhaseMarker($"16a-settings-tab-{tab.ToLowerInvariant()}");
+        }
+    }
+
+    private void ReturnFromSettings(Window window, string phaseName)
+    {
+        var settingsScrollViewer = FindByAutomationIdOrName(window, "MainScrollViewer");
+        if (settingsScrollViewer != null)
+        {
+            try
+            {
+                settingsScrollViewer.Patterns.Scroll.Pattern.SetScrollPercent(
+                    settingsScrollViewer.Patterns.Scroll.Pattern.HorizontalScrollPercent,
+                    0);
+                Thread.Sleep(300);
+            }
+            catch
+            {
+                // Settings tab switches normally reset the scroll position. This is only a best-effort aid.
+            }
+        }
+
+        var backButton = Retry.WhileNull(
+            () => FindVisibleByAutomationIdOrName(window, "FloatingBackButton")
+                  ?? FindVisibleByAutomationIdOrName(window, "BackButton"),
+            TimeSpan.FromSeconds(15)).Result;
 
         backButton.Should().NotBeNull("settings page must expose a back button");
         InvokeOrClick(backButton!);
         Thread.Sleep(1500);
 
-        var returnedSettingsButton = Retry.WhileNull(
-            () => FindByAutomationIdOrName(window, "SettingsButton"),
-            TimeSpan.FromSeconds(10)).Result;
+        var returnedSettingsButton = WaitForMainPage(window, TimeSpan.FromSeconds(10));
+
+        if (returnedSettingsButton == null && TryHandleSettingsNavigationDialog(window))
+        {
+            returnedSettingsButton = WaitForMainPage(window, TimeSpan.FromSeconds(15));
+        }
+
+        if (returnedSettingsButton == null)
+        {
+            TryNavigateBackWithKeyboard(window);
+            returnedSettingsButton = WaitForMainPage(window, TimeSpan.FromSeconds(10));
+        }
 
         returnedSettingsButton.Should().NotBeNull("main page should be visible after returning from settings");
-        WritePhaseMarker("17-settings-returned");
+        WritePhaseMarker(phaseName);
+    }
+
+    private static AutomationElement? WaitForMainPage(Window window, TimeSpan timeout)
+    {
+        return Retry.WhileNull(
+            () => FindVisibleByAutomationIdOrName(window, "SettingsButton"),
+            timeout).Result;
+    }
+
+    private bool TryHandleSettingsNavigationDialog(Window window)
+    {
+        var dialogButton = FindDialogButton(
+            window,
+            "SecondaryButton",
+            "Don't Save",
+            "Dont Save",
+            "Discard",
+            "不保存",
+            "不儲存")
+            ?? FindDialogButton(
+                window,
+                "PrimaryButton",
+                "Save Settings",
+                "Save",
+                "保存");
+
+        if (dialogButton == null)
+        {
+            return false;
+        }
+
+        _output.WriteLine($"[MemoryGate] Handling settings navigation dialog with '{SafeName(dialogButton)}'.");
+        InvokeOrClick(dialogButton);
+        Thread.Sleep(1000);
+        return true;
+    }
+
+    private static AutomationElement? FindDialogButton(Window window, string automationId, params string[] names)
+    {
+        var byAutomationId = FindVisibleByAutomationIdOrName(window, automationId);
+        if (byAutomationId != null)
+        {
+            return byAutomationId;
+        }
+
+        try
+        {
+            return window
+                .FindAllDescendants(cf => cf.ByControlType(ControlType.Button))
+                .FirstOrDefault(button =>
+                {
+                    var name = SafeName(button);
+                    return !string.IsNullOrWhiteSpace(name) &&
+                           names.Any(candidate => name.Contains(candidate, StringComparison.OrdinalIgnoreCase));
+                });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void TryNavigateBackWithKeyboard(Window window)
+    {
+        try
+        {
+            window.SetForeground();
+            Thread.Sleep(250);
+            Keyboard.Press(VirtualKeyShort.ALT);
+            Thread.Sleep(50);
+            Keyboard.Press(VirtualKeyShort.LEFT);
+            Thread.Sleep(50);
+            Keyboard.Release(VirtualKeyShort.LEFT);
+            Keyboard.Release(VirtualKeyShort.ALT);
+            Thread.Sleep(1000);
+        }
+        catch
+        {
+            try { Keyboard.Release(VirtualKeyShort.LEFT); } catch { /* ignore */ }
+            try { Keyboard.Release(VirtualKeyShort.ALT); } catch { /* ignore */ }
+        }
+    }
+
+    private void ExerciseFloatingWindows(Window mainWindow)
+    {
+        mainWindow.SetForeground();
+        Thread.Sleep(500);
+
+        OpenExerciseAndCloseFloatingWindow(
+            mainWindow,
+            windowType: "Mini",
+            hotkey: VirtualKeyShort.KEY_M,
+            openedPhase: "17c-mini-window-opened",
+            inputPhase: "17d-mini-window-input-entered",
+            closedPhase: "17e-mini-window-closed");
+
+        mainWindow.SetForeground();
+        Thread.Sleep(500);
+
+        OpenExerciseAndCloseFloatingWindow(
+            mainWindow,
+            windowType: "Fixed",
+            hotkey: VirtualKeyShort.KEY_F,
+            openedPhase: "17f-fixed-window-opened",
+            inputPhase: "17g-fixed-window-input-entered",
+            closedPhase: "17h-fixed-window-closed");
+    }
+
+    private void OpenExerciseAndCloseFloatingWindow(
+        Window mainWindow,
+        string windowType,
+        VirtualKeyShort hotkey,
+        string openedPhase,
+        string inputPhase,
+        string closedPhase)
+    {
+        _output.WriteLine($"[MemoryGate] Opening {windowType} window with Ctrl+Alt+{hotkey}.");
+        UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, hotkey);
+        Thread.Sleep(1500);
+
+        var floatingWindow = Retry.WhileNull(
+            () => FindFloatingWindow(mainWindow, windowType),
+            TimeSpan.FromSeconds(10)).Result;
+
+        floatingWindow.Should().NotBeNull($"{windowType} window must open during the memory gate scenario");
+        WritePhaseMarker(openedPhase);
+
+        floatingWindow!.SetForeground();
+        Thread.Sleep(500);
+
+        var inputBox = UITestHelper.FindInputTextBox(floatingWindow, TimeSpan.FromSeconds(8));
+        if (inputBox != null)
+        {
+            inputBox.Click();
+            Thread.Sleep(200);
+            inputBox.Text = $"{windowType} memory gate text";
+            Thread.Sleep(500);
+            WritePhaseMarker(inputPhase);
+        }
+        else
+        {
+            _output.WriteLine($"[MemoryGate] Skipping {windowType} window text entry; InputTextBox not found.");
+            WritePhaseMarker($"{inputPhase}-skipped");
+        }
+
+        var closeButton = FindByAutomationIdOrName(floatingWindow, "CloseButton");
+        if (closeButton != null)
+        {
+            InvokeOrClick(closeButton);
+        }
+        else
+        {
+            floatingWindow.Close();
+        }
+
+        Thread.Sleep(1000);
+        WritePhaseMarker(closedPhase);
+    }
+
+    private Window? FindFloatingWindow(Window mainWindow, string titlePart)
+    {
+        try
+        {
+            var windows = _launcher.Application.GetAllTopLevelWindows(_launcher.Automation);
+            foreach (var window in windows)
+            {
+                _output.WriteLine(
+                    $"[MemoryGate] Top-level window: \"{window.Title}\" " +
+                    $"bounds={window.BoundingRectangle.Width}x{window.BoundingRectangle.Height}");
+            }
+
+            return windows.FirstOrDefault(w =>
+                       !string.Equals(w.Title, mainWindow.Title, StringComparison.Ordinal) &&
+                       (w.Title ?? string.Empty).Contains(titlePart, StringComparison.OrdinalIgnoreCase))
+                   ?? windows
+                       .Where(w => !string.Equals(w.Title, mainWindow.Title, StringComparison.Ordinal))
+                       .OrderBy(w => w.BoundingRectangle.Width * w.BoundingRectangle.Height)
+                       .FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"[MemoryGate] Failed to enumerate floating windows: {ex.Message}");
+            return null;
+        }
     }
 
     private void ClickModeMenuItem(Window window, string menuItemAutomationId)
@@ -271,11 +537,12 @@ public sealed class MemoryGateTests : IDisposable
                 SelectModeMenuItemWithKeyboard(menuItemAutomationId);
             }
 
-            var modeButton = Retry.WhileNull(
-                () => FindModeButtonWithName(window, expectedModeName),
+            var modeSurface = Retry.WhileNull(
+                () => FindModeButtonWithName(window, expectedModeName)
+                      ?? FindModeSurfaceMarker(window, menuItemAutomationId),
                 TimeSpan.FromSeconds(5)).Result;
 
-            if (modeButton != null)
+            if (modeSurface != null)
             {
                 _output.WriteLine($"[MemoryGate] Attempt {attempt}: switched via {menuItemAutomationId} keyboard selection.");
                 return;
@@ -311,14 +578,15 @@ public sealed class MemoryGateTests : IDisposable
                 $"[MemoryGate] Attempt {attempt}: target {menuItemAutomationId} " +
                 $"Name='{SafeName(menuItem)}' AutomationId='{SafeAutomationId(menuItem)}' " +
                 $"Bounds={SafeBounds(menuItem)} Offscreen={SafeOffscreen(menuItem)} Enabled={SafeIsEnabled(menuItem)}");
-            ClickElementAtPoint(menuItem);
+            ActivateModeMenuItem(menuItem);
             Thread.Sleep(700);
 
-            modeButton = Retry.WhileNull(
-                () => FindModeButtonWithName(window, expectedModeName),
+            modeSurface = Retry.WhileNull(
+                () => FindModeButtonWithName(window, expectedModeName)
+                      ?? FindModeSurfaceMarker(window, menuItemAutomationId),
                 TimeSpan.FromSeconds(5)).Result;
 
-            if (modeButton != null)
+            if (modeSurface != null)
             {
                 _output.WriteLine($"[MemoryGate] Attempt {attempt}: switched via {menuItemAutomationId}.");
                 return;
@@ -329,9 +597,9 @@ public sealed class MemoryGateTests : IDisposable
             Thread.Sleep(250);
         }
 
-        FindModeButtonWithName(window, expectedModeName)
+        (FindModeButtonWithName(window, expectedModeName) ?? FindModeSurfaceMarker(window, menuItemAutomationId))
             .Should()
-            .NotBeNull($"mode button should report '{expectedModeName}' after clicking {menuItemAutomationId}");
+            .NotBeNull($"mode surface should switch to '{expectedModeName}' after clicking {menuItemAutomationId}");
     }
 
     private static void SelectModeMenuItemWithKeyboard(string menuItemAutomationId)
@@ -369,6 +637,37 @@ public sealed class MemoryGateTests : IDisposable
         }
 
         return FindModeMenuItem(window, targetMenuItemAutomationId) != null;
+    }
+
+    private void ActivateModeMenuItem(AutomationElement menuItem)
+    {
+        try
+        {
+            if (menuItem.Patterns.SelectionItem.IsSupported)
+            {
+                menuItem.Patterns.SelectionItem.Pattern.Select();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"[MemoryGate] SelectionItem activation failed: {ex.Message}");
+        }
+
+        try
+        {
+            if (menuItem.Patterns.Toggle.IsSupported)
+            {
+                menuItem.Patterns.Toggle.Pattern.Toggle();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"[MemoryGate] Toggle activation failed: {ex.Message}");
+        }
+
+        InvokeOrClick(menuItem);
     }
 
     private AutomationElement? FindModeMenuItem(Window window, string menuItemAutomationId)
@@ -503,6 +802,16 @@ public sealed class MemoryGateTests : IDisposable
             "ModeLongDocItem" => "Long Document",
             "ModeTranslationItem" => "Translation",
             _ => throw new ArgumentOutOfRangeException(nameof(menuItemAutomationId), menuItemAutomationId, "Unsupported mode menu item"),
+        };
+    }
+
+    private static AutomationElement? FindModeSurfaceMarker(Window window, string menuItemAutomationId)
+    {
+        return menuItemAutomationId switch
+        {
+            "ModeLongDocItem" => FindVisibleByAutomationIdOrName(window, "LongDocSourceLangCombo"),
+            "ModeTranslationItem" => FindVisibleByAutomationIdOrName(window, "InputTextBox"),
+            _ => null,
         };
     }
 

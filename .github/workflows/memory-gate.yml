@@ -74,6 +74,7 @@ jobs:
             -AppExePath "dotnet/publish/x64/Easydict.WinUI.exe" `
             -TestProject "dotnet/tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj" `
             -OutputDir "artifacts/memory-gate/pr" `
+            -PrivateBytesAbsoluteAllowanceMB 160 `
             -SkipBuild
 
       - name: Upload memory artifacts

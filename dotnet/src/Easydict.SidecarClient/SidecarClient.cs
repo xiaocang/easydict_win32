@@ -113,7 +113,8 @@ public sealed class SidecarClient : IDisposable, IAsyncDisposable
         string method,
         object? parameters = null,
         int? timeoutMs = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<string>? onRequestId = null)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(SidecarClient));
         if (!IsRunning) throw new SidecarNotRunningException();
@@ -143,6 +144,7 @@ public sealed class SidecarClient : IDisposable, IAsyncDisposable
             {
                 _writeLock.Release();
             }
+            onRequestId?.Invoke(requestId);
 
             var timeout = timeoutMs ?? _options.DefaultTimeoutMs;
             // timeout <= 0 means "wait indefinitely" — used by long-running operations
@@ -183,9 +185,10 @@ public sealed class SidecarClient : IDisposable, IAsyncDisposable
         string method,
         object? parameters = null,
         int? timeoutMs = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<string>? onRequestId = null)
     {
-        var response = await SendRequestAsync(method, parameters, timeoutMs, cancellationToken);
+        var response = await SendRequestAsync(method, parameters, timeoutMs, cancellationToken, onRequestId);
 
         if (response.IsError)
             throw new SidecarErrorException(response.Error!);

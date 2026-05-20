@@ -38,21 +38,29 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
     public IReadOnlyList<OcrLanguage> GetAvailableLanguages() => _fallback.GetAvailableLanguages();
 
     public async Task<OcrResult> RecognizeAsync(
-        byte[] pixelData,
+        ReadOnlyMemory<byte> pixelData,
         int pixelWidth,
         int pixelHeight,
         string? preferredLanguageTag = null,
         CancellationToken cancellationToken = default)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(OcrWorkerClient));
-        ArgumentNullException.ThrowIfNull(pixelData);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
 
         var tempPath = CreateTempPixelPath();
         try
         {
-            await File.WriteAllBytesAsync(tempPath, pixelData, cancellationToken).ConfigureAwait(false);
+            await using (var stream = new FileStream(
+                tempPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 81920,
+                useAsync: true))
+            {
+                await stream.WriteAsync(pixelData, cancellationToken).ConfigureAwait(false);
+            }
 
             SidecarClient.SidecarClient client;
             try

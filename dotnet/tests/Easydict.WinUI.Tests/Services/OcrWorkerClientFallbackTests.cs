@@ -20,7 +20,7 @@ public sealed class OcrWorkerClientFallbackTests
             _ => Task.FromException<SidecarClientType>(new WorkerStartFailedException("missing worker")));
 
         var result = await client.RecognizeAsync(
-            [0, 0, 0, 255],
+            new byte[] { 0, 0, 0, 255 },
             pixelWidth: 1,
             pixelHeight: 1,
             preferredLanguageTag: "en-US");
@@ -41,7 +41,7 @@ public sealed class OcrWorkerClientFallbackTests
         public bool IsAvailable => true;
 
         public Task<OcrResult> RecognizeAsync(
-            byte[] pixelData,
+            ReadOnlyMemory<byte> pixelData,
             int pixelWidth,
             int pixelHeight,
             string? preferredLanguageTag = null,

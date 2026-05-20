@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -6,6 +7,7 @@ using System.Text.Json;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
 using Easydict.WinUI.Models;
+using Easydict.WinUI.Services.Memory;
 
 namespace Easydict.WinUI.Services;
 
@@ -36,13 +38,12 @@ public sealed class CustomApiOcrService : IOcrService
 
     /// <inheritdoc />
     public async Task<OcrResult> RecognizeAsync(
-        byte[] pixelData,
+        ReadOnlyMemory<byte> pixelData,
         int pixelWidth,
         int pixelHeight,
         string? preferredLanguageTag = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(pixelData);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
 
@@ -221,19 +222,37 @@ public sealed class CustomApiOcrService : IOcrService
     /// Convert BGRA8 pixel data to a base64-encoded JPEG string.
     /// Uses Windows.Graphics.Imaging for high-quality encoding.
     /// </summary>
-    private static async Task<string> ConvertBgraToBase64JpegAsync(byte[] pixelData, int width, int height)
+    private static async Task<string> ConvertBgraToBase64JpegAsync(ReadOnlyMemory<byte> pixelData, int width, int height)
     {
         using var stream = new InMemoryRandomAccessStream();
         var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.JpegEncoderId, stream);
 
-        encoder.SetPixelData(
-            BitmapPixelFormat.Bgra8,
-            BitmapAlphaMode.Premultiplied,
-            (uint)width,
-            (uint)height,
-            96,
-            96,
-            pixelData);
+        byte[]? temporaryPixels = null;
+        try
+        {
+            var pixels = PixelMemory.ToArrayForInterop(pixelData, out var offset, out var length);
+            if (offset != 0 || length != pixels.Length)
+            {
+                temporaryPixels = pixelData.ToArray();
+                pixels = temporaryPixels;
+            }
+
+            encoder.SetPixelData(
+                BitmapPixelFormat.Bgra8,
+                BitmapAlphaMode.Premultiplied,
+                (uint)width,
+                (uint)height,
+                96,
+                96,
+                pixels);
+        }
+        finally
+        {
+            if (temporaryPixels is not null)
+            {
+                Array.Clear(temporaryPixels);
+            }
+        }
 
         await encoder.FlushAsync();
 
@@ -247,8 +266,15 @@ public sealed class CustomApiOcrService : IOcrService
         var size = (int)streamSize;
         stream.Seek(0);
 
-        var bytes = new byte[size];
-        await stream.ReadAsync(bytes.AsBuffer(), (uint)size, InputStreamOptions.None);
-        return Convert.ToBase64String(bytes);
+        var bytes = ArrayPool<byte>.Shared.Rent(size);
+        try
+        {
+            await stream.ReadAsync(bytes.AsBuffer(0, size), (uint)size, InputStreamOptions.None);
+            return Convert.ToBase64String(bytes, 0, size);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(bytes, clearArray: true);
+        }
     }
 }

@@ -23,10 +23,13 @@ internal static class PixelMemory
 
     public static IBuffer AsBufferForInterop(ReadOnlyMemory<byte> memory, out byte[]? temporaryArray)
     {
-        var array = ToArrayForInterop(memory, out var offset, out var length);
-        temporaryArray = ReferenceEquals(array, MemoryMarshal.TryGetArray(memory, out ArraySegment<byte> segment) ? segment.Array : null)
-            ? null
-            : array;
-        return array.AsBuffer(offset, length);
+        if (MemoryMarshal.TryGetArray(memory, out ArraySegment<byte> segment) && segment.Array is not null)
+        {
+            temporaryArray = null;
+            return segment.Array.AsBuffer(segment.Offset, segment.Count);
+        }
+
+        temporaryArray = memory.ToArray();
+        return temporaryArray.AsBuffer();
     }
 }

@@ -59,20 +59,49 @@ public sealed class MemoryProfilingAutomationTests
         script.Should().Contain("$testProcess.Refresh()");
         script.Should().Contain("ConvertFrom-Json $text");
         script.Should().Contain("$json.Events");
+        script.Should().Contain("Test-GcHeapSizeCounterName");
+        script.Should().Contain("GC Heap Size(?: \\(MB\\))?");
         script.Should().Contain("Read-GcdumpHeapBytes");
         script.Should().Contain("managedHeapBytes");
         script.Should().Contain("Managed heap bytes exceeded threshold after close");
+        script.Should().Contain("PrivateBytesAbsoluteAllowanceMB");
+        script.Should().Contain("[int]$PrivateBytesAbsoluteAllowanceMB = 160");
+        script.Should().Contain("ManagedHeapAbsoluteAllowanceMB");
+        script.Should().Contain("absoluteAllowancesMB");
+        script.Should().Contain("[Math]::Max($privateRelativeLimit, $privateAbsoluteLimit)");
         script.Should().Contain("EASYDICT_MEMORY_GATE_PHASE_DIR");
+        script.Should().Contain("19-post-close-idle-complete.marker");
         script.Should().Contain("phase-snapshots.json");
         script.Should().Contain("New-PhaseSnapshots");
         script.Should().Contain("Convert-TypeperfTimestampToUtc");
         script.Should().Contain("privateBytesDeltaFromPrevious");
         script.Should().Contain("phaseSnapshots");
+        script.Should().Contain("Get-SeriesFromIndex");
+        script.Should().Contain("$postCloseHandleValues = Get-SeriesFromIndex $handles $postCloseStartIndex");
+        script.Should().Contain("postCloseSampleCount");
+        script.Should().Contain("HandleCountPostCloseGrowthAllowance");
+        script.Should().Contain("postCloseGrowthAllowance");
+        script.Should().Contain("Handle Count is still growing after close");
+        script.Should().Contain("Keep final gcdump out of typeperf/dotnet-counters tail metrics.");
+        script.IndexOf("Keep final gcdump out of typeperf/dotnet-counters tail metrics.", StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(script.IndexOf("Invoke-Gcdump $dotnetGcdump $processId $finalGcdump", StringComparison.Ordinal));
         script.Should().Contain("Fatal error\\.|AccessViolationException");
         script.Should().Contain("Memory gate app process emitted a fatal runtime error");
         script.Should().Contain("WaitForExit(5000) | Out-Null");
         script.Should().Contain("catch");
         script.Should().Contain("throw");
+    }
+
+    [Fact]
+    public void PrMemoryGateWorkflow_UsesExpandedUiNativeAllowance()
+    {
+        var workflowPath = Path.Combine(ProjectRoot, "..", ".github", "workflows", "memory-gate.yml");
+        var workflow = File.ReadAllText(Path.GetFullPath(workflowPath));
+
+        workflow.Should().Contain("Invoke-PrMemoryGate.ps1");
+        workflow.Should().Contain("-PrivateBytesAbsoluteAllowanceMB 160");
+        workflow.Should().Contain("artifacts/memory-gate/pr");
     }
 
     [Fact]
@@ -113,6 +142,14 @@ public sealed class MemoryProfilingAutomationTests
         test.Should().Contain("09-long-doc-mode-ready");
         test.Should().Contain("13-long-doc-page-range-set");
         test.Should().Contain("16-settings-opened");
+        test.Should().Contain("ExerciseSettingsTabs");
+        test.Should().Contain("$\"SettingsTab_{tab}\"");
+        test.Should().Contain("\"General\"");
+        test.Should().Contain("\"About\"");
+        test.Should().Contain("17a-settings-reopened");
+        test.Should().Contain("17c-mini-window-opened");
+        test.Should().Contain("17f-fixed-window-opened");
+        test.Should().Contain("UITestHelper.SendHotkey");
         test.Should().Contain("18-main-window-closed");
     }
 
@@ -131,12 +168,61 @@ public sealed class MemoryProfilingAutomationTests
 
         xaml.Should().Contain("x:Name=\"ModeSelectorButton\"");
         xaml.Should().Contain("AutomationProperties.AutomationId=\"ModeMenuButton\"");
+        xaml.Should().Contain("Tapped=\"OnModeMenuItemTapped\"");
         code.Should().Contain("AutomationProperties.SetName");
         code.Should().Contain("Mode: Long Document");
         code.Should().Contain("Mode: Translation");
+        code.Should().Contain("OnModeMenuItemTapped");
+        code.Should().Contain("SwitchModeFromMenuItemAsync");
         code.Should().Contain("senderName");
         code.Should().Contain("nameof(ModeTranslationItem)");
         code.Should().Contain("nameof(ModeLongDocItem)");
+    }
+
+    [Fact]
+    public void SettingsPage_TabsExposeStableAutomationIds()
+    {
+        var xamlPath = Path.GetFullPath(Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.WinUI",
+            "Views",
+            "SettingsPage.xaml"));
+        var codePath = Path.ChangeExtension(xamlPath, ".xaml.cs");
+        var xaml = File.ReadAllText(xamlPath);
+        var code = File.ReadAllText(codePath);
+
+        xaml.Should().Contain("AutomationProperties.AutomationId=\"{Binding AutomationId}\"");
+        xaml.Should().Contain("AutomationProperties.Name=\"{Binding Label}\"");
+        xaml.Should().Contain("Loaded=\"OnSettingsTabButtonLoaded\"");
+        code.Should().Contain("public string AutomationId => $\"SettingsTab_{Id}\";");
+        code.Should().Contain("OnSettingsTabButtonLoaded");
+        code.Should().Contain("AutomationProperties.SetAutomationId(button, tab.AutomationId)");
+        code.Should().Contain("AutomationProperties.SetName(button, tab.Label)");
+        code.Should().Contain("ReleaseViewsTabContent");
+        code.Should().Contain("UnloadObject(ViewsTabContent)");
+    }
+
+    [Fact]
+    public void App_MemoryAbMode_ReleasesFrameContent_WhenMainWindowIsHidden()
+    {
+        var codePath = Path.GetFullPath(Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.WinUI",
+            "App.xaml.cs"));
+        var code = File.ReadAllText(codePath);
+
+        code.Should().Contain("EASYDICT_UIA_MEMORY_AB_MODE");
+        code.Should().Contain("ReleaseMainWindowContentForMemoryGate");
+        code.Should().Contain("frame.NavigationFailed -= OnNavigationFailed");
+        code.Should().Contain("frame.Navigated -= OnRootFrameNavigated");
+        code.Should().Contain("frame.BackStack.Clear()");
+        code.Should().Contain("frame.ForwardStack.Clear()");
+        code.Should().Contain("frame.Content = null");
+        code.Should().Contain("_window.Content = null");
+        code.Should().Contain("EnsureRootFrame");
+        code.Should().Contain("EnsureMainPageContent");
     }
 
     [Fact]

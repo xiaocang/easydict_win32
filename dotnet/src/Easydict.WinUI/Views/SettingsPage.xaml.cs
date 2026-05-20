@@ -913,6 +913,17 @@ public sealed partial class SettingsPage : Page
         SelectSettingsTab(tabId, resetScroll: true);
     }
 
+    private void OnSettingsTabButtonLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.DataContext is not SettingsTabItem tab)
+        {
+            return;
+        }
+
+        AutomationProperties.SetAutomationId(button, tab.AutomationId);
+        AutomationProperties.SetName(button, tab.Label);
+    }
+
     private void SelectSettingsTab(SettingsTabId tabId, bool resetScroll)
     {
         EnsureTabContentLoaded(tabId);
@@ -930,7 +941,14 @@ public sealed partial class SettingsPage : Page
         ServicesTabContent.Visibility = tabId == SettingsTabId.Services ? Visibility.Visible : Visibility.Collapsed;
         if (ViewsTabContent != null)
         {
-            ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;
+            if (tabId == SettingsTabId.Views)
+            {
+                ViewsTabContent.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                ReleaseViewsTabContent();
+            }
         }
         HotkeysTabContent.Visibility = tabId == SettingsTabId.Hotkeys ? Visibility.Visible : Visibility.Collapsed;
         AdvancedTabContent.Visibility = tabId == SettingsTabId.Advanced ? Visibility.Visible : Visibility.Collapsed;
@@ -955,6 +973,31 @@ public sealed partial class SettingsPage : Page
                 ApplyWindowResultsLocalization(LocalizationService.Instance);
                 break;
         }
+    }
+
+    private void ReleaseViewsTabContent()
+    {
+        if (ViewsTabContent == null)
+        {
+            return;
+        }
+
+        if (MainWindowServicesPanel != null)
+        {
+            MainWindowServicesPanel.ItemsSource = null;
+        }
+
+        if (MiniWindowServicesPanel != null)
+        {
+            MiniWindowServicesPanel.ItemsSource = null;
+        }
+
+        if (FixedWindowServicesPanel != null)
+        {
+            FixedWindowServicesPanel.ItemsSource = null;
+        }
+
+        UnloadObject(ViewsTabContent);
     }
 
     private bool ShouldLoadSettingsTab(SettingsTabId tabId, bool deferLazyTabData)
@@ -1866,18 +1909,7 @@ public sealed partial class SettingsPage : Page
         try { _currentDialog?.Hide(); } catch (COMException) { }
         _currentDialog = null;
 
-        if (MainWindowServicesPanel != null)
-        {
-            MainWindowServicesPanel.ItemsSource = null;
-        }
-        if (MiniWindowServicesPanel != null)
-        {
-            MiniWindowServicesPanel.ItemsSource = null;
-        }
-        if (FixedWindowServicesPanel != null)
-        {
-            FixedWindowServicesPanel.ItemsSource = null;
-        }
+        ReleaseViewsTabContent();
         LanguageCheckboxGrid.ItemsSource = null;
         SettingsTabsHost.ItemsSource = null;
 

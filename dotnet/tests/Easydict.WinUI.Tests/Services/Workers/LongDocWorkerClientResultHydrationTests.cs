@@ -1,5 +1,6 @@
 using Easydict.SidecarClient.Protocol;
 using Easydict.TranslationService;
+using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.Workers;
 using FluentAssertions;
 using Xunit;
@@ -64,5 +65,55 @@ public sealed class LongDocWorkerClientResultHydrationTests
 
         var exception = await act.Should().ThrowAsync<TranslationException>();
         exception.Which.ErrorCode.Should().Be(TranslationErrorCode.InvalidResponse);
+    }
+
+    [Fact]
+    public void MapResult_MapsFlatWorkerEnvelope()
+    {
+        var mapped = LongDocWorkerClient.MapResult(new TranslateDocumentResult
+        {
+            State = "PartiallyCompleted",
+            OutputPath = @"C:\docs\paper_zh.txt",
+            BilingualOutputPath = @"C:\docs\paper_bilingual.txt",
+            TotalChunks = 4,
+            SucceededChunks = 3,
+            FailedChunkIndexes = [2],
+            QualityReport = """
+                {
+                  "stageTimingsMs": { "translate": 12 },
+                  "totalBlocks": 4,
+                  "translatedBlocks": 3,
+                  "skippedBlocks": 0,
+                  "failedBlocks": []
+                }
+                """,
+        });
+
+        mapped.State.Should().Be(LongDocumentJobState.PartialSuccess);
+        mapped.OutputPath.Should().Be(@"C:\docs\paper_zh.txt");
+        mapped.BilingualOutputPath.Should().Be(@"C:\docs\paper_bilingual.txt");
+        mapped.TotalChunks.Should().Be(4);
+        mapped.SucceededChunks.Should().Be(3);
+        mapped.FailedChunkIndexes.Should().Equal(2);
+        mapped.QualityReport.TotalBlocks.Should().Be(4);
+        mapped.QualityReport.StageTimingsMs["translate"].Should().Be(12);
+        mapped.Checkpoint.Should().BeNull();
+    }
+
+    [Fact]
+    public void MapResult_BuildsFallbackQualityReport_WhenWorkerOmitsReport()
+    {
+        var mapped = LongDocWorkerClient.MapResult(new TranslateDocumentResult
+        {
+            State = "Completed",
+            OutputPath = @"C:\docs\paper_zh.txt",
+            TotalChunks = 2,
+            SucceededChunks = 2,
+        });
+
+        mapped.State.Should().Be(LongDocumentJobState.Completed);
+        mapped.QualityReport.TotalBlocks.Should().Be(2);
+        mapped.QualityReport.TranslatedBlocks.Should().Be(2);
+        mapped.QualityReport.FailedBlocks.Should().BeEmpty();
     }
 }

@@ -66,8 +66,8 @@ public sealed class ScreenCaptureWindow : IDisposable
     private const int MagDisplaySize = MagSourceSize * MagScale; // 88×88
 
     private nint _hwnd;
-    private nint _desktopBitmapHandle;
-    private nint _desktopDcHandle;
+    private SafeGdiObjectHandle? _desktopBitmapHandle;
+    private SafeCompatibleDcHandle? _desktopDcHandle;
     private nint _oldDesktopBitmapHandle; // saved from SelectObject to restore before cleanup
     private int _desktopWidth;
     private int _desktopHeight;
@@ -75,13 +75,13 @@ public sealed class ScreenCaptureWindow : IDisposable
     private int _virtualTop;
 
     // Back buffer for flicker-free painting (double-buffering)
-    private nint _backBufferDcHandle;
-    private nint _backBufferBitmapHandle;
+    private SafeCompatibleDcHandle? _backBufferDcHandle;
+    private SafeGdiObjectHandle? _backBufferBitmapHandle;
     private nint _oldBackBufferBitmapHandle;
 
     // Pre-composited dimmed desktop (desktop + dark overlay, computed once)
-    private nint _dimmedDcHandle;
-    private nint _dimmedBitmapHandle;
+    private SafeCompatibleDcHandle? _dimmedDcHandle;
+    private SafeGdiObjectHandle? _dimmedBitmapHandle;
     private nint _oldDimmedBitmapHandle;
 
     private readonly WindowDetector _windowDetector = new();
@@ -105,12 +105,22 @@ public sealed class ScreenCaptureWindow : IDisposable
     private bool _disposed;
 
     // Tips rendering
-    private nint _tipsFont;
-    private nint _tipsDc;
-    private nint _tipsBitmap;
+    private SafeGdiObjectHandle? _tipsFont;
+    private SafeCompatibleDcHandle? _tipsDc;
+    private SafeGdiObjectHandle? _tipsBitmap;
     private nint _tipsOldBitmap;
     private string _tipDetecting = string.Empty;
     private string _tipSelecting = string.Empty;
+
+    private nint DesktopDc => _desktopDcHandle?.Value ?? IntPtr.Zero;
+    private nint DesktopBitmap => _desktopBitmapHandle?.Value ?? IntPtr.Zero;
+    private nint BackBufferDc => _backBufferDcHandle?.Value ?? IntPtr.Zero;
+    private nint BackBufferBitmap => _backBufferBitmapHandle?.Value ?? IntPtr.Zero;
+    private nint DimmedDc => _dimmedDcHandle?.Value ?? IntPtr.Zero;
+    private nint DimmedBitmap => _dimmedBitmapHandle?.Value ?? IntPtr.Zero;
+    private nint TipsDc => _tipsDc?.Value ?? IntPtr.Zero;
+    private nint TipsBitmap => _tipsBitmap?.Value ?? IntPtr.Zero;
+    private nint TipsFont => _tipsFont?.Value ?? IntPtr.Zero;
 
     private enum SelectionPhase
     {
@@ -199,46 +209,57 @@ public sealed class ScreenCaptureWindow : IDisposable
         _desktopHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
         var screenDc = GetDC(IntPtr.Zero);
-        _desktopDcHandle = CreateCompatibleDC(screenDc);
-        _desktopBitmapHandle = CreateCompatibleBitmap(screenDc, _desktopWidth, _desktopHeight);
-        _oldDesktopBitmapHandle = SelectObject(_desktopDcHandle, _desktopBitmapHandle);
-
-        BitBlt(_desktopDcHandle, 0, 0, _desktopWidth, _desktopHeight,
-               screenDc, _virtualLeft, _virtualTop, SRCCOPY);
-
-        // Create pre-composited dimmed desktop (desktop + dark overlay, done once)
-        _dimmedDcHandle = CreateCompatibleDC(screenDc);
-        _dimmedBitmapHandle = CreateCompatibleBitmap(screenDc, _desktopWidth, _desktopHeight);
-        _oldDimmedBitmapHandle = SelectObject(_dimmedDcHandle, _dimmedBitmapHandle);
-        BitBlt(_dimmedDcHandle, 0, 0, _desktopWidth, _desktopHeight,
-               _desktopDcHandle, 0, 0, SRCCOPY);
-
-        // Apply dark overlay once onto the dimmed desktop
-        var overlayDc = CreateCompatibleDC(screenDc);
-        var overlayBmp = CreateCompatibleBitmap(screenDc, 1, 1);
-        var oldOverlay = SelectObject(overlayDc, overlayBmp);
-        var blackBrush = GetStockObject(4); // BLACK_BRUSH
-        var rc = new RECT { Left = 0, Top = 0, Right = 1, Bottom = 1 };
-        FillRect(overlayDc, ref rc, blackBrush);
-        var blend = new BLENDFUNCTION
+        try
         {
-            BlendOp = 0,              // AC_SRC_OVER
-            BlendFlags = 0,
-            SourceConstantAlpha = MaskAlpha,
-            AlphaFormat = 0
-        };
-        AlphaBlend(_dimmedDcHandle, 0, 0, _desktopWidth, _desktopHeight,
-                   overlayDc, 0, 0, 1, 1, blend);
-        SelectObject(overlayDc, oldOverlay);
-        DeleteObject(overlayBmp);
-        DeleteDC(overlayDc);
+            _desktopDcHandle = SafeCompatibleDcHandle.FromCompatibleDc(screenDc);
+            _desktopBitmapHandle = SafeGdiObjectHandle.FromCompatibleBitmap(screenDc, _desktopWidth, _desktopHeight);
+            _oldDesktopBitmapHandle = SelectObject(DesktopDc, DesktopBitmap);
 
-        // Create back buffer for double-buffered painting
-        _backBufferDcHandle = CreateCompatibleDC(screenDc);
-        _backBufferBitmapHandle = CreateCompatibleBitmap(screenDc, _desktopWidth, _desktopHeight);
-        _oldBackBufferBitmapHandle = SelectObject(_backBufferDcHandle, _backBufferBitmapHandle);
+            BitBlt(DesktopDc, 0, 0, _desktopWidth, _desktopHeight,
+                   screenDc, _virtualLeft, _virtualTop, SRCCOPY);
 
-        ReleaseDC(IntPtr.Zero, screenDc);
+            // Create pre-composited dimmed desktop (desktop + dark overlay, done once)
+            _dimmedDcHandle = SafeCompatibleDcHandle.FromCompatibleDc(screenDc);
+            _dimmedBitmapHandle = SafeGdiObjectHandle.FromCompatibleBitmap(screenDc, _desktopWidth, _desktopHeight);
+            _oldDimmedBitmapHandle = SelectObject(DimmedDc, DimmedBitmap);
+            BitBlt(DimmedDc, 0, 0, _desktopWidth, _desktopHeight,
+                   DesktopDc, 0, 0, SRCCOPY);
+
+            // Apply dark overlay once onto the dimmed desktop
+            using (var overlayDc = SafeCompatibleDcHandle.FromCompatibleDc(screenDc))
+            using (var overlayBmp = SafeGdiObjectHandle.FromCompatibleBitmap(screenDc, 1, 1))
+            {
+                var oldOverlay = SelectObject(overlayDc.Value, overlayBmp.Value);
+                try
+                {
+                    var blackBrush = GetStockObject(4); // BLACK_BRUSH
+                    var rc = new RECT { Left = 0, Top = 0, Right = 1, Bottom = 1 };
+                    FillRect(overlayDc.Value, ref rc, blackBrush);
+                    var blend = new BLENDFUNCTION
+                    {
+                        BlendOp = 0,              // AC_SRC_OVER
+                        BlendFlags = 0,
+                        SourceConstantAlpha = MaskAlpha,
+                        AlphaFormat = 0
+                    };
+                    AlphaBlend(DimmedDc, 0, 0, _desktopWidth, _desktopHeight,
+                               overlayDc.Value, 0, 0, 1, 1, blend);
+                }
+                finally
+                {
+                    RestoreSelectedObject(overlayDc.Value, oldOverlay);
+                }
+            }
+
+            // Create back buffer for double-buffered painting
+            _backBufferDcHandle = SafeCompatibleDcHandle.FromCompatibleDc(screenDc);
+            _backBufferBitmapHandle = SafeGdiObjectHandle.FromCompatibleBitmap(screenDc, _desktopWidth, _desktopHeight);
+            _oldBackBufferBitmapHandle = SelectObject(BackBufferDc, BackBufferBitmap);
+        }
+        finally
+        {
+            ReleaseDC(IntPtr.Zero, screenDc);
+        }
 
         Debug.WriteLine($"[ScreenCapture] Desktop captured: {_desktopWidth}×{_desktopHeight} at ({_virtualLeft},{_virtualTop})");
     }
@@ -378,10 +399,10 @@ public sealed class ScreenCaptureWindow : IDisposable
         var hdc = BeginPaint(hwnd, ref ps);
 
         // All drawing targets the back buffer, then a single BitBlt to screen (double-buffering)
-        var buf = _backBufferDcHandle;
+        var buf = BackBufferDc;
 
         // 1. Start from pre-composited dimmed desktop (replaces desktop BitBlt + AlphaBlend)
-        BitBlt(buf, 0, 0, _desktopWidth, _desktopHeight, _dimmedDcHandle, 0, 0, SRCCOPY);
+        BitBlt(buf, 0, 0, _desktopWidth, _desktopHeight, DimmedDc, 0, 0, SRCCOPY);
 
         // 2. Draw selection region (clear area + border)
         if (_phase == SelectionPhase.Detecting && _detectedRegion.HasValue)
@@ -417,18 +438,21 @@ public sealed class ScreenCaptureWindow : IDisposable
     {
         // Clear the overlay in the selection area by re-drawing the desktop bitmap there
         BitBlt(hdc, sel.Left, sel.Top, sel.Width, sel.Height,
-               _desktopDcHandle, sel.Left, sel.Top, SRCCOPY);
+               DesktopDc, sel.Left, sel.Top, SRCCOPY);
 
         // Draw border
-        var pen = CreatePen(0, 2, 0x00FF8C00); // RGB orange-ish (reversed for GDI: 0x00BBGGRR)
-        var oldPen = SelectObject(hdc, pen);
+        using var pen = SafeGdiObjectHandle.FromPen(0, 2, 0x00FF8C00); // RGB orange-ish (reversed for GDI: 0x00BBGGRR)
+        var oldPen = SelectObject(hdc, pen.Value);
         var oldBrush = SelectObject(hdc, GetStockObject(5)); // HOLLOW_BRUSH
-
-        Rectangle(hdc, sel.Left, sel.Top, sel.Right, sel.Bottom);
-
-        SelectObject(hdc, oldPen);
-        SelectObject(hdc, oldBrush);
-        DeleteObject(pen);
+        try
+        {
+            Rectangle(hdc, sel.Left, sel.Top, sel.Right, sel.Bottom);
+        }
+        finally
+        {
+            RestoreSelectedObject(hdc, oldPen);
+            RestoreSelectedObject(hdc, oldBrush);
+        }
     }
 
     private void DrawSizeLabel(nint hdc, RECT sel)
@@ -453,14 +477,13 @@ public sealed class ScreenCaptureWindow : IDisposable
         if (magY + totalH + 4 > _desktopHeight) magY = cy - totalH - 24;
 
         // Background for magnifier panel
-        var bgBrush = CreateSolidBrush(0x00303030); // Dark gray
+        using var bgBrush = SafeGdiObjectHandle.FromSolidBrush(0x00303030); // Dark gray
         var panelRect = new RECT
         {
             Left = magX - 2, Top = magY - 2,
             Right = magX + MagDisplaySize + 2, Bottom = magY + totalH + 2
         };
-        FillRect(hdc, ref panelRect, bgBrush);
-        DeleteObject(bgBrush);
+        FillRect(hdc, ref panelRect, bgBrush.Value);
 
         // Stretch source pixels around cursor into magnifier area
         var srcX = Math.Clamp(cx - MagSourceSize / 2, 0, _desktopWidth - MagSourceSize);
@@ -468,28 +491,38 @@ public sealed class ScreenCaptureWindow : IDisposable
 
         SetStretchBltMode(hdc, 3); // COLORONCOLOR
         StretchBlt(hdc, magX, magY, MagDisplaySize, MagDisplaySize,
-                   _desktopDcHandle, srcX, srcY, MagSourceSize, MagSourceSize, SRCCOPY);
+                   DesktopDc, srcX, srcY, MagSourceSize, MagSourceSize, SRCCOPY);
 
         // Draw crosshair in center of magnifier
-        var crossPen = CreatePen(0, 1, 0x0000FF00); // Green
-        var oldPen = SelectObject(hdc, crossPen);
-        var centerX = magX + MagDisplaySize / 2;
-        var centerY = magY + MagDisplaySize / 2;
-        MoveToEx(hdc, centerX - MagScale, centerY, IntPtr.Zero);
-        LineTo(hdc, centerX + MagScale, centerY);
-        MoveToEx(hdc, centerX, centerY - MagScale, IntPtr.Zero);
-        LineTo(hdc, centerX, centerY + MagScale);
-        SelectObject(hdc, oldPen);
-        DeleteObject(crossPen);
+        using var crossPen = SafeGdiObjectHandle.FromPen(0, 1, 0x0000FF00); // Green
+        var oldPen = SelectObject(hdc, crossPen.Value);
+        try
+        {
+            var centerX = magX + MagDisplaySize / 2;
+            var centerY = magY + MagDisplaySize / 2;
+            MoveToEx(hdc, centerX - MagScale, centerY, IntPtr.Zero);
+            LineTo(hdc, centerX + MagScale, centerY);
+            MoveToEx(hdc, centerX, centerY - MagScale, IntPtr.Zero);
+            LineTo(hdc, centerX, centerY + MagScale);
+        }
+        finally
+        {
+            RestoreSelectedObject(hdc, oldPen);
+        }
 
         // Draw magnifier border
-        var borderPen = CreatePen(0, 1, 0x00808080);
-        oldPen = SelectObject(hdc, borderPen);
+        using var borderPen = SafeGdiObjectHandle.FromPen(0, 1, 0x00808080);
+        oldPen = SelectObject(hdc, borderPen.Value);
         var oldBrush = SelectObject(hdc, GetStockObject(5)); // HOLLOW_BRUSH
-        Rectangle(hdc, magX, magY, magX + MagDisplaySize, magY + MagDisplaySize);
-        SelectObject(hdc, oldPen);
-        SelectObject(hdc, oldBrush);
-        DeleteObject(borderPen);
+        try
+        {
+            Rectangle(hdc, magX, magY, magX + MagDisplaySize, magY + MagDisplaySize);
+        }
+        finally
+        {
+            RestoreSelectedObject(hdc, oldPen);
+            RestoreSelectedObject(hdc, oldBrush);
+        }
 
         // Draw coordinate text below magnifier
         var coordText = $"({cx + _virtualLeft}, {cy + _virtualTop})";
@@ -498,7 +531,7 @@ public sealed class ScreenCaptureWindow : IDisposable
         TextOut(hdc, magX, magY + MagDisplaySize + 4, coordText, coordText.Length);
 
         // Get pixel color at cursor and display it
-        var pixelColor = GetPixel(_desktopDcHandle, cx, cy);
+        var pixelColor = GetPixel(DesktopDc, cx, cy);
         if (pixelColor != 0xFFFFFFFF) // CLR_INVALID
         {
             var r = pixelColor & 0xFF;
@@ -508,14 +541,13 @@ public sealed class ScreenCaptureWindow : IDisposable
             TextOut(hdc, magX, magY + MagDisplaySize + 18, colorText, colorText.Length);
 
             // Color swatch
-            var swatchBrush = CreateSolidBrush(pixelColor);
+            using var swatchBrush = SafeGdiObjectHandle.FromSolidBrush(pixelColor);
             var swatchRect = new RECT
             {
                 Left = magX + 70, Top = magY + MagDisplaySize + 14,
                 Right = magX + 88, Bottom = magY + MagDisplaySize + 28
             };
-            FillRect(hdc, ref swatchRect, swatchBrush);
-            DeleteObject(swatchBrush);
+            FillRect(hdc, ref swatchRect, swatchBrush.Value);
         }
     }
 
@@ -533,7 +565,7 @@ public sealed class ScreenCaptureWindow : IDisposable
         if (dpi == 0) dpi = 96; // fallback to 96 DPI (100% scaling)
         var fontHeight = (int)(TipsFontPointSize * dpi / 72);
 
-        _tipsFont = CreateFont(
+        _tipsFont = SafeGdiObjectHandle.FromFont(
             -fontHeight, 0, 0, 0, 400, // height (negative = character height), weight = FW_NORMAL
             0, 0, 0,                     // italic, underline, strikeout
             1,                           // DEFAULT_CHARSET
@@ -543,16 +575,21 @@ public sealed class ScreenCaptureWindow : IDisposable
         // Cache a 1×1 compatible DC + bitmap for DrawTips alpha blending
         // so we don't allocate/destroy GDI objects on every paint cycle.
         var screenDc = GetDC(IntPtr.Zero);
-        _tipsDc = CreateCompatibleDC(screenDc);
-        _tipsBitmap = CreateCompatibleBitmap(screenDc, 1, 1);
-        _tipsOldBitmap = SelectObject(_tipsDc, _tipsBitmap);
-        ReleaseDC(IntPtr.Zero, screenDc);
+        try
+        {
+            _tipsDc = SafeCompatibleDcHandle.FromCompatibleDc(screenDc);
+            _tipsBitmap = SafeGdiObjectHandle.FromCompatibleBitmap(screenDc, 1, 1);
+            _tipsOldBitmap = SelectObject(TipsDc, TipsBitmap);
+        }
+        finally
+        {
+            ReleaseDC(IntPtr.Zero, screenDc);
+        }
 
         // Fill the 1×1 pixel with dark gray once
-        var brush = CreateSolidBrush(0x00303030);
+        using var brush = SafeGdiObjectHandle.FromSolidBrush(0x00303030);
         var rc = new RECT { Left = 0, Top = 0, Right = 1, Bottom = 1 };
-        FillRect(_tipsDc, ref rc, brush);
-        DeleteObject(brush);
+        FillRect(TipsDc, ref rc, brush.Value);
 
         // Cache localized tip strings
         var loc = LocalizationService.Instance;
@@ -571,7 +608,7 @@ public sealed class ScreenCaptureWindow : IDisposable
 
         if (string.IsNullOrEmpty(text)) return;
 
-        var oldFont = SelectObject(hdc, _tipsFont);
+        var oldFont = SelectObject(hdc, TipsFont);
 
         // Measure text dimensions
         GetTextExtentPoint32(hdc, text, text.Length, out var textSize);
@@ -591,14 +628,14 @@ public sealed class ScreenCaptureWindow : IDisposable
             SourceConstantAlpha = 200, // ~78% opacity
             AlphaFormat = 0
         };
-        AlphaBlend(hdc, panelX, panelY, panelWidth, panelHeight, _tipsDc, 0, 0, 1, 1, blend);
+        AlphaBlend(hdc, panelX, panelY, panelWidth, panelHeight, TipsDc, 0, 0, 1, 1, blend);
 
         // Draw white text centered in the panel
         SetBkMode(hdc, 1); // TRANSPARENT
         SetTextColor(hdc, 0x00FFFFFF);
         TextOut(hdc, panelX + padH, panelY + padV, text, text.Length);
 
-        SelectObject(hdc, oldFont);
+        RestoreSelectedObject(hdc, oldFont);
     }
 
     // --- Mouse event handlers ---
@@ -831,43 +868,57 @@ public sealed class ScreenCaptureWindow : IDisposable
         var height = sel.Height;
 
         // Create a memory DC and bitmap for the selection
-        var memDc = CreateCompatibleDC(_desktopDcHandle);
-        var hBitmap = CreateCompatibleBitmap(_desktopDcHandle, width, height);
-        var oldBmp = SelectObject(memDc, hBitmap);
+        using var memDc = SafeCompatibleDcHandle.FromCompatibleDc(DesktopDc);
+        using var hBitmap = SafeGdiObjectHandle.FromCompatibleBitmap(DesktopDc, width, height);
+        var oldBmp = SelectObject(memDc.Value, hBitmap.Value);
+        OwnedPixelBuffer? pixelBuffer = null;
 
-        BitBlt(memDc, 0, 0, width, height, _desktopDcHandle, sel.Left, sel.Top, SRCCOPY);
-
-        // Extract pixel data
-        var bmi = new BITMAPINFO
+        try
         {
-            bmiHeader = new BITMAPINFOHEADER
+            BitBlt(memDc.Value, 0, 0, width, height, DesktopDc, sel.Left, sel.Top, SRCCOPY);
+
+            // Extract pixel data
+            var bmi = new BITMAPINFO
             {
-                biSize = (uint)Marshal.SizeOf<BITMAPINFOHEADER>(),
-                biWidth = width,
-                biHeight = -height, // Top-down
-                biPlanes = 1,
-                biBitCount = 32,
-                biCompression = 0 // BI_RGB
+                bmiHeader = new BITMAPINFOHEADER
+                {
+                    biSize = (uint)Marshal.SizeOf<BITMAPINFOHEADER>(),
+                    biWidth = width,
+                    biHeight = -height, // Top-down
+                    biPlanes = 1,
+                    biBitCount = 32,
+                    biCompression = 0 // BI_RGB
+                }
+            };
+
+            pixelBuffer = OwnedPixelBuffer.Rent(width * height * 4);
+            if (!MemoryMarshal.TryGetArray<byte>(pixelBuffer.Memory, out var segment) ||
+                segment.Array is null ||
+                segment.Offset != 0)
+            {
+                throw new InvalidOperationException("Screen capture pixel buffer must be backed by a zero-offset array.");
             }
-        };
 
-        var pixelData = new byte[width * height * 4];
-        GetDIBits(memDc, hBitmap, 0, (uint)height, pixelData, ref bmi, 0);
+            GetDIBits(memDc.Value, hBitmap.Value, 0, (uint)height, segment.Array, ref bmi, 0);
 
-        SelectObject(memDc, oldBmp);
-        DeleteObject(hBitmap);
-        DeleteDC(memDc);
-
-        return new ScreenCaptureResult
+            var result = new ScreenCaptureResult
+            {
+                PixelBuffer = pixelBuffer,
+                PixelWidth = width,
+                PixelHeight = height,
+                ScreenRect = new OcrRect(
+                    sel.Left + _virtualLeft,
+                    sel.Top + _virtualTop,
+                    width, height)
+            };
+            pixelBuffer = null;
+            return result;
+        }
+        finally
         {
-            PixelData = pixelData,
-            PixelWidth = width,
-            PixelHeight = height,
-            ScreenRect = new OcrRect(
-                sel.Left + _virtualLeft,
-                sel.Top + _virtualTop,
-                width, height)
-        };
+            pixelBuffer?.Dispose();
+            RestoreSelectedObject(memDc.Value, oldBmp);
+        }
     }
 
     // --- Helper methods ---
@@ -883,6 +934,14 @@ public sealed class ScreenCaptureWindow : IDisposable
     private static bool RectsEqual(RECT a, RECT b)
         => a.Left == b.Left && a.Top == b.Top && a.Right == b.Right && a.Bottom == b.Bottom;
 
+    private static void RestoreSelectedObject(nint hdc, nint oldHandle)
+    {
+        if (hdc != IntPtr.Zero && oldHandle != IntPtr.Zero)
+        {
+            SelectObject(hdc, oldHandle);
+        }
+    }
+
     private static POINT GetLParamPoint(nint lParam) => new()
     {
         X = (short)(lParam.ToInt64() & 0xFFFF),
@@ -893,80 +952,52 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     private void Cleanup()
     {
-        if (_tipsFont != IntPtr.Zero)
-        {
-            DeleteObject(_tipsFont);
-            _tipsFont = IntPtr.Zero;
-        }
-
         // Release cached tips DC/bitmap
-        if (_tipsDc != IntPtr.Zero && _tipsOldBitmap != IntPtr.Zero)
+        if (TipsDc != IntPtr.Zero && _tipsOldBitmap != IntPtr.Zero)
         {
-            SelectObject(_tipsDc, _tipsOldBitmap);
+            RestoreSelectedObject(TipsDc, _tipsOldBitmap);
             _tipsOldBitmap = IntPtr.Zero;
         }
-        if (_tipsDc != IntPtr.Zero)
-        {
-            DeleteDC(_tipsDc);
-            _tipsDc = IntPtr.Zero;
-        }
-        if (_tipsBitmap != IntPtr.Zero)
-        {
-            DeleteObject(_tipsBitmap);
-            _tipsBitmap = IntPtr.Zero;
-        }
+        _tipsDc?.Dispose();
+        _tipsDc = null;
+        _tipsBitmap?.Dispose();
+        _tipsBitmap = null;
+        _tipsFont?.Dispose();
+        _tipsFont = null;
 
         // Release back buffer DC/bitmap
-        if (_backBufferDcHandle != IntPtr.Zero && _oldBackBufferBitmapHandle != IntPtr.Zero)
+        if (BackBufferDc != IntPtr.Zero && _oldBackBufferBitmapHandle != IntPtr.Zero)
         {
-            SelectObject(_backBufferDcHandle, _oldBackBufferBitmapHandle);
+            RestoreSelectedObject(BackBufferDc, _oldBackBufferBitmapHandle);
             _oldBackBufferBitmapHandle = IntPtr.Zero;
         }
-        if (_backBufferDcHandle != IntPtr.Zero)
-        {
-            DeleteDC(_backBufferDcHandle);
-            _backBufferDcHandle = IntPtr.Zero;
-        }
-        if (_backBufferBitmapHandle != IntPtr.Zero)
-        {
-            DeleteObject(_backBufferBitmapHandle);
-            _backBufferBitmapHandle = IntPtr.Zero;
-        }
+        _backBufferDcHandle?.Dispose();
+        _backBufferDcHandle = null;
+        _backBufferBitmapHandle?.Dispose();
+        _backBufferBitmapHandle = null;
 
         // Release dimmed desktop DC/bitmap
-        if (_dimmedDcHandle != IntPtr.Zero && _oldDimmedBitmapHandle != IntPtr.Zero)
+        if (DimmedDc != IntPtr.Zero && _oldDimmedBitmapHandle != IntPtr.Zero)
         {
-            SelectObject(_dimmedDcHandle, _oldDimmedBitmapHandle);
+            RestoreSelectedObject(DimmedDc, _oldDimmedBitmapHandle);
             _oldDimmedBitmapHandle = IntPtr.Zero;
         }
-        if (_dimmedDcHandle != IntPtr.Zero)
-        {
-            DeleteDC(_dimmedDcHandle);
-            _dimmedDcHandle = IntPtr.Zero;
-        }
-        if (_dimmedBitmapHandle != IntPtr.Zero)
-        {
-            DeleteObject(_dimmedBitmapHandle);
-            _dimmedBitmapHandle = IntPtr.Zero;
-        }
+        _dimmedDcHandle?.Dispose();
+        _dimmedDcHandle = null;
+        _dimmedBitmapHandle?.Dispose();
+        _dimmedBitmapHandle = null;
 
         // Restore the original bitmap before deleting the DC and our bitmap.
         // GDI requires that objects are deselected from a DC before deletion.
-        if (_desktopDcHandle != IntPtr.Zero && _oldDesktopBitmapHandle != IntPtr.Zero)
+        if (DesktopDc != IntPtr.Zero && _oldDesktopBitmapHandle != IntPtr.Zero)
         {
-            SelectObject(_desktopDcHandle, _oldDesktopBitmapHandle);
+            RestoreSelectedObject(DesktopDc, _oldDesktopBitmapHandle);
             _oldDesktopBitmapHandle = IntPtr.Zero;
         }
-        if (_desktopDcHandle != IntPtr.Zero)
-        {
-            DeleteDC(_desktopDcHandle);
-            _desktopDcHandle = IntPtr.Zero;
-        }
-        if (_desktopBitmapHandle != IntPtr.Zero)
-        {
-            DeleteObject(_desktopBitmapHandle);
-            _desktopBitmapHandle = IntPtr.Zero;
-        }
+        _desktopDcHandle?.Dispose();
+        _desktopDcHandle = null;
+        _desktopBitmapHandle?.Dispose();
+        _desktopBitmapHandle = null;
 
         try { UnregisterClass(WindowClassName, GetModuleHandle(null)); }
         catch (ExternalException) { }

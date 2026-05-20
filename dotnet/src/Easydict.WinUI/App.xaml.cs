@@ -641,8 +641,11 @@ namespace Easydict.WinUI
             }
 
             // Slow path: open the window now so it appears immediately, then overwrite with
-            // the selected text once the selection fetch completes.
-            dispatcher.TryEnqueue(showEmpty);
+            // the selected text once the selection fetch completes. Wrap in a lambda —
+            // DispatcherQueue.TryEnqueue takes a DispatcherQueueHandler, not an Action,
+            // and the two delegate types don't implicitly convert even with matching
+            // signatures.
+            dispatcher.TryEnqueue(() => showEmpty());
 
             // Fire-and-forget continuation. Exceptions are already logged inside
             // GetSelectedTextAsync; guard with status check anyway.

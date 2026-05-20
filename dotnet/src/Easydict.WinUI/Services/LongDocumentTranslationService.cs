@@ -16,87 +16,6 @@ using LetterGeometry = Easydict.TranslationService.ContentPreservation.FormulaAw
 
 namespace Easydict.WinUI.Services;
 
-public enum LongDocumentInputMode
-{
-    PlainText,
-    Markdown,
-    Pdf
-}
-
-public enum LongDocumentJobState
-{
-    Completed,
-    PartialSuccess,
-    Failed
-}
-
-public enum LayoutRegionType
-{
-    Unknown,
-    Header,
-    Footer,
-    Body,
-    LeftColumn,
-    RightColumn,
-    TableLike,
-    // ML-detected types (DocLayout-YOLO)
-    Figure,
-    Table,
-    Formula,
-    Caption,
-    Title,
-    IsolatedFormula
-}
-
-
-public enum LayoutRegionSource
-{
-    Unknown,
-    Heuristic,
-    BlockIdFallback,
-    OnnxModel,
-    VisionLLM
-}
-
-public sealed class LongDocumentTranslationCheckpoint
-{
-    public required LongDocumentInputMode InputMode { get; init; }
-    public string? SourceFilePath { get; init; }
-    public Language? TargetLanguage { get; init; }
-    public string? PageRange { get; init; }
-    public required List<string> SourceChunks { get; init; }
-    public required List<LongDocumentChunkMetadata> ChunkMetadata { get; init; }
-    public required Dictionary<int, string> TranslatedChunks { get; init; }
-    public required HashSet<int> FailedChunkIndexes { get; init; }
-    /// <summary>
-    /// Optional per-chunk annotations for source-fallback blocks. The default PDF export
-    /// pipeline does not currently populate or render these.
-    /// </summary>
-    public Dictionary<int, IReadOnlyList<WordAnnotation>>? WordAnnotations { get; set; }
-}
-
-public sealed class LongDocumentChunkMetadata
-{
-    public required int ChunkIndex { get; init; }
-    public required int PageNumber { get; init; }
-    public required string SourceBlockId { get; init; }
-    public required SourceBlockType SourceBlockType { get; init; }
-    public bool IsFormulaLike { get; init; }
-    public required int OrderInPage { get; init; }
-    public required LayoutRegionType RegionType { get; init; }
-    public double RegionConfidence { get; init; }
-    public LayoutRegionSource RegionSource { get; init; }
-    public double ReadingOrderScore { get; init; }
-    public BlockRect? BoundingBox { get; init; }
-    public BlockTextStyle? TextStyle { get; init; }
-    public BlockFormulaCharacters? FormulaCharacters { get; init; }
-    public bool TranslationSkipped { get; init; }
-    public bool PreserveOriginalTextInPdfExport { get; init; }
-    public int RetryCount { get; set; }
-    public string? FallbackText { get; init; }
-    public IReadOnlyList<string>? DetectedFontNames { get; init; }
-}
-
 public sealed class LongDocumentTranslationResult
 {
     public required LongDocumentJobState State { get; init; }
@@ -106,7 +25,7 @@ public sealed class LongDocumentTranslationResult
     public required int SucceededChunks { get; init; }
     public required IReadOnlyList<int> FailedChunkIndexes { get; init; }
     public required LongDocumentQualityReport QualityReport { get; init; }
-    public required LongDocumentTranslationCheckpoint Checkpoint { get; init; }
+    public LongDocumentTranslationCheckpoint? Checkpoint { get; init; }
 }
 
 public sealed class LongDocumentTranslationService : IDisposable
@@ -187,6 +106,26 @@ public sealed class LongDocumentTranslationService : IDisposable
         string? visionModel = null,
         System.IProgress<LongDocumentTranslationProgress>? progress = null)
     {
+        // Worker mode: when SettingsService.UseLongDocWorker is on, run translation in
+        // a child process so MuPDF + ONNX native heap is reclaimed by process exit.
+        // The worker exits after each translate per the "exit on completion" lifecycle.
+        if (SettingsService.Instance.UseLongDocWorker)
+        {
+            try
+            {
+                using var worker = new Workers.LongDocWorkerClient(SettingsService.Instance);
+                return await worker.TranslateToPdfAsync(
+                    mode, input, from, to, outputPath, serviceId, onProgress, cancellationToken,
+                    layoutDetection, outputMode, pdfExportMode, visionEndpoint, visionApiKey, visionModel,
+                    progress).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (Workers.LongDocWorkerClient.CanFallbackToInProc(ex))
+            {
+                System.Diagnostics.Debug.WriteLine($"[LongDocWorker] Falling back to in-proc translation: {ex.Message}");
+                onProgress?.Invoke("Long-document worker unavailable; falling back to in-process translation...");
+            }
+        }
+
         var pageRange = string.IsNullOrWhiteSpace(SettingsService.Instance.LongDocPageRange) ? null : SettingsService.Instance.LongDocPageRange;
 
         // Build source document (now natively async, CPU-bound work is wrapped inside)
@@ -320,7 +259,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             ChunkMetadata = allBlocks
                 .Select((item, index) =>
                 {
-                    var regionInfo = InferRegionInfoFromBlockId(item.Block.SourceBlockId);
+                    var regionInfo = LongDocumentSourceExtraction.InferRegionInfoFromBlockId(item.Block.SourceBlockId);
                     sourceBlocksByPageAndId.TryGetValue((item.PageNumber, item.Block.SourceBlockId), out var sourceBlock);
                     var sourceBlockType = item.Block.BlockType switch
                     {
@@ -345,7 +284,7 @@ public sealed class LongDocumentTranslationService : IDisposable
                         RegionType = regionInfo.Type,
                         RegionConfidence = regionInfo.Confidence,
                         RegionSource = regionInfo.Source,
-                        ReadingOrderScore = CalculateReadingOrderScore(
+                        ReadingOrderScore = LongDocumentSourceExtraction.CalculateReadingOrderScore(
                             orderBySourceBlockId.TryGetValue(item.PageNumber, out var scoreOrders) &&
                             scoreOrders.TryGetValue(item.Block.SourceBlockId, out var scoreOrder)
                                 ? scoreOrder
@@ -872,121 +811,9 @@ public sealed class LongDocumentTranslationService : IDisposable
         return sb.ToString().Trim();
     }
 
-    private static readonly Regex FormulaHeuristicRegex = new(@"(\$[^$]+\$|\\([^)]+\\)|\\[[^\]]+\\]|\b\w+\s*=\s*[-+*/^()\w\u221A]+)", RegexOptions.Compiled);
-    private static readonly Regex NaturalWordRegex = new(@"\b[a-zA-Z]{4,}\b", RegexOptions.Compiled);
-
     private static Task<SourceDocument> BuildSourceDocumentBasicAsync(LongDocumentInputMode mode, string input, string? pageRange = null)
     {
-        if (!File.Exists(input))
-        {
-            throw new FileNotFoundException("Source file not found.", input);
-        }
-
-        if (mode is LongDocumentInputMode.PlainText or LongDocumentInputMode.Markdown)
-        {
-            return Task.FromResult(BuildSourceDocumentFromTextFile(input));
-        }
-
-        return BuildSourceDocumentFromPdfAsync(input, pageRange);
-    }
-
-    private static SourceDocument BuildSourceDocumentFromTextFile(string filePath)
-    {
-        var text = File.ReadAllText(filePath);
-        var blocks = SplitTextIntoBlocks(text, 1).ToList();
-
-        return new SourceDocument
-        {
-            DocumentId = Path.GetFileNameWithoutExtension(filePath),
-            Pages =
-            [
-                new SourceDocumentPage
-                {
-                    PageNumber = 1,
-                    Blocks = blocks
-                }
-            ]
-        };
-    }
-
-    private static IEnumerable<SourceDocumentBlock> SplitTextIntoBlocks(string text, int pageNumber)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            yield return new SourceDocumentBlock
-            {
-                BlockId = $"p{pageNumber}-b1",
-                BlockType = SourceBlockType.Paragraph,
-                Text = string.Empty
-            };
-
-            yield break;
-        }
-
-        var normalized = text.Replace("\r\n", "\n");
-        var rawBlocks = normalized
-            .Split("\n\n", StringSplitOptions.TrimEntries)
-            .Where(block => !string.IsNullOrWhiteSpace(block))
-            .ToList();
-
-        if (rawBlocks.Count == 0)
-        {
-            rawBlocks.Add(normalized.Trim());
-        }
-
-        for (var i = 0; i < rawBlocks.Count; i++)
-        {
-            var blockText = rawBlocks[i].Trim();
-            var blockType = GuessBlockType(blockText);
-
-            yield return new SourceDocumentBlock
-            {
-                BlockId = $"p{pageNumber}-b{i + 1}",
-                BlockType = blockType,
-                Text = blockText,
-                IsFormulaLike = blockType == SourceBlockType.Formula
-            };
-        }
-    }
-
-    private static Task<SourceDocument> BuildSourceDocumentFromPdfAsync(string input, string? pageRange = null)
-    {
-        return Task.Run(() =>
-        {
-            using var document = PdfPigDocument.Open(input);
-            var allPdfPages = document.GetPages().ToList();
-            var selectedPages = PageRangeParser.Parse(pageRange, allPdfPages.Count);
-            var pages = allPdfPages
-                .Where(page => selectedPages == null || selectedPages.Contains(page.Number))
-                .Select(page =>
-                {
-                    var blocks = ExtractLayoutBlocksFromPage(page).ToList();
-                    var scanned = string.IsNullOrWhiteSpace(page.Text) || blocks.Count == 0;
-                    return new SourceDocumentPage
-                    {
-                        PageNumber = page.Number,
-                        IsScanned = scanned,
-                        Blocks = scanned ? [] : blocks
-                    };
-                })
-                .ToList();
-
-            if (pages.Count == 0)
-            {
-                pages.Add(new SourceDocumentPage
-                {
-                    PageNumber = 1,
-                    IsScanned = true,
-                    Blocks = []
-                });
-            }
-
-            return new SourceDocument
-            {
-                DocumentId = Path.GetFileNameWithoutExtension(input),
-                Pages = pages
-            };
-        });
+        return LongDocumentSourceExtraction.BuildSourceDocumentBasicAsync(mode, input, pageRange);
     }
 
     /// <summary>
@@ -1030,17 +857,16 @@ public sealed class LongDocumentTranslationService : IDisposable
         return await Task.Run(async () =>
         {
             using var document = PdfPigDocument.Open(input);
-            var pdfPages = document.GetPages().ToList();
-            var selectedPages = PageRangeParser.Parse(pageRange, pdfPages.Count);
+            var totalPages = document.NumberOfPages;
+            var selectedPages = PageRangeParser.Parse(pageRange, totalPages);
             var pages = new List<SourceDocumentPage>();
 
-            for (var i = 0; i < pdfPages.Count; i++)
+            for (var pageNumber = 1; pageNumber <= totalPages; pageNumber++)
             {
-                var page = pdfPages[i];
-
-                // Skip pages not in the selected range
-                if (selectedPages != null && !selectedPages.Contains(page.Number))
+                if (selectedPages != null && !selectedPages.Contains(pageNumber))
                     continue;
+
+                var page = document.GetPage(pageNumber);
                 var pageText = page.Text;
                 var scanned = string.IsNullOrWhiteSpace(pageText);
 
@@ -1048,7 +874,7 @@ public sealed class LongDocumentTranslationService : IDisposable
                 {
                     pages.Add(new SourceDocumentPage
                     {
-                        PageNumber = page.Number,
+                        PageNumber = pageNumber,
                         IsScanned = true,
                         Blocks = []
                     });
@@ -1056,12 +882,12 @@ public sealed class LongDocumentTranslationService : IDisposable
                 }
 
                 // First extract heuristic blocks (always needed for text content)
-                var heuristicBlocks = ExtractLayoutBlocksFromPage(page).ToList();
+                var heuristicBlocks = LongDocumentSourceExtraction.ExtractLayoutBlocksFromPage(page).ToList();
                 if (heuristicBlocks.Count == 0)
                 {
                     pages.Add(new SourceDocumentPage
                     {
-                        PageNumber = page.Number,
+                        PageNumber = pageNumber,
                         IsScanned = true,
                         Blocks = []
                     });
@@ -1072,7 +898,7 @@ public sealed class LongDocumentTranslationService : IDisposable
                 try
                 {
                     var enhancedBlocks = await strategy.DetectAndExtractAsync(
-                        page, input, i, layoutDetection,
+                        page, input, pageNumber - 1, layoutDetection,
                         visionEndpoint, visionApiKey, visionModel, ct).ConfigureAwait(false);
 
                     if (enhancedBlocks.Count > 0)
@@ -1081,7 +907,7 @@ public sealed class LongDocumentTranslationService : IDisposable
                         // (set by LayoutDetectionStrategy.ExtractBlocksByMlRegions → GroupWordsIntoBlocks).
                         pages.Add(new SourceDocumentPage
                         {
-                            PageNumber = page.Number,
+                            PageNumber = pageNumber,
                             IsScanned = false,
                             Blocks = enhancedBlocks.Select(eb => eb.Block).ToList()
                         });
@@ -1090,13 +916,13 @@ public sealed class LongDocumentTranslationService : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[LongDoc] ML detection failed for page {page.Number}: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[LongDoc] ML detection failed for page {pageNumber}: {ex.Message}");
                 }
 
                 // Fallback: use heuristic blocks
                 pages.Add(new SourceDocumentPage
                 {
-                    PageNumber = page.Number,
+                    PageNumber = pageNumber,
                     IsScanned = false,
                     Blocks = heuristicBlocks
                 });
@@ -1226,7 +1052,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             var regionType = InferRegionType(layoutProfile, left, right, top, bottom, blockText);
             var type = regionType == LayoutRegionType.TableLike
                 ? SourceBlockType.TableCell
-                : GuessBlockType(blockText);
+                : LongDocumentSourceExtraction.GuessBlockType(blockText);
             var regionTag = regionType switch
             {
                 LayoutRegionType.Header => "header",
@@ -1415,7 +1241,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             if (string.IsNullOrWhiteSpace(blockText))
                 continue;
 
-            var type = GuessBlockType(blockText);
+            var type = LongDocumentSourceExtraction.GuessBlockType(blockText);
 
             blockIndex++;
             result.Add(new SourceDocumentBlock
@@ -2779,107 +2605,6 @@ public sealed class LongDocumentTranslationService : IDisposable
             Right = Math.Max(Right, segment.Right);
             LastBottom = segment.Bottom;
         }
-    }
-
-    private static double CalculateReadingOrderScore(int orderInPage, int pageBlockCount)
-    {
-        if (pageBlockCount <= 1)
-        {
-            return 1d;
-        }
-
-        var denominator = Math.Max(1, pageBlockCount - 1);
-        var normalized = 1d - Math.Clamp(orderInPage / (double)denominator, 0d, 1d);
-        return Math.Round(normalized, 4, MidpointRounding.AwayFromZero);
-    }
-
-    private static (LayoutRegionType Type, double Confidence, LayoutRegionSource Source) InferRegionInfoFromBlockId(string sourceBlockId)
-    {
-        if (sourceBlockId.Contains("-header-", StringComparison.OrdinalIgnoreCase))
-        {
-            return (LayoutRegionType.Header, 0.92d, LayoutRegionSource.Heuristic);
-        }
-
-        if (sourceBlockId.Contains("-footer-", StringComparison.OrdinalIgnoreCase))
-        {
-            return (LayoutRegionType.Footer, 0.92d, LayoutRegionSource.Heuristic);
-        }
-
-        if (sourceBlockId.Contains("-left-", StringComparison.OrdinalIgnoreCase))
-        {
-            return (LayoutRegionType.LeftColumn, 0.80d, LayoutRegionSource.Heuristic);
-        }
-
-        if (sourceBlockId.Contains("-right-", StringComparison.OrdinalIgnoreCase))
-        {
-            return (LayoutRegionType.RightColumn, 0.80d, LayoutRegionSource.Heuristic);
-        }
-
-        if (sourceBlockId.Contains("-table-", StringComparison.OrdinalIgnoreCase))
-        {
-            return (LayoutRegionType.TableLike, 0.88d, LayoutRegionSource.Heuristic);
-        }
-
-        // ML-detected region types (from ONNX or Vision LLM)
-        if (sourceBlockId.Contains("-figure-", StringComparison.OrdinalIgnoreCase))
-        {
-            return (LayoutRegionType.Figure, 0.90d, LayoutRegionSource.OnnxModel);
-        }
-
-        if (sourceBlockId.Contains("-formula-", StringComparison.OrdinalIgnoreCase))
-        {
-            return (LayoutRegionType.Formula, 0.90d, LayoutRegionSource.OnnxModel);
-        }
-
-        if (sourceBlockId.Contains("-caption-", StringComparison.OrdinalIgnoreCase))
-        {
-            return (LayoutRegionType.Caption, 0.85d, LayoutRegionSource.OnnxModel);
-        }
-
-        if (sourceBlockId.Contains("-title-", StringComparison.OrdinalIgnoreCase))
-        {
-            return (LayoutRegionType.Title, 0.88d, LayoutRegionSource.OnnxModel);
-        }
-
-        if (sourceBlockId.Contains("-body-", StringComparison.OrdinalIgnoreCase))
-        {
-            return (LayoutRegionType.Body, 0.72d, LayoutRegionSource.BlockIdFallback);
-        }
-
-        return (LayoutRegionType.Unknown, 0.35d, LayoutRegionSource.Unknown);
-    }
-
-    internal static SourceBlockType GuessBlockType(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return SourceBlockType.Unknown;
-        }
-
-        var trimmed = text.Trim();
-        var formulaMatch = FormulaHeuristicRegex.Match(trimmed);
-        if (formulaMatch.Success)
-        {
-            var naturalWordCount = NaturalWordRegex.Matches(trimmed).Count;
-            var proseDominantInlineEquation =
-                trimmed.Length > 80 &&
-                naturalWordCount >= 6 &&
-                formulaMatch.Length < trimmed.Length * 0.45;
-
-            if (proseDominantInlineEquation)
-            {
-                return SourceBlockType.Paragraph;
-            }
-
-            return SourceBlockType.Formula;
-        }
-
-        if (trimmed.Length < 80 && trimmed.All(c => !char.IsLetter(c) || char.IsUpper(c)))
-        {
-            return SourceBlockType.Heading;
-        }
-
-        return SourceBlockType.Paragraph;
     }
 
     private static IReadOnlyDictionary<int, BackfillPageMetrics>? MergePageBackfillMetrics(

@@ -92,6 +92,40 @@ jobs:
             --output ./publish-msix/arm64 `
             -p:PublishTrimmed=true
 
+      - name: Publish LongDoc Worker (arm64)
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj `
+            --configuration Release `
+            --runtime win-arm64 `
+            --no-self-contained `
+            --output ./publish-msix/arm64/workers/longdoc `
+            -p:Platform=arm64 `
+            -p:PublishTrimmed=false `
+            -p:WindowsAppSDKSelfContained=false
+
+      - name: Publish LocalAi Worker (arm64)
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj `
+            --configuration Release `
+            --runtime win-arm64 `
+            --no-self-contained `
+            --output ./publish-msix/arm64/workers/localai `
+            -p:Platform=arm64 `
+            -p:PublishTrimmed=false `
+            -p:WindowsAppSDKSelfContained=false
+
+      - name: Bundle .NET 8 Runtime (arm64)
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          ./scripts/Extract-DotnetRuntime.ps1 `
+            -Rid win-arm64 `
+            -OutputDir ./publish-msix/arm64/dotnet
+
       - name: Package MSIX (shared script)
         shell: pwsh
         run: |

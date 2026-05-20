@@ -82,6 +82,7 @@
                             Spacing="12">
                         <Button x:Name="BackButton"
                                 AutomationProperties.AutomationId="BackButton"
+                                AutomationProperties.Name="Back"
                                 Click="OnBackClick"
                                 Style="{StaticResource SettingsAccentButtonStyle}"
                                 Padding="8">
@@ -109,8 +110,10 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Button Click="OnSettingsTabClick"
+                                    Loaded="OnSettingsTabButtonLoaded"
                                     Tag="{Binding Id}"
                                     AutomationProperties.AutomationId="{Binding AutomationId}"
+                                    AutomationProperties.Name="{Binding Label}"
                                     Style="{StaticResource SettingsTabButtonStyle}"
                                     Width="86"
                                     Height="76"

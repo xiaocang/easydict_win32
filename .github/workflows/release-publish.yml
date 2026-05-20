@@ -147,6 +147,34 @@ jobs:
             --output ./publish/${{ matrix.platform }} `
             -p:PublishTrimmed=true
 
+      # Publish LongDoc worker (out-of-process PDF + ONNX layout detection).
+      # Resolved by host via AppContext.BaseDirectory + "workers/longdoc/Easydict.Workers.LongDoc.exe".
+      # No trimming — MuPDF.NET and ONNX Runtime use reflection that breaks under IL trim.
+      # Portable artifacts ship outside the MSIX framework-dependency umbrella, so
+      # workers self-contain both .NET and WindowsAppSDK. The MSIX path below strips
+      # this back to a shared .NET 8 runtime via Extract-DotnetRuntime.ps1.
+      - name: Publish LongDoc Worker
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --output ./publish/${{ matrix.platform }}/workers/longdoc `
+            -p:Platform=${{ matrix.platform }} `
+            -p:PublishTrimmed=false
+
+      - name: Publish LocalAi Worker
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --output ./publish/${{ matrix.platform }}/workers/localai `
+            -p:Platform=${{ matrix.platform }} `
+            -p:PublishTrimmed=false
+
       # Publish again for MSIX without bundled Windows App SDK DLLs.
       # MSIX declares a framework package dependency (Microsoft.WindowsAppRuntime)
       # so bundled DLLs are redundant and cause launch failures.
@@ -186,6 +214,42 @@ jobs:
             --output ./publish-msix/${{ matrix.platform }} `
             -p:PublishTrimmed=true
 
+      # Publish LongDoc worker into MSIX output. The publish dir becomes a subtree under
+      # the package root (workers/longdoc/), and runFullTrust + same-package identity
+      # let the host CreateProcess this exe without a separate manifest declaration.
+      # WindowsAppSDKSelfContained=false because the MSIX declares the framework dep already.
+      - name: Publish LongDoc Worker (MSIX)
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --no-self-contained `
+            --output ./publish-msix/${{ matrix.platform }}/workers/longdoc `
+            -p:Platform=${{ matrix.platform }} `
+            -p:PublishTrimmed=false `
+            -p:WindowsAppSDKSelfContained=false
+
+      - name: Publish LocalAi Worker (MSIX)
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --no-self-contained `
+            --output ./publish-msix/${{ matrix.platform }}/workers/localai `
+            -p:Platform=${{ matrix.platform }} `
+            -p:PublishTrimmed=false `
+            -p:WindowsAppSDKSelfContained=false
+
+      - name: Bundle .NET 8 Runtime (MSIX)
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          ./scripts/Extract-DotnetRuntime.ps1 `
+            -Rid win-${{ matrix.platform }} `
+            -OutputDir ./publish-msix/${{ matrix.platform }}/dotnet
+
       - name: Package MSIX (shared script)
         shell: pwsh
         run: |
@@ -204,6 +268,29 @@ jobs:
           dotnet run --project tools/MsixValidate -- `
             "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix" `
             --allow-unsigned
+
+      # Windows App Certification Kit — required for Microsoft Store submission.
+      # Both x64 and arm64 hard-fail on WACK violations: cross-arch validation on the
+      # x64 runner still does the static checks (manifest, capabilities, files, banned
+      # APIs); launch-tests are auto-skipped by appcert when it sees -arch arm64, so
+      # the arm64 run isn't expected to fail purely on cross-arch grounds.
+      - name: Run Windows App Certification Kit
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          ./scripts/Run-Wack.ps1 `
+            -MsixPath "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix" `
+            -Arch "${{ matrix.platform }}" `
+            -ReportPath "msix/wack-report-${{ matrix.platform }}.xml"
+
+      # Always upload the report so we can inspect failures without re-running CI.
+      - name: Upload WACK report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wack-report-${{ matrix.platform }}
+          path: dotnet/msix/wack-report-${{ matrix.platform }}.xml
+          if-no-files-found: warn
 
       # Also create ZIP archive for portable distribution
       - name: Create ZIP archive

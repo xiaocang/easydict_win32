@@ -49,6 +49,8 @@
                            VerticalAlignment="Center"/>
                 <StackPanel VerticalAlignment="Center">
                     <Button x:Name="ModeSelectorButton"
+                            AutomationProperties.AutomationId="ModeMenuButton"
+                            AutomationProperties.Name="Mode: Translation"
                             Background="Transparent"
                             BorderThickness="0"
                             CornerRadius="{ThemeResource EasydictControlCornerRadius}"
@@ -62,10 +64,12 @@
                                                      Text="🌐  Quick Translation"
                                                      GroupName="AppMode"
                                                      IsChecked="True"
+                                                     Tapped="OnModeMenuItemTapped"
                                                      Click="OnModeMenuItemClick"/>
                                 <RadioMenuFlyoutItem x:Name="ModeLongDocItem"
                                                      Text="📄  Long Document"
                                                      GroupName="AppMode"
+                                                     Tapped="OnModeMenuItemTapped"
                                                      Click="OnModeMenuItemClick"/>
                             </MenuFlyout>
                         </Button.Flyout>
@@ -1018,6 +1022,30 @@
                 </Expander>
             </Grid>
         </ScrollViewer>
+
+        <Grid x:Name="ModeSwitchLoadingOverlay"
+              Grid.Row="1"
+              Canvas.ZIndex="10"
+              Background="Transparent"
+              IsHitTestVisible="True"
+              Opacity="0"
+              Visibility="Collapsed">
+            <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                    Opacity="0.86"/>
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="8">
+                <ProgressRing x:Name="ModeSwitchLoadingRing"
+                              Width="32"
+                              Height="32"
+                              IsActive="False"/>
+                <TextBlock x:Name="ModeSwitchLoadingText"
+                           Text="Loading..."
+                           FontSize="12"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
 
         <Popup x:Name="SuggestionPopup"
                IsLightDismissEnabled="True">

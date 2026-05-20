@@ -38,7 +38,7 @@ public interface IOcrService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>OCR result with recognized text and line information.</returns>
     Task<OcrResult> RecognizeAsync(
-        byte[] pixelData,
+        ReadOnlyMemory<byte> pixelData,
         int pixelWidth,
         int pixelHeight,
         string? preferredLanguageTag = null,
@@ -66,7 +66,7 @@ public static class OcrServiceExtensions
         CancellationToken cancellationToken = default)
     {
         return service.RecognizeAsync(
-            capture.PixelData,
+            capture.PixelMemory,
             capture.PixelWidth,
             capture.PixelHeight,
             preferredLanguageTag,

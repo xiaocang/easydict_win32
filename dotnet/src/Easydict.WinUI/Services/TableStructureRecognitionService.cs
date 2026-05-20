@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Easydict.WinUI.Services.Memory;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -197,17 +198,17 @@ public sealed class TableStructureRecognitionService : IDisposable
         }
 
         // Preprocess: crop → RGB float tensor at (newH, newW) after aspect-preserving resize.
-        var (inputTensor, newW, newH) = PreprocessCrop(
+        using var input = PreprocessCropPooled(
             pageBgra8, pageWidth, pageHeight,
             (int)Math.Round(clampedX), (int)Math.Round(clampedY),
             (int)Math.Round(clampedW), (int)Math.Round(clampedH));
 
-        Debug.WriteLine($"[TATR] Recognize: crop=({clampedX:F0},{clampedY:F0},{clampedW:F0}x{clampedH:F0}) → tensor={newH}x{newW}, threshold={confidenceThreshold}");
+        Debug.WriteLine($"[TATR] Recognize: crop=({clampedX:F0},{clampedY:F0},{clampedW:F0}x{clampedH:F0}) → tensor={input.NewH}x{input.NewW}, threshold={confidenceThreshold}");
 
         // Run inference. Input name discovered at init time (stored in _inputName).
         var inputs = new List<NamedOnnxValue>
         {
-            NamedOnnxValue.CreateFromTensor(_inputName ?? "pixel_values", inputTensor)
+            NamedOnnxValue.CreateFromTensor(_inputName ?? "pixel_values", input.Tensor)
         };
 
         List<TableSubDetection> parsed;
@@ -300,6 +301,24 @@ public sealed class TableStructureRecognitionService : IDisposable
         byte[] pageBgra, int pageWidth, int pageHeight,
         int cropX, int cropY, int cropW, int cropH)
     {
+        var (scale, newW, newH) = CalculateCropResize(cropW, cropH);
+        var tensor = new DenseTensor<float>([1, 3, newH, newW]);
+        FillPreprocessedCrop(tensor, pageBgra, pageWidth, pageHeight, cropX, cropY, cropW, cropH, scale, newW, newH);
+        return (tensor, newW, newH);
+    }
+
+    private static PooledTableTensor PreprocessCropPooled(
+        byte[] pageBgra, int pageWidth, int pageHeight,
+        int cropX, int cropY, int cropW, int cropH)
+    {
+        var (scale, newW, newH) = CalculateCropResize(cropW, cropH);
+        var owner = PooledDenseTensor<float>.Rent(1, 3, newH, newW);
+        FillPreprocessedCrop(owner.Tensor, pageBgra, pageWidth, pageHeight, cropX, cropY, cropW, cropH, scale, newW, newH);
+        return new PooledTableTensor(owner, newW, newH);
+    }
+
+    private static (double Scale, int NewW, int NewH) CalculateCropResize(int cropW, int cropH)
+    {
         // Aspect-preserving resize: scale so the SHORT side hits ShortestEdge,
         // then if the LONG side overshoots LongestEdge, scale down.
         var shortSide = Math.Min(cropW, cropH);
@@ -310,8 +329,22 @@ public sealed class TableStructureRecognitionService : IDisposable
         var newW = Math.Max(1, (int)Math.Round(cropW * scale));
         var newH = Math.Max(1, (int)Math.Round(cropH * scale));
 
-        var tensor = new DenseTensor<float>([1, 3, newH, newW]);
+        return (scale, newW, newH);
+    }
 
+    private static void FillPreprocessedCrop(
+        DenseTensor<float> tensor,
+        byte[] pageBgra,
+        int pageWidth,
+        int pageHeight,
+        int cropX,
+        int cropY,
+        int cropW,
+        int cropH,
+        double scale,
+        int newW,
+        int newH)
+    {
         // Direct span access is ~3-5x faster than the multidim indexer on this hot path.
         var span = tensor.Buffer.Span;
         var channelStride = newH * newW;
@@ -355,8 +388,24 @@ public sealed class TableStructureRecognitionService : IDisposable
                 span[bBase + dst] = (b - bMean) * bInvStd;
             }
         }
+    }
 
-        return (tensor, newW, newH);
+    private sealed class PooledTableTensor : IDisposable
+    {
+        private readonly PooledDenseTensor<float> _owner;
+
+        public PooledTableTensor(PooledDenseTensor<float> owner, int newW, int newH)
+        {
+            _owner = owner;
+            NewW = newW;
+            NewH = newH;
+        }
+
+        public DenseTensor<float> Tensor => _owner.Tensor;
+        public int NewW { get; }
+        public int NewH { get; }
+
+        public void Dispose() => _owner.Dispose();
     }
 
     /// <summary>

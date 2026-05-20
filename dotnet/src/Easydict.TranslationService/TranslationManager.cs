@@ -35,11 +35,12 @@ public class TranslationManagerOptions
 /// </summary>
 public sealed class TranslationManager : IDisposable
 {
+    private const long TranslationCacheLimitKb = 8 * 1024;
+    private const long PhoneticCacheLimitKb = 512;
+
     private readonly Dictionary<string, ITranslationService> _services = new();
     private readonly IMemoryCache _cache;
-    private readonly MemoryCacheEntryOptions _cacheOptions;
     private readonly IMemoryCache _phoneticCache;
-    private readonly MemoryCacheEntryOptions _phoneticCacheOptions;
     private readonly HttpClient _httpClient;
     private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<Phonetic>?>>> _phoneticFlightTracker = new();
 
@@ -79,23 +80,13 @@ public sealed class TranslationManager : IDisposable
 
         _cache = new MemoryCache(new MemoryCacheOptions
         {
-            SizeLimit = 1000 // Max 1000 cached translations
+            SizeLimit = TranslationCacheLimitKb
         });
-
-        _cacheOptions = new MemoryCacheEntryOptions()
-            .SetSize(1)
-            .SetSlidingExpiration(TimeSpan.FromHours(1))
-            .SetAbsoluteExpiration(TimeSpan.FromDays(1));
 
         _phoneticCache = new MemoryCache(new MemoryCacheOptions
         {
-            SizeLimit = 500 // Max 500 cached phonetic lookups
+            SizeLimit = PhoneticCacheLimitKb
         });
-
-        _phoneticCacheOptions = new MemoryCacheEntryOptions()
-            .SetSize(1)
-            .SetSlidingExpiration(TimeSpan.FromHours(2))
-            .SetAbsoluteExpiration(TimeSpan.FromDays(7));
 
         // Register default services
         RegisterService(new GoogleTranslateService(_httpClient));
@@ -231,7 +222,7 @@ public sealed class TranslationManager : IDisposable
         if (!request.BypassCache)
         {
             var cacheKey = GetCacheKey(request, serviceId);
-            _cache.Set(cacheKey, result, _cacheOptions);
+            _cache.Set(cacheKey, result, CreateTranslationCacheOptions(cacheKey, request, result));
         }
 
         return result;
@@ -291,7 +282,7 @@ public sealed class TranslationManager : IDisposable
 
             if (phonetics != null && phonetics.Count > 0)
             {
-                _phoneticCache.Set(phoneticCacheKey, phonetics, _phoneticCacheOptions);
+                _phoneticCache.Set(phoneticCacheKey, phonetics, CreatePhoneticCacheOptions(phoneticCacheKey, phonetics));
                 return MergePhoneticsIntoResult(result, phonetics);
             }
         }
@@ -358,6 +349,115 @@ public sealed class TranslationManager : IDisposable
     private static string GetPhoneticCacheKey(string englishWord)
     {
         return $"phonetic:{englishWord.ToLowerInvariant().Trim()}";
+    }
+
+    private static MemoryCacheEntryOptions CreateTranslationCacheOptions(
+        string cacheKey,
+        TranslationRequest request,
+        TranslationResult result)
+    {
+        var bytes = EstimateUtf16Bytes(cacheKey)
+            + EstimateUtf16Bytes(request.Text)
+            + EstimateUtf16Bytes(result.OriginalText)
+            + EstimateUtf16Bytes(result.TranslatedText)
+            + EstimateUtf16Bytes(result.ServiceName)
+            + EstimateUtf16Bytes(result.InfoMessage)
+            + EstimateUtf16Bytes(result.RawHtml);
+
+        bytes += EstimateStringsUtf16Bytes(result.Alternatives);
+        if (result.WordResult is not null)
+        {
+            bytes += EstimatePhoneticsUtf16Bytes(result.WordResult.Phonetics);
+            bytes += EstimateDefinitionsUtf16Bytes(result.WordResult.Definitions);
+            bytes += EstimateStringsUtf16Bytes(result.WordResult.Examples);
+            bytes += EstimateWordFormsUtf16Bytes(result.WordResult.WordForms);
+            bytes += EstimateSynonymsUtf16Bytes(result.WordResult.Synonyms);
+        }
+
+        return new MemoryCacheEntryOptions()
+            .SetSize(ToCacheKilobytes(bytes))
+            .SetSlidingExpiration(TimeSpan.FromHours(1))
+            .SetAbsoluteExpiration(TimeSpan.FromDays(1));
+    }
+
+    private static MemoryCacheEntryOptions CreatePhoneticCacheOptions(
+        string cacheKey,
+        IReadOnlyList<Phonetic> phonetics)
+    {
+        var bytes = EstimateUtf16Bytes(cacheKey) + EstimatePhoneticsUtf16Bytes(phonetics);
+        return new MemoryCacheEntryOptions()
+            .SetSize(ToCacheKilobytes(bytes))
+            .SetSlidingExpiration(TimeSpan.FromHours(2))
+            .SetAbsoluteExpiration(TimeSpan.FromDays(7));
+    }
+
+    private static long ToCacheKilobytes(long bytes)
+    {
+        return Math.Max(1, (bytes + 1023) / 1024);
+    }
+
+    private static long EstimateUtf16Bytes(string? value)
+    {
+        return string.IsNullOrEmpty(value) ? 0 : value.Length * sizeof(char);
+    }
+
+    private static long EstimateStringsUtf16Bytes(IEnumerable<string>? values)
+    {
+        return values?.Sum(EstimateUtf16Bytes) ?? 0;
+    }
+
+    private static long EstimatePhoneticsUtf16Bytes(IEnumerable<Phonetic>? values)
+    {
+        if (values is null) return 0;
+        long bytes = 0;
+        foreach (var value in values)
+        {
+            bytes += EstimateUtf16Bytes(value.Text)
+                + EstimateUtf16Bytes(value.AudioUrl)
+                + EstimateUtf16Bytes(value.Accent);
+        }
+
+        return bytes;
+    }
+
+    private static long EstimateDefinitionsUtf16Bytes(IEnumerable<Definition>? values)
+    {
+        if (values is null) return 0;
+        long bytes = 0;
+        foreach (var value in values)
+        {
+            bytes += EstimateUtf16Bytes(value.PartOfSpeech)
+                + EstimateStringsUtf16Bytes(value.Meanings);
+        }
+
+        return bytes;
+    }
+
+    private static long EstimateWordFormsUtf16Bytes(IEnumerable<WordForm>? values)
+    {
+        if (values is null) return 0;
+        long bytes = 0;
+        foreach (var value in values)
+        {
+            bytes += EstimateUtf16Bytes(value.Name)
+                + EstimateUtf16Bytes(value.Value);
+        }
+
+        return bytes;
+    }
+
+    private static long EstimateSynonymsUtf16Bytes(IEnumerable<Synonym>? values)
+    {
+        if (values is null) return 0;
+        long bytes = 0;
+        foreach (var value in values)
+        {
+            bytes += EstimateUtf16Bytes(value.PartOfSpeech)
+                + EstimateUtf16Bytes(value.Meaning)
+                + EstimateStringsUtf16Bytes(value.Words);
+        }
+
+        return bytes;
     }
 
     /// <summary>

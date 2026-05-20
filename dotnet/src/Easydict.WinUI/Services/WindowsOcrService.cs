@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices.WindowsRuntime;
 using Easydict.WinUI.Models;
+using Easydict.WinUI.Services.Memory;
 using Windows.Graphics.Imaging;
 using WinOcr = Windows.Media.Ocr;
 
@@ -24,13 +24,12 @@ public sealed class WindowsOcrService : IOcrService
 
     /// <inheritdoc />
     public async Task<OcrResult> RecognizeAsync(
-        byte[] pixelData,
+        ReadOnlyMemory<byte> pixelData,
         int pixelWidth,
         int pixelHeight,
         string? preferredLanguageTag = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(pixelData);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
 
@@ -64,18 +63,26 @@ public sealed class WindowsOcrService : IOcrService
             .ToList();
     }
 
-    private static SoftwareBitmap CreateSoftwareBitmap(byte[] pixelData, int width, int height)
+    private static SoftwareBitmap CreateSoftwareBitmap(ReadOnlyMemory<byte> pixelData, int width, int height)
     {
         var bitmap = new SoftwareBitmap(BitmapPixelFormat.Bgra8, width, height, BitmapAlphaMode.Premultiplied);
+        byte[]? temporaryArray = null;
         try
         {
-            bitmap.CopyFromBuffer(pixelData.AsBuffer());
+            bitmap.CopyFromBuffer(PixelMemory.AsBufferForInterop(pixelData, out temporaryArray));
             return bitmap;
         }
         catch
         {
             bitmap.Dispose();
             throw;
+        }
+        finally
+        {
+            if (temporaryArray is not null)
+            {
+                Array.Clear(temporaryArray);
+            }
         }
     }
 

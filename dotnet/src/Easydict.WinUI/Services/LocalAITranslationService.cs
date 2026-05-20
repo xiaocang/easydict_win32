@@ -19,35 +19,90 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
     internal const string LegacyOpenVinoServiceId = OpenVINOTranslationService.ServiceIdValue;
     internal const string DisplayNameValue = "Windows Local AI";
 
-    private readonly PhiSilicaTranslationService _phiSilica;
-    private readonly IStreamTranslationService _foundryLocal;
-    private readonly ILocalModelProvider? _foundryLocalModelProvider;
-    private readonly OpenVINOTranslationService _openVino;
+    private readonly Lazy<PhiSilicaTranslationService> _phiSilicaLazy;
+    private readonly Lazy<IStreamTranslationService> _foundryLocalLazy;
+    private readonly Lazy<OpenVINOTranslationService> _openVinoLazy;
+
+    // 0 = not subscribed, 1 = subscribed. Interlocked guards concurrent first access.
+    private int _phiSilicaSubscribed;
+    private int _foundryLocalSubscribed;
+    private int _openVinoSubscribed;
+
     private LocalAIProviderMode _providerMode = LocalAIProviderMode.Auto;
     private bool _disposed;
 
     public LocalAITranslationService(
+        Lazy<PhiSilicaTranslationService> phiSilica,
+        Lazy<IStreamTranslationService> foundryLocal,
+        Lazy<OpenVINOTranslationService> openVino)
+    {
+        _phiSilicaLazy = phiSilica ?? throw new ArgumentNullException(nameof(phiSilica));
+        _foundryLocalLazy = foundryLocal ?? throw new ArgumentNullException(nameof(foundryLocal));
+        _openVinoLazy = openVino ?? throw new ArgumentNullException(nameof(openVino));
+        // Inner provider StatusChanged subscriptions are deferred to first
+        // materialization (see PhiSilica/FoundryLocal/OpenVino properties).
+        // Constructing this wrapper at startup must not force the inner
+        // providers to materialize — the user may never select local AI.
+    }
+
+    // Backward-compat ctor for tests that construct with concrete instances.
+    public LocalAITranslationService(
         PhiSilicaTranslationService phiSilica,
         IStreamTranslationService foundryLocal,
         OpenVINOTranslationService openVino)
+        : this(
+            new Lazy<PhiSilicaTranslationService>(() => phiSilica ?? throw new ArgumentNullException(nameof(phiSilica))),
+            new Lazy<IStreamTranslationService>(() => foundryLocal ?? throw new ArgumentNullException(nameof(foundryLocal))),
+            new Lazy<OpenVINOTranslationService>(() => openVino ?? throw new ArgumentNullException(nameof(openVino))))
     {
-        _phiSilica = phiSilica ?? throw new ArgumentNullException(nameof(phiSilica));
-        _foundryLocal = foundryLocal ?? throw new ArgumentNullException(nameof(foundryLocal));
-        _foundryLocalModelProvider = foundryLocal as ILocalModelProvider;
-        _openVino = openVino ?? throw new ArgumentNullException(nameof(openVino));
-
-        // Named handlers (not inline lambdas) so Dispose can unhook them.
-        // The underlying provider singletons outlive this wrapper — without
-        // explicit unsubscription, recreating LocalAITranslationService (e.g.
-        // via TranslationManagerService.ReconfigureProxy) leaks the old
-        // instance and double-forwards StatusChanged.
-        _phiSilica.StatusChanged += OnInnerStatusChanged;
-        if (_foundryLocalModelProvider is not null)
-        {
-            _foundryLocalModelProvider.StatusChanged += OnInnerStatusChanged;
-        }
-        _openVino.StatusChanged += OnInnerStatusChanged;
     }
+
+    private PhiSilicaTranslationService PhiSilica
+    {
+        get
+        {
+            var svc = _phiSilicaLazy.Value;
+            if (Interlocked.CompareExchange(ref _phiSilicaSubscribed, 1, 0) == 0)
+            {
+                svc.StatusChanged += OnInnerStatusChanged;
+            }
+            return svc;
+        }
+    }
+
+    private IStreamTranslationService FoundryLocal
+    {
+        get
+        {
+            var svc = _foundryLocalLazy.Value;
+            if (Interlocked.CompareExchange(ref _foundryLocalSubscribed, 1, 0) == 0
+                && svc is ILocalModelProvider provider)
+            {
+                provider.StatusChanged += OnInnerStatusChanged;
+            }
+            return svc;
+        }
+    }
+
+    private ILocalModelProvider? FoundryLocalModelProvider => FoundryLocal as ILocalModelProvider;
+
+    private OpenVINOTranslationService OpenVino
+    {
+        get
+        {
+            var svc = _openVinoLazy.Value;
+            if (Interlocked.CompareExchange(ref _openVinoSubscribed, 1, 0) == 0)
+            {
+                svc.StatusChanged += OnInnerStatusChanged;
+            }
+            return svc;
+        }
+    }
+
+    // Test hook — true if a sub-provider has been materialized via these accessors.
+    internal bool IsPhiSilicaMaterialized => _phiSilicaLazy.IsValueCreated;
+    internal bool IsFoundryLocalMaterialized => _foundryLocalLazy.IsValueCreated;
+    internal bool IsOpenVinoMaterialized => _openVinoLazy.IsValueCreated;
 
     public string ServiceId => ServiceIdValue;
 
@@ -75,12 +130,12 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
     {
         return _providerMode switch
         {
-            LocalAIProviderMode.WindowsAI => _phiSilica.SupportsLanguagePair(from, to),
-            LocalAIProviderMode.FoundryLocal => _foundryLocal.SupportsLanguagePair(from, to),
-            LocalAIProviderMode.OpenVINO => _openVino.SupportsLanguagePair(from, to),
-            _ => _phiSilica.SupportsLanguagePair(from, to)
-                || _foundryLocal.SupportsLanguagePair(from, to)
-                || _openVino.SupportsLanguagePair(from, to),
+            LocalAIProviderMode.WindowsAI => PhiSilica.SupportsLanguagePair(from, to),
+            LocalAIProviderMode.FoundryLocal => FoundryLocal.SupportsLanguagePair(from, to),
+            LocalAIProviderMode.OpenVINO => OpenVino.SupportsLanguagePair(from, to),
+            _ => PhiSilica.SupportsLanguagePair(from, to)
+                || FoundryLocal.SupportsLanguagePair(from, to)
+                || OpenVino.SupportsLanguagePair(from, to),
         };
     }
 
@@ -229,9 +284,9 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
     {
         return _providerMode switch
         {
-            LocalAIProviderMode.WindowsAI => _phiSilica.GetStatus(),
+            LocalAIProviderMode.WindowsAI => PhiSilica.GetStatus(),
             LocalAIProviderMode.FoundryLocal => GetFoundryLocalStatus(),
-            LocalAIProviderMode.OpenVINO => _openVino.GetStatus(),
+            LocalAIProviderMode.OpenVINO => OpenVino.GetStatus(),
             _ => GetAutoStatus(),
         };
     }
@@ -240,10 +295,10 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
     {
         return _providerMode switch
         {
-            LocalAIProviderMode.FoundryLocal when _foundryLocalModelProvider is not null =>
-                _foundryLocalModelProvider.PrepareAsync(cancellationToken),
-            LocalAIProviderMode.OpenVINO => _openVino.PrepareAsync(cancellationToken),
-            _ => _phiSilica.PrepareAsync(cancellationToken),
+            LocalAIProviderMode.FoundryLocal when FoundryLocalModelProvider is not null =>
+                FoundryLocalModelProvider.PrepareAsync(cancellationToken),
+            LocalAIProviderMode.OpenVINO => OpenVino.PrepareAsync(cancellationToken),
+            _ => PhiSilica.PrepareAsync(cancellationToken),
         };
     }
 
@@ -256,12 +311,12 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
     {
         if (_providerMode != LocalAIProviderMode.Auto)
         {
-            var explicitService = _providerMode switch
+            IStreamTranslationService explicitService = _providerMode switch
             {
-                LocalAIProviderMode.WindowsAI => _phiSilica,
-                LocalAIProviderMode.FoundryLocal => _foundryLocal,
-                LocalAIProviderMode.OpenVINO => _openVino,
-                _ => _openVino,
+                LocalAIProviderMode.WindowsAI => PhiSilica,
+                LocalAIProviderMode.FoundryLocal => FoundryLocal,
+                LocalAIProviderMode.OpenVINO => OpenVino,
+                _ => OpenVino,
             };
 
             if (explicitService.SupportsLanguagePair(from, to))
@@ -273,17 +328,17 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
 
         if (ShouldTryPhiSilica(from, to))
         {
-            yield return _phiSilica;
+            yield return PhiSilica;
         }
 
         if (ShouldTryFoundryLocal(from, to))
         {
-            yield return _foundryLocal;
+            yield return FoundryLocal;
         }
 
-        if (_openVino.SupportsLanguagePair(from, to))
+        if (OpenVino.SupportsLanguagePair(from, to))
         {
-            yield return _openVino;
+            yield return OpenVino;
         }
     }
 
@@ -302,12 +357,12 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
 
     private bool ShouldTryPhiSilica(Language from, Language to)
     {
-        if (!_phiSilica.SupportsLanguagePair(from, to))
+        if (!PhiSilica.SupportsLanguagePair(from, to))
         {
             return false;
         }
 
-        var phiSilicaStatus = _phiSilica.GetStatus();
+        var phiSilicaStatus = PhiSilica.GetStatus();
         if (phiSilicaStatus.State is LocalModelState.Ready
             or LocalModelState.NeedsPreparation
             or LocalModelState.Preparing)
@@ -315,12 +370,12 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
             return true;
         }
 
-        return !ShouldTryFoundryLocal(from, to) && !_openVino.SupportsLanguagePair(from, to);
+        return !ShouldTryFoundryLocal(from, to) && !OpenVino.SupportsLanguagePair(from, to);
     }
 
     private bool ShouldTryFoundryLocal(Language from, Language to)
     {
-        if (!_foundryLocal.IsConfigured || !_foundryLocal.SupportsLanguagePair(from, to))
+        if (!FoundryLocal.IsConfigured || !FoundryLocal.SupportsLanguagePair(from, to))
         {
             return false;
         }
@@ -352,7 +407,7 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
 
     private LocalModelStatus GetAutoStatus()
     {
-        var phiSilicaStatus = _phiSilica.GetStatus();
+        var phiSilicaStatus = PhiSilica.GetStatus();
         if (phiSilicaStatus.State == LocalModelState.Ready)
         {
             return phiSilicaStatus;
@@ -364,7 +419,7 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
             return foundryLocalStatus;
         }
 
-        var openVinoStatus = _openVino.GetStatus();
+        var openVinoStatus = OpenVino.GetStatus();
         return openVinoStatus.State == LocalModelState.Ready
             ? openVinoStatus
             : phiSilicaStatus;
@@ -372,7 +427,7 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
 
     private LocalModelStatus GetFoundryLocalStatus()
     {
-        return _foundryLocalModelProvider?.GetStatus()
+        return FoundryLocalModelProvider?.GetStatus()
             ?? new LocalModelStatus(LocalModelState.Ready, FoundryLocalResources.StatusKeys.Ready);
     }
 
@@ -386,12 +441,23 @@ public sealed class LocalAITranslationService : IStreamTranslationService, IGram
         if (_disposed) return;
         _disposed = true;
 
-        _phiSilica.StatusChanged -= OnInnerStatusChanged;
-        if (_foundryLocalModelProvider is not null)
+        // Only unsubscribe if we actually subscribed. The IsValueCreated check is
+        // a belt-and-suspenders guard: _xxxSubscribed == 1 already implies the
+        // Lazy was materialized via the property getter.
+        if (_phiSilicaSubscribed == 1 && _phiSilicaLazy.IsValueCreated)
         {
-            _foundryLocalModelProvider.StatusChanged -= OnInnerStatusChanged;
+            _phiSilicaLazy.Value.StatusChanged -= OnInnerStatusChanged;
         }
-        _openVino.StatusChanged -= OnInnerStatusChanged;
+        if (_foundryLocalSubscribed == 1
+            && _foundryLocalLazy.IsValueCreated
+            && _foundryLocalLazy.Value is ILocalModelProvider provider)
+        {
+            provider.StatusChanged -= OnInnerStatusChanged;
+        }
+        if (_openVinoSubscribed == 1 && _openVinoLazy.IsValueCreated)
+        {
+            _openVinoLazy.Value.StatusChanged -= OnInnerStatusChanged;
+        }
     }
 
     private TranslationResult NormalizeResult(TranslationResult result)

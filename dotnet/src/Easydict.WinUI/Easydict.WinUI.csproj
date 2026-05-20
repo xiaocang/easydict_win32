@@ -160,6 +160,12 @@
         <Compile Remove="Services\LongDocumentCliCommand.cs" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Remove="Services\CharacterParagraphBuilder.cs" />
+        <Compile Remove="Services\ContentStreamInterpreter.cs" />
+        <Compile Remove="Services\DocumentExport\**\*.cs" />
+    </ItemGroup>
+
     <!-- Verify resources.pri is generated in both packaged and unpackaged modes -->
     <Target Name="VerifyPriFile" AfterTargets="Build">
         <Message Importance="high" Text="[Localization] Checking for resources.pri..." />
@@ -243,6 +249,7 @@
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
+      <ProjectReference Include="..\Easydict.DocumentExport\Easydict.DocumentExport.csproj" />
       <ProjectReference Include="..\Polyglot.TextLayout\Polyglot.TextLayout.csproj" />
       <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
       <!-- Windows AI APIs / Phi Silica provider (windows-local-ai). Compile-only;
@@ -253,7 +260,63 @@
            via ONNX Runtime's OpenVINO Execution Provider. Model files are downloaded
            on first use into %LOCALAPPDATA%\Easydict\models, not bundled. -->
       <ProjectReference Include="..\Easydict.OpenVINO\Easydict.OpenVINO.csproj" />
+      <!-- Worker projects. ReferenceOutputAssembly=false because these are out-of-process
+           executables — host doesn't link them. They're built whenever WinUI is built and
+           their output is copied to bin\workers\{kind}\ by the CopyWorkerOutput target below.
+           For MSIX, those files must be included as Content in the package; this PR wires
+           the local build copy but leaves the MSIX Content packaging as a follow-up. -->
+      <ProjectReference Include="..\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj"
+                        ReferenceOutputAssembly="false"
+                        OutputItemType="WorkerOutput"
+                        SetTargetFramework="TargetFramework=net8.0-windows10.0.22621.0" />
+      <ProjectReference Include="..\Easydict.Workers.LocalAi\Easydict.Workers.LocalAi.csproj"
+                        ReferenceOutputAssembly="false"
+                        OutputItemType="WorkerOutput"
+                        SetTargetFramework="TargetFramework=net8.0-windows10.0.22621.0" />
+      <ProjectReference Include="..\Easydict.Workers.Ocr\Easydict.Workers.Ocr.csproj"
+                        ReferenceOutputAssembly="false"
+                        OutputItemType="WorkerOutput"
+                        SetTargetFramework="TargetFramework=net8.0-windows10.0.22621.0" />
     </ItemGroup>
+
+    <!-- Copy worker build outputs into $(TargetDir)workers\<kind>\ so dev runs from
+         bin\ can spawn the worker exe. For publish/MSIX builds, the workers are
+         published independently into ./publish[-msix]/{arch}/workers/{kind}/ by the
+         Makefile (matching the NativeBridge / BrowserRegistrar pattern); this Build
+         target only handles the local-dev codepath.
+
+         The Condition guards against missing worker bin output when someone builds
+         WinUI before either worker has been built — without the guard MSBuild emits
+         a warning. The worker ProjectReferences above ensure both workers are built
+         first, but we accept the no-op fallback to keep CI clean. -->
+    <Target Name="CopyWorkerOutput" AfterTargets="Build">
+      <ItemGroup>
+        <_LongDocWorkerFilesPlatform Include="..\Easydict.Workers.LongDoc\bin\$(Platform)\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
+        <_LongDocWorkerFilesAnyCpu  Include="..\Easydict.Workers.LongDoc\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
+        <_LocalAiWorkerFilesPlatform Include="..\Easydict.Workers.LocalAi\bin\$(Platform)\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
+        <_LocalAiWorkerFilesAnyCpu  Include="..\Easydict.Workers.LocalAi\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
+        <_OcrWorkerFilesPlatform Include="..\Easydict.Workers.Ocr\bin\$(Platform)\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
+        <_OcrWorkerFilesAnyCpu  Include="..\Easydict.Workers.Ocr\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
+                                     Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
+      </ItemGroup>
+      <Copy SourceFiles="@(_LongDocWorkerFilesPlatform);@(_LongDocWorkerFilesAnyCpu)"
+            DestinationFiles="@(_LongDocWorkerFilesPlatform->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)');@(_LongDocWorkerFilesAnyCpu->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true"
+            Condition="'@(_LongDocWorkerFilesPlatform)@(_LongDocWorkerFilesAnyCpu)' != ''" />
+      <Copy SourceFiles="@(_LocalAiWorkerFilesPlatform);@(_LocalAiWorkerFilesAnyCpu)"
+            DestinationFiles="@(_LocalAiWorkerFilesPlatform->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)');@(_LocalAiWorkerFilesAnyCpu->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true"
+            Condition="'@(_LocalAiWorkerFilesPlatform)@(_LocalAiWorkerFilesAnyCpu)' != ''" />
+      <Copy SourceFiles="@(_OcrWorkerFilesPlatform);@(_OcrWorkerFilesAnyCpu)"
+            DestinationFiles="@(_OcrWorkerFilesPlatform->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)');@(_OcrWorkerFilesAnyCpu->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true"
+            Condition="'@(_OcrWorkerFilesPlatform)@(_OcrWorkerFilesAnyCpu)' != ''" />
+    </Target>
 
     <!-- FlaUI for proper UI Automation text selection -->
     <ItemGroup>

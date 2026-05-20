@@ -140,6 +140,54 @@ public class MainPageLifecycleLeakTests
     }
 
     [Fact]
+    public void MainPage_DefersLongDocInitializationUntilLongDocMode()
+    {
+        var content = File.ReadAllText(MainPagePath);
+
+        content.Should().Contain("private void PopulateLongDocLanguageCombos(",
+            "hidden long-document language combo population should be centralized and callable on demand");
+        content.Should().Contain("if (_longDocFeaturesInitialized || _currentMode == QueryMode.LongDocument)",
+            "initial quick-translation localization should not populate hidden long-document combo items");
+        content.Should().MatchRegex(@"case QueryMode\.LongDocument:[\s\S]*EnsureLongDocFeaturesInitialized\(\);",
+            "long-document controls should still be initialized before that mode is shown");
+        content.Should().NotContain("if (!MinimalThemeService.IsActive)\r\n            {\r\n                EnsureLongDocFeaturesInitialized();\r\n            }",
+            "quick-translation startup should not eagerly initialize hidden long-document controls");
+    }
+
+    [Fact]
+    public void MainPage_SkipsStaticUiRefreshWhenSettingsSignatureIsUnchanged()
+    {
+        var content = File.ReadAllText(MainPagePath);
+
+        content.Should().Contain("private string? _staticUiSettingsSignature;",
+            "cached navigation should remember whether language and theme settings actually changed");
+        content.Should().Contain("BuildStaticUiSettingsSignature()",
+            "the skip decision should be based on a stable settings signature");
+        content.Should().Contain("skipped ApplyLocalization/ApplySettings",
+            "debug sessions should make skipped static UI refreshes visible");
+    }
+
+    [Fact]
+    public void MainPage_ShowsLoadingOverlayWhenSwitchingBetweenTranslationAndLongDoc()
+    {
+        var xaml = File.ReadAllText(MainPageXamlPath);
+        var content = File.ReadAllText(MainPagePath);
+
+        xaml.Should().Contain("x:Name=\"ModeSwitchLoadingOverlay\"",
+            "mode switches need a shared content-layer overlay instead of changing panels instantly");
+        xaml.Should().Contain("x:Name=\"ModeSwitchLoadingRing\"",
+            "the mode-switch overlay should expose a visible loading animation");
+        content.Should().Contain("private async Task<bool> SwitchModeAsync(QueryMode newMode)",
+            "mode switching should be asynchronous so the loading overlay can render before heavy UI initialization");
+        content.Should().Contain("await ShowModeSwitchLoadingAsync();",
+            "translation and long-document switches should display the loading overlay");
+        content.Should().Contain("await Task.Delay(ModeSwitchMinimumDurationMs);",
+            "the loading animation should remain visible long enough to be perceived");
+        content.Should().Contain("private async void OnModeMenuItemClick(",
+            "mode menu clicks should use the asynchronous switch path");
+    }
+
+    [Fact]
     public void MainPage_PreservesLanguageSelectionSuppressionWhileSyncingResponsiveCombos()
     {
         var content = File.ReadAllText(MainPagePath);

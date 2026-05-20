@@ -82,8 +82,8 @@
             "name": "Launch E2E Tests",
             "type": "coreclr",
             "request": "launch",
-            "preLaunchTask": "build",
-            "program": "${workspaceFolder}/dotnet/e2e/bin/Debug/net8.0/e2e.dll",
+            "preLaunchTask": "build-e2e",
+            "program": "${workspaceFolder}/dotnet/e2e/bin/Debug/net8.0/E2E.SidecarClient.dll",
             "args": [],
             "cwd": "${workspaceFolder}/dotnet/e2e",
             "stopAtEntry": false,
@@ -100,6 +100,13 @@
             "type": "coreclr",
             "request": "attach",
             "processName": "Easydict.WinUI.exe"
+        },
+        {
+            "name": "Attach to LongDoc Worker",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "Easydict.Workers.LongDoc.exe",
+            "requireExactSource": false
         },
         {
             "name": "Attach to Process (Manual)",

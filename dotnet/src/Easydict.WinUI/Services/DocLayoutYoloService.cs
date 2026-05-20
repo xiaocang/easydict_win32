@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Easydict.TranslationService.LongDocument;
+using Easydict.WinUI.Services.Memory;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -119,19 +121,27 @@ public sealed class DocLayoutYoloService : IDisposable
             throw new InvalidOperationException("Service not initialized. Call InitializeAsync first.");
 
         // Preprocess: BGRA8 → letterbox-resized RGB float tensor [1, 3, 1024, 1024]
-        var (inputTensor, scaleX, scaleY, padX, padY) = PreprocessImage(imagePixels, width, height);
+        using var input = PreprocessImagePooled(imagePixels, width, height);
 
         // Run inference
         var inputs = new List<NamedOnnxValue>
         {
-            NamedOnnxValue.CreateFromTensor("images", inputTensor)
+            NamedOnnxValue.CreateFromTensor("images", input.Tensor)
         };
 
         using var results = _session.Run(inputs);
 
         // Parse output: see ParseDetections for the two supported output shapes.
         var outputTensor = results.First().AsTensor<float>();
-        return ParseDetections(outputTensor, scaleX, scaleY, padX, padY, width, height, confidenceThreshold);
+        return ParseDetections(
+            outputTensor,
+            input.ScaleX,
+            input.ScaleY,
+            input.PadX,
+            input.PadY,
+            width,
+            height,
+            confidenceThreshold);
     }
 
     /// <summary>
@@ -150,7 +160,6 @@ public sealed class DocLayoutYoloService : IDisposable
     internal static (DenseTensor<float> Tensor, double ScaleX, double ScaleY, int PadX, int PadY)
         PreprocessImage(byte[] bgra, int width, int height)
     {
-        // Calculate letterbox dimensions
         var scale = Math.Min((double)ModelInputSize / width, (double)ModelInputSize / height);
         var newW = (int)Math.Round(width * scale);
         var newH = (int)Math.Round(height * scale);
@@ -158,7 +167,35 @@ public sealed class DocLayoutYoloService : IDisposable
         var padY = (ModelInputSize - newH) / 2;
 
         var tensor = new DenseTensor<float>([1, 3, ModelInputSize, ModelInputSize]);
+        FillPreprocessedImage(tensor, bgra, width, height, scale, newW, newH, padX, padY);
+        return (tensor, scale, scale, padX, padY);
+    }
 
+    private static PooledLayoutTensor PreprocessImagePooled(byte[] bgra, int width, int height)
+    {
+        // Calculate letterbox dimensions
+        var scale = Math.Min((double)ModelInputSize / width, (double)ModelInputSize / height);
+        var newW = (int)Math.Round(width * scale);
+        var newH = (int)Math.Round(height * scale);
+        var padX = (ModelInputSize - newW) / 2;
+        var padY = (ModelInputSize - newH) / 2;
+
+        var owner = PooledDenseTensor<float>.Rent(1, 3, ModelInputSize, ModelInputSize);
+        FillPreprocessedImage(owner.Tensor, bgra, width, height, scale, newW, newH, padX, padY);
+        return new PooledLayoutTensor(owner, scale, scale, padX, padY);
+    }
+
+    private static void FillPreprocessedImage(
+        DenseTensor<float> tensor,
+        byte[] bgra,
+        int width,
+        int height,
+        double scale,
+        int newW,
+        int newH,
+        int padX,
+        int padY)
+    {
         // Direct span access is ~3-5x faster than the multidim indexer on this hot path.
         var span = tensor.Buffer.Span;
         span.Fill(114f / 255f);  // gray letterbox padding
@@ -188,8 +225,28 @@ public sealed class DocLayoutYoloService : IDisposable
                 span[bBase + dst] = bgra[srcIdx] / 255f;
             }
         }
+    }
 
-        return (tensor, scale, scale, padX, padY);
+    private sealed class PooledLayoutTensor : IDisposable
+    {
+        private readonly PooledDenseTensor<float> _owner;
+
+        public PooledLayoutTensor(PooledDenseTensor<float> owner, double scaleX, double scaleY, int padX, int padY)
+        {
+            _owner = owner;
+            ScaleX = scaleX;
+            ScaleY = scaleY;
+            PadX = padX;
+            PadY = padY;
+        }
+
+        public DenseTensor<float> Tensor => _owner.Tensor;
+        public double ScaleX { get; }
+        public double ScaleY { get; }
+        public int PadX { get; }
+        public int PadY { get; }
+
+        public void Dispose() => _owner.Dispose();
     }
 
     /// <summary>

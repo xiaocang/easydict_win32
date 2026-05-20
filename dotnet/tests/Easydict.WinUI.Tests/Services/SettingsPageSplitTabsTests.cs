@@ -203,6 +203,25 @@ public class SettingsPageSplitTabsTests
     }
 
     [Fact]
+    public void SettingsPage_KeepsDeferredViewsTabLoadedDuringSettingsSession()
+    {
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var initializeSettingsContent = GetMethodBody(codeBehind, "InitializeSettingsContent");
+        var selectSettingsTab = GetMethodBody(codeBehind, "SelectSettingsTab");
+        var teardownOnUnload = GetMethodBody(codeBehind, "TeardownOnUnload");
+
+        codeBehind.Should().Contain("SettingsTabFastSwitchWarmupOrder",
+            "Settings tab contents should be warmed after first paint for fast in-page tab switching");
+        initializeSettingsContent.Should().Contain("QueueSettingsTabWarmup(cancellationToken);",
+            "the warm-up should be scoped to a live SettingsPage instance");
+        selectSettingsTab.Should().Contain("ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;");
+        selectSettingsTab.Should().NotContain("ReleaseViewsTabContent();",
+            "high-frequency tab switches should not rebuild the Views tab after it has been loaded");
+        teardownOnUnload.Should().Contain("ReleaseViewsTabContent();",
+            "leaving SettingsPage should still release lazily loaded tab content");
+    }
+
+    [Fact]
     public void SettingsPage_DefaultTabIsGeneral()
     {
         var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);

@@ -150,6 +150,15 @@ public sealed partial class SettingsPage : Page
     private const double PasswordTailHintMaxWidth = 72;
     private const double PasswordTailHintTrailingMargin = 44;
     private const string PasswordTailHintPrefix = "...";
+    private static readonly SettingsTabId[] SettingsTabFastSwitchWarmupOrder =
+    [
+        SettingsTabId.Services,
+        SettingsTabId.Views,
+        SettingsTabId.Hotkeys,
+        SettingsTabId.Advanced,
+        SettingsTabId.Language,
+        SettingsTabId.About
+    ];
     private static readonly (string BrushKey, string ColorKey)[] ScopedThemeResourceBrushes =
     [
         ("ApplicationPageBackgroundThemeBrush", "FloatingWindowBackgroundColor"),
@@ -226,6 +235,8 @@ public sealed partial class SettingsPage : Page
     private bool _isMiniWindowReorderModeEnabled;
     private bool _isFixedWindowReorderModeEnabled;
     private bool _themeChromeRefreshQueued;
+    private bool _settingsTabWarmupQueued;
+    private bool _deferredSettingsIoStarted;
     private readonly Dictionary<PasswordBox, bool> _visiblePasswordBoxes = new();
     private readonly Dictionary<PasswordBox, PasswordTailHint> _passwordTailHints = new();
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
@@ -913,6 +924,17 @@ public sealed partial class SettingsPage : Page
         SelectSettingsTab(tabId, resetScroll: true);
     }
 
+    private void OnSettingsTabButtonLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.DataContext is not SettingsTabItem tab)
+        {
+            return;
+        }
+
+        AutomationProperties.SetAutomationId(button, tab.AutomationId);
+        AutomationProperties.SetName(button, tab.Label);
+    }
+
     private void SelectSettingsTab(SettingsTabId tabId, bool resetScroll)
     {
         EnsureTabContentLoaded(tabId);
@@ -942,7 +964,11 @@ public sealed partial class SettingsPage : Page
             MainScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
         }
 
-        ApplyThemeChrome();
+        // Theme chrome is refreshed on actual theme changes (OnActualThemeChanged →
+        // QueueApplyThemeChrome) and when a tab's XAML is first inflated
+        // (EnsureTabContentLoaded above). Visibility-toggle switches reuse the brushes
+        // already assigned on the inflated subtrees, so re-walking the visual tree here
+        // costs ~ms-to-tens-of-ms on the Services tab for no observable change.
     }
 
     private void EnsureTabContentLoaded(SettingsTabId tabId)
@@ -953,8 +979,39 @@ public sealed partial class SettingsPage : Page
                 FindName(nameof(ViewsTabContent));
                 BindWindowServicePanels();
                 ApplyWindowResultsLocalization(LocalizationService.Instance);
+                // Chrome the newly-inflated subtree — the rest of the page already has
+                // brushes assigned from the initial ctor pass. ApplyThemeChrome walks the
+                // entire visual tree (~thousands of elements on the Services tab), so
+                // confining it to this inflation site avoids paying the cost on every
+                // visibility-toggle switch in SelectSettingsTab below.
+                ApplyThemeChrome();
                 break;
         }
+    }
+
+    private void ReleaseViewsTabContent()
+    {
+        if (ViewsTabContent == null)
+        {
+            return;
+        }
+
+        if (MainWindowServicesPanel != null)
+        {
+            MainWindowServicesPanel.ItemsSource = null;
+        }
+
+        if (MiniWindowServicesPanel != null)
+        {
+            MiniWindowServicesPanel.ItemsSource = null;
+        }
+
+        if (FixedWindowServicesPanel != null)
+        {
+            FixedWindowServicesPanel.ItemsSource = null;
+        }
+
+        UnloadObject(ViewsTabContent);
     }
 
     private bool ShouldLoadSettingsTab(SettingsTabId tabId, bool deferLazyTabData)
@@ -1667,16 +1724,9 @@ public sealed partial class SettingsPage : Page
 #endif
         _isLoading = true;
         InitializeSettingsTabs();
-        var deferLazyTabData = MinimalThemeService.IsActive;
+        var deferLazyTabData = true;
         _initializedSettingsTabData.Clear();
         _initializedSettingsTabData.Add(SettingsTabId.General);
-        if (!deferLazyTabData)
-        {
-            foreach (var tabId in Enum.GetValues<SettingsTabId>())
-            {
-                _initializedSettingsTabData.Add(tabId);
-            }
-        }
 
         // Snapshot original SelectedLanguages for discard/restore
         _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
@@ -1740,6 +1790,8 @@ public sealed partial class SettingsPage : Page
         LogDebugState("InitializeSettingsContent complete");
 #endif
 
+        QueueSettingsTabWarmup(cancellationToken);
+
         // Defer disk I/O (ONNX model check, SQLite cache) to after content is visible
         DispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
@@ -1777,8 +1829,59 @@ public sealed partial class SettingsPage : Page
                 UpdateDeferredIoState("io-dispatched");
                 PerfLog("Deferred I/O: dispatching queued work");
 #endif
+                if (!TryBeginDeferredSettingsIo(cancellationToken))
+                {
+                    return;
+                }
+
                 RunDeferredSettingsIo(cancellationToken);
             });
+    }
+
+    private void QueueSettingsTabWarmup(CancellationToken cancellationToken)
+    {
+        if (_settingsTabWarmupQueued)
+        {
+            return;
+        }
+
+        _settingsTabWarmupQueued = true;
+#if DEBUG
+        PerfLog("Settings tab warm-up: queued");
+#endif
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => WarmNextSettingsTabForFastSwitching(cancellationToken, 0));
+    }
+
+    private void WarmNextSettingsTabForFastSwitching(CancellationToken cancellationToken, int tabIndex)
+    {
+        if (_isUnloaded || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (tabIndex >= SettingsTabFastSwitchWarmupOrder.Length)
+        {
+#if DEBUG
+            PerfLog("Settings tab warm-up: complete");
+#endif
+            return;
+        }
+
+        var tabId = SettingsTabFastSwitchWarmupOrder[tabIndex];
+#if DEBUG
+        PerfLog($"Settings tab warm-up: {tabId}");
+#endif
+        EnsureTabContentLoaded(tabId);
+        if (_isInitialized)
+        {
+            EnsureSettingsTabDataInitialized(tabId);
+        }
+
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => WarmNextSettingsTabForFastSwitching(cancellationToken, tabIndex + 1));
     }
 
     private void QueueDeferredSettingsIo(CancellationToken cancellationToken)
@@ -1792,8 +1895,24 @@ public sealed partial class SettingsPage : Page
                     return;
                 }
 
+                if (!TryBeginDeferredSettingsIo(cancellationToken))
+                {
+                    return;
+                }
+
                 RunDeferredSettingsIo(cancellationToken);
             });
+    }
+
+    private bool TryBeginDeferredSettingsIo(CancellationToken cancellationToken)
+    {
+        if (_deferredSettingsIoStarted || _isUnloaded || cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        _deferredSettingsIoStarted = true;
+        return true;
     }
 
     private void RunDeferredSettingsIo(CancellationToken cancellationToken)
@@ -1873,18 +1992,7 @@ public sealed partial class SettingsPage : Page
         try { _currentDialog?.Hide(); } catch (COMException) { }
         _currentDialog = null;
 
-        if (MainWindowServicesPanel != null)
-        {
-            MainWindowServicesPanel.ItemsSource = null;
-        }
-        if (MiniWindowServicesPanel != null)
-        {
-            MiniWindowServicesPanel.ItemsSource = null;
-        }
-        if (FixedWindowServicesPanel != null)
-        {
-            FixedWindowServicesPanel.ItemsSource = null;
-        }
+        ReleaseViewsTabContent();
         LanguageCheckboxGrid.ItemsSource = null;
         SettingsTabsHost.ItemsSource = null;
 

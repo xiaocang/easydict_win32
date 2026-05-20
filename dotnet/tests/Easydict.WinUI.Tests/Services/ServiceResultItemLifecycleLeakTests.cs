@@ -34,10 +34,12 @@ public class ServiceResultItemLifecycleLeakTests
     public void ServiceResultItem_CleanupDetachesWebView2Events()
     {
         var content = File.ReadAllText(ServiceResultItemPath);
-        content.Should().Contain("DictWebView.NavigationCompleted -= OnDictWebViewNavigationCompleted;",
+        content.Should().Contain("webView.NavigationCompleted -= OnDictWebViewNavigationCompleted;",
             "Cleanup should detach WebView2 navigation handlers");
-        content.Should().Contain("DictWebView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;",
+        content.Should().Contain("webView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;",
             "Cleanup should detach WebView2 resource handlers");
+        content.Should().Contain("webView.CoreWebView2.WebMessageReceived -= OnDictWebViewWebMessageReceived;",
+            "Cleanup should detach WebView2 message handlers");
     }
 
     [Fact]
@@ -52,8 +54,30 @@ public class ServiceResultItemLifecycleLeakTests
             "Cleanup should release dynamically generated MDX result visuals before the control is discarded");
         content.Should().Contain("PhoneticPanel.Children.Clear();",
             "Cleanup should release dynamically generated phonetic badges before the control is discarded");
-        content.Should().Contain("DictWebView.NavigateToString(\"<html><body></body></html>\");",
+        content.Should().Contain("webView.NavigateToString(\"<html><body></body></html>\");",
             "Cleanup should reset WebView2 content before the control is discarded");
+        content.Should().Contain("webView.Close();",
+            "Cleanup should close the lazily-created WebView2 control to release browser resources");
+        content.Should().Contain("DictWebViewHost.Children.Clear();",
+            "Cleanup should detach the lazily-created WebView2 from the visual tree");
+        content.Should().Contain("_dictWebView = null;",
+            "Cleanup should clear the WebView2 field after releasing it");
+    }
+
+    [Fact]
+    public void ServiceResultItem_CreatesDictionaryWebViewLazily()
+    {
+        var xaml = File.ReadAllText(Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml"));
+        var content = File.ReadAllText(ServiceResultItemPath);
+
+        xaml.Should().Contain("x:Name=\"DictWebViewHost\"",
+            "XAML should keep only a lightweight host in the normal result item tree");
+        xaml.Should().NotContain("<WebView2",
+            "WebView2 should not be constructed with every result item at InitializeComponent time");
+        content.Should().Contain("private WebView2 EnsureDictionaryWebView()",
+            "HTML dictionary results should create WebView2 only on demand");
+        content.Should().Contain("ScheduleDictionaryWebViewRelease();",
+            "non-HTML transitions should release WebView2 after a short idle delay");
     }
 
     private static string FindProjectRoot()

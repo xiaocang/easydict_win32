@@ -134,117 +134,135 @@ public sealed class MuPdfExportService : IDocumentExportService
         string sourceFilePath,
         string outputPath)
     {
-        var sourceBytes = File.ReadAllBytes(sourceFilePath);
-
-        // Read-side: PdfPig for text extraction and content stream parsing
-        using var pdfPigDoc = PdfPigDocument.Open(sourceBytes);
-
-        // Write-side: MuPDF.NET for content stream replacement
-        var muDoc = new Document(sourceFilePath);
-
-        var pageCount = pdfPigDoc.NumberOfPages;
-        var totalRendered = 0;
-        var totalCandidates = 0;
-        var totalMissingBoundingBoxes = 0;
-        var totalShrinkFontBlocks = 0;
-        var totalTruncatedBlocks = 0;
-        var pageMetrics = new Dictionary<int, BackfillPageMetrics>();
-        var blockIssues = new List<BackfillBlockIssue>();
-        var usedGlyphsByFontXref = new Dictionary<int, Dictionary<ushort, char>>();
-
-        // Build lookup: page number → translated blocks
-        var translatedBlocksByPage = BuildTranslatedBlockLookup(checkpoint);
-
-        // Resolve font paths for embedding
-        var fontPaths = ResolveFontPaths(checkpoint.TargetLanguage);
-
-        for (var pageIdx = 0; pageIdx < pageCount; pageIdx++)
+        // MuPDF.NET keeps the file handle open, so copy once to a temp path
+        // and read PdfPig from the same copy. Avoids both file-lock contention
+        // on the caller's source path and a redundant full-document byte[].
+        var muPdfSourcePath = CreateTemporaryPdfCopy(sourceFilePath);
+        Document? muDoc = null;
+        try
         {
-            var pageNumber = pageIdx + 1;
-            if (!translatedBlocksByPage.TryGetValue(pageNumber, out var blocks) || blocks.Count == 0)
-                continue;
+            using var pdfPigDoc = PdfPigDocument.Open(muPdfSourcePath);
+            muDoc = new Document(muPdfSourcePath);
 
-            var pdfPigPage = pdfPigDoc.GetPage(pageNumber);
-            var muPage = muDoc[pageIdx];
+            var pageCount = pdfPigDoc.NumberOfPages;
+            var totalRendered = 0;
+            var totalCandidates = 0;
+            var totalMissingBoundingBoxes = 0;
+            var totalShrinkFontBlocks = 0;
+            var totalTruncatedBlocks = 0;
+            var pageMetrics = new Dictionary<int, BackfillPageMetrics>();
+            var blockIssues = new List<BackfillBlockIssue>();
+            var usedGlyphsByFontXref = new Dictionary<int, Dictionary<ushort, char>>();
 
+            // Build lookup: page number -> translated blocks
+            var translatedBlocksByPage = BuildTranslatedBlockLookup(checkpoint);
+
+            // Resolve font paths for embedding
+            var fontPaths = ResolveFontPaths(checkpoint.TargetLanguage);
+
+            for (var pageIdx = 0; pageIdx < pageCount; pageIdx++)
+            {
+                var pageNumber = pageIdx + 1;
+                if (!translatedBlocksByPage.TryGetValue(pageNumber, out var blocks) || blocks.Count == 0)
+                    continue;
+
+                var pdfPigPage = pdfPigDoc.GetPage(pageNumber);
+                var muPage = muDoc[pageIdx];
+
+                try
+                {
+                    var pageResult = RenderPageWithContentStreamReplacement(
+                        pdfPigPage, muPage, muDoc, blocks, fontPaths);
+                    totalRendered += pageResult.RenderedBlocks;
+                    totalCandidates += blocks.Count;
+                    totalMissingBoundingBoxes += pageResult.MissingBoundingBoxBlocks;
+                    totalShrinkFontBlocks += pageResult.ShrinkFontBlocks;
+                    totalTruncatedBlocks += pageResult.TruncatedBlocks;
+                    MergeUsedGlyphs(usedGlyphsByFontXref, pageResult.UsedGlyphs);
+                    pageMetrics[pageNumber] = new BackfillPageMetrics
+                    {
+                        CandidateBlocks = blocks.Count,
+                        RenderedBlocks = pageResult.RenderedBlocks,
+                        MissingBoundingBoxBlocks = pageResult.MissingBoundingBoxBlocks,
+                        ShrinkFontBlocks = pageResult.ShrinkFontBlocks,
+                        TruncatedBlocks = pageResult.TruncatedBlocks,
+                        ObjectReplaceBlocks = 0,
+                        OverlayModeBlocks = 0,
+                        StructuredFallbackBlocks = 0,
+                    };
+                    if (pageResult.BlockIssues.Count > 0)
+                        blockIssues.AddRange(pageResult.BlockIssues);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MuPdfExport] Page {pageNumber} failed: {ex.Message}");
+                    totalCandidates += blocks.Count;
+                    pageMetrics[pageNumber] = new BackfillPageMetrics
+                    {
+                        CandidateBlocks = blocks.Count,
+                        RenderedBlocks = 0,
+                        MissingBoundingBoxBlocks = 0,
+                        ShrinkFontBlocks = 0,
+                        TruncatedBlocks = 0,
+                        ObjectReplaceBlocks = 0,
+                        OverlayModeBlocks = 0,
+                        StructuredFallbackBlocks = 0,
+                    };
+                    // Fall through - page retains original content.
+                }
+            }
+
+            // Font subsetting to reduce file size.
             try
             {
-                var pageResult = RenderPageWithContentStreamReplacement(
-                    pdfPigPage, muPage, muDoc, blocks, fontPaths);
-                totalRendered += pageResult.RenderedBlocks;
-                totalCandidates += blocks.Count;
-                totalMissingBoundingBoxes += pageResult.MissingBoundingBoxBlocks;
-                totalShrinkFontBlocks += pageResult.ShrinkFontBlocks;
-                totalTruncatedBlocks += pageResult.TruncatedBlocks;
-                MergeUsedGlyphs(usedGlyphsByFontXref, pageResult.UsedGlyphs);
-                pageMetrics[pageNumber] = new BackfillPageMetrics
-                {
-                    CandidateBlocks = blocks.Count,
-                    RenderedBlocks = pageResult.RenderedBlocks,
-                    MissingBoundingBoxBlocks = pageResult.MissingBoundingBoxBlocks,
-                    ShrinkFontBlocks = pageResult.ShrinkFontBlocks,
-                    TruncatedBlocks = pageResult.TruncatedBlocks,
-                    ObjectReplaceBlocks = 0,
-                    OverlayModeBlocks = 0,
-                    StructuredFallbackBlocks = 0,
-                };
-                if (pageResult.BlockIssues.Count > 0)
-                    blockIssues.AddRange(pageResult.BlockIssues);
+                muDoc.SubsetFonts();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[MuPdfExport] Page {pageNumber} failed: {ex.Message}");
-                totalCandidates += blocks.Count;
-                pageMetrics[pageNumber] = new BackfillPageMetrics
-                {
-                    CandidateBlocks = blocks.Count,
-                    RenderedBlocks = 0,
-                    MissingBoundingBoxBlocks = 0,
-                    ShrinkFontBlocks = 0,
-                    TruncatedBlocks = 0,
-                    ObjectReplaceBlocks = 0,
-                    OverlayModeBlocks = 0,
-                    StructuredFallbackBlocks = 0,
-                };
-                // Fall through — page retains original content
+                Debug.WriteLine($"[MuPdfExport] SubsetFonts failed: {ex.Message}");
             }
-        }
 
-        // Font subsetting to reduce file size
-        try
-        {
-            muDoc.SubsetFonts();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[MuPdfExport] SubsetFonts failed: {ex.Message}");
-        }
+            try
+            {
+                AttachToUnicodeMaps(muDoc, usedGlyphsByFontXref);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MuPdfExport] AttachToUnicodeMaps failed: {ex.Message}");
+            }
 
-        try
-        {
-            AttachToUnicodeMaps(muDoc, usedGlyphsByFontXref);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[MuPdfExport] AttachToUnicodeMaps failed: {ex.Message}");
-        }
+            muDoc.Save(outputPath);
 
-        muDoc.Save(outputPath);
-        muDoc.Close();
-
-        return new BackfillQualityMetrics
+            return new BackfillQualityMetrics
+            {
+                CandidateBlocks = totalCandidates,
+                RenderedBlocks = totalRendered,
+                MissingBoundingBoxBlocks = totalMissingBoundingBoxes,
+                ShrinkFontBlocks = totalShrinkFontBlocks,
+                TruncatedBlocks = totalTruncatedBlocks,
+                ObjectReplaceBlocks = 0,
+                OverlayModeBlocks = 0,
+                StructuredFallbackBlocks = 0,
+                PageMetrics = pageMetrics.Count > 0 ? pageMetrics : null,
+                BlockIssues = blockIssues.Count > 0 ? blockIssues : null,
+            };
+        }
+        finally
         {
-            CandidateBlocks = totalCandidates,
-            RenderedBlocks = totalRendered,
-            MissingBoundingBoxBlocks = totalMissingBoundingBoxes,
-            ShrinkFontBlocks = totalShrinkFontBlocks,
-            TruncatedBlocks = totalTruncatedBlocks,
-            ObjectReplaceBlocks = 0,
-            OverlayModeBlocks = 0,
-            StructuredFallbackBlocks = 0,
-            PageMetrics = pageMetrics.Count > 0 ? pageMetrics : null,
-            BlockIssues = blockIssues.Count > 0 ? blockIssues : null,
-        };
+            if (muDoc is not null)
+            {
+                try
+                {
+                    muDoc.Close();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MuPdfExport] Close failed: {ex.Message}");
+                }
+            }
+
+            TryDeleteFile(muPdfSourcePath);
+        }
     }
 
     /// <summary>
@@ -1794,6 +1812,30 @@ public sealed class MuPdfExportService : IDocumentExportService
             Debug.WriteLine($"[MuPdfExport] Bilingual PDF generation failed: {ex.Message}");
             // Fallback: copy the monolingual translated PDF
             File.Copy(translatedPath, outputPath, overwrite: true);
+        }
+    }
+
+    private static string CreateTemporaryPdfCopy(string sourceFilePath)
+    {
+        var tempPath = Path.Combine(
+            Path.GetTempPath(),
+            $"easydict-mupdf-source-{Guid.NewGuid():N}.pdf");
+        File.Copy(sourceFilePath, tempPath, overwrite: false);
+        return tempPath;
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MuPdfExport] Temp file cleanup failed: {ex.Message}");
         }
     }
 

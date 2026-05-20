@@ -63,6 +63,16 @@ public sealed class LocalDictionaryIndexService
         return Task.Run(() => EnsureIndexCoreAsync(dictionary, service, ct), ct);
     }
 
+    public void RegisterDescriptor(SettingsService.ImportedMdxDictionary dictionary)
+    {
+        ArgumentNullException.ThrowIfNull(dictionary);
+
+        var isQueryable = !dictionary.IsEncrypted ||
+                          (!string.IsNullOrWhiteSpace(dictionary.Regcode) &&
+                           !string.IsNullOrWhiteSpace(dictionary.Email));
+        UpsertDescriptor(dictionary, isQueryable);
+    }
+
     public void RemoveDictionary(string serviceId, bool deleteFiles = true)
     {
         if (string.IsNullOrWhiteSpace(serviceId))
@@ -329,11 +339,14 @@ public sealed class LocalDictionaryIndexService
     }
 
     private void UpsertDescriptor(SettingsService.ImportedMdxDictionary dictionary, MdxDictionaryTranslationService service)
+        => UpsertDescriptor(dictionary, service.CanEnumerateKeys);
+
+    private void UpsertDescriptor(SettingsService.ImportedMdxDictionary dictionary, bool isQueryable)
     {
         var descriptor = new ServiceDescriptor(
             dictionary.DisplayName,
             dictionary.FilePath,
-            service.CanEnumerateKeys);
+            isQueryable);
 
         lock (_gate)
         {
@@ -344,7 +357,7 @@ public sealed class LocalDictionaryIndexService
                 _loadedIndexes[dictionary.ServiceId] = existing with
                 {
                     DisplayName = dictionary.DisplayName,
-                    IsQueryable = service.CanEnumerateKeys
+                    IsQueryable = isQueryable
                 };
             }
         }

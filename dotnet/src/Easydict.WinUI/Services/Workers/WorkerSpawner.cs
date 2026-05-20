@@ -231,9 +231,11 @@ internal sealed class WorkerSpawner
             // Long-doc specifics
             LongDocMaxConcurrency = settings.LongDocMaxConcurrency,
             LongDocEnableDocumentContextPass = settings.LongDocEnableDocumentContextPass,
+            EnableTatrTableStructure = settings.EnableTatrTableStructure,
             FormulaFontPattern = settings.FormulaFontPattern,
             FormulaCharPattern = settings.FormulaCharPattern,
             LongDocCustomPrompt = settings.LongDocCustomPrompt,
+            LayoutDetectionMode = settings.LayoutDetectionMode,
             EnableInternationalServices = settings.EnableInternationalServices,
         };
     }

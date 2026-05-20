@@ -1,11 +1,16 @@
+extern alias LongDocWorker;
+
 using Easydict.SidecarClient.Protocol;
 using Easydict.TranslationService.LongDocument;
 using Easydict.TranslationService.Models;
-using Easydict.Workers.LongDoc.Infrastructure;
+using Easydict.WinUI.Services.DocumentExport;
 using FluentAssertions;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
+using WorkerLongDocumentPipeline = LongDocWorker::Easydict.Workers.LongDoc.Infrastructure.WorkerLongDocumentPipeline;
+using WorkerLongDocumentSourceDocumentBuilder = LongDocWorker::Easydict.Workers.LongDoc.Infrastructure.WorkerLongDocumentSourceDocumentBuilder;
+using WinUiLongDocumentTranslationService = Easydict.WinUI.Services.LongDocumentTranslationService;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services.Workers;
@@ -102,7 +107,7 @@ public sealed class LongDocWorkerPipelineTests
 
             var output = await File.ReadAllTextAsync(result.OutputPath!);
             output.Should().Contain("> # Title");
-            output.Should().Contain("### TR:# Title");
+            output.Should().Contain("TR:# Title");
             output.Should().Contain("> Body text.");
             output.Should().Contain("TR:Body text.");
         }
@@ -205,8 +210,48 @@ public sealed class LongDocWorkerPipelineTests
 
             using var outputDoc = PdfPigDocument.Open(outputPath);
             var text = string.Join("\n", outputDoc.GetPages().Select(page => page.Text));
-            text.Should().Contain("Second page only");
-            text.Should().NotContain("First page only");
+            var compactText = text.Replace(" ", string.Empty, StringComparison.Ordinal);
+            compactText.Should().Contain("Secondpageonly");
+            compactText.Should().NotContain("Firstpageonly");
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WorkerSourceBuilder_PdfHeuristic_MatchesInProcBuilder()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("easydict-longdoc-worker-test-");
+        var inputPath = Path.Combine(tempDir.FullName, "source.pdf");
+
+        try
+        {
+            CreatePdf(inputPath, ["First page only.", "Second page only."]);
+
+            var expected = await BuildInProcBasicSourceDocumentAsync(
+                LongDocumentInputMode.Pdf,
+                inputPath,
+                pageRange: "2");
+
+            using var builder = new WorkerLongDocumentSourceDocumentBuilder();
+            var actual = await builder.BuildAsync(
+                LongDocumentInputMode.Pdf,
+                inputPath,
+                LayoutDetectionMode.Heuristic,
+                visionEndpoint: null,
+                visionApiKey: null,
+                visionModel: null,
+                pageRange: "2",
+                enableTatrTableStructure: true,
+                proxyEnabled: false,
+                proxyUri: null,
+                proxyBypassLocal: false,
+                onProgress: null,
+                CancellationToken.None);
+
+            Snapshot(actual).Should().BeEquivalentTo(Snapshot(expected), options => options.WithStrictOrdering());
         }
         finally
         {
@@ -231,7 +276,7 @@ public sealed class LongDocWorkerPipelineTests
 
     private static void CreatePdf(string path, IReadOnlyList<string> pages)
     {
-        WorkerPdfFontResolver.EnsureInitialized();
+        CjkFontResolver.EnsureInitialized();
         using var doc = new PdfDocument();
         foreach (var text in pages)
         {
@@ -243,5 +288,46 @@ public sealed class LongDocWorkerPipelineTests
         }
 
         doc.Save(path);
+    }
+
+    private static async Task<SourceDocument> BuildInProcBasicSourceDocumentAsync(
+        LongDocumentInputMode mode,
+        string input,
+        string? pageRange)
+    {
+        var method = typeof(WinUiLongDocumentTranslationService).GetMethod(
+            "BuildSourceDocumentBasicAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        method.Should().NotBeNull();
+        var task = (Task<SourceDocument>)method!.Invoke(null, [mode, input, pageRange])!;
+        return await task.ConfigureAwait(false);
+    }
+
+    private static object Snapshot(SourceDocument document)
+    {
+        return new
+        {
+            document.DocumentId,
+            Pages = document.Pages.Select(page => new
+            {
+                page.PageNumber,
+                page.IsScanned,
+                Blocks = page.Blocks.Select(block => new
+                {
+                    block.BlockId,
+                    block.BlockType,
+                    block.Text,
+                    block.ParentBlockId,
+                    block.IsFormulaLike,
+                    block.BoundingBox,
+                    block.FallbackText,
+                    block.DetectedFontNames,
+                    block.TextStyle,
+                    block.FormulaCharacters,
+                    block.CharacterLevelProtectedText,
+                }).ToList(),
+            }).ToList(),
+        };
     }
 }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Easydict.TranslationService.LongDocument;
+using Easydict.WinUI.Services.DocumentExport;
 using UglyToad.PdfPig.Content;
 using PdfPigPage = UglyToad.PdfPig.Content.Page;
 
@@ -587,7 +588,7 @@ internal sealed class LayoutDetectionStrategy
                 }
             }
 
-            foreach (var block in LongDocumentTranslationService.GroupWordsIntoBlocks(
+            foreach (var block in LongDocumentSourceExtraction.GroupWordsIntoBlocks(
                 wordsByRegion[i], page, page.Number, regionTag, ref blockIndex))
             {
                 // Formula regions must get BlockType=Formula so downstream
@@ -607,7 +608,7 @@ internal sealed class LayoutDetectionStrategy
         // Orphan words: use simple heuristic grouping so no text is lost.
         if (orphanWords.Count > 0)
         {
-            foreach (var block in LongDocumentTranslationService.GroupWordsIntoBlocks(
+            foreach (var block in LongDocumentSourceExtraction.GroupWordsIntoBlocks(
                 orphanWords, page, page.Number, "body", ref blockIndex))
             {
                 results.Add(new EnhancedSourceBlock(block, LayoutRegionType.Body, 0.5, LayoutRegionSource.Heuristic));
@@ -709,7 +710,7 @@ internal sealed class LayoutDetectionStrategy
         {
             if (wordsByCell[c].Count == 0) continue;
 
-            foreach (var cellBlock in LongDocumentTranslationService.GroupWordsIntoBlocks(
+            foreach (var cellBlock in LongDocumentSourceExtraction.GroupWordsIntoBlocks(
                 wordsByCell[c], page, page.Number, "table", ref blockIndex))
             {
                 var finalCell = cellBlock with { BlockType = SourceBlockType.TableCell };
@@ -725,7 +726,7 @@ internal sealed class LayoutDetectionStrategy
         // where they'd be translated.
         if (orphanTableWords.Count > 0)
         {
-            foreach (var orphanBlock in LongDocumentTranslationService.GroupWordsIntoBlocks(
+            foreach (var orphanBlock in LongDocumentSourceExtraction.GroupWordsIntoBlocks(
                 orphanTableWords, page, page.Number, "table", ref blockIndex))
             {
                 var finalCell = orphanBlock with { BlockType = SourceBlockType.TableCell };

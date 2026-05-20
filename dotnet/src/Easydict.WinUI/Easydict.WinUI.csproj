@@ -160,6 +160,12 @@
         <Compile Remove="Services\LongDocumentCliCommand.cs" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Remove="Services\CharacterParagraphBuilder.cs" />
+        <Compile Remove="Services\ContentStreamInterpreter.cs" />
+        <Compile Remove="Services\DocumentExport\**\*.cs" />
+    </ItemGroup>
+
     <!-- Verify resources.pri is generated in both packaged and unpackaged modes -->
     <Target Name="VerifyPriFile" AfterTargets="Build">
         <Message Importance="high" Text="[Localization] Checking for resources.pri..." />
@@ -243,6 +249,7 @@
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
+      <ProjectReference Include="..\Easydict.DocumentExport\Easydict.DocumentExport.csproj" />
       <ProjectReference Include="..\Polyglot.TextLayout\Polyglot.TextLayout.csproj" />
       <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
       <!-- Windows AI APIs / Phi Silica provider (windows-local-ai). Compile-only;

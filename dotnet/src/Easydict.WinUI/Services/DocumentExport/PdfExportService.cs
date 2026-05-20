@@ -2472,7 +2472,7 @@ public sealed class PdfExportService : IDocumentExportService
     /// </summary>
     private static void EnsureCjkFontSetup(Language? targetLanguage)
     {
-        if (targetLanguage == null || !FontDownloadService.RequiresCjkFont(targetLanguage.Value))
+        if (targetLanguage == null || !RequiresCjkFont(targetLanguage.Value))
         {
             return;
         }
@@ -2480,8 +2480,7 @@ public sealed class PdfExportService : IDocumentExportService
         CjkFontResolver.EnsureInitialized();
 
         // Try to register font from the download cache
-        using var fontService = new FontDownloadService();
-        var fontPath = fontService.GetCachedFontPath(targetLanguage.Value);
+        var fontPath = GetCachedCjkFontPath(targetLanguage.Value);
         if (fontPath != null)
         {
             var familyName = targetLanguage switch
@@ -2502,6 +2501,57 @@ public sealed class PdfExportService : IDocumentExportService
         {
             Debug.WriteLine($"[PdfExportService] CJK font not downloaded for {targetLanguage}. Using Arial fallback.");
         }
+    }
+
+    private static bool RequiresCjkFont(Language targetLanguage)
+    {
+        return targetLanguage is Language.SimplifiedChinese
+            or Language.TraditionalChinese
+            or Language.Japanese
+            or Language.Korean;
+    }
+
+    private static string? GetCachedCjkFontPath(Language targetLanguage)
+    {
+        var fontsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Easydict",
+            "Fonts");
+
+        var fileName = targetLanguage switch
+        {
+            Language.SimplifiedChinese => "NotoSansSC-Regular.ttf",
+            Language.TraditionalChinese => "NotoSansTC-Regular.ttf",
+            Language.Japanese => "NotoSansJP-Regular.ttf",
+            Language.Korean => "NotoSansKR-Regular.ttf",
+            _ => null,
+        };
+
+        if (fileName is not null)
+        {
+            var exactPath = Path.Combine(fontsDir, fileName);
+            if (File.Exists(exactPath))
+            {
+                return exactPath;
+            }
+        }
+
+        foreach (var fallbackFile in new[]
+        {
+            "NotoSansSC-Regular.ttf",
+            "NotoSansTC-Regular.ttf",
+            "NotoSansJP-Regular.ttf",
+            "NotoSansKR-Regular.ttf",
+        })
+        {
+            var path = Path.Combine(fontsDir, fallbackFile);
+            if (File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Minimum font size for font shrinking — lowered from 8 to 6 to give more room before truncation.</summary>

@@ -1,930 +1,119 @@
-using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using Easydict.TranslationService.ContentPreservation;
 using Easydict.TranslationService.FormulaProtection;
 using Easydict.TranslationService.LongDocument;
-using Easydict.TranslationService.Models;
-using Easydict.WinUI.Services.DocumentExport;
+using Easydict.WinUI.Services;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
 using PdfPigPage = UglyToad.PdfPig.Content.Page;
-using CoreLongDocumentTranslationService = Easydict.TranslationService.LongDocument.LongDocumentTranslationService;
-using CoreLongDocumentTranslationResult = Easydict.TranslationService.LongDocument.LongDocumentTranslationResult;
 using LetterGeometry = Easydict.TranslationService.ContentPreservation.FormulaAwareTextReconstructor.LetterGeometry;
 
-namespace Easydict.WinUI.Services;
+namespace Easydict.WinUI.Services.DocumentExport;
 
-public sealed class LongDocumentTranslationResult
+public static class LongDocumentSourceExtraction
 {
-    public required LongDocumentJobState State { get; init; }
-    public required string OutputPath { get; init; }
-    public string? BilingualOutputPath { get; init; }
-    public required int TotalChunks { get; init; }
-    public required int SucceededChunks { get; init; }
-    public required IReadOnlyList<int> FailedChunkIndexes { get; init; }
-    public required LongDocumentQualityReport QualityReport { get; init; }
-    public LongDocumentTranslationCheckpoint? Checkpoint { get; init; }
-}
+    private static readonly Regex FormulaHeuristicRegex = new(@"(\$[^$]+\$|\\([^)]+\\)|\\[[^\]]+\\]|\b\w+\s*=\s*[-+*/^()\w\u221A]+)", RegexOptions.Compiled);
+    private static readonly Regex NaturalWordRegex = new(@"\b[a-zA-Z]{4,}\b", RegexOptions.Compiled);
 
-public sealed class LongDocumentTranslationService : IDisposable
-{
-    private sealed record RetryExecutionSummary(LongDocumentQualityReport? CoreQualityReport, int ReusedByCanonicalCount);
-
-    private sealed record CanonicalTranslationEntry(int ChunkIndex, int PageNumber, string Translation);
-
-    private readonly CoreLongDocumentTranslationService _coreLongDocumentService = new(
-        translateWithService: (request, serviceId, ct) =>
-            TranslationManagerService.Instance.Manager.TranslateAsync(request, ct, serviceId));
-    private readonly TranslationCacheService _cacheService = new();
-
-    // Layout detection services (lazy-initialized)
-    private LayoutModelDownloadService? _layoutModelDownloadService;
-    private DocLayoutYoloService? _docLayoutYoloService;
-    private TableStructureRecognitionService? _tatrService;
-    private HttpClient? _visionHttpClient;
-    private VisionLayoutDetectionService? _visionLayoutDetectionService;
-    private LayoutDetectionStrategy? _layoutDetectionStrategy;
-    private bool _disposed;
-
-    /// <summary>
-    /// Gets or creates the layout detection strategy instance.
-    /// </summary>
-    private LayoutDetectionStrategy GetLayoutDetectionStrategy()
+    public static Task<SourceDocument> BuildSourceDocumentBasicAsync(LongDocumentInputMode mode, string input, string? pageRange = null)
     {
-        if (_layoutDetectionStrategy is not null)
-            return _layoutDetectionStrategy;
-
-        _layoutModelDownloadService ??= new LayoutModelDownloadService();
-        _docLayoutYoloService ??= new DocLayoutYoloService(_layoutModelDownloadService);
-        _tatrService ??= new TableStructureRecognitionService(_layoutModelDownloadService);
-        _visionHttpClient ??= new HttpClient();
-        _visionLayoutDetectionService ??= new VisionLayoutDetectionService(_visionHttpClient);
-        _layoutDetectionStrategy = new LayoutDetectionStrategy(
-            _docLayoutYoloService, _visionLayoutDetectionService, _layoutModelDownloadService,
-            _tatrService,
-            tatrEnabledGetter: () => SettingsService.Instance.EnableTatrTableStructure);
-
-        return _layoutDetectionStrategy;
-    }
-
-    /// <summary>
-    /// Gets the layout model download service for UI status checks.
-    /// </summary>
-    public LayoutModelDownloadService GetLayoutModelDownloadService()
-    {
-        _layoutModelDownloadService ??= new LayoutModelDownloadService();
-        return _layoutModelDownloadService;
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        _docLayoutYoloService?.Dispose();
-        _tatrService?.Dispose();
-        _layoutModelDownloadService?.Dispose();
-        _visionHttpClient?.Dispose();
-        _cacheService.Dispose();
-    }
-
-    public async Task<LongDocumentTranslationResult> TranslateToPdfAsync(
-        LongDocumentInputMode mode,
-        string input,
-        Language from,
-        Language to,
-        string outputPath,
-        string serviceId,
-        Action<string>? onProgress = null,
-        CancellationToken cancellationToken = default,
-        LayoutDetectionMode layoutDetection = LayoutDetectionMode.Heuristic,
-        DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
-        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement,
-        string? visionEndpoint = null,
-        string? visionApiKey = null,
-        string? visionModel = null,
-        System.IProgress<LongDocumentTranslationProgress>? progress = null)
-    {
-        // Worker mode: when SettingsService.UseLongDocWorker is on, run translation in
-        // a child process so MuPDF + ONNX native heap is reclaimed by process exit.
-        // The worker exits after each translate per the "exit on completion" lifecycle.
-        if (SettingsService.Instance.UseLongDocWorker)
-        {
-            try
-            {
-                using var worker = new Workers.LongDocWorkerClient(SettingsService.Instance);
-                return await worker.TranslateToPdfAsync(
-                    mode, input, from, to, outputPath, serviceId, onProgress, cancellationToken,
-                    layoutDetection, outputMode, pdfExportMode, visionEndpoint, visionApiKey, visionModel,
-                    progress).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (Workers.LongDocWorkerClient.CanFallbackToInProc(ex))
-            {
-                System.Diagnostics.Debug.WriteLine($"[LongDocWorker] Falling back to in-proc translation: {ex.Message}");
-                onProgress?.Invoke("Long-document worker unavailable; falling back to in-process translation...");
-            }
-        }
-
-        var pageRange = string.IsNullOrWhiteSpace(SettingsService.Instance.LongDocPageRange) ? null : SettingsService.Instance.LongDocPageRange;
-
-        // Build source document (now natively async, CPU-bound work is wrapped inside)
-        var sourceDocument = await BuildSourceDocumentAsync(
-            mode, input, layoutDetection, visionEndpoint, visionApiKey, visionModel,
-            onProgress, cancellationToken, pageRange).ConfigureAwait(false);
-
-        var sourceFilePath = input;
-        var hasAnySourceText = sourceDocument.Pages
-            .SelectMany(page => page.Blocks)
-            .Any(block => !string.IsNullOrWhiteSpace(block.Text));
-        var hasScannedPages = sourceDocument.Pages.Any(page => page.IsScanned);
-
-        if (!hasAnySourceText && !hasScannedPages)
-        {
-            throw new InvalidOperationException("No source text found for translation.");
-        }
-
-        onProgress?.Invoke("Building long-document IR...");
-
-        var maxConcurrency = Math.Clamp(SettingsService.Instance.LongDocMaxConcurrency, 1, 16);
-        var formulaFontPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaFontPattern) ? null : SettingsService.Instance.FormulaFontPattern;
-        var formulaCharPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaCharPattern) ? null : SettingsService.Instance.FormulaCharPattern;
-        var customPrompt = string.IsNullOrWhiteSpace(SettingsService.Instance.LongDocCustomPrompt) ? null : SettingsService.Instance.LongDocCustomPrompt;
-        var enableDocumentContextPass = SettingsService.Instance.LongDocEnableDocumentContextPass;
-        var coreOptions = CreateCoreTranslationOptions(
-            serviceId,
-            from,
-            to,
-            enableOcrFallback: true,
-            maxConcurrency,
-            formulaFontPattern,
-            formulaCharPattern,
-            customPrompt,
-            progress,
-            enableDocumentContextPass);
-        var coreResult = await _coreLongDocumentService.TranslateAsync(sourceDocument, coreOptions, cancellationToken).ConfigureAwait(false);
-
-        var checkpoint = BuildCheckpointFromCoreResult(
-            mode,
-            sourceFilePath,
-            to,
-            sourceDocument,
-            coreResult,
-            pageRange);
-
-        // Try to resolve failed chunks from persistent cache before retrying
-        if (SettingsService.Instance.EnableTranslationCache && checkpoint.FailedChunkIndexes.Count > 0)
-        {
-            await ReadCacheEntriesAsync(checkpoint, serviceId, from, to, cancellationToken).ConfigureAwait(false);
-        }
-
-        EnforceTerminologyConsistency(checkpoint);
-
-        // Write successful translations to persistent cache
-        if (SettingsService.Instance.EnableTranslationCache)
-        {
-            await WriteCacheEntriesAsync(checkpoint, serviceId, from, to, cancellationToken).ConfigureAwait(false);
-        }
-
-        onProgress?.Invoke("Rendering translated output...");
-        return FinalizeResult(checkpoint, outputPath, onProgress, coreResult.QualityReport, outputMode, pdfExportMode);
-    }
-
-    public async Task<LongDocumentTranslationResult> RetryFailedChunksAsync(
-        LongDocumentTranslationCheckpoint checkpoint,
-        Language from,
-        Language to,
-        string outputPath,
-        string serviceId,
-        Action<string>? onProgress = null,
-        CancellationToken cancellationToken = default,
-        DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
-        System.IProgress<LongDocumentTranslationProgress>? progress = null)
-    {
-        ValidateCheckpointOrThrow(checkpoint);
-
-        if (checkpoint.FailedChunkIndexes.Count == 0)
-        {
-            return FinalizeResult(checkpoint, outputPath, onProgress, BuildQualityReportFromCheckpoint(checkpoint), outputMode);
-        }
-
-        onProgress?.Invoke($"Retrying {checkpoint.FailedChunkIndexes.Count} failed chunks...");
-        var retryCacheService = SettingsService.Instance.EnableTranslationCache ? _cacheService : null;
-        var retrySummary = await TranslatePendingChunksAsync(_coreLongDocumentService, checkpoint, from, to, serviceId, onProgress, cancellationToken, retryCacheService, progress).ConfigureAwait(false);
-        EnforceTerminologyConsistency(checkpoint);
-        var qualityReport = BuildQualityReportFromRetry(checkpoint, retrySummary);
-
-        return FinalizeResult(checkpoint, outputPath, onProgress, qualityReport, outputMode);
-    }
-
-    internal static LongDocumentTranslationCheckpoint BuildCheckpointFromCoreResult(
-        LongDocumentInputMode mode,
-        string sourceFilePath,
-        Language targetLanguage,
-        SourceDocument sourceDocument,
-        CoreLongDocumentTranslationResult coreResult,
-        string? pageRange = null)
-    {
-        var allBlocks = coreResult.Pages
-            .SelectMany(page => page.Blocks.Select(block => new
-            {
-                page.PageNumber,
-                Block = block
-            }))
-            .ToList();
-
-        var orderBySourceBlockId = coreResult.Pages
-            .ToDictionary(
-                p => p.PageNumber,
-                p => p.Blocks.Select((b, index) => new { b.SourceBlockId, index })
-                    .ToDictionary(x => x.SourceBlockId, x => x.index, StringComparer.Ordinal));
-        var pageBlockCounts = coreResult.Pages.ToDictionary(p => p.PageNumber, p => Math.Max(1, p.Blocks.Count));
-        var sourceBlocksByPageAndId = sourceDocument.Pages
-            .SelectMany(page => page.Blocks.Select(block => new
-            {
-                page.PageNumber,
-                Block = block
-            }))
-            .ToDictionary(
-                x => (x.PageNumber, x.Block.BlockId),
-                x => x.Block);
-
-        return new LongDocumentTranslationCheckpoint
-        {
-            InputMode = mode,
-            SourceFilePath = sourceFilePath,
-            TargetLanguage = targetLanguage,
-            PageRange = pageRange,
-            SourceChunks = allBlocks.Select(item => item.Block.OriginalText).ToList(),
-            ChunkMetadata = allBlocks
-                .Select((item, index) =>
-                {
-                    var regionInfo = LongDocumentSourceExtraction.InferRegionInfoFromBlockId(item.Block.SourceBlockId);
-                    sourceBlocksByPageAndId.TryGetValue((item.PageNumber, item.Block.SourceBlockId), out var sourceBlock);
-                    var sourceBlockType = item.Block.BlockType switch
-                    {
-                        BlockType.Heading => SourceBlockType.Heading,
-                        BlockType.Caption => SourceBlockType.Caption,
-                        BlockType.Table => SourceBlockType.TableCell,
-                        BlockType.Formula => SourceBlockType.Formula,
-                        BlockType.Unknown => SourceBlockType.Unknown,
-                        _ => SourceBlockType.Paragraph
-                    };
-                    return new LongDocumentChunkMetadata
-                    {
-                        ChunkIndex = index,
-                        PageNumber = item.PageNumber,
-                        SourceBlockId = item.Block.SourceBlockId,
-                        SourceBlockType = sourceBlockType,
-                        IsFormulaLike = sourceBlock?.IsFormulaLike ?? sourceBlockType == SourceBlockType.Formula,
-                        OrderInPage = orderBySourceBlockId.TryGetValue(item.PageNumber, out var orders) &&
-                                      orders.TryGetValue(item.Block.SourceBlockId, out var order)
-                            ? order
-                            : 0,
-                        RegionType = regionInfo.Type,
-                        RegionConfidence = regionInfo.Confidence,
-                        RegionSource = regionInfo.Source,
-                        ReadingOrderScore = LongDocumentSourceExtraction.CalculateReadingOrderScore(
-                            orderBySourceBlockId.TryGetValue(item.PageNumber, out var scoreOrders) &&
-                            scoreOrders.TryGetValue(item.Block.SourceBlockId, out var scoreOrder)
-                                ? scoreOrder
-                                : 0,
-                            pageBlockCounts.TryGetValue(item.PageNumber, out var pageCount) ? pageCount : 1),
-                        BoundingBox = item.Block.BoundingBox,
-                        TextStyle = item.Block.TextStyle,
-                        FormulaCharacters = item.Block.FormulaCharacters,
-                        TranslationSkipped = item.Block.TranslationSkipped,
-                        PreserveOriginalTextInPdfExport =
-                            item.Block.PreserveOriginalTextInPdfExport ||
-                            sourceBlockType == SourceBlockType.Formula ||
-                            regionInfo.Type is LayoutRegionType.Formula or LayoutRegionType.IsolatedFormula,
-                        RetryCount = item.Block.RetryCount,
-                        FallbackText = sourceBlock?.FallbackText,
-                        DetectedFontNames = sourceBlock?.DetectedFontNames
-                    };
-                })
-                .ToList(),
-            TranslatedChunks = allBlocks
-                .Select((item, index) => new { item.Block, index })
-                .Where(x => string.IsNullOrWhiteSpace(x.Block.LastError))
-                .ToDictionary(x => x.index, x => x.Block.TranslatedText),
-            FailedChunkIndexes = allBlocks
-                .Select((item, index) => new { item.Block, index })
-                .Where(x => !string.IsNullOrWhiteSpace(x.Block.LastError))
-                .Select(x => x.index)
-                .ToHashSet()
-        };
-    }
-
-    private static async Task<RetryExecutionSummary> TranslatePendingChunksAsync(
-        CoreLongDocumentTranslationService coreLongDocumentService,
-        LongDocumentTranslationCheckpoint checkpoint,
-        Language from,
-        Language to,
-        string serviceId,
-        Action<string>? onProgress,
-        CancellationToken cancellationToken,
-        TranslationCacheService? cacheService = null,
-        System.IProgress<LongDocumentTranslationProgress>? progress = null)
-    {
-        var pendingIndexes = checkpoint.FailedChunkIndexes.Count > 0
-            ? checkpoint.FailedChunkIndexes.OrderBy(i => i).ToList()
-            : Enumerable.Range(0, checkpoint.SourceChunks.Count).ToList();
-        var metadataByChunkIndex = checkpoint.ChunkMetadata
-            .ToDictionary(m => m.ChunkIndex);
-
-        checkpoint.FailedChunkIndexes.Clear();
-
-        if (pendingIndexes.Count == 0)
-        {
-            return new RetryExecutionSummary(null, 0);
-        }
-
-        var indexByRetryBlockId = new Dictionary<string, int>(StringComparer.Ordinal);
-        var retryPages = new List<SourceDocumentPage>(pendingIndexes.Count);
-        var canonicalBySource = BuildCanonicalTranslationsBySource(checkpoint);
-        var reusedByCanonical = 0;
-
-        for (var i = 0; i < pendingIndexes.Count; i++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var chunkIndex = pendingIndexes[i];
-            var sourceText = checkpoint.SourceChunks[chunkIndex];
-
-            if (TryGetCanonicalTranslationForChunk(checkpoint, canonicalBySource, chunkIndex, sourceText, out var canonicalTranslation))
-            {
-                checkpoint.TranslatedChunks[chunkIndex] = canonicalTranslation;
-                reusedByCanonical++;
-                continue;
-            }
-
-            // Try persistent cache before sending to API
-            if (cacheService != null && !string.IsNullOrWhiteSpace(sourceText))
-            {
-                var hash = TranslationCacheService.ComputeHash(sourceText);
-                try
-                {
-                    var cached = await cacheService.TryGetAsync(serviceId, from, to, hash, cancellationToken).ConfigureAwait(false);
-                    if (cached != null)
-                    {
-                        checkpoint.TranslatedChunks[chunkIndex] = cached;
-                        continue;
-                    }
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[LongDoc] Cache lookup failed for chunk {chunkIndex}: {ex.Message}");
-                }
-            }
-
-            if (!metadataByChunkIndex.TryGetValue(chunkIndex, out var metadata))
-            {
-                throw new InvalidOperationException($"Missing chunk metadata for chunk index {chunkIndex}.");
-            }
-
-            var pageNumber = metadata.PageNumber;
-            var blockId = $"retry-{chunkIndex}-{metadata.SourceBlockId}";
-            indexByRetryBlockId[blockId] = chunkIndex;
-
-            retryPages.Add(new SourceDocumentPage
-            {
-                PageNumber = pageNumber,
-                Blocks =
-                [
-                    new SourceDocumentBlock
-                    {
-                        BlockId = blockId,
-                        BlockType = metadata.SourceBlockType,
-                        Text = checkpoint.SourceChunks[chunkIndex],
-                        IsFormulaLike = metadata.IsFormulaLike,
-                        BoundingBox = metadata.BoundingBox,
-                        TextStyle = metadata.TextStyle
-                    }
-                ]
-            });
-        }
-
-        if (retryPages.Count == 0)
-        {
-            return new RetryExecutionSummary(null, reusedByCanonical);
-        }
-
-        var retrySource = new SourceDocument
-        {
-            DocumentId = "retry-failed-chunks",
-            Pages = retryPages
-        };
-
-        var retryConcurrency = Math.Clamp(SettingsService.Instance.LongDocMaxConcurrency, 1, 16);
-        var retryFormulaFontPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaFontPattern) ? null : SettingsService.Instance.FormulaFontPattern;
-        var retryFormulaCharPattern = string.IsNullOrWhiteSpace(SettingsService.Instance.FormulaCharPattern) ? null : SettingsService.Instance.FormulaCharPattern;
-        var retryCustomPrompt = string.IsNullOrWhiteSpace(SettingsService.Instance.LongDocCustomPrompt) ? null : SettingsService.Instance.LongDocCustomPrompt;
-        var retryOptions = CreateCoreTranslationOptions(
-            serviceId,
-            from,
-            to,
-            enableOcrFallback: false,
-            retryConcurrency,
-            retryFormulaFontPattern,
-            retryFormulaCharPattern,
-            retryCustomPrompt,
-            progress,
-            // Pass 1 already ran on the initial translation; the retry translates only
-            // failed chunks and would just re-do the document-context call wastefully.
-            enableDocumentContextPass: false);
-        var retryResult = await coreLongDocumentService.TranslateAsync(retrySource, retryOptions, cancellationToken).ConfigureAwait(false);
-
-        foreach (var translatedBlock in retryResult.Pages.SelectMany(page => page.Blocks))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (!indexByRetryBlockId.TryGetValue(translatedBlock.SourceBlockId, out var chunkIndex))
-            {
-                continue;
-            }
-
-            onProgress?.Invoke($"Translating chunk {chunkIndex + 1}/{checkpoint.SourceChunks.Count}...");
-
-            if (metadataByChunkIndex.TryGetValue(chunkIndex, out var metadata))
-                metadata.RetryCount = Math.Max(metadata.RetryCount, translatedBlock.RetryCount);
-
-            if (!string.IsNullOrWhiteSpace(translatedBlock.LastError) || string.IsNullOrWhiteSpace(translatedBlock.TranslatedText))
-            {
-                checkpoint.FailedChunkIndexes.Add(chunkIndex);
-                continue;
-            }
-
-            checkpoint.TranslatedChunks[chunkIndex] = translatedBlock.TranslatedText.Trim();
-        }
-
-        foreach (var chunkIndex in pendingIndexes)
-        {
-            if (!checkpoint.TranslatedChunks.ContainsKey(chunkIndex) && !checkpoint.FailedChunkIndexes.Contains(chunkIndex))
-            {
-                checkpoint.FailedChunkIndexes.Add(chunkIndex);
-            }
-        }
-
-        return new RetryExecutionSummary(retryResult.QualityReport, reusedByCanonical);
-    }
-
-    private const int DefaultLongDocRequestTimeoutMs = 30_000;
-    private const int FoundryLocalLongDocRequestTimeoutMs = 120_000;
-
-    internal static LongDocumentTranslationOptions CreateCoreTranslationOptions(
-        string serviceId,
-        Language from,
-        Language to,
-        bool enableOcrFallback,
-        int maxConcurrency,
-        string? formulaFontPattern,
-        string? formulaCharPattern,
-        string? customPrompt,
-        System.IProgress<LongDocumentTranslationProgress>? progress = null,
-        bool enableDocumentContextPass = true)
-    {
-        var usesFoundryLocal = UsesFoundryLocalLongDocProfile(serviceId);
-
-        return new LongDocumentTranslationOptions
-        {
-            ServiceId = serviceId,
-            FromLanguage = from,
-            ToLanguage = to,
-            EnableFormulaProtection = true,
-            EnableDocumentContextPass = enableDocumentContextPass && !usesFoundryLocal,
-            EnableOcrFallback = enableOcrFallback,
-            EnableQualityFeedbackRetry = true,
-            MaxRetriesPerBlock = 1,
-            MaxConcurrency = usesFoundryLocal ? 1 : Math.Clamp(maxConcurrency, 1, 16),
-            RequestTimeoutMs = usesFoundryLocal ? FoundryLocalLongDocRequestTimeoutMs : DefaultLongDocRequestTimeoutMs,
-            FormulaFontPattern = formulaFontPattern,
-            FormulaCharPattern = formulaCharPattern,
-            CustomPrompt = customPrompt,
-            Progress = progress
-        };
-    }
-
-    private static bool UsesFoundryLocalLongDocProfile(string serviceId)
-    {
-        if (!string.Equals(serviceId, LocalAITranslationService.ServiceIdValue, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return LocalAIProviderModeExtensions.Parse(SettingsService.Instance.LocalAIProvider) is
-            LocalAIProviderMode.Auto or LocalAIProviderMode.FoundryLocal;
-    }
-
-    private async Task WriteCacheEntriesAsync(
-        LongDocumentTranslationCheckpoint checkpoint,
-        string serviceId, Language from, Language to,
-        CancellationToken ct)
-    {
-        try
-        {
-            foreach (var (chunkIndex, translated) in checkpoint.TranslatedChunks)
-            {
-                ct.ThrowIfCancellationRequested();
-                if (chunkIndex < 0 || chunkIndex >= checkpoint.SourceChunks.Count)
-                    continue;
-                var source = checkpoint.SourceChunks[chunkIndex];
-                if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(translated))
-                    continue;
-                var hash = TranslationCacheService.ComputeHash(source);
-                await _cacheService.SetAsync(serviceId, from, to, hash, source, translated, ct).ConfigureAwait(false);
-            }
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[LongDoc] Cache write failed: {ex.Message}");
-        }
-    }
-
-    private async Task ReadCacheEntriesAsync(
-        LongDocumentTranslationCheckpoint checkpoint,
-        string serviceId, Language from, Language to,
-        CancellationToken ct)
-    {
-        try
-        {
-            var resolved = new List<int>();
-            foreach (var chunkIndex in checkpoint.FailedChunkIndexes)
-            {
-                ct.ThrowIfCancellationRequested();
-                if (chunkIndex < 0 || chunkIndex >= checkpoint.SourceChunks.Count)
-                    continue;
-                var source = checkpoint.SourceChunks[chunkIndex];
-                if (string.IsNullOrWhiteSpace(source))
-                    continue;
-                var hash = TranslationCacheService.ComputeHash(source);
-                var cached = await _cacheService.TryGetAsync(serviceId, from, to, hash, ct).ConfigureAwait(false);
-                if (cached != null)
-                {
-                    checkpoint.TranslatedChunks[chunkIndex] = cached;
-                    resolved.Add(chunkIndex);
-                }
-            }
-            foreach (var idx in resolved)
-            {
-                checkpoint.FailedChunkIndexes.Remove(idx);
-            }
-            if (resolved.Count > 0)
-            {
-                System.Diagnostics.Debug.WriteLine($"[LongDoc] Cache read resolved {resolved.Count} chunks");
-            }
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[LongDoc] Cache read failed: {ex.Message}");
-        }
-    }
-
-    private static IDocumentExportService ResolveExportService(
-        string? sourceFilePath,
-        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement)
-    {
-        var ext = Path.GetExtension(sourceFilePath)?.ToLowerInvariant();
-        return ext switch
-        {
-            ".pdf" => pdfExportMode switch
-            {
-                PdfExportMode.ContentStreamReplacement => new MuPdfExportService(),
-                _ => new PdfExportService(),
-            },
-            ".md" => new MarkdownExportService(),
-            ".txt" => new PlainTextExportService(),
-            _ => throw new NotSupportedException($"Unsupported file format: {ext}")
-        };
-    }
-
-    private static LongDocumentTranslationResult FinalizeResult(
-        LongDocumentTranslationCheckpoint checkpoint,
-        string outputPath,
-        Action<string>? onProgress,
-        LongDocumentQualityReport qualityReport,
-        DocumentOutputMode outputMode = DocumentOutputMode.Monolingual,
-        PdfExportMode pdfExportMode = PdfExportMode.ContentStreamReplacement)
-    {
-        ValidateCheckpointOrThrow(checkpoint);
-
-        var succeededCount = checkpoint.TranslatedChunks.Count;
-        if (succeededCount == 0)
-        {
-            throw new InvalidOperationException("Translation failed for all chunks.");
-        }
-
-        onProgress?.Invoke("Generating output document...");
-
-        var exportService = ResolveExportService(checkpoint.SourceFilePath, pdfExportMode);
-        var exportResult = exportService.Export(checkpoint, checkpoint.SourceFilePath!, outputPath, outputMode);
-
-        if (exportResult.BackfillMetrics != null)
-        {
-            qualityReport = qualityReport with { BackfillMetrics = exportResult.BackfillMetrics };
-        }
-
-        var state = checkpoint.FailedChunkIndexes.Count switch
-        {
-            0 => LongDocumentJobState.Completed,
-            _ => LongDocumentJobState.PartialSuccess
-        };
-
-        var primaryPath = exportResult.OutputPath;
-        onProgress?.Invoke(state == LongDocumentJobState.Completed
-            ? exportResult.BilingualOutputPath != null && exportResult.BilingualOutputPath != primaryPath
-                ? $"Completed: {primaryPath} + {exportResult.BilingualOutputPath}"
-                : $"Completed: {primaryPath}"
-            : $"Partially completed: {succeededCount}/{checkpoint.SourceChunks.Count} chunks. You can retry failed chunks.");
-
-        return new LongDocumentTranslationResult
-        {
-            State = state,
-            OutputPath = primaryPath,
-            BilingualOutputPath = exportResult.BilingualOutputPath,
-            TotalChunks = checkpoint.SourceChunks.Count,
-            SucceededChunks = succeededCount,
-            FailedChunkIndexes = checkpoint.FailedChunkIndexes.OrderBy(i => i).ToList(),
-            QualityReport = qualityReport,
-            Checkpoint = checkpoint
-        };
-    }
-
-    /// <summary>
-    /// Legacy helper that calls the LLM to identify difficult words in source-fallback blocks.
-    /// The default PDF export path no longer invokes or renders these annotations.
-    /// </summary>
-    private static async Task AnnotateSourceFallbackBlocksAsync(
-        LongDocumentTranslationCheckpoint checkpoint,
-        string serviceId,
-        Language targetLanguage,
-        CancellationToken ct)
-    {
-        var fallbackChunkIndexes = checkpoint.FailedChunkIndexes
-            .Where(i => !checkpoint.TranslatedChunks.ContainsKey(i)
-                && i >= 0 && i < checkpoint.SourceChunks.Count
-                && !string.IsNullOrWhiteSpace(checkpoint.SourceChunks[i]))
-            .ToList();
-
-        if (fallbackChunkIndexes.Count == 0)
-            return;
-
-        var annotations = new Dictionary<int, IReadOnlyList<WordAnnotation>>();
-
-        // Process each fallback block individually to keep responses focused
-        foreach (var chunkIndex in fallbackChunkIndexes)
-        {
-            ct.ThrowIfCancellationRequested();
-            var sourceText = checkpoint.SourceChunks[chunkIndex];
-            if (sourceText.Length < 10) // Skip very short texts
-                continue;
-
-            try
-            {
-                var prompt = $"For the following English text, identify up to 8 uncommon or technical words " +
-                    $"that a {targetLanguage.GetDisplayName()} reader might not know. " +
-                    $"For each word, provide a very short translation (1-3 characters preferred). " +
-                    $"Return ONLY a JSON array: [{{\"word\": \"example\", \"translation\": \"示例\"}}]. " +
-                    $"Skip common words (the, is, have, with, for, from, etc.). " +
-                    $"If no difficult words, return [].";
-
-                var request = new TranslationRequest
-                {
-                    Text = sourceText,
-                    FromLanguage = Language.English,
-                    ToLanguage = targetLanguage,
-                    CustomPrompt = prompt
-                };
-
-                var result = await TranslationManagerService.Instance.Manager
-                    .TranslateAsync(request, ct, serviceId);
-
-                var parsed = ParseWordAnnotations(result.TranslatedText);
-                if (parsed.Count > 0)
-                {
-                    annotations[chunkIndex] = parsed;
-                }
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[LongDoc] Word annotation failed for chunk {chunkIndex}: {ex.Message}");
-                // Non-critical: skip annotation for this block
-            }
-        }
-
-        if (annotations.Count > 0)
-        {
-            checkpoint.WordAnnotations = annotations;
-        }
-    }
-
-    internal static List<WordAnnotation> ParseWordAnnotations(string llmResponse)
-    {
-        var result = new List<WordAnnotation>();
-        if (string.IsNullOrWhiteSpace(llmResponse))
-            return result;
-
-        try
-        {
-            // Extract JSON array from response (LLM might wrap it in markdown code blocks)
-            var text = llmResponse.Trim();
-            var jsonStart = text.IndexOf('[');
-            var jsonEnd = text.LastIndexOf(']');
-            if (jsonStart < 0 || jsonEnd <= jsonStart)
-                return result;
-
-            var json = text[jsonStart..(jsonEnd + 1)];
-            var items = System.Text.Json.JsonSerializer.Deserialize<List<WordAnnotationDto>>(json,
-                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            if (items is null)
-                return result;
-
-            foreach (var item in items)
-            {
-                if (!string.IsNullOrWhiteSpace(item.Word) && !string.IsNullOrWhiteSpace(item.Translation))
-                {
-                    result.Add(new WordAnnotation(item.Word.Trim(), item.Translation.Trim()));
-                }
-            }
-        }
-        catch (System.Text.Json.JsonException ex)
-        {
-            Debug.WriteLine($"[LongDoc] Failed to parse word annotations JSON: {ex.Message}");
-        }
-
-        return result;
-    }
-
-    private sealed record WordAnnotationDto
-    {
-        public string? Word { get; init; }
-        public string? Translation { get; init; }
-    }
-
-    private static string ComposeOutputText(LongDocumentTranslationCheckpoint checkpoint)
-    {
-        var sb = new StringBuilder();
-
-        var metadataByChunkIndex = checkpoint.ChunkMetadata
-            .ToDictionary(m => m.ChunkIndex);
-
-        var orderedChunkIndexes = Enumerable.Range(0, checkpoint.SourceChunks.Count)
-            .OrderBy(index => metadataByChunkIndex[index].PageNumber)
-            .ThenBy(index => metadataByChunkIndex[index].OrderInPage)
-            .ThenBy(index => index)
-            .ToList();
-
-        int? currentPage = null;
-
-        foreach (var chunkIndex in orderedChunkIndexes)
-        {
-            var metadata = metadataByChunkIndex[chunkIndex];
-            if (currentPage != metadata.PageNumber)
-            {
-                currentPage = metadata.PageNumber;
-                sb.AppendLine($"=== Page {currentPage} ===");
-                sb.AppendLine();
-            }
-
-            if (checkpoint.TranslatedChunks.TryGetValue(chunkIndex, out var translated))
-            {
-                if (metadata?.SourceBlockType == SourceBlockType.Formula || metadata?.IsFormulaLike == true)
-                {
-                    sb.AppendLine($"[Formula] {translated}");
-                }
-                else
-                {
-                    sb.AppendLine(translated);
-                }
-                sb.AppendLine();
-            }
-            else
-            {
-                sb.AppendLine($"[Chunk {chunkIndex + 1} translation failed. Retry required.]");
-                sb.AppendLine();
-            }
-        }
-
-        return sb.ToString().Trim();
-    }
-
-    private static Task<SourceDocument> BuildSourceDocumentBasicAsync(LongDocumentInputMode mode, string input, string? pageRange = null)
-    {
-        return LongDocumentSourceExtraction.BuildSourceDocumentBasicAsync(mode, input, pageRange);
-    }
-
-    /// <summary>
-    /// Async version of BuildSourceDocument that supports ML layout detection.
-    /// Text/Markdown modes always use heuristic (no PDF pages to analyze).
-    /// Falls back to heuristic when ML detection is set to Heuristic.
-    /// </summary>
-    private async Task<SourceDocument> BuildSourceDocumentAsync(
-        LongDocumentInputMode mode,
-        string input,
-        LayoutDetectionMode layoutDetection,
-        string? visionEndpoint,
-        string? visionApiKey,
-        string? visionModel,
-        Action<string>? onProgress,
-        CancellationToken ct,
-        string? pageRange = null)
-    {
-        // Text/Markdown modes don't have PDF pages for ML layout detection
-        if (mode is LongDocumentInputMode.PlainText or LongDocumentInputMode.Markdown ||
-            layoutDetection == LayoutDetectionMode.Heuristic)
-        {
-            return await BuildSourceDocumentBasicAsync(mode, input, pageRange).ConfigureAwait(false);
-        }
-
         if (!File.Exists(input))
         {
             throw new FileNotFoundException("Source file not found.", input);
         }
 
-        var strategy = GetLayoutDetectionStrategy();
-
-        // For Auto mode, check if ONNX is available; if not, fall back to async heuristic
-        if (layoutDetection == LayoutDetectionMode.Auto && !strategy.IsOnnxDownloaded)
+        if (mode is LongDocumentInputMode.PlainText or LongDocumentInputMode.Markdown)
         {
-            return await BuildSourceDocumentBasicAsync(mode, input, pageRange).ConfigureAwait(false);
+            return Task.FromResult(BuildSourceDocumentFromTextFile(input));
         }
 
-        onProgress?.Invoke("Analyzing page layouts with ML model...");
+        return BuildSourceDocumentFromPdfAsync(input, pageRange);
+    }
 
-        return await Task.Run(async () =>
+    private static SourceDocument BuildSourceDocumentFromTextFile(string filePath)
+    {
+        var text = File.ReadAllText(filePath);
+        var blocks = SplitTextIntoBlocks(text, 1).ToList();
+
+        return new SourceDocument
+        {
+            DocumentId = Path.GetFileNameWithoutExtension(filePath),
+            Pages =
+            [
+                new SourceDocumentPage
+                {
+                    PageNumber = 1,
+                    Blocks = blocks
+                }
+            ]
+        };
+    }
+
+    private static IEnumerable<SourceDocumentBlock> SplitTextIntoBlocks(string text, int pageNumber)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            yield return new SourceDocumentBlock
+            {
+                BlockId = $"p{pageNumber}-b1",
+                BlockType = SourceBlockType.Paragraph,
+                Text = string.Empty
+            };
+
+            yield break;
+        }
+
+        var normalized = text.Replace("\r\n", "\n");
+        var rawBlocks = normalized
+            .Split("\n\n", StringSplitOptions.TrimEntries)
+            .Where(block => !string.IsNullOrWhiteSpace(block))
+            .ToList();
+
+        if (rawBlocks.Count == 0)
+        {
+            rawBlocks.Add(normalized.Trim());
+        }
+
+        for (var i = 0; i < rawBlocks.Count; i++)
+        {
+            var blockText = rawBlocks[i].Trim();
+            var blockType = GuessBlockType(blockText);
+
+            yield return new SourceDocumentBlock
+            {
+                BlockId = $"p{pageNumber}-b{i + 1}",
+                BlockType = blockType,
+                Text = blockText,
+                IsFormulaLike = blockType == SourceBlockType.Formula
+            };
+        }
+    }
+
+    private static Task<SourceDocument> BuildSourceDocumentFromPdfAsync(string input, string? pageRange = null)
+    {
+        return Task.Run(() =>
         {
             using var document = PdfPigDocument.Open(input);
             var totalPages = document.NumberOfPages;
             var selectedPages = PageRangeParser.Parse(pageRange, totalPages);
             var pages = new List<SourceDocumentPage>();
-
             for (var pageNumber = 1; pageNumber <= totalPages; pageNumber++)
             {
-                if (selectedPages != null && !selectedPages.Contains(pageNumber))
+                if (selectedPages is not null && !selectedPages.Contains(pageNumber))
+                {
                     continue;
+                }
 
                 var page = document.GetPage(pageNumber);
-                var pageText = page.Text;
-                var scanned = string.IsNullOrWhiteSpace(pageText);
-
-                if (scanned)
-                {
-                    pages.Add(new SourceDocumentPage
-                    {
-                        PageNumber = pageNumber,
-                        IsScanned = true,
-                        Blocks = []
-                    });
-                    continue;
-                }
-
-                // First extract heuristic blocks (always needed for text content)
-                var heuristicBlocks = LongDocumentSourceExtraction.ExtractLayoutBlocksFromPage(page).ToList();
-                if (heuristicBlocks.Count == 0)
-                {
-                    pages.Add(new SourceDocumentPage
-                    {
-                        PageNumber = pageNumber,
-                        IsScanned = true,
-                        Blocks = []
-                    });
-                    continue;
-                }
-
-                // Try ML-enhanced detection
-                try
-                {
-                    var enhancedBlocks = await strategy.DetectAndExtractAsync(
-                        page, input, pageNumber - 1, layoutDetection,
-                        visionEndpoint, visionApiKey, visionModel, ct).ConfigureAwait(false);
-
-                    if (enhancedBlocks.Count > 0)
-                    {
-                        // ML-driven blocks already carry correct BlockIds and IsFormulaLike flags
-                        // (set by LayoutDetectionStrategy.ExtractBlocksByMlRegions → GroupWordsIntoBlocks).
-                        pages.Add(new SourceDocumentPage
-                        {
-                            PageNumber = pageNumber,
-                            IsScanned = false,
-                            Blocks = enhancedBlocks.Select(eb => eb.Block).ToList()
-                        });
-                        continue;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[LongDoc] ML detection failed for page {pageNumber}: {ex.Message}");
-                }
-
-                // Fallback: use heuristic blocks
+                var blocks = ExtractLayoutBlocksFromPage(page).ToList();
+                var scanned = string.IsNullOrWhiteSpace(page.Text) || blocks.Count == 0;
                 pages.Add(new SourceDocumentPage
                 {
                     PageNumber = pageNumber,
-                    IsScanned = false,
-                    Blocks = heuristicBlocks
+                    IsScanned = scanned,
+                    Blocks = scanned ? [] : blocks,
                 });
             }
 
@@ -943,12 +132,12 @@ public sealed class LongDocumentTranslationService : IDisposable
                 DocumentId = Path.GetFileNameWithoutExtension(input),
                 Pages = pages
             };
-        }, ct).ConfigureAwait(false);
+        });
     }
 
     // --- PDF export methods removed; see PdfExportService ---
 
-    private static IEnumerable<SourceDocumentBlock> ExtractLayoutBlocksFromPage(PdfPigPage page)
+    public static IEnumerable<SourceDocumentBlock> ExtractLayoutBlocksFromPage(PdfPigPage page)
     {
         var pageWidth = (double)page.Width;
         var allWords = page.GetWords()
@@ -1052,7 +241,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             var regionType = InferRegionType(layoutProfile, left, right, top, bottom, blockText);
             var type = regionType == LayoutRegionType.TableLike
                 ? SourceBlockType.TableCell
-                : LongDocumentSourceExtraction.GuessBlockType(blockText);
+                : GuessBlockType(blockText);
             var regionTag = regionType switch
             {
                 LayoutRegionType.Header => "header",
@@ -1171,7 +360,7 @@ public sealed class LongDocumentTranslationService : IDisposable
     /// <param name="pageNumber">1-based page number for BlockId generation.</param>
     /// <param name="regionTag">Region tag embedded in the BlockId (e.g., "body", "title").</param>
     /// <param name="blockIndex">Counter incremented for each emitted block (shared across regions on the same page).</param>
-    internal static List<SourceDocumentBlock> GroupWordsIntoBlocks(
+    public static List<SourceDocumentBlock> GroupWordsIntoBlocks(
         List<Word> regionWords,
         PdfPigPage page,
         int pageNumber,
@@ -1241,7 +430,7 @@ public sealed class LongDocumentTranslationService : IDisposable
             if (string.IsNullOrWhiteSpace(blockText))
                 continue;
 
-            var type = LongDocumentSourceExtraction.GuessBlockType(blockText);
+            var type = GuessBlockType(blockText);
 
             blockIndex++;
             result.Add(new SourceDocumentBlock
@@ -2607,281 +1796,104 @@ public sealed class LongDocumentTranslationService : IDisposable
         }
     }
 
-    private static IReadOnlyDictionary<int, BackfillPageMetrics>? MergePageBackfillMetrics(
-        IReadOnlyDictionary<int, BackfillPageMetrics>? previous,
-        IReadOnlyDictionary<int, BackfillPageMetrics>? current)
+    public static double CalculateReadingOrderScore(int orderInPage, int pageBlockCount)
     {
-        if (previous is null && current is null)
+        if (pageBlockCount <= 1)
         {
-            return null;
+            return 1d;
         }
 
-        if (previous is null)
+        var denominator = Math.Max(1, pageBlockCount - 1);
+        var normalized = 1d - Math.Clamp(orderInPage / (double)denominator, 0d, 1d);
+        return Math.Round(normalized, 4, MidpointRounding.AwayFromZero);
+    }
+
+    public static (LayoutRegionType Type, double Confidence, LayoutRegionSource Source) InferRegionInfoFromBlockId(string sourceBlockId)
+    {
+        if (sourceBlockId.Contains("-header-", StringComparison.OrdinalIgnoreCase))
         {
-            return current!.ToDictionary(entry => entry.Key, entry => entry.Value);
+            return (LayoutRegionType.Header, 0.92d, LayoutRegionSource.Heuristic);
         }
 
-        if (current is null)
+        if (sourceBlockId.Contains("-footer-", StringComparison.OrdinalIgnoreCase))
         {
-            return previous.ToDictionary(entry => entry.Key, entry => entry.Value);
+            return (LayoutRegionType.Footer, 0.92d, LayoutRegionSource.Heuristic);
         }
 
-        var merged = previous.ToDictionary(entry => entry.Key, entry => entry.Value);
-        foreach (var (pageNumber, currentPage) in current)
+        if (sourceBlockId.Contains("-left-", StringComparison.OrdinalIgnoreCase))
         {
-            if (!merged.TryGetValue(pageNumber, out var previousPage))
+            return (LayoutRegionType.LeftColumn, 0.80d, LayoutRegionSource.Heuristic);
+        }
+
+        if (sourceBlockId.Contains("-right-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.RightColumn, 0.80d, LayoutRegionSource.Heuristic);
+        }
+
+        if (sourceBlockId.Contains("-table-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.TableLike, 0.88d, LayoutRegionSource.Heuristic);
+        }
+
+        // ML-detected region types (from ONNX or Vision LLM)
+        if (sourceBlockId.Contains("-figure-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.Figure, 0.90d, LayoutRegionSource.OnnxModel);
+        }
+
+        if (sourceBlockId.Contains("-formula-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.Formula, 0.90d, LayoutRegionSource.OnnxModel);
+        }
+
+        if (sourceBlockId.Contains("-caption-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.Caption, 0.85d, LayoutRegionSource.OnnxModel);
+        }
+
+        if (sourceBlockId.Contains("-title-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.Title, 0.88d, LayoutRegionSource.OnnxModel);
+        }
+
+        if (sourceBlockId.Contains("-body-", StringComparison.OrdinalIgnoreCase))
+        {
+            return (LayoutRegionType.Body, 0.72d, LayoutRegionSource.BlockIdFallback);
+        }
+
+        return (LayoutRegionType.Unknown, 0.35d, LayoutRegionSource.Unknown);
+    }
+
+    internal static SourceBlockType GuessBlockType(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return SourceBlockType.Unknown;
+        }
+
+        var trimmed = text.Trim();
+        var formulaMatch = FormulaHeuristicRegex.Match(trimmed);
+        if (formulaMatch.Success)
+        {
+            var naturalWordCount = NaturalWordRegex.Matches(trimmed).Count;
+            var proseDominantInlineEquation =
+                trimmed.Length > 80 &&
+                naturalWordCount >= 6 &&
+                formulaMatch.Length < trimmed.Length * 0.45;
+
+            if (proseDominantInlineEquation)
             {
-                merged[pageNumber] = currentPage;
-                continue;
+                return SourceBlockType.Paragraph;
             }
 
-            merged[pageNumber] = new BackfillPageMetrics
-            {
-                CandidateBlocks = previousPage.CandidateBlocks + currentPage.CandidateBlocks,
-                RenderedBlocks = previousPage.RenderedBlocks + currentPage.RenderedBlocks,
-                MissingBoundingBoxBlocks = previousPage.MissingBoundingBoxBlocks + currentPage.MissingBoundingBoxBlocks,
-                ShrinkFontBlocks = previousPage.ShrinkFontBlocks + currentPage.ShrinkFontBlocks,
-                TruncatedBlocks = previousPage.TruncatedBlocks + currentPage.TruncatedBlocks,
-                ObjectReplaceBlocks = previousPage.ObjectReplaceBlocks + currentPage.ObjectReplaceBlocks,
-                OverlayModeBlocks = previousPage.OverlayModeBlocks + currentPage.OverlayModeBlocks,
-                StructuredFallbackBlocks = previousPage.StructuredFallbackBlocks + currentPage.StructuredFallbackBlocks
-            };
+            return SourceBlockType.Formula;
         }
 
-        return merged;
-    }
-
-    private static LongDocumentQualityReport BuildQualityReportFromCheckpoint(LongDocumentTranslationCheckpoint checkpoint)
-    {
-        var metadataByIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
-        var failedBlocks = checkpoint.FailedChunkIndexes
-            .Select(index => metadataByIndex[index])
-            .Select(metadata => new FailedBlockInfo
-            {
-                IrBlockId = $"checkpoint-{metadata.ChunkIndex}",
-                SourceBlockId = metadata.SourceBlockId,
-                PageNumber = metadata.PageNumber,
-                RetryCount = 0,
-                Error = "Translation failed or missing translated text."
-            })
-            .ToList();
-
-        return new LongDocumentQualityReport
+        if (trimmed.Length < 80 && trimmed.All(c => !char.IsLetter(c) || char.IsUpper(c)))
         {
-            StageTimingsMs = new Dictionary<string, long>(),
-            BackfillMetrics = null,
-            TotalBlocks = checkpoint.SourceChunks.Count,
-            TranslatedBlocks = checkpoint.TranslatedChunks.Count,
-            SkippedBlocks = checkpoint.ChunkMetadata.Count(m => m.SourceBlockType == SourceBlockType.Formula || m.IsFormulaLike),
-            FailedBlocks = failedBlocks
-        };
-    }
-
-    private static BackfillQualityMetrics? MergeRetryBackfillMetrics(
-        BackfillQualityMetrics? previous,
-        BackfillQualityMetrics? current)
-    {
-        if (previous is null && current is null)
-        {
-            return null;
+            return SourceBlockType.Heading;
         }
 
-        if (previous is null)
-        {
-            var coreMetrics = current!;
-            return coreMetrics with
-            {
-                RetryMergeStrategy = "core-only",
-                PageMetrics = MergePageBackfillMetrics(null, coreMetrics.PageMetrics)
-            };
-        }
-
-        if (current is null)
-        {
-            return previous with { RetryMergeStrategy = "checkpoint-only", PageMetrics = MergePageBackfillMetrics(previous.PageMetrics, null) };
-        }
-
-        return new BackfillQualityMetrics
-        {
-            CandidateBlocks = previous.CandidateBlocks + current.CandidateBlocks,
-            RenderedBlocks = previous.RenderedBlocks + current.RenderedBlocks,
-            MissingBoundingBoxBlocks = previous.MissingBoundingBoxBlocks + current.MissingBoundingBoxBlocks,
-            ShrinkFontBlocks = previous.ShrinkFontBlocks + current.ShrinkFontBlocks,
-            TruncatedBlocks = previous.TruncatedBlocks + current.TruncatedBlocks,
-            ObjectReplaceBlocks = previous.ObjectReplaceBlocks + current.ObjectReplaceBlocks,
-            OverlayModeBlocks = previous.OverlayModeBlocks + current.OverlayModeBlocks,
-            StructuredFallbackBlocks = previous.StructuredFallbackBlocks + current.StructuredFallbackBlocks,
-            PageMetrics = MergePageBackfillMetrics(previous.PageMetrics, current.PageMetrics),
-            BlockIssues = MergeBlockIssues(previous.BlockIssues, current.BlockIssues),
-            RetryMergeStrategy = "accumulate"
-        };
-    }
-
-    private static IReadOnlyList<BackfillBlockIssue>? MergeBlockIssues(
-        IReadOnlyList<BackfillBlockIssue>? previous,
-        IReadOnlyList<BackfillBlockIssue>? current)
-    {
-        if (previous is null or { Count: 0 } && current is null or { Count: 0 })
-        {
-            return null;
-        }
-
-        var merged = new List<BackfillBlockIssue>();
-        if (previous is { Count: > 0 })
-            merged.AddRange(previous);
-        if (current is { Count: > 0 })
-            merged.AddRange(current);
-
-        return merged.Count > 0 ? merged : null;
-    }
-
-    private static LongDocumentQualityReport BuildQualityReportFromRetry(
-        LongDocumentTranslationCheckpoint checkpoint,
-        RetryExecutionSummary retrySummary)
-    {
-        var fallback = BuildQualityReportFromCheckpoint(checkpoint);
-        if (retrySummary.CoreQualityReport is null)
-        {
-            return fallback;
-        }
-
-        var timings = new Dictionary<string, long>(retrySummary.CoreQualityReport.StageTimingsMs, StringComparer.Ordinal)
-        {
-            ["retry-canonical-reuse"] = retrySummary.ReusedByCanonicalCount
-        };
-
-        var backfill = MergeRetryBackfillMetrics(fallback.BackfillMetrics, retrySummary.CoreQualityReport.BackfillMetrics);
-
-        return new LongDocumentQualityReport
-        {
-            StageTimingsMs = timings,
-            BackfillMetrics = backfill,
-            TotalBlocks = fallback.TotalBlocks,
-            TranslatedBlocks = fallback.TranslatedBlocks,
-            SkippedBlocks = fallback.SkippedBlocks,
-            FailedBlocks = fallback.FailedBlocks
-        };
-    }
-
-    private static void ValidateCheckpointOrThrow(LongDocumentTranslationCheckpoint checkpoint)
-    {
-        if (string.IsNullOrWhiteSpace(checkpoint.SourceFilePath))
-        {
-            throw new InvalidOperationException("Checkpoint source file path is required for export.");
-        }
-
-        if (checkpoint.ChunkMetadata.Count != checkpoint.SourceChunks.Count)
-        {
-            throw new InvalidOperationException("Checkpoint metadata count does not match source chunk count.");
-        }
-
-        var expectedIndexes = Enumerable.Range(0, checkpoint.SourceChunks.Count).ToHashSet();
-        var actualIndexes = checkpoint.ChunkMetadata.Select(m => m.ChunkIndex).ToHashSet();
-        if (!expectedIndexes.SetEquals(actualIndexes))
-        {
-            throw new InvalidOperationException("Checkpoint metadata indexes are incomplete or duplicated.");
-        }
-    }
-
-    private static Dictionary<string, List<CanonicalTranslationEntry>> BuildCanonicalTranslationsBySource(LongDocumentTranslationCheckpoint checkpoint)
-    {
-        var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
-        var canonical = new Dictionary<string, List<CanonicalTranslationEntry>>(StringComparer.Ordinal);
-
-        foreach (var entry in checkpoint.TranslatedChunks.OrderBy(item => item.Key))
-        {
-            if (entry.Key < 0 || entry.Key >= checkpoint.SourceChunks.Count ||
-                !metadataByChunkIndex.TryGetValue(entry.Key, out var metadata))
-            {
-                continue;
-            }
-
-            var source = checkpoint.SourceChunks[entry.Key];
-            if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(entry.Value))
-            {
-                continue;
-            }
-
-            if (!canonical.TryGetValue(source, out var values))
-            {
-                values = [];
-                canonical[source] = values;
-            }
-
-            values.Add(new CanonicalTranslationEntry(entry.Key, metadata.PageNumber, entry.Value.Trim()));
-        }
-
-        return canonical;
-    }
-
-    private static bool TryGetCanonicalTranslationForChunk(
-        LongDocumentTranslationCheckpoint checkpoint,
-        IReadOnlyDictionary<string, List<CanonicalTranslationEntry>> canonicalBySource,
-        int chunkIndex,
-        string sourceText,
-        out string canonicalTranslation)
-    {
-        canonicalTranslation = string.Empty;
-        if (string.IsNullOrWhiteSpace(sourceText) ||
-            !canonicalBySource.TryGetValue(sourceText, out var candidates) ||
-            candidates.Count == 0)
-        {
-            return false;
-        }
-
-        var metadataByChunkIndex = checkpoint.ChunkMetadata.ToDictionary(m => m.ChunkIndex);
-        if (!metadataByChunkIndex.TryGetValue(chunkIndex, out var targetMetadata))
-        {
-            return false;
-        }
-
-        const int pageWindow = 2;
-
-        var best = candidates
-            .Where(c => c.ChunkIndex != chunkIndex)
-            .Select(c => new
-            {
-                Entry = c,
-                Distance = Math.Abs(c.PageNumber - targetMetadata.PageNumber)
-            })
-            .OrderBy(x => x.Distance)
-            .ThenByDescending(x => x.Entry.ChunkIndex)
-            .FirstOrDefault(x => x.Distance <= pageWindow)
-            ?.Entry;
-
-        if (best is null)
-        {
-            best = candidates
-                .Where(c => c.ChunkIndex != chunkIndex)
-                .OrderByDescending(c => c.ChunkIndex)
-                .FirstOrDefault();
-        }
-
-        if (best is null || string.IsNullOrWhiteSpace(best.Translation))
-        {
-            return false;
-        }
-
-        canonicalTranslation = best.Translation;
-        return true;
-    }
-
-    private static void EnforceTerminologyConsistency(LongDocumentTranslationCheckpoint checkpoint)
-    {
-        var canonicalBySource = BuildCanonicalTranslationsBySource(checkpoint);
-
-        for (var i = 0; i < checkpoint.SourceChunks.Count; i++)
-        {
-            if (checkpoint.FailedChunkIndexes.Contains(i))
-            {
-                continue;
-            }
-
-            var source = checkpoint.SourceChunks[i];
-            if (TryGetCanonicalTranslationForChunk(checkpoint, canonicalBySource, i, source, out var canonical))
-            {
-                checkpoint.TranslatedChunks[i] = canonical;
-            }
-        }
+        return SourceBlockType.Paragraph;
     }
 }

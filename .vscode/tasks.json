@@ -103,6 +103,94 @@
             }
         },
         {
+            "label": "build-document-export",
+            "command": "dotnet",
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
+            "args": [
+                "build",
+                "${workspaceFolder}/dotnet/src/Easydict.DocumentExport/Easydict.DocumentExport.csproj",
+                "-p:Platform=x64",
+                "--configuration",
+                "Debug",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary,ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "build-longdoc-worker",
+            "command": "dotnet",
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
+            "args": [
+                "build",
+                "${workspaceFolder}/dotnet/src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj",
+                "-p:Platform=x64",
+                "--configuration",
+                "Debug",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary,ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "build-refactor-components",
+            "dependsOn": [
+                "build-document-export",
+                "build-longdoc-worker"
+            ],
+            "dependsOrder": "sequence",
+            "group": "build",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "build-e2e",
+            "command": "dotnet",
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
+            "args": [
+                "build",
+                "${workspaceFolder}/dotnet/e2e/E2E.SidecarClient.csproj",
+                "--configuration",
+                "Debug",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary,ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
             "label": "clean",
             "command": "dotnet",
             "type": "shell",
@@ -164,6 +252,76 @@
         // ============================================
         // Test Tasks
         // ============================================
+        {
+            "label": "test-winui",
+            "command": "dotnet",
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
+            "args": [
+                "test",
+                "${workspaceFolder}/dotnet/tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj",
+                "-p:Platform=x64",
+                "--no-restore"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "test-longdoc-worker",
+            "command": "dotnet",
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
+            "args": [
+                "test",
+                "${workspaceFolder}/dotnet/tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj",
+                "-p:Platform=x64",
+                "--no-restore",
+                "--filter",
+                "FullyQualifiedName~LongDocWorkerPipelineTests"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "test-pdf-worker-export",
+            "command": "dotnet",
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
+            "args": [
+                "test",
+                "${workspaceFolder}/dotnet/tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj",
+                "-p:Platform=x64",
+                "--no-restore",
+                "--filter",
+                "FullyQualifiedName~LongDocWorkerPipelineTests|FullyQualifiedName~LongDocumentTranslationServiceReviewFixTests|FullyQualifiedName~DocumentExportServiceTests|FullyQualifiedName~MuPdfExportServiceSpacingTests"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
         {
             "label": "test-e2e",
             "command": "dotnet",
@@ -324,6 +482,7 @@
                 "Release",
                 "-r",
                 "win-x64",
+                "-p:Platform=x64",
                 "--self-contained",
                 "true",
                 "/p:PublishReadyToRun=true"
@@ -336,25 +495,14 @@
         },
         {
             "label": "publish-x86",
-            "command": "dotnet",
+            "command": "powershell.exe",
             "type": "shell",
-            "options": {
-                "cwd": "${workspaceFolder}/dotnet"
-            },
-            "dependsOn": "ensure-build-submodules",
-            "dependsOrder": "sequence",
             "args": [
-                "publish",
-                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj",
-                "-c",
-                "Release",
-                "-r",
-                "win-x86",
-                "--self-contained",
-                "true",
-                "/p:PublishReadyToRun=true"
+                "-NoProfile",
+                "-Command",
+                "Write-Error 'publish-x86 is unsupported after the LongDoc worker/MuPDF export refactor. Easydict.Workers.LongDoc only targets win-x64 and win-arm64.'; exit 1"
             ],
-            "problemMatcher": "$msCompile",
+            "problemMatcher": [],
             "presentation": {
                 "reveal": "always",
                 "panel": "shared"
@@ -376,9 +524,62 @@
                 "Release",
                 "-r",
                 "win-arm64",
+                "-p:Platform=ARM64",
                 "--self-contained",
                 "true",
                 "/p:PublishReadyToRun=true"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "publish-longdoc-worker-x64",
+            "command": "dotnet",
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
+            "args": [
+                "publish",
+                "${workspaceFolder}/dotnet/src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj",
+                "-c",
+                "Release",
+                "-r",
+                "win-x64",
+                "-p:Platform=x64",
+                "--self-contained",
+                "false"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "publish-longdoc-worker-arm64",
+            "command": "dotnet",
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/dotnet"
+            },
+            "dependsOn": "ensure-build-submodules",
+            "dependsOrder": "sequence",
+            "args": [
+                "publish",
+                "${workspaceFolder}/dotnet/src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj",
+                "-c",
+                "Release",
+                "-r",
+                "win-arm64",
+                "-p:Platform=arm64",
+                "--self-contained",
+                "false"
             ],
             "problemMatcher": "$msCompile",
             "presentation": {
@@ -400,7 +601,8 @@
             "dependsOrder": "sequence",
             "args": [
                 "restore",
-                "${workspaceFolder}/dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj"
+                "${workspaceFolder}/dotnet/Easydict.Win32.sln",
+                "-p:Platform=x64"
             ],
             "problemMatcher": "$msCompile",
             "presentation": {

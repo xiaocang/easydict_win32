@@ -21,6 +21,7 @@ using Easydict.WinUI.Services.DocumentExport;
 using FluentAssertions;
 using MuPDF.NET;
 using Xunit;
+using WinUiLongDocumentTranslationService = Easydict.WinUI.Services.LongDocumentTranslationService;
 
 namespace Easydict.WinUI.Tests.Services;
 
@@ -51,7 +52,7 @@ public class PdfTranslationVisualTest
         });
 
         // ── Invoke production pipeline (same as the actual app) ───────────────
-        using var service = new LongDocumentTranslationService();
+        using var service = new WinUiLongDocumentTranslationService();
 
         // Mirror what EnsureOnnxReadyAsync() does in the UI:
         // use OnnxLocal if the model is already downloaded, else fall back to heuristic
@@ -83,7 +84,7 @@ public class PdfTranslationVisualTest
             {
                 var muPage = muDoc[pageNumber - 1];
                 var mat = new Matrix(1.5f, 1.5f); // 108 DPI
-                var pix = muPage.GetPixmap(mat);
+                using var pix = muPage.GetPixmap(mat);
                 var pngPath = Path.Combine(outputDir, $"translated_p{pageNumber}.png");
                 pix.Save(pngPath, "png");
                 System.Diagnostics.Debug.WriteLine($"[VisualTest] Saved PNG: {pngPath}");

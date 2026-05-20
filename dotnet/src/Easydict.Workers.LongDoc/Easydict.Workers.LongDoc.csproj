@@ -8,6 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+    <DefineConstants>$(DefineConstants);EASYDICT_LONGDOC_WORKER</DefineConstants>
     <RootNamespace>Easydict.Workers.LongDoc</RootNamespace>
     <AssemblyName>Easydict.Workers.LongDoc</AssemblyName>
     <!-- MuPDF.NET does not ship a stable x86 runtime; drop x86 from the worker RIDs. -->
@@ -65,7 +66,21 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="PdfSharpCore" Version="1.3.67" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Easydict.WinUI\Services\ModelDownloadClient.cs" Link="Shared\ModelDownloadClient.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\LayoutModelDownloadService.cs" Link="Shared\LayoutModelDownloadService.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\DocLayoutYoloService.cs" Link="Shared\DocLayoutYoloService.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\TableStructureRecognitionService.cs" Link="Shared\TableStructureRecognitionService.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\VisionLayoutDetectionService.cs" Link="Shared\VisionLayoutDetectionService.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\LayoutDetectionStrategy.cs" Link="Shared\LayoutDetectionStrategy.cs" />
+    <Compile Include="..\Easydict.WinUI\Services\Memory\PooledDenseTensor.cs" Link="Shared\Memory\PooledDenseTensor.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Easydict.DocumentExport\Easydict.DocumentExport.csproj" />
     <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
     <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
     <ProjectReference Include="..\..\..\lib\PdfPig\src\UglyToad.PdfPig\UglyToad.PdfPig.csproj" />

@@ -119,14 +119,9 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void CalculateReadingOrderScore_ShouldBePageLocalAndStableForLargeCounts()
     {
-        var method = typeof(WinUiLongDocumentTranslationService)
-            .GetMethod("CalculateReadingOrderScore", BindingFlags.NonPublic | BindingFlags.Static);
-
-        method.Should().NotBeNull();
-
-        var first = (double)method!.Invoke(null, [0, 200])!;
-        var mid = (double)method.Invoke(null, [100, 200])!;
-        var last = (double)method.Invoke(null, [199, 200])!;
+        var first = LongDocumentSourceExtraction.CalculateReadingOrderScore(0, 200);
+        var mid = LongDocumentSourceExtraction.CalculateReadingOrderScore(100, 200);
+        var last = LongDocumentSourceExtraction.CalculateReadingOrderScore(199, 200);
 
         first.Should().Be(1d);
         mid.Should().BeGreaterThan(0d).And.BeLessThan(1d);
@@ -175,30 +170,20 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void GuessBlockType_ShouldTreatSquareRootEquationAsFormula()
     {
-        var method = typeof(WinUiLongDocumentTranslationService)
-            .GetMethod("GuessBlockType", BindingFlags.NonPublic | BindingFlags.Static);
-
-        method.Should().NotBeNull();
-
-        var result = (SourceBlockType)method!.Invoke(null, ["x = √d_k"])!;
-        result.Should().Be(SourceBlockType.Formula);
+        LongDocumentSourceExtraction.GuessBlockType("x = √d_k")
+            .Should().Be(SourceBlockType.Formula);
     }
 
     [Fact]
     public void GuessBlockType_ShouldTreatLongProseWithInlineEquationAsParagraph()
     {
-        var method = typeof(WinUiLongDocumentTranslationService)
-            .GetMethod("GuessBlockType", BindingFlags.NonPublic | BindingFlags.Static);
-
-        method.Should().NotBeNull();
-
         const string text =
             "Most competitive neural sequence transduction models have an encoder-decoder structure. " +
             "Here, the encoder maps the input sequence of symbol representations (x1, ..., xn) " +
             "to a sequence of continuous representations z = (z1, ..., zn).";
 
-        var result = (SourceBlockType)method!.Invoke(null, [text])!;
-        result.Should().Be(SourceBlockType.Paragraph);
+        LongDocumentSourceExtraction.GuessBlockType(text)
+            .Should().Be(SourceBlockType.Paragraph);
     }
 
     [Fact]
@@ -584,25 +569,14 @@ public class LongDocumentTranslationServiceReviewFixTests
     [Fact]
     public void InferRegionInfoFromBlockId_ShouldReturnConfidenceAndSource()
     {
-        var serviceType = typeof(WinUiLongDocumentTranslationService);
-        var method = serviceType.GetMethod("InferRegionInfoFromBlockId", BindingFlags.NonPublic | BindingFlags.Static);
-        method.Should().NotBeNull();
+        var tableInfo = LongDocumentSourceExtraction.InferRegionInfoFromBlockId("p2-table-b3");
+        tableInfo.Type.Should().Be(LayoutRegionType.TableLike);
+        tableInfo.Confidence.Should().BeGreaterThan(0.8);
+        tableInfo.Source.Should().Be(LayoutRegionSource.Heuristic);
 
-        var tableInfo = method!.Invoke(null, ["p2-table-b3"]);
-        tableInfo.Should().NotBeNull();
-        var tableType = (LayoutRegionType)tableInfo!.GetType().GetField("Item1")!.GetValue(tableInfo)!;
-        var tableConfidence = (double)tableInfo.GetType().GetField("Item2")!.GetValue(tableInfo)!;
-        var tableSource = (LayoutRegionSource)tableInfo.GetType().GetField("Item3")!.GetValue(tableInfo)!;
-        tableType.Should().Be(LayoutRegionType.TableLike);
-        tableConfidence.Should().BeGreaterThan(0.8);
-        tableSource.Should().Be(LayoutRegionSource.Heuristic);
-
-        var unknownInfo = method.Invoke(null, ["p9-raw-b1"]);
-        unknownInfo.Should().NotBeNull();
-        var unknownType = (LayoutRegionType)unknownInfo!.GetType().GetField("Item1")!.GetValue(unknownInfo)!;
-        var unknownSource = (LayoutRegionSource)unknownInfo.GetType().GetField("Item3")!.GetValue(unknownInfo)!;
-        unknownType.Should().Be(LayoutRegionType.Unknown);
-        unknownSource.Should().Be(LayoutRegionSource.Unknown);
+        var unknownInfo = LongDocumentSourceExtraction.InferRegionInfoFromBlockId("p9-raw-b1");
+        unknownInfo.Type.Should().Be(LayoutRegionType.Unknown);
+        unknownInfo.Source.Should().Be(LayoutRegionSource.Unknown);
     }
 
     [Fact]
@@ -1431,7 +1405,7 @@ public class LongDocumentTranslationServiceReviewFixTests
                 muDoc.PageCount.Should().BeGreaterOrEqualTo(4);
 
                 var page4 = muDoc[3];
-                var pix = page4.GetPixmap(new Matrix(1.5f, 1.5f));
+                using var pix = page4.GetPixmap(new Matrix(1.5f, 1.5f));
                 pix.Save(outputPngPath, "png");
 
                 File.Exists(outputPngPath).Should().BeTrue();

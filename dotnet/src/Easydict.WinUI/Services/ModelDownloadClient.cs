@@ -190,7 +190,10 @@ public sealed class ModelDownloadClient : IDisposable
     {
         var handler = new HttpClientHandler { AllowAutoRedirect = true };
 
-        // Apply proxy settings if configured
+        // Apply proxy settings if configured. The long-doc worker links this
+        // class without SettingsService, so it uses the caller-provided client
+        // path and falls back to a direct client here.
+#if !EASYDICT_LONGDOC_WORKER
         var settings = SettingsService.Instance;
         if (settings.ProxyEnabled && !string.IsNullOrWhiteSpace(settings.ProxyUri))
         {
@@ -208,6 +211,7 @@ public sealed class ModelDownloadClient : IDisposable
                 Debug.WriteLine($"[ModelDownload] Invalid proxy URI: {settings.ProxyUri}");
             }
         }
+#endif
 
         var client = new HttpClient(handler)
         {

@@ -487,6 +487,7 @@ public class Page2TranslationQualityTests
     {
         var pdfPath = GetPdfFixturePath();
         Skip.IfNot(File.Exists(pdfPath), $"PDF fixture not found: {pdfPath}");
+        Skip.IfNot(VisualReviewArtifacts.ShouldEmitPngs(), VisualReviewArtifacts.OptInMessage);
 
         var (source, _) = await BuildPage2SourceBlocksAsync(pdfPath);
         var checkpoint = BuildPage2VisualReviewCheckpoint(source, pdfPath);
@@ -507,7 +508,7 @@ public class Page2TranslationQualityTests
                 muDoc.PageCount.Should().BeGreaterOrEqualTo(2);
 
                 var page2 = muDoc[1];
-                var pix = page2.GetPixmap(new Matrix(1.5f, 1.5f));
+                using var pix = page2.GetPixmap(new Matrix(1.5f, 1.5f));
                 pix.Save(outputPngPath, "png");
             }
             finally

@@ -150,6 +150,15 @@ public sealed partial class SettingsPage : Page
     private const double PasswordTailHintMaxWidth = 72;
     private const double PasswordTailHintTrailingMargin = 44;
     private const string PasswordTailHintPrefix = "...";
+    private static readonly SettingsTabId[] SettingsTabFastSwitchWarmupOrder =
+    [
+        SettingsTabId.Services,
+        SettingsTabId.Views,
+        SettingsTabId.Hotkeys,
+        SettingsTabId.Advanced,
+        SettingsTabId.Language,
+        SettingsTabId.About
+    ];
     private static readonly (string BrushKey, string ColorKey)[] ScopedThemeResourceBrushes =
     [
         ("ApplicationPageBackgroundThemeBrush", "FloatingWindowBackgroundColor"),
@@ -226,6 +235,8 @@ public sealed partial class SettingsPage : Page
     private bool _isMiniWindowReorderModeEnabled;
     private bool _isFixedWindowReorderModeEnabled;
     private bool _themeChromeRefreshQueued;
+    private bool _settingsTabWarmupQueued;
+    private bool _deferredSettingsIoStarted;
     private readonly Dictionary<PasswordBox, bool> _visiblePasswordBoxes = new();
     private readonly Dictionary<PasswordBox, PasswordTailHint> _passwordTailHints = new();
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
@@ -941,14 +952,7 @@ public sealed partial class SettingsPage : Page
         ServicesTabContent.Visibility = tabId == SettingsTabId.Services ? Visibility.Visible : Visibility.Collapsed;
         if (ViewsTabContent != null)
         {
-            if (tabId == SettingsTabId.Views)
-            {
-                ViewsTabContent.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                ReleaseViewsTabContent();
-            }
+            ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;
         }
         HotkeysTabContent.Visibility = tabId == SettingsTabId.Hotkeys ? Visibility.Visible : Visibility.Collapsed;
         AdvancedTabContent.Visibility = tabId == SettingsTabId.Advanced ? Visibility.Visible : Visibility.Collapsed;
@@ -1776,6 +1780,8 @@ public sealed partial class SettingsPage : Page
         LogDebugState("InitializeSettingsContent complete");
 #endif
 
+        QueueSettingsTabWarmup(cancellationToken);
+
         // Defer disk I/O (ONNX model check, SQLite cache) to after content is visible
         DispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
@@ -1813,8 +1819,59 @@ public sealed partial class SettingsPage : Page
                 UpdateDeferredIoState("io-dispatched");
                 PerfLog("Deferred I/O: dispatching queued work");
 #endif
+                if (!TryBeginDeferredSettingsIo(cancellationToken))
+                {
+                    return;
+                }
+
                 RunDeferredSettingsIo(cancellationToken);
             });
+    }
+
+    private void QueueSettingsTabWarmup(CancellationToken cancellationToken)
+    {
+        if (_settingsTabWarmupQueued)
+        {
+            return;
+        }
+
+        _settingsTabWarmupQueued = true;
+#if DEBUG
+        PerfLog("Settings tab warm-up: queued");
+#endif
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => WarmNextSettingsTabForFastSwitching(cancellationToken, 0));
+    }
+
+    private void WarmNextSettingsTabForFastSwitching(CancellationToken cancellationToken, int tabIndex)
+    {
+        if (_isUnloaded || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (tabIndex >= SettingsTabFastSwitchWarmupOrder.Length)
+        {
+#if DEBUG
+            PerfLog("Settings tab warm-up: complete");
+#endif
+            return;
+        }
+
+        var tabId = SettingsTabFastSwitchWarmupOrder[tabIndex];
+#if DEBUG
+        PerfLog($"Settings tab warm-up: {tabId}");
+#endif
+        EnsureTabContentLoaded(tabId);
+        if (_isInitialized)
+        {
+            EnsureSettingsTabDataInitialized(tabId);
+        }
+
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => WarmNextSettingsTabForFastSwitching(cancellationToken, tabIndex + 1));
     }
 
     private void QueueDeferredSettingsIo(CancellationToken cancellationToken)
@@ -1828,8 +1885,24 @@ public sealed partial class SettingsPage : Page
                     return;
                 }
 
+                if (!TryBeginDeferredSettingsIo(cancellationToken))
+                {
+                    return;
+                }
+
                 RunDeferredSettingsIo(cancellationToken);
             });
+    }
+
+    private bool TryBeginDeferredSettingsIo(CancellationToken cancellationToken)
+    {
+        if (_deferredSettingsIoStarted || _isUnloaded || cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        _deferredSettingsIoStarted = true;
+        return true;
     }
 
     private void RunDeferredSettingsIo(CancellationToken cancellationToken)

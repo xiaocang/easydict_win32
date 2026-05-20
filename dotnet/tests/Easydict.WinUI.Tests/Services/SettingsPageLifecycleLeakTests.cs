@@ -183,16 +183,20 @@ public class SettingsPageLifecycleLeakTests
     }
 
     [Fact]
-    public void SettingsPage_InitialLoadOnlyInitializesGeneralTabData()
+    public void SettingsPage_FirstPaintOnlyInitializesGeneralTabDataBeforeIdleWarmup()
     {
         var content = File.ReadAllText(SettingsPagePath);
 
         content.Should().Contain("var deferLazyTabData = true;",
-            "opening Settings should not populate hidden tab data or start Advanced-tab I/O before the user asks for those tabs");
+            "opening Settings should keep first paint focused on the General tab before background warm-up runs");
+        content.Should().Contain("_initializedSettingsTabData.Add(SettingsTabId.General);",
+            "the initial synchronous load should only mark General as initialized");
+        content.Should().Contain("QueueSettingsTabWarmup(cancellationToken);",
+            "hidden tab data should be warmed after content is visible so frequent in-page tab switches stay fast");
         content.Should().Contain("if (deferLazyTabData && !ShouldLoadSettingsTab(SettingsTabId.Advanced, deferLazyTabData))",
-            "Advanced deferred I/O should stay parked until the Advanced tab is initialized");
+            "Advanced deferred I/O should stay parked until the Advanced tab is initialized by user navigation or warm-up");
         content.Should().NotContain("foreach (var tabId in Enum.GetValues<SettingsTabId>())\r\n            {\r\n                _initializedSettingsTabData.Add(tabId);\r\n            }",
-            "initial Settings open should not mark every tab as initialized");
+            "initial Settings open should not synchronously mark every tab as initialized");
     }
 
     private static string FindProjectRoot()

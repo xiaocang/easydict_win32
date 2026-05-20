@@ -31,19 +31,22 @@ namespace Easydict.WinUI.Services;
 internal sealed class StreamingTextCoalescer : IDisposable
 {
     private readonly DispatcherQueue _dispatcher;
-    private readonly DispatcherQueueTimer _timer;
+    private readonly int _intervalMs;
     private readonly Dictionary<ServiceQueryResult, string> _pending = new();
     private readonly object _lock = new();
+    // Lazily created on the first Update call so windows that never actually stream
+    // a translation (e.g. opened just to take a memory snapshot or for a settings
+    // check) don't allocate a DispatcherQueueTimer's COM handle. The handle count
+    // post-close growth gate in the PR Memory Gate scenario is tight (8 handles);
+    // avoiding the eager allocation keeps idle-window cost at zero.
+    private DispatcherQueueTimer? _timer;
     private bool _disposed;
 
     public StreamingTextCoalescer(DispatcherQueue dispatcher, int intervalMs = 16)
     {
         ArgumentNullException.ThrowIfNull(dispatcher);
         _dispatcher = dispatcher;
-        _timer = _dispatcher.CreateTimer();
-        _timer.Interval = TimeSpan.FromMilliseconds(intervalMs);
-        _timer.IsRepeating = true;
-        _timer.Tick += OnTick;
+        _intervalMs = intervalMs;
     }
 
     /// <summary>
@@ -65,14 +68,28 @@ internal sealed class StreamingTextCoalescer : IDisposable
 
         if (startTimer)
         {
-            // The timer's Start/Stop lives on the dispatcher thread. Marshal there
-            // so the first push from a background streaming task can safely arm
-            // the timer.
+            // The timer's lifecycle is thread-affine to the dispatcher. Marshal there
+            // both to create the timer the first time and to arm it on subsequent
+            // pushes. Background streaming tasks call Update freely.
             _dispatcher.TryEnqueue(() =>
             {
-                if (!_disposed) _timer.Start();
+                if (_disposed) return;
+                EnsureTimerStarted();
             });
         }
+    }
+
+    private void EnsureTimerStarted()
+    {
+        // UI-dispatcher-thread only. Called from Update's TryEnqueue continuation.
+        if (_timer is null)
+        {
+            _timer = _dispatcher.CreateTimer();
+            _timer.Interval = TimeSpan.FromMilliseconds(_intervalMs);
+            _timer.IsRepeating = true;
+            _timer.Tick += OnTick;
+        }
+        _timer.Start();
     }
 
     /// <summary>
@@ -135,8 +152,17 @@ internal sealed class StreamingTextCoalescer : IDisposable
     public void Dispose()
     {
         _disposed = true;
-        try { _timer.Tick -= OnTick; } catch { /* shutdown race */ }
-        try { _timer.Stop(); } catch { /* shutdown race */ }
+        var timer = _timer;
+        if (timer != null)
+        {
+            try { timer.Tick -= OnTick; } catch { /* shutdown race */ }
+            try { timer.Stop(); } catch { /* shutdown race */ }
+        }
+        // Explicit null so the timer's COM handle becomes eligible for GC release
+        // even before the coalescer instance itself is unreachable. The handle-
+        // count post-close gate in the PR Memory Gate scenario allows only 8 net
+        // new handles across the close-window + idle phase.
+        _timer = null;
         lock (_lock) _pending.Clear();
     }
 }

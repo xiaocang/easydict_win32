@@ -450,13 +450,19 @@ public class KanbanTodoUxRegressionTests
         AssertContainsInOrder(
             miniHotkeyCode,
             "MiniWindowService.Instance.IsVisible",
-            "var text = await TextSelectionService.GetSelectedTextAsync();",
+            "RaceShowWindowWithSelectionAsync(",
             "the mini-window hotkey should short-circuit the foreground hide toggle before attempting any selection capture");
         AssertContainsInOrder(
             fixedHotkeyCode,
             "FixedWindowService.Instance.IsVisible",
-            "var text = await TextSelectionService.GetSelectedTextAsync();",
+            "RaceShowWindowWithSelectionAsync(",
             "the fixed-window hotkey should short-circuit the foreground hide toggle before attempting any selection capture");
+        appCode.Should().Contain(
+            "TextSelectionService.GetSelectedTextAsync()",
+            "the shared race helper must still drive the existing selection capture API");
+        appCode.Should().Contain(
+            "private async Task RaceShowWindowWithSelectionAsync(",
+            "selection capture should run on a frame-rate budget shared by the mini and fixed hotkey paths");
     }
 
     private static string FindProjectRoot()

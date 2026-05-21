@@ -3399,8 +3399,8 @@ namespace Easydict.WinUI.Views
 
         private Brush? CreateLongDocUnavailableServiceForeground()
         {
-            return CreateThemeBrush("ServiceResultHeaderSecondaryForegroundColor")
-                ?? CreateThemeBrush("QueryTextColor")
+            return CreateThemeBrush("QueryTextColor")
+                ?? CreateThemeBrush("ServiceResultHeaderSecondaryForegroundColor")
                 ?? ThemeResourceService.GetBrush("ComboBoxForeground", this)
                 ?? ThemeResourceService.GetBrush("TextFillColorPrimaryBrush", this);
         }

@@ -180,6 +180,23 @@ public class UnsavedChangesDialogTests
     }
 
     [Fact]
+    public void SettingsPage_PreparesDialogsWithCurrentTheme()
+    {
+        var content = File.ReadAllText(SettingsPagePath);
+
+        content.Should().Contain("PrepareDialogForDisplay(dialog)",
+            "all settings dialogs should be normalized before ShowAsync");
+        content.Should().Contain("dialog.XamlRoot ??= XamlRoot",
+            "dialogs must attach to the settings page XamlRoot");
+        content.Should().Contain("dialog.RequestedTheme = ResolveDialogRequestedTheme()",
+            "ContentDialog popup chrome should follow the current settings page theme");
+        content.Should().Contain("ActualTheme switch",
+            "System theme should resolve from the page's current actual theme");
+        content.Should().Contain("MinimalThemeService.ToElementTheme(_settings.AppTheme)",
+            "dialogs need a fallback when ActualTheme has not resolved yet");
+    }
+
+    [Fact]
     public void SettingsPage_UsesLocalizationForDialogStrings()
     {
         var content = File.ReadAllText(SettingsPagePath);

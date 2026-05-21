@@ -953,10 +953,14 @@ public sealed partial class SettingsPage : Page
         if (showProgress)
         {
             ShowSettingsTabSwitchProgress();
-            var delayMs = RequiresSettingsTabSwitchPreRenderDelay(tabId)
-                ? SettingsTabSwitchIndicatorDelayMs
-                : SettingsTabSwitchIndicatorFrameDelayMs;
-            await Task.Delay(delayMs);
+            if (RequiresSettingsTabSwitchPreRenderDelay(tabId))
+            {
+                await Task.Delay(SettingsTabSwitchIndicatorDelayMs);
+            }
+            else
+            {
+                await Task.Delay(SettingsTabSwitchIndicatorFrameDelayMs);
+            }
 
             if (_isUnloaded || _isTornDown || switchVersion != _settingsTabSwitchVersion)
             {
@@ -5130,6 +5134,7 @@ public sealed partial class SettingsPage : Page
         }
 
         try { _currentDialog?.Hide(); } catch (COMException) { }
+        PrepareDialogForDisplay(dialog);
         _currentDialog = dialog;
 
         try
@@ -5143,6 +5148,27 @@ public sealed partial class SettingsPage : Page
                 _currentDialog = null;
             }
         }
+    }
+
+    private void PrepareDialogForDisplay(ContentDialog dialog)
+    {
+        dialog.XamlRoot ??= XamlRoot;
+        dialog.RequestedTheme = ResolveDialogRequestedTheme();
+    }
+
+    private ElementTheme ResolveDialogRequestedTheme()
+    {
+        if (ThemeResourceService.IsHighContrastActive() && !MinimalThemeService.IsActive)
+        {
+            return ElementTheme.Default;
+        }
+
+        return ActualTheme switch
+        {
+            ElementTheme.Dark => ElementTheme.Dark,
+            ElementTheme.Light => ElementTheme.Light,
+            _ => MinimalThemeService.ToElementTheme(_settings.AppTheme)
+        };
     }
 
     #endregion

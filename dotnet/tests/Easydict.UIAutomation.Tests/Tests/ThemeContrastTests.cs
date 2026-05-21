@@ -163,6 +163,41 @@ public sealed class ThemeContrastTests : IDisposable
         AssertMainLightPalette(window, path);
     }
 
+    [Fact]
+    public void MainWindow_FollowSystemTheme_WhenWindowsThemeChanges_ShouldUpdateWhileRunning()
+    {
+        SnapshotAndSetPersistedAppTheme("System");
+        ForceWindowsTheme(light: true);
+
+        _launcher = new AppLauncher();
+        _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+
+        var window = _launcher.GetMainWindow();
+        WaitForPersistedAppTheme("System", TimeSpan.FromSeconds(5))
+            .Should().Be("System", "the app must stay in Follow System mode during runtime Windows theme changes");
+        WaitForMainPage(window);
+
+        var lightPath = WaitForMainPalette(
+            window,
+            expectedLight: true,
+            screenshotNamePrefix: "50_follow-system_runtime_initial-light");
+        _output.WriteLine($"Follow-system initial light screenshot saved: {lightPath}");
+
+        ForceWindowsTheme(light: false);
+        var darkPath = WaitForMainPalette(
+            window,
+            expectedLight: false,
+            screenshotNamePrefix: "51_follow-system_runtime_after-windows-dark");
+        _output.WriteLine($"Follow-system runtime dark screenshot saved: {darkPath}");
+
+        ForceWindowsTheme(light: true);
+        var lightAgainPath = WaitForMainPalette(
+            window,
+            expectedLight: true,
+            screenshotNamePrefix: "52_follow-system_runtime_after-windows-light");
+        _output.WriteLine($"Follow-system runtime light-again screenshot saved: {lightAgainPath}");
+    }
+
     [Theory]
     [MemberData(nameof(LongDocServiceDropdownThemeMatrixCases))]
     public void LongDocServiceCombo_ThemeMatrix_ShouldRenderUnavailableServicesInDropdown(
@@ -892,6 +927,42 @@ public sealed class ThemeContrastTests : IDisposable
             expectedLight: expectedLight,
             minLightBrightness: 175,
             maxDarkBrightness: 130);
+    }
+
+    private string WaitForMainPalette(Window window, bool expectedLight, string screenshotNamePrefix)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(12);
+        Exception? lastFailure = null;
+        string? lastPath = null;
+        var attempt = 0;
+
+        do
+        {
+            PrepareMainWindowForScreenshot(window);
+            lastPath = ScreenshotHelper.CaptureWindowPhysical(
+                window,
+                $"{screenshotNamePrefix}_attempt-{attempt++:00}");
+
+            try
+            {
+                AssertMainPalette(window, lastPath, expectedLight);
+                return lastPath;
+            }
+            catch (Exception ex)
+            {
+                lastFailure = ex;
+                _output.WriteLine(
+                    $"Follow-system palette not ready yet for {(expectedLight ? "Light" : "Dark")} " +
+                    $"after screenshot {lastPath}: {ex.Message}");
+            }
+
+            Thread.Sleep(800);
+        }
+        while (DateTime.UtcNow < deadline);
+
+        throw new InvalidOperationException(
+            $"Main window did not switch to {(expectedLight ? "Light" : "Dark")} palette. Last screenshot: {lastPath}",
+            lastFailure);
     }
 
     private static AutomationElement FindRequired(Window window, string automationId)

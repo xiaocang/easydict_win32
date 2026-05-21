@@ -3,6 +3,7 @@ using Easydict.WinUI.Services;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Navigation;
+using Microsoft.Win32;
 using WinRT.Interop;
 
 namespace Easydict.WinUI
@@ -15,6 +16,38 @@ namespace Easydict.WinUI
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
 
+        private const uint WM_SETTINGCHANGE = 0x001A;
+        private const uint WM_THEMECHANGED = 0x031A;
+        private const nuint ThemeSubclassId = 2;
+
+        private delegate nint SubclassProc(
+            nint hWnd,
+            uint uMsg,
+            nint wParam,
+            nint lParam,
+            nuint uIdSubclass,
+            nuint dwRefData);
+
+        [DllImport("comctl32.dll", SetLastError = true)]
+        private static extern bool SetWindowSubclass(
+            nint hWnd,
+            SubclassProc pfnSubclass,
+            nuint uIdSubclass,
+            nuint dwRefData);
+
+        [DllImport("comctl32.dll", SetLastError = true)]
+        private static extern bool RemoveWindowSubclass(
+            nint hWnd,
+            SubclassProc pfnSubclass,
+            nuint uIdSubclass);
+
+        [DllImport("comctl32.dll")]
+        private static extern nint DefSubclassProc(
+            nint hWnd,
+            uint uMsg,
+            nint wParam,
+            nint lParam);
+
         private Window? _window;
         private TrayIconService? _trayIconService;
         private HotkeyService? _hotkeyService;
@@ -23,6 +56,10 @@ namespace Easydict.WinUI
         private PopButtonService? _popButtonService;
         private OcrTranslateService? _ocrTranslateService;
         private AppWindow? _appWindow;
+        private bool? _lastSystemDark;
+        private int _systemThemeRefreshQueued;
+        private nint _themeSubclassHwnd;
+        private SubclassProc? _themeSubclassProc;
 
         // IPC: named event for context menu --ocr-translate signaling
         private EventWaitHandle? _ocrSignalEvent;
@@ -472,6 +509,7 @@ namespace Easydict.WinUI
             ApplyAlwaysOnTop(settings.AlwaysOnTop);
 
             // Apply saved theme setting
+            RegisterSystemThemeWatcher();
             ApplyTheme(settings.AppTheme);
 
             // Pre-warm TTS service to avoid first-use delay, but only when the user
@@ -1098,6 +1136,7 @@ namespace Easydict.WinUI
             FixedWindowService.Instance.Dispose();
             MiniWindowService.Instance.Dispose();
             TextToSpeechService.Instance.Stop();
+            app.UnregisterSystemThemeWatcher();
         }
 
         /// <summary>
@@ -1195,6 +1234,11 @@ namespace Easydict.WinUI
             var wasMinimalResourcesApplied = MinimalThemeService.ResourcesApplied;
             MinimalThemeService.ApplyResources(isMinimal);
             var forceThemeResourceRefresh = wasMinimalResourcesApplied != isMinimal;
+            if (IsSystemTheme(theme))
+            {
+                Instance._lastSystemDark = SystemThemeProbe.IsSystemDark();
+            }
+
             var elementTheme = MinimalThemeService.ToElementTheme(theme);
             ApplyMainWindowTitleBarChrome(theme, elementTheme);
 
@@ -1215,6 +1259,107 @@ namespace Easydict.WinUI
             Instance._popButtonService?.ApplyTheme(elementTheme, forceThemeResourceRefresh);
 
             System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {theme} (ElementTheme.{elementTheme})");
+        }
+
+        private static bool IsSystemTheme(string? theme) =>
+            string.Equals(theme, "System", StringComparison.OrdinalIgnoreCase);
+
+        private void RegisterSystemThemeWatcher()
+        {
+            SystemEvents.UserPreferenceChanged -= OnSystemUserPreferenceChanged;
+            SystemEvents.UserPreferenceChanged += OnSystemUserPreferenceChanged;
+            _lastSystemDark = SystemThemeProbe.IsSystemDark();
+
+            if (_themeSubclassProc is not null || _window is null)
+            {
+                return;
+            }
+
+            _themeSubclassHwnd = WindowNative.GetWindowHandle(_window);
+            if (_themeSubclassHwnd == 0)
+            {
+                return;
+            }
+
+            _themeSubclassProc = SystemThemeSubclassWndProc;
+            if (!SetWindowSubclass(_themeSubclassHwnd, _themeSubclassProc, ThemeSubclassId, 0))
+            {
+                _themeSubclassProc = null;
+                _themeSubclassHwnd = 0;
+            }
+        }
+
+        private void UnregisterSystemThemeWatcher()
+        {
+            SystemEvents.UserPreferenceChanged -= OnSystemUserPreferenceChanged;
+            if (_themeSubclassProc is not null && _themeSubclassHwnd != 0)
+            {
+                RemoveWindowSubclass(_themeSubclassHwnd, _themeSubclassProc, ThemeSubclassId);
+            }
+
+            _themeSubclassProc = null;
+            _themeSubclassHwnd = 0;
+            _systemThemeRefreshQueued = 0;
+        }
+
+        private void OnSystemUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+            => QueueSystemThemeRefresh();
+
+        private nint SystemThemeSubclassWndProc(
+            nint hWnd,
+            uint uMsg,
+            nint wParam,
+            nint lParam,
+            nuint uIdSubclass,
+            nuint dwRefData)
+        {
+            if (uMsg is WM_SETTINGCHANGE or WM_THEMECHANGED)
+            {
+                QueueSystemThemeRefresh();
+            }
+
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        }
+
+        private void QueueSystemThemeRefresh()
+        {
+            if (!IsSystemTheme(SettingsService.Instance.AppTheme))
+            {
+                return;
+            }
+
+            if (Interlocked.Exchange(ref _systemThemeRefreshQueued, 1) == 1)
+            {
+                return;
+            }
+
+            var dispatcherQueue = _window?.DispatcherQueue;
+            if (dispatcherQueue is null ||
+                !dispatcherQueue.TryEnqueue(
+                    Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                    RefreshSystemThemeIfChanged))
+            {
+                _systemThemeRefreshQueued = 0;
+            }
+        }
+
+        private void RefreshSystemThemeIfChanged()
+        {
+            _systemThemeRefreshQueued = 0;
+
+            if (!IsSystemTheme(SettingsService.Instance.AppTheme))
+            {
+                return;
+            }
+
+            var currentSystemDark = SystemThemeProbe.IsSystemDark();
+            if (currentSystemDark == _lastSystemDark)
+            {
+                return;
+            }
+
+            _lastSystemDark = currentSystemDark;
+            ApplyTheme(SettingsService.Instance.AppTheme);
         }
 
         private static void ApplyFrameTheme(

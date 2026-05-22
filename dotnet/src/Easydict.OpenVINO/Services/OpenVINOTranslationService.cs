@@ -30,6 +30,7 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
     private const int DefaultMaxNewTokens = 256;
 
     private readonly ModelDownloadService _downloader;
+    private readonly OpenVinoRuntimeDownloadService _runtimeDownloader;
     private readonly object _engineLock = new();
     private readonly SemaphoreSlim _prepareLock = new(1, 1);
 
@@ -41,13 +42,21 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
     private bool _disposed;
 
     public OpenVINOTranslationService()
-        : this(new ModelDownloadService())
+        : this(new ModelDownloadService(), new OpenVinoRuntimeDownloadService())
     {
     }
 
     internal OpenVINOTranslationService(ModelDownloadService downloader)
+        : this(downloader, new OpenVinoRuntimeDownloadService())
+    {
+    }
+
+    internal OpenVINOTranslationService(
+        ModelDownloadService downloader,
+        OpenVinoRuntimeDownloadService runtimeDownloader)
     {
         _downloader = downloader;
+        _runtimeDownloader = runtimeDownloader;
     }
 
     /// <summary>
@@ -59,6 +68,17 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
         INllbTokenizer tokenizer,
         INllbInferenceEngine engine)
         : this(downloader)
+    {
+        _tokenizer = tokenizer;
+        _engine = engine;
+    }
+
+    internal OpenVINOTranslationService(
+        ModelDownloadService downloader,
+        OpenVinoRuntimeDownloadService runtimeDownloader,
+        INllbTokenizer tokenizer,
+        INllbInferenceEngine engine)
+        : this(downloader, runtimeDownloader)
     {
         _tokenizer = tokenizer;
         _engine = engine;
@@ -180,15 +200,16 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
     {
         ValidateRequest(request);
 
-        if (!_downloader.IsModelInstalled())
+        if (!_runtimeDownloader.IsRuntimeInstalled() || !_downloader.IsModelInstalled())
         {
             throw new TranslationException(
-                "OpenVINO NLLB-200 model is not downloaded. Open Settings → Services and click \"Download model\".")
+                "OpenVINO runtime or NLLB-200 model is not downloaded. Open Settings → Services and click \"Download model\".")
             {
                 ErrorCode = TranslationErrorCode.ServiceUnavailable,
                 ServiceId = ServiceId,
             };
         }
+        _runtimeDownloader.EnsureNativeDirectoryOnPath();
 
         EnterTranslation();
         try
@@ -230,7 +251,15 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
 
     public LocalModelStatus GetStatus()
     {
-        if (_downloader.IsModelInstalled())
+        if (!_runtimeDownloader.IsSupportedCurrentArchitecture)
+        {
+            return new LocalModelStatus(
+                LocalModelState.NotCompatible,
+                OpenVinoResources.StatusKeys.NotDownloaded,
+                DetailMessage: "OpenVINO local translation runtime is only available for Windows x64.");
+        }
+
+        if (_runtimeDownloader.IsRuntimeInstalled() && _downloader.IsModelInstalled())
         {
             return new LocalModelStatus(LocalModelState.Ready, OpenVinoResources.StatusKeys.Ready);
         }
@@ -243,19 +272,35 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
         await _prepareLock.WaitAsync(cancellationToken);
         try
         {
-            if (_downloader.IsModelInstalled())
+            if (!_runtimeDownloader.IsSupportedCurrentArchitecture)
+            {
+                var unsupported = GetStatus();
+                RaiseStatusChanged(unsupported);
+                return unsupported;
+            }
+
+            if (_runtimeDownloader.IsRuntimeInstalled() && _downloader.IsModelInstalled())
             {
                 var ready = new LocalModelStatus(LocalModelState.Ready, OpenVinoResources.StatusKeys.Ready);
                 RaiseStatusChanged(ready);
                 return ready;
             }
 
-            var progress = new Progress<ModelDownloadProgress>(p =>
+            var runtimeProgress = new Progress<ModelDownloadProgress>(p =>
             {
                 RaiseStatusChanged(new LocalModelStatus(
                     LocalModelState.Preparing,
                     OpenVinoResources.StatusKeys.Downloading,
-                    ProgressPercent: p.OverallPercent,
+                    ProgressPercent: Math.Clamp(p.OverallPercent * 0.10, 0, 10),
+                    DetailMessage: p.CurrentFile));
+            });
+
+            var modelProgress = new Progress<ModelDownloadProgress>(p =>
+            {
+                RaiseStatusChanged(new LocalModelStatus(
+                    LocalModelState.Preparing,
+                    OpenVinoResources.StatusKeys.Downloading,
+                    ProgressPercent: Math.Clamp(10 + p.OverallPercent * 0.90, 10, 100),
                     DetailMessage: p.CurrentFile));
             });
 
@@ -266,7 +311,17 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
 
             try
             {
-                await _downloader.DownloadAsync(progress, cancellationToken);
+                if (!_runtimeDownloader.IsRuntimeInstalled())
+                {
+                    await _runtimeDownloader.DownloadAsync(runtimeProgress, cancellationToken);
+                }
+
+                if (!_downloader.IsModelInstalled())
+                {
+                    await _downloader.DownloadAsync(modelProgress, cancellationToken);
+                }
+
+                _runtimeDownloader.EnsureNativeDirectoryOnPath();
                 var ready = new LocalModelStatus(LocalModelState.Ready, OpenVinoResources.StatusKeys.Ready);
                 RaiseStatusChanged(ready);
                 return ready;
@@ -340,6 +395,7 @@ public sealed class OpenVINOTranslationService : IStreamTranslationService, ILoc
         DisposeEngine();
         _prepareLock.Dispose();
         _downloader.Dispose();
+        _runtimeDownloader.Dispose();
     }
 
     private void RaiseStatusChanged(LocalModelStatus status)

@@ -24,6 +24,7 @@ public sealed class WorkerPackagingTests
         workflow.Should().Contain("Easydict.Workers.Ocr");
         workflow.Should().Contain("./publish/${{ matrix.platform }}/workers/ocr");
         workflow.Should().Contain("./publish-msix/${{ matrix.platform }}/workers/ocr");
+        workflow.Should().Contain("Dedupe-WorkerSharedFiles.ps1");
     }
 
     [Fact]
@@ -39,8 +40,36 @@ public sealed class WorkerPackagingTests
         makefile.Should().Contain("./publish/arm64/workers/ocr");
         makefile.Should().Contain("./publish-msix/x64/workers/ocr");
         makefile.Should().Contain("./publish-msix/arm64/workers/ocr");
+        makefile.Should().Contain("Dedupe-WorkerSharedFiles.ps1");
         makefile.Should().Contain("Worker settings default");
         makefile.Should().NotContain("UseLocalAiWorker default false");
+    }
+
+    [Fact]
+    public void OpenVinoNativeRuntime_IsNotPublishedWithLocalAiWorker()
+    {
+        var csprojPath = Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.OpenVINO",
+            "Easydict.OpenVINO.csproj");
+        var csproj = File.ReadAllText(csprojPath);
+
+        csproj.Should().Contain("Intel.ML.OnnxRuntime.OpenVino");
+        csproj.Should().Contain("<ExcludeAssets>runtime;native</ExcludeAssets>");
+    }
+
+    [Fact]
+    public void WorkerSharedDedupeScript_MovesOnlyAllowlistedIdenticalDlls()
+    {
+        var scriptPath = Path.Combine(ProjectRoot, "scripts", "Dedupe-WorkerSharedFiles.ps1");
+        var script = File.ReadAllText(scriptPath);
+
+        script.Should().Contain("Microsoft.Windows.SDK.NET.dll");
+        script.Should().Contain("Join-Path $PublishDir \"workers\"");
+        script.Should().Contain("shared");
+        script.Should().Contain("Get-FileHash");
+        script.Should().Contain("Remove-Item");
     }
 
     private static string FindProjectRoot()

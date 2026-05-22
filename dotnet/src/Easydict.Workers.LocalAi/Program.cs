@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Easydict.SidecarClient;
 using Easydict.SidecarClient.Protocol;
 using Easydict.Workers.LocalAi.Handlers;
 using Easydict.Workers.LocalAi.Infrastructure;
@@ -25,6 +26,8 @@ internal static class Program
 
     public static async Task<int> Main(string[] args)
     {
+        WorkerSharedAssemblyResolver.Install();
+
         Trace.Listeners.Clear();
         Trace.Listeners.Add(new TextWriterTraceListener(Console.Error));
         Trace.AutoFlush = true;

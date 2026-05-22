@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.Json;
+using Easydict.SidecarClient;
 using Easydict.SidecarClient.Protocol;
 using Windows.Graphics.Imaging;
 using WinOcr = Windows.Media.Ocr;
@@ -18,6 +19,8 @@ internal static class Program
 
     public static async Task<int> Main(string[] args)
     {
+        WorkerSharedAssemblyResolver.Install();
+
         Trace.Listeners.Clear();
         Trace.Listeners.Add(new TextWriterTraceListener(Console.Error));
         Trace.AutoFlush = true;

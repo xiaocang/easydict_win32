@@ -469,7 +469,23 @@ public sealed class LocalAITranslationServiceIntegrationTests : IDisposable
             },
         };
 
-        return new OpenVINOTranslationService(_downloader, tokenizer, engine);
+        var runtimeDownloader = new OpenVinoRuntimeDownloadService(new HttpClient(), _tempDir);
+        InstallRuntimeStub(runtimeDownloader);
+
+        return new OpenVINOTranslationService(_downloader, runtimeDownloader, tokenizer, engine);
+    }
+
+    private static void InstallRuntimeStub(OpenVinoRuntimeDownloadService runtimeDownloader)
+    {
+        Directory.CreateDirectory(runtimeDownloader.NativeDirectory);
+        foreach (var file in OpenVinoRuntimeManifest.NativeFiles)
+        {
+            File.WriteAllText(Path.Combine(runtimeDownloader.NativeDirectory, file), "stub");
+        }
+
+        File.WriteAllText(
+            Path.Combine(runtimeDownloader.NativeDirectory, OpenVinoRuntimeDownloadService.CompletionSentinel),
+            "stub");
     }
 
     private sealed class FakeWindowsAIClient : IWindowsLanguageModelClient

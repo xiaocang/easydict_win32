@@ -272,6 +272,11 @@ internal sealed class LongDocWorkerClient : IDisposable
             return true;
         }
 
+        if (ex is TranslationException { InnerException: SidecarProcessExitedException })
+        {
+            return true;
+        }
+
         return ex is TranslationException { InnerException: SidecarErrorException sidecarError } &&
             sidecarError.Error.Code == WorkerErrorCodes.Internal;
     }

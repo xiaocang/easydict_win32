@@ -1,3 +1,4 @@
+using Easydict.SidecarClient;
 using Easydict.SidecarClient.Protocol;
 using Easydict.TranslationService;
 using Easydict.WinUI.Services;
@@ -115,5 +116,15 @@ public sealed class LongDocWorkerClientResultHydrationTests
         mapped.QualityReport.TotalBlocks.Should().Be(2);
         mapped.QualityReport.TranslatedBlocks.Should().Be(2);
         mapped.QualityReport.FailedBlocks.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CanFallbackToInProc_ReturnsTrue_WhenWorkerProcessExitsUnexpectedly()
+    {
+        var exception = new TranslationException(
+            "Long-document worker exited unexpectedly",
+            new SidecarProcessExitedException(unchecked((int)0xC0000409)));
+
+        LongDocWorkerClient.CanFallbackToInProc(exception).Should().BeTrue();
     }
 }

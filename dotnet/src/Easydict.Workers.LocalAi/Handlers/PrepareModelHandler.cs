@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Easydict.SidecarClient.Protocol;
 using Easydict.TranslationService.LocalModels;
@@ -22,14 +23,33 @@ internal sealed class PrepareModelHandler
             throw new WorkerHandlerException(WorkerErrorCodes.InvalidParams, "Worker not configured");
 
         var p = ParseParams(parameters);
-        LocalModelStatus status = p.Provider switch
+        var sw = Stopwatch.StartNew();
+        Trace.WriteLine(
+            $"[LocalAiWorker] prepare_model start. requestId={requestId}, provider={p.Provider}, endpointOverride={!string.IsNullOrWhiteSpace(p.Endpoint)}, modelOverride={p.Model}");
+
+        LocalModelStatus status;
+        try
         {
-            LocalAiProviderModes.WindowsAI => await _state.GetPhiSilica().PrepareAsync(cancellationToken).ConfigureAwait(false),
-            LocalAiProviderModes.FoundryLocal => await PrepareFoundryAsync(p, cancellationToken).ConfigureAwait(false),
-            LocalAiProviderModes.OpenVINO => await _state.GetOpenVino().PrepareAsync(cancellationToken).ConfigureAwait(false),
-            _ => throw new WorkerHandlerException(WorkerErrorCodes.InvalidParams,
-                $"Unknown provider for prepare_model: {p.Provider}"),
-        };
+            status = p.Provider switch
+            {
+                LocalAiProviderModes.WindowsAI => await _state.GetPhiSilica().PrepareAsync(cancellationToken).ConfigureAwait(false),
+                LocalAiProviderModes.FoundryLocal => await PrepareFoundryAsync(p, cancellationToken).ConfigureAwait(false),
+                LocalAiProviderModes.OpenVINO => await _state.GetOpenVino().PrepareAsync(cancellationToken).ConfigureAwait(false),
+                _ => throw new WorkerHandlerException(WorkerErrorCodes.InvalidParams,
+                    $"Unknown provider for prepare_model: {p.Provider}"),
+            };
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Trace.WriteLine(
+                $"[LocalAiWorker] prepare_model exception. requestId={requestId}, provider={p.Provider}, elapsedMs={sw.ElapsedMilliseconds}, exception={ex.GetType().FullName}, message={ex.Message}");
+            throw;
+        }
+
+        sw.Stop();
+        Trace.WriteLine(
+            $"[LocalAiWorker] prepare_model success. requestId={requestId}, provider={p.Provider}, elapsedMs={sw.ElapsedMilliseconds}, state={status.State}, resourceKey={status.ResourceKey}, detailLength={status.DetailMessage?.Length ?? 0}");
 
         return new LocalModelStatusDto
         {

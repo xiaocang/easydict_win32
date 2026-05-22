@@ -31,6 +31,7 @@ internal static class Program
         Trace.Listeners.Clear();
         Trace.Listeners.Add(new TextWriterTraceListener(Console.Error));
         Trace.AutoFlush = true;
+        Trace.WriteLine($"[LocalAiWorker] Process starting. pid={Environment.ProcessId}, baseDir={AppContext.BaseDirectory}");
 
         var writer = new IpcEventWriter(Console.Out);
         var dispatcher = new RequestDispatcher(writer);
@@ -70,6 +71,7 @@ internal static class Program
                 WorkerMethods.Shutdown,
             },
         });
+        Trace.WriteLine("[LocalAiWorker] Ready event emitted.");
 
         using var reader = new StreamReader(Console.OpenStandardInput());
         var stdinLoop = Task.Run(async () =>
@@ -79,13 +81,17 @@ internal static class Program
             {
                 if (_shutdownRequested.Task.IsCompleted) break;
                 if (string.IsNullOrWhiteSpace(line)) continue;
+                Trace.WriteLine($"[LocalAiWorker] Received stdin message. chars={line.Length}");
                 _ = dispatcher.DispatchAsync(line, OnRequestCompleted);
             }
+            Trace.WriteLine("[LocalAiWorker] Stdin loop ending.");
             _shutdownRequested.TrySetResult();
         });
 
         await _shutdownRequested.Task;
+        Trace.WriteLine("[LocalAiWorker] Shutdown requested.");
         await Task.WhenAny(stdinLoop, Task.Delay(200));
+        Trace.WriteLine("[LocalAiWorker] Process exiting cleanly.");
         return 0;
     }
 
@@ -100,6 +106,7 @@ internal static class Program
             || method == LocalAiMethods.TranslateStream
             || method == LocalAiMethods.GrammarStream)
         {
+            Trace.WriteLine($"[LocalAiWorker] Completion of terminal method '{method}' requested shutdown.");
             _shutdownRequested.TrySetResult();
         }
     }

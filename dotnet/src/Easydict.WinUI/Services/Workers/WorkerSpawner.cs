@@ -51,6 +51,8 @@ internal sealed class WorkerSpawner
             EnvironmentVariables = BuildEnvironmentVariables(workerSubdir),
         };
 
+        Debug.WriteLine($"[WorkerSpawner:{workerKind}] Starting worker: {exePath}");
+
         var client = new SidecarClient.SidecarClient(options);
 
         ReadyEventData? ready = null;
@@ -73,6 +75,7 @@ internal sealed class WorkerSpawner
 
         void OnProcessExited(int? exitCode)
         {
+            Debug.WriteLine($"[WorkerSpawner:{workerKind}] Worker exited before ready/configure completed: code={exitCode}");
             readyTcs.TrySetException(new WorkerStartFailedException(
                 $"Worker process exited (code={exitCode}) before handshake completed"));
         }
@@ -106,6 +109,9 @@ internal sealed class WorkerSpawner
                     $"Expected worker kind '{workerKind}' but worker reported '{ready.WorkerKind}'");
             }
 
+            Debug.WriteLine(
+                $"[WorkerSpawner:{workerKind}] Ready: workerVersion={ready.WorkerVersion}, protocol={ready.ProtocolVersion}, capabilities={string.Join(",", ready.Capabilities)}");
+
             if (ready.ProtocolVersion != WorkerProtocolVersion.Current)
             {
                 throw new WorkerVersionMismatchException(
@@ -125,6 +131,8 @@ internal sealed class WorkerSpawner
                 throw new WorkerStartFailedException(
                     $"Worker {workerKind} configure request did not return ok=true");
             }
+
+            Debug.WriteLine($"[WorkerSpawner:{workerKind}] Configure completed.");
 
             // Unhook the ready-only event handler; consumers will subscribe to OnEvent themselves.
             client.OnEvent -= OnEvent;

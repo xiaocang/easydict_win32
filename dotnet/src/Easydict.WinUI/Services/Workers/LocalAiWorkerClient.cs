@@ -140,6 +140,11 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         {
             throw MapError(sex);
         }
+        catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && _fallbackTranslationService is not null)
+        {
+            Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc TranslateAsync after worker exit: {pex.Message}");
+            return await _fallbackTranslationService.TranslateAsync(request, cancellationToken).ConfigureAwait(false);
+        }
         catch (SidecarProcessExitedException pex)
         {
             throw new TranslationException(
@@ -234,19 +239,54 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
             }
         }, cancellationToken);
 
+        var emittedAnyChunk = false;
+        var fallbackAfterWorkerExit = false;
         try
         {
-            while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+            while (true)
             {
-                while (channel.Reader.TryRead(out var text))
+                string? textToYield;
+                try
                 {
-                    yield return text;
+                    if (!await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        break;
+                    }
+
+                    if (!channel.Reader.TryRead(out textToYield))
+                    {
+                        continue;
+                    }
+
+                    emittedAnyChunk = true;
                 }
+                catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && fallbackTranslationService is not null && !emittedAnyChunk)
+                {
+                    Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc TranslateStreamAsync after worker exit: {pex.Message}");
+                    fallbackAfterWorkerExit = true;
+                    break;
+                }
+                catch (SidecarProcessExitedException pex)
+                {
+                    throw new TranslationException(
+                        $"Local AI worker exited unexpectedly (code={pex.ExitCode})", pex)
+                    {
+                        ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                        ServiceId = ServiceId,
+                    };
+                }
+
+                yield return textToYield;
             }
 
             // Surface any background exception (e.g. SidecarErrorException → TranslationException).
             try { await requestTask.ConfigureAwait(false); }
             catch (SidecarErrorException sex) { throw MapError(sex); }
+            catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && fallbackTranslationService is not null && !emittedAnyChunk)
+            {
+                Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc TranslateStreamAsync after worker exit: {pex.Message}");
+                fallbackAfterWorkerExit = true;
+            }
             catch (SidecarProcessExitedException pex)
             {
                 throw new TranslationException(
@@ -260,6 +300,17 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         finally
         {
             client.OnEvent -= OnEvent;
+        }
+
+        if (fallbackAfterWorkerExit && fallbackTranslationService is not null)
+        {
+            await foreach (var chunk in fallbackTranslationService
+                               .TranslateStreamAsync(request, cancellationToken)
+                               .WithCancellation(cancellationToken)
+                               .ConfigureAwait(false))
+            {
+                yield return chunk;
+            }
         }
     }
 
@@ -350,22 +401,77 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
             }
         }, cancellationToken);
 
+        var emittedAnyChunk = false;
+        var fallbackAfterWorkerExit = false;
         try
         {
-            while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+            while (true)
             {
-                while (channel.Reader.TryRead(out var text))
+                string? textToYield;
+                try
                 {
-                    yield return text;
+                    if (!await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        break;
+                    }
+
+                    if (!channel.Reader.TryRead(out textToYield))
+                    {
+                        continue;
+                    }
+
+                    emittedAnyChunk = true;
                 }
+                catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && fallbackGrammarService is not null && !emittedAnyChunk)
+                {
+                    Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc CorrectGrammarStreamAsync after worker exit: {pex.Message}");
+                    fallbackAfterWorkerExit = true;
+                    break;
+                }
+                catch (SidecarProcessExitedException pex)
+                {
+                    throw new TranslationException(
+                        $"Local AI worker exited unexpectedly (code={pex.ExitCode})", pex)
+                    {
+                        ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                        ServiceId = ServiceId,
+                    };
+                }
+
+                yield return textToYield;
             }
 
             try { await requestTask.ConfigureAwait(false); }
             catch (SidecarErrorException sex) { throw MapError(sex); }
+            catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && fallbackGrammarService is not null && !emittedAnyChunk)
+            {
+                Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc CorrectGrammarStreamAsync after worker exit: {pex.Message}");
+                fallbackAfterWorkerExit = true;
+            }
+            catch (SidecarProcessExitedException pex)
+            {
+                throw new TranslationException(
+                    $"Local AI worker exited unexpectedly (code={pex.ExitCode})", pex)
+                {
+                    ErrorCode = TranslationErrorCode.ServiceUnavailable,
+                    ServiceId = ServiceId,
+                };
+            }
         }
         finally
         {
             client.OnEvent -= OnEvent;
+        }
+
+        if (fallbackAfterWorkerExit && fallbackGrammarService is not null)
+        {
+            await foreach (var chunk in fallbackGrammarService
+                               .CorrectGrammarStreamAsync(request, cancellationToken)
+                               .WithCancellation(cancellationToken)
+                               .ConfigureAwait(false))
+            {
+                yield return chunk;
+            }
         }
     }
 
@@ -400,11 +506,20 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
             ? LocalAiProviderModes.WindowsAI // pick a concrete one for prepare
             : providerMode;
 
-        var status = await client.SendRequestAsync<LocalModelStatusDto>(
-            LocalAiMethods.PrepareModel,
-            new PrepareModelParams { Provider = provider },
-            timeoutMs: 0,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        LocalModelStatusDto? status;
+        try
+        {
+            status = await client.SendRequestAsync<LocalModelStatusDto>(
+                LocalAiMethods.PrepareModel,
+                new PrepareModelParams { Provider = provider },
+                timeoutMs: 0,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (SidecarProcessExitedException ex) when (CanFallbackToInProc(ex) && _fallbackModelProvider is not null)
+        {
+            Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc PrepareAsync after worker exit: {ex.Message}");
+            return await _fallbackModelProvider.PrepareAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         return MapStatus(status);
     }
@@ -448,11 +563,12 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         };
     }
 
-    private static bool CanFallbackToInProc(Exception ex)
+    internal static bool CanFallbackToInProc(Exception ex)
     {
         return ex is WorkerStartFailedException
             or WorkerVersionMismatchException
-            or FileNotFoundException;
+            or FileNotFoundException
+            or SidecarProcessExitedException;
     }
 
     private static LocalModelStatus MapStatus(LocalModelStatusDto? dto)

@@ -66,7 +66,7 @@ try {
     # UseBasicParsing avoids the IE engine dependency on Windows Server SKUs.
     Invoke-WebRequest -Uri $url -OutFile $tmpZip -UseBasicParsing -TimeoutSec 300
 } catch {
-    throw "Failed to download .NET $Version runtime for $Rid: $($_.Exception.Message)"
+    throw "Failed to download .NET $Version runtime for ${Rid}: $($_.Exception.Message)"
 }
 
 if (-not (Test-Path $tmpZip) -or (Get-Item $tmpZip).Length -lt 1MB) {

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Easydict.SidecarClient;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
@@ -82,6 +83,13 @@ public sealed class LocalAiWorkerClientFallbackTests
         status.State.Should().Be(LocalModelState.Ready);
         status.ResourceKey.Should().Be("FallbackReady");
         fallback.PrepareCallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void CanFallbackToInProc_ReturnsTrue_WhenWorkerProcessExitsUnexpectedly()
+    {
+        LocalAiWorkerClient.CanFallbackToInProc(new SidecarProcessExitedException(unchecked((int)0xC0000409)))
+            .Should().BeTrue();
     }
 
     private static LocalAiWorkerClient CreateClient(FallbackLocalAiService fallback)

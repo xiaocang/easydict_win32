@@ -1,3 +1,4 @@
+using Easydict.SidecarClient;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.Workers;
@@ -49,6 +50,13 @@ public sealed class OcrWorkerClientFallbackTests
         result.Lines.Should().ContainSingle().Which.Text.Should().Be("fallback text");
         fallback.RecognizeCallCount.Should().Be(1);
         fallback.LastPreferredLanguageTag.Should().Be("en-US");
+    }
+
+    [Fact]
+    public void CanFallbackToInProc_ReturnsTrue_WhenWorkerProcessExitsUnexpectedly()
+    {
+        OcrWorkerClient.CanFallbackToInProc(new SidecarProcessExitedException(unchecked((int)0xC0000409)))
+            .Should().BeTrue();
     }
 
     private sealed class FakeOcrService : IOcrService

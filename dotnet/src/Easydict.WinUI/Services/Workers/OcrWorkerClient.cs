@@ -101,6 +101,16 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
 
                 return MapResult(dto);
             }
+            catch (SidecarProcessExitedException ex) when (CanFallbackToInProc(ex))
+            {
+                Debug.WriteLine($"[OcrWorker] Falling back to in-proc OCR after worker exit: {ex.Message}");
+                return await _fallback.RecognizeAsync(
+                    pixelData,
+                    pixelWidth,
+                    pixelHeight,
+                    preferredLanguageTag,
+                    cancellationToken).ConfigureAwait(false);
+            }
             catch (SidecarProcessExitedException ex)
             {
                 throw new InvalidOperationException($"OCR worker exited unexpectedly (code={ex.ExitCode})", ex);
@@ -180,11 +190,12 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
         }
     }
 
-    private static bool CanFallbackToInProc(Exception ex)
+    internal static bool CanFallbackToInProc(Exception ex)
     {
         return ex is WorkerStartFailedException
             or WorkerVersionMismatchException
-            or FileNotFoundException;
+            or FileNotFoundException
+            or SidecarProcessExitedException;
     }
 
     public void Dispose()

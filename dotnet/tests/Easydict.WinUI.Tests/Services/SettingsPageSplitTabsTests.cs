@@ -16,6 +16,8 @@ public class SettingsPageSplitTabsTests
     private static readonly string SettingsPageCodeBehindPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml.cs");
     private static readonly string SettingsPagePhiSilicaPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.PhiSilica.cs");
     private static readonly string SettingsPageFoundryLocalPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.FoundryLocal.cs");
+    private static readonly string SettingsPageOpenVinoPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.OpenVino.cs");
+    private static readonly string TranslationManagerServicePath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Services", "TranslationManagerService.cs");
     private static readonly string AppCodeBehindPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "App.xaml.cs");
     private static readonly string ServiceResultItemXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml");
     private static readonly string ServiceResultItemCodeBehindPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "Controls", "ServiceResultItem.xaml.cs");
@@ -367,6 +369,9 @@ public class SettingsPageSplitTabsTests
         foundryLocalCode.Should().NotContain("ReconfigureServices()");
         foundryLocalCode.Should().NotContain("_settings.FoundryLocalEndpoint =");
         foundryLocalCode.Should().NotContain("_settings.FoundryLocalModel =");
+        File.ReadAllText(SettingsPageOpenVinoPath).Should().Contain("GetOrCreateOpenVinoService()");
+        File.ReadAllText(SettingsPagePhiSilicaPath).Should().Contain("InitializeOpenVinoPanel();");
+        File.ReadAllText(TranslationManagerServicePath).Should().Contain("internal OpenVINOTranslationService GetOrCreateOpenVinoService()");
         xaml.Should().NotContain("x:Name=\"OpenVinoExpander\"");
     }
 

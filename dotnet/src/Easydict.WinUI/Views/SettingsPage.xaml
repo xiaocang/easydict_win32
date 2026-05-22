@@ -169,17 +169,21 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <ProgressRing x:Name="SettingsTabSwitchRing"
-                                  Width="20"
-                                  Height="20"
-                                  Margin="0,6,4,0"
-                                  HorizontalAlignment="Right"
-                                  VerticalAlignment="Top"
-                                  IsActive="False"
-                                  IsHitTestVisible="False"
-                                  Canvas.ZIndex="1"
-                                  Visibility="Collapsed"
-                                  AutomationProperties.Name="Loading settings tab"/>
+                    <Grid IsHitTestVisible="False"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Top"
+                          Height="0"
+                          Canvas.ZIndex="1">
+                        <ProgressRing x:Name="SettingsTabSwitchRing"
+                                      Width="20"
+                                      Height="20"
+                                      Margin="0,6,4,0"
+                                      HorizontalAlignment="Right"
+                                      VerticalAlignment="Top"
+                                      IsActive="False"
+                                      Visibility="Collapsed"
+                                      AutomationProperties.Name="Loading settings tab"/>
+                    </Grid>
                 </Grid>
 
                 <Grid x:Name="TabContentHost">

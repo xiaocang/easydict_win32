@@ -26,7 +26,7 @@ public sealed partial class SettingsPage
             return _openVinoServiceCached;
         }
 
-        _openVinoServiceCached = TranslationManagerService.Instance.OpenVinoService;
+        _openVinoServiceCached = TranslationManagerService.Instance.GetOrCreateOpenVinoService();
         return _openVinoServiceCached;
     }
 

@@ -2521,13 +2521,262 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>
-    /// Show the floating save button when any setting changes.
+    /// Show the floating save button only when a user-editable setting differs
+    /// from the persisted settings snapshot. Some UI events are raised while
+    /// refreshing status panels or reselecting an already-saved value; those
+    /// should not create an unsaved-changes state.
     /// </summary>
     private void OnSettingChanged(object sender, object e)
     {
         if (_isLoading) return;
+
+        if (!DoesChangedControlDifferFromSettings(sender, e) && !HasAnyTrackedSettingChanges())
+        {
+            _hasUnsavedChanges = false;
+            SaveButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         _hasUnsavedChanges = true;
         SaveButton.Visibility = Visibility.Visible;
+    }
+
+    private bool DoesChangedControlDifferFromSettings(object? sender, object? e)
+    {
+        if (e is PropertyChangedEventArgs { PropertyName: nameof(ServiceCheckItem.IsReorderModeEnabled) or nameof(ServiceCheckItem.IsAvailable) })
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(sender, LocalAIProviderCombo))
+        {
+            return !SameSetting(GetSelectedTag(LocalAIProviderCombo) ?? "Auto", _settings.LocalAIProvider);
+        }
+
+        if (ReferenceEquals(sender, AppThemeCombo))
+        {
+            return !SameSetting(GetSelectedTag(AppThemeCombo) ?? "System", _settings.AppTheme);
+        }
+
+        if (ReferenceEquals(sender, UILanguageCombo))
+        {
+            return !SameUiLanguageSetting(GetSelectedTag(UILanguageCombo), _settings.UILanguage);
+        }
+
+        if (ReferenceEquals(sender, FirstLanguageCombo))
+        {
+            return !SameSetting(GetSelectedTag(FirstLanguageCombo) ?? "zh", _settings.FirstLanguage);
+        }
+
+        if (ReferenceEquals(sender, SecondLanguageCombo))
+        {
+            return !SameSetting(GetSelectedTag(SecondLanguageCombo) ?? "en", _settings.SecondLanguage);
+        }
+
+        if (ReferenceEquals(sender, EnableInternationalServicesToggle))
+        {
+            return EnableInternationalServicesToggle.IsOn != _settings.EnableInternationalServices;
+        }
+
+        if (ReferenceEquals(sender, AutoSelectTargetToggle))
+        {
+            return AutoSelectTargetToggle.IsOn != _settings.AutoSelectTargetLanguage;
+        }
+
+        if (ReferenceEquals(sender, FoundryLocalEndpointBox))
+        {
+            return !SameSetting(FoundryLocalEndpointBox.Text?.Trim() ?? "", _settings.FoundryLocalEndpoint);
+        }
+
+        if (ReferenceEquals(sender, FoundryLocalModelBox))
+        {
+            var model = FoundryLocalModelBox.Text?.Trim();
+            return !SameSetting(string.IsNullOrWhiteSpace(model) ? FoundryLocalService.DefaultModel : model, _settings.FoundryLocalModel);
+        }
+
+        if (sender is ServiceCheckItem)
+        {
+            return ServicesDifferFromSettings();
+        }
+
+        return false;
+    }
+
+    private bool HasAnyTrackedSettingChanges()
+    {
+        return IsSettingsTabInitialized(SettingsTabId.Services) && ServicesTabSettingsDifferFromSettings()
+            || IsSettingsTabInitialized(SettingsTabId.General) && GeneralTabSettingsDifferFromSettings()
+            || IsSettingsTabInitialized(SettingsTabId.Language) && LanguageTabSettingsDifferFromSettings()
+            || IsSettingsTabInitialized(SettingsTabId.Hotkeys) && HotkeyTabSettingsDifferFromSettings()
+            || IsSettingsTabInitialized(SettingsTabId.Advanced) && AdvancedTabSettingsDifferFromSettings()
+            || IsSettingsTabInitialized(SettingsTabId.Views) && ServicesDifferFromSettings();
+    }
+
+    private bool IsSettingsTabInitialized(SettingsTabId tabId)
+    {
+        return _initializedSettingsTabData.Contains(tabId);
+    }
+
+    private bool ServicesTabSettingsDifferFromSettings()
+    {
+        var openAIEndpoint = OpenAIEndpointBox.Text?.Trim();
+        var customModel = CustomOpenAIModelBox.Text?.Trim();
+        var ollamaEndpoint = OllamaEndpointBox.Text?.Trim();
+        var foundryLocalModel = FoundryLocalModelBox.Text?.Trim();
+        var doubaoEndpoint = DoubaoEndpointBox.Text?.Trim();
+        var doubaoModel = DoubaoModelBox.Text?.Trim();
+
+        return EnableInternationalServicesToggle.IsOn != _settings.EnableInternationalServices
+            || !SameSecret(DeepLKeyBox.Password, _settings.DeepLApiKey)
+            || (DeepLFreeCheck.IsChecked ?? true) != _settings.DeepLUseFreeApi
+            || (DeepLQualityCheck.IsChecked ?? false) != _settings.DeepLUseQualityOptimized
+            || !SameSecret(OpenAIKeyBox.Password, _settings.OpenAIApiKey)
+            || !SameSetting(string.IsNullOrWhiteSpace(openAIEndpoint) ? OpenAIService.DefaultEndpoint : openAIEndpoint, _settings.OpenAIEndpoint)
+            || !SameSetting(GetTagComboValue(OpenAIApiFormatCombo, "Auto"), string.IsNullOrEmpty(_settings.OpenAIApiFormatOverride) ? "Auto" : _settings.OpenAIApiFormatOverride)
+            || !SameSetting(GetEditableComboValue(OpenAIModelCombo, OpenAIService.DefaultModel), _settings.OpenAIModel)
+            || !SameSecret(DeepSeekKeyBox.Password, _settings.DeepSeekApiKey)
+            || !SameSetting(GetEditableComboValue(DeepSeekModelCombo, "deepseek-chat"), _settings.DeepSeekModel)
+            || !SameSecret(GroqKeyBox.Password, _settings.GroqApiKey)
+            || !SameSetting(GetEditableComboValue(GroqModelCombo, "llama-3.3-70b-versatile"), _settings.GroqModel)
+            || !SameSecret(ZhipuKeyBox.Password, _settings.ZhipuApiKey)
+            || !SameSetting(GetEditableComboValue(ZhipuModelCombo, "glm-4.5-flash"), _settings.ZhipuModel)
+            || !SameSecret(GitHubModelsTokenBox.Password, _settings.GitHubModelsToken)
+            || !SameSetting(GetEditableComboValue(GitHubModelsModelCombo, "gpt-4.1"), _settings.GitHubModelsModel)
+            || !SameSecret(GeminiKeyBox.Password, _settings.GeminiApiKey)
+            || !SameSetting(GetEditableComboValue(GeminiModelCombo, "gemini-2.5-flash"), _settings.GeminiModel)
+            || !SameSetting(CustomOpenAIEndpointBox.Text?.Trim() ?? "", _settings.CustomOpenAIEndpoint)
+            || !SameSecret(CustomOpenAIKeyBox.Password, _settings.CustomOpenAIApiKey)
+            || !SameSetting(string.IsNullOrWhiteSpace(customModel) ? "gpt-3.5-turbo" : customModel, _settings.CustomOpenAIModel)
+            || !SameSetting(string.IsNullOrWhiteSpace(ollamaEndpoint) ? "http://localhost:11434/v1/chat/completions" : ollamaEndpoint, _settings.OllamaEndpoint)
+            || !SameSetting(OllamaModelCombo.Text?.Trim() ?? "llama3.2", _settings.OllamaModel)
+            || !SameSetting(GetSelectedTag(LocalAIProviderCombo) ?? "Auto", _settings.LocalAIProvider)
+            || !SameSetting(FoundryLocalEndpointBox.Text?.Trim() ?? "", _settings.FoundryLocalEndpoint)
+            || !SameSetting(string.IsNullOrWhiteSpace(foundryLocalModel) ? FoundryLocalService.DefaultModel : foundryLocalModel, _settings.FoundryLocalModel)
+            || !SameSetting(GetEditableComboValue(BuiltInModelCombo, "glm-4-flash-250414"), _settings.BuiltInAIModel)
+            || !SameSecret(BuiltInApiKeyBox.Password, _settings.BuiltInAIApiKey)
+            || !SameSecret(DoubaoKeyBox.Password, _settings.DoubaoApiKey)
+            || !SameSetting(string.IsNullOrWhiteSpace(doubaoEndpoint) ? "https://ark.cn-beijing.volces.com/api/v3/responses" : doubaoEndpoint, _settings.DoubaoEndpoint)
+            || !SameSetting(string.IsNullOrWhiteSpace(doubaoModel) ? "doubao-seed-translation-250915" : doubaoModel, _settings.DoubaoModel)
+            || !SameSecret(CaiyunKeyBox.Password, _settings.CaiyunApiKey)
+            || !SameSecret(NiuTransKeyBox.Password, _settings.NiuTransApiKey)
+            || !SameSecret(YoudaoAppKeyBox.Password, _settings.YoudaoAppKey)
+            || !SameSecret(YoudaoAppSecretBox.Password, _settings.YoudaoAppSecret)
+            || YoudaoUseOfficialApiToggle.IsOn != _settings.YoudaoUseOfficialApi;
+    }
+
+    private bool GeneralTabSettingsDifferFromSettings()
+    {
+        return !SameSetting(GetSelectedTag(AppThemeCombo) ?? "System", _settings.AppTheme)
+            || MinimizeToTrayToggle.IsOn != _settings.MinimizeToTray
+            || MinimizeToTrayOnStartupToggle.IsOn != _settings.MinimizeToTrayOnStartup
+            || ClipboardMonitorToggle.IsOn != _settings.ClipboardMonitoring
+            || MouseSelectionTranslateToggle.IsOn != _settings.MouseSelectionTranslate
+            || !SameSequence(GetCommaSeparatedValues(MouseSelectionExcludedAppsBox.Text), _settings.MouseSelectionExcludedApps)
+            || AlwaysOnTopToggle.IsOn != _settings.AlwaysOnTop
+            || LaunchAtStartupToggle.IsOn != _settings.LaunchAtStartup
+            || !SameDouble(TtsSpeedSlider.Value, _settings.TtsSpeed)
+            || AutoPlayTranslationToggle.IsOn != _settings.AutoPlayTranslation
+            || HideEmptyServiceResultsToggle.IsOn != _settings.HideEmptyServiceResults
+            || EnableLocalDictionarySuggestionsToggle.IsOn != _settings.EnableLocalDictionarySuggestions;
+    }
+
+    private bool LanguageTabSettingsDifferFromSettings()
+    {
+        return !SameSetting(GetSelectedTag(FirstLanguageCombo) ?? "zh", _settings.FirstLanguage)
+            || !SameSetting(GetSelectedTag(SecondLanguageCombo) ?? "en", _settings.SecondLanguage)
+            || !SameUiLanguageSetting(GetSelectedTag(UILanguageCombo), _settings.UILanguage)
+            || AutoSelectTargetToggle.IsOn != _settings.AutoSelectTargetLanguage
+            || !SameSequence(_languageItems.Where(item => item.IsSelected).Select(item => item.Tag).ToList(), _settings.SelectedLanguages);
+    }
+
+    private bool HotkeyTabSettingsDifferFromSettings()
+    {
+        return !SameSetting(ShowHotkeyBox.Text, _settings.ShowWindowHotkey)
+            || !SameSetting(TranslateHotkeyBox.Text, _settings.TranslateSelectionHotkey)
+            || !SameSetting(ShowMiniHotkeyBox.Text, _settings.ShowMiniWindowHotkey)
+            || !SameSetting(ShowFixedHotkeyBox.Text, _settings.ShowFixedWindowHotkey)
+            || !SameSetting(OcrTranslateHotkeyBox.Text, _settings.OcrTranslateHotkey)
+            || !SameSetting(SilentOcrHotkeyBox.Text, _settings.SilentOcrHotkey)
+            || ShowHotkeyEnabledToggle.IsOn != _settings.EnableShowWindowHotkey
+            || TranslateHotkeyEnabledToggle.IsOn != _settings.EnableTranslateSelectionHotkey
+            || ShowMiniHotkeyEnabledToggle.IsOn != _settings.EnableShowMiniWindowHotkey
+            || ShowFixedHotkeyEnabledToggle.IsOn != _settings.EnableShowFixedWindowHotkey
+            || OcrTranslateHotkeyEnabledToggle.IsOn != _settings.EnableOcrTranslateHotkey
+            || SilentOcrHotkeyEnabledToggle.IsOn != _settings.EnableSilentOcrHotkey;
+    }
+
+    private bool AdvancedTabSettingsDifferFromSettings()
+    {
+        var ocrOptions = GetCurrentOcrServiceOptions();
+
+        return ocrOptions.Engine != _settings.OcrEngine
+            || !SameSetting(ocrOptions.ApiKey, _settings.OcrApiKey)
+            || !SameSetting(ocrOptions.Endpoint, _settings.OcrEndpoint)
+            || !SameSetting(ocrOptions.Model, _settings.OcrModel)
+            || !SameSetting(ocrOptions.SystemPrompt, _settings.OcrSystemPrompt)
+            || ProxyEnabledToggle.IsOn != _settings.ProxyEnabled
+            || ProxyBypassLocalToggle.IsOn != _settings.ProxyBypassLocal
+            || !SameSetting(ProxyUriBox.Text?.Trim() ?? "", _settings.ProxyUri)
+            || !SameSetting(GetSelectedTag(LayoutDetectionModeCombo) ?? "Auto", _settings.LayoutDetectionMode)
+            || !SameSetting(GetSelectedTag(VisionLayoutServiceCombo) ?? "gemini", _settings.VisionLayoutServiceId)
+            || !SameSetting(FormulaFontPatternBox.Text?.Trim() ?? "", _settings.FormulaFontPattern)
+            || !SameSetting(FormulaCharPatternBox.Text?.Trim() ?? "", _settings.FormulaCharPattern)
+            || TranslationCacheToggle.IsOn != _settings.EnableTranslationCache
+            || !SameSetting(CustomPromptBox.Text?.Trim() ?? "", _settings.LongDocCustomPrompt);
+    }
+
+    private bool ServicesDifferFromSettings()
+    {
+        return !SameSequence(GetEnabledServicesFromCollection(_mainWindowServices), _settings.MainWindowEnabledServices)
+            || !SameSequence(GetEnabledServicesFromCollection(_miniWindowServices), _settings.MiniWindowEnabledServices)
+            || !SameSequence(GetEnabledServicesFromCollection(_fixedWindowServices), _settings.FixedWindowEnabledServices)
+            || !SameDictionary(GetEnabledQueryFromCollection(_mainWindowServices), _settings.MainWindowServiceEnabledQuery)
+            || !SameDictionary(GetEnabledQueryFromCollection(_miniWindowServices), _settings.MiniWindowServiceEnabledQuery)
+            || !SameDictionary(GetEnabledQueryFromCollection(_fixedWindowServices), _settings.FixedWindowServiceEnabledQuery);
+    }
+
+    private static bool SameSetting(string? current, string? saved)
+    {
+        return string.Equals(current ?? "", saved ?? "", StringComparison.Ordinal);
+    }
+
+    private static bool SameSecret(string? current, string? saved)
+    {
+        var normalizedCurrent = string.IsNullOrWhiteSpace(current) ? null : current;
+        return string.Equals(normalizedCurrent, saved, StringComparison.Ordinal);
+    }
+
+    private static bool SameUiLanguageSetting(string? current, string? saved)
+    {
+        var currentLanguage = current ?? LocalizationService.Instance.CurrentLanguage;
+        var savedLanguage = string.IsNullOrWhiteSpace(saved)
+            ? LocalizationService.Instance.CurrentLanguage
+            : saved;
+        return string.Equals(currentLanguage, savedLanguage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool SameDouble(double current, double saved)
+    {
+        return Math.Abs(current - saved) < 0.0001;
+    }
+
+    private static List<string> GetCommaSeparatedValues(string? value)
+    {
+        return (value ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(s => s.Length > 0)
+            .ToList();
+    }
+
+    private static bool SameSequence(IReadOnlyList<string> current, IReadOnlyList<string> saved)
+    {
+        return current.SequenceEqual(saved, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool SameDictionary(IReadOnlyDictionary<string, bool> current, IReadOnlyDictionary<string, bool> saved)
+    {
+        return current.Count == saved.Count
+            && current.All(pair => saved.TryGetValue(pair.Key, out var value) && value == pair.Value);
     }
 
     private void OnDeepLModeChanged(object sender, RoutedEventArgs e)
@@ -4277,7 +4526,7 @@ public sealed partial class SettingsPage : Page
         EnsureDefaultServiceEnabled(_miniWindowServices, miniServices);
         EnsureDefaultServiceEnabled(_fixedWindowServices, fixedServices);
 
-        SaveButton.Visibility = Visibility.Visible;
+        OnSettingChanged(sender, e);
     }
 
     /// <summary>
@@ -4326,8 +4575,11 @@ public sealed partial class SettingsPage : Page
         // Apply theme immediately
         App.ApplyTheme(selectedTag);
 
-        // Show the save button (in case other settings were changed)
-        SaveButton.Visibility = Visibility.Visible;
+        if (!HasAnyTrackedSettingChanges())
+        {
+            _hasUnsavedChanges = false;
+            SaveButton.Visibility = Visibility.Collapsed;
+        }
     }
 
     /// <summary>

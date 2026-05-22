@@ -20,7 +20,9 @@
          OpenVINO 2024 runtime so the EP can be selected at session creation with
          device_type=NPU/GPU/CPU. Intel publishes this package; version pinned to
          match the Managed wrapper. -->
-    <PackageReference Include="Intel.ML.OnnxRuntime.OpenVino" Version="1.21.0" />
+    <PackageReference Include="Intel.ML.OnnxRuntime.OpenVino" Version="1.21.0">
+      <ExcludeAssets>runtime;native</ExcludeAssets>
+    </PackageReference>
     <!-- SentencePiece tokenizer support. NLLB-200 ships a SentencePiece BPE model
          (sentencepiece.bpe.model) plus a tokenizer.json that adds the FLORES-200
          language-code special tokens. -->

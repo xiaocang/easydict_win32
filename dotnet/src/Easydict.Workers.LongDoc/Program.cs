@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Easydict.SidecarClient;
 using Easydict.SidecarClient.Protocol;
 using Easydict.Workers.LongDoc.Handlers;
 using Easydict.Workers.LongDoc.Infrastructure;
@@ -35,6 +36,8 @@ internal static class Program
 
     public static async Task<int> Main(string[] args)
     {
+        WorkerSharedAssemblyResolver.Install();
+
         // Redirect Debug.WriteLine / Trace.WriteLine to stderr so they don't pollute stdout
         // (which is reserved for JSON Lines protocol messages going to the host).
         Trace.Listeners.Clear();

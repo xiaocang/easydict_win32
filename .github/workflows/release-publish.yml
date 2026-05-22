@@ -266,6 +266,13 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
+      - name: Dedupe worker shared assemblies (MSIX)
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          ./scripts/Dedupe-WorkerSharedFiles.ps1 `
+            -PublishDir ./publish-msix/${{ matrix.platform }}
+
       - name: Bundle .NET 8 Runtime (MSIX)
         shell: pwsh
         working-directory: dotnet

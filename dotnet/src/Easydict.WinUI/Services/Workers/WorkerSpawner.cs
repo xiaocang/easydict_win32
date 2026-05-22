@@ -48,7 +48,7 @@ internal sealed class WorkerSpawner
             // every DOTNET_ROOT variant the .NET host loader consults — DOTNET_ROOT for
             // the legacy path, and DOTNET_ROOT_<ARCH> for per-arch hosts on systems where
             // a different arch's runtime is also installed.
-            EnvironmentVariables = BuildEnvironmentVariables(),
+            EnvironmentVariables = BuildEnvironmentVariables(workerSubdir),
         };
 
         var client = new SidecarClient.SidecarClient(options);
@@ -155,19 +155,41 @@ internal sealed class WorkerSpawner
     /// worker apphost finds it regardless of which probe order the local .NET host
     /// loader uses.
     /// </summary>
-    private static Dictionary<string, string> BuildEnvironmentVariables()
+    private static Dictionary<string, string> BuildEnvironmentVariables(string workerSubdir)
     {
         var dotnetRoot = Path.Combine(AppContext.BaseDirectory, "dotnet");
-        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        var sharedDir = Path.Combine(AppContext.BaseDirectory, "workers", "shared");
+        var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["DOTNET_ROOT"] = dotnetRoot,
             ["DOTNET_ROOT_X64"] = dotnetRoot,
             ["DOTNET_ROOT_ARM64"] = dotnetRoot,
+            ["EASYDICT_WORKER_SHARED_DIR"] = sharedDir,
             // Suppress global telemetry from the worker apphost (the host itself
             // already opts out via its csproj). Worker startup cost is on the
             // critical path of every translate request — skip the network sniff.
             ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
         };
+
+        if (string.Equals(workerSubdir, "localai", StringComparison.OrdinalIgnoreCase))
+        {
+            var openVinoRuntimeDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Easydict",
+                "runtimes",
+                "openvino",
+                "1.21.0",
+                "win-x64",
+                "native");
+            variables["EASYDICT_OPENVINO_RUNTIME_DIR"] = openVinoRuntimeDir;
+
+            var existingPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+            variables["PATH"] = string.IsNullOrWhiteSpace(existingPath)
+                ? openVinoRuntimeDir
+                : openVinoRuntimeDir + Path.PathSeparator + existingPath;
+        }
+
+        return variables;
     }
 
     /// <summary>

@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Net;
 using Easydict.OpenVINO.Inference;
 using Easydict.OpenVINO.Models;
 using Easydict.OpenVINO.Services;
@@ -23,6 +25,7 @@ public class OpenVinoTranslationServiceTests : IDisposable
 
     private readonly string _tempDir;
     private readonly ModelDownloadService _downloader;
+    private readonly OpenVinoRuntimeDownloadService _runtimeDownloader;
 
     public OpenVinoTranslationServiceTests()
     {
@@ -40,6 +43,8 @@ public class OpenVinoTranslationServiceTests : IDisposable
         File.WriteAllText(Path.Combine(modelDir, ModelManifest.CompletionSentinel), "stub");
 
         _downloader = NewDownloader(_tempDir);
+        _runtimeDownloader = NewRuntimeDownloader(_tempDir);
+        InstallRuntimeStub(_runtimeDownloader);
     }
 
     public void Dispose()
@@ -177,7 +182,7 @@ public class OpenVinoTranslationServiceTests : IDisposable
         };
         var engine = new FakeEngine { TokenStream = new[] { 100, 200, 300, 400 } };
 
-        using var svc = new OpenVINOTranslationService(_downloader, tokenizer, engine);
+        using var svc = new OpenVINOTranslationService(_downloader, _runtimeDownloader, tokenizer, engine);
         var request = new TranslationRequest
         {
             Text = "Hello, world",
@@ -202,7 +207,7 @@ public class OpenVinoTranslationServiceTests : IDisposable
         };
         var engine = new FakeEngine { TokenStream = new[] { 100, 200, 300 } };
 
-        using var svc = new OpenVINOTranslationService(_downloader, tokenizer, engine);
+        using var svc = new OpenVINOTranslationService(_downloader, _runtimeDownloader, tokenizer, engine);
         var request = new TranslationRequest
         {
             Text = "你好世界",
@@ -230,7 +235,7 @@ public class OpenVinoTranslationServiceTests : IDisposable
         };
         var engine = new FakeEngine { TokenStream = new[] { 100, 999, 300 } };
 
-        using var svc = new OpenVINOTranslationService(_downloader, tokenizer, engine);
+        using var svc = new OpenVINOTranslationService(_downloader, _runtimeDownloader, tokenizer, engine);
         var request = new TranslationRequest
         {
             Text = "test",
@@ -261,7 +266,7 @@ public class OpenVinoTranslationServiceTests : IDisposable
         };
         var engine = new FakeEngine { TokenStream = new[] { 100, 200, 300, 400 } };
 
-        using var svc = new OpenVINOTranslationService(_downloader, tokenizer, engine);
+        using var svc = new OpenVINOTranslationService(_downloader, _runtimeDownloader, tokenizer, engine);
         var request = new TranslationRequest
         {
             Text = "你好",
@@ -362,7 +367,7 @@ public class OpenVinoTranslationServiceTests : IDisposable
     {
         var tokenizer = new FakeTokenizer();
         var engine = new FakeEngine();
-        using var svc = new OpenVINOTranslationService(_downloader, tokenizer, engine);
+        using var svc = new OpenVINOTranslationService(_downloader, _runtimeDownloader, tokenizer, engine);
 
         svc.Configure(OpenVINODevice.NPU);
 
@@ -377,7 +382,7 @@ public class OpenVinoTranslationServiceTests : IDisposable
             DecodedPieces = { [100] = "Hello" },
         };
         var engine = new FakeEngine { TokenStream = new[] { 100 } };
-        using var svc = new OpenVINOTranslationService(_downloader, tokenizer, engine);
+        using var svc = new OpenVINOTranslationService(_downloader, _runtimeDownloader, tokenizer, engine);
         var request = new TranslationRequest
         {
             Text = "你好",
@@ -402,19 +407,93 @@ public class OpenVinoTranslationServiceTests : IDisposable
         engine.DisposeCount.Should().Be(1);
     }
 
+    [Fact]
+    public async Task RuntimeDownload_HashMismatchFailsWithoutCompletionSentinel()
+    {
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+        {
+            return;
+        }
+
+        var cacheRoot = Path.Combine(Path.GetTempPath(), "EasydictOvRuntimeBad-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var handler = new RecordingHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage
+            {
+                Content = new ByteArrayContent(Encoding.UTF8.GetBytes("not the expected nupkg")),
+            }));
+            using var service = new OpenVinoRuntimeDownloadService(new HttpClient(handler), cacheRoot);
+
+            var act = () => service.DownloadAsync(null, CancellationToken.None);
+
+            await act.Should().ThrowAsync<InvalidDataException>()
+                .WithMessage("*SHA-256 mismatch*");
+            File.Exists(Path.Combine(
+                service.NativeDirectory,
+                OpenVinoRuntimeDownloadService.CompletionSentinel)).Should().BeFalse();
+        }
+        finally
+        {
+            try { Directory.Delete(cacheRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task RuntimeDownload_SkipsNetworkWhenRuntimeAlreadyInstalled()
+    {
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+        {
+            return;
+        }
+
+        var cacheRoot = Path.Combine(Path.GetTempPath(), "EasydictOvRuntimeReady-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var handler = new RecordingHttpMessageHandler((_, _) =>
+                throw new InvalidOperationException("Network should not be used when runtime is installed."));
+            using var service = new OpenVinoRuntimeDownloadService(new HttpClient(handler), cacheRoot);
+            InstallRuntimeStub(service);
+
+            await service.DownloadAsync(null, CancellationToken.None);
+
+            service.IsRuntimeInstalled().Should().BeTrue();
+        }
+        finally
+        {
+            try { Directory.Delete(cacheRoot, recursive: true); } catch { }
+        }
+    }
+
     // ── Fakes ───────────────────────────────────────────────────────────
 
     private OpenVINOTranslationService NewService()
     {
         var tokenizer = new FakeTokenizer();
         var engine = new FakeEngine();
-        return new OpenVINOTranslationService(_downloader, tokenizer, engine);
+        return new OpenVINOTranslationService(_downloader, _runtimeDownloader, tokenizer, engine);
     }
 
     private static ModelDownloadService NewDownloader(string cacheRoot)
     {
         // We never actually hit the network in tests; pass a dummy HttpClient.
         return new ModelDownloadService(new HttpClient(), cacheRoot);
+    }
+
+    private static OpenVinoRuntimeDownloadService NewRuntimeDownloader(string cacheRoot)
+    {
+        return new OpenVinoRuntimeDownloadService(new HttpClient(), cacheRoot);
+    }
+
+    private static void InstallRuntimeStub(OpenVinoRuntimeDownloadService runtimeDownloader)
+    {
+        Directory.CreateDirectory(runtimeDownloader.NativeDirectory);
+        foreach (var f in OpenVinoRuntimeManifest.NativeFiles)
+        {
+            File.WriteAllText(Path.Combine(runtimeDownloader.NativeDirectory, f), "stub");
+        }
+        File.WriteAllText(
+            Path.Combine(runtimeDownloader.NativeDirectory, OpenVinoRuntimeDownloadService.CompletionSentinel),
+            "stub");
     }
 
     private sealed class FakeTokenizer : INllbTokenizer

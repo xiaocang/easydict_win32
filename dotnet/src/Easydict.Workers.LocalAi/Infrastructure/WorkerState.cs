@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Easydict.OpenVINO.Inference;
 using Easydict.OpenVINO.Services;
 using Easydict.SidecarClient.Protocol;
@@ -43,6 +44,8 @@ internal sealed class WorkerState
         lock (_lock)
         {
             _settings = snapshot;
+            Trace.WriteLine(
+                $"[LocalAiWorker] Settings applied. provider={snapshot.LocalAIProvider}, proxyEnabled={snapshot.ProxyEnabled}, openVinoDevice={snapshot.OpenVinoDevice}");
         }
     }
 
@@ -50,7 +53,12 @@ internal sealed class WorkerState
     {
         lock (_lock)
         {
-            _phiSilica ??= new PhiSilicaTranslationService();
+            if (_phiSilica is null)
+            {
+                Trace.WriteLine("[LocalAiWorker] Creating PhiSilicaTranslationService.");
+                _phiSilica = new PhiSilicaTranslationService();
+                Trace.WriteLine("[LocalAiWorker] Created PhiSilicaTranslationService.");
+            }
             return _phiSilica;
         }
     }
@@ -59,11 +67,24 @@ internal sealed class WorkerState
     {
         lock (_lock)
         {
-            _httpClient ??= CreateConfiguredHttpClient();
-            _foundryLocal ??= new FoundryLocalService(_httpClient);
+            if (_httpClient is null)
+            {
+                Trace.WriteLine("[LocalAiWorker] Creating HTTP client for Foundry Local.");
+                _httpClient = CreateConfiguredHttpClient();
+            }
+
+            if (_foundryLocal is null)
+            {
+                Trace.WriteLine("[LocalAiWorker] Creating FoundryLocalService.");
+                _foundryLocal = new FoundryLocalService(_httpClient);
+                Trace.WriteLine("[LocalAiWorker] Created FoundryLocalService.");
+            }
+
             _foundryLocal.Configure(
                 _settings?.FoundryLocalEndpoint,
                 _settings?.FoundryLocalModel);
+            Trace.WriteLine(
+                $"[LocalAiWorker] Configured FoundryLocalService. endpointConfigured={!string.IsNullOrWhiteSpace(_settings?.FoundryLocalEndpoint)}, model={_settings?.FoundryLocalModel}");
             return _foundryLocal;
         }
     }
@@ -72,8 +93,17 @@ internal sealed class WorkerState
     {
         lock (_lock)
         {
-            _openVino ??= new OpenVINOTranslationService();
-            _openVino.Configure(ParseOpenVinoDevice(_settings?.OpenVinoDevice));
+            if (_openVino is null)
+            {
+                Trace.WriteLine("[LocalAiWorker] Creating OpenVINOTranslationService.");
+                _openVino = new OpenVINOTranslationService();
+                Trace.WriteLine("[LocalAiWorker] Created OpenVINOTranslationService.");
+            }
+
+            var device = ParseOpenVinoDevice(_settings?.OpenVinoDevice);
+            Trace.WriteLine($"[LocalAiWorker] Configuring OpenVINOTranslationService. device={device}");
+            _openVino.Configure(device);
+            Trace.WriteLine("[LocalAiWorker] Configured OpenVINOTranslationService.");
             return _openVino;
         }
     }

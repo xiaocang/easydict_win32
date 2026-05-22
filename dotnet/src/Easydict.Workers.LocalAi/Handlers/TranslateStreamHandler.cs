@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Easydict.SidecarClient.Protocol;
@@ -31,17 +32,21 @@ internal sealed class TranslateStreamHandler
         var request = TranslateHandler.BuildRequest(p);
 
         var candidates = new TranslateHandler(_state).ResolveCandidates(p.ProviderMode).ToList();
+        Trace.WriteLine(
+            $"[LocalAiWorker] translate_stream start. requestId={requestId}, providerMode={p.ProviderMode}, from={request.FromLanguage}, to={request.ToLanguage}, textLength={p.Text?.Length ?? 0}, candidates={string.Join(">", candidates.Select(c => c.DisplayName))}");
 
         var aggregated = new StringBuilder();
         TranslationException? lastError = null;
 
         for (var i = 0; i < candidates.Count; i++)
         {
-            var (svc, _) = candidates[i];
+            var (svc, displayName) = candidates[i];
             var emittedAny = false;
             aggregated.Clear();
+            var sw = Stopwatch.StartNew();
             try
             {
+                Trace.WriteLine($"[LocalAiWorker] translate_stream provider enter. requestId={requestId}, provider={displayName}, serviceId={svc.ServiceId}");
                 await foreach (var chunk in svc.TranslateStreamAsync(request, cancellationToken).ConfigureAwait(false))
                 {
                     if (string.IsNullOrEmpty(chunk)) continue;
@@ -51,6 +56,9 @@ internal sealed class TranslateStreamHandler
                         new ChunkEventData { Text = chunk }, requestId).ConfigureAwait(false);
                 }
 
+                sw.Stop();
+                Trace.WriteLine(
+                    $"[LocalAiWorker] translate_stream provider success. requestId={requestId}, provider={displayName}, elapsedMs={sw.ElapsedMilliseconds}, resultLength={aggregated.Length}");
                 return new TranslateStreamResult
                 {
                     Done = true,
@@ -59,16 +67,29 @@ internal sealed class TranslateStreamHandler
             }
             catch (TranslationException tex) when (!emittedAny && CanFallback(p.ProviderMode, i, candidates.Count, tex))
             {
+                sw.Stop();
+                Trace.WriteLine(
+                    $"[LocalAiWorker] translate_stream provider fallback. requestId={requestId}, provider={displayName}, elapsedMs={sw.ElapsedMilliseconds}, errorCode={tex.ErrorCode}, serviceId={tex.ServiceId}, message={tex.Message}");
                 lastError = tex;
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                Trace.WriteLine(
+                    $"[LocalAiWorker] translate_stream provider exception. requestId={requestId}, provider={displayName}, emittedAny={emittedAny}, elapsedMs={sw.ElapsedMilliseconds}, exception={ex.GetType().FullName}, message={ex.Message}");
+                throw;
             }
         }
 
         if (lastError is not null)
         {
+            Trace.WriteLine(
+                $"[LocalAiWorker] translate_stream failed after fallbacks. requestId={requestId}, errorCode={lastError.ErrorCode}, serviceId={lastError.ServiceId}, message={lastError.Message}");
             throw new WorkerHandlerException(WorkerErrorCodes.ServiceError,
                 lastError.Message,
                 new { errorCode = lastError.ErrorCode.ToString(), serviceId = lastError.ServiceId });
         }
+        Trace.WriteLine($"[LocalAiWorker] translate_stream failed: no provider produced response. requestId={requestId}");
         throw new WorkerHandlerException(WorkerErrorCodes.ServiceError,
             "No local AI provider produced a streaming response");
     }

@@ -31,13 +31,18 @@ internal sealed class TranslateHandler
         var sw = Stopwatch.StartNew();
 
         var candidates = ResolveCandidates(p.ProviderMode);
+        Trace.WriteLine(
+            $"[LocalAiWorker] translate start. requestId={requestId}, providerMode={p.ProviderMode}, from={request.FromLanguage}, to={request.ToLanguage}, textLength={p.Text?.Length ?? 0}, candidates={string.Join(">", candidates.Select(c => c.DisplayName))}");
         TranslationException? lastError = null;
         foreach (var (svc, displayName) in candidates)
         {
             try
             {
+                Trace.WriteLine($"[LocalAiWorker] translate provider enter. requestId={requestId}, provider={displayName}, serviceId={svc.ServiceId}");
                 var result = await svc.TranslateAsync(request, cancellationToken).ConfigureAwait(false);
                 sw.Stop();
+                Trace.WriteLine(
+                    $"[LocalAiWorker] translate provider success. requestId={requestId}, provider={displayName}, elapsedMs={sw.ElapsedMilliseconds}, resultLength={result.TranslatedText?.Length ?? 0}");
                 return new LocalAiTranslateResult
                 {
                     TranslatedText = result.TranslatedText,
@@ -49,16 +54,27 @@ internal sealed class TranslateHandler
             }
             catch (TranslationException tex) when (CanFallback(p.ProviderMode, tex))
             {
+                Trace.WriteLine(
+                    $"[LocalAiWorker] translate provider fallback. requestId={requestId}, provider={displayName}, errorCode={tex.ErrorCode}, serviceId={tex.ServiceId}, message={tex.Message}");
                 lastError = tex;
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine(
+                    $"[LocalAiWorker] translate provider exception. requestId={requestId}, provider={displayName}, exception={ex.GetType().FullName}, message={ex.Message}");
+                throw;
             }
         }
 
         if (lastError is not null)
         {
+            Trace.WriteLine(
+                $"[LocalAiWorker] translate failed after fallbacks. requestId={requestId}, errorCode={lastError.ErrorCode}, serviceId={lastError.ServiceId}, message={lastError.Message}");
             throw new WorkerHandlerException(WorkerErrorCodes.ServiceError,
                 lastError.Message,
                 new { errorCode = lastError.ErrorCode.ToString(), serviceId = lastError.ServiceId });
         }
+        Trace.WriteLine($"[LocalAiWorker] translate failed: no provider available. requestId={requestId}");
         throw new WorkerHandlerException(WorkerErrorCodes.ServiceError, "No local AI provider available");
     }
 

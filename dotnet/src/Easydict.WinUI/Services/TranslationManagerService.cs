@@ -67,6 +67,16 @@ public sealed class TranslationManagerService : IDisposable
         }
     }
 
+    internal OpenVINOTranslationService GetOrCreateOpenVinoService()
+    {
+        lock (_lock)
+        {
+            _openVinoService ??= new OpenVINOTranslationService();
+            _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
+            return _openVinoService;
+        }
+    }
+
     internal FoundryLocalService? FoundryLocalService
     {
         get
@@ -481,15 +491,7 @@ public sealed class TranslationManagerService : IDisposable
             LazyThreadSafetyMode.ExecutionAndPublication);
 
         var openVinoLazy = new Lazy<OpenVINOTranslationService>(
-            () =>
-            {
-                lock (_lock)
-                {
-                    _openVinoService ??= new OpenVINOTranslationService();
-                    _openVinoService.Configure(ParseOpenVinoDevice(_settings.OpenVinoDevice));
-                    return _openVinoService;
-                }
-            },
+            GetOrCreateOpenVinoService,
             LazyThreadSafetyMode.ExecutionAndPublication);
 
         return new LocalAITranslationService(phiSilicaLazy, foundryLocalLazy, openVinoLazy);

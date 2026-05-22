@@ -99,9 +99,15 @@ public sealed partial class SettingsPage
 
         if (OpenVinoConfigPanel is not null)
         {
-            OpenVinoConfigPanel.Visibility = mode == LocalAIProviderMode.Auto || mode == LocalAIProviderMode.OpenVINO
+            var showOpenVino = mode == LocalAIProviderMode.Auto || mode == LocalAIProviderMode.OpenVINO;
+            OpenVinoConfigPanel.Visibility = showOpenVino
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+
+            if (showOpenVino)
+            {
+                InitializeOpenVinoPanel();
+            }
         }
 
         UpdateLocalAIProviderPanelEmphasis(mode);

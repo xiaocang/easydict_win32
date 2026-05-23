@@ -25,7 +25,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
-  <!-- Same onnxruntime.dll dedupe as the host. -->
+  <!--
+    The OpenVINO provider still runs in this worker process, but by default it
+    uses the stable CPU ONNX Runtime native binary and lets NllbInferenceEngine
+    fall back when the OpenVINO EP is unavailable. Intel.ML.OnnxRuntime.OpenVino
+    native assets are opt-in through OpenVinoRuntimeDownloadService/PATH injection;
+    publishing them here caused sidecar fail-fast crashes on machines where that
+    EP build could not initialize.
+  -->
   <Target Name="DedupeOnnxRuntime"
           AfterTargets="ResolveAssemblyReferences;ResolvePackageAssets;ResolveRuntimePackAssets;_ResolveCopyLocalAssetsForRuntimeDependencies"
           BeforeTargets="_CopyFilesMarkedCopyLocal;ComputeFilesToPublish;_ComputeResolvedFilesToPublishTypes">
@@ -33,15 +40,28 @@
       <ReferenceCopyLocalPaths
           Remove="@(ReferenceCopyLocalPaths)"
           Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
-                     $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+                     ($([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning')) OR
+                      $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('intel.ml.onnxruntime.openvino')))" />
       <ResolvedFileToPublish
           Remove="@(ResolvedFileToPublish)"
           Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
-                     $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+                     ($([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning')) OR
+                      $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('intel.ml.onnxruntime.openvino')))" />
       <RuntimeCopyLocalItems
           Remove="@(RuntimeCopyLocalItems)"
           Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
-                     $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning'))" />
+                     ($([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning')) OR
+                      $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('intel.ml.onnxruntime.openvino')))" />
+      <RuntimeTargetsCopyLocalItems
+          Remove="@(RuntimeTargetsCopyLocalItems)"
+          Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                     ($([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning')) OR
+                      $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('intel.ml.onnxruntime.openvino')))" />
+      <NativeCopyLocalItems
+          Remove="@(NativeCopyLocalItems)"
+          Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' AND
+                     ($([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('microsoft.windows.ai.machinelearning')) OR
+                      $([System.String]::Copy('%(FullPath)').ToLowerInvariant().Contains('intel.ml.onnxruntime.openvino')))" />
     </ItemGroup>
   </Target>
 
@@ -58,6 +78,7 @@
     <PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.0.*">
       <ExcludeAssets>runtime;native</ExcludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.21.0" />
   </ItemGroup>
 
 </Project>

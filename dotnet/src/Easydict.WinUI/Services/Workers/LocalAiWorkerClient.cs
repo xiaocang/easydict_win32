@@ -97,18 +97,12 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
     {
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
-        if (ShouldBypassWorkerForOpenVino() && _fallbackTranslationService is not null)
-        {
-            Debug.WriteLine("[LocalAiWorker] Bypassing worker for OpenVINO TranslateAsync.");
-            return await _fallbackTranslationService.TranslateAsync(request, cancellationToken).ConfigureAwait(false);
-        }
-
         SidecarClient.SidecarClient client;
         try
         {
             client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (CanFallbackToInProc(ex) && _fallbackTranslationService is not null)
+        catch (Exception ex) when (CanFallbackToInProc(ex) && CanFallbackToInProcForCurrentProvider() && _fallbackTranslationService is not null)
         {
             Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc TranslateAsync: {ex.Message}");
             return await _fallbackTranslationService.TranslateAsync(request, cancellationToken).ConfigureAwait(false);
@@ -146,7 +140,7 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         {
             throw MapError(sex);
         }
-        catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && _fallbackTranslationService is not null)
+        catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && CanFallbackToInProcForCurrentProvider() && _fallbackTranslationService is not null)
         {
             Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc TranslateAsync after worker exit: {pex.Message}");
             return await _fallbackTranslationService.TranslateAsync(request, cancellationToken).ConfigureAwait(false);
@@ -169,27 +163,13 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
         var fallbackTranslationService = _fallbackTranslationService;
-        if (ShouldBypassWorkerForOpenVino() && fallbackTranslationService is not null)
-        {
-            Debug.WriteLine("[LocalAiWorker] Bypassing worker for OpenVINO TranslateStreamAsync.");
-            await foreach (var chunk in fallbackTranslationService
-                               .TranslateStreamAsync(request, cancellationToken)
-                               .WithCancellation(cancellationToken)
-                               .ConfigureAwait(false))
-            {
-                yield return chunk;
-            }
-
-            yield break;
-        }
-
         SidecarClient.SidecarClient? client = null;
         Exception? fallbackException = null;
         try
         {
             client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (CanFallbackToInProc(ex) && fallbackTranslationService is not null)
+        catch (Exception ex) when (CanFallbackToInProc(ex) && CanFallbackToInProcForCurrentProvider() && fallbackTranslationService is not null)
         {
             fallbackException = ex;
         }
@@ -280,7 +260,7 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
 
                     emittedAnyChunk = true;
                 }
-                catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && fallbackTranslationService is not null && !emittedAnyChunk)
+                catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && CanFallbackToInProcForCurrentProvider() && fallbackTranslationService is not null && !emittedAnyChunk)
                 {
                     Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc TranslateStreamAsync after worker exit: {pex.Message}");
                     fallbackAfterWorkerExit = true;
@@ -302,7 +282,7 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
             // Surface any background exception (e.g. SidecarErrorException → TranslationException).
             try { await requestTask.ConfigureAwait(false); }
             catch (SidecarErrorException sex) { throw MapError(sex); }
-            catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && fallbackTranslationService is not null && !emittedAnyChunk)
+            catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && CanFallbackToInProcForCurrentProvider() && fallbackTranslationService is not null && !emittedAnyChunk)
             {
                 Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc TranslateStreamAsync after worker exit: {pex.Message}");
                 fallbackAfterWorkerExit = true;
@@ -343,27 +323,13 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
         var fallbackGrammarService = _fallbackGrammarService;
-        if (ShouldBypassWorkerForOpenVino() && fallbackGrammarService is not null)
-        {
-            Debug.WriteLine("[LocalAiWorker] Bypassing worker for OpenVINO CorrectGrammarStreamAsync.");
-            await foreach (var chunk in fallbackGrammarService
-                               .CorrectGrammarStreamAsync(request, cancellationToken)
-                               .WithCancellation(cancellationToken)
-                               .ConfigureAwait(false))
-            {
-                yield return chunk;
-            }
-
-            yield break;
-        }
-
         SidecarClient.SidecarClient? client = null;
         Exception? fallbackException = null;
         try
         {
             client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (CanFallbackToInProc(ex) && fallbackGrammarService is not null)
+        catch (Exception ex) when (CanFallbackToInProc(ex) && CanFallbackToInProcForCurrentProvider() && fallbackGrammarService is not null)
         {
             fallbackException = ex;
         }
@@ -456,7 +422,7 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
 
                     emittedAnyChunk = true;
                 }
-                catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && fallbackGrammarService is not null && !emittedAnyChunk)
+                catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && CanFallbackToInProcForCurrentProvider() && fallbackGrammarService is not null && !emittedAnyChunk)
                 {
                     Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc CorrectGrammarStreamAsync after worker exit: {pex.Message}");
                     fallbackAfterWorkerExit = true;
@@ -477,7 +443,7 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
 
             try { await requestTask.ConfigureAwait(false); }
             catch (SidecarErrorException sex) { throw MapError(sex); }
-            catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && fallbackGrammarService is not null && !emittedAnyChunk)
+            catch (SidecarProcessExitedException pex) when (CanFallbackToInProc(pex) && CanFallbackToInProcForCurrentProvider() && fallbackGrammarService is not null && !emittedAnyChunk)
             {
                 Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc CorrectGrammarStreamAsync after worker exit: {pex.Message}");
                 fallbackAfterWorkerExit = true;
@@ -523,18 +489,12 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
     {
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
-        if (ShouldBypassWorkerForOpenVino() && _fallbackModelProvider is not null)
-        {
-            Debug.WriteLine("[LocalAiWorker] Bypassing worker for OpenVINO PrepareAsync.");
-            return await _fallbackModelProvider.PrepareAsync(cancellationToken).ConfigureAwait(false);
-        }
-
         SidecarClient.SidecarClient client;
         try
         {
             client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (CanFallbackToInProc(ex) && _fallbackModelProvider is not null)
+        catch (Exception ex) when (CanFallbackToInProc(ex) && CanFallbackToInProcForCurrentProvider() && _fallbackModelProvider is not null)
         {
             Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc PrepareAsync: {ex.Message}");
             return await _fallbackModelProvider.PrepareAsync(cancellationToken).ConfigureAwait(false);
@@ -555,7 +515,7 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
                 timeoutMs: 0,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
-        catch (SidecarProcessExitedException ex) when (CanFallbackToInProc(ex) && _fallbackModelProvider is not null)
+        catch (SidecarProcessExitedException ex) when (CanFallbackToInProc(ex) && CanFallbackToInProcForCurrentProvider() && _fallbackModelProvider is not null)
         {
             Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc PrepareAsync after worker exit: {ex.Message}");
             return await _fallbackModelProvider.PrepareAsync(cancellationToken).ConfigureAwait(false);
@@ -576,9 +536,9 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
             WorkerKinds.LocalAi, WorkerSubdir, WorkerExeName, snapshot, ct).ConfigureAwait(false);
     }
 
-    private bool ShouldBypassWorkerForOpenVino()
+    private bool CanFallbackToInProcForCurrentProvider()
     {
-        return string.Equals(_settings.LocalAIProvider, LocalAiProviderModes.OpenVINO, StringComparison.OrdinalIgnoreCase);
+        return !string.Equals(_settings.LocalAIProvider, LocalAiProviderModes.OpenVINO, StringComparison.OrdinalIgnoreCase);
     }
 
     private LocalAiTranslateParams BuildParams(TranslationRequest request)

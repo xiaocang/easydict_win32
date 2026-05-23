@@ -60,6 +60,21 @@ public sealed class WorkerPackagingTests
     }
 
     [Fact]
+    public void LocalAiWorker_UsesCpuOnnxRuntimeAndExcludesOpenVinoEpNativeByDefault()
+    {
+        var csprojPath = Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.Workers.LocalAi",
+            "Easydict.Workers.LocalAi.csproj");
+        var csproj = File.ReadAllText(csprojPath);
+
+        csproj.Should().Contain("Microsoft.ML.OnnxRuntime\" Version=\"1.21.0");
+        csproj.Should().Contain("intel.ml.onnxruntime.openvino");
+        csproj.Should().Contain("microsoft.windows.ai.machinelearning");
+    }
+
+    [Fact]
     public void LocalAiWorker_DoesNotInjectOpenVinoNativePathByDefault()
     {
         var spawnerPath = Path.Combine(

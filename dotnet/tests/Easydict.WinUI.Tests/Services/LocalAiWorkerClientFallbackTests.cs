@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Easydict.SidecarClient;
+using Easydict.SidecarClient.Protocol;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
@@ -86,33 +87,40 @@ public sealed class LocalAiWorkerClientFallbackTests
     }
 
     [Fact]
-    public async Task TranslateStreamAsync_BypassesWorker_WhenProviderIsOpenVino()
+    public async Task TranslateStreamAsync_DoesNotFallbackInProc_WhenProviderIsOpenVino()
     {
         var originalProvider = SettingsService.Instance.LocalAIProvider;
         try
         {
             SettingsService.Instance.LocalAIProvider = "OpenVINO";
             var fallback = new FallbackLocalAiService();
+            var spawnCount = 0;
             using var client = new LocalAiWorkerClient(
                 SettingsService.Instance,
                 fallback,
                 fallback,
                 fallback,
-                _ => throw new InvalidOperationException("OpenVINO should bypass the worker."));
+                _ =>
+                {
+                    spawnCount++;
+                    return Task.FromException<SidecarClientType>(new WorkerStartFailedException("missing worker"));
+                });
 
-            var chunks = new List<string>();
-            await foreach (var chunk in client.TranslateStreamAsync(new TranslationRequest
-                           {
-                               Text = "hello",
-                               FromLanguage = Language.English,
-                               ToLanguage = Language.SimplifiedChinese,
-                           }))
+            var act = async () =>
             {
-                chunks.Add(chunk);
-            }
+                await foreach (var _ in client.TranslateStreamAsync(new TranslationRequest
+                               {
+                                   Text = "hello",
+                                   FromLanguage = Language.English,
+                                   ToLanguage = Language.SimplifiedChinese,
+                               }))
+                {
+                }
+            };
 
-            chunks.Should().Equal("fallback", "-stream");
-            fallback.StreamCallCount.Should().Be(1);
+            await act.Should().ThrowAsync<WorkerStartFailedException>();
+            spawnCount.Should().Be(1);
+            fallback.StreamCallCount.Should().Be(0);
         }
         finally
         {
@@ -121,29 +129,35 @@ public sealed class LocalAiWorkerClientFallbackTests
     }
 
     [Fact]
-    public async Task TranslateAsync_BypassesWorker_WhenProviderIsOpenVino()
+    public async Task TranslateAsync_DoesNotFallbackInProc_WhenProviderIsOpenVino()
     {
         var originalProvider = SettingsService.Instance.LocalAIProvider;
         try
         {
             SettingsService.Instance.LocalAIProvider = "OpenVINO";
             var fallback = new FallbackLocalAiService();
+            var spawnCount = 0;
             using var client = new LocalAiWorkerClient(
                 SettingsService.Instance,
                 fallback,
                 fallback,
                 fallback,
-                _ => throw new InvalidOperationException("OpenVINO should bypass the worker."));
+                _ =>
+                {
+                    spawnCount++;
+                    return Task.FromException<SidecarClientType>(new WorkerStartFailedException("missing worker"));
+                });
 
-            var result = await client.TranslateAsync(new TranslationRequest
+            var act = () => client.TranslateAsync(new TranslationRequest
             {
                 Text = "hello",
                 FromLanguage = Language.English,
                 ToLanguage = Language.SimplifiedChinese,
             });
 
-            result.TranslatedText.Should().Be("fallback:hello");
-            fallback.TranslateCallCount.Should().Be(1);
+            await act.Should().ThrowAsync<WorkerStartFailedException>();
+            spawnCount.Should().Be(1);
+            fallback.TranslateCallCount.Should().Be(0);
         }
         finally
         {
@@ -160,6 +174,7 @@ public sealed class LocalAiWorkerClientFallbackTests
 
     private static LocalAiWorkerClient CreateClient(FallbackLocalAiService fallback)
     {
+        SettingsService.Instance.LocalAIProvider = LocalAiProviderModes.WindowsAI;
         return new LocalAiWorkerClient(
             SettingsService.Instance,
             fallback,

@@ -276,7 +276,34 @@ public sealed class SidecarClient : IDisposable, IAsyncDisposable
         var exitCode = _process?.ExitCode;
         OnProcessExited?.Invoke(exitCode);
 
-        // Fail all pending requests
+        if (exitCode == 0)
+        {
+            _ = FailPendingRequestsAfterOutputDrainAsync(exitCode);
+            return;
+        }
+
+        FailPendingRequests(exitCode);
+    }
+
+    private async Task FailPendingRequestsAfterOutputDrainAsync(int? exitCode)
+    {
+        try
+        {
+            if (_stdoutReaderTask is not null)
+            {
+                await _stdoutReaderTask.ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            // If the reader itself faulted, pending requests still need to unblock.
+        }
+
+        FailPendingRequests(exitCode);
+    }
+
+    private void FailPendingRequests(int? exitCode)
+    {
         foreach (var (id, tcs) in _pendingRequests)
         {
             tcs.TrySetException(new SidecarProcessExitedException(exitCode));

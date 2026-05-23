@@ -137,6 +137,7 @@ internal sealed class WorkerSpawner
 
             // Unhook the ready-only event handler; consumers will subscribe to OnEvent themselves.
             client.OnEvent -= OnEvent;
+            client.OnProcessExited -= OnProcessExited;
             return client;
         }
         catch

@@ -464,6 +464,57 @@ public class OpenVinoTranslationServiceTests : IDisposable
         }
     }
 
+    [Fact]
+    public void EnsureNativeDirectoryOnPath_DoesNotModifyPathUnlessOpenVinoEpIsExplicitlyEnabled()
+    {
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+        var originalFlag = Environment.GetEnvironmentVariable(OpenVinoRuntimeDownloadService.EnableOpenVinoEpEnvironmentVariable);
+        var cacheRoot = Path.Combine(Path.GetTempPath(), "EasydictOvRuntimePath-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Environment.SetEnvironmentVariable(OpenVinoRuntimeDownloadService.EnableOpenVinoEpEnvironmentVariable, null);
+            using var service = NewRuntimeDownloader(cacheRoot);
+
+            service.EnsureNativeDirectoryOnPath();
+
+            Environment.GetEnvironmentVariable("PATH").Should().Be(originalPath);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+            Environment.SetEnvironmentVariable(OpenVinoRuntimeDownloadService.EnableOpenVinoEpEnvironmentVariable, originalFlag);
+            try { Directory.Delete(cacheRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void EnsureNativeDirectoryOnPath_PrependsNativeDirectoryWhenOpenVinoEpIsExplicitlyEnabled()
+    {
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+        {
+            return;
+        }
+
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+        var originalFlag = Environment.GetEnvironmentVariable(OpenVinoRuntimeDownloadService.EnableOpenVinoEpEnvironmentVariable);
+        var cacheRoot = Path.Combine(Path.GetTempPath(), "EasydictOvRuntimePath-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Environment.SetEnvironmentVariable(OpenVinoRuntimeDownloadService.EnableOpenVinoEpEnvironmentVariable, "1");
+            using var service = NewRuntimeDownloader(cacheRoot);
+
+            service.EnsureNativeDirectoryOnPath();
+
+            Environment.GetEnvironmentVariable("PATH").Should().StartWith(service.NativeDirectory + Path.PathSeparator);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+            Environment.SetEnvironmentVariable(OpenVinoRuntimeDownloadService.EnableOpenVinoEpEnvironmentVariable, originalFlag);
+            try { Directory.Delete(cacheRoot, recursive: true); } catch { }
+        }
+    }
+
     // ── Fakes ───────────────────────────────────────────────────────────
 
     private OpenVINOTranslationService NewService()

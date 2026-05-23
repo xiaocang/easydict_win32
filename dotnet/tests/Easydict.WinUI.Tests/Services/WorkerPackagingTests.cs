@@ -60,6 +60,23 @@ public sealed class WorkerPackagingTests
     }
 
     [Fact]
+    public void LocalAiWorker_DoesNotInjectOpenVinoNativePathByDefault()
+    {
+        var spawnerPath = Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.WinUI",
+            "Services",
+            "Workers",
+            "WorkerSpawner.cs");
+        var spawner = File.ReadAllText(spawnerPath);
+
+        spawner.Should().Contain("IsOpenVinoEpPathInjectionEnabled()");
+        spawner.Should().Contain("EASYDICT_OPENVINO_RUNTIME_DIR");
+        spawner.Should().NotContain("openVinoRuntimeDir + Path.PathSeparator + existingPath;\r\n        }");
+    }
+
+    [Fact]
     public void WorkerSharedDedupeScript_MovesOnlyAllowlistedIdenticalDlls()
     {
         var scriptPath = Path.Combine(ProjectRoot, "scripts", "Dedupe-WorkerSharedFiles.ps1");

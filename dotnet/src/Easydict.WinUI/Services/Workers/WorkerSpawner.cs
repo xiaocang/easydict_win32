@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Easydict.SidecarClient;
 using Easydict.SidecarClient.Protocol;
+using Easydict.OpenVINO.Services;
 
 namespace Easydict.WinUI.Services.Workers;
 
@@ -181,20 +182,26 @@ internal sealed class WorkerSpawner
 
         if (string.Equals(workerSubdir, "localai", StringComparison.OrdinalIgnoreCase))
         {
-            var openVinoRuntimeDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Easydict",
-                "runtimes",
-                "openvino",
-                "1.21.0",
-                "win-x64",
-                "native");
-            variables["EASYDICT_OPENVINO_RUNTIME_DIR"] = openVinoRuntimeDir;
+            variables[OpenVinoRuntimeDownloadService.EnableOpenVinoEpEnvironmentVariable] =
+                Environment.GetEnvironmentVariable(OpenVinoRuntimeDownloadService.EnableOpenVinoEpEnvironmentVariable) ?? "";
 
-            var existingPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-            variables["PATH"] = string.IsNullOrWhiteSpace(existingPath)
-                ? openVinoRuntimeDir
-                : openVinoRuntimeDir + Path.PathSeparator + existingPath;
+            if (OpenVinoRuntimeDownloadService.IsOpenVinoEpPathInjectionEnabled())
+            {
+                var openVinoRuntimeDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Easydict",
+                    "runtimes",
+                    "openvino",
+                    OpenVinoRuntimeDownloadService.PackageVersion,
+                    "win-x64",
+                    "native");
+                variables["EASYDICT_OPENVINO_RUNTIME_DIR"] = openVinoRuntimeDir;
+
+                var existingPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+                variables["PATH"] = string.IsNullOrWhiteSpace(existingPath)
+                    ? openVinoRuntimeDir
+                    : openVinoRuntimeDir + Path.PathSeparator + existingPath;
+            }
         }
 
         return variables;

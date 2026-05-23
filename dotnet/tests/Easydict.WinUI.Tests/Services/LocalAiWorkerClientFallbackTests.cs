@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Easydict.SidecarClient;
+using Easydict.SidecarClient.Protocol;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Models;
@@ -86,6 +87,85 @@ public sealed class LocalAiWorkerClientFallbackTests
     }
 
     [Fact]
+    public async Task TranslateStreamAsync_DoesNotFallbackInProc_WhenProviderIsOpenVino()
+    {
+        var originalProvider = SettingsService.Instance.LocalAIProvider;
+        try
+        {
+            SettingsService.Instance.LocalAIProvider = "OpenVINO";
+            var fallback = new FallbackLocalAiService();
+            var spawnCount = 0;
+            using var client = new LocalAiWorkerClient(
+                SettingsService.Instance,
+                fallback,
+                fallback,
+                fallback,
+                _ =>
+                {
+                    spawnCount++;
+                    return Task.FromException<SidecarClientType>(new WorkerStartFailedException("missing worker"));
+                });
+
+            var act = async () =>
+            {
+                await foreach (var _ in client.TranslateStreamAsync(new TranslationRequest
+                               {
+                                   Text = "hello",
+                                   FromLanguage = Language.English,
+                                   ToLanguage = Language.SimplifiedChinese,
+                               }))
+                {
+                }
+            };
+
+            await act.Should().ThrowAsync<WorkerStartFailedException>();
+            spawnCount.Should().Be(1);
+            fallback.StreamCallCount.Should().Be(0);
+        }
+        finally
+        {
+            SettingsService.Instance.LocalAIProvider = originalProvider;
+        }
+    }
+
+    [Fact]
+    public async Task TranslateAsync_DoesNotFallbackInProc_WhenProviderIsOpenVino()
+    {
+        var originalProvider = SettingsService.Instance.LocalAIProvider;
+        try
+        {
+            SettingsService.Instance.LocalAIProvider = "OpenVINO";
+            var fallback = new FallbackLocalAiService();
+            var spawnCount = 0;
+            using var client = new LocalAiWorkerClient(
+                SettingsService.Instance,
+                fallback,
+                fallback,
+                fallback,
+                _ =>
+                {
+                    spawnCount++;
+                    return Task.FromException<SidecarClientType>(new WorkerStartFailedException("missing worker"));
+                });
+
+            var act = () => client.TranslateAsync(new TranslationRequest
+            {
+                Text = "hello",
+                FromLanguage = Language.English,
+                ToLanguage = Language.SimplifiedChinese,
+            });
+
+            await act.Should().ThrowAsync<WorkerStartFailedException>();
+            spawnCount.Should().Be(1);
+            fallback.TranslateCallCount.Should().Be(0);
+        }
+        finally
+        {
+            SettingsService.Instance.LocalAIProvider = originalProvider;
+        }
+    }
+
+    [Fact]
     public void CanFallbackToInProc_ReturnsTrue_WhenWorkerProcessExitsUnexpectedly()
     {
         LocalAiWorkerClient.CanFallbackToInProc(new SidecarProcessExitedException(unchecked((int)0xC0000409)))
@@ -94,6 +174,7 @@ public sealed class LocalAiWorkerClientFallbackTests
 
     private static LocalAiWorkerClient CreateClient(FallbackLocalAiService fallback)
     {
+        SettingsService.Instance.LocalAIProvider = LocalAiProviderModes.WindowsAI;
         return new LocalAiWorkerClient(
             SettingsService.Instance,
             fallback,

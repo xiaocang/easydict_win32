@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using Easydict.OpenVINO.Models;
@@ -20,6 +21,7 @@ public sealed class OpenVinoRuntimeDownloadService : IDisposable
         "https://www.nuget.org/api/v2/package/Intel.ML.OnnxRuntime.OpenVino/" + PackageVersion;
     private const string PackageSha256 =
         "a70be78c7ce5c0ff82538f8934fffaafa5f63409ee0604d3990c8b393e178e15";
+    public const string EnableOpenVinoEpEnvironmentVariable = "EASYDICT_ENABLE_OPENVINO_EP";
 
     private readonly HttpClient _httpClient;
     private readonly string _cacheRoot;
@@ -80,6 +82,13 @@ public sealed class OpenVinoRuntimeDownloadService : IDisposable
             return;
         }
 
+        if (!IsOpenVinoEpPathInjectionEnabled())
+        {
+            Debug.WriteLine(
+                $"[OpenVINO] Skipping native PATH injection. Set {EnableOpenVinoEpEnvironmentVariable}=1 to enable the OpenVINO EP runtime.");
+            return;
+        }
+
         var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
         var nativeDir = Path.GetFullPath(NativeDirectory);
         var entries = path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
@@ -92,6 +101,13 @@ public sealed class OpenVinoRuntimeDownloadService : IDisposable
             "PATH",
             NativeDirectory + Path.PathSeparator + path,
             EnvironmentVariableTarget.Process);
+    }
+
+    public static bool IsOpenVinoEpPathInjectionEnabled()
+    {
+        var value = Environment.GetEnvironmentVariable(EnableOpenVinoEpEnvironmentVariable);
+        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool PathsEqual(string path, string expectedFullPath)

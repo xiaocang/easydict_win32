@@ -97,6 +97,12 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
     {
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
+        if (ShouldBypassWorkerForOpenVino() && _fallbackTranslationService is not null)
+        {
+            Debug.WriteLine("[LocalAiWorker] Bypassing worker for OpenVINO TranslateAsync.");
+            return await _fallbackTranslationService.TranslateAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
         SidecarClient.SidecarClient client;
         try
         {
@@ -163,6 +169,20 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
         var fallbackTranslationService = _fallbackTranslationService;
+        if (ShouldBypassWorkerForOpenVino() && fallbackTranslationService is not null)
+        {
+            Debug.WriteLine("[LocalAiWorker] Bypassing worker for OpenVINO TranslateStreamAsync.");
+            await foreach (var chunk in fallbackTranslationService
+                               .TranslateStreamAsync(request, cancellationToken)
+                               .WithCancellation(cancellationToken)
+                               .ConfigureAwait(false))
+            {
+                yield return chunk;
+            }
+
+            yield break;
+        }
+
         SidecarClient.SidecarClient? client = null;
         Exception? fallbackException = null;
         try
@@ -323,6 +343,20 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
         var fallbackGrammarService = _fallbackGrammarService;
+        if (ShouldBypassWorkerForOpenVino() && fallbackGrammarService is not null)
+        {
+            Debug.WriteLine("[LocalAiWorker] Bypassing worker for OpenVINO CorrectGrammarStreamAsync.");
+            await foreach (var chunk in fallbackGrammarService
+                               .CorrectGrammarStreamAsync(request, cancellationToken)
+                               .WithCancellation(cancellationToken)
+                               .ConfigureAwait(false))
+            {
+                yield return chunk;
+            }
+
+            yield break;
+        }
+
         SidecarClient.SidecarClient? client = null;
         Exception? fallbackException = null;
         try
@@ -489,6 +523,12 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
     {
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
+        if (ShouldBypassWorkerForOpenVino() && _fallbackModelProvider is not null)
+        {
+            Debug.WriteLine("[LocalAiWorker] Bypassing worker for OpenVINO PrepareAsync.");
+            return await _fallbackModelProvider.PrepareAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         SidecarClient.SidecarClient client;
         try
         {
@@ -534,6 +574,11 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         var snapshot = WorkerSpawner.BuildSnapshot(_settings);
         return await _spawner.StartAndConfigureAsync(
             WorkerKinds.LocalAi, WorkerSubdir, WorkerExeName, snapshot, ct).ConfigureAwait(false);
+    }
+
+    private bool ShouldBypassWorkerForOpenVino()
+    {
+        return string.Equals(_settings.LocalAIProvider, LocalAiProviderModes.OpenVINO, StringComparison.OrdinalIgnoreCase);
     }
 
     private LocalAiTranslateParams BuildParams(TranslationRequest request)

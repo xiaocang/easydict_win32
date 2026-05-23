@@ -86,6 +86,72 @@ public sealed class LocalAiWorkerClientFallbackTests
     }
 
     [Fact]
+    public async Task TranslateStreamAsync_BypassesWorker_WhenProviderIsOpenVino()
+    {
+        var originalProvider = SettingsService.Instance.LocalAIProvider;
+        try
+        {
+            SettingsService.Instance.LocalAIProvider = "OpenVINO";
+            var fallback = new FallbackLocalAiService();
+            using var client = new LocalAiWorkerClient(
+                SettingsService.Instance,
+                fallback,
+                fallback,
+                fallback,
+                _ => throw new InvalidOperationException("OpenVINO should bypass the worker."));
+
+            var chunks = new List<string>();
+            await foreach (var chunk in client.TranslateStreamAsync(new TranslationRequest
+                           {
+                               Text = "hello",
+                               FromLanguage = Language.English,
+                               ToLanguage = Language.SimplifiedChinese,
+                           }))
+            {
+                chunks.Add(chunk);
+            }
+
+            chunks.Should().Equal("fallback", "-stream");
+            fallback.StreamCallCount.Should().Be(1);
+        }
+        finally
+        {
+            SettingsService.Instance.LocalAIProvider = originalProvider;
+        }
+    }
+
+    [Fact]
+    public async Task TranslateAsync_BypassesWorker_WhenProviderIsOpenVino()
+    {
+        var originalProvider = SettingsService.Instance.LocalAIProvider;
+        try
+        {
+            SettingsService.Instance.LocalAIProvider = "OpenVINO";
+            var fallback = new FallbackLocalAiService();
+            using var client = new LocalAiWorkerClient(
+                SettingsService.Instance,
+                fallback,
+                fallback,
+                fallback,
+                _ => throw new InvalidOperationException("OpenVINO should bypass the worker."));
+
+            var result = await client.TranslateAsync(new TranslationRequest
+            {
+                Text = "hello",
+                FromLanguage = Language.English,
+                ToLanguage = Language.SimplifiedChinese,
+            });
+
+            result.TranslatedText.Should().Be("fallback:hello");
+            fallback.TranslateCallCount.Should().Be(1);
+        }
+        finally
+        {
+            SettingsService.Instance.LocalAIProvider = originalProvider;
+        }
+    }
+
+    [Fact]
     public void CanFallbackToInProc_ReturnsTrue_WhenWorkerProcessExitsUnexpectedly()
     {
         LocalAiWorkerClient.CanFallbackToInProc(new SidecarProcessExitedException(unchecked((int)0xC0000409)))

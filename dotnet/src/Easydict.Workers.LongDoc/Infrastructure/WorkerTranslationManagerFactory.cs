@@ -30,6 +30,7 @@ internal static class WorkerTranslationManagerFactory
         };
 
         var manager = new TranslationManager(options);
+        manager.RegisterService(new WorkerLocalAiTranslationService(snapshot));
 
         // Configure each cloud LLM service from the snapshot. Workers register only
         // the services they may need to call — we keep the full set so any serviceId

@@ -56,6 +56,17 @@ internal static class Program
             _shutdownRequested.TrySetResult();
             return Task.FromResult<object?>(new { ok = true });
         });
+        dispatcher.OnRequestCompleted = method =>
+        {
+            if (method != LongDocMethods.TranslateDocument)
+            {
+                return;
+            }
+
+            Trace.WriteLine("[LongDocWorker] translate_document completed; requesting process shutdown.");
+            state.LastExitCode = ResolveExitCode(WorkerExitReason.Clean);
+            _shutdownRequested.TrySetResult();
+        };
 
         await writer.WriteEventAsync(WorkerEvents.Ready, new ReadyEventData
         {

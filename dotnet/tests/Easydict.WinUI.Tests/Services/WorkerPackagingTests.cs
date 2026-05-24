@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Easydict.WinUI.Services.Workers;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
@@ -102,6 +103,47 @@ public sealed class WorkerPackagingTests
         script.Should().Contain("shared");
         script.Should().Contain("Get-FileHash");
         script.Should().Contain("Remove-Item");
+    }
+
+    [Fact]
+    public void WorkerSpawner_DoesNotPinDotnetRootWhenBundledRuntimeIsMissing()
+    {
+        var baseDir = Path.Combine(Path.GetTempPath(), "easydict-worker-env-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(baseDir);
+        try
+        {
+            var variables = WorkerSpawner.BuildEnvironmentVariables("longdoc", baseDir);
+
+            variables.Should().NotContainKey("DOTNET_ROOT");
+            variables.Should().NotContainKey("DOTNET_ROOT_X64");
+            variables.Should().NotContainKey("DOTNET_ROOT_ARM64");
+            variables.Should().ContainKey("EASYDICT_WORKER_SHARED_DIR");
+        }
+        finally
+        {
+            Directory.Delete(baseDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WorkerSpawner_PinsDotnetRootWhenBundledRuntimeExists()
+    {
+        var baseDir = Path.Combine(Path.GetTempPath(), "easydict-worker-env-" + Guid.NewGuid().ToString("N"));
+        var dotnetRoot = Path.Combine(baseDir, "dotnet");
+        Directory.CreateDirectory(Path.Combine(dotnetRoot, "host", "fxr", "8.0.11"));
+        Directory.CreateDirectory(Path.Combine(dotnetRoot, "shared", "Microsoft.NETCore.App", "8.0.11"));
+        try
+        {
+            var variables = WorkerSpawner.BuildEnvironmentVariables("longdoc", baseDir);
+
+            variables["DOTNET_ROOT"].Should().Be(dotnetRoot);
+            variables["DOTNET_ROOT_X64"].Should().Be(dotnetRoot);
+            variables["DOTNET_ROOT_ARM64"].Should().Be(dotnetRoot);
+        }
+        finally
+        {
+            Directory.Delete(baseDir, recursive: true);
+        }
     }
 
     private static string FindProjectRoot()

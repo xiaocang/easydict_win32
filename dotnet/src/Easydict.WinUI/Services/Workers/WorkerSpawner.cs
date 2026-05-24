@@ -42,13 +42,9 @@ internal sealed class WorkerSpawner
             // 0 = no default timeout for long-running ops; per-call timeouts are passed
             // explicitly. Workers themselves report ready inside HandshakeTimeoutMs.
             DefaultTimeoutMs = 0,
-            // Workers are published framework-dependent to share a single .NET 8 runtime
-            // copy across both workers (instead of bundling the runtime per-worker).
-            // The runtime lives at <install>/dotnet, populated at publish time by
-            // scripts/Extract-DotnetRuntime.ps1. Point the apphost at it explicitly via
-            // every DOTNET_ROOT variant the .NET host loader consults — DOTNET_ROOT for
-            // the legacy path, and DOTNET_ROOT_<ARCH> for per-arch hosts on systems where
-            // a different arch's runtime is also installed.
+            // MSIX builds bundle a shared .NET runtime at <install>/dotnet. Local
+            // dev and portable builds do not, so BuildEnvironmentVariables only
+            // pins DOTNET_ROOT when that bundled runtime layout is present.
             EnvironmentVariables = BuildEnvironmentVariables(workerSubdir),
         };
 
@@ -160,26 +156,32 @@ internal sealed class WorkerSpawner
     }
 
     /// <summary>
-    /// Build the DOTNET_ROOT environment block for the worker. Points every variant
-    /// at the bundled runtime at &lt;install&gt;/dotnet so the framework-dependent
-    /// worker apphost finds it regardless of which probe order the local .NET host
-    /// loader uses.
+    /// Build the environment block for the worker. When a bundled runtime exists,
+    /// points every DOTNET_ROOT variant at &lt;install&gt;/dotnet so framework-dependent
+    /// workers find it regardless of which probe order the local .NET host uses.
     /// </summary>
-    private static Dictionary<string, string> BuildEnvironmentVariables(string workerSubdir)
+    internal static Dictionary<string, string> BuildEnvironmentVariables(string workerSubdir)
+        => BuildEnvironmentVariables(workerSubdir, AppContext.BaseDirectory);
+
+    internal static Dictionary<string, string> BuildEnvironmentVariables(string workerSubdir, string baseDirectory)
     {
-        var dotnetRoot = Path.Combine(AppContext.BaseDirectory, "dotnet");
-        var sharedDir = Path.Combine(AppContext.BaseDirectory, "workers", "shared");
+        var dotnetRoot = Path.Combine(baseDirectory, "dotnet");
+        var sharedDir = Path.Combine(baseDirectory, "workers", "shared");
         var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["DOTNET_ROOT"] = dotnetRoot,
-            ["DOTNET_ROOT_X64"] = dotnetRoot,
-            ["DOTNET_ROOT_ARM64"] = dotnetRoot,
             ["EASYDICT_WORKER_SHARED_DIR"] = sharedDir,
             // Suppress global telemetry from the worker apphost (the host itself
             // already opts out via its csproj). Worker startup cost is on the
             // critical path of every translate request — skip the network sniff.
             ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
         };
+
+        if (HasBundledDotnetRuntime(dotnetRoot))
+        {
+            variables["DOTNET_ROOT"] = dotnetRoot;
+            variables["DOTNET_ROOT_X64"] = dotnetRoot;
+            variables["DOTNET_ROOT_ARM64"] = dotnetRoot;
+        }
 
         if (string.Equals(workerSubdir, "localai", StringComparison.OrdinalIgnoreCase))
         {
@@ -206,6 +208,12 @@ internal sealed class WorkerSpawner
         }
 
         return variables;
+    }
+
+    private static bool HasBundledDotnetRuntime(string dotnetRoot)
+    {
+        return Directory.Exists(Path.Combine(dotnetRoot, "host", "fxr"))
+            && Directory.Exists(Path.Combine(dotnetRoot, "shared", "Microsoft.NETCore.App"));
     }
 
     /// <summary>

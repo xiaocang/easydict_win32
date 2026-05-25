@@ -310,7 +310,7 @@
     <value>D&#x1ECB;ch v&#x1EE5; mi&#x1EC5;n ph&#xED; (Kh&#xF4;ng c&#x1EA7;n c&#x1EA5;u h&#xEC;nh)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google Translate v&#xE0; Linguee Dictionary ho&#x1EA1;t &#x111;&#x1ED9;ng ngay m&#xE0; kh&#xF4;ng c&#x1EA7;n API key.</value>
+    <value>Google Translate ho&#x1EA1;t &#x111;&#x1ED9;ng ngay m&#xE0; kh&#xF4;ng c&#x1EA7;n API key.</value>
   </data>
 
   <!-- HTTP Proxy -->

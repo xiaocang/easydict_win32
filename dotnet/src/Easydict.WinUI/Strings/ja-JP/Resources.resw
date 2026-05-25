@@ -406,7 +406,7 @@
     <value>無料サービス（設定不要）</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google翻訳とLinguee辞書はAPIキーなしで使用できます。</value>
+    <value>Google翻訳はAPIキーなしで使用できます。</value>
   </data>
 
   <!-- HTTP Proxy -->

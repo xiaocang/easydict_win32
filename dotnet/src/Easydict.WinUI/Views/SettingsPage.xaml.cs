@@ -226,7 +226,9 @@ public sealed partial class SettingsPage : Page
         ["niutrans"] = 170,
         ["youdao"] = 180,
         ["volcano"] = 190,
-        ["linguee"] = 200
+#if ENABLE_LINGUEE_SERVICE
+        ["linguee"] = 200,
+#endif
     };
     private readonly SettingsService _settings = SettingsService.Instance;
     private bool _isLoading = true; // Prevent change detection during initial load
@@ -404,6 +406,7 @@ public sealed partial class SettingsPage : Page
 #endif
         this.InitializeComponent();
         ApplyThemeChrome();
+        ApplyLingueeAvailability();
         InitializeServiceConfigurationHeaderIcons();
         InitializePasswordTailHints();
 #if DEBUG
@@ -414,6 +417,13 @@ public sealed partial class SettingsPage : Page
         this.Loaded += OnPageLoaded;
         this.Unloaded += OnPageUnloaded;
         this.ActualThemeChanged += OnActualThemeChanged;
+    }
+
+    private void ApplyLingueeAvailability()
+    {
+#if ENABLE_LINGUEE_SERVICE
+        LingueeFreeServicePanel.Visibility = Visibility.Visible;
+#endif
     }
 
     private void InitializeServiceConfigurationHeaderIcons()

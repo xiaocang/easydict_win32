@@ -459,8 +459,6 @@ public sealed class TranslationManagerService : IDisposable
             }
         });
 
-        // Linguee doesn't need configuration (no API key)
-
         RegisterImportedMdxServices();
 
         Debug.WriteLine("[TranslationManagerService] Services configured");

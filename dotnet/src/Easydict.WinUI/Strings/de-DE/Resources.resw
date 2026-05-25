@@ -406,7 +406,7 @@
     <value>Kostenlose Dienste (Keine Konfiguration erforderlich)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google Translate und Linguee Dictionary funktionieren sofort ohne API-Schlüssel.</value>
+    <value>Google Translate funktioniert sofort ohne API-Schlüssel.</value>
   </data>
 
   <!-- HTTP Proxy -->

@@ -141,7 +141,7 @@
   <data name="UseOfficialApi" xml:space="preserve"><value>Gunakan API Rasmi</value></data>
   <data name="YoudaoDescription" xml:space="preserve"><value>Youdao menyediakan transkripsi fonetik untuk perkataan Inggeris. Tanpa kunci API, menggunakan kamus web percuma. Dengan kunci API, membolehkan API rasmi untuk had lebih tinggi. Dapatkan kunci API dari ai.youdao.com</value></data>
   <data name="FreeServicesTitle" xml:space="preserve"><value>Perkhidmatan Percuma (Tanpa Konfigurasi)</value></data>
-  <data name="FreeServicesDescription" xml:space="preserve"><value>Google Translate dan Kamus Linguee berfungsi terus tanpa kunci API.</value></data>
+  <data name="FreeServicesDescription" xml:space="preserve"><value>Google Translate berfungsi terus tanpa kunci API.</value></data>
   <data name="HttpProxy" xml:space="preserve"><value>Proksi HTTP</value></data>
   <data name="UseHttpProxy" xml:space="preserve"><value>Gunakan Proksi HTTP</value></data>
   <data name="ProxyUrl" xml:space="preserve"><value>URL Proksi</value></data>

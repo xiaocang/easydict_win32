@@ -27,7 +27,7 @@ public class LingueeServiceIntegrationTests : IDisposable
         _httpClient.Dispose();
     }
 
-    [Fact]
+    [Fact(Skip = "Linguee sample API is unavailable and disabled by default.")]
     public async Task TranslateAsync_EnglishToChinese_ReturnsTranslation()
     {
         var request = new TranslationRequest
@@ -43,7 +43,7 @@ public class LingueeServiceIntegrationTests : IDisposable
         result.TranslatedText.Should().NotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [Fact(Skip = "Linguee sample API is unavailable and disabled by default.")]
     public async Task TranslateAsync_ChineseToEnglish_ReturnsTranslation()
     {
         var request = new TranslationRequest

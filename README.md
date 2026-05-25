@@ -85,7 +85,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **Long Document Translation** - Translate PDF, plain text, and Markdown documents with ML-based layout detection, formula protection, parallel processing, bilingual output, and translation cache
 
-- **Dictionary Mode** - Word definitions, phonetics, and example sentences powered by Google Dict and Linguee
+- **Dictionary Mode** - Word definitions, phonetics, and example sentences powered by Google Dict. Linguee is currently unavailable because its upstream sample API no longer resolves.
 
 - **MDX Dictionary** - Import MDict (.mdx) dictionary files for offline word lookups with rich HTML rendering
 
@@ -124,7 +124,7 @@ While the feature set is not yet complete compared to the macOS version, this po
 
 - **High DPI Support** - Per-Monitor V2 DPI awareness
 
-- **Multiple Translation Services** (20 services)
+- **Multiple Translation Services** (19 available services; Linguee currently unavailable)
   - Google Translate (free, no API key required)
   - Google Dict (rich dictionary: phonetics, definitions, examples)
   - Bing Translate (free, no API key required)
@@ -140,7 +140,7 @@ While the feature set is not yet complete compared to the macOS version, this po
   - Volcano Engine (火山翻译, ByteDance)
   - Caiyun (彩云小译, Traditional Chinese supported)
   - NiuTrans (小牛翻译, 450+ languages, Traditional Chinese supported)
-  - Linguee Dictionary (with context examples)
+  - Linguee Dictionary (currently unavailable; upstream sample API is offline and disabled by default)
   - Ollama (local LLM, default: llama3.2)
   - Windows Local AI (Phi Silica on Copilot+ PCs, OpenVINO fallback)
   - BuiltIn AI (free, powered by Groq)
@@ -237,7 +237,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | DeepL | REST | — | Missing API key |
 | Caiyun | REST | — | Missing API key |
 | NiuTrans | REST | ✅ | |
-| Linguee | REST | — | Not tested |
+| Linguee | REST | — | Unavailable: upstream sample API domain no longer resolves; integration tests are skipped by default |
 | Google Dict | REST | ✅ | |
 | Ollama | OpenAI API | — | Requires local Ollama setup |
 | Windows Local AI | Local runtime | ✅ | TranslationManager routing tested; real inference requires Phi Silica, Foundry Local, or OpenVINO model |
@@ -255,7 +255,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - [x] ~~**Doubao**~~ - ByteDance LLM service ✅ **Implemented**
 - [x] ~~**Caiyun**~~ - 彩云小译 ✅ **Implemented**
 - [x] ~~**NiuTrans**~~ - 小牛翻译 (450+ languages) ✅ **Implemented**
-- [x] ~~**Linguee Dictionary**~~ - Dictionary with context examples ✅ **Implemented**
+- [x] ~~**Linguee Dictionary**~~ - Dictionary with context examples ✅ **Implemented, currently unavailable**
 - [x] ~~**TTS (Text-to-Speech)**~~ - Windows Speech Synthesis API ✅ **Implemented**
 - [x] ~~**OCR Screenshot Translation**~~ - Snipaste-style screen capture with Windows OCR API ✅ **Implemented**
 

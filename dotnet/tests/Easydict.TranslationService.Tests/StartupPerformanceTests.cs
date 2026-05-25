@@ -395,7 +395,11 @@ public class StartupPerformanceTests : IDisposable
 
             _output.WriteLine("=== Full Cold-Start Simulation (non-UI) ===");
             _output.WriteLine($"  Steps: File.ReadAllText → JSON parse → 60+ GetValue → RegionDetect");
+#if ENABLE_LINGUEE_SERVICE
             _output.WriteLine($"       → TranslationManager(17 svc) → ConfigureServices(14 svc)");
+#else
+            _output.WriteLine($"       → TranslationManager(16 svc) → ConfigureServices(14 svc)");
+#endif
             _output.WriteLine($"  Iterations : {iterations}");
             _output.WriteLine($"  Timings (ms): [{string.Join(", ", timings)}]");
             _output.WriteLine($"  Average (ms): {avg:F1}");

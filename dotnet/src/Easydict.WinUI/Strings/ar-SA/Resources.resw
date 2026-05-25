@@ -310,7 +310,7 @@
     <value>خدمات مجانية (لا تتطلب تكويناً)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>يعمل Google Translate وقاموس Linguee فوراً بدون مفاتيح API.</value>
+    <value>يعمل Google Translate فوراً بدون مفاتيح API.</value>
   </data>
 
   <!-- HTTP Proxy -->

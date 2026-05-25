@@ -1416,7 +1416,7 @@
                         <StackPanel x:Name="ImportedMdxConfigPanel"
                                 Spacing="8"/>
 
-                        <!-- Google Translate & Linguee (No configuration needed) -->
+                        <!-- Google Translate (No configuration needed) -->
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="8">
                                 <TextBlock x:Name="FreeServicesHeaderText"
@@ -1435,8 +1435,10 @@
                                         <TextBlock Text="Google Translate"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal"
-                                                Spacing="6">
+                                    <StackPanel x:Name="LingueeFreeServicePanel"
+                                                Orientation="Horizontal"
+                                                Spacing="6"
+                                                Visibility="Collapsed">
                                         <Image Width="18"
                                                Height="18"
                                                Source="ms-appx:///Assets/ServiceIcons/Linguee.png"
@@ -1448,7 +1450,7 @@
                                     </StackPanel>
                                 </StackPanel>
                                 <TextBlock x:Name="FreeServicesDescriptionText"
-                                        Text="Google Translate and Linguee Dictionary work out of the box without API keys."
+                                        Text="Google Translate works out of the box without API keys."
                                            FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>

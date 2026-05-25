@@ -421,7 +421,7 @@
     <value>Free Services (No Configuration Required)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google Translate and Linguee Dictionary work out of the box without API keys.</value>
+    <value>Google Translate works out of the box without API keys.</value>
   </data>
 
   <!-- HTTP Proxy -->

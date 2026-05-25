@@ -302,7 +302,7 @@
     <value>Servizi gratuiti (Nessuna configurazione richiesta)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google Translate e Linguee Dictionary funzionano subito senza chiavi API.</value>
+    <value>Google Translate funziona subito senza chiavi API.</value>
   </data>
 
   <!-- HTTP Proxy -->

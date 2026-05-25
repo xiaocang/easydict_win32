@@ -685,7 +685,11 @@ public class SettingsServiceTests
         SettingsService.InternationalOnlyServices.Should().Contain("deepl");
         SettingsService.InternationalOnlyServices.Should().Contain("openai");
         SettingsService.InternationalOnlyServices.Should().Contain("gemini");
+#if ENABLE_LINGUEE_SERVICE
         SettingsService.InternationalOnlyServices.Should().Contain("linguee");
+#else
+        SettingsService.InternationalOnlyServices.Should().NotContain("linguee");
+#endif
     }
 
     [Fact]
@@ -807,8 +811,12 @@ public class SettingsServiceTests
     [InlineData("groq", true)]
     [InlineData("github", true)]
     [InlineData("builtin", true)]
+#if ENABLE_LINGUEE_SERVICE
     [InlineData("linguee", true)]
-    public void IsInternationalOnlyService_ReturnsTrueForInternationalServices(string serviceId, bool expected)
+#else
+    [InlineData("linguee", false)]
+#endif
+    public void IsInternationalOnlyService_ReturnsExpectedValue(string serviceId, bool expected)
     {
         SettingsService.IsInternationalOnlyService(serviceId).Should().Be(expected);
     }

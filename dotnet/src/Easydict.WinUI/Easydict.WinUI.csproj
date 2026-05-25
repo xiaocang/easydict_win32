@@ -139,6 +139,12 @@
              in CI; otherwise test/release graphs can compile the same worker into the same
              obj path concurrently. Local dev keeps the default worker-copy behavior. -->
         <BuildWorkerOutputs Condition="'$(BuildWorkerOutputs)' == '' and '$(CI)' == 'true'">false</BuildWorkerOutputs>
+        <!-- Release artifacts always ship the long-document worker, so do not also
+             carry the in-process PDF/MuPDF/PdfPig implementation in the host. Debug
+             keeps it for local diagnostics and unit-test coverage. Override with
+             -p:EnableInProcLongDocFallback=true for one-off local Release debugging. -->
+        <EnableInProcLongDocFallback Condition="'$(EnableInProcLongDocFallback)' == '' and '$(Configuration)' == 'Release'">false</EnableInProcLongDocFallback>
+        <EnableInProcLongDocFallback Condition="'$(EnableInProcLongDocFallback)' == ''">true</EnableInProcLongDocFallback>
 
         <!--
             Ensure PRI resources are generated for BOTH packaged and unpackaged modes.
@@ -170,6 +176,20 @@
         <Compile Remove="Services\CharacterParagraphBuilder.cs" />
         <Compile Remove="Services\ContentStreamInterpreter.cs" />
         <Compile Remove="Services\DocumentExport\**\*.cs" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(EnableInProcLongDocFallback)' == 'true'">
+        <Compile Remove="Services\LongDocumentTranslationService.WorkerOnly.cs" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(EnableInProcLongDocFallback)' != 'true'">
+        <Compile Remove="Services\LongDocumentTranslationService.cs" />
+        <Compile Remove="Services\DocLayoutYoloService.cs" />
+        <Compile Remove="Services\TableStructureRecognitionService.cs" />
+        <Compile Remove="Services\LayoutDetectionStrategy.cs" />
+        <Compile Remove="Services\VisionLayoutDetectionService.cs" />
+        <Compile Remove="Services\Memory\PooledDenseTensor.cs" />
+        <Compile Include="Services\DocumentExport\DocumentExportModes.WorkerOnly.cs" />
     </ItemGroup>
 
     <!-- Verify resources.pri is generated in both packaged and unpackaged modes -->
@@ -255,7 +275,8 @@
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\Easydict.SidecarClient\Easydict.SidecarClient.csproj" />
-      <ProjectReference Include="..\Easydict.DocumentExport\Easydict.DocumentExport.csproj" />
+      <ProjectReference Include="..\Easydict.DocumentExport\Easydict.DocumentExport.csproj"
+                        Condition="'$(EnableInProcLongDocFallback)' == 'true'" />
       <ProjectReference Include="..\Polyglot.TextLayout\Polyglot.TextLayout.csproj" />
       <ProjectReference Include="..\Easydict.TranslationService\Easydict.TranslationService.csproj" />
       <!-- Windows AI APIs / Phi Silica provider (windows-local-ai). Compile-only;
@@ -330,11 +351,14 @@
     <!-- FlaUI for proper UI Automation text selection -->
     <ItemGroup>
       <PackageReference Include="FlaUI.UIA3" Version="4.0.0" />
-      <PackageReference Include="PdfSharpCore" Version="1.3.67" />
+      <PackageReference Include="PdfSharpCore" Version="1.3.67"
+                        Condition="'$(EnableInProcLongDocFallback)' == 'true'" />
       <!-- PdfPig fork (submodule at lib/PdfPig) with CID/CTM/CharacterCode exposure for pdf2zh-aligned pipeline. -->
-      <ProjectReference Include="..\..\..\lib\PdfPig\src\UglyToad.PdfPig\UglyToad.PdfPig.csproj" />
+      <ProjectReference Include="..\..\..\lib\PdfPig\src\UglyToad.PdfPig\UglyToad.PdfPig.csproj"
+                        Condition="'$(EnableInProcLongDocFallback)' == 'true'" />
       <!-- ONNX Runtime managed wrapper only (native binary downloaded on first use) -->
-      <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0" />
+      <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.21.0"
+                        Condition="'$(EnableInProcLongDocFallback)' == 'true'" />
       <!-- SQLite for persistent translation cache -->
       <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
       <!-- LexIndex: local DAWG-based key index for autocomplete and wildcard lookup -->
@@ -343,7 +367,8 @@
       <ProjectReference Include="..\..\lib\MDict.CSharp\MDict.Csharp\MDict.Csharp.csproj" />
       <!-- MuPDF.NET: Official C# bindings for MuPDF — content stream replacement, font embedding,
            XRef manipulation, dual PDF output. Used by MuPdfExportService for pdf2zh-aligned pipeline. -->
-      <PackageReference Include="MuPDF.NET" Version="3.2.12" />
+      <PackageReference Include="MuPDF.NET" Version="3.2.12"
+                        Condition="'$(EnableInProcLongDocFallback)' == 'true'" />
     </ItemGroup>
 
     <!-- 

@@ -19,7 +19,9 @@
   <ItemGroup>
     <Compile Include="..\Easydict.WinUI\Services\CharacterParagraphBuilder.cs" Link="Services\CharacterParagraphBuilder.cs" />
     <Compile Include="..\Easydict.WinUI\Services\ContentStreamInterpreter.cs" Link="Services\ContentStreamInterpreter.cs" />
-    <Compile Include="..\Easydict.WinUI\Services\DocumentExport\*.cs" Link="Services\DocumentExport\%(Filename)%(Extension)" />
+    <Compile Include="..\Easydict.WinUI\Services\DocumentExport\*.cs"
+             Exclude="..\Easydict.WinUI\Services\DocumentExport\DocumentExportModes.WorkerOnly.cs"
+             Link="Services\DocumentExport\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

@@ -109,7 +109,7 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }} -p:BuildWorkerOutputs=false
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }} -p:Configuration=Release -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
       # Build and publish the application (portable: ZIP and EXE)
       - name: Publish WinUI App (portable)
@@ -124,6 +124,7 @@ jobs:
             -p:Version=${{ needs.prepare.outputs.BASE_VERSION }} `
             -p:Platform=${{ matrix.platform }} `
             -p:BuildWorkerOutputs=false `
+            -p:EnableInProcLongDocFallback=false `
             -p:PublishTrimmed=false
 
       # Publish NativeBridge (for portable/Inno installer)
@@ -202,7 +203,9 @@ jobs:
             -p:Version=${{ needs.prepare.outputs.BASE_VERSION }} `
             -p:Platform=${{ matrix.platform }} `
             -p:BuildWorkerOutputs=false `
+            -p:EnableInProcLongDocFallback=false `
             -p:PublishTrimmed=false `
+            -p:PublishReadyToRun=false `
             -p:WindowsAppSDKSelfContained=false
 
       # Publish NativeBridge into MSIX output (for browser extension support)
@@ -299,6 +302,38 @@ jobs:
           dotnet run --project tools/MsixValidate -- `
             "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix" `
             --allow-unsigned
+
+      - name: Verify MSIX worker-only longdoc payload
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $msix = Resolve-Path "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix"
+          $forbiddenRootFiles = @(
+            "Easydict.DocumentExport.dll",
+            "MuPDF.NET.dll",
+            "PdfSharpCore.dll",
+            "UglyToad.PdfPig.dll",
+            "libSkiaSharp.dll",
+            "SkiaSharp.dll"
+          )
+
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($msix.Path)
+          try {
+            $rootHits = @(
+              $zip.Entries |
+                Where-Object { $_.FullName -notlike "*/*" -and $forbiddenRootFiles -contains $_.Name } |
+                Select-Object -ExpandProperty FullName
+            )
+
+            if ($rootHits.Count -gt 0) {
+              throw "In-proc longdoc payload leaked into MSIX root: $($rootHits -join ', ')"
+            }
+
+            Write-Host "MSIX root is worker-only for longdoc payload."
+          } finally {
+            $zip.Dispose()
+          }
 
       # Windows App Certification Kit — required for Microsoft Store submission.
       # Both x64 and arm64 hard-fail on WACK violations: cross-arch validation on the
@@ -474,7 +509,11 @@ jobs:
           }
 
           Write-Host "`nCreated bundle: $bundlePath"
-          Write-Host "Bundle size: $((Get-Item $bundlePath).Length / 1MB) MB"
+          $bundleSize = (Get-Item $bundlePath).Length
+          Write-Host "Bundle size: $([math]::Round($bundleSize / 1000000, 2)) MB ($bundleSize bytes)"
+          if ($bundleSize -ge 400000000) {
+            throw "MSIX bundle is over the 400 MB budget: $bundleSize bytes"
+          }
 
       # Verify bundle manifest MinVersion
       - name: Verify bundle MinVersion

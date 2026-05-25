@@ -41,6 +41,10 @@ public sealed class WorkerPackagingTests
         makefile.Should().Contain("./publish/arm64/workers/ocr");
         makefile.Should().Contain("./publish-msix/x64/workers/ocr");
         makefile.Should().Contain("./publish-msix/arm64/workers/ocr");
+        makefile.Should().Contain("./publish-msix/x64 -p:BuildWorkerOutputs=false");
+        makefile.Should().Contain("./publish-msix/arm64 -p:BuildWorkerOutputs=false");
+        makefile.Should().Contain("winapp package ./publish-msix/x64");
+        makefile.Should().Contain("<Identity[^>]* Version=");
         makefile.Should().Contain("Dedupe-WorkerSharedFiles.ps1");
         makefile.Should().Contain("Worker settings default");
         makefile.Should().NotContain("UseLocalAiWorker default false");
@@ -103,6 +107,39 @@ public sealed class WorkerPackagingTests
         script.Should().Contain("shared");
         script.Should().Contain("Get-FileHash");
         script.Should().Contain("Remove-Item");
+    }
+
+    [Fact]
+    public void ReleaseWinUIBuild_UsesWorkerOnlyLongDocPackaging()
+    {
+        var csprojPath = Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.WinUI",
+            "Easydict.WinUI.csproj");
+        var csproj = File.ReadAllText(csprojPath);
+
+        csproj.Should().Contain("<EnableInProcLongDocFallback Condition=\"'$(EnableInProcLongDocFallback)' == '' and '$(Configuration)' == 'Release'\">false</EnableInProcLongDocFallback>");
+        csproj.Should().Contain("<Compile Remove=\"Services\\LongDocumentTranslationService.cs\" />");
+        csproj.Should().Contain("Services\\LongDocumentTranslationService.WorkerOnly.cs");
+        csproj.Should().Contain("Condition=\"'$(EnableInProcLongDocFallback)' == 'true'\"");
+    }
+
+    [Fact]
+    public void WorkerOnlyLongDocBuild_DoesNotReferenceHostMuPdfPipeline()
+    {
+        var csprojPath = Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.WinUI",
+            "Easydict.WinUI.csproj");
+        var csproj = File.ReadAllText(csprojPath);
+
+        csproj.Should().Contain("<ProjectReference Include=\"..\\Easydict.DocumentExport\\Easydict.DocumentExport.csproj\"");
+        csproj.Should().Contain("<PackageReference Include=\"MuPDF.NET\" Version=\"3.2.12\"");
+        csproj.Should().Contain("<ProjectReference Include=\"..\\..\\..\\lib\\PdfPig\\src\\UglyToad.PdfPig\\UglyToad.PdfPig.csproj\"");
+        csproj.Should().Contain("<PackageReference Include=\"Microsoft.ML.OnnxRuntime.Managed\" Version=\"1.21.0\"");
+        csproj.Should().Contain("Condition=\"'$(EnableInProcLongDocFallback)' == 'true'\"");
     }
 
     [Fact]

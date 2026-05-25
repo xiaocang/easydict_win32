@@ -97,6 +97,7 @@
                 "--configuration",
                 "Release",
                 "-p:WindowsPackageType=None",
+                "-p:WindowsAppSDKSelfContained=false",
                 "-p:SkipPriFileVerification=true",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary,ForceNoAlign"
@@ -453,6 +454,7 @@
                 "Release",
                 "-p:BuildWorkerOutputs=true",
                 "-p:WindowsPackageType=None",
+                "-p:WindowsAppSDKSelfContained=false",
                 "-p:SkipPriFileVerification=true"
             ],
             "problemMatcher": "$msCompile",

@@ -178,6 +178,7 @@ jobs:
             --configuration Release `
             -p:Platform=x64 `
             -p:BuildWorkerOutputs=false `
+            -p:EnableInProcLongDocFallback=true `
             -p:WindowsAppSdkAutoInitialize=true
 
       - name: Run WinUI Unit Tests

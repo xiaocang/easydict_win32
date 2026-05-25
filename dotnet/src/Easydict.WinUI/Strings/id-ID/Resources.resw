@@ -286,7 +286,7 @@
     <value>Layanan Gratis (Tidak Perlu Konfigurasi)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google Translate dan Linguee Dictionary langsung berfungsi tanpa API key.</value>
+    <value>Google Translate langsung berfungsi tanpa API key.</value>
   </data>
   <data name="HttpProxy" xml:space="preserve">
     <value>HTTP Proxy</value>

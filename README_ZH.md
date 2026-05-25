@@ -85,7 +85,7 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 
 - **长文档翻译** - 支持 PDF、纯文本和 Markdown 文档翻译，具备 ML 版面检测、公式保护、并行处理、双语输出和翻译缓存功能
 
-- **词典模式** - 单词释义、音标和例句，由 Google 词典和 Linguee 提供
+- **词典模式** - 单词释义、音标和例句由 Google 词典提供。Linguee 当前不可用，因为其上游示例 API 域名已无法解析。
 
 - **MDX 词典** - 导入 MDict (.mdx) 词典文件，支持离线查词和丰富的 HTML 渲染
 
@@ -124,7 +124,7 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 
 - **高 DPI 支持** - Per-Monitor V2 DPI 感知
 
-- **多种翻译服务**（20 种服务）
+- **多种翻译服务**（19 种可用服务；Linguee 当前不可用）
   - Google 翻译（免费，无需 API Key）
   - Google 词典（丰富词典：音标、释义、例句）
   - 必应翻译（免费，无需 API Key）
@@ -140,7 +140,7 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
   - 火山翻译（字节跳动）
   - 彩云小译（支持繁体中文）
   - 小牛翻译（450+ 语种，支持繁体中文）
-  - Linguee 词典（带上下文例句）
+  - Linguee 词典（当前不可用；上游示例 API 已离线，默认禁用）
   - Ollama（本地 LLM，默认：llama3.2）
   - Windows Local AI（Copilot+ PC 上使用 Phi Silica，OpenVINO 回退）
   - 内置 AI（免费，由 Groq 提供）
@@ -237,7 +237,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | DeepL | REST | — | 缺少 API Key |
 | 彩云小译 | REST | — | 缺少 API Key |
 | 小牛翻译 | REST | ✅ | |
-| Linguee | REST | — | 未测试 |
+| Linguee | REST | — | 不可用：上游示例 API 域名已无法解析；集成测试默认跳过 |
 | Google 词典 | REST | ✅ | |
 | Ollama | OpenAI API | — | 需要本地 Ollama 环境 |
 | Windows Local AI | 本地运行时 | ✅ | 已测试 TranslationManager 路由；真实推理需要 Phi Silica、Foundry Local 或 OpenVINO 模型 |
@@ -255,7 +255,7 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 - [x] ~~**豆包**~~ - 字节跳动 LLM 服务 ✅ **已实现**
 - [x] ~~**彩云小译**~~ ✅ **已实现**
 - [x] ~~**小牛翻译**~~ - 450+ 语种 ✅ **已实现**
-- [x] ~~**Linguee 词典**~~ - 带上下文例句的词典 ✅ **已实现**
+- [x] ~~**Linguee 词典**~~ - 带上下文例句的词典 ✅ **已实现，当前不可用**
 - [x] ~~**TTS（文字转语音）**~~ - Windows Speech Synthesis API ✅ **已实现**
 - [x] ~~**OCR 截图翻译**~~ - 类似 Snipaste 的截图体验，使用 Windows OCR API ✅ **已实现**
 

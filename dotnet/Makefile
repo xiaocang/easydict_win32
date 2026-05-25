@@ -74,7 +74,8 @@ test-ui:
 
 # Integration test service filter (default: all)
 # Available services: google, openai, deepl, deepseek, groq, zhipu, github-models,
-#                     gemini, doubao, caiyun, niutrans, linguee, bing, youdao, phonetic
+#                     gemini, doubao, caiyun, niutrans, bing, youdao, phonetic
+# Linguee integration tests are skipped by default because the upstream sample API is unavailable.
 SERVICE ?= all
 
 # Run integration tests (all services by default)
@@ -395,8 +396,9 @@ help:
 	@echo "  CERT_PATH=...     - Certificate file path (default: ./certs/dev.pfx)"
 	@echo "  SERVICE=...       - Integration test service filter (default: all)"
 	@echo "                      Available: google, openai, deepl, deepseek, groq, zhipu,"
-	@echo "                      github-models, gemini, doubao, caiyun, niutrans, linguee,"
+	@echo "                      github-models, gemini, doubao, caiyun, niutrans,"
 	@echo "                      bing, youdao, phonetic"
+	@echo "                      Linguee tests are skipped by default (upstream unavailable)."
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean        - Clean build artifacts"

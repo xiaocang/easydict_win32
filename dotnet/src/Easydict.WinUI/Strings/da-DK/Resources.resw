@@ -141,7 +141,7 @@
   <data name="UseOfficialApi" xml:space="preserve"><value>Brug officiel API</value></data>
   <data name="YoudaoDescription" xml:space="preserve"><value>Youdao giver fonetisk transskription for engelske ord. Uden API-nøgler bruges gratis webopslag. Med API-nøgler aktiveres officiel API for højere grænser. Hent API-nøgler fra ai.youdao.com</value></data>
   <data name="FreeServicesTitle" xml:space="preserve"><value>Gratis tjenester (ingen konfiguration påkrævet)</value></data>
-  <data name="FreeServicesDescription" xml:space="preserve"><value>Google Translate og Linguee Dictionary fungerer med det samme uden API-nøgler.</value></data>
+  <data name="FreeServicesDescription" xml:space="preserve"><value>Google Translate fungerer med det samme uden API-nøgler.</value></data>
   <data name="HttpProxy" xml:space="preserve"><value>HTTP-proxy</value></data>
   <data name="UseHttpProxy" xml:space="preserve"><value>Brug HTTP-proxy</value></data>
   <data name="ProxyUrl" xml:space="preserve"><value>Proxy-URL</value></data>

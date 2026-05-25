@@ -141,7 +141,7 @@
   <data name="UseOfficialApi" xml:space="preserve"><value>आधिकारिक API का उपयोग करें</value></data>
   <data name="YoudaoDescription" xml:space="preserve"><value>Youdao अंग्रेज़ी शब्दों के लिए ध्वन्यात्मक लिप्यंतरण प्रदान करता है। API key के बिना, मुफ़्त वेब शब्दकोश का उपयोग करता है। API key के साथ, उच्च सीमा के लिए आधिकारिक API सक्षम होता है। ai.youdao.com से API key प्राप्त करें</value></data>
   <data name="FreeServicesTitle" xml:space="preserve"><value>मुफ़्त सेवाएँ (कॉन्फ़िगरेशन आवश्यक नहीं)</value></data>
-  <data name="FreeServicesDescription" xml:space="preserve"><value>Google Translate और Linguee Dictionary बिना API key के तुरंत काम करते हैं।</value></data>
+  <data name="FreeServicesDescription" xml:space="preserve"><value>Google Translate बिना API key के तुरंत काम करता है।</value></data>
   <data name="HttpProxy" xml:space="preserve"><value>HTTP Proxy</value></data>
   <data name="UseHttpProxy" xml:space="preserve"><value>HTTP Proxy का उपयोग करें</value></data>
   <data name="ProxyUrl" xml:space="preserve"><value>Proxy URL</value></data>

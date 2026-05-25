@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup Condition="'$(EnableLingueeService)' == 'true' or '$(EnableLingueeService)' == 'True'">
+    <DefineConstants>$(DefineConstants);ENABLE_LINGUEE_SERVICE</DefineConstants>
+  </PropertyGroup>
+</Project>

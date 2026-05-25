@@ -41,6 +41,16 @@ public class TranslationManagerTests : IDisposable
     }
 
     [Fact]
+    public void Constructor_SkipsLingueeByDefault()
+    {
+#if ENABLE_LINGUEE_SERVICE
+        _manager.Services.Should().ContainKey("linguee");
+#else
+        _manager.Services.Should().NotContainKey("linguee");
+#endif
+    }
+
+    [Fact]
     public void DefaultServiceId_IsGoogle()
     {
         _manager.DefaultServiceId.Should().Be("google");

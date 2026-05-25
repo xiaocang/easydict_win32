@@ -421,7 +421,7 @@
     <value>免费服务（无需配置）</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google 翻译和 Linguee 词典无需 API 密钥即可使用。</value>
+    <value>Google 翻译无需 API 密钥即可使用。</value>
   </data>
 
   <!-- HTTP Proxy -->

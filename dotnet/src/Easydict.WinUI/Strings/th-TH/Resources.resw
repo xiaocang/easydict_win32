@@ -294,7 +294,7 @@
     <value>&#xE1A;&#xE23;&#xE34;&#xE01;&#xE32;&#xE23;&#xE1F;&#xE23;&#xE35; (&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE01;&#xE33;&#xE2B;&#xE19;&#xE14;&#xE04;&#xE48;&#xE32;)</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google Translate &#xE41;&#xE25;&#xE30; Linguee Dictionary &#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE44;&#xE14;&#xE49;&#xE17;&#xE31;&#xE19;&#xE17;&#xE35;&#xE42;&#xE14;&#xE22;&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; API key</value>
+    <value>Google Translate &#xE43;&#xE0A;&#xE49;&#xE07;&#xE32;&#xE19;&#xE44;&#xE14;&#xE49;&#xE17;&#xE31;&#xE19;&#xE17;&#xE35;&#xE42;&#xE14;&#xE22;&#xE44;&#xE21;&#xE48;&#xE15;&#xE49;&#xE2D;&#xE07;&#xE43;&#xE0A;&#xE49; API key</value>
   </data>
   <data name="HttpProxy" xml:space="preserve">
     <value>HTTP Proxy</value>

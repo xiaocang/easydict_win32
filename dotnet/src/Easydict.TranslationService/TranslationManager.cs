@@ -113,7 +113,9 @@ public sealed class TranslationManager : IDisposable
         RegisterService(new CaiyunService(_httpClient));
         RegisterService(new NiuTransService(_httpClient));
         RegisterService(new VolcanoService(_httpClient));
+#if ENABLE_LINGUEE_SERVICE
         RegisterService(new LingueeService(_httpClient));
+#endif
     }
 
     /// <summary>

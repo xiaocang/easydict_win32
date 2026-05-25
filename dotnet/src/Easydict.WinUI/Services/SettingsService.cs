@@ -190,8 +190,6 @@ public sealed class SettingsService
     public string? VolcanoAccessKeyId { get; set; }
     public string? VolcanoSecretAccessKey { get; set; }
 
-    // Linguee settings (no API key needed)
-
     // Behavior settings
     public bool MinimizeToTray { get; set; } = true;
     public bool ClipboardMonitoring { get; set; } = false;
@@ -1126,7 +1124,10 @@ public sealed class SettingsService
     public static readonly HashSet<string> InternationalOnlyServices = new(StringComparer.OrdinalIgnoreCase)
     {
         "google", "google_web", "deepl", "openai", "gemini",
-        "groq", "github", "builtin", "linguee"
+        "groq", "github", "builtin",
+#if ENABLE_LINGUEE_SERVICE
+        "linguee",
+#endif
     };
 
     /// <summary>

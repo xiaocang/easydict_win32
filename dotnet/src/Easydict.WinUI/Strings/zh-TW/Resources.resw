@@ -406,7 +406,7 @@
     <value>免費服務（無需設定）</value>
   </data>
   <data name="FreeServicesDescription" xml:space="preserve">
-    <value>Google 翻譯和 Linguee 詞典無需 API 金鑰即可使用。</value>
+    <value>Google 翻譯無需 API 金鑰即可使用。</value>
   </data>
 
   <!-- HTTP Proxy -->

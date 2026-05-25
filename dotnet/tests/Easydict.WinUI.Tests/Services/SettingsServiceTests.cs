@@ -163,6 +163,25 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void UseLongDocWorker_DefaultsToWorkerIsolationEnabled()
+    {
+        var current = AppDomain.CurrentDomain.BaseDirectory;
+        while (!string.IsNullOrEmpty(current) &&
+               !File.Exists(Path.Combine(current, "Easydict.Win32.sln")))
+        {
+            current = Path.GetDirectoryName(current);
+        }
+
+        current.Should().NotBeNullOrEmpty();
+        var source = File.ReadAllText(Path.Combine(current!, "src", "Easydict.WinUI", "Services", "SettingsService.cs"));
+        source.Should().Contain("public bool UseLongDocWorker { get; set; } = true;");
+        source.Should().Contain("UseLongDocWorker = ResolveWorkerIsolationSetting(nameof(UseLongDocWorker), DisableLongDocWorkerEnvironmentVariable);");
+        source.Should().Contain("EASYDICT_DISABLE_LONGDOC_WORKER");
+        source.Should().Contain("RemoveRuntimeOnlyWorkerIsolationSettings();");
+        source.Should().NotContain("_settings[nameof(UseLongDocWorker)] =");
+    }
+
+    [Fact]
     public void UseLocalAiWorker_DefaultsToTrue()
     {
         var current = AppDomain.CurrentDomain.BaseDirectory;
@@ -175,7 +194,10 @@ public class SettingsServiceTests
         current.Should().NotBeNullOrEmpty();
         var source = File.ReadAllText(Path.Combine(current!, "src", "Easydict.WinUI", "Services", "SettingsService.cs"));
         source.Should().Contain("public bool UseLocalAiWorker { get; set; } = true;");
-        source.Should().Contain("UseLocalAiWorker = GetValue(nameof(UseLocalAiWorker), true);");
+        source.Should().Contain("UseLocalAiWorker = ResolveWorkerIsolationSetting(nameof(UseLocalAiWorker), DisableLocalAiWorkerEnvironmentVariable);");
+        source.Should().Contain("EASYDICT_DISABLE_LOCALAI_WORKER");
+        source.Should().Contain("RemoveRuntimeOnlyWorkerIsolationSettings();");
+        source.Should().NotContain("_settings[nameof(UseLocalAiWorker)] =");
     }
 
     [Fact]
@@ -191,7 +213,10 @@ public class SettingsServiceTests
         current.Should().NotBeNullOrEmpty();
         var source = File.ReadAllText(Path.Combine(current!, "src", "Easydict.WinUI", "Services", "SettingsService.cs"));
         source.Should().Contain("public bool UseOcrWorker { get; set; } = true;");
-        source.Should().Contain("UseOcrWorker = GetValue(nameof(UseOcrWorker), true);");
+        source.Should().Contain("UseOcrWorker = ResolveWorkerIsolationSetting(nameof(UseOcrWorker), DisableOcrWorkerEnvironmentVariable);");
+        source.Should().Contain("EASYDICT_DISABLE_OCR_WORKER");
+        source.Should().Contain("RemoveRuntimeOnlyWorkerIsolationSettings();");
+        source.Should().NotContain("_settings[nameof(UseOcrWorker)] =");
     }
 
     [Fact]

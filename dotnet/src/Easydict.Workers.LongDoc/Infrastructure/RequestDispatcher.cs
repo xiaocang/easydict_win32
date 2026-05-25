@@ -99,10 +99,12 @@ internal sealed class RequestDispatcher
         {
             await _writer.WriteErrorAsync(request.Id, WorkerErrorCodes.Cancelled,
                 $"Request {request.Id} cancelled");
+            OnRequestCompleted?.Invoke(request.Method);
         }
         catch (WorkerHandlerException ex)
         {
             await _writer.WriteErrorAsync(request.Id, ex.Code, ex.Message, ex.Details);
+            OnRequestCompleted?.Invoke(request.Method);
         }
         catch (Exception ex)
         {
@@ -110,6 +112,7 @@ internal sealed class RequestDispatcher
             await _writer.WriteErrorAsync(request.Id, WorkerErrorCodes.Internal,
                 ex.Message,
                 new { exception = ex.GetType().FullName, stackTrace = ex.StackTrace });
+            OnRequestCompleted?.Invoke(request.Method);
         }
         finally
         {

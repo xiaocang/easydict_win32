@@ -17,6 +17,9 @@ public sealed class SettingsService
 {
     private const string GoogleServiceId = "google";
     private const string SettingsDirectoryEnvironmentVariable = "EASYDICT_SETTINGS_DIR";
+    private const string DisableLongDocWorkerEnvironmentVariable = "EASYDICT_DISABLE_LONGDOC_WORKER";
+    private const string DisableLocalAiWorkerEnvironmentVariable = "EASYDICT_DISABLE_LOCALAI_WORKER";
+    private const string DisableOcrWorkerEnvironmentVariable = "EASYDICT_DISABLE_OCR_WORKER";
     private static readonly JsonSerializerOptions SettingsJsonOptions = new() { WriteIndented = true };
 
     public sealed class ImportedMdxDictionary
@@ -199,6 +202,8 @@ public sealed class SettingsService
     /// (Easydict.Workers.LongDoc.exe). Native MuPDF / ONNX heap is reclaimed
     /// on each job by exiting the worker after completion. On by default
     /// with in-process fallback on startup/internal worker failures.
+    /// Runtime-only: not persisted to settings.json. Use
+    /// EASYDICT_DISABLE_LONGDOC_WORKER=1 for development diagnostics.
     /// </summary>
     public bool UseLongDocWorker { get; set; } = true;
 
@@ -207,6 +212,8 @@ public sealed class SettingsService
     /// (Easydict.Workers.LocalAi.exe) instead of the in-proc LocalAITranslationService.
     /// On by default to isolate local model native memory; worker startup failures
     /// fall back to the in-proc LocalAITranslationService.
+    /// Runtime-only: not persisted to settings.json. Use
+    /// EASYDICT_DISABLE_LOCALAI_WORKER=1 for development diagnostics.
     /// </summary>
     public bool UseLocalAiWorker { get; set; } = true;
 
@@ -214,6 +221,8 @@ public sealed class SettingsService
     /// When true, Windows Native OCR runs in a short-lived child worker process
     /// so WinRT OCR/bitmap resources are reclaimed by process exit. API-based OCR
     /// engines continue to use their existing in-proc HTTP path.
+    /// Runtime-only: not persisted to settings.json. Use
+    /// EASYDICT_DISABLE_OCR_WORKER=1 for development diagnostics.
     /// </summary>
     public bool UseOcrWorker { get; set; } = true;
 
@@ -724,9 +733,9 @@ public sealed class SettingsService
         MinimizeToTray = GetValue(nameof(MinimizeToTray), true);
         ClipboardMonitoring = GetValue(nameof(ClipboardMonitoring), false);
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
-        UseLongDocWorker = GetValue(nameof(UseLongDocWorker), true);
-        UseLocalAiWorker = GetValue(nameof(UseLocalAiWorker), true);
-        UseOcrWorker = GetValue(nameof(UseOcrWorker), true);
+        UseLongDocWorker = ResolveWorkerIsolationSetting(nameof(UseLongDocWorker), DisableLongDocWorkerEnvironmentVariable);
+        UseLocalAiWorker = ResolveWorkerIsolationSetting(nameof(UseLocalAiWorker), DisableLocalAiWorkerEnvironmentVariable);
+        UseOcrWorker = ResolveWorkerIsolationSetting(nameof(UseOcrWorker), DisableOcrWorkerEnvironmentVariable);
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
         MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);
@@ -870,6 +879,7 @@ public sealed class SettingsService
     {
         NormalizeDeepLModeSettings();
         var previousJson = JsonSerializer.Serialize(_settings, SettingsJsonOptions);
+        RemoveRuntimeOnlyWorkerIsolationSettings();
 
         _settings[nameof(SourceLanguage)] = SourceLanguage;
 
@@ -956,9 +966,6 @@ public sealed class SettingsService
         _settings[nameof(MinimizeToTray)] = MinimizeToTray;
         _settings[nameof(ClipboardMonitoring)] = ClipboardMonitoring;
         _settings[nameof(AutoTranslate)] = AutoTranslate;
-        _settings[nameof(UseLongDocWorker)] = UseLongDocWorker;
-        _settings[nameof(UseLocalAiWorker)] = UseLocalAiWorker;
-        _settings[nameof(UseOcrWorker)] = UseOcrWorker;
         _settings[nameof(MouseSelectionTranslate)] = MouseSelectionTranslate;
         _settings[nameof(MouseSelectionExcludedApps)] = MouseSelectionExcludedApps;
         _settings[nameof(ShellContextMenu)] = ShellContextMenu;
@@ -1508,6 +1515,43 @@ public sealed class SettingsService
             catch { }
         }
         return defaultValue;
+    }
+
+    private bool ResolveWorkerIsolationSetting(string key, string disableEnvironmentVariable)
+    {
+        if (IsEnvironmentFlagEnabled(disableEnvironmentVariable))
+        {
+            Debug.WriteLine($"[SettingsService] Worker isolation disabled by {disableEnvironmentVariable}=1 for {key}.");
+            return false;
+        }
+
+        // These flags are internal safety switches. Older/debug settings files may
+        // contain false; do not let that silently route memory-heavy work back into
+        // the UI process. Use the environment variable above for explicit opt-out.
+        if (!GetValue(key, true))
+        {
+            Debug.WriteLine(
+                $"[SettingsService] Ignoring persisted {key}=false; worker isolation remains enabled. " +
+                $"Set {disableEnvironmentVariable}=1 to disable it for diagnostics.");
+        }
+
+        return true;
+    }
+
+    private void RemoveRuntimeOnlyWorkerIsolationSettings()
+    {
+        _settings.Remove(nameof(UseLongDocWorker));
+        _settings.Remove(nameof(UseLocalAiWorker));
+        _settings.Remove(nameof(UseOcrWorker));
+    }
+
+    private static bool IsEnvironmentFlagEnabled(string name)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        return string.Equals(value, "1", StringComparison.Ordinal)
+            || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "on", StringComparison.OrdinalIgnoreCase);
     }
 
     private string? GetSensitiveSetting(string key)

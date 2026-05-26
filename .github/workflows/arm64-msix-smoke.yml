@@ -44,7 +44,7 @@ jobs:
         working-directory: dotnet
         shell: pwsh
         run: |
-          dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-arm64 -p:BuildWorkerOutputs=false
+          dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-arm64 -p:Configuration=Release -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
       - name: Clean publish output directory (arm64)
         shell: pwsh
@@ -67,6 +67,7 @@ jobs:
             --output ./publish-msix/arm64 `
             -p:Platform=arm64 `
             -p:BuildWorkerOutputs=false `
+            -p:EnableInProcLongDocFallback=false `
             -p:PublishTrimmed=false `
             -p:PublishReadyToRun=false `
             -p:WindowsAppSDKSelfContained=false

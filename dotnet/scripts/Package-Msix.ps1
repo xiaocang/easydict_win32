@@ -90,14 +90,27 @@ if (Test-Path $sourcePri) {
     Write-Warning "[MSIX] No PRI file found; localization may be incomplete"
 }
 
-# Generate temporary manifest with arch/version overrides
-$tempManifest = Join-Path $env:RUNNER_TEMP "Package.$Platform.appxmanifest"
-$content = Get-Content $ManifestPath -Raw
-$content = $content -replace 'ProcessorArchitecture="[^"]*"', ('ProcessorArchitecture="' + $Platform + '"')
+# Generate temporary manifest with architecture/version overrides. Keep the
+# version write scoped to <Identity>; TargetDeviceFamily MinVersion and
+# MaxVersionTested must remain the OS compatibility values from the source
+# manifest.
+$tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+$tempManifest = Join-Path $tempRoot "Package.$Platform.appxmanifest"
+[xml]$manifest = Get-Content $ManifestPath -Raw
+$manifest.Package.Identity.ProcessorArchitecture = $Platform
 if ($MsixVersion) {
-    $content = $content -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', ('Version="' + $MsixVersion + '"')
+    $manifest.Package.Identity.Version = $MsixVersion
 }
-Set-Content $tempManifest $content -Encoding utf8
+
+$settings = New-Object System.Xml.XmlWriterSettings
+$settings.Encoding = New-Object System.Text.UTF8Encoding($false)
+$settings.Indent = $true
+$writer = [System.Xml.XmlWriter]::Create($tempManifest, $settings)
+try {
+    $manifest.Save($writer)
+} finally {
+    $writer.Dispose()
+}
 
 # Package
 $outputDir = Split-Path -Parent $OutputMsixPath

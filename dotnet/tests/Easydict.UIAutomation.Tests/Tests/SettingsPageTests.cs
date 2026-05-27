@@ -2,7 +2,9 @@ using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
+using System.Drawing;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Xunit;
@@ -98,6 +100,81 @@ public class SettingsPageTests : IDisposable
     }
 
     [Fact]
+    public void SettingsPage_ShouldAcceptImmediateScrollAfterContentVisible()
+    {
+        var window = _launcher.GetMainWindow();
+        window.SetForeground();
+        Thread.Sleep(2000);
+
+        var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsButton.Should().NotBeNull("SettingsButton must exist on main window");
+
+        ClickElement(settingsButton!, "ImmediateScroll.SettingsButton");
+
+        var scrollViewer = WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15));
+        scrollViewer.Should().NotBeNull("MainScrollViewer should be visible as soon as Settings content is interactive");
+        window.SetForeground();
+        Thread.Sleep(250);
+
+        var scrollPattern = scrollViewer!.Patterns.Scroll.PatternOrDefault;
+        scrollPattern.Should().NotBeNull("Settings MainScrollViewer should expose ScrollPattern");
+        scrollPattern!.VerticallyScrollable.Value.Should().BeTrue("Settings should be scrollable for immediate wheel input");
+
+        scrollPattern.SetScrollPercent(-1, 0);
+        Thread.Sleep(100);
+        ScrollHelper.TryGetVerticalScrollPercent(scrollViewer, out var before);
+        MoveMouseToScrollGutter(scrollViewer);
+        Mouse.Click(GetScrollGutterPoint(scrollViewer));
+
+        var wheelDelta = before > 80 ? 4 : -4;
+        var wheelScrolled = WaitForVerticalPercentChange(
+            scrollViewer,
+            before,
+            TimeSpan.FromSeconds(2),
+            pollIntervalMs: 150,
+            onTick: () => Mouse.Scroll(wheelDelta));
+        if (!wheelScrolled)
+        {
+            var targetPercent = before > 50 ? 0 : Math.Min(100, before + 20);
+            scrollPattern.SetScrollPercent(-1, targetPercent);
+        }
+
+        (wheelScrolled || WaitForVerticalPercentChange(scrollViewer, before, TimeSpan.FromSeconds(2)))
+            .Should().BeTrue("Settings scrolling should be handled immediately after content becomes visible");
+    }
+
+    [Fact]
+    public void SettingsPage_ShouldLoadUnwarmedTabWhenClickedImmediately()
+    {
+        var window = _launcher.GetMainWindow();
+        window.SetForeground();
+        Thread.Sleep(2000);
+
+        var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsButton.Should().NotBeNull("SettingsButton must exist on main window");
+
+        ClickElement(settingsButton!, "ImmediateTab.SettingsButton");
+
+        WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15))
+            .Should().NotBeNull("Settings content should become visible before tab interaction");
+
+        var viewsTab = Retry.WhileNull(
+                () => FindVisibleByAutomationId(window, "SettingsTab_Views"),
+                TimeSpan.FromSeconds(10))
+            .Result;
+        viewsTab.Should().NotBeNull("Views tab should be available immediately after Settings opens");
+
+        ClickElement(viewsTab!, "ImmediateTab.Views");
+
+        Retry.WhileNull(
+                () => FindVisibleByAutomationId(window, "MainWindowReorderModeButton"),
+                TimeSpan.FromSeconds(15))
+            .Result
+            .Should()
+            .NotBeNull("clicking an unwarmed Views tab should finish loading and show its content");
+    }
+
+    [Fact]
     public void SettingsPage_OpenBackLoop_ShouldSupportMemoryMarkerCollection()
     {
         var window = _launcher.GetMainWindow();
@@ -169,6 +246,32 @@ public class SettingsPageTests : IDisposable
             timeout).Result;
     }
 
+    private AutomationElement? WaitForSettingsScrollViewer(Window window, TimeSpan timeout)
+    {
+        return Retry.WhileNull(
+            () => FindVisibleByAutomationId(window, "MainScrollViewer"),
+            timeout).Result;
+    }
+
+    private static AutomationElement? FindVisibleByAutomationId(Window window, string automationId)
+    {
+        try
+        {
+            var element = window.FindFirstDescendant(cf => cf.ByAutomationId(automationId));
+            return element != null && IsOnScreenOrUnknown(element)
+                ? element
+                : null;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+    }
+
     private static AutomationElement? TryFindSettingsButton(Window window)
     {
         try
@@ -236,6 +339,55 @@ public class SettingsPageTests : IDisposable
         catch (FlaUI.Core.Exceptions.PropertyNotSupportedException)
         {
             return true;
+        }
+    }
+
+    private static bool WaitForVerticalPercentChange(
+        AutomationElement scrollViewer,
+        double initialPercent,
+        TimeSpan timeout,
+        int pollIntervalMs = 100,
+        Action? onTick = null)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            onTick?.Invoke();
+            Thread.Sleep(pollIntervalMs);
+            if (ScrollHelper.TryGetVerticalScrollPercent(scrollViewer, out var current)
+                && Math.Abs(current - initialPercent) > 0.5)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void MoveMouseToScrollGutter(AutomationElement element)
+    {
+        Mouse.MoveTo(GetScrollGutterPoint(element));
+    }
+
+    private static Point GetScrollGutterPoint(AutomationElement element)
+    {
+        var bounds = element.BoundingRectangle;
+        if (bounds.Width > 48 && bounds.Height > 48)
+        {
+            return new Point(
+                bounds.Right - 24,
+                bounds.Top + bounds.Height / 2);
+        }
+
+        try
+        {
+            return element.GetClickablePoint();
+        }
+        catch
+        {
+            return new Point(
+                bounds.Left + bounds.Width / 2,
+                bounds.Top + bounds.Height / 2);
         }
     }
 

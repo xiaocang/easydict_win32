@@ -174,6 +174,9 @@ public class SettingsPageSplitTabsTests
         selectSettingsTabAsync.Should().Contain("ShowSettingsTabSwitchProgress();");
         selectSettingsTabAsync.Should().Contain("await Task.Delay(SettingsTabSwitchIndicatorDelayMs)");
         selectSettingsTabAsync.Should().Contain("HideSettingsTabSwitchProgress();");
+        codeBehind.Should().Contain("private bool IsSettingsTabReadyForImmediateSwitch(SettingsTabId tabId)");
+        codeBehind.Should().Contain("return !IsSettingsTabReadyForImmediateSwitch(tabId);",
+            "tab switches should only show loading while the target tab is still uninitialized");
     }
 
     [Fact]
@@ -238,11 +241,36 @@ public class SettingsPageSplitTabsTests
             "Settings tab contents should be warmed after first paint for fast in-page tab switching");
         initializeSettingsContent.Should().Contain("QueueSettingsTabWarmup(cancellationToken);",
             "the warm-up should be scoped to a live SettingsPage instance");
+        var queueWarmup = GetMethodBody(codeBehind, "QueueSettingsTabWarmup");
+        var warmNext = GetMethodBody(codeBehind, "WarmNextSettingsTabForFastSwitching");
+        queueWarmup.Should().Contain("DispatcherQueuePriority.Low",
+            "hidden tab warm-up should not run at normal input priority");
+        warmNext.Should().Contain("IsSettingsTabReadyForImmediateSwitch(tabId)",
+            "queued warm-up should skip tabs already initialized by user navigation");
+        warmNext.Should().Contain("EnsureSettingsTabDataInitialized(tabId, isWarmup: true)",
+            "warm-up initialization should use the reduced-cost warm-up path");
         selectSettingsTab.Should().Contain("ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;");
         selectSettingsTab.Should().NotContain("ReleaseViewsTabContent();",
             "high-frequency tab switches should not rebuild the Views tab after it has been loaded");
         teardownOnUnload.Should().Contain("ReleaseViewsTabContent();",
             "leaving SettingsPage should still release lazily loaded tab content");
+    }
+
+    [Fact]
+    public void SettingsPage_WarmupAvoidsFullPageRelocalization()
+    {
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var ensureInitialized = GetMethodBody(codeBehind, "EnsureSettingsTabDataInitialized");
+        var warmLocalization = GetMethodBody(codeBehind, "ApplyLocalizationForWarmedSettingsTab");
+
+        codeBehind.Should().Contain("EnsureSettingsTabDataInitialized(SettingsTabId tabId, bool isWarmup = false)");
+        ensureInitialized.Should().Contain("ApplyLocalizationForWarmedSettingsTab(tabId);");
+        ensureInitialized.Should().Contain("ApplyLocalization();");
+        warmLocalization.Should().Contain("UpdateSettingsTabLabels(LocalizationService.Instance);");
+        warmLocalization.Should().NotContain("ApplyLocalization();",
+            "background warm-up should not repeat whole-page localization for every hidden tab");
+        warmLocalization.Should().NotContain("ApplyWindowResultsLocalization(",
+            "EnsureTabContentLoaded already runs the Views-specific localization before warm-up reaches this method");
     }
 
     [Fact]

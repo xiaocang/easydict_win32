@@ -1002,13 +1002,18 @@ public sealed partial class SettingsPage : Page
             return false;
         }
 
-        return true;
+        return !IsSettingsTabReadyForImmediateSwitch(tabId);
     }
 
     private bool RequiresSettingsTabSwitchPreRenderDelay(SettingsTabId tabId)
     {
-        return !_initializedSettingsTabData.Contains(tabId)
-            || tabId == SettingsTabId.Views && ViewsTabContent == null;
+        return !IsSettingsTabReadyForImmediateSwitch(tabId);
+    }
+
+    private bool IsSettingsTabReadyForImmediateSwitch(SettingsTabId tabId)
+    {
+        return _initializedSettingsTabData.Contains(tabId)
+            && (tabId != SettingsTabId.Views || ViewsTabContent != null);
     }
 
     private void ShowSettingsTabSwitchProgress()
@@ -1117,7 +1122,7 @@ public sealed partial class SettingsPage : Page
         return !deferLazyTabData || _initializedSettingsTabData.Contains(tabId);
     }
 
-    private void EnsureSettingsTabDataInitialized(SettingsTabId tabId)
+    private void EnsureSettingsTabDataInitialized(SettingsTabId tabId, bool isWarmup = false)
     {
         if (!_initializedSettingsTabData.Add(tabId))
         {
@@ -1137,7 +1142,14 @@ public sealed partial class SettingsPage : Page
             }
 
             LoadSettingsForTab(tabId);
-            ApplyLocalization();
+            if (isWarmup)
+            {
+                ApplyLocalizationForWarmedSettingsTab(tabId);
+            }
+            else
+            {
+                ApplyLocalization();
+            }
 
             if (tabId == SettingsTabId.Views)
             {
@@ -1154,6 +1166,14 @@ public sealed partial class SettingsPage : Page
         {
             _isLoading = wasLoading;
         }
+    }
+
+    private void ApplyLocalizationForWarmedSettingsTab(SettingsTabId tabId)
+    {
+        // EnsureTabContentLoaded already runs the per-tab localization (Views: ApplyWindowResultsLocalization)
+        // before warm-up reaches this method, and the rest of the page was localized once during
+        // InitializeSettingsContent. Warmed tabs only need tab-strip labels refreshed.
+        UpdateSettingsTabLabels(LocalizationService.Instance);
     }
 
     private void LoadSettingsForTab(SettingsTabId tabId)
@@ -1971,10 +1991,13 @@ public sealed partial class SettingsPage : Page
 #if DEBUG
         PerfLog($"Settings tab warm-up: {tabId}");
 #endif
-        EnsureTabContentLoaded(tabId);
-        if (_isInitialized)
+        if (!IsSettingsTabReadyForImmediateSwitch(tabId))
         {
-            EnsureSettingsTabDataInitialized(tabId);
+            EnsureTabContentLoaded(tabId);
+            if (_isInitialized)
+            {
+                EnsureSettingsTabDataInitialized(tabId, isWarmup: true);
+            }
         }
 
         DispatcherQueue.TryEnqueue(

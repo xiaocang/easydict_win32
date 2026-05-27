@@ -1,6 +1,7 @@
 using Easydict.UIAutomation.Tests.Infrastructure;
 using FluentAssertions;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Exceptions;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using Xunit;
@@ -158,9 +159,13 @@ public class PopButtonTests : IDisposable
         {
             return !element.IsOffscreen;
         }
-        catch
+        catch (PropertyNotSupportedException)
         {
             return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 

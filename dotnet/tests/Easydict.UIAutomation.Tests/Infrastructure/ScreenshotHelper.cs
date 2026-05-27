@@ -339,7 +339,7 @@ public static class ScreenshotHelper
             }
 
             Thread.Sleep(250);
-            if (IsForegroundWindowOrRoot(hwnd))
+            if (IsForegroundWindow(hwnd))
             {
                 Thread.Sleep(150);
                 return;
@@ -351,16 +351,8 @@ public static class ScreenshotHelper
             $"Screenshot '{name}' would capture the wrong window: target HWND=0x{hwnd.ToInt64():X}, foreground HWND=0x{foreground.ToInt64():X}.");
     }
 
-    private static bool IsForegroundWindowOrRoot(IntPtr hwnd)
-    {
-        var foreground = GetForegroundWindow();
-        if (foreground == hwnd)
-        {
-            return true;
-        }
-
-        return foreground != IntPtr.Zero && GetAncestor(foreground, GetAncestorRoot) == hwnd;
-    }
+    private static bool IsForegroundWindow(IntPtr hwnd)
+        => GetForegroundWindow() == hwnd;
 
     private static Rectangle IntersectWithVirtualScreen(Rectangle bounds)
     {
@@ -417,9 +409,6 @@ public static class ScreenshotHelper
     private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
-    private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
-
-    [DllImport("user32.dll")]
     private static extern bool IsIconic(IntPtr hWnd);
 
     [DllImport("user32.dll")]
@@ -442,7 +431,6 @@ public static class ScreenshotHelper
     private const int SystemMetricVirtualScreenWidth = 78;
     private const int SystemMetricVirtualScreenHeight = 79;
     private const int ShowWindowRestore = 9;
-    private const uint GetAncestorRoot = 2;
     private static readonly IntPtr HwndTopMost = new(-1);
     private static readonly IntPtr HwndNoTopMost = new(-2);
 

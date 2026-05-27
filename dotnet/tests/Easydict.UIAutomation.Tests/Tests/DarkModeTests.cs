@@ -288,10 +288,10 @@ public class DarkModeTests : IDisposable
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-        JsonNode root;
+        JsonObject root;
         try
         {
-            root = JsonNode.Parse(File.ReadAllText(path)) ?? new JsonObject();
+            root = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? new JsonObject();
         }
         catch
         {

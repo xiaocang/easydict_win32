@@ -60,7 +60,7 @@ public sealed class ThemeRegressionMemoryAutomationTests
         script.Should().Contain("visual diff");
         script.Should().Contain("suspicious screenshot dimensions",
             "1x1 or otherwise undersized captures should be review blockers, not buried in the gallery");
-        script.Should().Contain("Image.FromFile",
+        script.Should().Contain("[System.Drawing.Image]::FromFile",
             "the summary should read screenshot dimensions for review triage");
         script.Should().Contain("Get-ChildItem");
     }

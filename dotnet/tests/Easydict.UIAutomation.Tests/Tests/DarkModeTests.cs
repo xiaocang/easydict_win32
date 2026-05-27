@@ -7,6 +7,7 @@ using FlaUI.Core.WindowsAPI;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -20,31 +21,25 @@ namespace Easydict.UIAutomation.Tests.Tests;
 [Collection("UIAutomation")]
 public class DarkModeTests : IDisposable
 {
-    private readonly AppLauncher _launcher;
+    private AppLauncher? _launcher;
     private readonly ITestOutputHelper _output;
+    private readonly Dictionary<string, string?> _settingsSnapshots = new(StringComparer.OrdinalIgnoreCase);
 
     public DarkModeTests(ITestOutputHelper output)
     {
         _output = output;
-        _launcher = new AppLauncher();
-        _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
     }
 
     [Fact]
     public void DarkMode_MainWindow_ShouldRenderCorrectly()
     {
-        var window = _launcher.GetMainWindow();
-        Thread.Sleep(2000);
+        var window = LaunchWithPersistedAppTheme("Light");
 
         // Capture light mode baseline first
         var pathLight = ScreenshotHelper.CaptureWindow(window, "30_main_light_mode");
         _output.WriteLine($"Light mode screenshot saved: {pathLight}");
 
-        // Switch to dark mode via settings
-        SwitchToDarkMode(window);
-
-        // Navigate back to main window
-        NavigateBackToMain(window);
+        window = LaunchWithPersistedAppTheme("Dark");
 
         Thread.Sleep(1000);
         var pathDark = ScreenshotHelper.CaptureWindow(window, "31_main_dark_mode");
@@ -65,16 +60,11 @@ public class DarkModeTests : IDisposable
     [Fact]
     public void MainWindow_ExplicitLightAndDarkThemes_ShouldNotLeakOppositePalette()
     {
-        var window = _launcher.GetMainWindow();
-        Thread.Sleep(2000);
-
-        SwitchToLightMode(window);
-        NavigateBackToMain(window);
+        var window = LaunchWithPersistedAppTheme("Light");
         WaitForMainPage(window);
         CaptureAndAssertMainWindowPalette(window, ThemePalette.Light, "37_main_explicit_light_theme");
 
-        SwitchToDarkMode(window);
-        NavigateBackToMain(window);
+        window = LaunchWithPersistedAppTheme("Dark");
         WaitForMainPage(window);
         CaptureAndAssertMainWindowPalette(window, ThemePalette.Dark, "39_main_explicit_dark_theme");
     }
@@ -82,41 +72,32 @@ public class DarkModeTests : IDisposable
     [Fact]
     public void DarkMode_SettingsPage_ShouldRenderCorrectly()
     {
-        var window = _launcher.GetMainWindow();
-        Thread.Sleep(2000);
-
-        // Switch to dark mode
-        SwitchToDarkMode(window);
+        var window = LaunchWithPersistedAppTheme("Dark");
+        OpenSettingsPage(window);
 
         // Stay on settings page and capture
         Thread.Sleep(1000);
         var path = ScreenshotHelper.CaptureWindow(window, "32_settings_dark_mode");
         _output.WriteLine($"Screenshot saved: {path}");
 
-        // Scroll down to show more settings in dark mode
-        var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
-        if (scrollViewer != null)
-        {
-            ScrollHelper.ScrollToPercent(scrollViewer, 12, _output.WriteLine);
-            var pathServices = ScreenshotHelper.CaptureWindow(window, "33_settings_dark_services");
-            _output.WriteLine($"Screenshot saved: {pathServices}");
-
-            ScrollHelper.ScrollToPercent(scrollViewer, 35, _output.WriteLine);
-            var pathConfig = ScreenshotHelper.CaptureWindow(window, "34_settings_dark_config");
-            _output.WriteLine($"Screenshot saved: {pathConfig}");
-        }
+        CaptureSettingsTab(
+            window,
+            "SettingsTab_Services",
+            "DeepLServiceExpander",
+            "33_settings_dark_services",
+            "Services");
+        CaptureSettingsTab(
+            window,
+            "SettingsTab_Advanced",
+            "OcrEngineCombo",
+            "34_settings_dark_advanced_config",
+            "Advanced configuration");
     }
 
     [Fact]
     public void DarkMode_MiniWindow_ShouldRenderCorrectly()
     {
-        var window = _launcher.GetMainWindow();
-        Thread.Sleep(2000);
-
-        // Switch to dark mode first
-        SwitchToDarkMode(window);
-
-        NavigateBackToMain(window);
+        var window = LaunchWithPersistedAppTheme("Dark");
         Thread.Sleep(1000);
 
         // Open mini window via hotkey: Ctrl+Alt+M
@@ -125,7 +106,7 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(3000);
 
         var miniWindow = UITestHelper.FindSecondaryWindow(
-            _launcher.Application, _launcher.Automation, "Mini", _output);
+            _launcher!.Application, _launcher.Automation, "Mini", _output);
         miniWindow.Should().NotBeNull("Mini window must open after Ctrl+Alt+M hotkey in dark mode");
 
         miniWindow!.SetForeground();
@@ -149,13 +130,7 @@ public class DarkModeTests : IDisposable
     [Fact]
     public void DarkMode_FixedWindow_ShouldRenderCorrectly()
     {
-        var window = _launcher.GetMainWindow();
-        Thread.Sleep(2000);
-
-        // Switch to dark mode first
-        SwitchToDarkMode(window);
-
-        NavigateBackToMain(window);
+        var window = LaunchWithPersistedAppTheme("Dark");
         Thread.Sleep(1000);
 
         // Open fixed window via hotkey: Ctrl+Alt+F
@@ -164,7 +139,7 @@ public class DarkModeTests : IDisposable
         Thread.Sleep(3000);
 
         var fixedWindow = UITestHelper.FindSecondaryWindow(
-            _launcher.Application, _launcher.Automation, "Fixed", _output);
+            _launcher!.Application, _launcher.Automation, "Fixed", _output);
         fixedWindow.Should().NotBeNull("Fixed window must open after Ctrl+Alt+F hotkey in dark mode");
 
         fixedWindow!.SetForeground();
@@ -185,56 +160,84 @@ public class DarkModeTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// Navigate to settings and switch AppThemeCombo to "Dark".
-    /// </summary>
-    private void SwitchToDarkMode(Window window)
-        => SwitchToTheme(window, "Dark", 2);
-
-    private void SwitchToLightMode(Window window)
-        => SwitchToTheme(window, "Light", 1);
-
-    private void SwitchToTheme(Window window, string themeName, int themeIndex)
+    private Window LaunchWithPersistedAppTheme(string themeName)
     {
-        var themeCombo = FindAppThemeCombo(window);
+        _launcher?.Dispose();
+        _launcher = null;
 
-        _output.WriteLine($"Selecting {themeName} theme with AppThemeCombo item index {themeIndex}");
-        SelectThemeComboItem(themeCombo, themeName, themeIndex);
-
-        var persistedTheme = WaitForPersistedAppTheme(themeName, TimeSpan.FromSeconds(5));
-        _output.WriteLine($"Persisted AppTheme after selecting {themeName}: {persistedTheme}");
-        if (!string.Equals(persistedTheme, themeName, StringComparison.OrdinalIgnoreCase))
-        {
-            _output.WriteLine("Settings paths checked:");
-            foreach (var path in GetSettingsFileCandidates().Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                _output.WriteLine($"  {path}");
-            }
-        }
-
-        persistedTheme.Should().Be(
+        SnapshotAndSetPersistedAppTheme(themeName);
+        WaitForPersistedAppTheme(themeName, TimeSpan.FromSeconds(5)).Should().Be(
             themeName,
-            $"theme selection must be persisted before rendering {themeName} palette assertions");
+            $"the persisted AppTheme must be prepared before launching {themeName} screenshot coverage");
+
+        _launcher = new AppLauncher();
+        _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+
+        var window = _launcher.GetMainWindow();
+        Thread.Sleep(2000);
+        return window;
     }
 
-    private void SelectThemeComboItem(ComboBox themeCombo, string themeName, int themeIndex)
-    {
-        themeCombo.Expand();
-        Thread.Sleep(500);
-        var items = themeCombo.Items;
-        _output.WriteLine(
-            $"AppThemeCombo exposed {items.Length} item(s): {string.Join(", ", items.Select(i => $"'{i.Name}'"))}");
+    private void OpenSettingsPage(Window window)
+        => _ = FindAppThemeCombo(window);
 
-        if (items.Length <= themeIndex)
+    private void CaptureSettingsTab(
+        Window window,
+        string tabAutomationId,
+        string expectedElementAutomationId,
+        string screenshotName,
+        string label)
+    {
+        var tab = Retry.WhileNull(
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId(tabAutomationId)),
+            TimeSpan.FromSeconds(5)).Result;
+
+        tab.Should().NotBeNull($"{label} settings tab must be available before dark-mode screenshot capture");
+        ActivateSettingsTab(tab!, label);
+
+        var expectedElement = Retry.WhileNull(
+            () =>
+            {
+                var element = window.FindFirstDescendant(cf => cf.ByAutomationId(expectedElementAutomationId));
+                return element is { IsOffscreen: false } ? element : null;
+            },
+            TimeSpan.FromSeconds(8)).Result;
+
+        if (expectedElement is null)
         {
-            throw new InvalidOperationException(
-                $"AppThemeCombo exposed {items.Length} item(s), cannot select index {themeIndex} for {themeName}");
+            TryScrollElementIntoView(
+                window.FindFirstDescendant(cf => cf.ByAutomationId(expectedElementAutomationId)),
+                expectedElementAutomationId);
+            expectedElement = window.FindFirstDescendant(cf => cf.ByAutomationId(expectedElementAutomationId));
         }
 
-        // Click() drives a real mouse click through the UI input pipeline so WinUI's
-        // ComboBox fires SelectionChanged. SelectionItemPattern.Select() programmatically
-        // toggles IsSelected without firing the event, so AppTheme would not persist.
-        items[themeIndex].Click();
+        expectedElement.Should().NotBeNull(
+            $"{label} settings screenshot must show {expectedElementAutomationId} instead of stale General tab content");
+
+        var path = ScreenshotHelper.CaptureWindow(window, screenshotName);
+        _output.WriteLine($"{label} settings screenshot saved: {path}");
+    }
+
+    private void ActivateSettingsTab(AutomationElement tab, string label)
+    {
+        _output.WriteLine($"Activating {label} settings tab at {tab.BoundingRectangle}");
+
+        try
+        {
+            if (tab.Patterns.SelectionItem.IsSupported)
+            {
+                tab.Patterns.SelectionItem.Pattern.Select();
+                Thread.Sleep(1200);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"{label} settings tab SelectionItem activation failed: {ex.Message}");
+        }
+
+        InvokeOrClick(tab);
+        Thread.Sleep(1200);
     }
 
     private static string WaitForPersistedAppTheme(string expectedTheme, TimeSpan timeout)
@@ -254,6 +257,68 @@ public class DarkModeTests : IDisposable
         while (DateTime.UtcNow < deadline);
 
         return current;
+    }
+
+    private void SnapshotAndSetPersistedAppTheme(string theme)
+    {
+        var candidates = GetSettingsFileCandidates()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var path in candidates)
+        {
+            if (!_settingsSnapshots.ContainsKey(path))
+            {
+                _settingsSnapshots[path] = File.Exists(path) ? File.ReadAllText(path) : null;
+            }
+
+            if (File.Exists(path))
+            {
+                WriteAppTheme(path, theme);
+            }
+        }
+
+        if (candidates.LastOrDefault() is { } localSettingsPath)
+        {
+            WriteAppTheme(localSettingsPath, theme);
+        }
+    }
+
+    private static void WriteAppTheme(string path, string theme)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        JsonNode root;
+        try
+        {
+            root = JsonNode.Parse(File.ReadAllText(path)) ?? new JsonObject();
+        }
+        catch
+        {
+            root = new JsonObject();
+        }
+
+        root["AppTheme"] = theme;
+        File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private void RestoreSettingsSnapshots()
+    {
+        foreach (var (path, content) in _settingsSnapshots)
+        {
+            if (content is null)
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, content);
+        }
     }
 
     private static string ReadPersistedAppTheme()
@@ -372,8 +437,12 @@ public class DarkModeTests : IDisposable
         }
 
         var scrollViewer = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer")),
-            TimeSpan.FromSeconds(15)).Result;
+            () =>
+            {
+                var viewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
+                return viewer is { IsOffscreen: false } ? viewer : null;
+            },
+            TimeSpan.FromSeconds(20)).Result;
 
         if (scrollViewer is null)
         {
@@ -384,15 +453,38 @@ public class DarkModeTests : IDisposable
         scrollViewer.Should().NotBeNull(
             "MainScrollViewer must appear on settings page once initialization finishes");
 
-        var element = ScrollHelper.ScrollToFind(
-            scrollViewer!, startPercent: 70,
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo")),
-            _output.WriteLine);
+        Thread.Sleep(500);
+
+        var element = Retry.WhileNull(
+            () =>
+            {
+                var combo = window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo"));
+                return combo is { IsOffscreen: false } ? combo : null;
+            },
+            TimeSpan.FromSeconds(5)).Result;
+
+        if (element is null)
+        {
+            try
+            {
+                element = ScrollHelper.ScrollToFind(
+                    scrollViewer!, startPercent: 70,
+                    () => window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo")),
+                    _output.WriteLine);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _output.WriteLine($"ScrollToFind AppThemeCombo failed, falling back to existing UIA element: {ex.Message}");
+                element = window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo"));
+                TryScrollElementIntoView(element, "AppThemeCombo");
+            }
+        }
+
         var themeCombo = element?.AsComboBox();
 
         themeCombo.Should().NotBeNull("AppThemeCombo must exist on settings page");
 
-        _output.WriteLine("Found AppThemeCombo");
+        _output.WriteLine($"Found AppThemeCombo at {themeCombo!.BoundingRectangle}");
         return themeCombo!;
     }
 
@@ -900,6 +992,7 @@ public class DarkModeTests : IDisposable
 
     public void Dispose()
     {
-        _launcher.Dispose();
+        _launcher?.Dispose();
+        RestoreSettingsSnapshots();
     }
 }

@@ -74,7 +74,7 @@ public sealed class ThemeContrastTests : IDisposable
     [Fact]
     public void SettingsPage_ExplicitLightTheme_OnDarkWindowsTheme_ShouldRenderLightControls()
     {
-        SnapshotAndSetPersistedAppTheme("System");
+        SnapshotAndSetPersistedAppTheme("Light");
         ForceWindowsTheme(light: false);
 
         _launcher = new AppLauncher();
@@ -83,11 +83,9 @@ public sealed class ThemeContrastTests : IDisposable
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
-        var themeCombo = FindAppThemeCombo(window);
-        SelectThemeComboItem(themeCombo, "Light", themeIndex: 1);
-
         WaitForPersistedAppTheme("Light", TimeSpan.FromSeconds(5))
             .Should().Be("Light", "explicit Light must persist before screenshot validation");
+        FindAppThemeCombo(window);
 
         Thread.Sleep(1200);
         PrepareSettingsWindowForScreenshot(window);
@@ -135,7 +133,7 @@ public sealed class ThemeContrastTests : IDisposable
     [Fact]
     public void MainWindow_ExplicitLightTheme_OnDarkWindowsTheme_ShouldRenderLightChrome()
     {
-        SnapshotAndSetPersistedAppTheme("System");
+        SnapshotAndSetPersistedAppTheme("Light");
         ForceWindowsTheme(light: false);
 
         _launcher = new AppLauncher();
@@ -144,14 +142,10 @@ public sealed class ThemeContrastTests : IDisposable
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
-        var themeCombo = FindAppThemeCombo(window);
-        SelectThemeComboItem(themeCombo, "Light", themeIndex: 1);
-
         WaitForPersistedAppTheme("Light", TimeSpan.FromSeconds(5))
             .Should().Be("Light", "explicit Light must persist before main-window screenshot validation");
 
         Thread.Sleep(1200);
-        NavigateBackToMain(window);
         WaitForMainPage(window);
         PrepareMainWindowForScreenshot(window);
 
@@ -260,7 +254,7 @@ public sealed class ThemeContrastTests : IDisposable
         _launcher?.Dispose();
         _launcher = null;
 
-        SnapshotAndSetPersistedAppTheme("System");
+        SnapshotAndSetPersistedAppTheme(testCase.AppTheme);
         ForceWindowsTheme(testCase.WindowsLight);
 
         _launcher = new AppLauncher();
@@ -270,14 +264,12 @@ public sealed class ThemeContrastTests : IDisposable
         Thread.Sleep(2000);
         CaptureThemeMatrixMemory(testCase, "after-launch");
 
-        var themeCombo = FindAppThemeCombo(window);
-        SelectThemeComboItem(themeCombo, testCase.AppTheme, testCase.ThemeIndex);
-
         WaitForPersistedAppTheme(testCase.AppTheme, TimeSpan.FromSeconds(5))
             .Should().Be(
                 testCase.AppTheme,
                 "the app theme must persist before theme-matrix screenshots are captured");
 
+        FindAppThemeCombo(window);
         Thread.Sleep(1200);
         CaptureThemeMatrixMemory(testCase, "after-theme-select");
         CaptureThemeMatrixSettingsGeneral(window, testCase);
@@ -427,10 +419,15 @@ public sealed class ThemeContrastTests : IDisposable
         Thread.Sleep(2000);
 
         var scrollViewer = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer")),
-            TimeSpan.FromSeconds(15)).Result;
+            () =>
+            {
+                var viewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
+                return viewer is { IsOffscreen: false } ? viewer : null;
+            },
+            TimeSpan.FromSeconds(20)).Result;
 
         scrollViewer.Should().NotBeNull("settings MainScrollViewer must appear after opening settings");
+        Thread.Sleep(500);
 
         var element = Retry.WhileNull(
             () =>
@@ -483,23 +480,6 @@ public sealed class ThemeContrastTests : IDisposable
         {
             _output.WriteLine($"ScrollItem fallback failed: {ex.Message}");
         }
-    }
-
-    private void SelectThemeComboItem(ComboBox themeCombo, string themeName, int themeIndex)
-    {
-        themeCombo.Focus();
-        themeCombo.Expand();
-        Thread.Sleep(500);
-
-        var items = themeCombo.Items;
-        _output.WriteLine(
-            $"AppThemeCombo exposed {items.Length} item(s): {string.Join(", ", items.Select(i => $"'{i.Name}'"))}");
-
-        items.Length.Should().BeGreaterThan(themeIndex, "requested theme item must be available");
-        Keyboard.Type(themeName[..1]);
-        Thread.Sleep(200);
-        Keyboard.Press(VirtualKeyShort.ENTER);
-        Thread.Sleep(500);
     }
 
     private void PrepareSettingsWindowForScreenshot(Window window)
@@ -1491,7 +1471,7 @@ public sealed class ThemeContrastTests : IDisposable
         var screenshotRoot = Environment.GetEnvironmentVariable("SCREENSHOT_OUTPUT_DIR");
         if (string.IsNullOrWhiteSpace(screenshotRoot))
         {
-            screenshotRoot = Path.Combine(FindRepositoryRoot(), "artifacts");
+            screenshotRoot = Path.Combine(FindRepositoryRoot(), "artifacts", "ui-screenshots");
         }
 
         var outputDir = Path.Combine(

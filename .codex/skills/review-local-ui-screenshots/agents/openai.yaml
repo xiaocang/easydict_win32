@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Local UI Screenshots"
+  short_description: "Review local UI screenshot artifacts for mismatches."
+  default_prompt: "Review local UI screenshots under artifacts/ui-screenshots and report any mismatch between each filename and the visible UI state."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review PR UI Screenshots"
+  short_description: "Download and review PR UI screenshot artifacts."
+  default_prompt: "Download UI screenshot artifacts for the current pull request with gh, then report mismatches between screenshot filenames and visible UI states."

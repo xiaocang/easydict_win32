@@ -62,18 +62,16 @@ public sealed class PopButtonSelectionFixture : IDisposable
             var window = Launcher.GetMainWindow();
             Thread.Sleep(2000);
 
-            // Navigate to Settings page via the SettingsButton (AutomationId)
-            var settingsButton = Retry.WhileNull(
-                () => window.FindFirstDescendant(c => c.ByAutomationId("SettingsButton")),
-                TimeSpan.FromSeconds(10)).Result;
+            // Navigate to Settings page via the SettingsButton.
+            var settingsButton = UITestHelper.WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
 
             if (settingsButton == null)
             {
-                Log("SettingsButton not found by AutomationId");
+                Log("SettingsButton not found");
                 return false;
             }
 
-            settingsButton.Click();
+            UITestHelper.ClickElement(settingsButton);
             Log("Clicked SettingsButton, waiting for settings page...");
             Thread.Sleep(2000);
 

@@ -1,9 +1,12 @@
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Conditions;
+using FlaUI.Core.Definitions;
+using FlaUI.Core.Exceptions;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;
+using System.Runtime.InteropServices;
 using Xunit.Abstractions;
 
 namespace Easydict.UIAutomation.Tests.Infrastructure;
@@ -50,7 +53,10 @@ public static class UITestHelper
 
         foreach (var w in allWindows)
         {
-            output.WriteLine($"  Window: \"{w.Title}\" size={w.BoundingRectangle.Width}x{w.BoundingRectangle.Height}");
+            var bounds = w.BoundingRectangle;
+            output.WriteLine(
+                $"  Window: \"{SafeName(w)}\" automationId=\"{SafeAutomationId(w)}\" " +
+                $"offscreen={SafeIsOffscreen(w)} bounds={bounds}");
         }
 
         if (allWindows.Length <= 1)
@@ -59,10 +65,173 @@ public static class UITestHelper
             return null;
         }
 
-        // Return the smallest window (mini/fixed are smaller than main)
-        return allWindows
-            .OrderBy(w => w.BoundingRectangle.Width * w.BoundingRectangle.Height)
-            .First();
+        var candidates = allWindows
+            .Where(IsUsableTopLevelWindow)
+            .Select(w => new
+            {
+                Window = w,
+                Area = GetWindowArea(w),
+                Score = ScoreSecondaryWindow(w, windowType)
+            })
+            .ToList();
+
+        var mainWindow = candidates
+            .OrderByDescending(candidate => candidate.Area)
+            .FirstOrDefault()?.Window;
+
+        var matched = candidates
+            .Where(candidate => !ReferenceEquals(candidate.Window, mainWindow))
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.Area)
+            .FirstOrDefault();
+
+        if (matched != null && matched.Score > 0)
+        {
+            output.WriteLine(
+                $"Selected {windowType} window by score={matched.Score}: " +
+                $"\"{SafeName(matched.Window)}\" bounds={matched.Window.BoundingRectangle}");
+            return matched.Window;
+        }
+
+        // Fallback to the smallest visible non-main top-level window, preserving
+        // the old behavior when UIA metadata is sparse.
+        var fallback = candidates
+            .Where(candidate => !ReferenceEquals(candidate.Window, mainWindow))
+            .OrderBy(candidate => candidate.Area)
+            .FirstOrDefault();
+
+        if (fallback != null)
+        {
+            output.WriteLine(
+                $"Selected {windowType} window by fallback smallest area: " +
+                $"\"{SafeName(fallback.Window)}\" bounds={fallback.Window.BoundingRectangle}");
+            return fallback.Window;
+        }
+
+        output.WriteLine($"{windowType} window did not open - no usable secondary window found");
+        return null;
+    }
+
+    public static AutomationElement? FindByAutomationIdOrName(Window window, string name)
+    {
+        try
+        {
+            return window.FindFirstDescendant(cf => cf.ByAutomationId(name))
+                ?? window.FindFirstDescendant(cf => cf.ByName(name));
+        }
+        catch (Exception ex) when (ex is PropertyNotSupportedException or TimeoutException or COMException)
+        {
+            return null;
+        }
+    }
+
+    public static AutomationElement? WaitForSettingsButton(Window window, TimeSpan timeout)
+    {
+        return Retry.WhileNull(
+            () => FindSettingsButton(window),
+            timeout).Result;
+    }
+
+    public static AutomationElement? FindSettingsButton(Window window)
+    {
+        return FindByAutomationIdOrName(window, "SettingsButton")
+            ?? FindByAutomationIdOrName(window, "Settings")
+            ?? FindTopRightLikelySettingsButton(window);
+    }
+
+    public static void ClickElement(AutomationElement element)
+    {
+        try
+        {
+            var invokePattern = element.Patterns.Invoke.PatternOrDefault;
+            if (invokePattern != null)
+            {
+                invokePattern.Invoke();
+                return;
+            }
+        }
+        catch
+        {
+            // Fall back to a physical click below.
+        }
+
+        element.Click();
+    }
+
+    private static int ScoreSecondaryWindow(Window window, string windowType)
+    {
+        var score = 0;
+        var title = SafeName(window);
+        if (title.Contains(windowType, StringComparison.OrdinalIgnoreCase))
+        {
+            score += 100;
+        }
+
+        if (title.Contains("Easydict", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 25;
+        }
+
+        if (FindByAutomationIdOrName(window, "InputTextBox") != null)
+        {
+            score += 50;
+        }
+
+        if (FindByAutomationIdOrName(window, "CloseButton") != null)
+        {
+            score += 10;
+        }
+
+        if (FindByAutomationIdOrName(window, "SettingsButton") != null)
+        {
+            score -= 25;
+        }
+
+        return score;
+    }
+
+    private static bool IsUsableTopLevelWindow(Window window)
+    {
+        var bounds = window.BoundingRectangle;
+        return bounds.Width >= 80 &&
+               bounds.Height >= 80 &&
+               IsOnScreenOrUnknown(window);
+    }
+
+    private static int GetWindowArea(Window window)
+    {
+        var bounds = window.BoundingRectangle;
+        return Math.Max(0, bounds.Width) * Math.Max(0, bounds.Height);
+    }
+
+    private static bool IsOnScreenOrUnknown(AutomationElement element)
+    {
+        try
+        {
+            return !element.IsOffscreen;
+        }
+        catch (PropertyNotSupportedException)
+        {
+            return true;
+        }
+    }
+
+    private static AutomationElement? FindTopRightLikelySettingsButton(Window window)
+    {
+        var bounds = window.BoundingRectangle;
+        var headerTopLimit = bounds.Top + 220;
+        var rightLimit = bounds.Right - 160;
+
+        var buttons = window.FindAllDescendants(cf => cf.ByControlType(ControlType.Button));
+        return buttons
+            .Where(button =>
+                IsOnScreenOrUnknown(button) &&
+                button.BoundingRectangle.Top <= headerTopLimit &&
+                button.BoundingRectangle.Right >= rightLimit &&
+                button.BoundingRectangle.Width <= 70 &&
+                button.BoundingRectangle.Height <= 70)
+            .OrderByDescending(button => button.BoundingRectangle.Right)
+            .FirstOrDefault();
     }
 
     /// <summary>
@@ -75,7 +244,8 @@ public static class UITestHelper
     /// </summary>
     public static TextBox? FindInputTextBox(Window window, TimeSpan? timeout = null)
     {
-        var inputBox = window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox();
+        var inputBox = window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox()
+            ?? window.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox();
         if (inputBox == null || inputBox.IsOffscreen)
         {
             var collapsed = window.FindFirstDescendant(cf => cf.ByAutomationId("SourceTextCollapsed"));
@@ -87,7 +257,44 @@ public static class UITestHelper
         }
 
         return Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox(),
+            () => window.FindFirstDescendant(cf => cf.ByAutomationId("InputTextBox"))?.AsTextBox()
+                ?? window.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox(),
             timeout ?? TimeSpan.FromSeconds(10)).Result;
+    }
+
+    private static string SafeName(AutomationElement element)
+    {
+        try
+        {
+            return element.Name ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeAutomationId(AutomationElement element)
+    {
+        try
+        {
+            return element.AutomationId ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeIsOffscreen(AutomationElement element)
+    {
+        try
+        {
+            return element.IsOffscreen.ToString();
+        }
+        catch (PropertyNotSupportedException)
+        {
+            return "unknown";
+        }
     }
 }

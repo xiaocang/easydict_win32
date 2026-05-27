@@ -7,7 +7,7 @@ namespace Easydict.UIAutomation.Tests.Infrastructure;
 /// Compares screenshots against baseline images for visual regression testing.
 ///
 /// Baseline workflow:
-/// 1. First run (no baseline): screenshot saved as candidate in screenshots/baseline-candidates/
+/// 1. First run (no baseline): screenshot saved as candidate in artifacts/ui-screenshots/baseline-candidates/
 /// 2. Human reviews candidates from CI artifacts
 /// 3. Approved candidates are committed to Baselines/ directory
 /// 4. Subsequent runs compare against committed baselines
@@ -100,7 +100,9 @@ public static class VisualRegressionHelper
         string? diffImagePath = null;
         if (pixelErrorPercent > thresholdPercent)
         {
-            diffImagePath = Path.Combine(ScreenshotHelper.OutputDir, $"{baselineName}_diff.png");
+            var diffDir = Path.Combine(ScreenshotHelper.OutputDir, "visual-diffs");
+            Directory.CreateDirectory(diffDir);
+            diffImagePath = Path.Combine(diffDir, $"{baselineName}_diff.png");
             using var diffImage = ImageSharpCompare.CalcDiffMaskImage(screenshotPath, baselinePath);
             diffImage.Save(diffImagePath);
         }

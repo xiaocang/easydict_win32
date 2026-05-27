@@ -53,25 +53,26 @@ public class MainWindowTests : IDisposable
 
         // Find source language combo (by Name property which maps to x:Name)
         var sourceLangCombo = Retry.WhileNull(
-            () => window.FindFirstDescendant(c => c.ByName("SourceLangCombo")),
+            () => UITestHelper.FindByAutomationIdOrName(window, "SourceLangCombo"),
             TimeSpan.FromSeconds(10)).Result;
 
         // Find target language combo
         var targetLangCombo = Retry.WhileNull(
-            () => window.FindFirstDescendant(c => c.ByName("TargetLangCombo")),
+            () => UITestHelper.FindByAutomationIdOrName(window, "TargetLangCombo"),
             TimeSpan.FromSeconds(5)).Result;
 
         // Find translate button
         var translateButton = Retry.WhileNull(
-            () => window.FindFirstDescendant(c => c.ByName("TranslateButton")),
+            () => UITestHelper.FindByAutomationIdOrName(window, "TranslateButton"),
             TimeSpan.FromSeconds(5)).Result;
 
         var path = ScreenshotHelper.CaptureWindow(window, "02_main_window_controls");
         _output.WriteLine($"Screenshot saved: {path}");
 
-        // At least the window should be found and contain expected elements
-        // Some elements may not be found by x:Name if UIA mapping differs
         window.Should().NotBeNull();
+        sourceLangCombo.Should().NotBeNull("source language control should be discoverable before capturing controls");
+        targetLangCombo.Should().NotBeNull("target language control should be discoverable before capturing controls");
+        translateButton.Should().NotBeNull("translate button should be discoverable before capturing controls");
     }
 
     [Fact]
@@ -82,31 +83,22 @@ public class MainWindowTests : IDisposable
         // Wait for UI to be fully loaded
         Thread.Sleep(2000);
 
-        // Try to find the input text box
-        var inputBox = Retry.WhileNull(
-            () => window.FindFirstDescendant(cf => cf.ByName("InputTextBox"))?.AsTextBox(),
-            TimeSpan.FromSeconds(10)).Result;
+        var inputBox = UITestHelper.FindInputTextBox(window, TimeSpan.FromSeconds(10));
+        inputBox.Should().NotBeNull("InputTextBox should be discoverable by AutomationId or Name");
 
-        if (inputBox != null)
+        inputBox!.Text = "Hello World";
+        Thread.Sleep(500);
+
+        inputBox.Text.Should().Contain("Hello World", "input text should be committed before the screenshot is captured");
+
+        var path = ScreenshotHelper.CaptureWindow(window, "03_main_window_text_input");
+        _output.WriteLine($"Screenshot saved: {path}");
+
+        var result = VisualRegressionHelper.CompareWithBaseline(path, "03_main_window_text_input");
+        if (result != null)
         {
-            inputBox.Text = "Hello World";
-            Thread.Sleep(500);
-
-            var path = ScreenshotHelper.CaptureWindow(window, "03_main_window_text_input");
-            _output.WriteLine($"Screenshot saved: {path}");
-
-            var result = VisualRegressionHelper.CompareWithBaseline(path, "03_main_window_text_input");
-            if (result != null)
-            {
-                _output.WriteLine(result.ToString());
-                result.Passed.Should().BeTrue(result.ToString());
-            }
-        }
-        else
-        {
-            // If TextBox not found by x:Name, capture the window state for debugging
-            _output.WriteLine("InputTextBox not found by name - capturing window for inspection");
-            ScreenshotHelper.CaptureWindow(window, "03_main_window_input_not_found");
+            _output.WriteLine(result.ToString());
+            result.Passed.Should().BeTrue(result.ToString());
         }
     }
 

@@ -5,6 +5,7 @@ using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;
+using System.Drawing;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -487,7 +488,8 @@ public class LongDocTranslationTests : IDisposable
 
     private void CaptureAndCompare(Window window, string screenshotName)
     {
-        var path = ScreenshotHelper.CaptureWindow(window, screenshotName);
+        var captureWindow = RefreshMainWindowForScreenshot(window);
+        var path = ScreenshotHelper.CaptureWindow(captureWindow, screenshotName);
         _output.WriteLine($"Screenshot saved: {path}");
 
         var result = VisualRegressionHelper.CompareWithBaseline(
@@ -501,6 +503,102 @@ public class LongDocTranslationTests : IDisposable
         {
             _output.WriteLine("No baseline found — screenshot saved as candidate");
         }
+    }
+
+    private Window RefreshMainWindowForScreenshot(Window fallback)
+    {
+        try
+        {
+            var refreshed = FindBestMainWindowForScreenshot() ?? _launcher.GetMainWindow(TimeSpan.FromSeconds(5));
+            if (PrepareWindowForScreenshot(refreshed))
+            {
+                return refreshed;
+            }
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Could not refresh main window before screenshot: {ex.Message}");
+        }
+
+        return fallback;
+    }
+
+    private Window? FindBestMainWindowForScreenshot()
+    {
+        var virtualScreen = ScreenshotHelper.GetVirtualScreenBounds();
+        var candidates = _launcher.Application.GetAllTopLevelWindows(_launcher.Automation)
+            .Select(window =>
+            {
+                var bounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+                return new
+                {
+                    Window = window,
+                    Bounds = bounds,
+                    Score = ScoreMainWindowCandidate(window),
+                    Area = Math.Max(0, bounds.Width) * Math.Max(0, bounds.Height),
+                    IntersectsScreen = Rectangle.Intersect(bounds, virtualScreen).Width > 1 &&
+                                       Rectangle.Intersect(bounds, virtualScreen).Height > 1
+                };
+            })
+            .Where(candidate => candidate.Bounds.Width > 100 && candidate.Bounds.Height > 100)
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenByDescending(candidate => candidate.IntersectsScreen)
+            .ThenByDescending(candidate => candidate.Area)
+            .ToList();
+
+        foreach (var candidate in candidates)
+        {
+            _output.WriteLine(
+                $"Screenshot window candidate: title='{candidate.Window.Name}', score={candidate.Score}, " +
+                $"bounds={candidate.Bounds}, intersectsScreen={candidate.IntersectsScreen}");
+        }
+
+        return candidates.FirstOrDefault()?.Window;
+    }
+
+    private static int ScoreMainWindowCandidate(Window window)
+    {
+        var score = 0;
+        if (UITestHelper.FindByAutomationIdOrName(window, "LongDocSourceLangCombo") != null)
+        {
+            score += 100;
+        }
+
+        if (UITestHelper.FindByAutomationIdOrName(window, "SourceLangCombo") != null)
+        {
+            score += 50;
+        }
+
+        if (UITestHelper.FindByAutomationIdOrName(window, "SettingsButton") != null)
+        {
+            score += 25;
+        }
+
+        if ((window.Name ?? string.Empty).Contains("Easydict", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 10;
+        }
+
+        return score;
+    }
+
+    private bool PrepareWindowForScreenshot(Window window)
+    {
+        var moved = ScreenshotHelper.TrySetWindowPhysicalBounds(window, new Rectangle(0, 0, 900, 900));
+        _output.WriteLine($"Prepare screenshot window moved={moved}");
+        Thread.Sleep(500);
+        window.SetForeground();
+        Thread.Sleep(300);
+
+        var bounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        var visible = Rectangle.Intersect(bounds, ScreenshotHelper.GetVirtualScreenBounds());
+        if (bounds.Width > 1 && bounds.Height > 1 && visible.Width > 1 && visible.Height > 1)
+        {
+            return true;
+        }
+
+        _output.WriteLine($"Prepared main window had unusable capture bounds: {bounds}, visible={visible}");
+        return false;
     }
 
     #endregion

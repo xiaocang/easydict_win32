@@ -261,24 +261,24 @@ jobs:
         shard:
           - name: "PopButton"
             filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PopButtonTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PopButtonSelectionTests.)"
-            suffix: "shard-1"
+            suffix: "pop-button"
           - name: "Advanced"
             # MiniWindowFocusTests excluded pending investigation of re-open hotkey regression
             # surfaced once these test classes started running on CI.
             filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MiniWindowLongTextTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.PhoneticTranscriptionTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DictionaryWebViewRenderingTests.)"
-            suffix: "shard-2"
+            suffix: "mini-phonetic-dictionary"
           - name: "Core & Settings"
             filter: "Category=UIAutomation & (FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.MainWindowTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.TranslationTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.WindowLifecycleTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.SettingsPageScrollTests. | FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.DarkModeTests.)"
-            suffix: "shard-3"
+            suffix: "core-settings-darkmode"
           - name: "Theme Contrast"
             filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.ThemeContrastTests."
             suffix: "theme-contrast"
           - name: "OCR"
             filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.OcrTests."
-            suffix: "shard-4"
+            suffix: "ocr-overlay"
           - name: "LongDoc"
             filter: "Category=UIAutomation & FullyQualifiedName~Easydict.UIAutomation.Tests.Tests.LongDocTranslationTests."
-            suffix: "shard-5"
+            suffix: "long-document"
 
     steps:
       - name: Checkout code
@@ -368,10 +368,10 @@ jobs:
       - name: Run UI Automation Tests
         working-directory: dotnet
         env:
-          SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/screenshots
+          SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/ui-screenshots/${{ matrix.shard.suffix }}
         run: |
           # Create screenshot output directory
-          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/screenshots"
+          New-Item -ItemType Directory -Force -Path $env:SCREENSHOT_OUTPUT_DIR
 
           dotnet test tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
             --configuration Release `
@@ -425,116 +425,14 @@ jobs:
             Write-Host "::error title=UI test $outcome (${{ matrix.shard.name }})::$name%0A$msg"
           }
 
-      - name: Publish theme contrast screenshot summary
-        if: always() && matrix.shard.suffix == 'theme-contrast'
+      - name: Publish UI screenshot summary
+        if: always()
         shell: pwsh
         run: |
-          $matrixDir = Join-Path "${{ github.workspace }}" "screenshots/theme-contrast-regression/theme-matrix"
-          $galleryDir = Join-Path "${{ github.workspace }}" "screenshots/theme-contrast-regression"
-          $summary = [System.Collections.Generic.List[string]]::new()
-          $summary.Add("## Theme contrast regression screenshots")
-          $summary.Add("")
-          $summary.Add("Artifact: ``theme-contrast-regression-screenshots-theme-contrast``")
-          $summary.Add("Path inside artifact: ``theme-matrix/``")
-
-          if (-not (Test-Path $matrixDir)) {
-            $summary.Add("")
-            $summary.Add("No theme contrast screenshots were produced.")
-            $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-            exit 0
-          }
-
-          $screenshots = @(Get-ChildItem -Path $matrixDir -Filter "theme-contrast_*.png" | Sort-Object Name)
-          $summary.Add("")
-          $summary.Add("Generated **$($screenshots.Count)** screenshots.")
-
-          if ($screenshots.Count -gt 0) {
-            try {
-              Add-Type -AssemblyName System.Drawing
-
-              $columns = 4
-              $thumbWidth = 190
-              $thumbHeight = 170
-              $labelHeight = 50
-              $padding = 12
-              $rows = [int][Math]::Ceiling($screenshots.Count / [double]$columns)
-              $sheetWidth = ($columns * $thumbWidth) + (($columns + 1) * $padding)
-              $sheetHeight = ($rows * ($labelHeight + $thumbHeight + $padding)) + $padding
-
-              $sheet = [System.Drawing.Bitmap]::new($sheetWidth, $sheetHeight)
-              $graphics = [System.Drawing.Graphics]::FromImage($sheet)
-              $font = [System.Drawing.Font]::new("Segoe UI", 8)
-              $brush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(32, 36, 43))
-              $tileBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(245, 247, 250))
-              $borderPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(205, 213, 224))
-
-              try {
-                $graphics.Clear([System.Drawing.Color]::White)
-                $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-                $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
-
-                for ($i = 0; $i -lt $screenshots.Count; $i++) {
-                  $row = [Math]::Floor($i / $columns)
-                  $column = $i % $columns
-                  $x = $padding + ($column * ($thumbWidth + $padding))
-                  $y = $padding + ($row * ($labelHeight + $thumbHeight + $padding))
-                  $tile = [System.Drawing.Rectangle]::new($x, $y, $thumbWidth, $labelHeight + $thumbHeight)
-                  $graphics.FillRectangle($tileBrush, $tile)
-                  $graphics.DrawRectangle($borderPen, $tile)
-
-                  $name = $screenshots[$i].BaseName -replace "theme-contrast_", ""
-                  $graphics.DrawString($name, $font, $brush, [System.Drawing.RectangleF]::new($x + 6, $y + 6, $thumbWidth - 12, $labelHeight - 8))
-
-                  $image = [System.Drawing.Image]::FromFile($screenshots[$i].FullName)
-                  try {
-                    $scale = [Math]::Min(($thumbWidth - 12) / [double]$image.Width, ($thumbHeight - 12) / [double]$image.Height)
-                    $drawWidth = [int]($image.Width * $scale)
-                    $drawHeight = [int]($image.Height * $scale)
-                    $drawX = $x + [int](($thumbWidth - $drawWidth) / 2)
-                    $drawY = $y + $labelHeight + [int](($thumbHeight - $drawHeight) / 2)
-                    $graphics.DrawImage($image, $drawX, $drawY, $drawWidth, $drawHeight)
-                  }
-                  finally {
-                    $image.Dispose()
-                  }
-                }
-
-                New-Item -ItemType Directory -Force -Path $galleryDir | Out-Null
-                $galleryPath = Join-Path $galleryDir "theme-contrast-regression-gallery.png"
-                $sheet.Save($galleryPath, [System.Drawing.Imaging.ImageFormat]::Png)
-              }
-              finally {
-                $borderPen.Dispose()
-                $tileBrush.Dispose()
-                $brush.Dispose()
-                $font.Dispose()
-                $graphics.Dispose()
-                $sheet.Dispose()
-              }
-
-              $galleryBytes = [System.IO.File]::ReadAllBytes($galleryPath)
-              $summary.Add("")
-              $summary.Add("### Gallery")
-              if ($galleryBytes.Length -le 600000) {
-                $galleryBase64 = [Convert]::ToBase64String($galleryBytes)
-                $summary.Add("<img alt=""Theme contrast regression screenshot gallery"" src=""data:image/png;base64,$galleryBase64"" />")
-              } else {
-                $summary.Add("Gallery image was generated at ``theme-contrast-regression-gallery.png`` in the artifact.")
-              }
-            }
-            catch {
-              $summary.Add("")
-              $summary.Add("Could not generate inline gallery: $($_.Exception.Message)")
-            }
-
-            $summary.Add("")
-            $summary.Add("### Screenshot files")
-            foreach ($screenshot in $screenshots) {
-              $summary.Add("- ``theme-matrix/$($screenshot.Name)``")
-            }
-          }
-
-          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          & "${{ github.workspace }}/dotnet/scripts/ci/Publish-UiScreenshotSummary.ps1" `
+            -ScreenshotRoot "${{ github.workspace }}/artifacts/ui-screenshots/${{ matrix.shard.suffix }}" `
+            -ArtifactName "ui-screenshots-${{ matrix.shard.suffix }}" `
+            -Title "UI automation screenshots (${{ matrix.shard.name }})"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
@@ -542,7 +440,7 @@ jobs:
         with:
           name: ui-screenshots-${{ matrix.shard.suffix }}
           path: |
-            screenshots/
+            artifacts/ui-screenshots/${{ matrix.shard.suffix }}/
           retention-days: 30
 
       - name: Upload theme contrast regression screenshots
@@ -550,7 +448,7 @@ jobs:
         if: always()
         with:
           name: theme-contrast-regression-screenshots-${{ matrix.shard.suffix }}
-          path: screenshots/theme-contrast-regression/
+          path: artifacts/ui-screenshots/${{ matrix.shard.suffix }}/theme-contrast-regression/
           retention-days: 30
           if-no-files-found: ignore
 
@@ -560,7 +458,7 @@ jobs:
         with:
           name: baseline-candidates-${{ matrix.shard.suffix }}
           path: |
-            screenshots/baseline-candidates/
+            artifacts/ui-screenshots/${{ matrix.shard.suffix }}/baseline-candidates/
           retention-days: 30
           if-no-files-found: ignore
 

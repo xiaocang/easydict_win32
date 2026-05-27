@@ -38,59 +38,25 @@ public class PopButtonTests : IDisposable
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
-        // Navigate to settings page
-        var settingsNav = Retry.WhileNull(
-            () => window.FindFirstDescendant(c => c.ByName("Settings")),
-            TimeSpan.FromSeconds(10)).Result;
+        var settingsNav = UITestHelper.WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsNav.Should().NotBeNull("SettingsButton must be discoverable before validating PopButton settings");
 
-        if (settingsNav != null)
+        UITestHelper.ClickElement(settingsNav!);
+        Thread.Sleep(1500);
+
+        var path = ScreenshotHelper.CaptureWindow(window, "pop_button_01_settings_page");
+        _output.WriteLine($"Screenshot saved: {path}");
+
+        var toggle = FindMouseSelectionTranslateToggle(window);
+        if (toggle == null)
         {
-            settingsNav.Click();
-            Thread.Sleep(1000);
-
-            // Screenshot settings page with the new toggle
-            var path = ScreenshotHelper.CaptureWindow(window, "pop_button_01_settings_page");
-            _output.WriteLine($"Screenshot saved: {path}");
-
-            // Try to find the mouse selection translate toggle
-            var toggle = Retry.WhileNull(
-                () => window.FindFirstDescendant(c => c.ByName("MouseSelectionTranslateToggle")),
-                TimeSpan.FromSeconds(5)).Result;
-
-            if (toggle != null)
-            {
-                _output.WriteLine("MouseSelectionTranslateToggle found");
-
-                // Screenshot with toggle visible
-                var togglePath = ScreenshotHelper.CaptureWindow(window, "pop_button_02_toggle_found");
-                _output.WriteLine($"Toggle screenshot saved: {togglePath}");
-            }
-            else
-            {
-                _output.WriteLine("MouseSelectionTranslateToggle not found by name - trying header text");
-
-                // Try finding by the toggle's header text content
-                var toggleByHeader = window.FindFirstDescendant(c => c.ByName("Mouse selection translate"));
-                if (toggleByHeader != null)
-                {
-                    _output.WriteLine("Found toggle by header text");
-                }
-                else
-                {
-                    _output.WriteLine("Toggle not found - capturing full page for debugging");
-                    ScreenshotHelper.CaptureWindow(window, "pop_button_02_toggle_not_found");
-                }
-            }
-        }
-        else
-        {
-            _output.WriteLine("Settings navigation item not found");
-            ScreenshotHelper.CaptureWindow(window, "pop_button_01_settings_nav_not_found");
+            ScreenshotHelper.CaptureWindow(window, "pop_button_02_toggle_not_found");
         }
 
-        // The test passes as long as the app launched and we could navigate.
-        // The toggle may not be discoverable via UIA by x:Name in all scenarios.
-        window.Should().NotBeNull();
+        toggle.Should().NotBeNull("Mouse selection translate toggle must be visible in Settings");
+
+        var togglePath = ScreenshotHelper.CaptureWindow(window, "pop_button_02_toggle_found");
+        _output.WriteLine($"Toggle screenshot saved: {togglePath}");
     }
 
     [Fact]
@@ -100,41 +66,27 @@ public class PopButtonTests : IDisposable
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
-        // Navigate to settings
-        var settingsNav = Retry.WhileNull(
-            () => window.FindFirstDescendant(c => c.ByName("Settings")),
-            TimeSpan.FromSeconds(10)).Result;
+        var settingsNav = UITestHelper.WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsNav.Should().NotBeNull("SettingsButton must be discoverable before capturing Behavior section");
 
-        if (settingsNav != null)
+        UITestHelper.ClickElement(settingsNav!);
+        Thread.Sleep(1500);
+
+        var behaviorToggle = FindMouseSelectionTranslateToggle(window);
+        behaviorToggle.Should().NotBeNull("Behavior section should expose the Mouse selection translate toggle");
+
+        var path = ScreenshotHelper.CaptureWindow(window, "pop_button_03_behavior_section");
+        _output.WriteLine($"Behavior section screenshot saved: {path}");
+
+        var result = VisualRegressionHelper.CompareWithBaseline(path, "pop_button_03_behavior_section");
+        if (result != null)
         {
-            settingsNav.Click();
-            Thread.Sleep(1500);
-
-            // Scroll down to find the Behavior section
-            // First try to find the behavior header
-            var behaviorHeader = window.FindFirstDescendant(c => c.ByName("Behavior"));
-            if (behaviorHeader != null)
-            {
-                _output.WriteLine("Found Behavior section header");
-            }
-
-            // Capture the settings page showing behavior toggles
-            var path = ScreenshotHelper.CaptureWindow(window, "pop_button_03_behavior_section");
-            _output.WriteLine($"Behavior section screenshot saved: {path}");
-
-            var result = VisualRegressionHelper.CompareWithBaseline(path, "pop_button_03_behavior_section");
-            if (result != null)
-            {
-                _output.WriteLine(result.ToString());
-                // Don't assert pass - baseline may not exist yet
-            }
-            else
-            {
-                _output.WriteLine("No baseline found - screenshot saved as candidate baseline");
-            }
+            _output.WriteLine(result.ToString());
         }
-
-        window.Should().NotBeNull();
+        else
+        {
+            _output.WriteLine("No baseline found - screenshot saved as candidate baseline");
+        }
     }
 
     [Fact]
@@ -152,24 +104,64 @@ public class PopButtonTests : IDisposable
         _output.WriteLine($"Step 1 (Initial state): {step1}");
 
         // Step 2: Navigate to settings
-        var settingsNav = Retry.WhileNull(
-            () => window.FindFirstDescendant(c => c.ByName("Settings")),
-            TimeSpan.FromSeconds(10)).Result;
+        var settingsNav = UITestHelper.WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsNav.Should().NotBeNull("SettingsButton must be discoverable for the PopButton workflow sequence");
 
-        if (settingsNav != null)
-        {
-            settingsNav.Click();
-            Thread.Sleep(1500);
+        UITestHelper.ClickElement(settingsNav!);
+        Thread.Sleep(1500);
 
-            var step2 = ScreenshotHelper.CaptureWindow(window, "pop_button_workflow_02_settings");
-            _output.WriteLine($"Step 2 (Settings page): {step2}");
-        }
+        var step2 = ScreenshotHelper.CaptureWindow(window, "pop_button_workflow_02_settings");
+        _output.WriteLine($"Step 2 (Settings page): {step2}");
 
         // Step 3: Capture full screen context
         var step3 = ScreenshotHelper.CaptureScreen("pop_button_workflow_03_full_screen");
         _output.WriteLine($"Step 3 (Full screen): {step3}");
 
         window.Should().NotBeNull();
+    }
+
+    private AutomationElement? FindMouseSelectionTranslateToggle(Window window)
+    {
+        AutomationElement? Finder()
+        {
+            return UITestHelper.FindByAutomationIdOrName(window, "MouseSelectionTranslateToggle")
+                ?? window.FindFirstDescendant(c => c.ByName("Mouse selection translate"));
+        }
+
+        var toggle = Finder();
+        if (IsVisible(toggle))
+        {
+            return toggle;
+        }
+
+        var scrollViewer = UITestHelper.FindByAutomationIdOrName(window, "MainScrollViewer");
+        if (scrollViewer == null)
+        {
+            return toggle;
+        }
+
+        return ScrollHelper.ScrollToFind(
+            scrollViewer,
+            startPercent: 70,
+            Finder,
+            _output.WriteLine);
+    }
+
+    private static bool IsVisible(AutomationElement? element)
+    {
+        if (element == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return !element.IsOffscreen;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     public void Dispose()

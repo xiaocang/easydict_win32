@@ -21,6 +21,7 @@ public class SettingsPageTests : IDisposable
     private readonly AppLauncher _launcher;
     private readonly ITestOutputHelper _output;
     private readonly string _abMode;
+    private static readonly TimeSpan ImmediateMouseResponseBudget = TimeSpan.FromSeconds(1);
 
     public SettingsPageTests(ITestOutputHelper output)
     {
@@ -172,6 +173,59 @@ public class SettingsPageTests : IDisposable
             .Result
             .Should()
             .NotBeNull("clicking an unwarmed Views tab should finish loading and show its content");
+    }
+
+    [Fact]
+    public void SettingsPage_FirstEntry_ShouldAcceptImmediatePhysicalMouseTabClickAndShowReaction()
+    {
+        var window = _launcher.GetMainWindow();
+        window.SetForeground();
+        Thread.Sleep(2000);
+
+        var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsButton.Should().NotBeNull("SettingsButton must exist on main window");
+
+        ClickElementWithMouse(settingsButton!, "FirstEntryMouse.SettingsButton");
+
+        WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15))
+            .Should()
+            .NotBeNull("Settings content should become visible before immediate tab interaction");
+
+        var hotkeysTab = Retry.WhileNull(
+                () => FindVisibleByAutomationId(window, "SettingsTab_Hotkeys"),
+                TimeSpan.FromSeconds(5))
+            .Result;
+        hotkeysTab.Should().NotBeNull("Hotkeys tab should be physically clickable on first Settings entry");
+
+        var hotkeysPoint = MoveMouseToElement(hotkeysTab!, "FirstEntryMouse.HotkeysTab");
+        var reactionTimer = Stopwatch.StartNew();
+        Mouse.Click(hotkeysPoint);
+
+        var visibleHotkeyBox = Retry.WhileNull(
+                () => FindVisibleByAutomationId(window, "ShowHotkeyBox"),
+                ImmediateMouseResponseBudget)
+            .Result;
+        reactionTimer.Stop();
+
+        visibleHotkeyBox
+            .Should()
+            .NotBeNull("the first physical mouse click inside Settings must produce visible tab content within 1s");
+        reactionTimer.Elapsed
+            .Should()
+            .BeLessThanOrEqualTo(ImmediateMouseResponseBudget, "mouse input must never feel unresponsive for more than 1s");
+
+        _output.WriteLine($"[FirstEntryMouse] Hotkeys tab reaction in {reactionTimer.ElapsedMilliseconds}ms");
+        Retry.WhileNull(
+                () =>
+                {
+                    var hotkeyBox = FindVisibleByAutomationId(window, "ShowHotkeyBox")?.AsTextBox();
+                    return string.IsNullOrWhiteSpace(hotkeyBox?.Text) ? null : hotkeyBox;
+                },
+                TimeSpan.FromSeconds(5))
+            .Result
+            .Should()
+            .NotBeNull("the Hotkeys tab should finish loading its editable settings after the immediate visual response");
+        ScreenshotHelper.CaptureWindow(window, "settings_first_entry_immediate_mouse_tab_reaction");
     }
 
     [Fact]
@@ -443,6 +497,34 @@ public class SettingsPageTests : IDisposable
         }
 
         element.Click();
+    }
+
+    private void ClickElementWithMouse(AutomationElement element, string context)
+    {
+        var point = MoveMouseToElement(element, context);
+        Mouse.Click(point);
+    }
+
+    private Point MoveMouseToElement(AutomationElement element, string context)
+    {
+        var point = GetClickablePoint(element, context);
+        _output.WriteLine($"[{context}] Physical mouse click at {point}, bounds={element.BoundingRectangle}");
+        Mouse.MoveTo(point);
+        return point;
+    }
+
+    private Point GetClickablePoint(AutomationElement element, string context)
+    {
+        try
+        {
+            return element.GetClickablePoint();
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"[{context}] GetClickablePoint failed: {ex.Message}; using element center");
+            var bounds = element.BoundingRectangle;
+            return new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
+        }
     }
 
     private MemorySample? CaptureAppProcessMemory(string marker)

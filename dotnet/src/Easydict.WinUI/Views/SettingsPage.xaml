@@ -60,6 +60,7 @@
         <StackPanel x:Name="LoadingOverlay"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
+                    IsHitTestVisible="False"
                     Spacing="12">
             <ProgressRing x:Name="LoadingOverlayRing"
                     IsActive="True"

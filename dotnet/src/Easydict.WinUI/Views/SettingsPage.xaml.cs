@@ -153,6 +153,7 @@ public sealed partial class SettingsPage : Page
     private const string PasswordTailHintPrefix = "...";
     private const int SettingsTabSwitchIndicatorDelayMs = 50;
     private const int SettingsTabSwitchIndicatorFrameDelayMs = 16;
+    private const int SettingsTabWarmupInitialDelayMs = 1500;
     private const int DeferredUnloadTeardownDelayMs = 250;
     private static readonly SettingsTabId[] SettingsTabFastSwitchWarmupOrder =
     [
@@ -245,6 +246,7 @@ public sealed partial class SettingsPage : Page
     private bool _deferredSettingsIoStarted;
     private bool _teardownQueued;
     private int _settingsTabSwitchVersion;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _settingsTabWarmupTimer;
     private readonly Dictionary<PasswordBox, bool> _visiblePasswordBoxes = new();
     private readonly Dictionary<PasswordBox, PasswordTailHint> _passwordTailHints = new();
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
@@ -959,6 +961,33 @@ public sealed partial class SettingsPage : Page
         }
 
         var switchVersion = ++_settingsTabSwitchVersion;
+        var needsDeferredInitialization = _isInitialized && !IsSettingsTabReadyForImmediateSwitch(tabId);
+        if (needsDeferredInitialization && IsSettingsTabContentAvailableForImmediateReveal(tabId))
+        {
+            ApplySettingsTabSelection(tabId, resetScroll);
+            ShowSettingsTabSwitchProgress();
+
+            await Task.Delay(SettingsTabSwitchIndicatorFrameDelayMs);
+            if (_isUnloaded || _isTornDown || switchVersion != _settingsTabSwitchVersion)
+            {
+                return;
+            }
+
+            try
+            {
+                EnsureSettingsTabDataInitialized(tabId);
+            }
+            finally
+            {
+                if (switchVersion == _settingsTabSwitchVersion)
+                {
+                    HideSettingsTabSwitchProgress();
+                }
+            }
+
+            return;
+        }
+
         var showProgress = ShouldShowSettingsTabSwitchProgress(tabId);
         if (showProgress)
         {
@@ -1016,6 +1045,11 @@ public sealed partial class SettingsPage : Page
             && (tabId != SettingsTabId.Views || ViewsTabContent != null);
     }
 
+    private bool IsSettingsTabContentAvailableForImmediateReveal(SettingsTabId tabId)
+    {
+        return tabId != SettingsTabId.Views || ViewsTabContent != null;
+    }
+
     private void ShowSettingsTabSwitchProgress()
     {
         if (SettingsTabSwitchRing is null)
@@ -1046,6 +1080,11 @@ public sealed partial class SettingsPage : Page
             EnsureSettingsTabDataInitialized(tabId);
         }
 
+        ApplySettingsTabSelection(tabId, resetScroll);
+    }
+
+    private void ApplySettingsTabSelection(SettingsTabId tabId, bool resetScroll)
+    {
         foreach (var item in _settingsTabs)
         {
             item.IsSelected = item.Id == tabId;
@@ -1901,6 +1940,9 @@ public sealed partial class SettingsPage : Page
         // Reveal content, hide loading overlay
         LoadingOverlay.Visibility = Visibility.Collapsed;
         MainScrollViewer.Visibility = Visibility.Visible;
+        MainScrollViewer.IsEnabled = true;
+        BackButton.IsEnabled = true;
+        SaveButton.IsEnabled = true;
 #if DEBUG
         PerfLog("Content revealed");
         MemoryDiagnostics.LogDelta("SettingsPage.InitializeSettingsContent retained after init", initializeBaseline);
@@ -1967,9 +2009,41 @@ public sealed partial class SettingsPage : Page
 #if DEBUG
         PerfLog("Settings tab warm-up: queued");
 #endif
-        DispatcherQueue.TryEnqueue(
-            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-            () => WarmNextSettingsTabForFastSwitching(cancellationToken, 0));
+        var timer = DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(SettingsTabWarmupInitialDelayMs);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (ReferenceEquals(_settingsTabWarmupTimer, timer))
+            {
+                _settingsTabWarmupTimer = null;
+            }
+
+            if (_isUnloaded || cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            DispatcherQueue.TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () => WarmNextSettingsTabForFastSwitching(cancellationToken, 0));
+        };
+
+        _settingsTabWarmupTimer = timer;
+        timer.Start();
+    }
+
+    private void StopSettingsTabWarmupTimer()
+    {
+        var timer = _settingsTabWarmupTimer;
+        if (timer is null)
+        {
+            return;
+        }
+
+        timer.Stop();
+        _settingsTabWarmupTimer = null;
     }
 
     private void WarmNextSettingsTabForFastSwitching(CancellationToken cancellationToken, int tabIndex)
@@ -2074,6 +2148,7 @@ public sealed partial class SettingsPage : Page
         _teardownQueued = true;
         _isUnloaded = true;
         _isLoading = true;
+        StopSettingsTabWarmupTimer();
 #if DEBUG
         UpdateDeferredIoState("teardown-queued");
 #endif

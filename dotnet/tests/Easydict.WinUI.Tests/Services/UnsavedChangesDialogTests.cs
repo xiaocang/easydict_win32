@@ -229,11 +229,14 @@ public class UnsavedChangesDialogTests
     {
         var content = File.ReadAllText(SettingsPagePath);
 
-        // When save is chosen from the dialog, it should call SaveSettingsAsync and navigate back
+        // When save is chosen from the dialog, it should call SaveSettingsAsync and return to MainPage.
         content.Should().Contain("await SaveSettingsAsync()",
             "Save option should await SaveSettingsAsync");
-        content.Should().Contain("Frame.GoBack()",
-            "Should navigate back after save or discard");
+        content.Should().Contain("frame.Navigate(typeof(MainPage))",
+            "Should return to MainPage after save or discard");
+        content.Should().MatchRegex(
+            @"if \(frame\.Navigate\(typeof\(MainPage\)\)\)[\s\S]*frame\.BackStack\.Clear\(\);[\s\S]*frame\.ForwardStack\.Clear\(\);",
+            "SettingsPage must not stay retained in the navigation stack after returning to MainPage");
     }
 
     [Fact]

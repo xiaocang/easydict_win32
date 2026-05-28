@@ -10,49 +10,17 @@
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <Page.Resources>
-        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-        <local:BoolToOpacityConverter x:Key="BoolToOpacityConverter"/>
-        <local:BoolToCompactMarginConverter x:Key="BoolToCompactMarginConverter"/>
-        <local:BoolToCompactFontSizeConverter x:Key="BoolToCompactFontSizeConverter"/>
-        <local:BoolToItalicFontStyleConverter x:Key="BoolToItalicFontStyleConverter"/>
-        <Style x:Key="SettingsAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictAccentButtonStyle}"/>
-        <Style x:Key="SettingsSectionStyle" TargetType="Border" BasedOn="{StaticResource EasydictSurfaceStyle}">
-            <Setter Property="Padding" Value="16"/>
-        </Style>
-        <Style x:Key="SettingsInlineIconButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictIconButtonStyle}">
-            <Setter Property="Width" Value="28"/>
-            <Setter Property="Height" Value="28"/>
-            <Setter Property="MinWidth" Value="0"/>
-            <Setter Property="MinHeight" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="CornerRadius" Value="4"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-        </Style>
-        <Style x:Key="SettingsTabButtonStyle" TargetType="Button">
-            <Setter Property="MinWidth" Value="0"/>
-            <Setter Property="MinHeight" Value="0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{TemplateBinding CornerRadius}">
-                            <ContentPresenter
-                                Content="{TemplateBinding Content}"
-                                ContentTemplate="{TemplateBinding ContentTemplate}"
-                                Padding="{TemplateBinding Padding}"
-                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Themes/SettingsPageResources.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <local:BoolToOpacityConverter x:Key="BoolToOpacityConverter"/>
+            <local:BoolToCompactMarginConverter x:Key="BoolToCompactMarginConverter"/>
+            <local:BoolToCompactFontSizeConverter x:Key="BoolToCompactFontSizeConverter"/>
+            <local:BoolToItalicFontStyleConverter x:Key="BoolToItalicFontStyleConverter"/>
+        </ResourceDictionary>
     </Page.Resources>
 
     <Grid>
@@ -1979,6 +1947,7 @@
                     <StackPanel x:Name="BehaviorSection"
                             Spacing="12">
                         <TextBlock x:Name="BehaviorHeaderText"
+                                AutomationProperties.AutomationId="SettingsGeneralBehaviorHeader"
                                 Text="Behavior"
                                 FontSize="18"
                                 FontWeight="SemiBold"/>
@@ -2015,6 +1984,7 @@
                                 <ToggleSwitch x:Name="ClipboardMonitorToggle"
                                         Header="Monitor clipboard for text"/>
                                 <ToggleSwitch x:Name="MouseSelectionTranslateToggle"
+                                        AutomationProperties.AutomationId="MouseSelectionTranslateToggle"
                                         Header="Mouse selection translate"/>
                                 <StackPanel x:Name="MouseSelectionExcludedAppsPanel"
                                         Spacing="4"
@@ -2099,19 +2069,26 @@
                         <TextBlock x:Name="AboutHeaderText"
                                 Text="About"
                                 FontSize="18"
-                                FontWeight="SemiBold"/>
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel Spacing="8">
-                                <TextBlock FontWeight="SemiBold"
-                                        Text="Easydict for Windows ᵇᵉᵗᵃ"/>
+                                <TextBlock AutomationProperties.AutomationId="AboutAppNameText"
+                                        FontWeight="SemiBold"
+                                        Text="Easydict for Windows ᵇᵉᵗᵃ"
+                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                 <TextBlock x:Name="VersionText"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                <HyperlinkButton Content="GitHub Repository"
-                                        NavigateUri="https://github.com/xiaocang/easydict_win32"/>
+                                <HyperlinkButton AutomationProperties.AutomationId="GitHubRepositoryLink"
+                                        Content="GitHub Repository"
+                                        NavigateUri="https://github.com/xiaocang/easydict_win32"
+                                        Style="{StaticResource SettingsLinkButtonStyle}"/>
                                 <HyperlinkButton x:Name="IssueFeedbackLink"
+                                        AutomationProperties.AutomationId="IssueFeedbackLink"
                                         Content="Issue Feedback"
-                                        NavigateUri="https://github.com/xiaocang/easydict_win32/issues/new/choose"/>
+                                        NavigateUri="https://github.com/xiaocang/easydict_win32/issues/new/choose"
+                                        Style="{StaticResource SettingsLinkButtonStyle}"/>
 
                                 <StackPanel Orientation="Horizontal"
                                         Spacing="4">
@@ -2119,10 +2096,11 @@
                                             FontSize="12"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             VerticalAlignment="Center"/>
-                                    <HyperlinkButton Content="Easydict for macOS"
+                                    <HyperlinkButton AutomationProperties.AutomationId="InspiredByLink"
+                                            Content="Easydict for macOS"
                                             NavigateUri="https://github.com/tisfeng/Easydict"
                                             FontSize="12"
-                                            Padding="0"/>
+                                            Style="{StaticResource SettingsLinkButtonStyle}"/>
                                 </StackPanel>
 
                                 <TextBlock Text="License: GPL-3.0"

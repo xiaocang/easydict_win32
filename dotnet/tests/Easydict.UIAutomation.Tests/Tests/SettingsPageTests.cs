@@ -17,6 +17,7 @@ namespace Easydict.UIAutomation.Tests.Tests;
 public class SettingsPageTests : IDisposable
 {
     private readonly record struct MemorySample(double WorkingSetMb, double PrivateMb, double PagedMb);
+    private readonly record struct SettingsTabSwitchCase(string TabAutomationId, string ExpectedSelectedTab);
 
     private readonly AppLauncher _launcher;
     private readonly ITestOutputHelper _output;
@@ -43,7 +44,9 @@ public class SettingsPageTests : IDisposable
         if (settingsButton != null)
         {
             settingsButton.Click();
-            Thread.Sleep(2000); // Wait for page transition
+            WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15))
+                .Should()
+                .NotBeNull("Settings should open inside the main window");
 
             var path = ScreenshotHelper.CaptureWindow(window, "05_settings_page");
             _output.WriteLine($"Screenshot saved: {path}");
@@ -74,7 +77,9 @@ public class SettingsPageTests : IDisposable
         if (settingsButton != null)
         {
             settingsButton.Click();
-            Thread.Sleep(2000);
+            WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15))
+                .Should()
+                .NotBeNull("Settings should open inside the main window");
 
             // Try to scroll down to see service configuration
             var scrollViewer = window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer"));
@@ -172,7 +177,7 @@ public class SettingsPageTests : IDisposable
                 TimeSpan.FromSeconds(15))
             .Result
             .Should()
-            .NotBeNull("clicking an unwarmed Views tab should finish loading and show its content");
+            .NotBeNull("clicking the preloaded Views tab should show its content");
     }
 
     [Fact]
@@ -229,6 +234,63 @@ public class SettingsPageTests : IDisposable
     }
 
     [Fact]
+    public void SettingsPage_LoadedTabs_ShouldSwitchWithinOneSecond()
+    {
+        var window = _launcher.GetMainWindow();
+        window.SetForeground();
+        Thread.Sleep(2000);
+
+        var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsButton.Should().NotBeNull("SettingsButton must exist on main window");
+
+        ClickElementWithMouse(settingsButton!, "TabSwitchBudget.SettingsButton");
+
+        var scrollViewer = WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15));
+        scrollViewer
+            .Should()
+            .NotBeNull("Settings content should become visible before measuring tab switching");
+
+        var tabCases = new[]
+        {
+            new SettingsTabSwitchCase("SettingsTab_Services", "Services"),
+            new SettingsTabSwitchCase("SettingsTab_Views", "Views"),
+            new SettingsTabSwitchCase("SettingsTab_Hotkeys", "Hotkeys"),
+            new SettingsTabSwitchCase("SettingsTab_Advanced", "Advanced"),
+            new SettingsTabSwitchCase("SettingsTab_Language", "Language"),
+            new SettingsTabSwitchCase("SettingsTab_About", "About"),
+            new SettingsTabSwitchCase("SettingsTab_General", "General"),
+        };
+
+        foreach (var tabCase in tabCases)
+        {
+            var tab = Retry.WhileNull(
+                    () => FindVisibleByAutomationId(window, tabCase.TabAutomationId),
+                    TimeSpan.FromSeconds(5))
+                .Result;
+            tab.Should().NotBeNull($"{tabCase.TabAutomationId} should be visible after Settings loads");
+
+            ClickElementWithMouse(tab!, $"TabSwitchBudget.{tabCase.TabAutomationId}");
+            var selected = WaitForSelectedSettingsTab(
+                scrollViewer!,
+                tabCase.ExpectedSelectedTab,
+                ImmediateMouseResponseBudget,
+                out var elapsed);
+
+            selected
+                .Should()
+                .NotBeNull($"{tabCase.TabAutomationId} should become the selected Settings tab within 1s");
+            elapsed
+                .Should()
+                .BeLessThanOrEqualTo(
+                    ImmediateMouseResponseBudget,
+                    $"{tabCase.TabAutomationId} must be interactive within 1s after Settings loading completes");
+
+            _output.WriteLine(
+                $"[TabSwitchBudget] {tabCase.TabAutomationId} selected in {elapsed.TotalMilliseconds:F0}ms");
+        }
+    }
+
+    [Fact]
     public void SettingsPage_OpenBackLoop_ShouldSupportMemoryMarkerCollection()
     {
         var window = _launcher.GetMainWindow();
@@ -251,7 +313,9 @@ public class SettingsPageTests : IDisposable
             }
             settingsButton.Should().NotBeNull($"iteration {i}: settings button should be available");
             ClickElement(settingsButton!, $"MemoryLoop.SettingsButton iteration={i}");
-            Thread.Sleep(1800);
+            WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15))
+                .Should()
+                .NotBeNull($"iteration {i}: Settings should open inside the main window");
             _ = CaptureAppProcessMemory($"{_abMode}_iter_{i}_after_open");
 
             _output.WriteLine($"[MemoryLoop] Iteration {i}: opened Settings page. Check Debug Output for [Memory] SettingsPage markers.");
@@ -418,6 +482,48 @@ public class SettingsPageTests : IDisposable
         return false;
     }
 
+    private static string? ReadSelectedSettingsTab(AutomationElement scrollViewer)
+    {
+        try
+        {
+            const string prefix = "SelectedSettingsTab:";
+            var helpText = scrollViewer.Properties.HelpText.ValueOrDefault;
+            return helpText != null && helpText.StartsWith(prefix, StringComparison.Ordinal)
+                ? helpText[prefix.Length..]
+                : null;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    private static string? WaitForSelectedSettingsTab(
+        AutomationElement scrollViewer,
+        string expectedTab,
+        TimeSpan timeout,
+        out TimeSpan elapsed)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        string? selectedTab = null;
+        while (stopwatch.Elapsed <= timeout)
+        {
+            selectedTab = ReadSelectedSettingsTab(scrollViewer);
+            if (selectedTab == expectedTab)
+            {
+                stopwatch.Stop();
+                elapsed = stopwatch.Elapsed;
+                return selectedTab;
+            }
+
+            Thread.Sleep(25);
+        }
+
+        stopwatch.Stop();
+        elapsed = stopwatch.Elapsed;
+        return selectedTab == expectedTab ? selectedTab : null;
+    }
+
     private static void MoveMouseToScrollGutter(AutomationElement element)
     {
         Mouse.MoveTo(GetScrollGutterPoint(element));
@@ -527,6 +633,66 @@ public class SettingsPageTests : IDisposable
         }
     }
 
+    [Fact]
+    public void SettingsPage_OpenAndReturn_ShouldRestoreMainWindowMemory()
+    {
+        var window = _launcher.GetMainWindow();
+        Thread.Sleep(2000);
+
+        var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsButton.Should().NotBeNull("SettingsButton must exist on main window before the memory isolation check");
+
+        OpenSettingsAndReturn(window, "MemoryIsolation.Prime1");
+        Thread.Sleep(1500);
+        OpenSettingsAndReturn(window, "MemoryIsolation.Prime2");
+        Thread.Sleep(1500);
+        OpenSettingsAndReturn(window, "MemoryIsolation.Prime3");
+        Thread.Sleep(1500);
+
+        var baseline = CaptureSettledAppProcessMemory("isolation_baseline", TimeSpan.FromSeconds(8));
+        baseline.Should().NotBeNull("the app process memory must be observable before opening Settings");
+
+        OpenSettingsAndReturn(window, "MemoryIsolation.Checked");
+
+        var afterReturn = CaptureSettledAppProcessMemory("isolation_after_return", TimeSpan.FromSeconds(10));
+        afterReturn.Should().NotBeNull("the app process memory must be observable after returning to MainPage");
+
+        var toleranceMb = ResolveMemoryIsolationToleranceMb();
+        var privateDelta = afterReturn!.Value.PrivateMb - baseline!.Value.PrivateMb;
+        var workingSetDelta = afterReturn.Value.WorkingSetMb - baseline.Value.WorkingSetMb;
+
+        _output.WriteLine(
+            $"[MemoryIsolation] BaselinePrivate={baseline.Value.PrivateMb:F1}MB " +
+            $"AfterPrivate={afterReturn.Value.PrivateMb:F1}MB DeltaPrivate={privateDelta:+0.0;-0.0;0.0}MB " +
+            $"BaselineWS={baseline.Value.WorkingSetMb:F1}MB AfterWS={afterReturn.Value.WorkingSetMb:F1}MB " +
+            $"DeltaWS={workingSetDelta:+0.0;-0.0;0.0}MB Tolerance={toleranceMb:F1}MB");
+
+        privateDelta
+            .Should()
+            .BeLessThanOrEqualTo(
+                toleranceMb,
+                "opening Settings and returning to MainPage should not retain Settings/window-control memory");
+    }
+
+    private void OpenSettingsAndReturn(Window window, string context)
+    {
+        var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsButton.Should().NotBeNull($"{context}: SettingsButton must exist on MainPage");
+
+        ClickElement(settingsButton!, $"{context}.SettingsButton");
+        WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15))
+            .Should()
+            .NotBeNull($"{context}: Settings content should be visible before returning to MainPage");
+
+        var backButton = WaitForBackButton(window, TimeSpan.FromSeconds(15));
+        backButton.Should().NotBeNull($"{context}: Settings back button must be available");
+        ClickElement(backButton!, $"{context}.BackButton");
+
+        WaitForSettingsButton(window, TimeSpan.FromSeconds(15))
+            .Should()
+            .NotBeNull($"{context}: MainPage should be visible after returning from Settings");
+    }
+
     private MemorySample? CaptureAppProcessMemory(string marker)
     {
         try
@@ -547,6 +713,52 @@ public class SettingsPageTests : IDisposable
             _output.WriteLine($"[MemoryLoop][{marker}] Failed to read process memory: {ex.Message}");
             return null;
         }
+    }
+
+    private MemorySample? CaptureSettledAppProcessMemory(string marker, TimeSpan settleTimeout)
+    {
+        var deadline = DateTime.UtcNow + settleTimeout;
+        MemorySample? best = null;
+        MemorySample? previous = null;
+        var stableSamples = 0;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var sample = CaptureAppProcessMemory($"{marker}_sample");
+            if (sample.HasValue)
+            {
+                best = !best.HasValue || sample.Value.PrivateMb < best.Value.PrivateMb
+                    ? sample.Value
+                    : best.Value;
+
+                if (previous.HasValue &&
+                    Math.Abs(sample.Value.PrivateMb - previous.Value.PrivateMb) <= 0.5 &&
+                    Math.Abs(sample.Value.WorkingSetMb - previous.Value.WorkingSetMb) <= 1.0)
+                {
+                    stableSamples++;
+                    if (stableSamples >= 2 && DateTime.UtcNow >= deadline - TimeSpan.FromSeconds(2))
+                    {
+                        return sample;
+                    }
+                }
+                else
+                {
+                    stableSamples = 0;
+                }
+
+                previous = sample;
+            }
+
+            Thread.Sleep(500);
+        }
+
+        if (best.HasValue)
+        {
+            _output.WriteLine(
+                $"[MemoryLoop][{marker}] Settling timeout reached; using lowest observed private memory sample.");
+        }
+
+        return best;
     }
 
     private void EmitMemorySummary(string phase, MemorySample? baseline, IReadOnlyList<MemorySample> afterBackSamples)
@@ -601,6 +813,17 @@ public class SettingsPageTests : IDisposable
         }
 
         return Math.Clamp(delayMs, 0, 10000);
+    }
+
+    private static double ResolveMemoryIsolationToleranceMb()
+    {
+        var value = Environment.GetEnvironmentVariable("EASYDICT_UIA_SETTINGS_MEMORY_TOLERANCE_MB");
+        if (!double.TryParse(value, out var toleranceMb))
+        {
+            return 8;
+        }
+
+        return Math.Clamp(toleranceMb, 0, 64);
     }
 
     private static string ResolveAbMode()

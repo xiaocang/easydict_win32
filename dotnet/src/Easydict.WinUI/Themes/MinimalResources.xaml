@@ -10,6 +10,15 @@
             <Color x:Key="MinimalStrongLineColor">#000000</Color>
             <Color x:Key="MinimalTextColor">#111111</Color>
             <Color x:Key="MinimalSecondaryTextColor">#666666</Color>
+            <Color x:Key="QueryTextColor">#111111</Color>
+            <Color x:Key="ServiceResultHeaderSecondaryForegroundColor">#666666</Color>
+            <Color x:Key="MainBorderColor">#999999</Color>
+            <Color x:Key="FloatingWindowBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="FloatingInputBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="FloatingInputBorderColor">#999999</Color>
+            <Color x:Key="FloatingIconForegroundColor">#111111</Color>
+            <Color x:Key="EasydictCardBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="EasydictCardBorderColor">#999999</Color>
 
             <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="{StaticResource MinimalBackgroundColor}" />
             <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush" Color="{StaticResource MinimalSurfaceColor}" />
@@ -45,6 +54,49 @@
             <SolidColorBrush x:Key="TextControlBorderBrush" Color="{StaticResource MinimalLineColor}" />
             <SolidColorBrush x:Key="TextControlForeground" Color="{StaticResource MinimalTextColor}" />
             <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundThemeBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForegroundThemeBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForegroundThemeBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="RadioButtonsHeaderForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="RadioButtonsHeaderForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchContentForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchContentForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchForegroundThemeBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchDisabledForegroundThemeBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundThemeBrush" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderDisabledForegroundThemeBrush" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForegroundPointerOver" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForegroundPressed" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ExpanderDisabledForeground" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderDisabledForeground" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronPointerOverForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronPressedForeground" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUnchecked" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPointerOver" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPressed" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundChecked" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPointerOver" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPressed" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminate" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePointerOver" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePressed" Color="{StaticResource MinimalTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminateDisabled" Color="{StaticResource MinimalSecondaryTextColor}" />
 
             <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
             <CornerRadius x:Key="OverlayCornerRadius">0</CornerRadius>

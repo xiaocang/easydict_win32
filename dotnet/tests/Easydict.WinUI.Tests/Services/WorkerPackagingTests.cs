@@ -29,6 +29,23 @@ public sealed class WorkerPackagingTests
     }
 
     [Fact]
+    public void ReleaseWorkflow_EnforcesMsixBundleSizeBudget()
+    {
+        var workflowPath = Path.GetFullPath(Path.Combine(
+            ProjectRoot,
+            "..",
+            ".github",
+            "workflows",
+            "release-publish.yml"));
+        var workflow = File.ReadAllText(workflowPath);
+
+        workflow.Should().Contain("Create MSIX Bundle");
+        workflow.Should().Contain("$bundleSize = (Get-Item $bundlePath).Length");
+        workflow.Should().Contain("if ($bundleSize -ge 400000000)");
+        workflow.Should().Contain("MSIX bundle is over the 400 MB budget");
+    }
+
+    [Fact]
     public void Makefile_PublishesAllDefaultEnabledWorkers()
     {
         var makefilePath = Path.Combine(ProjectRoot, "Makefile");

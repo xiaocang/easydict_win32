@@ -19,6 +19,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Navigation;
 
 namespace Easydict.WinUI.Views;
 
@@ -153,58 +154,7 @@ public sealed partial class SettingsPage : Page
     private const string PasswordTailHintPrefix = "...";
     private const int SettingsTabSwitchIndicatorDelayMs = 50;
     private const int SettingsTabSwitchIndicatorFrameDelayMs = 16;
-    private const int SettingsTabWarmupInitialDelayMs = 1500;
     private const int DeferredUnloadTeardownDelayMs = 250;
-    private static readonly SettingsTabId[] SettingsTabFastSwitchWarmupOrder =
-    [
-        SettingsTabId.Services,
-        SettingsTabId.Views,
-        SettingsTabId.Hotkeys,
-        SettingsTabId.Advanced,
-        SettingsTabId.Language,
-        SettingsTabId.About
-    ];
-    private static readonly (string BrushKey, string ColorKey)[] ScopedThemeResourceBrushes =
-    [
-        ("ApplicationPageBackgroundThemeBrush", "FloatingWindowBackgroundColor"),
-        ("CardBackgroundFillColorDefaultBrush", "EasydictCardBackgroundColor"),
-        ("CardStrokeColorDefaultBrush", "EasydictCardBorderColor"),
-        ("ControlFillColorDefaultBrush", "EasydictCardBackgroundColor"),
-        ("ControlFillColorSecondaryBrush", "FloatingInputBackgroundColor"),
-        ("ControlFillColorTertiaryBrush", "EasydictCardBackgroundColor"),
-        ("ControlStrokeColorDefaultBrush", "FloatingInputBorderColor"),
-        ("ControlStrokeColorSecondaryBrush", "MainBorderColor"),
-        ("TextFillColorPrimaryBrush", "QueryTextColor"),
-        ("TextFillColorSecondaryBrush", "ServiceResultHeaderSecondaryForegroundColor"),
-        ("TextFillColorTertiaryBrush", "ServiceResultHeaderSecondaryForegroundColor"),
-        ("ButtonBackground", "EasydictCardBackgroundColor"),
-        ("ButtonBackgroundPointerOver", "FloatingInputBackgroundColor"),
-        ("ButtonBackgroundPressed", "FloatingInputBackgroundColor"),
-        ("ButtonForeground", "FloatingIconForegroundColor"),
-        ("ButtonBorderBrush", "FloatingInputBorderColor"),
-        ("ButtonBorderBrushPointerOver", "MainBorderColor"),
-        ("ButtonBorderBrushPressed", "MainBorderColor"),
-        ("ComboBoxBackground", "EasydictCardBackgroundColor"),
-        ("ComboBoxBackgroundPointerOver", "FloatingInputBackgroundColor"),
-        ("ComboBoxBorderBrush", "FloatingInputBorderColor"),
-        ("ComboBoxForeground", "QueryTextColor"),
-        ("TextControlBackground", "FloatingInputBackgroundColor"),
-        ("TextControlBorderBrush", "FloatingInputBorderColor"),
-        ("TextControlForeground", "QueryTextColor"),
-        ("AccentBrush", "AccentColor"),
-        ("AccentTextFillColorPrimaryBrush", "AccentForegroundColor"),
-        ("AccentForegroundBrush", "AccentForegroundColor"),
-        ("AccentPointerOverBrush", "AccentPointerOverColor"),
-        ("AccentPressedBrush", "AccentPressedColor"),
-        ("BlueAccentBrush", "BlueAccentColor"),
-        ("FloatingWindowBackgroundBrush", "FloatingWindowBackgroundColor"),
-        ("FloatingWindowBorderBrush", "FloatingWindowBorderColor"),
-        ("FloatingInputBackgroundBrush", "FloatingInputBackgroundColor"),
-        ("FloatingInputBorderBrush", "FloatingInputBorderColor"),
-        ("FloatingIconForegroundBrush", "FloatingIconForegroundColor"),
-        ("EasydictCardBackgroundBrush", "EasydictCardBackgroundColor"),
-        ("EasydictCardBorderBrush", "EasydictCardBorderColor")
-    ];
 
     private static readonly Dictionary<string, int> PreferredServiceDisplayOrder = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -242,11 +192,9 @@ public sealed partial class SettingsPage : Page
     private bool _isMiniWindowReorderModeEnabled;
     private bool _isFixedWindowReorderModeEnabled;
     private bool _themeChromeRefreshQueued;
-    private bool _settingsTabWarmupQueued;
     private bool _deferredSettingsIoStarted;
     private bool _teardownQueued;
     private int _settingsTabSwitchVersion;
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _settingsTabWarmupTimer;
     private readonly Dictionary<PasswordBox, bool> _visiblePasswordBoxes = new();
     private readonly Dictionary<PasswordBox, PasswordTailHint> _passwordTailHints = new();
     private ContentDialog? _currentDialog; // Track open dialog to prevent COMException
@@ -421,6 +369,13 @@ public sealed partial class SettingsPage : Page
         this.ActualThemeChanged += OnActualThemeChanged;
     }
 
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        Frame.BackStack.Clear();
+        Frame.ForwardStack.Clear();
+    }
+
     private void ApplyLingueeAvailability()
     {
 #if ENABLE_LINGUEE_SERVICE
@@ -540,7 +495,6 @@ public sealed partial class SettingsPage : Page
     public void ApplyThemeChrome()
     {
         var minimal = MinimalThemeService.IsActive;
-        RefreshScopedThemeResources();
         var chrome = CreateSettingsThemeChrome();
         Background = chrome.PageBackground;
         SaveButton.Shadow = minimal ? null : new ThemeShadow();
@@ -592,22 +546,19 @@ public sealed partial class SettingsPage : Page
             }
             else if (current is ComboBox comboBox)
             {
-                comboBox.Background = chrome.CardBackground;
-                comboBox.Foreground = chrome.PrimaryForeground;
-                comboBox.BorderBrush = chrome.InputBorder;
+                ApplyComboBoxChrome(comboBox, chrome);
             }
             else if (current is TextBox textBox)
             {
-                textBox.Background = chrome.InputBackground;
-                textBox.Foreground = chrome.PrimaryForeground;
-                textBox.BorderBrush = chrome.InputBorder;
-                textBox.PlaceholderForeground = placeholderForeground;
+                ApplyTextBoxChrome(textBox, chrome, placeholderForeground);
             }
             else if (current is PasswordBox passwordBox)
             {
-                passwordBox.Background = chrome.InputBackground;
-                passwordBox.Foreground = chrome.PrimaryForeground;
-                passwordBox.BorderBrush = chrome.InputBorder;
+                ApplyPasswordBoxChrome(passwordBox, chrome);
+            }
+            else if (current is Expander expander)
+            {
+                ApplyExpanderChrome(expander, chrome);
             }
             else if (current is TextBlock textBlock)
             {
@@ -667,14 +618,15 @@ public sealed partial class SettingsPage : Page
             }
             else if (current is ToggleSwitch toggleSwitch)
             {
-                toggleSwitch.Foreground = chrome.PrimaryForeground;
-                SetResourceIfNotNull(toggleSwitch.Resources, "ToggleSwitchContentForeground", chrome.PrimaryForeground);
-                SetResourceIfNotNull(toggleSwitch.Resources, "ToggleSwitchContentForegroundPointerOver", chrome.PrimaryForeground);
-                SetResourceIfNotNull(toggleSwitch.Resources, "ToggleSwitchContentForegroundPressed", chrome.PrimaryForeground);
+                ApplyToggleSwitchChrome(toggleSwitch, chrome);
             }
             else if (current is CheckBox checkBox)
             {
-                checkBox.Foreground = chrome.PrimaryForeground;
+                ApplyCheckBoxChrome(checkBox, chrome);
+            }
+            else if (current is Slider slider)
+            {
+                ApplySliderChrome(slider, chrome);
             }
             else if (current is RadioButton radioButton)
             {
@@ -690,13 +642,49 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private void RefreshScopedThemeResources()
+    private static void ApplyComboBoxChrome(ComboBox comboBox, SettingsThemeChrome chrome)
     {
-        var brushCache = new Dictionary<string, Brush?>(StringComparer.Ordinal);
-        foreach (var (brushKey, colorKey) in ScopedThemeResourceBrushes)
-        {
-            SetResourceBrush(brushCache, brushKey, colorKey);
-        }
+        comboBox.Background = chrome.CardBackground;
+        comboBox.Foreground = chrome.PrimaryForeground;
+        comboBox.BorderBrush = chrome.InputBorder;
+    }
+
+    private static void ApplyTextBoxChrome(
+        TextBox textBox,
+        SettingsThemeChrome chrome,
+        Brush? placeholderForeground)
+    {
+        textBox.Background = chrome.InputBackground;
+        textBox.Foreground = chrome.PrimaryForeground;
+        textBox.BorderBrush = chrome.InputBorder;
+        textBox.PlaceholderForeground = placeholderForeground;
+    }
+
+    private static void ApplyPasswordBoxChrome(PasswordBox passwordBox, SettingsThemeChrome chrome)
+    {
+        passwordBox.Background = chrome.InputBackground;
+        passwordBox.Foreground = chrome.PrimaryForeground;
+        passwordBox.BorderBrush = chrome.InputBorder;
+    }
+
+    private static void ApplySliderChrome(Slider slider, SettingsThemeChrome chrome)
+    {
+        slider.Foreground = chrome.PrimaryForeground;
+    }
+
+    private static void ApplyToggleSwitchChrome(ToggleSwitch toggleSwitch, SettingsThemeChrome chrome)
+    {
+        toggleSwitch.Foreground = chrome.PrimaryForeground;
+    }
+
+    private static void ApplyExpanderChrome(Expander expander, SettingsThemeChrome chrome)
+    {
+        expander.Foreground = chrome.PrimaryForeground;
+    }
+
+    private static void ApplyCheckBoxChrome(CheckBox checkBox, SettingsThemeChrome chrome)
+    {
+        checkBox.Foreground = chrome.PrimaryForeground;
     }
 
     private SettingsTabBrushes CreateSettingsTabBrushes()
@@ -777,20 +765,6 @@ public sealed partial class SettingsPage : Page
         Brush? AccentHoverBackground,
         Brush? AccentPressedBackground,
         Brush? HyperlinkForeground);
-
-    private void SetResourceBrush(
-        Dictionary<string, Brush?> brushCache,
-        string brushKey,
-        string colorKey)
-    {
-        if (!brushCache.TryGetValue(colorKey, out var brush))
-        {
-            brush = CreateThemeBrush(colorKey);
-            brushCache[colorKey] = brush;
-        }
-
-        SetResourceIfNotNull(Resources, brushKey, brush);
-    }
 
     private Brush? CreateThemeBrush(string colorKey)
     {
@@ -1100,6 +1074,7 @@ public sealed partial class SettingsPage : Page
         AdvancedTabContent.Visibility = tabId == SettingsTabId.Advanced ? Visibility.Visible : Visibility.Collapsed;
         LanguageTabContent.Visibility = tabId == SettingsTabId.Language ? Visibility.Visible : Visibility.Collapsed;
         AboutTabContent.Visibility = tabId == SettingsTabId.About ? Visibility.Visible : Visibility.Collapsed;
+        AutomationProperties.SetHelpText(MainScrollViewer, $"SelectedSettingsTab:{tabId}");
 
         if (resetScroll)
         {
@@ -1161,7 +1136,7 @@ public sealed partial class SettingsPage : Page
         return !deferLazyTabData || _initializedSettingsTabData.Contains(tabId);
     }
 
-    private void EnsureSettingsTabDataInitialized(SettingsTabId tabId, bool isWarmup = false)
+    private void EnsureSettingsTabDataInitialized(SettingsTabId tabId)
     {
         if (!_initializedSettingsTabData.Add(tabId))
         {
@@ -1181,14 +1156,7 @@ public sealed partial class SettingsPage : Page
             }
 
             LoadSettingsForTab(tabId);
-            if (isWarmup)
-            {
-                ApplyLocalizationForWarmedSettingsTab(tabId);
-            }
-            else
-            {
-                ApplyLocalization();
-            }
+            ApplyLocalization();
 
             if (tabId == SettingsTabId.Views)
             {
@@ -1205,14 +1173,6 @@ public sealed partial class SettingsPage : Page
         {
             _isLoading = wasLoading;
         }
-    }
-
-    private void ApplyLocalizationForWarmedSettingsTab(SettingsTabId tabId)
-    {
-        // EnsureTabContentLoaded already runs the per-tab localization (Views: ApplyWindowResultsLocalization)
-        // before warm-up reaches this method, and the rest of the page was localized once during
-        // InitializeSettingsContent. Warmed tabs only need tab-strip labels refreshed.
-        UpdateSettingsTabLabels(LocalizationService.Instance);
     }
 
     private void LoadSettingsForTab(SettingsTabId tabId)
@@ -1881,9 +1841,13 @@ public sealed partial class SettingsPage : Page
 #endif
         _isLoading = true;
         InitializeSettingsTabs();
-        var deferLazyTabData = true;
         _initializedSettingsTabData.Clear();
-        _initializedSettingsTabData.Add(SettingsTabId.General);
+        foreach (var tabId in Enum.GetValues<SettingsTabId>())
+        {
+            _initializedSettingsTabData.Add(tabId);
+        }
+
+        EnsureTabContentLoaded(SettingsTabId.Views);
 
         // Snapshot original SelectedLanguages for discard/restore
         _originalSelectedLanguages = new List<string>(_settings.SelectedLanguages);
@@ -1892,10 +1856,7 @@ public sealed partial class SettingsPage : Page
         PerfLog("PopulateLanguageCheckboxGrid: begin");
 #endif
         // Populate available languages checkbox grid
-        if (ShouldLoadSettingsTab(SettingsTabId.Language, deferLazyTabData))
-        {
-            PopulateLanguageCheckboxGrid();
-        }
+        PopulateLanguageCheckboxGrid();
 #if DEBUG
         PerfLog("PopulateLanguageCheckboxGrid: end");
         MemoryDiagnostics.LogSnapshot("SettingsPage.PopulateLanguageCheckboxGrid complete");
@@ -1904,16 +1865,13 @@ public sealed partial class SettingsPage : Page
 
         // Populate First/Second Language combos dynamically
         var loc = LocalizationService.Instance;
-        if (ShouldLoadSettingsTab(SettingsTabId.Language, deferLazyTabData))
-        {
-            PopulateSettingsLanguageCombo(FirstLanguageCombo, loc);
-            PopulateSettingsLanguageCombo(SecondLanguageCombo, loc);
-        }
+        PopulateSettingsLanguageCombo(FirstLanguageCombo, loc);
+        PopulateSettingsLanguageCombo(SecondLanguageCombo, loc);
 
 #if DEBUG
         PerfLog("LoadSettings: begin");
 #endif
-        LoadSettings(deferLazyTabData);
+        LoadSettings(deferLazyTabData: false);
 #if DEBUG
         PerfLog("LoadSettings: end");
         MemoryDiagnostics.LogSnapshot("SettingsPage.LoadSettings complete");
@@ -1950,8 +1908,6 @@ public sealed partial class SettingsPage : Page
         LogDebugState("InitializeSettingsContent complete");
 #endif
 
-        QueueSettingsTabWarmup(cancellationToken);
-
         // Defer disk I/O (ONNX model check, SQLite cache) to after content is visible
         DispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
@@ -1961,15 +1917,6 @@ public sealed partial class SettingsPage : Page
                 {
 #if DEBUG
                     UpdateDeferredIoState("canceled-before-start");
-#endif
-                    return;
-                }
-
-                if (deferLazyTabData && !ShouldLoadSettingsTab(SettingsTabId.Advanced, deferLazyTabData))
-                {
-#if DEBUG
-                    UpdateDeferredIoState("deferred-until-advanced-tab");
-                    PerfLog("Deferred I/O: waiting for Advanced tab in minimal theme");
 #endif
                     return;
                 }
@@ -1996,87 +1943,6 @@ public sealed partial class SettingsPage : Page
 
                 RunDeferredSettingsIo(cancellationToken);
             });
-    }
-
-    private void QueueSettingsTabWarmup(CancellationToken cancellationToken)
-    {
-        if (_settingsTabWarmupQueued)
-        {
-            return;
-        }
-
-        _settingsTabWarmupQueued = true;
-#if DEBUG
-        PerfLog("Settings tab warm-up: queued");
-#endif
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(SettingsTabWarmupInitialDelayMs);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            if (ReferenceEquals(_settingsTabWarmupTimer, timer))
-            {
-                _settingsTabWarmupTimer = null;
-            }
-
-            if (_isUnloaded || cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-
-            DispatcherQueue.TryEnqueue(
-                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-                () => WarmNextSettingsTabForFastSwitching(cancellationToken, 0));
-        };
-
-        _settingsTabWarmupTimer = timer;
-        timer.Start();
-    }
-
-    private void StopSettingsTabWarmupTimer()
-    {
-        var timer = _settingsTabWarmupTimer;
-        if (timer is null)
-        {
-            return;
-        }
-
-        timer.Stop();
-        _settingsTabWarmupTimer = null;
-    }
-
-    private void WarmNextSettingsTabForFastSwitching(CancellationToken cancellationToken, int tabIndex)
-    {
-        if (_isUnloaded || cancellationToken.IsCancellationRequested)
-        {
-            return;
-        }
-
-        if (tabIndex >= SettingsTabFastSwitchWarmupOrder.Length)
-        {
-#if DEBUG
-            PerfLog("Settings tab warm-up: complete");
-#endif
-            return;
-        }
-
-        var tabId = SettingsTabFastSwitchWarmupOrder[tabIndex];
-#if DEBUG
-        PerfLog($"Settings tab warm-up: {tabId}");
-#endif
-        if (!IsSettingsTabReadyForImmediateSwitch(tabId))
-        {
-            EnsureTabContentLoaded(tabId);
-            if (_isInitialized)
-            {
-                EnsureSettingsTabDataInitialized(tabId, isWarmup: true);
-            }
-        }
-
-        DispatcherQueue.TryEnqueue(
-            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-            () => WarmNextSettingsTabForFastSwitching(cancellationToken, tabIndex + 1));
     }
 
     private void QueueDeferredSettingsIo(CancellationToken cancellationToken)
@@ -2138,7 +2004,7 @@ public sealed partial class SettingsPage : Page
         QueueTeardownOnUnload();
     }
 
-    private void QueueTeardownOnUnload()
+    private void QueueTeardownOnUnload(bool deferVisualTreeRelease = true)
     {
         if (_isTornDown || _teardownQueued)
         {
@@ -2148,7 +2014,6 @@ public sealed partial class SettingsPage : Page
         _teardownQueued = true;
         _isUnloaded = true;
         _isLoading = true;
-        StopSettingsTabWarmupTimer();
 #if DEBUG
         UpdateDeferredIoState("teardown-queued");
 #endif
@@ -2168,7 +2033,13 @@ public sealed partial class SettingsPage : Page
         this.Unloaded -= OnPageUnloaded;
         this.ActualThemeChanged -= OnActualThemeChanged;
 
-        _ = CompleteTeardownOnUnloadAsync();
+        if (deferVisualTreeRelease)
+        {
+            _ = CompleteTeardownOnUnloadAsync();
+            return;
+        }
+
+        TeardownOnUnload();
     }
 
     private async Task CompleteTeardownOnUnloadAsync()
@@ -2246,6 +2117,7 @@ public sealed partial class SettingsPage : Page
         _languageItems.Clear();
         _settingsTabs.Clear();
 
+        Content = null;
         _isInitialized = false;
 
 #if DEBUG
@@ -4028,9 +3900,31 @@ public sealed partial class SettingsPage : Page
             await ShowNavigationLoadingOverlayAsync();
         }
 
-        if (Frame.CanGoBack)
+        if (Frame is not null)
         {
-            Frame.GoBack();
+            var frame = Frame;
+
+            // Settings owns a large, lazily-inflated tree for service/window controls.
+            // Release it before MainPage is rebuilt so Settings and Main do not
+            // coexist in the frame navigation stacks.
+            try
+            {
+                QueueTeardownOnUnload(deferVisualTreeRelease: false);
+            }
+            finally
+            {
+                frame.BackStack.Clear();
+                frame.ForwardStack.Clear();
+                if (frame.Navigate(typeof(MainPage)))
+                {
+                    frame.BackStack.Clear();
+                    frame.ForwardStack.Clear();
+                }
+                else
+                {
+                    HideNavigationLoadingOverlay();
+                }
+            }
         }
         else
         {

@@ -123,6 +123,49 @@
             <SolidColorBrush x:Key="TextControlBorderBrush" Color="{StaticResource FloatingInputBorderColor}" />
             <SolidColorBrush x:Key="TextControlForeground" Color="{StaticResource QueryTextColor}" />
             <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#8A8D92" />
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="RadioButtonsHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="RadioButtonsHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchContentForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchContentForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchDisabledForegroundThemeBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderDisabledForegroundThemeBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ExpanderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForegroundPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForegroundPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderDisabledForeground" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderDisabledForeground" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronPointerOverForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronPressedForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUnchecked" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundChecked" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminate" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminateDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
             <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource BlueAccentColor}" />
             <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />
@@ -284,6 +327,49 @@
             <SolidColorBrush x:Key="TextControlBorderBrush" Color="#3A4250" />
             <SolidColorBrush x:Key="TextControlForeground" Color="#E2E4E9" />
             <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#9CA4B0" />
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="RadioButtonsHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="RadioButtonsHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchContentForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchContentForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchDisabledForegroundThemeBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderDisabledForegroundThemeBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ExpanderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForegroundPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForegroundPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderDisabledForeground" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderDisabledForeground" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronPointerOverForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronPressedForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUnchecked" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundChecked" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminate" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminateDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
             <SolidColorBrush x:Key="BlueAccentBrush" Color="#5EB5FF" />
             <SolidColorBrush x:Key="BlueTintBrush" Color="#4DB8E8" />
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="#2A2F39" />
@@ -429,6 +515,49 @@
             <SolidColorBrush x:Key="TextControlBorderBrush" Color="#000000" />
             <SolidColorBrush x:Key="TextControlForeground" Color="#000000" />
             <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#000000" />
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="TextControlHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="SliderHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="RadioButtonsHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="RadioButtonsHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchContentForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchContentForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchDisabledForegroundThemeBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderForegroundThemeBrush" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ToggleSwitchHeaderDisabledForegroundThemeBrush" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ExpanderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForegroundPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderForegroundPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderDisabledForeground" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderHeaderDisabledForeground" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronPointerOverForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="ExpanderChevronPressedForeground" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUnchecked" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundUncheckedDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundChecked" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedPressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundCheckedDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminate" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePointerOver" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminatePressed" Color="{StaticResource QueryTextColor}" />
+            <SolidColorBrush x:Key="CheckBoxForegroundIndeterminateDisabled" Color="{StaticResource ServiceResultHeaderSecondaryForegroundColor}" />
             <SolidColorBrush x:Key="BlueAccentBrush" Color="{StaticResource BlueAccentColor}" />
             <SolidColorBrush x:Key="BlueTintBrush" Color="{StaticResource BlueTintColor}" />
             <SolidColorBrush x:Key="AddMinusBackgroundBrush" Color="{StaticResource AddMinusBackgroundColor}" />

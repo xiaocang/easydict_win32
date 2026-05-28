@@ -309,8 +309,18 @@ namespace Easydict.WinUI.Views
             HidePageNavigationLoading();
             if (e.NavigationMode == NavigationMode.Back)
             {
+                Frame.ForwardStack.Clear();
+                ApplySettings();
                 _deferLoadedThemeChrome = true;
                 QueueApplyThemeChrome(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+                DispatcherQueue.TryEnqueue(
+                    Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                    static () =>
+                    {
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
+                        GC.Collect();
+                    });
                 return;
             }
 

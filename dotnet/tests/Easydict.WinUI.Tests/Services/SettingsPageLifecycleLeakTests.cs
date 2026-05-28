@@ -183,20 +183,21 @@ public class SettingsPageLifecycleLeakTests
     }
 
     [Fact]
-    public void SettingsPage_FirstPaintOnlyInitializesGeneralTabDataBeforeIdleWarmup()
+    public void SettingsPage_LoadingPhaseInitializesAllTabData()
     {
         var content = File.ReadAllText(SettingsPagePath);
 
-        content.Should().Contain("var deferLazyTabData = true;",
-            "opening Settings should keep first paint focused on the General tab before background warm-up runs");
-        content.Should().Contain("_initializedSettingsTabData.Add(SettingsTabId.General);",
-            "the initial synchronous load should only mark General as initialized");
-        content.Should().Contain("QueueSettingsTabWarmup(cancellationToken);",
-            "hidden tab data should be warmed after content is visible so frequent in-page tab switches stay fast");
-        content.Should().Contain("if (deferLazyTabData && !ShouldLoadSettingsTab(SettingsTabId.Advanced, deferLazyTabData))",
-            "Advanced deferred I/O should stay parked until the Advanced tab is initialized by user navigation or warm-up");
-        content.Should().NotContain("foreach (var tabId in Enum.GetValues<SettingsTabId>())\r\n            {\r\n                _initializedSettingsTabData.Add(tabId);\r\n            }",
-            "initial Settings open should not synchronously mark every tab as initialized");
+        content.Should().Contain("foreach (var tabId in Enum.GetValues<SettingsTabId>())",
+            "Settings can load all tab data behind the in-window loading overlay");
+        content.Should().Contain("_initializedSettingsTabData.Add(tabId);");
+        content.Should().Contain("EnsureTabContentLoaded(SettingsTabId.Views);",
+            "x:Load tab content should be inflated during Settings loading, not on first tab click");
+        content.Should().Contain("LoadSettings(deferLazyTabData: false);",
+            "Settings should load every tab before revealing content");
+        content.Should().NotContain("QueueSettingsTabWarmup(cancellationToken);",
+            "loading-phase tab initialization removes the need for post-paint tab warm-up");
+        content.Should().NotContain("deferred-until-advanced-tab",
+            "Advanced deferred I/O no longer waits for lazy Advanced tab initialization");
     }
 
     private static string FindProjectRoot()

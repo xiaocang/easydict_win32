@@ -780,9 +780,10 @@ public class SettingsPageSplitTabsTests
         onBackClick.Should().Contain("var frame = Frame;");
         onBackClick.Should().Contain("frame.BackStack.Clear();");
         onBackClick.Should().Contain("frame.ForwardStack.Clear();");
-        onBackClick.Should().Contain("if (frame.Navigate(typeof(MainPage)))");
+        onBackClick.Should().Contain("_releaseVisualTreeImmediatelyOnUnload = true;");
+        onBackClick.Should().Contain("navigated = frame.Navigate(typeof(MainPage));");
         onBackClick.Should().MatchRegex(
-            @"if \(frame\.Navigate\(typeof\(MainPage\)\)\)[\s\S]*frame\.BackStack\.Clear\(\);[\s\S]*frame\.ForwardStack\.Clear\(\);",
+            @"if \(navigated\)[\s\S]*QueueTeardownOnUnload\(deferVisualTreeRelease: false\);[\s\S]*frame\.BackStack\.Clear\(\);[\s\S]*frame\.ForwardStack\.Clear\(\);",
             "SettingsPage itself must be removed from the navigation stack after returning to MainPage");
         codeBehind.Should().Contain("NavigationLoadingRing.IsActive = true");
         codeBehind.Should().Contain("await Task.Delay(50)");
@@ -798,7 +799,7 @@ public class SettingsPageSplitTabsTests
 
         codeBehind.Should().Contain("DeferredUnloadTeardownDelayMs",
             "SettingsPage should keep the main-window return path responsive before reclaiming tab content");
-        onPageUnloaded.Should().Contain("QueueTeardownOnUnload();");
+        onPageUnloaded.Should().Contain("QueueTeardownOnUnload(deferVisualTreeRelease: !_releaseVisualTreeImmediatelyOnUnload);");
         onPageUnloaded.Should().NotContain("        TeardownOnUnload();",
             "the unload handler should not synchronously walk and clear the full Settings visual tree");
         queueTeardown.Should().Contain("_lifetimeCts.Cancel();",

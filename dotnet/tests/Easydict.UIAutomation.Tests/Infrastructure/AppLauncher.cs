@@ -297,10 +297,8 @@ public sealed class AppLauncher : IDisposable
 
     private void TryCloseApplication()
     {
-        int? processId = null;
         try
         {
-            processId = _application?.ProcessId;
             _application?.Close();
             if (_application != null && !_application.HasExited)
             {
@@ -315,36 +313,7 @@ public sealed class AppLauncher : IDisposable
         {
             // Ignore close errors
         }
-        finally
-        {
-            if (processId.HasValue)
-            {
-                TryKillProcess(processId.Value);
-            }
-        }
         _application = null;
-    }
-
-    private static void TryKillProcess(int processId)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(processId);
-            if (process.HasExited)
-            {
-                return;
-            }
-
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit(5000);
-        }
-        catch
-        {
-            // Best-effort UI test cleanup.
-        }
-        finally
-        {
-        }
     }
 
     public void Dispose()

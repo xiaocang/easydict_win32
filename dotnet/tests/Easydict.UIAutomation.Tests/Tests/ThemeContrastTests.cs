@@ -80,6 +80,7 @@ public sealed class ThemeContrastTests : IDisposable
     public void SettingsPage_ExplicitLightTheme_OnDarkWindowsTheme_ShouldRenderLightControls()
     {
         SnapshotAndSetPersistedAppTheme("Light");
+        SnapshotAndSetPersistedCheckedAccentService();
         ForceWindowsTheme(light: false);
 
         _launcher = new AppLauncher();
@@ -153,6 +154,7 @@ public sealed class ThemeContrastTests : IDisposable
     {
         SnapshotAndSetPersistedAppTheme("Light");
         SnapshotAndSetPersistedUiLanguage("zh-CN");
+        SnapshotAndSetPersistedCheckedAccentService();
         ForceWindowsTheme(light: false);
 
         _launcher = new AppLauncher();
@@ -1632,6 +1634,31 @@ public sealed class ThemeContrastTests : IDisposable
         }
     }
 
+    private void SnapshotAndSetPersistedCheckedAccentService()
+    {
+        var candidates = GetSettingsFileCandidates()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var path in candidates)
+        {
+            if (!_settingsSnapshots.ContainsKey(path))
+            {
+                _settingsSnapshots[path] = File.Exists(path) ? File.ReadAllText(path) : null;
+            }
+
+            if (File.Exists(path))
+            {
+                WriteCheckedAccentService(path);
+            }
+        }
+
+        if (candidates.LastOrDefault() is { } localSettingsPath)
+        {
+            WriteCheckedAccentService(localSettingsPath);
+        }
+    }
+
     private void ClearPersistedServiceTestStatus()
     {
         var candidates = GetSettingsFileCandidates()
@@ -1690,6 +1717,25 @@ public sealed class ThemeContrastTests : IDisposable
         }
 
         root["UILanguage"] = language;
+        File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static void WriteCheckedAccentService(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        JsonNode root;
+        try
+        {
+            root = JsonNode.Parse(File.ReadAllText(path)) ?? new JsonObject();
+        }
+        catch
+        {
+            root = new JsonObject();
+        }
+
+        root["MainWindowEnabledServices"] = JsonNode.Parse("[\"bing\"]");
+        root["MainWindowServiceEnabledQuery"] = JsonNode.Parse("{\"bing\":true}");
         File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 

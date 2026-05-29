@@ -221,6 +221,9 @@ namespace Easydict.WinUI.Views
         private static bool IsMainPageResultRebuildDisabledForDebug()
             => IsDebugEnvFlagEnabled("EASYDICT_DEBUG_DISABLE_MAINPAGE_RESULT_REBUILD");
 
+        private static bool ShouldForceFullGcAfterSettingsReturn()
+            => IsDebugEnvFlagEnabled("EASYDICT_DEBUG_FORCE_GC_ON_SETTINGS_RETURN");
+
 #if DEBUG
         [Conditional("DEBUG")]
         private void LogObjectState(string label)
@@ -313,14 +316,17 @@ namespace Easydict.WinUI.Views
                 ApplySettings();
                 _deferLoadedThemeChrome = true;
                 QueueApplyThemeChrome(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
-                DispatcherQueue.TryEnqueue(
-                    Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-                    static () =>
-                    {
-                        GC.Collect();
-                        GC.WaitForPendingFinalizers();
-                        GC.Collect();
-                    });
+                if (ShouldForceFullGcAfterSettingsReturn())
+                {
+                    DispatcherQueue.TryEnqueue(
+                        Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                        static () =>
+                        {
+                            GC.Collect();
+                            GC.WaitForPendingFinalizers();
+                            GC.Collect();
+                        });
+                }
                 return;
             }
 

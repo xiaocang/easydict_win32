@@ -194,6 +194,7 @@ public sealed partial class SettingsPage : Page
     private bool _themeChromeRefreshQueued;
     private bool _deferredSettingsIoStarted;
     private bool _teardownQueued;
+    private bool _releaseVisualTreeImmediatelyOnUnload;
     private int _settingsTabSwitchVersion;
     private readonly Dictionary<PasswordBox, bool> _visiblePasswordBoxes = new();
     private readonly Dictionary<PasswordBox, PasswordTailHint> _passwordTailHints = new();
@@ -2001,7 +2002,8 @@ public sealed partial class SettingsPage : Page
         LogDebugState("OnPageUnloaded queued deferred teardown");
         MemoryDiagnostics.LogSnapshot("SettingsPage.OnPageUnloaded (deferred teardown queued)");
 #endif
-        QueueTeardownOnUnload();
+        QueueTeardownOnUnload(deferVisualTreeRelease: !_releaseVisualTreeImmediatelyOnUnload);
+        _releaseVisualTreeImmediatelyOnUnload = false;
     }
 
     private void QueueTeardownOnUnload(bool deferVisualTreeRelease = true)
@@ -3904,26 +3906,34 @@ public sealed partial class SettingsPage : Page
         {
             var frame = Frame;
 
-            // Settings owns a large, lazily-inflated tree for service/window controls.
-            // Release it before MainPage is rebuilt so Settings and Main do not
-            // coexist in the frame navigation stacks.
+            _releaseVisualTreeImmediatelyOnUnload = true;
+            bool navigated;
             try
             {
-                QueueTeardownOnUnload(deferVisualTreeRelease: false);
+                navigated = frame.Navigate(typeof(MainPage));
             }
-            finally
+            catch (Exception ex)
             {
+                _releaseVisualTreeImmediatelyOnUnload = false;
+                Debug.WriteLine($"[SettingsPage] Failed to navigate back to MainPage: {ex.Message}");
+                HideNavigationLoadingOverlay();
+                return;
+            }
+
+            if (navigated)
+            {
+                // Settings owns a large, lazily-inflated tree for service/window controls.
+                // Release it only after MainPage navigation succeeds so a navigation failure
+                // cannot leave the frame on a blank Settings page.
+                QueueTeardownOnUnload(deferVisualTreeRelease: false);
+                _releaseVisualTreeImmediatelyOnUnload = false;
                 frame.BackStack.Clear();
                 frame.ForwardStack.Clear();
-                if (frame.Navigate(typeof(MainPage)))
-                {
-                    frame.BackStack.Clear();
-                    frame.ForwardStack.Clear();
-                }
-                else
-                {
-                    HideNavigationLoadingOverlay();
-                }
+            }
+            else
+            {
+                _releaseVisualTreeImmediatelyOnUnload = false;
+                HideNavigationLoadingOverlay();
             }
         }
         else

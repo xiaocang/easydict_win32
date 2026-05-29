@@ -235,7 +235,7 @@ public class UnsavedChangesDialogTests
         content.Should().Contain("frame.Navigate(typeof(MainPage))",
             "Should return to MainPage after save or discard");
         content.Should().MatchRegex(
-            @"if \(frame\.Navigate\(typeof\(MainPage\)\)\)[\s\S]*frame\.BackStack\.Clear\(\);[\s\S]*frame\.ForwardStack\.Clear\(\);",
+            @"if \(navigated\)[\s\S]*QueueTeardownOnUnload\(deferVisualTreeRelease: false\);[\s\S]*frame\.BackStack\.Clear\(\);[\s\S]*frame\.ForwardStack\.Clear\(\);",
             "SettingsPage must not stay retained in the navigation stack after returning to MainPage");
     }
 

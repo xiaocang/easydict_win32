@@ -313,10 +313,7 @@ public sealed class AppLauncher : IDisposable
         {
             // Ignore close errors
         }
-        finally
-        {
-            _application = null;
-        }
+        _application = null;
     }
 
     public void Dispose()

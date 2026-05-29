@@ -102,18 +102,18 @@ public class MiniWindowFocusTests : IDisposable
         Keyboard.Type("hello");
         Thread.Sleep(300);
 
-        // Close the mini window with Escape
-        _output.WriteLine("Closing mini window with Escape");
-        Keyboard.Press(VirtualKeyShort.ESCAPE);
-        Thread.Sleep(1500);
+        _output.WriteLine("Closing mini window with its close button");
+        CloseMiniWindow(miniWindow);
+        TestRetry.Until(
+                () => FindMiniWindowCandidate() == null,
+                TimeSpan.FromSeconds(5))
+            .Should().BeTrue("Mini window must be hidden before validating the second hotkey opens it again");
 
         // Re-open
         _output.WriteLine("Second open: Ctrl+Alt+M");
         UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_M);
-        Thread.Sleep(3000);
 
-        var miniWindowReopen = UITestHelper.FindSecondaryWindow(
-            _launcher.Application, _launcher.Automation, "Mini", _output);
+        var miniWindowReopen = WaitForMiniWindow(TimeSpan.FromSeconds(5));
         miniWindowReopen.Should().NotBeNull("Mini window must open on second hotkey");
         miniWindowReopen!.SetForeground();
         Thread.Sleep(500);
@@ -128,6 +128,60 @@ public class MiniWindowFocusTests : IDisposable
 
         var path = ScreenshotHelper.CaptureWindow(miniWindowReopen, "51_mini_focus_on_reopen");
         _output.WriteLine($"Screenshot: {path}");
+    }
+
+    private void CloseMiniWindow(Window miniWindow)
+    {
+        var closeButton = miniWindow.FindFirstDescendant(cf => cf.ByAutomationId("MiniWindowCloseButton"))
+            ?? miniWindow.FindFirstDescendant(cf => cf.ByName("Close"));
+        closeButton.Should().NotBeNull("Mini window must expose a close button for deterministic UIA teardown");
+        UITestHelper.ClickElement(closeButton!);
+    }
+
+    private Window? WaitForMiniWindow(TimeSpan timeout)
+    {
+        return Retry.WhileNull(
+            FindMiniWindowCandidate,
+            timeout).Result;
+    }
+
+    private Window? FindMiniWindowCandidate()
+    {
+        try
+        {
+            return _launcher.Application
+                .GetAllTopLevelWindows(_launcher.Automation)
+                .FirstOrDefault(IsMiniWindowCandidate);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsMiniWindowCandidate(Window window)
+    {
+        var title = SafeName(window);
+        if (title.Contains("Quick Translate", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("Mini", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return UITestHelper.FindByAutomationIdOrName(window, "InputTextBox") != null &&
+               UITestHelper.FindByAutomationIdOrName(window, "SettingsButton") == null;
+    }
+
+    private static string SafeName(AutomationElement element)
+    {
+        try
+        {
+            return element.Name ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 
     public void Dispose()

@@ -235,7 +235,7 @@ public static class ScrollHelper
         }
     }
 
-    private static bool TryGetVerticalScrollPercent(
+    public static bool TryGetVerticalScrollPercent(
         AutomationElement scrollViewer,
         out double verticalPercent)
     {

@@ -43,7 +43,8 @@ public class PopButtonTests : IDisposable
         settingsNav.Should().NotBeNull("SettingsButton must be discoverable before validating PopButton settings");
 
         UITestHelper.ClickElement(settingsNav!);
-        Thread.Sleep(1500);
+        WaitForSettingsGeneralContent(window).Should()
+            .NotBeNull("Settings General tab must be visible before validating PopButton settings");
 
         var path = ScreenshotHelper.CaptureWindow(window, "pop_button_01_settings_page");
         _output.WriteLine($"Screenshot saved: {path}");
@@ -71,7 +72,8 @@ public class PopButtonTests : IDisposable
         settingsNav.Should().NotBeNull("SettingsButton must be discoverable before capturing Behavior section");
 
         UITestHelper.ClickElement(settingsNav!);
-        Thread.Sleep(1500);
+        WaitForSettingsGeneralContent(window).Should()
+            .NotBeNull("Settings General tab must be visible before capturing Behavior section");
 
         var behaviorToggle = FindMouseSelectionTranslateToggle(window);
         behaviorToggle.Should().NotBeNull("Behavior section should expose the Mouse selection translate toggle");
@@ -109,7 +111,8 @@ public class PopButtonTests : IDisposable
         settingsNav.Should().NotBeNull("SettingsButton must be discoverable for the PopButton workflow sequence");
 
         UITestHelper.ClickElement(settingsNav!);
-        Thread.Sleep(1500);
+        WaitForSettingsGeneralContent(window).Should()
+            .NotBeNull("Settings General tab must be visible before capturing workflow settings state");
 
         var step2 = ScreenshotHelper.CaptureWindow(window, "pop_button_workflow_02_settings");
         _output.WriteLine($"Step 2 (Settings page): {step2}");
@@ -146,6 +149,20 @@ public class PopButtonTests : IDisposable
             startPercent: 70,
             Finder,
             _output.WriteLine);
+    }
+
+    private static AutomationElement? WaitForSettingsGeneralContent(Window window)
+    {
+        return Retry.WhileNull(
+            () =>
+            {
+                var scrollViewer = UITestHelper.FindByAutomationIdOrName(window, "MainScrollViewer");
+                var behaviorHeader = UITestHelper.FindByAutomationIdOrName(window, "SettingsGeneralBehaviorHeader");
+                return IsVisible(scrollViewer) && IsVisible(behaviorHeader)
+                    ? behaviorHeader
+                    : null;
+            },
+            TimeSpan.FromSeconds(15)).Result;
     }
 
     private static bool IsVisible(AutomationElement? element)

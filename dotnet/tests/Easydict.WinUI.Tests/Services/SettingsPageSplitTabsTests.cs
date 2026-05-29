@@ -14,6 +14,9 @@ public class SettingsPageSplitTabsTests
     private static readonly string ProjectRoot = FindProjectRoot();
     private static readonly string SettingsPageXamlPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml");
     private static readonly string SettingsPageCodeBehindPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.xaml.cs");
+    private static readonly string SettingsPageResourcesPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Themes", "SettingsPageResources.xaml");
+    private static readonly string ColorsResourcesPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Themes", "Colors.xaml");
+    private static readonly string MinimalResourcesPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Themes", "MinimalResources.xaml");
     private static readonly string SettingsPagePhiSilicaPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.PhiSilica.cs");
     private static readonly string SettingsPageFoundryLocalPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.FoundryLocal.cs");
     private static readonly string SettingsPageOpenVinoPath = Path.Combine(ProjectRoot, "src", "Easydict.WinUI", "Views", "SettingsPage.OpenVino.cs");
@@ -174,6 +177,9 @@ public class SettingsPageSplitTabsTests
         selectSettingsTabAsync.Should().Contain("ShowSettingsTabSwitchProgress();");
         selectSettingsTabAsync.Should().Contain("await Task.Delay(SettingsTabSwitchIndicatorDelayMs)");
         selectSettingsTabAsync.Should().Contain("HideSettingsTabSwitchProgress();");
+        codeBehind.Should().Contain("private bool IsSettingsTabReadyForImmediateSwitch(SettingsTabId tabId)");
+        codeBehind.Should().Contain("return !IsSettingsTabReadyForImmediateSwitch(tabId);",
+            "tab switches should only show loading while the target tab is still uninitialized");
     }
 
     [Fact]
@@ -227,22 +233,39 @@ public class SettingsPageSplitTabsTests
     }
 
     [Fact]
-    public void SettingsPage_KeepsDeferredViewsTabLoadedDuringSettingsSession()
+    public void SettingsPage_LoadsViewsTabDuringInitialLoading()
     {
         var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
         var initializeSettingsContent = GetMethodBody(codeBehind, "InitializeSettingsContent");
-        var selectSettingsTab = GetMethodBody(codeBehind, "SelectSettingsTab");
+        var applySettingsTabSelection = GetMethodBody(codeBehind, "ApplySettingsTabSelection");
         var teardownOnUnload = GetMethodBody(codeBehind, "TeardownOnUnload");
 
-        codeBehind.Should().Contain("SettingsTabFastSwitchWarmupOrder",
-            "Settings tab contents should be warmed after first paint for fast in-page tab switching");
-        initializeSettingsContent.Should().Contain("QueueSettingsTabWarmup(cancellationToken);",
-            "the warm-up should be scoped to a live SettingsPage instance");
-        selectSettingsTab.Should().Contain("ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;");
-        selectSettingsTab.Should().NotContain("ReleaseViewsTabContent();",
+        initializeSettingsContent.Should().Contain("EnsureTabContentLoaded(SettingsTabId.Views);",
+            "Settings can inflate x:Load tab content behind the loading overlay");
+        initializeSettingsContent.Should().Contain("LoadSettings(deferLazyTabData: false);",
+            "Settings should load all tab data before content is revealed");
+        initializeSettingsContent.Should().NotContain("QueueSettingsTabWarmup(cancellationToken);",
+            "tab warm-up should not be needed once Settings loads all tabs before revealing content");
+        applySettingsTabSelection.Should().Contain("ViewsTabContent.Visibility = tabId == SettingsTabId.Views ? Visibility.Visible : Visibility.Collapsed;");
+        applySettingsTabSelection.Should().NotContain("ReleaseViewsTabContent();",
             "high-frequency tab switches should not rebuild the Views tab after it has been loaded");
         teardownOnUnload.Should().Contain("ReleaseViewsTabContent();",
             "leaving SettingsPage should still release lazily loaded tab content");
+    }
+
+    [Fact]
+    public void SettingsPage_LoadingDoesFullPageLocalizationOnce()
+    {
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var ensureInitialized = GetMethodBody(codeBehind, "EnsureSettingsTabDataInitialized");
+        var initializeSettingsContent = GetMethodBody(codeBehind, "InitializeSettingsContent");
+
+        codeBehind.Should().Contain("EnsureSettingsTabDataInitialized(SettingsTabId tabId)");
+        ensureInitialized.Should().Contain("ApplyLocalization();");
+        initializeSettingsContent.Should().Contain("ApplyLocalization();",
+            "initial loading localizes the full page once after all tab content is present");
+        initializeSettingsContent.Should().NotContain("ApplyLocalizationForWarmedSettingsTab",
+            "there should be no separate background warm-up localization path");
     }
 
     [Fact]
@@ -567,6 +590,181 @@ public class SettingsPageSplitTabsTests
     }
 
     [Fact]
+    public void SettingsPage_ScopesCommonControlForegroundsForExplicitLightTheme()
+    {
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+        var codeBehind = File.ReadAllText(SettingsPageCodeBehindPath);
+        var settingsResources = File.ReadAllText(SettingsPageResourcesPath);
+        var colorsResources = File.ReadAllText(ColorsResourcesPath);
+        var minimalResources = File.ReadAllText(MinimalResourcesPath);
+
+        foreach (var resourceKey in new[]
+        {
+            "TextFillColorDisabledBrush",
+            "ComboBoxHeaderForeground",
+            "ComboBoxHeaderForegroundDisabled",
+            "ComboBoxHeaderForegroundThemeBrush",
+            "TextControlHeaderForeground",
+            "TextControlHeaderForegroundDisabled",
+            "TextControlHeaderForegroundThemeBrush",
+            "SliderHeaderForeground",
+            "SliderHeaderForegroundDisabled",
+            "SliderHeaderForegroundThemeBrush",
+            "ToggleSwitchContentForeground",
+            "ToggleSwitchContentForegroundDisabled",
+            "ToggleSwitchHeaderForeground",
+            "ToggleSwitchHeaderForegroundDisabled",
+            "ToggleSwitchForegroundThemeBrush",
+            "ToggleSwitchDisabledForegroundThemeBrush",
+            "ToggleSwitchHeaderForegroundThemeBrush",
+            "ToggleSwitchHeaderDisabledForegroundThemeBrush",
+            "ExpanderHeaderForeground",
+            "ExpanderHeaderForegroundPointerOver",
+            "ExpanderHeaderForegroundPressed",
+            "ExpanderHeaderDisabledForeground",
+            "ExpanderChevronForeground",
+            "CheckBoxForegroundUnchecked",
+            "CheckBoxForegroundUncheckedPointerOver",
+            "CheckBoxForegroundUncheckedPressed",
+            "CheckBoxForegroundUncheckedDisabled",
+            "CheckBoxForegroundChecked",
+            "CheckBoxForegroundCheckedPointerOver",
+            "CheckBoxForegroundCheckedPressed",
+            "CheckBoxForegroundCheckedDisabled",
+            "CheckBoxForegroundIndeterminate",
+            "CheckBoxForegroundIndeterminatePointerOver",
+            "CheckBoxForegroundIndeterminatePressed",
+            "CheckBoxForegroundIndeterminateDisabled"
+        })
+        {
+            settingsResources.Should().Contain($"x:Key=\"{resourceKey}\"",
+                $"{resourceKey} must be scoped close to SettingsPage templates through SettingsPageResources.xaml");
+            colorsResources.Should().Contain($"x:Key=\"{resourceKey}\"",
+                $"{resourceKey} must live in the theme dictionary instead of SettingsPage code-behind");
+            minimalResources.Should().Contain($"x:Key=\"{resourceKey}\"",
+                $"{resourceKey} must be defined for Minimal resources too");
+        }
+
+        xaml.Should().Contain("ms-appx:///Themes/SettingsPageResources.xaml",
+            "SettingsPage should consume Settings-specific control chrome through one resource dictionary");
+        xaml.Should().NotContain("HeaderTemplate=\"{x:Null}\"",
+            "SettingsPage should not need per-control header-template opt-outs when header foregrounds are resource-scoped");
+
+        settingsResources.Should().Contain("x:Key=\"SettingsAccentButtonStyle\"");
+        settingsResources.Should().Contain("x:Key=\"SettingsSectionStyle\"");
+        settingsResources.Should().Contain("x:Key=\"SettingsInlineIconButtonStyle\"");
+        settingsResources.Should().Contain("x:Key=\"SettingsLinkForegroundBrush\"");
+        settingsResources.Should().Contain("x:Key=\"SettingsLinkButtonStyle\"");
+        settingsResources.Should().Contain("x:Key=\"SettingsTabButtonStyle\"");
+        settingsResources.Should().NotContain("x:Key=\"SettingsControlHeaderTemplate\"",
+            "a shared HeaderTemplate binds arbitrary DataContexts in item templates and can surface model type names");
+        settingsResources.Should().NotContain("HeaderTemplate\" Value=\"{StaticResource SettingsControlHeaderTemplate}\"");
+
+        foreach (var resourceKey in new[]
+        {
+            "AccentFillColorDefaultBrush",
+            "AccentFillColorSecondaryBrush",
+            "AccentFillColorTertiaryBrush",
+            "AccentFillColorDisabledBrush",
+            "TextOnAccentFillColorPrimaryBrush",
+            "TextOnAccentFillColorSecondaryBrush",
+            "TextOnAccentFillColorDisabledBrush",
+            "ToggleSwitchFillOn",
+            "ToggleSwitchFillOnPointerOver",
+            "ToggleSwitchFillOnPressed",
+            "ToggleSwitchFillOnDisabled",
+            "ToggleSwitchStrokeOn",
+            "ToggleSwitchStrokeOnPointerOver",
+            "ToggleSwitchStrokeOnPressed",
+            "ToggleSwitchStrokeOnDisabled",
+            "ToggleSwitchKnobFillOn",
+            "ToggleSwitchKnobFillOnPointerOver",
+            "ToggleSwitchKnobFillOnPressed",
+            "ToggleSwitchKnobFillOnDisabled",
+            "CheckBoxCheckBackgroundStrokeChecked",
+            "CheckBoxCheckBackgroundStrokeCheckedPointerOver",
+            "CheckBoxCheckBackgroundStrokeCheckedPressed",
+            "CheckBoxCheckBackgroundStrokeCheckedDisabled",
+            "CheckBoxCheckBackgroundStrokeIndeterminate",
+            "CheckBoxCheckBackgroundStrokeIndeterminatePointerOver",
+            "CheckBoxCheckBackgroundStrokeIndeterminatePressed",
+            "CheckBoxCheckBackgroundStrokeIndeterminateDisabled",
+            "CheckBoxCheckBackgroundFillChecked",
+            "CheckBoxCheckBackgroundFillCheckedPointerOver",
+            "CheckBoxCheckBackgroundFillCheckedPressed",
+            "CheckBoxCheckBackgroundFillCheckedDisabled",
+            "CheckBoxCheckBackgroundFillIndeterminate",
+            "CheckBoxCheckBackgroundFillIndeterminatePointerOver",
+            "CheckBoxCheckBackgroundFillIndeterminatePressed",
+            "CheckBoxCheckBackgroundFillIndeterminateDisabled",
+            "CheckBoxCheckGlyphForegroundChecked",
+            "CheckBoxCheckGlyphForegroundCheckedPointerOver",
+            "CheckBoxCheckGlyphForegroundCheckedPressed",
+            "CheckBoxCheckGlyphForegroundCheckedDisabled",
+            "CheckBoxCheckGlyphForegroundIndeterminate",
+            "CheckBoxCheckGlyphForegroundIndeterminatePointerOver",
+            "CheckBoxCheckGlyphForegroundIndeterminatePressed",
+            "CheckBoxCheckGlyphForegroundIndeterminateDisabled"
+        })
+        {
+            settingsResources.Should().Contain($"x:Key=\"{resourceKey}\"",
+                $"{resourceKey} should pin Settings checked/on visuals to the app accent instead of the Windows system accent");
+        }
+
+        foreach (var targetType in new[]
+        {
+            "ComboBox",
+            "ComboBoxItem",
+            "TextBox",
+            "PasswordBox",
+            "ToggleSwitch",
+            "CheckBox",
+            "Slider",
+            "Expander"
+        })
+        {
+            settingsResources.Should().NotContain($"<Style TargetType=\"{targetType}\">",
+                $"SettingsPageResources.xaml should override {targetType} template brushes through resource keys, not implicit styles");
+        }
+
+        codeBehind.Should().NotContain("ScopedThemeResourceBrushes");
+        codeBehind.Should().NotContain("CreateSettingsHeaderContent");
+        codeBehind.Should().NotContain("ComboBoxHeaderForeground\", chrome.");
+        codeBehind.Should().NotContain("TextControlHeaderForeground\", chrome.");
+        codeBehind.Should().NotContain("ToggleSwitchHeaderForeground\", chrome.");
+    }
+
+    [Fact]
+    public void SettingsPage_AboutLinksUseSettingsLinkResources()
+    {
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+        var settingsResources = File.ReadAllText(SettingsPageResourcesPath);
+
+        settingsResources.Should().Contain("SettingsLinkForegroundBrush");
+        settingsResources.Should().Contain("DictionaryHtmlLinkColor");
+        settingsResources.Should().Contain("SettingsLinkButtonStyle");
+
+        foreach (var automationId in new[]
+        {
+            "GitHubRepositoryLink",
+            "IssueFeedbackLink",
+            "InspiredByLink"
+        })
+        {
+            xaml.Should().MatchRegex(
+                $@"<HyperlinkButton[\s\S]*AutomationProperties\.AutomationId=""{automationId}""[\s\S]*Style=""{{StaticResource SettingsLinkButtonStyle}}""",
+                $"{automationId} should use the app Settings link color instead of the Windows system hyperlink color");
+        }
+
+        xaml.Should().MatchRegex(
+            @"x:Name=""AboutHeaderText""[\s\S]*Foreground=""{ThemeResource TextFillColorPrimaryBrush}""",
+            "About header should use the same primary Settings foreground as the other tab headers");
+        xaml.Should().MatchRegex(
+            @"AutomationProperties\.AutomationId=""AboutAppNameText""[\s\S]*Foreground=""{ThemeResource TextFillColorPrimaryBrush}""",
+            "About app name should remain readable on the light Settings surface");
+    }
+
+    [Fact]
     public void SettingsPage_BackNavigationShowsLoadingOverlay()
     {
         var xaml = File.ReadAllText(SettingsPageXamlPath);
@@ -578,7 +776,15 @@ public class SettingsPageSplitTabsTests
         xaml.Should().Contain("Canvas.ZIndex=\"100\"");
         onBackClick.Should().Contain("await ShowNavigationLoadingOverlayAsync()");
         onBackClick.Should().Contain("HideNavigationLoadingOverlay()");
-        onBackClick.Should().Contain("Frame.GoBack()");
+        onBackClick.Should().Contain("frame.Navigate(typeof(MainPage))");
+        onBackClick.Should().Contain("var frame = Frame;");
+        onBackClick.Should().Contain("frame.BackStack.Clear();");
+        onBackClick.Should().Contain("frame.ForwardStack.Clear();");
+        onBackClick.Should().Contain("_releaseVisualTreeImmediatelyOnUnload = true;");
+        onBackClick.Should().Contain("navigated = frame.Navigate(typeof(MainPage));");
+        onBackClick.Should().MatchRegex(
+            @"if \(navigated\)[\s\S]*QueueTeardownOnUnload\(deferVisualTreeRelease: false\);[\s\S]*frame\.BackStack\.Clear\(\);[\s\S]*frame\.ForwardStack\.Clear\(\);",
+            "SettingsPage itself must be removed from the navigation stack after returning to MainPage");
         codeBehind.Should().Contain("NavigationLoadingRing.IsActive = true");
         codeBehind.Should().Contain("await Task.Delay(50)");
     }
@@ -593,11 +799,11 @@ public class SettingsPageSplitTabsTests
 
         codeBehind.Should().Contain("DeferredUnloadTeardownDelayMs",
             "SettingsPage should keep the main-window return path responsive before reclaiming tab content");
-        onPageUnloaded.Should().Contain("QueueTeardownOnUnload();");
+        onPageUnloaded.Should().Contain("QueueTeardownOnUnload(deferVisualTreeRelease: !_releaseVisualTreeImmediatelyOnUnload);");
         onPageUnloaded.Should().NotContain("        TeardownOnUnload();",
             "the unload handler should not synchronously walk and clear the full Settings visual tree");
         queueTeardown.Should().Contain("_lifetimeCts.Cancel();",
-            "queued warm-up/deferred I/O work should stop immediately after navigation starts");
+            "queued deferred I/O work should stop immediately after navigation starts");
         completeTeardown.Should().Contain("await Task.Delay(DeferredUnloadTeardownDelayMs)");
         completeTeardown.Should().Contain("DispatcherQueuePriority.Low");
         completeTeardown.Should().Contain("TeardownOnUnload();",
@@ -669,6 +875,7 @@ public class SettingsPageSplitTabsTests
         var prefixes = new[]
         {
             "private void",
+            "private static void",
             "private async void",
             "private async Task",
             "protected override void"

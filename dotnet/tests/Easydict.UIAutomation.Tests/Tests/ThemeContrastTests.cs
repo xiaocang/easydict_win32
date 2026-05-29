@@ -53,10 +53,15 @@ public sealed class ThemeContrastTests : IDisposable
             "DeepL API key reveal button",
             "DeepLServiceExpander",
             45),
-        new("SettingsTab_Views", "MainWindowReorderModeButton", "settings-views", "views reorder button"),
-        new("SettingsTab_Hotkeys", "ShowHotkeyBox", "settings-hotkeys", "hotkey text box"),
-        new("SettingsTab_Language", "FirstLanguageCombo", "settings-language", "language combo"),
-        new("SettingsTab_Advanced", "OcrEngineCombo", "settings-advanced", "advanced OCR engine combo")
+        new(
+            "SettingsTab_Views",
+            "MainWindowReorderModeButton",
+            "settings-views",
+            "views reorder button",
+            ForbiddenVisibleText: "Easydict.WinUI.Models.ServiceCheckItem"),
+        new("SettingsTab_Hotkeys", "ShowHotkeyBox", "settings-hotkeys", "hotkey text box", AssertHeaderForeground: true),
+        new("SettingsTab_Language", "FirstLanguageCombo", "settings-language", "language combo", AssertHeaderForeground: true),
+        new("SettingsTab_Advanced", "OcrEngineCombo", "settings-advanced", "advanced OCR engine combo", AssertHeaderForeground: true)
     ];
 
     private readonly ITestOutputHelper _output;
@@ -75,6 +80,7 @@ public sealed class ThemeContrastTests : IDisposable
     public void SettingsPage_ExplicitLightTheme_OnDarkWindowsTheme_ShouldRenderLightControls()
     {
         SnapshotAndSetPersistedAppTheme("Light");
+        SnapshotAndSetPersistedCheckedAccentService();
         ForceWindowsTheme(light: false);
 
         _launcher = new AppLauncher();
@@ -109,25 +115,92 @@ public sealed class ThemeContrastTests : IDisposable
             "SettingsTab_Views",
             "MainWindowReorderModeButton",
             "43_settings_views_light_on_dark_system_contrast",
-            "views reorder button");
+            "views reorder button",
+            forbiddenVisibleText: "Easydict.WinUI.Models.ServiceCheckItem",
+            accentCheckBoxName: "Bing Translate");
         CaptureSettingsTabAndAssertElementLight(
             window,
             "SettingsTab_Hotkeys",
             "ShowHotkeyBox",
             "44_settings_hotkeys_light_on_dark_system_contrast",
-            "hotkey text box");
+            "hotkey text box",
+            assertHeaderForeground: true,
+            accentToggleAutomationId: "ShowHotkeyEnabledToggle");
         CaptureSettingsTabAndAssertElementLight(
             window,
             "SettingsTab_Language",
             "FirstLanguageCombo",
             "45_settings_language_light_on_dark_system_contrast",
-            "language combo");
+            "language combo",
+            assertHeaderForeground: true);
         CaptureSettingsTabAndAssertElementLight(
             window,
             "SettingsTab_Advanced",
             "OcrEngineCombo",
             "46_settings_advanced_light_on_dark_system_contrast",
-            "advanced OCR engine combo");
+            "advanced OCR engine combo",
+            assertHeaderForeground: true);
+        CaptureSettingsTabAndAssertElementLight(
+            window,
+            "SettingsTab_About",
+            "GitHubRepositoryLink",
+            "46a_settings_about_light_on_dark_system_contrast",
+            "about GitHub link",
+            assertElementForeground: true);
+    }
+
+    [Fact]
+    public void SettingsPage_ExplicitLightTheme_SimplifiedChinese_ShouldRenderControlStateColors()
+    {
+        SnapshotAndSetPersistedAppTheme("Light");
+        SnapshotAndSetPersistedUiLanguage("zh-CN");
+        SnapshotAndSetPersistedCheckedAccentService();
+        ForceWindowsTheme(light: false);
+
+        _launcher = new AppLauncher();
+        _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
+
+        var window = _launcher.GetMainWindow();
+        Thread.Sleep(2000);
+
+        WaitForPersistedAppTheme("Light", TimeSpan.FromSeconds(5))
+            .Should().Be("Light", "explicit Light must persist before screenshot validation");
+        WaitForPersistedUiLanguage("zh-CN", TimeSpan.FromSeconds(5))
+            .Should().Be("zh-CN", "Simplified Chinese UI must persist before screenshot validation");
+        FindAppThemeCombo(window);
+
+        Thread.Sleep(1200);
+        PrepareSettingsWindowForScreenshot(window);
+
+        var generalPath = ScreenshotHelper.CaptureWindowPhysical(
+            window,
+            "47_settings_zh_cn_light_on_dark_system_contrast");
+        _output.WriteLine($"zh-CN light settings screenshot saved: {generalPath}");
+
+        AssertSettingsLightPalette(window, generalPath);
+        CaptureSettingsTabAndAssertElementLight(
+            window,
+            "SettingsTab_Views",
+            "MainWindowReorderModeButton",
+            "48_settings_zh_cn_views_light_on_dark_system_contrast",
+            "zh-CN views reorder button",
+            forbiddenVisibleText: "Easydict.WinUI.Models.ServiceCheckItem",
+            accentCheckBoxName: "Bing Translate");
+        CaptureSettingsTabAndAssertElementLight(
+            window,
+            "SettingsTab_Hotkeys",
+            "ShowHotkeyBox",
+            "49_settings_zh_cn_hotkeys_light_on_dark_system_contrast",
+            "zh-CN hotkey text box",
+            assertHeaderForeground: true,
+            accentToggleAutomationId: "ShowHotkeyEnabledToggle");
+        CaptureSettingsTabAndAssertElementLight(
+            window,
+            "SettingsTab_About",
+            "GitHubRepositoryLink",
+            "50_settings_zh_cn_about_light_on_dark_system_contrast",
+            "zh-CN about GitHub link",
+            assertElementForeground: true);
     }
 
     [Fact]
@@ -402,6 +475,22 @@ public sealed class ThemeContrastTests : IDisposable
             expectedLight: testCase.ExpectedLight,
             minLightBrightness: 150,
             maxDarkBrightness: 130);
+
+        if (tab.AssertHeaderForeground)
+        {
+            AssertSettingsControlHeaderForeground(
+                tab.Label,
+                FindRequired(window, tab.ElementAutomationId),
+                bitmap,
+                windowBounds,
+                dpiScale,
+                testCase.ExpectedLight);
+        }
+
+        if (!string.IsNullOrWhiteSpace(tab.ForbiddenVisibleText))
+        {
+            AssertNoVisibleText(window, tab.ForbiddenVisibleText);
+        }
     }
 
     private ComboBox FindAppThemeCombo(Window window)
@@ -576,7 +665,12 @@ public sealed class ThemeContrastTests : IDisposable
         string screenshotName,
         string label,
         string? expanderAutomationId = null,
-        double? initialScrollPercent = null)
+        double? initialScrollPercent = null,
+        bool assertHeaderForeground = false,
+        bool assertElementForeground = false,
+        string? forbiddenVisibleText = null,
+        string? accentCheckBoxName = null,
+        string? accentToggleAutomationId = null)
     {
         var tab = FindRequired(window, tabAutomationId);
         InvokeOrClick(tab);
@@ -603,6 +697,58 @@ public sealed class ThemeContrastTests : IDisposable
             relativeWidth: 0.48,
             relativeHeight: 0.50,
             minBrightness: 150);
+
+        if (assertHeaderForeground)
+        {
+            AssertSettingsControlHeaderForeground(
+                label,
+                FindRequired(window, elementAutomationId),
+                bitmap,
+                windowBounds,
+                dpiScale,
+                expectedLight: true);
+        }
+
+        if (assertElementForeground)
+        {
+            AssertElementRelativeRegionMatchesForegroundPalette(
+                label,
+                FindRequired(window, elementAutomationId),
+                bitmap,
+                windowBounds,
+                dpiScale,
+                relativeX: 0.0,
+                relativeY: 0.0,
+                relativeWidth: 1.0,
+                relativeHeight: 1.0,
+                expectedLight: true,
+                minForegroundPixelRatio: 0.015);
+        }
+
+        if (!string.IsNullOrWhiteSpace(forbiddenVisibleText))
+        {
+            AssertNoVisibleText(window, forbiddenVisibleText);
+        }
+
+        if (!string.IsNullOrWhiteSpace(accentCheckBoxName))
+        {
+            AssertCheckedStateUsesAppAccent(
+                window,
+                bitmap,
+                windowBounds,
+                dpiScale,
+                accentCheckBoxName);
+        }
+
+        if (!string.IsNullOrWhiteSpace(accentToggleAutomationId))
+        {
+            AssertToggleSwitchOnStateUsesAppAccent(
+                window,
+                bitmap,
+                windowBounds,
+                dpiScale,
+                accentToggleAutomationId);
+        }
     }
 
     private void PrepareMainWindowForScreenshot(Window window)
@@ -834,6 +980,172 @@ public sealed class ThemeContrastTests : IDisposable
             expectedLight: expectedLight,
             minLightBrightness: 150,
             maxDarkBrightness: 130);
+
+        AssertElementRelativeRegionMatchesForegroundPalette(
+            "General MinimizeToTrayToggle header",
+            FindRequired(window, "MinimizeToTrayToggle"),
+            bitmap,
+            windowBounds,
+            dpiScale,
+            relativeX: 0.00,
+            relativeY: 0.00,
+            relativeWidth: 0.90,
+            relativeHeight: 0.45,
+            expectedLight: expectedLight,
+            minForegroundPixelRatio: 0.008);
+    }
+
+    private void AssertSettingsControlHeaderForeground(
+        string label,
+        AutomationElement element,
+        Bitmap bitmap,
+        Rectangle windowBounds,
+        double dpiScale,
+        bool expectedLight)
+    {
+        AssertElementRelativeRegionMatchesForegroundPalette(
+            $"{label} header",
+            element,
+            bitmap,
+            windowBounds,
+            dpiScale,
+            relativeX: 0.00,
+            relativeY: 0.00,
+            relativeWidth: 0.90,
+            relativeHeight: 0.36,
+            expectedLight: expectedLight,
+            minForegroundPixelRatio: 0.006);
+    }
+
+    private static void AssertNoVisibleText(Window window, string forbiddenText)
+    {
+        var visibleMatches = window
+            .FindAllDescendants(cf => cf.ByName(forbiddenText))
+            .Where(element => !element.IsOffscreen)
+            .ToArray();
+
+        visibleMatches.Should().BeEmpty(
+            $"Settings should not render model object names such as '{forbiddenText}' as visible labels");
+    }
+
+    private void AssertCheckedStateUsesAppAccent(
+        Window window,
+        Bitmap bitmap,
+        Rectangle windowBounds,
+        double dpiScale,
+        string checkBoxName)
+    {
+        var checkBox = window
+            .FindAllDescendants(cf => cf.ByName(checkBoxName))
+            .FirstOrDefault(element => !element.IsOffscreen && element.Patterns.Toggle.IsSupported);
+
+        checkBox.Should().NotBeNull($"the checked Settings checkbox '{checkBoxName}' must be visible");
+
+        AssertElementRelativeRegionMatchesSettingsAccent(
+            $"{checkBoxName} checked box",
+            checkBox!,
+            bitmap,
+            windowBounds,
+            dpiScale,
+            relativeX: 0.00,
+            relativeY: 0.18,
+            relativeWidth: 0.18,
+            relativeHeight: 0.64);
+    }
+
+    private void AssertToggleSwitchOnStateUsesAppAccent(
+        Window window,
+        Bitmap bitmap,
+        Rectangle windowBounds,
+        double dpiScale,
+        string toggleAutomationId)
+    {
+        var toggle = FindRequired(window, toggleAutomationId);
+
+        AssertElementRelativeRegionMatchesSettingsAccent(
+            $"{toggleAutomationId} on track",
+            toggle,
+            bitmap,
+            windowBounds,
+            dpiScale,
+            relativeX: 0.08,
+            relativeY: 0.30,
+            relativeWidth: 0.36,
+            relativeHeight: 0.40);
+        AssertElementRelativeRegionHasLightPixels(
+            $"{toggleAutomationId} on thumb",
+            toggle,
+            bitmap,
+            windowBounds,
+            dpiScale,
+            relativeX: 0.64,
+            relativeY: 0.18,
+            relativeWidth: 0.28,
+            relativeHeight: 0.64,
+            minLightPixelRatio: 0.35);
+    }
+
+    private void AssertElementRelativeRegionMatchesSettingsAccent(
+        string label,
+        AutomationElement element,
+        Bitmap bitmap,
+        Rectangle windowBounds,
+        double dpiScale,
+        double relativeX,
+        double relativeY,
+        double relativeWidth,
+        double relativeHeight)
+    {
+        var elementRect = ToScreenshotPixelRect(bitmap, element.BoundingRectangle, windowBounds, dpiScale);
+        var sampleRect = ToRelativeSampleRect(bitmap, elementRect, relativeX, relativeY, relativeWidth, relativeHeight);
+        var sample = AverageRegion(bitmap, sampleRect);
+
+        _output.WriteLine(
+            $"{label}: sample={sampleRect}, avg=({sample.R:0},{sample.G:0},{sample.B:0}), brightness={sample.Brightness:0.0}");
+
+        sample.R.Should().BeLessThan(115, $"{label} should use the app blue accent, not a bright cyan system accent");
+        sample.G.Should().BeInRange(80, 190, $"{label} should use the app blue accent, not a bright cyan system accent");
+        sample.B.Should().BeInRange(140, 245, $"{label} should use the app blue accent, not a bright cyan system accent");
+    }
+
+    private void AssertElementRelativeRegionHasLightPixels(
+        string label,
+        AutomationElement element,
+        Bitmap bitmap,
+        Rectangle windowBounds,
+        double dpiScale,
+        double relativeX,
+        double relativeY,
+        double relativeWidth,
+        double relativeHeight,
+        double minLightPixelRatio)
+    {
+        var elementRect = ToScreenshotPixelRect(bitmap, element.BoundingRectangle, windowBounds, dpiScale);
+        var sampleRect = ToRelativeSampleRect(bitmap, elementRect, relativeX, relativeY, relativeWidth, relativeHeight);
+        var lightPixels = 0;
+        var count = 0;
+
+        for (var y = sampleRect.Top; y < sampleRect.Bottom; y++)
+        {
+            for (var x = sampleRect.Left; x < sampleRect.Right; x++)
+            {
+                var color = bitmap.GetPixel(x, y);
+                var brightness = (0.299 * color.R) + (0.587 * color.G) + (0.114 * color.B);
+                if (brightness > 210)
+                {
+                    lightPixels++;
+                }
+
+                count++;
+            }
+        }
+
+        var ratio = count == 0 ? 0 : lightPixels / (double)count;
+        _output.WriteLine($"{label}: sample={sampleRect}, light-pixel ratio={ratio:0.000}");
+
+        ratio.Should().BeGreaterThan(
+            minLightPixelRatio,
+            $"{label} should render the on-state thumb/glyph with light text-on-accent color");
     }
 
     private void AssertMainLightPalette(Window window, string screenshotPath)
@@ -1133,7 +1445,7 @@ public sealed class ThemeContrastTests : IDisposable
 
         ratio.Should().BeGreaterThan(
             minForegroundPixelRatio,
-            $"{label} must render readable foreground text on the explicit {(expectedLight ? "Light" : "Dark")} dropdown");
+            $"{label} must render readable foreground text on the explicit {(expectedLight ? "Light" : "Dark")} surface");
     }
 
     private void AssertElementRegionHasDarkPixels(
@@ -1297,6 +1609,56 @@ public sealed class ThemeContrastTests : IDisposable
         }
     }
 
+    private void SnapshotAndSetPersistedUiLanguage(string language)
+    {
+        var candidates = GetSettingsFileCandidates()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var path in candidates)
+        {
+            if (!_settingsSnapshots.ContainsKey(path))
+            {
+                _settingsSnapshots[path] = File.Exists(path) ? File.ReadAllText(path) : null;
+            }
+
+            if (File.Exists(path))
+            {
+                WriteUiLanguage(path, language);
+            }
+        }
+
+        if (candidates.LastOrDefault() is { } localSettingsPath)
+        {
+            WriteUiLanguage(localSettingsPath, language);
+        }
+    }
+
+    private void SnapshotAndSetPersistedCheckedAccentService()
+    {
+        var candidates = GetSettingsFileCandidates()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var path in candidates)
+        {
+            if (!_settingsSnapshots.ContainsKey(path))
+            {
+                _settingsSnapshots[path] = File.Exists(path) ? File.ReadAllText(path) : null;
+            }
+
+            if (File.Exists(path))
+            {
+                WriteCheckedAccentService(path);
+            }
+        }
+
+        if (candidates.LastOrDefault() is { } localSettingsPath)
+        {
+            WriteCheckedAccentService(localSettingsPath);
+        }
+    }
+
     private void ClearPersistedServiceTestStatus()
     {
         var candidates = GetSettingsFileCandidates()
@@ -1340,6 +1702,43 @@ public sealed class ThemeContrastTests : IDisposable
         File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
+    private static void WriteUiLanguage(string path, string language)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        JsonNode root;
+        try
+        {
+            root = JsonNode.Parse(File.ReadAllText(path)) ?? new JsonObject();
+        }
+        catch
+        {
+            root = new JsonObject();
+        }
+
+        root["UILanguage"] = language;
+        File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static void WriteCheckedAccentService(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        JsonNode root;
+        try
+        {
+            root = JsonNode.Parse(File.ReadAllText(path)) ?? new JsonObject();
+        }
+        catch
+        {
+            root = new JsonObject();
+        }
+
+        root["MainWindowEnabledServices"] = JsonNode.Parse("[\"bing\"]");
+        root["MainWindowServiceEnabledQuery"] = JsonNode.Parse("{\"bing\":true}");
+        File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+
     private static void WriteEmptyServiceTestStatus(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -1377,7 +1776,29 @@ public sealed class ThemeContrastTests : IDisposable
         return current;
     }
 
+    private static string WaitForPersistedUiLanguage(string expectedLanguage, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        string current;
+        do
+        {
+            current = ReadPersistedString("UILanguage", "<missing UILanguage>");
+            if (string.Equals(current, expectedLanguage, StringComparison.OrdinalIgnoreCase))
+            {
+                return current;
+            }
+
+            Thread.Sleep(200);
+        }
+        while (DateTime.UtcNow < deadline);
+
+        return current;
+    }
+
     private static string ReadPersistedAppTheme()
+        => ReadPersistedString("AppTheme", "<missing AppTheme>");
+
+    private static string ReadPersistedString(string propertyName, string missingValue)
     {
         try
         {
@@ -1390,14 +1811,14 @@ public sealed class ThemeContrastTests : IDisposable
             }
 
             using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
-            if (!document.RootElement.TryGetProperty("AppTheme", out var appTheme))
+            if (!document.RootElement.TryGetProperty(propertyName, out var value))
             {
-                return "<missing AppTheme>";
+                return missingValue;
             }
 
-            return appTheme.ValueKind == JsonValueKind.String
-                ? appTheme.GetString() ?? "<missing AppTheme>"
-                : "<unreadable AppTheme>";
+            return value.ValueKind == JsonValueKind.String
+                ? value.GetString() ?? missingValue
+                : $"<unreadable {propertyName}>";
         }
         catch (Exception ex)
         {
@@ -1733,7 +2154,9 @@ public sealed class ThemeContrastTests : IDisposable
         string PageSlug,
         string Label,
         string? ExpanderAutomationId = null,
-        double? InitialScrollPercent = null);
+        double? InitialScrollPercent = null,
+        bool AssertHeaderForeground = false,
+        string? ForbiddenVisibleText = null);
 
     private readonly record struct ThemeMatrixMemorySample(
         DateTimeOffset TimestampUtc,

@@ -193,7 +193,7 @@ public class DarkModeTests : IDisposable
             TimeSpan.FromSeconds(5)).Result;
 
         tab.Should().NotBeNull($"{label} settings tab must be available before dark-mode screenshot capture");
-        ActivateSettingsTab(tab!, label);
+        ActivateSettingsTab(window, tab!, label);
 
         var expectedElement = Retry.WhileNull(
             () =>
@@ -218,7 +218,7 @@ public class DarkModeTests : IDisposable
         _output.WriteLine($"{label} settings screenshot saved: {path}");
     }
 
-    private void ActivateSettingsTab(AutomationElement tab, string label)
+    private void ActivateSettingsTab(Window window, AutomationElement tab, string label)
     {
         _output.WriteLine($"Activating {label} settings tab at {tab.BoundingRectangle}");
 
@@ -228,6 +228,7 @@ public class DarkModeTests : IDisposable
             {
                 tab.Patterns.SelectionItem.Pattern.Select();
                 Thread.Sleep(1200);
+                DismissTransientSettingsTooltip(window);
                 return;
             }
         }
@@ -238,6 +239,31 @@ public class DarkModeTests : IDisposable
 
         InvokeOrClick(tab);
         Thread.Sleep(1200);
+        DismissTransientSettingsTooltip(window);
+    }
+
+    private static void DismissTransientSettingsTooltip(Window window)
+    {
+        try
+        {
+            Keyboard.Press(VirtualKeyShort.ESCAPE);
+        }
+        catch
+        {
+            // Screenshot assertions do not depend on keyboard focus.
+        }
+
+        try
+        {
+            var bounds = window.BoundingRectangle;
+            Mouse.MoveTo(new Point(bounds.Right + 32, bounds.Bottom + 32));
+        }
+        catch
+        {
+            // The tooltip also dismisses on Escape; pointer movement is best-effort.
+        }
+
+        Thread.Sleep(800);
     }
 
     private static string WaitForPersistedAppTheme(string expectedTheme, TimeSpan timeout)

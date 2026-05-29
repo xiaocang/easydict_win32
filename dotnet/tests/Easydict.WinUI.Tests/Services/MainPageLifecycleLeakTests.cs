@@ -206,10 +206,15 @@ public class MainPageLifecycleLeakTests
         xaml.Should().Contain("Canvas.ZIndex=\"100\"");
         onSettingsClicked.Should().Contain("await ShowPageNavigationLoadingAsync();");
         onSettingsClicked.Should().Contain("Frame.Navigate(typeof(SettingsPage))");
+        onSettingsClicked.Should().NotContain("await App.OpenSettingsWorkerAsync();");
         onSettingsClicked.Should().Contain("HidePageNavigationLoading();",
             "navigation failure should not leave the cached MainPage masked");
         onNavigatedTo.Should().Contain("HidePageNavigationLoading();",
             "returning from Settings should clear the cached page-level mask");
+        onNavigatedTo.Should().Contain("Frame.ForwardStack.Clear();",
+            "returning from Settings should not keep the SettingsPage in the navigation forward stack");
+        onNavigatedTo.Should().Contain("ApplySettings();",
+            "Settings changes should be applied when the main page becomes active again");
         content.Should().Contain("await Task.Delay(PageNavigationRenderDelayMs)");
     }
 

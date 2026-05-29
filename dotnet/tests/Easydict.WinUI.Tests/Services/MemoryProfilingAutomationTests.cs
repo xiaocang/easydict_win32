@@ -226,6 +226,34 @@ public sealed class MemoryProfilingAutomationTests
     }
 
     [Fact]
+    public void SettingsPage_UsesInWindowLoadingNavigation()
+    {
+        var appPath = Path.GetFullPath(Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.WinUI",
+            "App.xaml.cs"));
+        var mainPagePath = Path.GetFullPath(Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.WinUI",
+            "Views",
+            "MainPage.xaml.cs"));
+        var app = File.ReadAllText(appPath);
+        var mainPage = File.ReadAllText(mainPagePath);
+
+        app.Should().NotContain("--settings-worker");
+        app.Should().NotContain("OpenSettingsWorkerAsync");
+        app.Should().NotContain("ProcessStartInfo");
+        app.Should().Contain("ShowAndActivateWindow();");
+        app.Should().Contain("frame.Navigate(typeof(SettingsPage))",
+            "tray Settings should navigate inside the existing main window");
+        mainPage.Should().Contain("await ShowPageNavigationLoadingAsync();");
+        mainPage.Should().Contain("Frame.Navigate(typeof(SettingsPage))");
+        mainPage.Should().NotContain("await App.OpenSettingsWorkerAsync()");
+    }
+
+    [Fact]
     public void App_MemoryAbMode_ReleasesFrameContent_WhenMainWindowIsHidden()
     {
         var codePath = Path.GetFullPath(Path.Combine(

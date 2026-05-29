@@ -69,6 +69,7 @@
 
             <Button
                 x:Name="CloseButton"
+                AutomationProperties.AutomationId="MiniWindowCloseButton"
                 Grid.Column="2"
                 Click="OnCloseClicked"
                 Style="{StaticResource EasydictIconButtonStyle}"

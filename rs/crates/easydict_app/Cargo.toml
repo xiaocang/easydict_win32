@@ -1,0 +1,11 @@
+[package]
+name = "easydict_app"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+win_fluent = { path = "../../../lib/winfluent-rs/crates/win_fluent" }
+
+[dev-dependencies]
+win_fluent_testkit = { path = "../../../lib/winfluent-rs/crates/win_fluent_testkit" }

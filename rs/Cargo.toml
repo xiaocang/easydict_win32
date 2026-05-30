@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/easydict_app",
+    "crates/easydict_preview_iced",
+]
+
+[workspace.package]
+edition = "2021"
+license = "GPL-3.0-or-later"
+version = "0.1.0"

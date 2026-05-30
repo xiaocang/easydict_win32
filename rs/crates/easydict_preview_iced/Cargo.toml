@@ -1,0 +1,10 @@
+[package]
+name = "easydict_preview_iced"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+easydict_app = { path = "../easydict_app" }
+win_fluent = { path = "../../../lib/winfluent-rs/crates/win_fluent" }
+win_fluent_backend_iced = { path = "../../../lib/winfluent-rs/crates/win_fluent_backend_iced" }

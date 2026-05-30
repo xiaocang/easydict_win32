@@ -93,6 +93,26 @@
             }
         },
         // ============================================
+        // Rust WinFluent Preview
+        // ============================================
+        {
+            "name": "Launch Easydict WinFluent RS Preview",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "preLaunchTask": "build-easydict-winfluent-rs-preview",
+            "program": "${workspaceFolder}/rs/target/debug/easydict_preview_iced.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/rs",
+            "stopAtEntry": false,
+            "console": "integratedTerminal",
+            "environment": [
+                {
+                    "name": "RUST_BACKTRACE",
+                    "value": "1"
+                }
+            ]
+        },
+        // ============================================
         // Attach to Running Process
         // ============================================
         {

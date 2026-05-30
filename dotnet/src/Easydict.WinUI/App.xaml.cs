@@ -1020,7 +1020,7 @@ namespace Easydict.WinUI
 
         private void HideWindow()
         {
-            TextToSpeechService.Instance.Stop();
+            TextToSpeechService.StopIfInitialized();
             _appWindow?.Hide();
             ReleaseMainWindowContentForMemoryGate();
         }
@@ -1135,7 +1135,7 @@ namespace Easydict.WinUI
             app._trayIconService?.Dispose();
             FixedWindowService.Instance.Dispose();
             MiniWindowService.Instance.Dispose();
-            TextToSpeechService.Instance.Stop();
+            TextToSpeechService.StopIfInitialized();
             app.UnregisterSystemThemeWatcher();
         }
 

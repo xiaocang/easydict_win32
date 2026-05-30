@@ -805,8 +805,8 @@ public sealed partial class MiniWindow : Window
 
             _isClosing = true;
 
-            // Stop any ongoing TTS audio immediately
-            TextToSpeechService.Instance.Stop();
+            // Stop any already-initialized TTS audio immediately.
+            TextToSpeechService.StopIfInitialized();
 
             SaveWindowPosition();
             await CleanupResourcesAsync();
@@ -2157,8 +2157,8 @@ public sealed partial class MiniWindow : Window
     /// </summary>
     public void HideWindow()
     {
-        // Stop any ongoing TTS audio immediately
-        TextToSpeechService.Instance.Stop();
+        // Stop any already-initialized TTS audio immediately.
+        TextToSpeechService.StopIfInitialized();
         
         SaveWindowPosition();
         _appWindow?.Hide();

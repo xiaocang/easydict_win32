@@ -17,6 +17,19 @@ public sealed class TextToSpeechService : IDisposable
 
     public static TextToSpeechService Instance => _instance.Value;
 
+    /// <summary>
+    /// Stops playback only if the singleton has already been created.
+    /// </summary>
+    public static void StopIfInitialized()
+    {
+        if (!_instance.IsValueCreated)
+        {
+            return;
+        }
+
+        _instance.Value.Stop();
+    }
+
     private readonly SpeechSynthesizer _synthesizer;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private static IReadOnlyList<VoiceInformation>? _cachedVoices;

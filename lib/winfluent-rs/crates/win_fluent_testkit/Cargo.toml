@@ -1,0 +1,12 @@
+[package]
+name = "win_fluent_testkit"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+win_fluent = { path = "../win_fluent" }
+
+[lib]
+path = "src/lib.rs"
+

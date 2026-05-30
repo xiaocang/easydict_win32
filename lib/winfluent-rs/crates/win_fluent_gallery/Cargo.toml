@@ -1,0 +1,14 @@
+[package]
+name = "win_fluent_gallery"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+win_fluent = { path = "../win_fluent" }
+win_fluent_testkit = { path = "../win_fluent_testkit" }
+
+[[bin]]
+name = "win_fluent_gallery"
+path = "src/main.rs"
+

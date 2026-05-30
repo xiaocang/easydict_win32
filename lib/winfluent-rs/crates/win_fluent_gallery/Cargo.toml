@@ -6,9 +6,9 @@ version.workspace = true
 
 [dependencies]
 win_fluent = { path = "../win_fluent" }
+win_fluent_platform_win = { path = "../win_fluent_platform_win" }
 win_fluent_testkit = { path = "../win_fluent_testkit" }
 
 [[bin]]
 name = "win_fluent_gallery"
 path = "src/main.rs"
-

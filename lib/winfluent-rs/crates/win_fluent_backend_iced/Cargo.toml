@@ -1,0 +1,30 @@
+[package]
+name = "win_fluent_backend_iced"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+iced = { version = "0.14.0", default-features = false, features = [
+    "crisp",
+    "thread-pool",
+    "tiny-skia",
+] }
+win_fluent = { path = "../win_fluent" }
+
+[target.'cfg(windows)'.dependencies]
+win_fluent_platform_win = { path = "../win_fluent_platform_win" }
+
+[dev-dependencies]
+win_fluent_testkit = { path = "../win_fluent_testkit" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "win_fluent_iced_demo"
+path = "src/bin/demo_window.rs"
+
+[[bin]]
+name = "win_fluent_mini_demo"
+path = "src/bin/mini_window.rs"

@@ -2,6 +2,7 @@ use crate::a11y::A11yHint;
 use crate::action::Action;
 use crate::command::CommandToken;
 use crate::icon::IconToken;
+use crate::state::{ControlState, ValidationState};
 
 #[derive(Clone, Debug)]
 pub struct View<Message> {
@@ -191,7 +192,7 @@ pub struct ButtonToken<Message> {
     pub kind: ButtonKind,
     pub icon: Option<IconToken>,
     pub tooltip: Option<String>,
-    pub enabled: bool,
+    pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
 }
@@ -204,6 +205,7 @@ pub struct TextEditorToken<Message> {
     pub min_height: Option<u16>,
     pub max_height: Option<u16>,
     pub read_only: bool,
+    pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
 }
@@ -213,7 +215,7 @@ pub struct ToggleSwitchToken<Message> {
     pub id: Option<String>,
     pub label: String,
     pub checked: bool,
-    pub enabled: bool,
+    pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
 }
@@ -239,7 +241,7 @@ pub struct ComboBoxToken<Message> {
     pub label: Option<String>,
     pub items: Vec<ComboBoxItem>,
     pub selected: Option<String>,
-    pub enabled: bool,
+    pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
 }
@@ -438,6 +440,7 @@ pub fn text_editor<Message>(text: impl Into<String>) -> TextEditorBuilder<Messag
         min_height: None,
         max_height: None,
         read_only: false,
+        state: ControlState::default(),
         action: Action::None,
         a11y: A11yHint::default(),
     }
@@ -451,7 +454,7 @@ pub fn toggle_switch<Message>(
         id: None,
         label: label.into(),
         checked,
-        enabled: true,
+        state: ControlState::default(),
         action: Action::None,
         a11y: A11yHint::default(),
     }
@@ -465,7 +468,7 @@ pub fn combo_box<Message>(
         label: None,
         items: items.into_iter().collect(),
         selected: None,
-        enabled: true,
+        state: ControlState::default(),
         action: Action::None,
         a11y: A11yHint::default(),
     }
@@ -633,7 +636,7 @@ pub struct ButtonBuilder<Message> {
     kind: ButtonKind,
     icon: Option<IconToken>,
     tooltip: Option<String>,
-    enabled: bool,
+    state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
 }
@@ -646,7 +649,7 @@ impl<Message> ButtonBuilder<Message> {
             kind,
             icon: None,
             tooltip: None,
-            enabled: true,
+            state: ControlState::default(),
             action: Action::None,
             a11y: A11yHint::default(),
         }
@@ -668,7 +671,32 @@ impl<Message> ButtonBuilder<Message> {
     }
 
     pub fn enabled(mut self, enabled: bool) -> Self {
-        self.enabled = enabled;
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn hovered(mut self, hovered: bool) -> Self {
+        self.state.hovered = hovered;
+        self
+    }
+
+    pub fn pressed(mut self, pressed: bool) -> Self {
+        self.state.pressed = pressed;
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.state.focused = focused;
+        self
+    }
+
+    pub fn validation(mut self, validation: ValidationState) -> Self {
+        self.state.validation = validation;
         self
     }
 
@@ -701,7 +729,7 @@ impl<Message> IntoView<Message> for ButtonBuilder<Message> {
             kind: self.kind,
             icon: self.icon,
             tooltip: self.tooltip,
-            enabled: self.enabled,
+            state: self.state,
             action: self.action,
             a11y: self.a11y,
         }))
@@ -716,6 +744,7 @@ pub struct TextEditorBuilder<Message> {
     min_height: Option<u16>,
     max_height: Option<u16>,
     read_only: bool,
+    state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
 }
@@ -746,6 +775,36 @@ impl<Message> TextEditorBuilder<Message> {
         self
     }
 
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn hovered(mut self, hovered: bool) -> Self {
+        self.state.hovered = hovered;
+        self
+    }
+
+    pub fn pressed(mut self, pressed: bool) -> Self {
+        self.state.pressed = pressed;
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.state.focused = focused;
+        self
+    }
+
+    pub fn validation(mut self, validation: ValidationState) -> Self {
+        self.state.validation = validation;
+        self
+    }
+
     pub fn a11y(mut self, a11y: A11yHint) -> Self {
         self.a11y = a11y;
         self
@@ -769,6 +828,7 @@ impl<Message> IntoView<Message> for TextEditorBuilder<Message> {
             min_height: self.min_height,
             max_height: self.max_height,
             read_only: self.read_only,
+            state: self.state,
             action: self.action,
             a11y: self.a11y,
         }))
@@ -780,7 +840,7 @@ pub struct ToggleSwitchBuilder<Message> {
     id: Option<String>,
     label: String,
     checked: bool,
-    enabled: bool,
+    state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
 }
@@ -792,7 +852,32 @@ impl<Message> ToggleSwitchBuilder<Message> {
     }
 
     pub fn enabled(mut self, enabled: bool) -> Self {
-        self.enabled = enabled;
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn hovered(mut self, hovered: bool) -> Self {
+        self.state.hovered = hovered;
+        self
+    }
+
+    pub fn pressed(mut self, pressed: bool) -> Self {
+        self.state.pressed = pressed;
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.state.focused = focused;
+        self
+    }
+
+    pub fn validation(mut self, validation: ValidationState) -> Self {
+        self.state.validation = validation;
         self
     }
 
@@ -816,7 +901,7 @@ impl<Message> IntoView<Message> for ToggleSwitchBuilder<Message> {
             id: self.id,
             label: self.label,
             checked: self.checked,
-            enabled: self.enabled,
+            state: self.state,
             action: self.action,
             a11y: self.a11y,
         }))
@@ -829,7 +914,7 @@ pub struct ComboBoxBuilder<Message> {
     label: Option<String>,
     items: Vec<ComboBoxItem>,
     selected: Option<String>,
-    enabled: bool,
+    state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
 }
@@ -851,7 +936,32 @@ impl<Message> ComboBoxBuilder<Message> {
     }
 
     pub fn enabled(mut self, enabled: bool) -> Self {
-        self.enabled = enabled;
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn hovered(mut self, hovered: bool) -> Self {
+        self.state.hovered = hovered;
+        self
+    }
+
+    pub fn pressed(mut self, pressed: bool) -> Self {
+        self.state.pressed = pressed;
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.state.focused = focused;
+        self
+    }
+
+    pub fn validation(mut self, validation: ValidationState) -> Self {
+        self.state.validation = validation;
         self
     }
 
@@ -876,7 +986,7 @@ impl<Message> IntoView<Message> for ComboBoxBuilder<Message> {
             label: self.label,
             items: self.items,
             selected: self.selected,
-            enabled: self.enabled,
+            state: self.state,
             action: self.action,
             a11y: self.a11y,
         }))

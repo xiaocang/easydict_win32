@@ -9,6 +9,8 @@ pub mod performance;
 pub mod platform;
 pub mod prelude;
 pub mod runtime;
+pub mod schema;
+pub mod state;
 pub mod subscription;
 pub mod task;
 pub mod theme;
@@ -25,6 +27,8 @@ pub use platform::{
     ClipboardFormat, Hotkey, HotkeyKey, HotkeyModifier, ShellVerb, TrayMenu, TrayMenuItem,
 };
 pub use runtime::{Application, RuntimeError};
+pub use schema::{view_schema, SchemaNode, SchemaProperty, ViewSchema, VIEW_SCHEMA_VERSION};
+pub use state::{ControlState, ValidationSeverity, ValidationState};
 pub use subscription::{PlatformEvent, Subscription, SubscriptionKind, WindowEvent};
 pub use task::Task;
 pub use theme::{

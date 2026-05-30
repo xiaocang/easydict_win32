@@ -126,7 +126,7 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .name
                 .clone()
                 .or_else(|| Some(token.label.clone()));
-            node.focusable = token.enabled;
+            node.focusable = token.state.is_focusable();
             node
         }
         ViewToken::TextEditor(token) => {
@@ -137,7 +137,7 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .clone()
                 .or_else(|| token.placeholder.clone())
                 .or_else(|| token.id.clone());
-            node.focusable = !token.read_only;
+            node.focusable = token.state.is_focusable() && !token.read_only;
             node
         }
         ViewToken::ToggleSwitch(token) => {
@@ -147,7 +147,7 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .name
                 .clone()
                 .or_else(|| Some(token.label.clone()));
-            node.focusable = token.enabled;
+            node.focusable = token.state.is_focusable();
             node
         }
         ViewToken::ComboBox(token) => {
@@ -158,7 +158,7 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .clone()
                 .or_else(|| token.label.clone())
                 .or_else(|| token.id.clone());
-            node.focusable = token.enabled;
+            node.focusable = token.state.is_focusable();
             node
         }
         ViewToken::CommandBar(token) => {

@@ -4,14 +4,21 @@ use std::fmt::Write;
 
 use win_fluent::a11y::{resolve_accessibility_tree, A11yNode};
 use win_fluent::action::ActionKind;
+use win_fluent::schema::{view_schema, ViewSchema};
 use win_fluent::theme::ThemeTokens;
-use win_fluent::view::{
-    LayoutKind, ResultStatus, ServiceResultCardToken, ServiceResultListToken, View, ViewToken,
-};
+use win_fluent::view::{LayoutKind, View, ViewToken};
+
+pub fn view_schema_tree<Message>(view: &View<Message>) -> ViewSchema {
+    view_schema(view)
+}
 
 pub fn view_snapshot<Message>(view: &View<Message>) -> String {
+    view_schema(view).snapshot()
+}
+
+pub fn layout_snapshot<Message>(view: &View<Message>) -> String {
     let mut output = String::new();
-    write_view(&mut output, view, 0);
+    write_layout(&mut output, view, 0);
     output
 }
 
@@ -28,7 +35,7 @@ pub fn accessibility_snapshot<Message>(view: &View<Message>) -> String {
 
 pub fn theme_snapshot(theme: &ThemeTokens) -> String {
     format!(
-        "Theme(mode={:?}, background=#{:02x}{:02x}{:02x}, surface=#{:02x}{:02x}{:02x}, text=#{:02x}{:02x}{:02x}, accent=#{:02x}{:02x}{:02x})",
+        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?}",
         theme.mode,
         theme.background.r,
         theme.background.g,
@@ -36,114 +43,33 @@ pub fn theme_snapshot(theme: &ThemeTokens) -> String {
         theme.surface.r,
         theme.surface.g,
         theme.surface.b,
+        theme.surface_alt.r,
+        theme.surface_alt.g,
+        theme.surface_alt.b,
         theme.text_primary.r,
         theme.text_primary.g,
         theme.text_primary.b,
+        theme.text_secondary.r,
+        theme.text_secondary.g,
+        theme.text_secondary.b,
+        theme.border.r,
+        theme.border.g,
+        theme.border.b,
+        theme.focus.r,
+        theme.focus.g,
+        theme.focus.b,
         theme.accent.base.r,
         theme.accent.base.g,
-        theme.accent.base.b
+        theme.accent.base.b,
+        theme.radius.control,
+        theme.spacing.md,
+        theme.density
     )
 }
 
-fn write_view<Message>(output: &mut String, view: &View<Message>, indent: usize) {
+fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usize) {
     let pad = " ".repeat(indent);
     match view.token() {
-        ViewToken::Page(token) => {
-            let _ = writeln!(
-                output,
-                "{pad}Page title={:?} id={:?}",
-                token.title, token.id
-            );
-            if let Some(content) = &token.content {
-                write_view(output, content, indent + 2);
-            }
-        }
-        ViewToken::Text(token) => {
-            let _ = writeln!(
-                output,
-                "{pad}Text value={:?} style={:?} id={:?}",
-                token.value, token.style, token.id
-            );
-        }
-        ViewToken::Button(token) => {
-            let _ = writeln!(
-                output,
-                "{pad}Button label={:?} kind={:?} icon={:?} enabled={} action={:?} id={:?}",
-                token.label,
-                token.kind,
-                token.icon.as_ref().map(|icon| icon.name),
-                token.enabled,
-                token.action.kind(),
-                token.id
-            );
-        }
-        ViewToken::TextEditor(token) => {
-            let _ = writeln!(
-                output,
-                "{pad}TextEditor id={:?} placeholder={:?} min_height={:?} read_only={} action={:?}",
-                token.id,
-                token.placeholder,
-                token.min_height,
-                token.read_only,
-                token.action.kind()
-            );
-        }
-        ViewToken::ToggleSwitch(token) => {
-            let _ = writeln!(
-                output,
-                "{pad}ToggleSwitch label={:?} checked={} action={:?} id={:?}",
-                token.label,
-                token.checked,
-                token.action.kind(),
-                token.id
-            );
-        }
-        ViewToken::ComboBox(token) => {
-            let _ = writeln!(
-                output,
-                "{pad}ComboBox label={:?} selected={:?} items={} action={:?} id={:?}",
-                token.label,
-                token.selected,
-                token.items.len(),
-                token.action.kind(),
-                token.id
-            );
-        }
-        ViewToken::CommandBar(token) => {
-            let _ = writeln!(
-                output,
-                "{pad}CommandBar compact={} items={} id={:?}",
-                token.compact,
-                token.items.len(),
-                token.id
-            );
-            for child in &token.items {
-                write_view(output, child, indent + 2);
-            }
-        }
-        ViewToken::NavigationView(token) => {
-            let _ = writeln!(
-                output,
-                "{pad}NavigationView selected={:?} items={} action={:?} id={:?}",
-                token.selected,
-                token.items.len(),
-                token.action.kind(),
-                token.id
-            );
-            if let Some(content) = &token.content {
-                write_view(output, content, indent + 2);
-            }
-        }
-        ViewToken::Dialog(token) => {
-            let _ = writeln!(
-                output,
-                "{pad}Dialog title={:?} kind={:?} id={:?}",
-                token.title, token.kind, token.id
-            );
-            if let Some(content) = &token.content {
-                write_view(output, content, indent + 2);
-            }
-        }
         ViewToken::Layout(token) => {
             let label = match token.kind {
                 LayoutKind::Column => "Column",
@@ -151,116 +77,90 @@ fn write_view<Message>(output: &mut String, view: &View<Message>, indent: usize)
             };
             let _ = writeln!(
                 output,
-                "{pad}{label} children={} padding={} spacing={} width={:?} height={:?} align={:?} id={:?}",
+                "{pad}{label} id={:?} children={} padding={} spacing={} width={:?} height={:?} align={:?}",
+                token.id,
                 token.children.len(),
                 token.padding,
                 token.spacing,
                 token.width,
                 token.height,
-                token.align,
-                token.id
+                token.align
             );
             for child in &token.children {
-                write_view(output, child, indent + 2);
+                write_layout(output, child, indent + 2);
             }
         }
-        ViewToken::Lazy(token) => {
-            let _ = writeln!(output, "{pad}Lazy key={:?} id={:?}", token.key, token.id);
-            write_view(output, &token.content, indent + 2);
+        ViewToken::Page(token) => {
+            if let Some(content) = &token.content {
+                write_layout(output, content, indent);
+            }
         }
+        ViewToken::CommandBar(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}CommandBar id={:?} items={} compact={}",
+                token.id,
+                token.items.len(),
+                token.compact
+            );
+            for child in &token.items {
+                write_layout(output, child, indent + 2);
+            }
+        }
+        ViewToken::NavigationView(token) => {
+            if let Some(content) = &token.content {
+                write_layout(output, content, indent);
+            }
+        }
+        ViewToken::Dialog(token) => {
+            if let Some(content) = &token.content {
+                write_layout(output, content, indent);
+            }
+        }
+        ViewToken::Lazy(token) => write_layout(output, &token.content, indent),
         ViewToken::ScrollView(token) => {
             let _ = writeln!(
                 output,
-                "{pad}ScrollView horizontal={:?} vertical={:?} id={:?}",
-                token.horizontal, token.vertical, token.id
+                "{pad}ScrollView id={:?} horizontal={:?} vertical={:?}",
+                token.id, token.horizontal, token.vertical
             );
             if let Some(content) = &token.content {
-                write_view(output, content, indent + 2);
+                write_layout(output, content, indent + 2);
             }
         }
         ViewToken::SettingsRow(token) => {
             let _ = writeln!(
                 output,
-                "{pad}SettingsRow title={:?} description={:?} kind={:?} trailing={} id={:?}",
-                token.title,
-                token.description,
-                token.kind,
-                token.trailing.len(),
-                token.id
+                "{pad}SettingsRow id={:?} trailing={}",
+                token.id,
+                token.trailing.len()
             );
             if let Some(content) = &token.content {
-                write_view(output, content, indent + 2);
+                write_layout(output, content, indent + 2);
             }
             for child in &token.trailing {
-                write_view(output, child, indent + 2);
+                write_layout(output, child, indent + 2);
             }
         }
-        ViewToken::ServiceResultCard(token) => write_result_card(output, token, indent),
-        ViewToken::ServiceResultList(token) => write_result_list(output, token, indent),
         ViewToken::Custom(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Custom control={:?} children={} id={:?}",
+                "{pad}Custom id={:?} control={:?} children={}",
+                token.id,
                 token.control,
-                token.children.len(),
-                token.id
+                token.children.len()
             );
             for child in &token.children {
-                write_view(output, child, indent + 2);
+                write_layout(output, child, indent + 2);
             }
         }
-    }
-}
-
-fn write_result_card<Message>(
-    output: &mut String,
-    token: &ServiceResultCardToken<Message>,
-    indent: usize,
-) {
-    let pad = " ".repeat(indent);
-    let _ = writeln!(
-        output,
-        "{pad}ServiceResultCard id={:?} item={} status={} copy={:?} speak={:?}",
-        token.id,
-        token.item.id,
-        status_label(token.item.status),
-        token.copy_action.kind(),
-        token.speak_action.kind()
-    );
-}
-
-fn write_result_list<Message>(
-    output: &mut String,
-    token: &ServiceResultListToken<Message>,
-    indent: usize,
-) {
-    let pad = " ".repeat(indent);
-    let _ = writeln!(
-        output,
-        "{pad}ServiceResultList id={:?} items={} virtualized={} copy={:?} speak={:?}",
-        token.id,
-        token.items.len(),
-        token.virtualized,
-        token.copy_action.kind(),
-        token.speak_action.kind()
-    );
-    for item in &token.items {
-        let _ = writeln!(
-            output,
-            "{pad}  ResultItem id={} title={:?} status={}",
-            item.id,
-            item.title,
-            status_label(item.status)
-        );
-    }
-}
-
-fn status_label(status: ResultStatus) -> &'static str {
-    match status {
-        ResultStatus::Loading => "loading",
-        ResultStatus::Streaming => "streaming",
-        ResultStatus::Ready => "ready",
-        ResultStatus::Error => "error",
+        ViewToken::Text(_)
+        | ViewToken::Button(_)
+        | ViewToken::TextEditor(_)
+        | ViewToken::ToggleSwitch(_)
+        | ViewToken::ComboBox(_)
+        | ViewToken::ServiceResultCard(_)
+        | ViewToken::ServiceResultList(_) => {}
     }
 }
 
@@ -305,19 +205,37 @@ mod tests {
     }
 
     #[test]
-    fn snapshots_token_tree() {
+    fn snapshots_token_tree_with_schema_version() {
         let view = page("Settings")
             .content(column((
                 settings_row("Mode")
                     .trailing((toggle_switch("Enabled", true).on_toggle(|_| Msg::Save),)),
-                text_editor("value").on_input(Msg::Changed),
+                text_editor("value")
+                    .focused(true)
+                    .validation(ValidationState::error("Invalid value"))
+                    .on_input(Msg::Changed),
             )))
             .into_view();
 
         let snapshot = crate::view_snapshot(&view);
 
+        assert!(snapshot.contains("ViewSchema version=1"));
         assert!(snapshot.contains("Page title=\"Settings\""));
         assert!(snapshot.contains("ToggleSwitch"));
         assert!(snapshot.contains("TextEditor"));
+        assert!(snapshot.contains("validation=Error"));
+    }
+
+    #[test]
+    fn snapshots_layout_tokens_separately() {
+        let view: View<Msg> = page("Layout")
+            .content(column((text("A"), text("B"))).padding(24).spacing(12))
+            .into_view();
+
+        let snapshot = crate::layout_snapshot(&view);
+
+        assert!(snapshot.contains("Column"));
+        assert!(snapshot.contains("padding=24"));
+        assert!(snapshot.contains("spacing=12"));
     }
 }

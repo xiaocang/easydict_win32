@@ -7,6 +7,8 @@ pub use crate::platform::{
     ClipboardFormat, Hotkey, HotkeyKey, HotkeyModifier, ShellVerb, TrayMenu, TrayMenuItem,
 };
 pub use crate::runtime::Application;
+pub use crate::schema::{view_schema, SchemaNode, SchemaProperty, ViewSchema, VIEW_SCHEMA_VERSION};
+pub use crate::state::{ControlState, ValidationSeverity, ValidationState};
 pub use crate::subscription::{PlatformEvent, Subscription, SubscriptionKind, WindowEvent};
 pub use crate::task::Task;
 pub use crate::theme::{

@@ -198,22 +198,23 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.label,
             token.kind,
             token.icon.as_ref().map(|icon| icon.name),
-            token.enabled,
+            token.state,
             token.action.kind()
         ),
         ViewToken::TextEditor(token) => format!(
-            "{:?}|{:?}|{:?}|{}|{:?}",
+            "{:?}|{:?}|{:?}|{}|{}|{:?}",
             token.placeholder,
             token.min_height,
             token.max_height,
             token.read_only,
+            token.state,
             token.action.kind()
         ),
         ViewToken::ToggleSwitch(token) => format!(
             "{:?}|{}|{}|{:?}",
             token.label,
             token.checked,
-            token.enabled,
+            token.state,
             token.action.kind()
         ),
         ViewToken::ComboBox(token) => format!(
@@ -221,7 +222,7 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.label,
             token.selected,
             token.items.len(),
-            token.enabled,
+            token.state,
             token.action.kind()
         ),
         ViewToken::CommandBar(token) => format!("compact={}", token.compact),

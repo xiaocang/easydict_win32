@@ -12,7 +12,8 @@ pub use crate::state::{ControlState, ValidationSeverity, ValidationState};
 pub use crate::subscription::{PlatformEvent, Subscription, SubscriptionKind, WindowEvent};
 pub use crate::task::Task;
 pub use crate::theme::{
-    AccentPalette, Color, CornerRadius, Density, Spacing, ThemeMode, ThemeTokens, Typography,
+    AccentPalette, BackdropKind, Color, ControlMetrics, CornerRadius, Density, Elevation, Spacing,
+    Stroke, ThemeMode, ThemeTokens, Typography,
 };
 pub use crate::view::{
     button, column, combo_box, command_bar, dialog, lazy, navigation_view, page, primary_button,

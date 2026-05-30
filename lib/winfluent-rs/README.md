@@ -19,6 +19,20 @@ details stay behind the framework boundary.
 - `win_fluent_iced_demo`: opens a general token-driven Iced demo window.
 - `win_fluent_mini_demo`: opens a Mini Window reference demo with topmost,
   skip-taskbar, stateful text editor, and simulated streaming output.
+- `win_fluent_mini_daemon`: starts without a default window and uses a global
+  hotkey to open, hide, restore, focus, and smoke-test the Mini Window.
+
+## Validation
+
+- `win_fluent_testkit` can snapshot view, layout, theme, accessibility, visual
+  diff, and accessibility-audit output without starting a window.
+- `win_fluent_platform_win` maps framework accessibility nodes into a Windows
+  UIA tree plan while keeping provider details outside the core crate.
+- `win_fluent_gallery` emits representative Main, Mini, Fixed, Settings, and
+  capture overlay references for schema, accessibility, theme, and UIA-plan
+  review.
+- The Mini daemon probe can write `manifest.json`, `events.jsonl`, and before
+  / after PPM screenshots for repeatable runtime evidence.
 
 ## Design constraints
 

@@ -2,6 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
+use win_fluent::a11y::{A11yNode, A11yRole};
 use win_fluent::platform::{
     ClipboardFormat, Hotkey, HotkeyKey, HotkeyModifier, ShellVerb, TrayMenu,
 };
@@ -86,6 +87,24 @@ pub struct ResolvedWindowPlacement {
     pub work_area: WindowsRect,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WindowsProcessMemory {
+    pub private_bytes: usize,
+    pub working_set_bytes: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsClipboardTextSnapshot {
+    pub unicode_text: Option<String>,
+    pub formats: Vec<WindowsClipboardFormatSnapshot>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsClipboardFormatSnapshot {
+    pub format: u32,
+    pub bytes: Vec<u8>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WindowsTrayPlan {
     pub tooltip: String,
@@ -99,6 +118,35 @@ pub struct WindowsShellVerbPlan {
     pub label: String,
     pub accepts_files: bool,
     pub accepts_directory_background: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WindowsUiaControlType {
+    Button,
+    CheckBox,
+    ComboBox,
+    Document,
+    Edit,
+    Group,
+    List,
+    ListItem,
+    Pane,
+    Text,
+    Window,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsUiaNodePlan {
+    pub control_type: WindowsUiaControlType,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub focusable: bool,
+    pub children: Vec<WindowsUiaNodePlan>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsUiaTreePlan {
+    pub root: WindowsUiaNodePlan,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -184,6 +232,12 @@ impl WindowsPlatformAdapter {
             .collect()
     }
 
+    pub fn plan_uia_tree(root: &A11yNode) -> WindowsUiaTreePlan {
+        WindowsUiaTreePlan {
+            root: plan_uia_node(root),
+        }
+    }
+
     pub fn plan_subscription<Message>(
         subscription: &Subscription<Message>,
     ) -> Result<Vec<WindowsRegistration>, WindowsPlatformError> {
@@ -233,6 +287,29 @@ impl WindowsPlatformAdapter {
     pub fn send_hotkey_input_for_probe(hotkey: &Hotkey) -> Result<(), WindowsPlatformError> {
         let native_hotkey = plan_hotkey(hotkey)?;
         native::send_hotkey_input_for_probe(&native_hotkey)
+    }
+
+    pub fn send_unicode_text_input_for_probe(text: &str) -> Result<(), WindowsPlatformError> {
+        native::send_unicode_text_input_for_probe(text)
+    }
+
+    pub fn send_clipboard_text_paste_for_probe(text: &str) -> Result<(), WindowsPlatformError> {
+        native::send_clipboard_text_paste_for_probe(text)
+    }
+
+    pub fn clipboard_text_snapshot_for_probe(
+    ) -> Result<WindowsClipboardTextSnapshot, WindowsPlatformError> {
+        native::clipboard_text_snapshot_for_probe()
+    }
+
+    pub fn restore_clipboard_text_for_probe(
+        snapshot: &WindowsClipboardTextSnapshot,
+    ) -> Result<(), WindowsPlatformError> {
+        native::restore_clipboard_text_for_probe(snapshot)
+    }
+
+    pub fn current_process_memory() -> Result<WindowsProcessMemory, WindowsPlatformError> {
+        native::current_process_memory()
     }
 }
 
@@ -320,6 +397,32 @@ fn plan_hotkey(hotkey: &Hotkey) -> Result<WindowsHotkey, WindowsPlatformError> {
         modifiers: hotkey_modifiers(&hotkey.modifiers),
         virtual_key: hotkey_virtual_key(&hotkey.key)?,
     })
+}
+
+fn plan_uia_node(node: &A11yNode) -> WindowsUiaNodePlan {
+    WindowsUiaNodePlan {
+        control_type: uia_control_type(&node.role),
+        name: node.name.clone(),
+        description: node.description.clone(),
+        focusable: node.focusable,
+        children: node.children.iter().map(plan_uia_node).collect(),
+    }
+}
+
+fn uia_control_type(role: &A11yRole) -> WindowsUiaControlType {
+    match role {
+        A11yRole::Application | A11yRole::Dialog => WindowsUiaControlType::Window,
+        A11yRole::Button => WindowsUiaControlType::Button,
+        A11yRole::CheckBox => WindowsUiaControlType::CheckBox,
+        A11yRole::ComboBox => WindowsUiaControlType::ComboBox,
+        A11yRole::Document => WindowsUiaControlType::Document,
+        A11yRole::Group | A11yRole::Navigation => WindowsUiaControlType::Group,
+        A11yRole::List => WindowsUiaControlType::List,
+        A11yRole::ListItem => WindowsUiaControlType::ListItem,
+        A11yRole::Pane | A11yRole::ScrollView => WindowsUiaControlType::Pane,
+        A11yRole::StaticText => WindowsUiaControlType::Text,
+        A11yRole::TextInput => WindowsUiaControlType::Edit,
+    }
 }
 
 fn native_hotkey_id(id: &str) -> i32 {
@@ -462,24 +565,33 @@ mod native {
     use std::ptr::null_mut;
 
     use super::{
-        ClipboardFormat, NativeHotkeyMessage, WindowsHotkey, WindowsHotkeyHandle,
-        WindowsPlatformError, WindowsPoint, WindowsRect,
+        ClipboardFormat, NativeHotkeyMessage, WindowsClipboardFormatSnapshot,
+        WindowsClipboardTextSnapshot, WindowsHotkey, WindowsHotkeyHandle, WindowsPlatformError,
+        WindowsPoint, WindowsProcessMemory, WindowsRect,
     };
-    use windows_sys::Win32::Foundation::{GetLastError, HWND, POINT};
+    use windows_sys::Win32::Foundation::{GetLastError, GlobalFree, SetLastError, HWND, POINT};
     use windows_sys::Win32::Graphics::Gdi::{
         GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
     };
     use windows_sys::Win32::System::DataExchange::{
-        CloseClipboard, IsClipboardFormatAvailable, OpenClipboard,
+        CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData,
+        IsClipboardFormatAvailable, OpenClipboard, SetClipboardData,
+    };
+    use windows_sys::Win32::System::Memory::{
+        GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE,
     };
     use windows_sys::Win32::System::Ole::CF_UNICODETEXT;
+    use windows_sys::Win32::System::ProcessStatus::{
+        K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
+    };
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
     #[cfg(test)]
     use windows_sys::Win32::System::Threading::GetCurrentThreadId;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         RegisterHotKey, SendInput, UnregisterHotKey, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-        KEYEVENTF_KEYUP, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, VK_BACK, VK_CONTROL, VK_DELETE,
-        VK_DOWN, VK_END, VK_ESCAPE, VK_F1, VK_HOME, VK_LEFT, VK_LWIN, VK_MENU, VK_RETURN, VK_RIGHT,
-        VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
+        KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, VK_BACK,
+        VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_F1, VK_HOME, VK_LEFT, VK_LWIN,
+        VK_MENU, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
     };
     #[cfg(test)]
     use windows_sys::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
@@ -564,6 +676,113 @@ mod native {
         Ok(())
     }
 
+    pub fn send_unicode_text_input_for_probe(text: &str) -> Result<(), WindowsPlatformError> {
+        let mut inputs = Vec::new();
+        for unit in text.encode_utf16() {
+            inputs.push(unicode_keyboard_input(unit, 0));
+            inputs.push(unicode_keyboard_input(unit, KEYEVENTF_KEYUP));
+        }
+
+        if inputs.is_empty() {
+            return Ok(());
+        }
+
+        // Safety: inputs points to a contiguous array of INPUT values with the correct element size.
+        let sent = unsafe {
+            SendInput(
+                inputs.len() as u32,
+                inputs.as_ptr(),
+                std::mem::size_of::<INPUT>() as i32,
+            )
+        };
+        if sent != inputs.len() as u32 {
+            return Err(last_error("SendInput"));
+        }
+
+        Ok(())
+    }
+
+    pub fn send_clipboard_text_paste_for_probe(text: &str) -> Result<(), WindowsPlatformError> {
+        set_clipboard_text_for_probe(text)?;
+        send_hotkey_input_for_probe(&WindowsHotkey {
+            id: "clipboard-paste".to_string(),
+            native_id: 0,
+            modifiers: MOD_CONTROL,
+            virtual_key: b'V' as u32,
+        })
+    }
+
+    pub fn clipboard_text_snapshot_for_probe(
+    ) -> Result<WindowsClipboardTextSnapshot, WindowsPlatformError> {
+        // Safety: Passing null owner opens the process clipboard for inspection only.
+        if unsafe { OpenClipboard(null_mut()) } == 0 {
+            return Err(last_error("OpenClipboard"));
+        }
+
+        let _guard = ClipboardGuard;
+        let mut formats = Vec::new();
+        let mut current = 0u32;
+
+        loop {
+            // Safety: Clipboard is open. SetLastError lets us distinguish end-of-enum from errors.
+            unsafe { SetLastError(0) };
+            // Safety: Clipboard is open for enumeration.
+            let format = unsafe { EnumClipboardFormats(current) };
+            if format == 0 {
+                let code = unsafe { GetLastError() };
+                if code != 0 {
+                    return Err(WindowsPlatformError::NativeCallFailed {
+                        operation: "EnumClipboardFormats",
+                        code,
+                    });
+                }
+                break;
+            }
+
+            formats.push(read_clipboard_format(format)?);
+            current = format;
+        }
+
+        let unicode_text = formats
+            .iter()
+            .find(|format| format.format == u32::from(CF_UNICODETEXT))
+            .and_then(|format| decode_clipboard_unicode_text(&format.bytes));
+
+        Ok(WindowsClipboardTextSnapshot {
+            unicode_text,
+            formats,
+        })
+    }
+
+    pub fn restore_clipboard_text_for_probe(
+        snapshot: &WindowsClipboardTextSnapshot,
+    ) -> Result<(), WindowsPlatformError> {
+        // Safety: Passing null owner opens the process clipboard for mutation.
+        if unsafe { OpenClipboard(null_mut()) } == 0 {
+            return Err(last_error("OpenClipboard"));
+        }
+
+        let _guard = ClipboardGuard;
+        // Safety: Clipboard is open for the current process.
+        if unsafe { EmptyClipboard() } == 0 {
+            return Err(last_error("EmptyClipboard"));
+        }
+
+        for format in &snapshot.formats {
+            let handle = global_alloc_from_bytes(&format.bytes)?;
+
+            // Safety: Clipboard is open; handle contains a movable memory block and ownership
+            // transfers to the system on success.
+            if unsafe { SetClipboardData(format.format, handle) }.is_null() {
+                // Safety: ownership has not been transferred to the clipboard.
+                let _ = unsafe { GlobalFree(handle) };
+                return Err(last_error("SetClipboardData"));
+            }
+        }
+
+        Ok(())
+    }
+
     fn modifier_virtual_keys(modifiers: u32) -> Vec<u16> {
         let mut keys = Vec::new();
         if modifiers & MOD_CONTROL != 0 {
@@ -594,6 +813,159 @@ mod native {
                 },
             },
         }
+    }
+
+    fn unicode_keyboard_input(unit: u16, flags: u32) -> INPUT {
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: 0,
+                    wScan: unit,
+                    dwFlags: KEYEVENTF_UNICODE | flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        }
+    }
+
+    fn read_clipboard_format(
+        format: u32,
+    ) -> Result<WindowsClipboardFormatSnapshot, WindowsPlatformError> {
+        // Safety: Clipboard is open for the current process.
+        let handle = unsafe { GetClipboardData(format) };
+        if handle.is_null() {
+            return Err(last_error("GetClipboardData"));
+        }
+
+        // Safety: handle is owned by the clipboard and valid while the clipboard remains open.
+        let size = unsafe { GlobalSize(handle) };
+        if size == 0 {
+            return Ok(WindowsClipboardFormatSnapshot {
+                format,
+                bytes: Vec::new(),
+            });
+        }
+
+        // Safety: handle is owned by the clipboard and valid while the clipboard remains open.
+        let locked = unsafe { GlobalLock(handle) } as *const u8;
+        if locked.is_null() {
+            return Err(last_error("GlobalLock"));
+        }
+
+        // Safety: locked points to size initialized bytes while the clipboard remains open.
+        let bytes = unsafe { std::slice::from_raw_parts(locked, size) }.to_vec();
+        // Safety: Balances a successful GlobalLock on the clipboard handle.
+        let _ = unsafe { GlobalUnlock(handle) };
+
+        Ok(WindowsClipboardFormatSnapshot { format, bytes })
+    }
+
+    fn decode_clipboard_unicode_text(bytes: &[u8]) -> Option<String> {
+        let units = bytes
+            .chunks_exact(2)
+            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+            .take_while(|unit| *unit != 0)
+            .collect::<Vec<_>>();
+
+        (!units.is_empty()).then(|| String::from_utf16_lossy(&units))
+    }
+
+    pub fn current_process_memory() -> Result<WindowsProcessMemory, WindowsPlatformError> {
+        let mut counters = PROCESS_MEMORY_COUNTERS_EX {
+            cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32,
+            ..unsafe { std::mem::zeroed() }
+        };
+
+        // Safety: GetCurrentProcess returns a valid pseudo handle for the current process.
+        // counters points to initialized storage large enough for PROCESS_MEMORY_COUNTERS_EX.
+        let ok = unsafe {
+            K32GetProcessMemoryInfo(
+                GetCurrentProcess(),
+                &mut counters as *mut PROCESS_MEMORY_COUNTERS_EX as *mut PROCESS_MEMORY_COUNTERS,
+                std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32,
+            )
+        };
+        if ok == 0 {
+            return Err(last_error("K32GetProcessMemoryInfo"));
+        }
+
+        Ok(WindowsProcessMemory {
+            private_bytes: counters.PrivateUsage,
+            working_set_bytes: counters.WorkingSetSize,
+        })
+    }
+
+    fn global_alloc_from_bytes(
+        bytes: &[u8],
+    ) -> Result<*mut std::ffi::c_void, WindowsPlatformError> {
+        let byte_len = bytes.len().max(1);
+
+        // Safety: GlobalAlloc returns a movable memory handle owned by this function until a
+        // successful SetClipboardData call transfers ownership to the system clipboard.
+        let handle = unsafe { GlobalAlloc(GMEM_MOVEABLE, byte_len) };
+        if handle.is_null() {
+            return Err(last_error("GlobalAlloc"));
+        }
+
+        // Safety: handle is a valid movable memory handle from GlobalAlloc.
+        let locked = unsafe { GlobalLock(handle) } as *mut u8;
+        if locked.is_null() {
+            // Safety: ownership has not been transferred to the clipboard.
+            let _ = unsafe { GlobalFree(handle) };
+            return Err(last_error("GlobalLock"));
+        }
+
+        if bytes.is_empty() {
+            // Safety: locked points to at least one byte because byte_len is at least 1.
+            unsafe { *locked = 0 };
+        } else {
+            // Safety: locked points to byte_len bytes and bytes.len() <= byte_len.
+            unsafe {
+                std::ptr::copy_nonoverlapping(bytes.as_ptr(), locked, bytes.len());
+            }
+        }
+
+        // Safety: Balances a successful GlobalLock on the allocated handle.
+        let _ = unsafe { GlobalUnlock(handle) };
+        Ok(handle)
+    }
+
+    fn set_clipboard_text_for_probe(text: &str) -> Result<(), WindowsPlatformError> {
+        let wide = text
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let bytes = wide
+            .iter()
+            .flat_map(|unit| unit.to_le_bytes())
+            .collect::<Vec<_>>();
+        let handle = global_alloc_from_bytes(&bytes)?;
+
+        // Safety: Passing null owner opens the process clipboard for mutation.
+        if unsafe { OpenClipboard(null_mut()) } == 0 {
+            // Safety: ownership has not been transferred to the clipboard.
+            let _ = unsafe { GlobalFree(handle) };
+            return Err(last_error("OpenClipboard"));
+        }
+
+        let _guard = ClipboardGuard;
+        // Safety: Clipboard is open for the current process.
+        if unsafe { EmptyClipboard() } == 0 {
+            // Safety: ownership has not been transferred to the clipboard.
+            let _ = unsafe { GlobalFree(handle) };
+            return Err(last_error("EmptyClipboard"));
+        }
+
+        // Safety: handle contains a null-terminated UTF-16 buffer for CF_UNICODETEXT.
+        if unsafe { SetClipboardData(u32::from(CF_UNICODETEXT), handle) }.is_null() {
+            // Safety: ownership has not been transferred to the clipboard.
+            let _ = unsafe { GlobalFree(handle) };
+            return Err(last_error("SetClipboardData"));
+        }
+
+        Ok(())
     }
 
     #[cfg(test)]
@@ -805,8 +1177,8 @@ mod native {
 #[cfg(not(windows))]
 mod native {
     use super::{
-        ClipboardFormat, NativeHotkeyMessage, WindowsHotkey, WindowsHotkeyHandle,
-        WindowsPlatformError, WindowsPoint, WindowsRect,
+        ClipboardFormat, NativeHotkeyMessage, WindowsClipboardTextSnapshot, WindowsHotkey,
+        WindowsHotkeyHandle, WindowsPlatformError, WindowsPoint, WindowsProcessMemory, WindowsRect,
     };
 
     pub fn register_global_hotkey(
@@ -825,6 +1197,29 @@ mod native {
     pub fn send_hotkey_input_for_probe(
         _hotkey: &WindowsHotkey,
     ) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn send_unicode_text_input_for_probe(_text: &str) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn send_clipboard_text_paste_for_probe(_text: &str) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn clipboard_text_snapshot_for_probe(
+    ) -> Result<WindowsClipboardTextSnapshot, WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn restore_clipboard_text_for_probe(
+        _snapshot: &WindowsClipboardTextSnapshot,
+    ) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn current_process_memory() -> Result<WindowsProcessMemory, WindowsPlatformError> {
         Err(WindowsPlatformError::UnsupportedPlatform)
     }
 
@@ -958,13 +1353,16 @@ mod native {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use win_fluent::a11y::{resolve_accessibility_tree, A11yNode, A11yRole};
     use win_fluent::platform::{HotkeyKey, HotkeyModifier, TrayMenu, TrayMenuItem};
+    use win_fluent::prelude::{button, column, page, text_editor, IntoView};
     use win_fluent::window::{WindowFrame, WindowLevel, WindowPlacement};
 
     #[allow(dead_code)]
     #[derive(Clone)]
     enum Msg {
         Open,
+        Changed(String),
     }
 
     #[test]
@@ -1175,5 +1573,60 @@ mod tests {
         assert_eq!(verbs[0].id, "ocr");
         assert!(verbs[0].accepts_files);
         assert!(verbs[0].accepts_directory_background);
+    }
+
+    #[test]
+    fn maps_accessibility_tree_to_uia_control_types() {
+        let mut root = A11yNode::new(A11yRole::Application);
+        root.name = Some("Win Fluent".to_string());
+
+        let mut group = A11yNode::new(A11yRole::Group);
+        let mut button = A11yNode::new(A11yRole::Button);
+        button.name = Some("Translate".to_string());
+        button.focusable = true;
+        group.children.push(button);
+        root.children.push(group);
+
+        let plan = WindowsPlatformAdapter::plan_uia_tree(&root);
+
+        assert_eq!(plan.root.control_type, WindowsUiaControlType::Window);
+        assert_eq!(plan.root.name.as_deref(), Some("Win Fluent"));
+        assert_eq!(
+            plan.root.children[0].control_type,
+            WindowsUiaControlType::Group
+        );
+        assert_eq!(
+            plan.root.children[0].children[0].control_type,
+            WindowsUiaControlType::Button
+        );
+        assert!(plan.root.children[0].children[0].focusable);
+    }
+
+    #[test]
+    fn maps_view_accessibility_tree_to_uia_plan() {
+        let view = page("Main")
+            .content(column((
+                button("Open").on_press(Msg::Open),
+                text_editor("").placeholder("Query").on_input(Msg::Changed),
+            )))
+            .into_view();
+        let tree = resolve_accessibility_tree(&view);
+
+        let plan = WindowsPlatformAdapter::plan_uia_tree(&tree);
+
+        assert_eq!(plan.root.control_type, WindowsUiaControlType::Window);
+        assert_eq!(plan.root.name.as_deref(), Some("Main"));
+        assert_eq!(
+            plan.root.children[0].children[0].control_type,
+            WindowsUiaControlType::Button
+        );
+        assert_eq!(
+            plan.root.children[0].children[1].control_type,
+            WindowsUiaControlType::Edit
+        );
+        assert_eq!(
+            plan.root.children[0].children[1].name.as_deref(),
+            Some("Query")
+        );
     }
 }

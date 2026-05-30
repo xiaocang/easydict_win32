@@ -114,6 +114,68 @@ pub enum Density {
     Comfortable,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BackdropKind {
+    Solid,
+    Mica,
+    Acrylic,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Stroke {
+    pub divider: f32,
+    pub control: f32,
+    pub focus: f32,
+}
+
+impl Default for Stroke {
+    fn default() -> Self {
+        Self {
+            divider: 1.0,
+            control: 1.0,
+            focus: 2.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Elevation {
+    pub rest: f32,
+    pub raised: f32,
+    pub overlay: f32,
+    pub flyout: f32,
+}
+
+impl Default for Elevation {
+    fn default() -> Self {
+        Self {
+            rest: 0.0,
+            raised: 2.0,
+            overlay: 8.0,
+            flyout: 16.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ControlMetrics {
+    pub height: f32,
+    pub compact_height: f32,
+    pub icon_button: f32,
+    pub min_touch_target: f32,
+}
+
+impl Default for ControlMetrics {
+    fn default() -> Self {
+        Self {
+            height: 32.0,
+            compact_height: 28.0,
+            icon_button: 32.0,
+            min_touch_target: 40.0,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ThemeTokens {
     pub mode: ThemeMode,
@@ -121,7 +183,11 @@ pub struct ThemeTokens {
     pub typography: Typography,
     pub spacing: Spacing,
     pub radius: CornerRadius,
+    pub stroke: Stroke,
+    pub elevation: Elevation,
+    pub control: ControlMetrics,
     pub density: Density,
+    pub backdrop: BackdropKind,
     pub background: Color,
     pub surface: Color,
     pub surface_alt: Color,
@@ -142,7 +208,11 @@ impl ThemeTokens {
             typography: Typography::default(),
             spacing: Spacing::default(),
             radius: CornerRadius::default(),
+            stroke: Stroke::default(),
+            elevation: Elevation::default(),
+            control: ControlMetrics::default(),
             density: Density::Comfortable,
+            backdrop: BackdropKind::Mica,
             background: Color::rgb(243, 243, 243),
             surface: Color::rgb(255, 255, 255),
             surface_alt: Color::rgb(250, 250, 250),
@@ -163,7 +233,11 @@ impl ThemeTokens {
             typography: Typography::default(),
             spacing: Spacing::default(),
             radius: CornerRadius::default(),
+            stroke: Stroke::default(),
+            elevation: Elevation::default(),
+            control: ControlMetrics::default(),
             density: Density::Comfortable,
+            backdrop: BackdropKind::Mica,
             background: Color::rgb(32, 32, 32),
             surface: Color::rgb(45, 45, 45),
             surface_alt: Color::rgb(56, 56, 56),
@@ -190,7 +264,16 @@ impl ThemeTokens {
             typography: Typography::default(),
             spacing: Spacing::default(),
             radius: CornerRadius::default(),
+            stroke: Stroke::default(),
+            elevation: Elevation {
+                rest: 0.0,
+                raised: 0.0,
+                overlay: 0.0,
+                flyout: 0.0,
+            },
+            control: ControlMetrics::default(),
             density: Density::Comfortable,
+            backdrop: BackdropKind::Solid,
             background: Color::rgb(0, 0, 0),
             surface: Color::rgb(0, 0, 0),
             surface_alt: Color::rgb(16, 16, 16),
@@ -210,5 +293,32 @@ impl ThemeTokens {
             ThemeMode::Dark => Self::fluent_dark(),
             ThemeMode::HighContrast => Self::high_contrast(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolves_visual_tokens_for_all_supported_modes() {
+        let light = ThemeTokens::resolve(ThemeMode::Light);
+        let dark = ThemeTokens::resolve(ThemeMode::Dark);
+        let high_contrast = ThemeTokens::resolve(ThemeMode::HighContrast);
+
+        assert_eq!(light.backdrop, BackdropKind::Mica);
+        assert_eq!(dark.backdrop, BackdropKind::Mica);
+        assert_eq!(high_contrast.backdrop, BackdropKind::Solid);
+        assert_eq!(light.control.height, 32.0);
+        assert_eq!(dark.stroke.focus, 2.0);
+        assert_eq!(high_contrast.elevation.overlay, 0.0);
+    }
+
+    #[test]
+    fn system_theme_resolves_to_light_visual_contract() {
+        assert_eq!(
+            ThemeTokens::resolve(ThemeMode::System),
+            ThemeTokens::fluent_light()
+        );
     }
 }

@@ -28,3 +28,7 @@ path = "src/bin/demo_window.rs"
 [[bin]]
 name = "win_fluent_mini_demo"
 path = "src/bin/mini_window.rs"
+
+[[bin]]
+name = "win_fluent_mini_daemon"
+path = "src/bin/mini_daemon.rs"

@@ -32,7 +32,8 @@ pub use state::{ControlState, ValidationSeverity, ValidationState};
 pub use subscription::{PlatformEvent, Subscription, SubscriptionKind, WindowEvent};
 pub use task::Task;
 pub use theme::{
-    AccentPalette, Color, CornerRadius, Density, Spacing, ThemeMode, ThemeTokens, Typography,
+    AccentPalette, BackdropKind, Color, ControlMetrics, CornerRadius, Density, Elevation, Spacing,
+    Stroke, ThemeMode, ThemeTokens, Typography,
 };
 pub use view::{
     button, column, combo_box, command_bar, dialog, lazy, navigation_view, page, primary_button,

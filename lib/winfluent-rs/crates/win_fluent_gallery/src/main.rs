@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use win_fluent::prelude::*;
 use win_fluent_platform_win::WindowsPlatformAdapter;
 
@@ -17,13 +19,26 @@ fn main() {
     let mini_options = mini_window_options();
     println!("{}", win_fluent_testkit::view_snapshot(&view));
     println!("{}", win_fluent_testkit::layout_snapshot(&view));
+    println!("{}", win_fluent_testkit::accessibility_snapshot(&view));
+    println!(
+        "{}",
+        win_fluent_testkit::accessibility_audit_snapshot(&view)
+    );
     println!("{}", window_options_snapshot(&mini_options));
     println!("{}", windows_window_plan_snapshot(&mini_options));
+    println!("{}", windows_uia_plan_snapshot(&view));
+    println!("{}", win_fluent_testkit::view_snapshot(&main_window_view()));
     println!("{}", win_fluent_testkit::view_snapshot(&mini_window_view()));
     println!(
         "{}",
-        win_fluent_testkit::theme_snapshot(&ThemeTokens::fluent_light())
+        win_fluent_testkit::view_snapshot(&fixed_window_view())
     );
+    println!(
+        "{}",
+        win_fluent_testkit::view_snapshot(&settings_window_view())
+    );
+    println!("{}", win_fluent_testkit::view_snapshot(&ocr_overlay_view()));
+    println!("{}", win_fluent_testkit::theme_matrix_snapshot());
 }
 
 fn gallery_view() -> View<Msg> {
@@ -85,6 +100,64 @@ fn mini_window_options() -> WindowOptions {
         .skip_taskbar(true)
 }
 
+fn main_window_view() -> View<Msg> {
+    page("Translate")
+        .content(
+            navigation_view([
+                NavigationItem::new("translate", "Translate").icon(icon::translate()),
+                NavigationItem::new("history", "History").icon(icon::search()),
+                NavigationItem::new("settings", "Settings").icon(icon::settings()),
+            ])
+            .selected("translate")
+            .content(scroll_view(
+                column((
+                    row((
+                        combo_box([
+                            ComboBoxItem::new("auto", "Auto detect"),
+                            ComboBoxItem::new("en", "English"),
+                            ComboBoxItem::new("zh", "Chinese"),
+                        ])
+                        .label("Source")
+                        .selected("auto")
+                        .on_change(Msg::Navigate),
+                        combo_box([
+                            ComboBoxItem::new("en", "English"),
+                            ComboBoxItem::new("zh", "Chinese"),
+                            ComboBoxItem::new("ja", "Japanese"),
+                        ])
+                        .label("Target")
+                        .selected("en")
+                        .on_change(Msg::Navigate),
+                    ))
+                    .spacing(12),
+                    text_editor("")
+                        .id("main.input")
+                        .placeholder("Text to translate")
+                        .min_height(140)
+                        .on_input(Msg::InputChanged),
+                    command_bar((
+                        primary_button("Translate")
+                            .icon(icon::translate())
+                            .on_press(Msg::Run),
+                        button("Copy").icon(icon::copy()).on_press(Msg::Copy),
+                        button("Speak").icon(icon::speaker()).on_press(Msg::Speak),
+                    )),
+                    service_result_list([
+                        ResultItem::new("provider-a", "Provider A", "Ready result"),
+                        ResultItem::new("provider-b", "Provider B", "Streaming result")
+                            .status(ResultStatus::Streaming),
+                    ])
+                    .on_copy(Msg::Copy)
+                    .on_speak(Msg::Speak),
+                ))
+                .padding(24)
+                .spacing(16),
+            ))
+            .on_select(Msg::Navigate),
+        )
+        .into_view()
+}
+
 fn mini_window_view() -> View<Msg> {
     page("Mini Translate")
         .content(
@@ -113,6 +186,94 @@ fn mini_window_view() -> View<Msg> {
             ))
             .padding(16)
             .spacing(12),
+        )
+        .into_view()
+}
+
+fn fixed_window_view() -> View<Msg> {
+    page("Fixed Translate")
+        .content(
+            column((
+                command_bar((
+                    primary_button("Translate")
+                        .icon(icon::translate())
+                        .on_press(Msg::Run),
+                    button("Copy").icon(icon::copy()).on_press(Msg::Copy),
+                    button("Speak").icon(icon::speaker()).on_press(Msg::Speak),
+                ))
+                .compact(true),
+                text_editor("Pinned source text")
+                    .id("fixed.input")
+                    .placeholder("Pinned text")
+                    .min_height(110)
+                    .on_input(Msg::InputChanged),
+                service_result_card(ResultItem::new(
+                    "fixed-result",
+                    "Pinned Result",
+                    "Translation stays visible while working in other windows.",
+                ))
+                .on_copy(Msg::Copy)
+                .on_speak(Msg::Speak),
+            ))
+            .padding(16)
+            .spacing(12),
+        )
+        .into_view()
+}
+
+fn settings_window_view() -> View<Msg> {
+    page("Settings")
+        .content(scroll_view(
+            column((
+                settings_row("Background service")
+                    .description("Start helper services with the session")
+                    .icon(icon::settings())
+                    .trailing((toggle_switch("Enabled", true).on_toggle(Msg::ToggleChanged),)),
+                settings_row("Theme")
+                    .description("Choose a visual mode")
+                    .trailing((combo_box([
+                        ComboBoxItem::new("system", "System"),
+                        ComboBoxItem::new("light", "Light"),
+                        ComboBoxItem::new("dark", "Dark"),
+                        ComboBoxItem::new("contrast", "High contrast"),
+                    ])
+                    .label("Theme")
+                    .selected("system")
+                    .on_change(Msg::Navigate),)),
+                settings_row("Capture shortcut")
+                    .description("Keyboard shortcut used by capture overlay")
+                    .trailing((button("Record").on_press(Msg::Run),)),
+                settings_row("Translation providers")
+                    .description("Select services for multi-result translation")
+                    .content(service_result_list([
+                        ResultItem::new("provider-a", "Provider A", "Configured"),
+                        ResultItem::new("provider-b", "Provider B", "Needs attention")
+                            .status(ResultStatus::Error),
+                    ])),
+            ))
+            .padding(24)
+            .spacing(12),
+        ))
+        .into_view()
+}
+
+fn ocr_overlay_view() -> View<Msg> {
+    page("Capture Overlay")
+        .content(
+            column((
+                text("Capture region"),
+                text("Use the overlay controls to confirm or adjust the selected area."),
+                command_bar((
+                    primary_button("Confirm")
+                        .icon(icon::translate())
+                        .on_press(Msg::Run),
+                    button("Copy").icon(icon::copy()).on_press(Msg::Copy),
+                    button("Cancel").on_press(Msg::Run),
+                ))
+                .compact(true),
+            ))
+            .padding(12)
+            .spacing(8),
         )
         .into_view()
 }
@@ -170,6 +331,35 @@ fn windows_window_plan_snapshot(options: &WindowOptions) -> String {
     )
 }
 
+fn windows_uia_plan_snapshot<Message>(view: &View<Message>) -> String {
+    let tree = win_fluent_testkit::accessibility_tree(view);
+    let plan = WindowsPlatformAdapter::plan_uia_tree(&tree);
+    let mut output = String::new();
+    let _ = writeln!(output, "WindowsUiaTree");
+    write_uia_node(&mut output, &plan.root, 0);
+    output
+}
+
+fn write_uia_node(
+    output: &mut String,
+    node: &win_fluent_platform_win::WindowsUiaNodePlan,
+    indent: usize,
+) {
+    let pad = " ".repeat(indent);
+    let _ = writeln!(
+        output,
+        "{pad}{:?} name={:?} focusable={} children={}",
+        node.control_type,
+        node.name,
+        node.focusable,
+        node.children.len()
+    );
+
+    for child in &node.children {
+        write_uia_node(output, child, indent + 2);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +406,49 @@ mod tests {
         assert!(snapshot.contains("ServiceResultList"));
         assert!(!snapshot.contains("iced"));
         assert!(!snapshot.contains("windows::"));
+    }
+
+    #[test]
+    fn main_fixed_settings_and_ocr_references_have_stable_schema() {
+        let snapshots = [
+            win_fluent_testkit::view_snapshot(&main_window_view()),
+            win_fluent_testkit::view_snapshot(&fixed_window_view()),
+            win_fluent_testkit::view_snapshot(&settings_window_view()),
+            win_fluent_testkit::view_snapshot(&ocr_overlay_view()),
+        ];
+
+        assert!(snapshots[0].contains("NavigationView"));
+        assert!(snapshots[0].contains("ServiceResultList"));
+        assert!(snapshots[1].contains("ServiceResultCard"));
+        assert!(snapshots[2].contains("SettingsRow"));
+        assert!(snapshots[3].contains("CommandBar"));
+
+        for snapshot in snapshots {
+            assert!(snapshot.contains("ViewSchema version=1"));
+            assert!(!snapshot.contains("iced"));
+            assert!(!snapshot.contains("windows::"));
+        }
+    }
+
+    #[test]
+    fn reference_views_pass_accessibility_audit_and_map_to_uia() {
+        let views = [
+            main_window_view(),
+            mini_window_view(),
+            fixed_window_view(),
+            settings_window_view(),
+            ocr_overlay_view(),
+        ];
+
+        for view in views {
+            let audit = win_fluent_testkit::accessibility_audit(&view);
+            assert!(audit.passed(), "{:?}", audit.issues);
+
+            let snapshot = windows_uia_plan_snapshot(&view);
+            assert!(snapshot.contains("WindowsUiaTree"));
+            assert!(snapshot.contains("Window"));
+            assert!(!snapshot.contains("iced::"));
+            assert!(!snapshot.contains("windows::"));
+        }
     }
 }

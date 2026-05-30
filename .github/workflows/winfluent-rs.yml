@@ -1,0 +1,101 @@
+name: winfluent-rs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "lib/winfluent-rs/**"
+      - ".github/workflows/winfluent-rs.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "lib/winfluent-rs/**"
+      - ".github/workflows/winfluent-rs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check (${{ matrix.target }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Show Rust toolchain
+        shell: pwsh
+        run: rustup show
+
+      - name: Install target
+        shell: pwsh
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Format check
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        working-directory: lib/winfluent-rs
+        shell: pwsh
+        run: cargo fmt --all --check
+
+      - name: Test workspace
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        working-directory: lib/winfluent-rs
+        shell: pwsh
+        run: cargo test --workspace
+
+      - name: Check workspace target
+        working-directory: lib/winfluent-rs
+        shell: pwsh
+        run: cargo check --workspace --target ${{ matrix.target }}
+
+      - name: Check all targets
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        working-directory: lib/winfluent-rs
+        shell: pwsh
+        run: cargo check --workspace --all-targets
+
+  arm64-runtime-smoke:
+    name: ARM64 Runtime Smoke
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, Windows, ARM64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Show Rust toolchain
+        shell: pwsh
+        run: rustup show
+
+      - name: Test workspace on ARM64
+        working-directory: lib/winfluent-rs
+        shell: pwsh
+        run: cargo test --workspace
+
+      - name: Run Mini daemon ARM64 runtime evidence probe
+        working-directory: lib/winfluent-rs
+        shell: pwsh
+        run: |
+          cargo run -p win_fluent_backend_iced --bin win_fluent_mini_daemon -- `
+            --resident-probe-exit `
+            --stream-delay-ms=120 `
+            --evidence-dir="$env:GITHUB_WORKSPACE\artifacts\winfluent-mini-daemon-evidence\arm64"
+
+      - name: Upload runtime evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: winfluent-mini-daemon-evidence-arm64
+          path: artifacts/winfluent-mini-daemon-evidence/arm64

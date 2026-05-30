@@ -1554,6 +1554,229 @@ boundary checks passed:
 4. UIA 可访问性树验证仍未建立
 ```
 
+### 12.15 Resident Mini daemon smoke 继续推进结果
+
+本轮补齐了当前阶段目标要求的后台常驻 Mini Window runtime smoke：
+
+```text
+1. 新增 win_fluent_mini_daemon binary，使用 iced::daemon 启动，默认不创建窗口
+2. daemon 启动后打印 DAEMON_STARTED default_window=None no_default_window=true，作为无默认主窗口 smoke 证据
+3. 全局热键 Ctrl+Alt+Shift+F24 统一驱动 Mini Window：
+   - 第 1 次热键：show/open Mini Window
+   - 第 2 次热键：hide Mini Window，验证 window mode = Hidden
+   - 第 3 次热键：restore/focus Mini Window，验证 window mode = Windowed 且 mini.input focused=true
+4. backend Iced compiler 现在把 TextEditorToken.id / fallback TextInput id 传给 Iced widget，支持 widget_operation::focus / is_focused
+5. Windows platform adapter 新增：
+   - send_unicode_text_input_for_probe
+   - send_clipboard_text_paste_for_probe
+   - current_process_memory
+6. 中文输入 smoke 使用 clipboard Unicode text + Ctrl+V，在已 focus 的 mini.input 内验证 InputChanged 收到 “中文输入”
+7. streaming smoke 在输入中文后启动，并用 iced_window::screenshot 做 before/after RGBA diff
+8. memory smoke 输出 resident no-window 与 mini after-stream 的 private bytes / working set
+9. accessibility smoke 输出 token accessibility tree role counts：Application + TextInput + Buttons + List
+10. 新增单元覆盖：
+    - resident probe 模式默认无 window id / invisible
+    - Mini daemon view 的 accessibility smoke shape
+    - visual diff changed-pixel 计算
+```
+
+本轮已执行：
+
+```bash
+cargo fmt --all
+cargo fmt --all --check
+cargo check -p win_fluent_backend_iced --bin win_fluent_mini_daemon
+$env:CARGO_INCREMENTAL='0'; cargo test --workspace
+cargo run -p win_fluent_backend_iced --bin win_fluent_mini_daemon -- --resident-probe-exit --stream-delay-ms=120
+rg -i "easydict" lib/winfluent-rs/crates lib/winfluent-rs/README.md
+rg "iced::|windows::|Win32|HWND|COM|wgpu|winit" lib/winfluent-rs/crates/win_fluent/src/prelude.rs lib/winfluent-rs/crates/win_fluent/src/view.rs lib/winfluent-rs/crates/win_fluent/src/window.rs lib/winfluent-rs/crates/win_fluent/src/platform.rs
+```
+
+结果：
+
+```text
+format check passed
+39 tests passed
+Resident daemon smoke passed:
+  A11Y_SMOKE root=Application name=Some("Mini Window") text_inputs=1 buttons=2 lists=1 ok=true
+  MEMORY_SMOKE phase=resident_no_window private_bytes_mb=2.9 working_set_mb=12.2
+  DAEMON_STARTED default_window=None no_default_window=true source=iced_daemon
+  HOTKEY_TRIGGERED id=mini.toggle count=1
+  HOTKEY_ACTION action=show_open id=Id(1) placement=420x360@972,552 work=1920x1032@0,0
+  WINDOW_OPENED id=Id(1)
+  WINDOW_RAW_ID raw_id=4653320
+  WINDOW_FOCUSED id=Id(1)
+  WINDOW_RESTORED mode=Windowed phase=Opened verified=true
+  INPUT_FOCUS phase=Opened focused=true
+  IME_INPUT_SENT method=clipboard_paste text="中文输入"
+  IME_INPUT_DONE text="中文输入"
+  VISUAL_BEFORE width=420 height=360 checksum=9444166364609262328
+  STREAM_DONE generation=1 bytes=92 text="Streaming translation for: 中文输入\n\nThis validates token-driven incremental UI updates."
+  VISUAL_SMOKE width=420 height=360 changed_pixels=28964 total_delta=9749985 before_checksum=9444166364609262328 after_checksum=13730284577711325987
+  MEMORY_SMOKE phase=mini_after_stream private_bytes_mb=6.6 working_set_mb=30.5
+  HOTKEY_TRIGGERED id=mini.toggle count=2
+  HOTKEY_ACTION action=hide id=Id(1)
+  WINDOW_HIDDEN mode=Hidden verified=true
+  HOTKEY_TRIGGERED id=mini.toggle count=3
+  HOTKEY_ACTION action=restore_focus id=Id(1)
+  WINDOW_FOCUSED id=Id(1)
+  WINDOW_RESTORED mode=Windowed phase=Restored verified=true
+  INPUT_FOCUS phase=Restored focused=true
+  DAEMON_SMOKE_DONE hotkeys=3 chinese_input=true visual=true memory=true a11y=true hide=true restore=true focus_event=true
+boundary checks passed:
+  no Easydict-specific names in winfluent-rs crates / README
+  no iced / Windows implementation types leaked through core win_fluent public API files
+```
+
+当前阶段目标状态：
+
+```text
+1. 后台常驻进程启动后默认无主窗口：已用 iced::daemon + DAEMON_STARTED smoke 覆盖
+2. 全局热键触发 Mini Window show / restore / focus / hide：已用 3 次 synthetic global hotkey runtime smoke 覆盖
+3. 窗口内能输入中文：已用 focused mini.input + Unicode clipboard paste + InputChanged 验证
+4. 流式刷新结果：已用中文输入后的 STREAM_DONE + before/after screenshot diff 验证
+5. 可重复视觉、内存、可访问性 smoke evidence：已由 resident probe 单命令输出
+```
+
+仍未完成的部分：
+
+```text
+1. 当前 accessibility evidence 是 win_fluent token tree smoke，不是 Windows UIA runtime tree
+2. 当前内存读数仍是 Rust/Iced Mini daemon smoke，不是和 WinUI Mini Window 的同机 baseline 对比
+3. 中文输入自动化使用 clipboard paste，会改写当前剪贴板；后续可增加 clipboard save/restore 或独立 IME automation
+```
+
+### 12.16 Runtime Evidence Hardening 继续推进结果
+
+本轮把 Mini daemon smoke 从“终端日志证明”升级为可重复、可审计、默认不污染用户环境的 runtime evidence 机制：
+
+```text
+1. resident probe 现在默认创建 evidence 目录：
+   - 默认：%TEMP%/win_fluent_mini_daemon_evidence/run-<timestamp>-<pid>
+   - 可通过 --evidence-dir=<path> 指定固定输出目录，便于 CI 或人工复核
+2. 每次 probe 写入结构化 artifacts：
+   - manifest.json：汇总 daemon/window/input/visual/memory/a11y/checks
+   - events.jsonl：按时间记录 probe_config、daemon_started、hotkey_triggered、window_opened、ime_input_done、stream_done、visual_smoke、memory_smoke、daemon_smoke_done 等事件
+   - visual_before.ppm / visual_after.ppm：保留 before/after screenshot bitmap，供离线审计
+3. 中文输入默认从 clipboard paste 改为 unicode_sendinput：
+   - 默认 --input-method=unicode_sendinput
+   - Iced TextEditor 对 Unicode SendInput 会逐字回调，本轮新增 probe-only 累积验证，最终严格匹配 “中文输入”
+   - 不写剪贴板，manifest 记录 clipboard_touched=false
+4. clipboard paste 变成可审计回退模式：
+   - --input-method=clipboard_paste
+   - unicode_sendinput 1.2s 内未完成精确输入时也会自动回退
+   - 先枚举并复制当前剪贴板所有可读取格式，不只保存 CF_UNICODETEXT
+   - 回退前重新 focus 输入框，并用 Ctrl+A + 多次 Backspace 清理迟到输入残留
+   - 发送 Ctrl+V 后恢复原剪贴板格式集合
+   - manifest/events 记录 clipboard_touched 与 clipboard_restored
+5. Windows platform adapter 新增 probe-only 剪贴板快照/恢复能力：
+   - clipboard_text_snapshot_for_probe
+   - restore_clipboard_text_for_probe
+6. runtime evidence 不再只依赖 stdout：
+   - stdout 仍保留简短 smoke line
+   - manifest/events/PPM artifacts 才是可归档证据
+7. failure path 也会写 manifest：
+   - ExitWithCode(code) 写 status=failed / exit_code=code
+   - timeout、hotkey error、input send failure、memory failure 都会先写事件
+```
+
+本轮已执行：
+
+```bash
+cargo fmt --all
+cargo fmt --all --check
+cargo check -p win_fluent_backend_iced --bin win_fluent_mini_daemon
+cargo check --workspace
+cargo check --workspace --all-targets
+cargo run -p win_fluent_backend_iced --bin win_fluent_mini_daemon -- --resident-probe-exit --stream-delay-ms=120 --evidence-dir=C:\Users\johnn\Documents\work\easydict_win32.refactor\artifacts\winfluent-mini-daemon-evidence\12.16-runtime-final3
+git grep -n -i easydict -- lib/winfluent-rs/crates lib/winfluent-rs/README.md
+git grep -n -E "iced::|windows::|Win32|HWND|COM|wgpu|winit" -- lib/winfluent-rs/crates/win_fluent/src/prelude.rs lib/winfluent-rs/crates/win_fluent/src/view.rs lib/winfluent-rs/crates/win_fluent/src/window.rs lib/winfluent-rs/crates/win_fluent/src/platform.rs
+```
+
+结果：
+
+```text
+format check passed
+target binary check passed
+workspace check passed
+workspace all-targets check passed
+Runtime evidence probe passed:
+  evidence_dir=artifacts/winfluent-mini-daemon-evidence/12.16-runtime-final3
+  manifest.status=passed exit_code=0
+  input.method=unicode_sendinput clipboard_touched=false seen=true text="中文输入"
+  window.hide_verified=true restore_verified=true focus_event_seen=true
+  visual.changed_pixels=28964 total_delta=9749985
+  memory resident_no_window=2.9MB private / 11.7MB working set
+  memory mini_after_stream=7.9MB private / 29.4MB working set
+  artifacts: manifest.json, events.jsonl, visual_before.ppm, visual_after.ppm
+boundary checks passed:
+  no Easydict-specific names in winfluent-rs crates / README
+  no iced / Windows implementation types leaked through core win_fluent public API files
+```
+
+本轮仍未执行的命令：
+
+```bash
+cargo test --workspace
+```
+
+原因：
+
+```text
+cargo test --workspace 在当前沙箱内仍失败（CreateProcessAsUserW failed: 1312），外部执行授权被拒绝。
+本轮已用 cargo check --workspace --all-targets 覆盖编译面，并完成 Mini daemon runtime evidence 实跑。
+```
+
+新的推荐 runtime evidence 命令：
+
+```bash
+cargo run -p win_fluent_backend_iced --bin win_fluent_mini_daemon -- --resident-probe-exit --stream-delay-ms=120
+```
+
+固定输出目录示例：
+
+```bash
+cargo run -p win_fluent_backend_iced --bin win_fluent_mini_daemon -- --resident-probe-exit --stream-delay-ms=120 --evidence-dir=artifacts/mini-daemon-evidence
+```
+
+如果必须验证 clipboard paste 回退：
+
+```bash
+cargo run -p win_fluent_backend_iced --bin win_fluent_mini_daemon -- --resident-probe-exit --input-method=clipboard_paste --evidence-dir=artifacts/mini-daemon-evidence-clipboard
+```
+
+当前阶段目标状态：
+
+```text
+1. 可重复：单命令 probe + 可指定 evidence 输出目录
+2. 可审计：manifest.json + events.jsonl + before/after PPM 截图
+3. 不污染用户环境：默认 unicode_sendinput 已实跑通过且 clipboard_touched=false；clipboard 回退保存/恢复所有可读取格式
+4. 失败可审计：失败退出也写 manifest/events
+5. 已完成编译面验证、x64 Windows runtime artifact 生成；cargo test --workspace 已在后续补跑通过
+```
+
+### 12.17 Cargo Test 补跑结果
+
+按 12.16 未执行项补跑：
+
+```bash
+cargo test --workspace
+```
+
+工作目录：
+
+```text
+lib/winfluent-rs
+```
+
+结果：
+
+```text
+workspace cargo test passed
+unit tests: 40 passed, 0 failed
+doctests completed with 0 failures
+```
+
 ## 13. 下一 milestone 补充事项
 
 这两个点需要纳入后续 milestone，但不阻塞当前 token/schema/backend adapter/Mini smoke 的推进：
@@ -1631,6 +1854,412 @@ scope 判断：
   1. cross compile 只能证明编译期兼容，不能证明 Windows ARM64 runtime 行为。
   2. 全局热键、IME、UIA、窗口特效必须有 ARM64 真机或 VM runtime evidence。
   3. 如果后续启用 wgpu/DX12 backend，需要单独验证 ARM64 GPU/driver 差异。
+```
+
+### 13.3 Visual Token Matrix 与 Cross Compile Gate 推进结果
+
+本轮按 13.1 / 13.2 推进了两个可验证切片：
+
+```text
+1. ThemeTokens 从基础颜色扩展为可快照的 Fluent visual contract：
+   - BackdropKind：Solid / Mica / Acrylic
+   - Stroke：divider / control / focus
+   - Elevation：rest / raised / overlay / flyout
+   - ControlMetrics：height / compact_height / icon_button / min_touch_target
+2. Light / Dark 默认使用 Mica backdrop；HighContrast 使用 Solid backdrop 且 elevation 全部为 0。
+3. win_fluent_testkit 新增 theme_matrix_snapshot，稳定输出 Light / Dark / HighContrast 三套 resolved theme。
+4. win_fluent_gallery 改为输出 theme matrix，后续视觉对齐可以先比较 theme/display-list，再进入截图 diff。
+5. 已建立当前 workspace 的 x64 / ARM64 compile gate：
+   - x86_64-pc-windows-msvc
+   - aarch64-pc-windows-msvc
+```
+
+本轮已执行：
+
+```bash
+cargo fmt --all
+cargo test --workspace
+cargo fmt --all --check
+cargo check --workspace --all-targets
+cargo run -p win_fluent_gallery
+cargo check --workspace --target x86_64-pc-windows-msvc
+rustup target add aarch64-pc-windows-msvc
+cargo check --workspace --target aarch64-pc-windows-msvc
+git grep -n -i easydict -- lib/winfluent-rs/crates lib/winfluent-rs/README.md
+git grep -n -E "iced::|windows::|Win32|HWND|COM|wgpu|winit" -- lib/winfluent-rs/crates/win_fluent/src/prelude.rs lib/winfluent-rs/crates/win_fluent/src/view.rs lib/winfluent-rs/crates/win_fluent/src/window.rs lib/winfluent-rs/crates/win_fluent/src/platform.rs lib/winfluent-rs/crates/win_fluent/src/theme.rs
+```
+
+结果：
+
+```text
+format check passed
+workspace tests passed: 43 passed, 0 failed
+workspace all-targets check passed
+gallery emitted Control Gallery, Mini Window, window plan, and Light/Dark/HighContrast resolved theme matrix
+x86_64-pc-windows-msvc check passed
+aarch64-pc-windows-msvc check passed
+boundary checks passed:
+  no Easydict-specific names in winfluent-rs crates / README
+  no iced / Windows implementation types leaked through public core API files
+```
+
+仍未完成的部分：
+
+```text
+1. 13.1 仍只是 visual token contract，不是完整 Fluent visual parity；后续还需要从 screenshot/ 提炼控件级布局和截图 diff 阈值。
+2. backend_iced 还没有把全部 ThemeTokens 映射到每个控件的实际渲染 style。
+3. 13.2 当前只完成 cross compile gate；ARM64 runtime gate 仍需要 ARM64 Windows 真机或 VM evidence。
+```
+
+### 13.4 Iced Backend Theme Mapping 推进结果
+
+本轮继续补 13.3 的第 2 个缺口，把 `ThemeTokens` 接入 Iced backend 的实际控件 style 编译路径：
+
+```text
+1. IcedAdapter 新增显式 theme 编译入口：
+   - compile_view_with_theme
+   - compile_view_with_text_editors_and_theme
+2. 原有 compile_view / compile_view_with_text_editors 保持兼容，默认使用 fluent_light。
+3. backend_iced 新增内部 IcedVisualTheme，把 win_fluent ThemeTokens 转换为 Iced Color / Border / Shadow style 输入。
+4. 已接入实际 style 的控件：
+   - Page container：background / text color
+   - Text：primary / secondary text color
+   - Button：Primary / Standard / Subtle / Icon 的 active / hovered / pressed / disabled style
+   - TextInput fallback：surface / focus border / selection / disabled state
+   - TextEditor：surface / focus border / selection / disabled state
+5. HighContrast style 明确不使用 elevation shadow，Primary 按钮使用黑色前景配黄色 accent。
+```
+
+本轮已执行：
+
+```bash
+cargo fmt --all
+cargo test -p win_fluent_backend_iced
+cargo fmt --all --check
+cargo test --workspace
+cargo check --workspace --all-targets
+cargo check --workspace --target x86_64-pc-windows-msvc
+cargo check --workspace --target aarch64-pc-windows-msvc
+git grep -n -i easydict -- lib/winfluent-rs/crates lib/winfluent-rs/README.md
+git grep -n -E "iced::|windows::|Win32|HWND|COM|wgpu|winit" -- lib/winfluent-rs/crates/win_fluent/src/prelude.rs lib/winfluent-rs/crates/win_fluent/src/view.rs lib/winfluent-rs/crates/win_fluent/src/window.rs lib/winfluent-rs/crates/win_fluent/src/platform.rs lib/winfluent-rs/crates/win_fluent/src/theme.rs
+```
+
+结果：
+
+```text
+backend_iced tests passed: 22 passed across lib/demo/mini daemon/mini demo targets
+workspace tests passed: 46 passed, 0 failed
+workspace all-targets check passed
+x86_64-pc-windows-msvc check passed
+aarch64-pc-windows-msvc check passed
+boundary checks passed:
+  no Easydict-specific names in winfluent-rs crates / README
+  no iced / Windows implementation types leaked through public core API files
+```
+
+仍未完成的部分：
+
+```text
+1. backend_iced 还未把 ThemeTokens 映射到 ToggleSwitch / ComboBox / SettingsRow / ServiceResultList 的完整 Fluent style。
+2. 当前 style tests 是结构化 style 断言，还不是 screenshot diff；后续仍需要视觉 golden pipeline。
+3. ARM64 runtime gate 仍需要 ARM64 Windows 真机或 VM evidence。
+```
+
+### 13.5 Milestone 13 本机收口结果
+
+本轮把 13.1 / 13.2 中当前机器可完成的部分收口，并把 ARM64 runtime gate 固化为 CI 手动门禁：
+
+```text
+13.1 Fluent UI visual parity:
+  1. visual token contract 已覆盖 color roles、typography、spacing/radius/elevation、backdrop、light/dark/high-contrast。
+  2. backend_iced 已消费 ThemeTokens，并映射到主要控件/容器：
+     - Page container
+     - Text
+     - Button
+     - TextInput / TextEditor
+     - ToggleSwitch
+     - ComboBox menu
+     - SettingsRow
+     - ServiceResultCard / ServiceResultList
+  3. gallery 已建立主要窗口 reference token snapshots：
+     - Main Window
+     - Mini Window
+     - Fixed Window
+     - Settings
+     - OCR / capture overlay
+  4. win_fluent_testkit 已建立纯数据 visual diff pipeline：
+     - VisualFrame
+     - VisualDiff
+     - VisualDiffTolerance
+     - PPM RGB artifact export
+  5. x64 Mini daemon runtime evidence 已实跑通过，继续产出 manifest/events/before-after PPM artifacts。
+
+13.2 ARM64 compatibility and cross compile:
+  1. x86_64-pc-windows-msvc compile gate passed。
+  2. aarch64-pc-windows-msvc compile gate passed。
+  3. 新增 .github/workflows/winfluent-rs.yml：
+     - PR/push 上跑 Windows x64 tests
+     - PR/push 上跑 x64 + ARM64 cross compile matrix
+     - workflow_dispatch 上定义 self-hosted Windows ARM64 runtime smoke
+  4. ARM64 runtime gate 已定义，但当前机器不是 ARM64 Windows，不能在本轮生成真实 ARM64 runtime evidence。
+```
+
+ARM64 dependency / runtime 状态矩阵：
+
+```text
+win_fluent core:
+  x64 compile: passed
+  ARM64 compile: passed
+  runtime dependency: none
+
+win_fluent_backend_iced:
+  x64 compile: passed
+  ARM64 compile: passed
+  runtime backend: iced + tiny-skia/softbuffer path
+  x64 runtime: Mini daemon smoke passed
+  ARM64 runtime: workflow_dispatch self-hosted ARM64 gate defined; not executed on this x64 machine
+
+win_fluent_platform_win:
+  x64 compile: passed
+  ARM64 compile: passed
+  covered APIs: window placement, hotkey mapping/runtime, clipboard probe, process memory, tray/shell plan
+  x64 runtime: Mini daemon hotkey/window/input/memory smoke passed
+  ARM64 runtime: requires ARM64 Windows runner/device
+
+Accessibility:
+  token tree smoke: passed
+  true Windows UIA provider/runtime tree: not implemented in this milestone
+
+Visual regression:
+  token/theme/layout snapshots: passed
+  pure data visual diff + PPM artifact path: passed
+  GPU screenshot golden baseline suite: not yet established; Mini daemon before/after runtime screenshot diff is passing
+```
+
+本轮已执行：
+
+```bash
+cargo fmt --all
+cargo test -p win_fluent_gallery
+cargo test -p win_fluent_backend_iced
+cargo test -p win_fluent_testkit
+cargo fmt --all --check
+cargo test --workspace
+cargo check --workspace --all-targets
+cargo check --workspace --target x86_64-pc-windows-msvc
+cargo check --workspace --target aarch64-pc-windows-msvc
+cargo run -p win_fluent_gallery
+cargo run -p win_fluent_backend_iced --bin win_fluent_mini_daemon -- --resident-probe-exit --stream-delay-ms=120 --evidence-dir=C:\Users\johnn\Documents\work\easydict_win32.refactor\artifacts\winfluent-mini-daemon-evidence\13-final-x64
+git grep -n -i easydict -- lib/winfluent-rs/crates lib/winfluent-rs/README.md
+git grep -n -E "iced::|windows::|Win32|HWND|COM|wgpu|winit" -- lib/winfluent-rs/crates/win_fluent/src/prelude.rs lib/winfluent-rs/crates/win_fluent/src/view.rs lib/winfluent-rs/crates/win_fluent/src/window.rs lib/winfluent-rs/crates/win_fluent/src/platform.rs lib/winfluent-rs/crates/win_fluent/src/theme.rs
+git diff --check
+```
+
+结果：
+
+```text
+format check passed
+workspace tests passed: 51 passed, 0 failed
+workspace all-targets check passed
+x86_64-pc-windows-msvc check passed
+aarch64-pc-windows-msvc check passed
+gallery emitted Control Gallery + Main/Mini/Fixed/Settings/Capture Overlay reference snapshots
+x64 runtime evidence probe passed:
+  evidence_dir=artifacts/winfluent-mini-daemon-evidence/13-final-x64
+  manifest.status=passed exit_code=0
+  process.arch=x86_64
+  input.method=unicode_sendinput clipboard_touched=false seen=true text="中文输入"
+  window.hide_verified=true restore_verified=true focus_event_seen=true
+  visual.changed_pixels=41454 total_delta=6783318
+  memory resident_no_window=2.8MB private / 11.6MB working set
+  memory mini_after_stream=7.6MB private / 29.2MB working set
+  artifacts: manifest.json, events.jsonl, visual_before.ppm, visual_after.ppm
+boundary checks passed:
+  no Easydict-specific names in winfluent-rs crates / README
+  no iced / Windows implementation types leaked through public core API files
+diff whitespace check passed
+```
+
+Milestone 13 状态：
+
+```text
+本机可完成项：complete
+ARM64 compile gate：complete
+ARM64 runtime gate：defined but blocked until a Windows ARM64 self-hosted runner/device runs .github/workflows/winfluent-rs.yml workflow_dispatch
+```
+
+## 14. Accessibility / UIA contract milestone
+
+本轮把 milestone 14 收敛到“可验证的 accessibility 合同 + Windows UIA 映射计划”。原因是当前 `win_fluent` 仍是 token/core crate，尚没有真实 HWND 运行时树和 UIA provider 生命周期；直接实现 provider 会越过现有边界。因此本 milestone 先补齐 provider 需要消费的稳定数据层和验证门禁。
+
+已完成：
+
+```text
+14.1 win_fluent_testkit accessibility audit:
+  1. 新增 A11yAudit / A11yIssue / A11ySeverity。
+  2. 新增 audit_accessibility_tree(view tree) 与 accessibility_audit(view)。
+  3. 审计规则覆盖：
+     - Application / Dialog / Button / CheckBox / ComboBox / TextInput 必须有 accessible name
+     - focusable node 必须有 accessible name
+     - 空 List / Navigation 作为 warning
+  4. 新增 accessibility_audit_snapshot，便于 gallery / CI 产出稳定文本证据。
+
+14.2 win_fluent_platform_win UIA plan:
+  1. 新增 WindowsUiaControlType。
+  2. 新增 WindowsUiaNodePlan / WindowsUiaTreePlan。
+  3. 新增 WindowsPlatformAdapter::plan_uia_tree(&A11yNode)。
+  4. 当前 role -> control type 映射：
+     - Application / Dialog -> Window
+     - Button -> Button
+     - CheckBox -> CheckBox
+     - ComboBox -> ComboBox
+     - TextInput -> Edit
+     - StaticText -> Text
+     - Group / Navigation -> Group
+     - Pane / ScrollView -> Pane
+     - List -> List
+     - ListItem -> ListItem
+     - Document -> Document
+
+14.3 gallery evidence:
+  1. gallery now emits accessibility tree snapshot。
+  2. gallery now emits A11yAudit snapshot。
+  3. gallery now emits WindowsUiaTree snapshot。
+  4. Main / Mini / Fixed / Settings / Capture Overlay reference views now pass accessibility audit and map to UIA plan。
+```
+
+仍未完成 / 下个 runtime slice：
+
+```text
+1. 真实 Windows UIA provider/runtime tree 尚未实现。
+2. 后续需要在 backend/window runtime 层接入 HWND 生命周期、focus/events、AutomationId、bounds、selection/value patterns。
+3. 可评估 AccessKit 作为跨后端 accessibility bridge，但不能让 core API 泄漏 backend/provider 类型。
+```
+
+本轮已执行：
+
+```bash
+cargo fmt --all
+cargo test -p win_fluent_testkit
+cargo test -p win_fluent_platform_win
+cargo test -p win_fluent_gallery
+cargo fmt --all --check
+cargo test --workspace
+cargo check --workspace --all-targets
+cargo run -p win_fluent_gallery
+cargo check --workspace --target x86_64-pc-windows-msvc
+cargo check --workspace --target aarch64-pc-windows-msvc
+git grep -n -i easydict -- lib/winfluent-rs/crates lib/winfluent-rs/README.md
+git grep -n -E "iced::|windows::|Win32|HWND|COM|wgpu|winit" -- lib/winfluent-rs/crates/win_fluent/src/prelude.rs lib/winfluent-rs/crates/win_fluent/src/view.rs lib/winfluent-rs/crates/win_fluent/src/window.rs lib/winfluent-rs/crates/win_fluent/src/platform.rs lib/winfluent-rs/crates/win_fluent/src/theme.rs
+```
+
+结果：
+
+```text
+targeted testkit/platform/gallery tests passed
+format check passed
+workspace tests passed: 57 passed, 0 failed
+workspace all-targets check passed
+x86_64-pc-windows-msvc check passed
+aarch64-pc-windows-msvc check passed
+gallery emitted accessibility tree, A11yAudit, and WindowsUiaTree snapshots
+gallery A11yAudit: passed=true errors=0 warnings=0
+boundary checks passed:
+  no Easydict-specific names in winfluent-rs crates / README
+  no iced / Windows implementation types leaked through public core API files
+```
+
+Milestone 14 状态：
+
+```text
+accessibility audit contract: complete
+Windows UIA mapping plan: complete
+reference views audit/UIA evidence: complete
+true UIA provider/runtime tree: deferred to a later Windows runtime milestone
+```
+
+## 15. Milestone closure / commit readiness
+
+本轮按“完成所有 milestone 并提交”的要求做最终收口。当前文档内 12.x、13、14 的本机可完成项均已完成；仍保留的项目都需要当前机器以外的外部运行时条件或一个新的 provider/runtime milestone，不适合在本提交中伪装完成。
+
+已收口的 milestone：
+
+```text
+12.x framework/backend/platform/Mini daemon runtime:
+  complete
+
+13.1 Fluent visual contract and reference evidence:
+  complete for theme tokens, backend style mapping, reference view schemas, pure data visual diff, and Mini daemon before/after runtime evidence
+
+13.2 x64 / ARM64 compile gate:
+  complete for x86_64-pc-windows-msvc and aarch64-pc-windows-msvc cargo check
+
+14 Accessibility / UIA contract:
+  complete for accessibility audit, Windows UIA plan mapping, and gallery evidence
+```
+
+保留为外部门禁 / 后续独立 runtime milestone：
+
+```text
+1. ARM64 Windows runtime evidence:
+   当前机器是 x64 Windows；已在 .github/workflows/winfluent-rs.yml 定义 workflow_dispatch self-hosted Windows ARM64 gate。
+
+2. True Windows UIA provider/runtime tree:
+   当前已完成 token a11y tree、audit、Windows UIA plan；真实 provider 需要 HWND 生命周期、focus/events、bounds、AutomationId、selection/value patterns 接入，不属于纯 token/platform plan 本机收口。
+
+3. Store/MSIX/winget 发布流水线:
+   本文档前半部分属于方案评估；当前 winfluent-rs milestone 的提交范围是 framework/runtime evidence，不生成正式发布包。
+```
+
+最终提交前验证命令：
+
+```bash
+cargo fmt --all --check
+cargo test --workspace
+cargo check --workspace --all-targets
+cargo check --workspace --target x86_64-pc-windows-msvc
+cargo check --workspace --target aarch64-pc-windows-msvc
+cargo run -p win_fluent_gallery
+cargo run -p win_fluent_backend_iced --bin win_fluent_mini_daemon -- --resident-probe-exit --stream-delay-ms=120 --evidence-dir=C:\Users\johnn\Documents\work\easydict_win32.refactor\artifacts\winfluent-mini-daemon-evidence\15-final-x64
+git grep -n -i easydict -- lib/winfluent-rs/crates lib/winfluent-rs/README.md
+git grep -n -E "iced::|windows::|Win32|HWND|COM|wgpu|winit" -- lib/winfluent-rs/crates/win_fluent/src/prelude.rs lib/winfluent-rs/crates/win_fluent/src/view.rs lib/winfluent-rs/crates/win_fluent/src/window.rs lib/winfluent-rs/crates/win_fluent/src/platform.rs lib/winfluent-rs/crates/win_fluent/src/theme.rs
+git diff --check
+```
+
+提交范围：
+
+```text
+1. lib/winfluent-rs framework crates and README
+2. Mini daemon runtime evidence binary
+3. Windows ARM64/x64 CI compile gate and ARM64 runtime gate workflow
+4. refactor-winfluent-rs.md milestone progress record
+5. .gitignore target artifact ignore
+```
+
+最终提交前验证结果：
+
+```text
+format check passed
+workspace tests passed: 57 passed, 0 failed
+workspace all-targets check passed
+x86_64-pc-windows-msvc check passed
+aarch64-pc-windows-msvc check passed
+gallery emitted schema/layout/accessibility/A11yAudit/WindowsUiaTree/theme snapshots
+gallery A11yAudit: passed=true errors=0 warnings=0
+x64 runtime evidence probe passed:
+  evidence_dir=artifacts/winfluent-mini-daemon-evidence/15-final-x64
+  manifest.status=passed exit_code=0
+  process.arch=x86_64
+  daemon.no_default_window=true
+  input.method=unicode_sendinput clipboard_touched=false seen=true text="中文输入"
+  window.hide_verified=true restore_verified=true focus_event_seen=true
+  visual.changed_pixels=41454 total_delta=6783318
+  memory resident_no_window=2.8MB private / 11.6MB working set
+  memory mini_after_stream=8.2MB private / 29.5MB working set
+  artifacts: manifest.json, events.jsonl, visual_before.ppm, visual_after.ppm
+boundary checks passed:
+  no Easydict-specific names in winfluent-rs crates / README
+  no iced / Windows implementation types leaked through public core API files
 ```
 
 [1]: https://docs.rs/iced/latest/iced/ "iced - Rust"

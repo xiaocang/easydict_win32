@@ -16,6 +16,7 @@ dotnet/temp_build_output*/
 tmp/
 
 # Common build artifacts
+**/target/
 **/*.dll
 **/*.exe
 **/*.pdb

@@ -120,12 +120,18 @@ fn child_segment<Message>(index: usize, token: &ViewToken<Message>) -> String {
 fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
     match token {
         ViewToken::Page(token) => token.content.iter().map(Box::as_ref).collect(),
+        ViewToken::TitleBar(token) => token.commands.iter().collect(),
         ViewToken::CommandBar(token) => token.items.iter().collect(),
         ViewToken::NavigationView(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::Dialog(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::Layout(token) => token.children.iter().collect(),
         ViewToken::Lazy(token) => vec![token.content.as_ref()],
         ViewToken::ScrollView(token) => token.content.iter().map(Box::as_ref).collect(),
+        ViewToken::Card(token) => {
+            let mut children: Vec<&View<Message>> = token.content.iter().map(Box::as_ref).collect();
+            children.extend(token.trailing.iter());
+            children
+        }
         ViewToken::SettingsRow(token) => {
             let mut children: Vec<&View<Message>> = token.content.iter().map(Box::as_ref).collect();
             children.extend(token.trailing.iter());
@@ -134,19 +140,25 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
         ViewToken::Custom(token) => token.children.iter().collect(),
         ViewToken::Text(_)
         | ViewToken::Button(_)
+        | ViewToken::StatusBadge(_)
+        | ViewToken::Spacer(_)
         | ViewToken::TextEditor(_)
         | ViewToken::ToggleSwitch(_)
         | ViewToken::ComboBox(_)
-        | ViewToken::ServiceResultCard(_)
-        | ViewToken::ServiceResultList(_) => Vec::new(),
+        | ViewToken::ResultCard(_)
+        | ViewToken::ResultList(_) => Vec::new(),
     }
 }
 
 fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
     match token {
         ViewToken::Page(_) => "Page",
+        ViewToken::TitleBar(_) => "TitleBar",
         ViewToken::Text(_) => "Text",
         ViewToken::Button(_) => "Button",
+        ViewToken::StatusBadge(_) => "StatusBadge",
+        ViewToken::Card(_) => "Card",
+        ViewToken::Spacer(_) => "Spacer",
         ViewToken::TextEditor(_) => "TextEditor",
         ViewToken::ToggleSwitch(_) => "ToggleSwitch",
         ViewToken::ComboBox(_) => "ComboBox",
@@ -160,8 +172,8 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
         ViewToken::Lazy(_) => "Lazy",
         ViewToken::ScrollView(_) => "ScrollView",
         ViewToken::SettingsRow(_) => "SettingsRow",
-        ViewToken::ServiceResultCard(_) => "ServiceResultCard",
-        ViewToken::ServiceResultList(_) => "ServiceResultList",
+        ViewToken::ResultCard(_) => "ResultCard",
+        ViewToken::ResultList(_) => "ResultList",
         ViewToken::Custom(_) => "Custom",
     }
 }
@@ -169,8 +181,12 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
 fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
     match token {
         ViewToken::Page(token) => token.id.as_deref(),
+        ViewToken::TitleBar(token) => token.id.as_deref(),
         ViewToken::Text(token) => token.id.as_deref(),
         ViewToken::Button(token) => token.id.as_deref(),
+        ViewToken::StatusBadge(token) => token.id.as_deref(),
+        ViewToken::Card(token) => token.id.as_deref(),
+        ViewToken::Spacer(token) => token.id.as_deref(),
         ViewToken::TextEditor(token) => token.id.as_deref(),
         ViewToken::ToggleSwitch(token) => token.id.as_deref(),
         ViewToken::ComboBox(token) => token.id.as_deref(),
@@ -181,8 +197,8 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::Lazy(token) => token.id.as_deref().or(Some(token.key.as_str())),
         ViewToken::ScrollView(token) => token.id.as_deref(),
         ViewToken::SettingsRow(token) => token.id.as_deref(),
-        ViewToken::ServiceResultCard(token) => token.id.as_deref(),
-        ViewToken::ServiceResultList(token) => token.id.as_deref(),
+        ViewToken::ResultCard(token) => token.id.as_deref(),
+        ViewToken::ResultList(token) => token.id.as_deref(),
         ViewToken::Custom(token) => token.id.as_deref(),
     }
 }
@@ -190,6 +206,17 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
 fn token_summary<Message>(token: &ViewToken<Message>) -> String {
     match token {
         ViewToken::Page(token) => format!("{:?}|commands={}", token.title, token.commands.len()),
+        ViewToken::TitleBar(token) => format!(
+            "{:?}|{:?}|{:?}|commands={}|caption={}|minimize={:?}|toggle_maximize={:?}|close={:?}",
+            token.title,
+            token.subtitle,
+            token.icon.as_ref().map(|icon| icon.name),
+            token.commands.len(),
+            token.show_caption_controls,
+            token.minimize_action.kind(),
+            token.toggle_maximize_action.kind(),
+            token.close_action.kind()
+        ),
         ViewToken::Text(token) => {
             format!("{:?}|{:?}|{}", token.value, token.style, token.selectable)
         }
@@ -201,11 +228,28 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.state,
             token.action.kind()
         ),
+        ViewToken::StatusBadge(token) => format!(
+            "{:?}|{:?}|{:?}",
+            token.label,
+            token.severity,
+            token.icon.as_ref().map(|icon| icon.name)
+        ),
+        ViewToken::Card(token) => format!(
+            "{:?}|{:?}|{:?}|{:?}|trailing={}",
+            token.title,
+            token.description,
+            token.kind,
+            token.icon.as_ref().map(|icon| icon.name),
+            token.trailing.len()
+        ),
+        ViewToken::Spacer(token) => format!("{:?}|{:?}", token.width, token.height),
         ViewToken::TextEditor(token) => format!(
-            "{:?}|{:?}|{:?}|{}|{}|{:?}",
+            "{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}",
             token.placeholder,
             token.min_height,
             token.max_height,
+            token.text_style,
+            token.chrome,
             token.read_only,
             token.state,
             token.action.kind()
@@ -218,14 +262,18 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.action.kind()
         ),
         ViewToken::ComboBox(token) => format!(
-            "{:?}|{:?}|items={}|{}|{:?}",
+            "{:?}|{:?}|items={}|{:?}|{}|{:?}",
             token.label,
             token.selected,
             token.items.len(),
+            token.width,
             token.state,
             token.action.kind()
         ),
-        ViewToken::CommandBar(token) => format!("compact={}", token.compact),
+        ViewToken::CommandBar(token) => format!(
+            "compact={}|{:?}|{:?}|{:?}",
+            token.compact, token.width, token.align, token.distribution
+        ),
         ViewToken::NavigationView(token) => {
             format!(
                 "{:?}|items={}|{:?}",
@@ -242,8 +290,14 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.secondary.is_some()
         ),
         ViewToken::Layout(token) => format!(
-            "padding={}|spacing={}|{:?}|{:?}|{:?}",
-            token.padding, token.spacing, token.width, token.height, token.align
+            "padding={}|spacing={}|{:?}|{:?}|{:?}|{:?}|style={:?}",
+            token.padding,
+            token.spacing,
+            token.width,
+            token.height,
+            token.align,
+            token.distribution,
+            token.style.summary()
         ),
         ViewToken::Lazy(token) => token.key.clone(),
         ViewToken::ScrollView(token) => format!("{:?}|{:?}", token.horizontal, token.vertical),
@@ -254,11 +308,16 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.kind,
             token.icon.as_ref().map(|icon| icon.name)
         ),
-        ViewToken::ServiceResultCard(token) => result_item_summary(&token.item),
-        ViewToken::ServiceResultList(token) => format!(
-            "items={}|virtualized={}|{}|{:?}|{:?}",
+        ViewToken::ResultCard(token) => format!(
+            "{}|collapse_transition_ms={}",
+            result_item_summary(&token.item),
+            token.collapse_transition.duration_ms
+        ),
+        ViewToken::ResultList(token) => format!(
+            "items={}|virtualized={}|collapse_transition_ms={}|{}|{:?}|{:?}|{:?}",
             token.items.len(),
             token.virtualized,
+            token.collapse_transition.duration_ms,
             token
                 .items
                 .iter()
@@ -266,7 +325,8 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
                 .collect::<Vec<_>>()
                 .join(","),
             token.copy_action.kind(),
-            token.speak_action.kind()
+            token.speak_action.kind(),
+            token.toggle_action.kind()
         ),
         ViewToken::Custom(token) => token.control.clone(),
     }
@@ -274,8 +334,17 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
 
 fn result_item_summary(item: &ResultItem) -> String {
     format!(
-        "{:?}|{:?}|{:?}|{:?}",
-        item.id, item.title, item.body, item.status
+        "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
+        item.id,
+        item.title,
+        item.body,
+        item.icon.as_ref().map(|icon| icon.name),
+        item.metadata,
+        item.pending_hint,
+        item.expanded,
+        item.toggleable,
+        item.dimmed,
+        item.status
     )
 }
 

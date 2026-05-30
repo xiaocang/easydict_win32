@@ -623,8 +623,8 @@ fn update(state: &mut DaemonState, message: DaemonMessage) -> Task<DaemonMessage
         }
         DaemonMessage::CaptureBeforeStream => {
             if let Some(window_id) = state.window_id {
-                iced_window::screenshot(window_id)
-                    .map(VisualFrame::from_screenshot)
+                IcedAdapter::window_screenshot(window_id)
+                    .map(VisualFrame::from_window_screenshot)
                     .map(DaemonMessage::BeforeStreamScreenshot)
             } else {
                 Task::none()
@@ -632,8 +632,14 @@ fn update(state: &mut DaemonState, message: DaemonMessage) -> Task<DaemonMessage
         }
         DaemonMessage::BeforeStreamScreenshot(frame) => {
             println!(
-                "VISUAL_BEFORE width={} height={} checksum={}",
-                frame.width, frame.height, frame.checksum
+                "VISUAL_BEFORE width={} height={} dpi={} scale={} dips={}x{} checksum={}",
+                frame.width,
+                frame.height,
+                frame.dpi,
+                frame.scale_factor,
+                frame.width_dips,
+                frame.height_dips,
+                frame.checksum
             );
             let artifact = state.evidence.write_visual_frame("visual_before", &frame);
             state.evidence.record_event(
@@ -641,6 +647,10 @@ fn update(state: &mut DaemonState, message: DaemonMessage) -> Task<DaemonMessage
                 &[
                     ("width", frame.width.to_string()),
                     ("height", frame.height.to_string()),
+                    ("dpi", frame.dpi.to_string()),
+                    ("scale_factor", frame.scale_factor.to_string()),
+                    ("width_dips", frame.width_dips.to_string()),
+                    ("height_dips", frame.height_dips.to_string()),
                     ("checksum", frame.checksum.to_string()),
                     ("artifact", json_option_string(artifact.as_deref())),
                 ],
@@ -650,8 +660,8 @@ fn update(state: &mut DaemonState, message: DaemonMessage) -> Task<DaemonMessage
         }
         DaemonMessage::CaptureAfterStream => {
             if let Some(window_id) = state.window_id {
-                iced_window::screenshot(window_id)
-                    .map(VisualFrame::from_screenshot)
+                IcedAdapter::window_screenshot(window_id)
+                    .map(VisualFrame::from_window_screenshot)
                     .map(DaemonMessage::AfterStreamScreenshot)
             } else {
                 Task::none()
@@ -663,9 +673,13 @@ fn update(state: &mut DaemonState, message: DaemonMessage) -> Task<DaemonMessage
                 state.visual_smoke_seen = diff.changed_pixels > 0;
                 state.visual_diff = Some(diff);
                 println!(
-                    "VISUAL_SMOKE width={} height={} changed_pixels={} total_delta={} before_checksum={} after_checksum={}",
+                    "VISUAL_SMOKE width={} height={} dpi={} scale={} dips={}x{} changed_pixels={} total_delta={} before_checksum={} after_checksum={}",
                     after.width,
                     after.height,
+                    after.dpi,
+                    after.scale_factor,
+                    after.width_dips,
+                    after.height_dips,
                     diff.changed_pixels,
                     diff.total_delta,
                     before.checksum,
@@ -677,6 +691,10 @@ fn update(state: &mut DaemonState, message: DaemonMessage) -> Task<DaemonMessage
                     &[
                         ("width", after.width.to_string()),
                         ("height", after.height.to_string()),
+                        ("dpi", after.dpi.to_string()),
+                        ("scale_factor", after.scale_factor.to_string()),
+                        ("width_dips", after.width_dips.to_string()),
+                        ("height_dips", after.height_dips.to_string()),
                         ("changed_pixels", diff.changed_pixels.to_string()),
                         ("total_delta", diff.total_delta.to_string()),
                         ("before_checksum", before.checksum.to_string()),
@@ -973,15 +991,20 @@ fn mini_window_settings(options: &WindowOptions) -> (iced::window::Settings, Str
             (
                 settings,
                 format!(
-                    "placement={}x{}@{},{} work={}x{}@{},{}",
+                    "placement={}x{}@{},{} dpi={} work={}x{}@{},{} physical_work={}x{}@{},{}",
                     placement.width,
                     placement.height,
                     placement.x,
                     placement.y,
+                    placement.dpi,
                     placement.work_area.width(),
                     placement.work_area.height(),
                     placement.work_area.left,
                     placement.work_area.top,
+                    placement.physical_work_area.width(),
+                    placement.physical_work_area.height(),
+                    placement.physical_work_area.left,
+                    placement.physical_work_area.top,
                 ),
             )
         }
@@ -1240,22 +1263,25 @@ struct A11yEvidence {
 struct VisualFrame {
     width: u32,
     height: u32,
+    dpi: u32,
+    scale_factor: f32,
+    width_dips: f32,
+    height_dips: f32,
     checksum: u64,
     rgba: Vec<u8>,
 }
 
 impl VisualFrame {
-    fn from_screenshot(screenshot: iced_window::Screenshot) -> Self {
-        let rgba = screenshot.rgba.as_ref().to_vec();
-        let checksum = rgba.iter().fold(0u64, |acc, value| {
-            acc.wrapping_mul(16777619) ^ u64::from(*value)
-        });
-
+    fn from_window_screenshot(screenshot: WindowScreenshot) -> Self {
         Self {
-            width: screenshot.size.width,
-            height: screenshot.size.height,
-            checksum,
-            rgba,
+            width: screenshot.width_physical,
+            height: screenshot.height_physical,
+            dpi: screenshot.dpi,
+            scale_factor: screenshot.scale_factor,
+            width_dips: screenshot.width_dips,
+            height_dips: screenshot.height_dips,
+            checksum: screenshot.checksum(),
+            rgba: screenshot.rgba,
         }
     }
 
@@ -1530,9 +1556,13 @@ fn visual_json(
 fn visual_frame_json(frame: Option<&VisualFrame>, artifact: Option<&str>) -> String {
     match frame {
         Some(frame) => format!(
-            "{{ \"width\": {}, \"height\": {}, \"checksum\": {}, \"artifact\": {} }}",
+            "{{ \"width\": {}, \"height\": {}, \"dpi\": {}, \"scale_factor\": {}, \"width_dips\": {}, \"height_dips\": {}, \"checksum\": {}, \"artifact\": {} }}",
             frame.width,
             frame.height,
+            frame.dpi,
+            frame.scale_factor,
+            frame.width_dips,
+            frame.height_dips,
             frame.checksum,
             json_option_string(artifact)
         ),
@@ -1759,12 +1789,20 @@ mod tests {
         let before = VisualFrame {
             width: 1,
             height: 1,
+            dpi: 96,
+            scale_factor: 1.0,
+            width_dips: 1.0,
+            height_dips: 1.0,
             checksum: 0,
             rgba: vec![0, 0, 0, 255],
         };
         let after = VisualFrame {
             width: 1,
             height: 1,
+            dpi: 96,
+            scale_factor: 1.0,
+            width_dips: 1.0,
+            height_dips: 1.0,
             checksum: 0,
             rgba: vec![1, 2, 3, 255],
         };

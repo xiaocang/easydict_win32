@@ -91,7 +91,7 @@ pub fn accessibility_audit_snapshot<Message>(view: &View<Message>) -> String {
 
 pub fn theme_snapshot(theme: &ThemeTokens) -> String {
     format!(
-        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?} backdrop={:?} stroke_control={} stroke_focus={} elevation_rest={} elevation_raised={} elevation_overlay={} elevation_flyout={} control_height={} control_compact_height={} control_icon_button={} control_min_touch_target={}",
+        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?} backdrop={:?} stroke_control={} stroke_focus={} elevation_rest={} elevation_raised={} elevation_overlay={} elevation_flyout={} control_height={} control_compact_height={} control_icon_button={} control_min_touch_target={} title_bar_height={} caption_button_width={} card_padding={} result_header_height={}",
         theme.mode,
         theme.background.r,
         theme.background.g,
@@ -131,12 +131,21 @@ pub fn theme_snapshot(theme: &ThemeTokens) -> String {
         theme.control.compact_height,
         theme.control.icon_button,
         theme.control.min_touch_target,
+        theme.control.title_bar_height,
+        theme.control.caption_button_width,
+        theme.control.card_padding,
+        theme.control.result_header_height,
     )
 }
 
 pub fn theme_matrix_snapshot() -> String {
     let mut output = String::new();
-    for mode in [ThemeMode::Light, ThemeMode::Dark, ThemeMode::HighContrast] {
+    for mode in [
+        ThemeMode::Light,
+        ThemeMode::Dark,
+        ThemeMode::Easydict,
+        ThemeMode::HighContrast,
+    ] {
         let theme = ThemeTokens::resolve(mode);
         let _ = writeln!(output, "{}", theme_snapshot(&theme));
     }
@@ -344,15 +353,19 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             };
             let _ = writeln!(
                 output,
-                "{pad}{label} id={:?} children={} padding={} spacing={} width={:?} height={:?} align={:?}",
+                "{pad}{label} id={:?} children={} padding={} spacing={} width={:?} height={:?} align={:?} distribution={:?}",
                 token.id,
                 token.children.len(),
                 token.padding,
                 token.spacing,
                 token.width,
                 token.height,
-                token.align
+                token.align,
+                token.distribution
             );
+            if !token.style.classes().is_empty() {
+                let _ = writeln!(output, "{pad}  style={:?}", token.style.summary());
+            }
             for child in &token.children {
                 write_layout(output, child, indent + 2);
             }
@@ -362,13 +375,31 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 write_layout(output, content, indent);
             }
         }
+        ViewToken::TitleBar(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}TitleBar id={:?} commands={} caption_controls={} minimize={:?} toggle_maximize={:?} close={:?}",
+                token.id,
+                token.commands.len(),
+                token.show_caption_controls,
+                token.minimize_action.kind(),
+                token.toggle_maximize_action.kind(),
+                token.close_action.kind()
+            );
+            for child in &token.commands {
+                write_layout(output, child, indent + 2);
+            }
+        }
         ViewToken::CommandBar(token) => {
             let _ = writeln!(
                 output,
-                "{pad}CommandBar id={:?} items={} compact={}",
+                "{pad}CommandBar id={:?} items={} compact={} width={:?} align={:?} distribution={:?}",
                 token.id,
                 token.items.len(),
-                token.compact
+                token.compact,
+                token.width,
+                token.align,
+                token.distribution
             );
             for child in &token.items {
                 write_layout(output, child, indent + 2);
@@ -394,6 +425,27 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             if let Some(content) = &token.content {
                 write_layout(output, content, indent + 2);
             }
+        }
+        ViewToken::Card(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Card id={:?} trailing={}",
+                token.id,
+                token.trailing.len()
+            );
+            if let Some(content) = &token.content {
+                write_layout(output, content, indent + 2);
+            }
+            for child in &token.trailing {
+                write_layout(output, child, indent + 2);
+            }
+        }
+        ViewToken::Spacer(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Spacer id={:?} width={:?} height={:?}",
+                token.id, token.width, token.height
+            );
         }
         ViewToken::SettingsRow(token) => {
             let _ = writeln!(
@@ -423,11 +475,12 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         }
         ViewToken::Text(_)
         | ViewToken::Button(_)
+        | ViewToken::StatusBadge(_)
         | ViewToken::TextEditor(_)
         | ViewToken::ToggleSwitch(_)
         | ViewToken::ComboBox(_)
-        | ViewToken::ServiceResultCard(_)
-        | ViewToken::ServiceResultList(_) => {}
+        | ViewToken::ResultCard(_)
+        | ViewToken::ResultList(_) => {}
     }
 }
 
@@ -577,6 +630,7 @@ mod tests {
 
         assert!(snapshot.contains("mode=Light"));
         assert!(snapshot.contains("mode=Dark"));
+        assert!(snapshot.contains("mode=Easydict"));
         assert!(snapshot.contains("mode=HighContrast"));
         assert!(snapshot.contains("backdrop=Mica"));
         assert!(snapshot.contains("backdrop=Solid"));

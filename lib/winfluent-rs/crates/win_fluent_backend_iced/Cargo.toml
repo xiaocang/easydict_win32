@@ -6,9 +6,11 @@ version.workspace = true
 
 [dependencies]
 iced = { version = "0.14.0", default-features = false, features = [
+    "advanced",
     "crisp",
     "thread-pool",
     "tiny-skia",
+    "wgpu",
 ] }
 win_fluent = { path = "../win_fluent" }
 

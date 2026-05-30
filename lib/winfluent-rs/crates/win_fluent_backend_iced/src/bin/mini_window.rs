@@ -519,15 +519,20 @@ fn mini_window_settings(options: &WindowOptions) -> (iced::window::Settings, Str
             (
                 settings,
                 format!(
-                    "PLACEMENT width={} height={} x={} y={} work={}x{}@{},{}",
+                    "PLACEMENT width={} height={} x={} y={} dpi={} work={}x{}@{},{} physical_work={}x{}@{},{}",
                     placement.width,
                     placement.height,
                     placement.x,
                     placement.y,
+                    placement.dpi,
                     placement.work_area.width(),
                     placement.work_area.height(),
                     placement.work_area.left,
                     placement.work_area.top,
+                    placement.physical_work_area.width(),
+                    placement.physical_work_area.height(),
+                    placement.physical_work_area.left,
+                    placement.physical_work_area.top,
                 ),
             )
         }

@@ -119,6 +119,20 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .or_else(|| Some(token.value.clone()));
             node
         }
+        ViewToken::TitleBar(token) => {
+            let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| Some(token.title.clone()));
+            node.children = token
+                .commands
+                .iter()
+                .map(resolve_accessibility_tree)
+                .collect();
+            node
+        }
         ViewToken::Button(token) => {
             let mut node = A11yNode::new(A11yRole::Button).with_hint(&token.a11y);
             node.name = token
@@ -129,6 +143,30 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
             node.focusable = token.state.is_focusable();
             node
         }
+        ViewToken::StatusBadge(token) => {
+            let mut node = A11yNode::new(A11yRole::StaticText).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| Some(token.label.clone()));
+            node
+        }
+        ViewToken::Card(token) => {
+            let mut node = A11yNode::new(A11yRole::Group).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| Some(token.title.clone()));
+            if let Some(content) = &token.content {
+                node.children.push(resolve_accessibility_tree(content));
+            }
+            node.children
+                .extend(token.trailing.iter().map(resolve_accessibility_tree));
+            node
+        }
+        ViewToken::Spacer(_) => A11yNode::new(A11yRole::StaticText),
         ViewToken::TextEditor(token) => {
             let mut node = A11yNode::new(A11yRole::TextInput).with_hint(&token.a11y);
             node.name = token
@@ -237,7 +275,7 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .extend(token.trailing.iter().map(resolve_accessibility_tree));
             node
         }
-        ViewToken::ServiceResultCard(token) => {
+        ViewToken::ResultCard(token) => {
             let mut node = A11yNode::new(A11yRole::ListItem).with_hint(&token.a11y);
             node.name = token
                 .a11y
@@ -246,7 +284,7 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .or_else(|| Some(token.item.title.clone()));
             node
         }
-        ViewToken::ServiceResultList(token) => {
+        ViewToken::ResultList(token) => {
             let mut node = A11yNode::new(A11yRole::List).with_hint(&token.a11y);
             node.children
                 .extend(token.items.iter().map(|item| A11yNode {

@@ -53,6 +53,13 @@ pub enum WindowThemePreference {
     Dark,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WindowScreenConstraint {
+    None,
+    Position,
+    SizeAndPosition,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum WindowPlacement {
     Center,
@@ -74,6 +81,7 @@ pub struct WindowOptions {
     pub resize_mode: WindowResizeMode,
     pub placement: WindowPlacement,
     pub theme: WindowThemePreference,
+    pub screen_constraint: WindowScreenConstraint,
     pub visible_on_start: bool,
     pub skip_taskbar: bool,
 }
@@ -92,6 +100,7 @@ impl WindowOptions {
             resize_mode: WindowResizeMode::CanResize,
             placement: WindowPlacement::Center,
             theme: WindowThemePreference::System,
+            screen_constraint: WindowScreenConstraint::SizeAndPosition,
             visible_on_start: true,
             skip_taskbar: false,
         }
@@ -129,6 +138,16 @@ impl WindowOptions {
         self
     }
 
+    pub fn screen_constraint(mut self, constraint: WindowScreenConstraint) -> Self {
+        self.screen_constraint = constraint;
+        self
+    }
+
+    pub fn allow_offscreen(mut self) -> Self {
+        self.screen_constraint = WindowScreenConstraint::None;
+        self
+    }
+
     pub fn hidden(mut self) -> Self {
         self.visible_on_start = false;
         self
@@ -154,6 +173,18 @@ pub enum WindowCommand<Message> {
     Show(WindowId),
     Hide(WindowId),
     Focus(WindowId),
+    CloseCurrent,
+    MinimizeCurrent(bool),
+    ToggleMaximizeCurrent,
+    Minimize {
+        id: WindowId,
+        minimized: bool,
+    },
+    Maximize {
+        id: WindowId,
+        maximized: bool,
+    },
+    ToggleMaximize(WindowId),
     SetTitle {
         id: WindowId,
         title: String,

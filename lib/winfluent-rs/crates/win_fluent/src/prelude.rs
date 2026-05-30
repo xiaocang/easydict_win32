@@ -1,14 +1,21 @@
 pub use crate::a11y::{A11yHint, A11yNode, A11yRole};
 pub use crate::command::{command, CommandPlacement, CommandToken, KeyboardAccelerator};
 pub use crate::diff::{diff_views, ViewChange, ViewChangeKind, ViewPath};
+pub use crate::i18n::{t, I18n, I18nArg, I18nBundle, LocaleId, LocalizedText, Localizer};
 pub use crate::icon;
+pub use crate::motion::{
+    Easing, Transition, CONTROL_FASTER_ANIMATION_MS, CONTROL_FAST_ANIMATION_MS,
+    CONTROL_NORMAL_ANIMATION_MS,
+};
 pub use crate::performance::{FrameCoalescer, TextStreamCoalescer};
 pub use crate::platform::{
     ClipboardFormat, Hotkey, HotkeyKey, HotkeyModifier, ShellVerb, TrayMenu, TrayMenuItem,
 };
 pub use crate::runtime::Application;
 pub use crate::schema::{view_schema, SchemaNode, SchemaProperty, ViewSchema, VIEW_SCHEMA_VERSION};
+pub use crate::screenshot::{ScreenshotError, WindowScreenshot};
 pub use crate::state::{ControlState, ValidationSeverity, ValidationState};
+pub use crate::style::{utility_scale, FluentStyle};
 pub use crate::subscription::{PlatformEvent, Subscription, SubscriptionKind, WindowEvent};
 pub use crate::task::Task;
 pub use crate::theme::{
@@ -16,13 +23,16 @@ pub use crate::theme::{
     Stroke, ThemeMode, ThemeTokens, Typography,
 };
 pub use crate::view::{
-    button, column, combo_box, command_bar, dialog, lazy, navigation_view, page, primary_button,
-    row, scroll_view, service_result_card, service_result_list, settings_row, text, text_editor,
-    toggle_switch, Alignment, ButtonKind, ComboBoxItem, DialogKind, IntoChildren, IntoView,
-    LayoutKind, LazyToken, Length, NavigationItem, ResultItem, ResultStatus, ScrollPolicy,
-    SettingsRowKind, TextStyle, View, ViewToken,
+    button, card, column, combo_box, command_bar, dialog, lazy, navigation_view, page,
+    primary_button, result_card, result_list, row, scroll_view, service_result_card,
+    service_result_list, settings_row, spacer, status_badge, text, text_editor, title_bar,
+    toggle_switch, Alignment, ButtonKind, CardKind, CollapseTraceDirection, CollapseTraceSample,
+    CollapseTransition, ComboBoxItem, DialogKind, IntoChildren, IntoView, LayoutDistribution,
+    LayoutKind, LazyToken, Length, NavigationItem, ResultCardBuilder, ResultCardToken, ResultItem,
+    ResultListBuilder, ResultListToken, ResultStatus, ScrollPolicy, SettingsRowKind, SpacerBuilder,
+    SpacerToken, TextEditorChrome, TextStyle, View, ViewToken,
 };
 pub use crate::window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,
-    WindowResizeMode, WindowThemePreference,
+    WindowResizeMode, WindowScreenConstraint, WindowThemePreference,
 };

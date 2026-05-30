@@ -1,9 +1,7 @@
 use std::fmt::Write;
 
 use crate::command::CommandToken;
-use crate::view::{
-    LayoutKind, ResultItem, ServiceResultCardToken, ServiceResultListToken, View, ViewToken,
-};
+use crate::view::{LayoutKind, ResultCardToken, ResultItem, ResultListToken, View, ViewToken};
 
 pub const VIEW_SCHEMA_VERSION: u16 = 1;
 
@@ -89,6 +87,19 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             }
             node
         }
+        ViewToken::TitleBar(token) => SchemaNode::new("TitleBar", token.id.clone())
+            .property("title", quoted(&token.title))
+            .property("subtitle", optional_string(token.subtitle.as_deref()))
+            .property("icon", optional_icon(token.icon.as_ref()))
+            .property("commands", token.commands.len().to_string())
+            .property("caption_controls", token.show_caption_controls.to_string())
+            .property("minimize", format!("{:?}", token.minimize_action.kind()))
+            .property(
+                "toggle_maximize",
+                format!("{:?}", token.toggle_maximize_action.kind()),
+            )
+            .property("close", format!("{:?}", token.close_action.kind()))
+            .children(token.commands.iter().map(schema_node)),
         ViewToken::Text(token) => SchemaNode::new("Text", token.id.clone())
             .property("value", quoted(&token.value))
             .property("style", format!("{:?}", token.style))
@@ -100,11 +111,33 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("tooltip", optional_string(token.tooltip.as_deref()))
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
+        ViewToken::StatusBadge(token) => SchemaNode::new("StatusBadge", token.id.clone())
+            .property("label", quoted(&token.label))
+            .property("severity", format!("{:?}", token.severity))
+            .property("icon", optional_icon(token.icon.as_ref())),
+        ViewToken::Card(token) => {
+            let mut node = SchemaNode::new("Card", token.id.clone())
+                .property("title", quoted(&token.title))
+                .property("description", optional_string(token.description.as_deref()))
+                .property("icon", optional_icon(token.icon.as_ref()))
+                .property("kind", format!("{:?}", token.kind))
+                .property("trailing", token.trailing.len().to_string());
+            if let Some(content) = &token.content {
+                node = node.child(schema_node(content));
+            }
+            node.children.extend(token.trailing.iter().map(schema_node));
+            node
+        }
+        ViewToken::Spacer(token) => SchemaNode::new("Spacer", token.id.clone())
+            .property("width", format!("{:?}", token.width))
+            .property("height", format!("{:?}", token.height)),
         ViewToken::TextEditor(token) => SchemaNode::new("TextEditor", token.id.clone())
             .property("text_len", token.text.chars().count().to_string())
             .property("placeholder", optional_string(token.placeholder.as_deref()))
             .property("min_height", optional_u16(token.min_height))
             .property("max_height", optional_u16(token.max_height))
+            .property("text_style", format!("{:?}", token.text_style))
+            .property("chrome", format!("{:?}", token.chrome))
             .property("read_only", token.read_only.to_string())
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
@@ -117,10 +150,14 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("label", optional_string(token.label.as_deref()))
             .property("selected", optional_string(token.selected.as_deref()))
             .property("items", combo_items(&token.items))
+            .property("width", format!("{:?}", token.width))
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::CommandBar(token) => SchemaNode::new("CommandBar", token.id.clone())
             .property("compact", token.compact.to_string())
+            .property("width", format!("{:?}", token.width))
+            .property("align", format!("{:?}", token.align))
+            .property("distribution", format!("{:?}", token.distribution))
             .children(token.items.iter().map(schema_node)),
         ViewToken::NavigationView(token) => SchemaNode::new("NavigationView", token.id.clone())
             .property("selected", optional_string(token.selected.as_deref()))
@@ -145,6 +182,8 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("width", format!("{:?}", token.width))
                 .property("height", format!("{:?}", token.height))
                 .property("align", format!("{:?}", token.align))
+                .property("distribution", format!("{:?}", token.distribution))
+                .property("style", quoted(&token.style.summary()))
                 .children(token.children.iter().map(schema_node))
         }
         ViewToken::Lazy(token) => SchemaNode::new("Lazy", token.id.clone())
@@ -167,8 +206,8 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             node.children.extend(token.trailing.iter().map(schema_node));
             node
         }
-        ViewToken::ServiceResultCard(token) => result_card_schema(token),
-        ViewToken::ServiceResultList(token) => result_list_schema(token),
+        ViewToken::ResultCard(token) => result_card_schema(token),
+        ViewToken::ResultList(token) => result_list_schema(token),
         ViewToken::Custom(token) => SchemaNode::new("Custom", token.id.clone())
             .property("control", quoted(&token.control))
             .property("children", token.children.len().to_string())
@@ -194,33 +233,58 @@ fn write_node(output: &mut String, node: &SchemaNode, indent: usize) {
     }
 }
 
-fn result_card_schema<Message>(token: &ServiceResultCardToken<Message>) -> SchemaNode {
-    SchemaNode::new("ServiceResultCard", token.id.clone())
+fn result_card_schema<Message>(token: &ResultCardToken<Message>) -> SchemaNode {
+    SchemaNode::new("ResultCard", token.id.clone())
         .property("item", result_item_summary(&token.item))
         .property("copy", format!("{:?}", token.copy_action.kind()))
         .property("speak", format!("{:?}", token.speak_action.kind()))
+        .property("toggle", format!("{:?}", token.toggle_action.kind()))
+        .property(
+            "collapse_transition_ms",
+            token.collapse_transition.duration_ms.to_string(),
+        )
 }
 
-fn result_list_schema<Message>(token: &ServiceResultListToken<Message>) -> SchemaNode {
-    SchemaNode::new("ServiceResultList", token.id.clone())
+fn result_list_schema<Message>(token: &ResultListToken<Message>) -> SchemaNode {
+    SchemaNode::new("ResultList", token.id.clone())
         .property("items", token.items.len().to_string())
         .property("virtualized", token.virtualized.to_string())
         .property("copy", format!("{:?}", token.copy_action.kind()))
         .property("speak", format!("{:?}", token.speak_action.kind()))
+        .property("toggle", format!("{:?}", token.toggle_action.kind()))
+        .property(
+            "collapse_transition_ms",
+            token.collapse_transition.duration_ms.to_string(),
+        )
         .children(token.items.iter().map(|item| {
             SchemaNode::new("ResultItem", Some(item.id.clone()))
                 .property("title", quoted(&item.title))
                 .property("body_len", item.body.chars().count().to_string())
+                .property("icon", optional_icon(item.icon.as_ref()))
+                .property("metadata", optional_string(item.metadata.as_deref()))
+                .property(
+                    "pending_hint",
+                    optional_string(item.pending_hint.as_deref()),
+                )
+                .property("expanded", item.expanded.to_string())
+                .property("toggleable", item.toggleable.to_string())
+                .property("dimmed", item.dimmed.to_string())
                 .property("status", format!("{:?}", item.status))
         }))
 }
 
 fn result_item_summary(item: &ResultItem) -> String {
     format!(
-        "id={},title={},status={:?},body_len={}",
+        "id={},title={},status={:?},icon={},metadata={},pending_hint={},expanded={},toggleable={},dimmed={},body_len={}",
         item.id,
         quoted(&item.title),
         item.status,
+        optional_icon(item.icon.as_ref()),
+        optional_string(item.metadata.as_deref()),
+        optional_string(item.pending_hint.as_deref()),
+        item.expanded,
+        item.toggleable,
+        item.dimmed,
         item.body.chars().count()
     )
 }

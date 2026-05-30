@@ -280,7 +280,7 @@ fn ocr_overlay_view() -> View<Msg> {
 
 fn window_options_snapshot(options: &WindowOptions) -> String {
     format!(
-        "WindowOptions id={} title={:?} size={}x{} min={:?}x{:?} level={:?} frame={:?} resize={:?} placement={:?} skip_taskbar={}",
+        "WindowOptions id={} title={:?} size={}x{} min={:?}x{:?} level={:?} frame={:?} resize={:?} placement={:?} screen_constraint={:?} skip_taskbar={}",
         options.id.as_str(),
         options.title,
         options.width,
@@ -291,6 +291,7 @@ fn window_options_snapshot(options: &WindowOptions) -> String {
         options.frame,
         options.resize_mode,
         options.placement,
+        options.screen_constraint,
         options.skip_taskbar
     )
 }
@@ -302,15 +303,20 @@ fn windows_window_plan_snapshot(options: &WindowOptions) -> String {
         .placement
         .map(|placement| {
             format!(
-                " placement={}x{}@{},{} work={}x{}@{},{}",
+                " placement={}x{}@{},{} dpi={} work={}x{}@{},{} physical_work={}x{}@{},{}",
                 placement.width,
                 placement.height,
                 placement.x,
                 placement.y,
+                placement.dpi,
                 placement.work_area.width(),
                 placement.work_area.height(),
                 placement.work_area.left,
                 placement.work_area.top,
+                placement.physical_work_area.width(),
+                placement.physical_work_area.height(),
+                placement.physical_work_area.left,
+                placement.physical_work_area.top,
             )
         })
         .unwrap_or_else(|| " placement=unresolved".to_string());
@@ -403,7 +409,7 @@ mod tests {
 
         assert!(snapshot.contains("ViewSchema version=1"));
         assert!(snapshot.contains("TextEditor"));
-        assert!(snapshot.contains("ServiceResultList"));
+        assert!(snapshot.contains("ResultList"));
         assert!(!snapshot.contains("iced"));
         assert!(!snapshot.contains("windows::"));
     }
@@ -418,8 +424,8 @@ mod tests {
         ];
 
         assert!(snapshots[0].contains("NavigationView"));
-        assert!(snapshots[0].contains("ServiceResultList"));
-        assert!(snapshots[1].contains("ServiceResultCard"));
+        assert!(snapshots[0].contains("ResultList"));
+        assert!(snapshots[1].contains("ResultCard"));
         assert!(snapshots[2].contains("SettingsRow"));
         assert!(snapshots[3].contains("CommandBar"));
 

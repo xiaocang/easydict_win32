@@ -9,6 +9,7 @@ use win_fluent::platform::{
 use win_fluent::subscription::{Subscription, SubscriptionKind};
 use win_fluent::window::{
     WindowFrame, WindowLevel, WindowOptions, WindowPlacement, WindowResizeMode,
+    WindowScreenConstraint,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -84,7 +85,32 @@ pub struct ResolvedWindowPlacement {
     pub y: i32,
     pub width: i32,
     pub height: i32,
+    pub dpi: u32,
     pub work_area: WindowsRect,
+    pub physical_work_area: WindowsRect,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WindowsMonitorMetrics {
+    pub physical_work_area: WindowsRect,
+    pub dpi: u32,
+}
+
+impl WindowsMonitorMetrics {
+    pub fn new(physical_work_area: WindowsRect, dpi: u32) -> Self {
+        Self {
+            physical_work_area,
+            dpi: dpi.max(1),
+        }
+    }
+
+    pub fn scale_factor(self) -> f32 {
+        self.dpi as f32 / 96.0
+    }
+
+    pub fn work_area_dips(self) -> WindowsRect {
+        physical_rect_to_dips(self.physical_work_area, self.scale_factor())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -185,10 +211,10 @@ impl WindowsPlatformAdapter {
         options: &WindowOptions,
     ) -> Result<ResolvedWindowPlacement, WindowsPlatformError> {
         let cursor = native::cursor_position()?;
-        let work_area = native::monitor_work_area_for_point(cursor)?;
+        let monitor = native::monitor_metrics_for_point(cursor)?;
 
-        Ok(Self::resolve_window_placement_for(
-            options, cursor, work_area,
+        Ok(Self::resolve_window_placement_for_monitor(
+            options, cursor, monitor,
         ))
     }
 
@@ -197,14 +223,40 @@ impl WindowsPlatformAdapter {
         cursor: WindowsPoint,
         work_area: WindowsRect,
     ) -> ResolvedWindowPlacement {
-        resolve_window_placement_with(options, cursor, work_area)
+        Self::resolve_window_placement_for_monitor(
+            options,
+            cursor,
+            WindowsMonitorMetrics::new(work_area, 96),
+        )
+    }
+
+    pub fn resolve_window_placement_for_monitor(
+        options: &WindowOptions,
+        cursor: WindowsPoint,
+        monitor: WindowsMonitorMetrics,
+    ) -> ResolvedWindowPlacement {
+        resolve_window_placement_with(options, cursor, monitor)
+    }
+
+    pub fn resolve_window_placement_for_work_areas(
+        options: &WindowOptions,
+        cursor: WindowsPoint,
+        work_areas: &[WindowsRect],
+    ) -> Option<ResolvedWindowPlacement> {
+        let work_area = select_work_area_for_point(cursor, work_areas)?;
+        Some(Self::resolve_window_placement_for(
+            options, cursor, work_area,
+        ))
     }
 
     pub fn plan_window_with_resolved_placement(
         options: &WindowOptions,
     ) -> Result<WindowsWindowPlan, WindowsPlatformError> {
         let mut plan = Self::plan_window(options);
-        plan.placement = Some(Self::resolve_window_placement(options)?);
+        let placement = Self::resolve_window_placement(options)?;
+        plan.width = placement.width;
+        plan.height = placement.height;
+        plan.placement = Some(placement);
         Ok(plan)
     }
 
@@ -514,11 +566,25 @@ fn window_ex_style(options: &WindowOptions) -> u32 {
 
 fn resolve_window_placement_with(
     options: &WindowOptions,
-    cursor: WindowsPoint,
-    work_area: WindowsRect,
+    physical_cursor: WindowsPoint,
+    monitor: WindowsMonitorMetrics,
 ) -> ResolvedWindowPlacement {
-    let width = options.width.round() as i32;
-    let height = options.height.round() as i32;
+    let work_area = monitor.work_area_dips();
+    let cursor = physical_point_to_dips(physical_cursor, monitor.scale_factor());
+    let requested_width = options.width.round().max(1.0) as i32;
+    let requested_height = options.height.round().max(1.0) as i32;
+    let width = constrained_size(
+        requested_width,
+        options.min_width,
+        work_area.width(),
+        options.screen_constraint,
+    );
+    let height = constrained_size(
+        requested_height,
+        options.min_height,
+        work_area.height(),
+        options.screen_constraint,
+    );
 
     let (x, y) = match options.placement {
         WindowPlacement::Center => (
@@ -535,12 +601,13 @@ fn resolve_window_placement_with(
         WindowPlacement::Explicit { x, y } => (x.round() as i32, y.round() as i32),
     };
 
-    let (x, y) = match options.placement {
-        WindowPlacement::Explicit { .. } => (x, y),
-        _ => (
+    let (x, y) = if clamps_position(options.screen_constraint) {
+        (
             clamp_axis(x, width, work_area.left, work_area.right),
             clamp_axis(y, height, work_area.top, work_area.bottom),
-        ),
+        )
+    } else {
+        (x, y)
     };
 
     ResolvedWindowPlacement {
@@ -548,8 +615,55 @@ fn resolve_window_placement_with(
         y,
         width,
         height,
+        dpi: monitor.dpi,
         work_area,
+        physical_work_area: monitor.physical_work_area,
     }
+}
+
+fn physical_rect_to_dips(rect: WindowsRect, scale_factor: f32) -> WindowsRect {
+    WindowsRect {
+        left: physical_axis_to_dips(rect.left, scale_factor),
+        top: physical_axis_to_dips(rect.top, scale_factor),
+        right: physical_axis_to_dips(rect.right, scale_factor),
+        bottom: physical_axis_to_dips(rect.bottom, scale_factor),
+    }
+}
+
+fn physical_point_to_dips(point: WindowsPoint, scale_factor: f32) -> WindowsPoint {
+    WindowsPoint {
+        x: physical_axis_to_dips(point.x, scale_factor),
+        y: physical_axis_to_dips(point.y, scale_factor),
+    }
+}
+
+fn physical_axis_to_dips(value: i32, scale_factor: f32) -> i32 {
+    if scale_factor <= f32::EPSILON {
+        value
+    } else {
+        (value as f32 / scale_factor).round() as i32
+    }
+}
+
+fn constrained_size(
+    requested: i32,
+    _min_size: Option<f32>,
+    available: i32,
+    constraint: WindowScreenConstraint,
+) -> i32 {
+    if constraint != WindowScreenConstraint::SizeAndPosition {
+        return requested.max(1);
+    }
+
+    let available = available.max(1);
+    requested.min(available).max(1)
+}
+
+fn clamps_position(constraint: WindowScreenConstraint) -> bool {
+    matches!(
+        constraint,
+        WindowScreenConstraint::Position | WindowScreenConstraint::SizeAndPosition
+    )
 }
 
 fn clamp_axis(value: i32, size: i32, min: i32, max: i32) -> i32 {
@@ -560,14 +674,53 @@ fn clamp_axis(value: i32, size: i32, min: i32, max: i32) -> i32 {
     value.clamp(min, max - size)
 }
 
+fn select_work_area_for_point(
+    point: WindowsPoint,
+    work_areas: &[WindowsRect],
+) -> Option<WindowsRect> {
+    work_areas
+        .iter()
+        .copied()
+        .find(|area| contains_point(*area, point))
+        .or_else(|| {
+            work_areas
+                .iter()
+                .copied()
+                .min_by_key(|area| squared_distance_to_rect(point, *area))
+        })
+}
+
+fn contains_point(area: WindowsRect, point: WindowsPoint) -> bool {
+    point.x >= area.left && point.x < area.right && point.y >= area.top && point.y < area.bottom
+}
+
+fn squared_distance_to_rect(point: WindowsPoint, area: WindowsRect) -> i64 {
+    let dx = if point.x < area.left {
+        area.left - point.x
+    } else if point.x >= area.right {
+        point.x - area.right + 1
+    } else {
+        0
+    } as i64;
+    let dy = if point.y < area.top {
+        area.top - point.y
+    } else if point.y >= area.bottom {
+        point.y - area.bottom + 1
+    } else {
+        0
+    } as i64;
+
+    dx * dx + dy * dy
+}
+
 #[cfg(windows)]
 mod native {
     use std::ptr::null_mut;
 
     use super::{
         ClipboardFormat, NativeHotkeyMessage, WindowsClipboardFormatSnapshot,
-        WindowsClipboardTextSnapshot, WindowsHotkey, WindowsHotkeyHandle, WindowsPlatformError,
-        WindowsPoint, WindowsProcessMemory, WindowsRect,
+        WindowsClipboardTextSnapshot, WindowsHotkey, WindowsHotkeyHandle, WindowsMonitorMetrics,
+        WindowsPlatformError, WindowsPoint, WindowsProcessMemory, WindowsRect,
     };
     use windows_sys::Win32::Foundation::{GetLastError, GlobalFree, SetLastError, HWND, POINT};
     use windows_sys::Win32::Graphics::Gdi::{
@@ -587,6 +740,7 @@ mod native {
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
     #[cfg(test)]
     use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+    use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         RegisterHotKey, SendInput, UnregisterHotKey, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
         KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, VK_BACK,
@@ -1021,9 +1175,9 @@ mod native {
         })
     }
 
-    pub fn monitor_work_area_for_point(
+    pub fn monitor_metrics_for_point(
         point: WindowsPoint,
-    ) -> Result<WindowsRect, WindowsPlatformError> {
+    ) -> Result<WindowsMonitorMetrics, WindowsPlatformError> {
         let native_point = POINT {
             x: point.x,
             y: point.y,
@@ -1043,12 +1197,20 @@ mod native {
             return Err(last_error("GetMonitorInfoW"));
         }
 
-        Ok(WindowsRect {
+        let physical_work_area = WindowsRect {
             left: info.rcWork.left,
             top: info.rcWork.top,
             right: info.rcWork.right,
             bottom: info.rcWork.bottom,
-        })
+        };
+
+        let mut dpi_x = 96u32;
+        let mut dpi_y = 96u32;
+        // Safety: monitor is a valid HMONITOR and dpi pointers are valid for writes.
+        let hr = unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) };
+        let dpi = if hr >= 0 && dpi_x > 0 { dpi_x } else { 96 };
+
+        Ok(WindowsMonitorMetrics::new(physical_work_area, dpi))
     }
 
     struct ClipboardGuard;
@@ -1178,7 +1340,8 @@ mod native {
 mod native {
     use super::{
         ClipboardFormat, NativeHotkeyMessage, WindowsClipboardTextSnapshot, WindowsHotkey,
-        WindowsHotkeyHandle, WindowsPlatformError, WindowsPoint, WindowsProcessMemory, WindowsRect,
+        WindowsHotkeyHandle, WindowsMonitorMetrics, WindowsPlatformError, WindowsPoint,
+        WindowsProcessMemory, WindowsRect,
     };
 
     pub fn register_global_hotkey(
@@ -1233,15 +1396,18 @@ mod native {
         Ok(WindowsPoint { x: 0, y: 0 })
     }
 
-    pub fn monitor_work_area_for_point(
+    pub fn monitor_metrics_for_point(
         _point: WindowsPoint,
-    ) -> Result<WindowsRect, WindowsPlatformError> {
-        Ok(WindowsRect {
-            left: 0,
-            top: 0,
-            right: 1920,
-            bottom: 1080,
-        })
+    ) -> Result<WindowsMonitorMetrics, WindowsPlatformError> {
+        Ok(WindowsMonitorMetrics::new(
+            WindowsRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            96,
+        ))
     }
 
     pub fn clipboard_format(format: ClipboardFormat) -> Option<u32> {
@@ -1509,7 +1675,7 @@ mod tests {
     }
 
     #[test]
-    fn keeps_explicit_window_placement_unclamped() {
+    fn clamps_explicit_window_placement_by_default() {
         let options = WindowOptions::new("mini", "Mini")
             .size(420.0, 360.0)
             .placement(WindowPlacement::Explicit {
@@ -1528,8 +1694,146 @@ mod tests {
             },
         );
 
+        assert_eq!(placement.x, 1500);
+        assert_eq!(placement.y, 0);
+    }
+
+    #[test]
+    fn allows_opt_in_offscreen_window_placement() {
+        let options = WindowOptions::new("mini", "Mini")
+            .size(420.0, 360.0)
+            .placement(WindowPlacement::Explicit {
+                x: 2200.0,
+                y: -500.0,
+            })
+            .allow_offscreen();
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for(
+            &options,
+            WindowsPoint { x: 0, y: 0 },
+            WindowsRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+        );
+
         assert_eq!(placement.x, 2200);
         assert_eq!(placement.y, -500);
+        assert_eq!(placement.width, 420);
+        assert_eq!(placement.height, 360);
+    }
+
+    #[test]
+    fn constrains_window_size_to_monitor_work_area() {
+        let options = WindowOptions::new("main", "Main")
+            .size(2400.0, 1400.0)
+            .min_size(640.0, 480.0)
+            .placement(WindowPlacement::Center);
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for(
+            &options,
+            WindowsPoint { x: 0, y: 0 },
+            WindowsRect {
+                left: 0,
+                top: 0,
+                right: 1366,
+                bottom: 768,
+            },
+        );
+
+        assert_eq!(placement.x, 0);
+        assert_eq!(placement.y, 0);
+        assert_eq!(placement.width, 1366);
+        assert_eq!(placement.height, 768);
+    }
+
+    #[test]
+    fn constrains_window_size_to_monitor_work_area_dips_on_high_dpi() {
+        let options = WindowOptions::new("main", "Main")
+            .size(940.0, 1220.0)
+            .placement(WindowPlacement::Explicit { x: 40.0, y: 20.0 });
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for_monitor(
+            &options,
+            WindowsPoint { x: 300, y: 200 },
+            WindowsMonitorMetrics::new(
+                WindowsRect {
+                    left: 0,
+                    top: 0,
+                    right: 1440,
+                    bottom: 900,
+                },
+                144,
+            ),
+        );
+
+        assert_eq!(placement.dpi, 144);
+        assert_eq!(placement.physical_work_area.width(), 1440);
+        assert_eq!(placement.work_area.width(), 960);
+        assert_eq!(placement.x, 20);
+        assert_eq!(placement.y, 0);
+        assert_eq!(placement.width, 940);
+        assert_eq!(placement.height, 600);
+    }
+
+    #[test]
+    fn selects_work_area_for_multi_monitor_cursor() {
+        let options = WindowOptions::new("mini", "Mini")
+            .size(420.0, 360.0)
+            .placement(WindowPlacement::CursorOffset { x: 12.0, y: 12.0 });
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for_work_areas(
+            &options,
+            WindowsPoint { x: -50, y: 700 },
+            &[
+                WindowsRect {
+                    left: 0,
+                    top: 0,
+                    right: 1920,
+                    bottom: 1080,
+                },
+                WindowsRect {
+                    left: -1280,
+                    top: 0,
+                    right: 0,
+                    bottom: 720,
+                },
+            ],
+        )
+        .expect("work area");
+
+        assert_eq!(placement.work_area.left, -1280);
+        assert_eq!(placement.work_area.right, 0);
+        assert_eq!(placement.x, -420);
+        assert_eq!(placement.y, 360);
+    }
+
+    #[test]
+    fn resolves_cursor_offset_from_physical_cursor_into_dips() {
+        let options = WindowOptions::new("mini", "Mini")
+            .size(420.0, 360.0)
+            .placement(WindowPlacement::CursorOffset { x: 12.0, y: 12.0 });
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for_monitor(
+            &options,
+            WindowsPoint { x: 1350, y: 780 },
+            WindowsMonitorMetrics::new(
+                WindowsRect {
+                    left: 0,
+                    top: 0,
+                    right: 1440,
+                    bottom: 900,
+                },
+                144,
+            ),
+        );
+
+        assert_eq!(placement.work_area.width(), 960);
+        assert_eq!(placement.work_area.height(), 600);
+        assert_eq!(placement.x, 540);
+        assert_eq!(placement.y, 240);
     }
 
     #[cfg(windows)]

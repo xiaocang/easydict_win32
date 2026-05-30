@@ -53,6 +53,10 @@ pub const fn more() -> IconToken {
     IconToken::named("more")
 }
 
+pub const fn play() -> IconToken {
+    IconToken::named("play")
+}
+
 pub const fn search() -> IconToken {
     IconToken::named("search")
 }

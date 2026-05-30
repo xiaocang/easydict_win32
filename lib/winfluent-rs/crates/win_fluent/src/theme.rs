@@ -3,6 +3,7 @@ pub enum ThemeMode {
     System,
     Light,
     Dark,
+    Easydict,
     HighContrast,
 }
 
@@ -49,6 +50,7 @@ impl Default for AccentPalette {
 pub struct Typography {
     pub caption: f32,
     pub body: f32,
+    pub body_large: f32,
     pub body_strong: f32,
     pub subtitle: f32,
     pub title: f32,
@@ -60,6 +62,7 @@ impl Default for Typography {
         Self {
             caption: 12.0,
             body: 14.0,
+            body_large: 15.0,
             body_strong: 14.0,
             subtitle: 20.0,
             title: 28.0,
@@ -101,8 +104,8 @@ pub struct CornerRadius {
 impl Default for CornerRadius {
     fn default() -> Self {
         Self {
-            control: 4.0,
-            overlay: 8.0,
+            control: 10.0,
+            overlay: 10.0,
             window: 8.0,
         }
     }
@@ -163,6 +166,10 @@ pub struct ControlMetrics {
     pub compact_height: f32,
     pub icon_button: f32,
     pub min_touch_target: f32,
+    pub title_bar_height: f32,
+    pub caption_button_width: f32,
+    pub card_padding: f32,
+    pub result_header_height: f32,
 }
 
 impl Default for ControlMetrics {
@@ -170,8 +177,12 @@ impl Default for ControlMetrics {
         Self {
             height: 32.0,
             compact_height: 28.0,
-            icon_button: 32.0,
+            icon_button: 36.0,
             min_touch_target: 40.0,
+            title_bar_height: 28.0,
+            caption_button_width: 48.0,
+            card_padding: 12.0,
+            result_header_height: 30.0,
         }
     }
 }
@@ -287,10 +298,60 @@ impl ThemeTokens {
         }
     }
 
+    pub fn easydict_soft() -> Self {
+        Self {
+            mode: ThemeMode::Easydict,
+            accent: AccentPalette {
+                base: Color::rgb(0, 120, 212),
+                light_1: Color::rgb(16, 110, 190),
+                light_2: Color::rgb(234, 243, 255),
+                dark_1: Color::rgb(0, 90, 158),
+                dark_2: Color::rgb(23, 78, 139),
+            },
+            typography: Typography::default(),
+            spacing: Spacing::default(),
+            radius: CornerRadius {
+                control: 10.0,
+                overlay: 10.0,
+                window: 8.0,
+            },
+            stroke: Stroke::default(),
+            elevation: Elevation {
+                rest: 0.0,
+                raised: 1.0,
+                overlay: 6.0,
+                flyout: 12.0,
+            },
+            control: ControlMetrics {
+                height: 32.0,
+                compact_height: 28.0,
+                icon_button: 28.0,
+                min_touch_target: 40.0,
+                title_bar_height: 28.0,
+                caption_button_width: 48.0,
+                card_padding: 12.0,
+                result_header_height: 30.0,
+            },
+            density: Density::Comfortable,
+            backdrop: BackdropKind::Mica,
+            background: Color::rgb(247, 249, 252),
+            surface: Color::rgb(255, 255, 255),
+            surface_alt: Color::rgb(241, 244, 248),
+            text_primary: Color::rgb(38, 38, 38),
+            text_secondary: Color::rgb(95, 102, 112),
+            border: Color::rgb(221, 228, 238),
+            focus: Color::rgb(0, 122, 255),
+            error: Color::rgb(209, 52, 56),
+            warning: Color::rgb(157, 93, 0),
+            success: Color::rgb(16, 124, 16),
+        }
+    }
+
     pub fn resolve(mode: ThemeMode) -> Self {
         match mode {
             ThemeMode::System | ThemeMode::Light => Self::fluent_light(),
             ThemeMode::Dark => Self::fluent_dark(),
+            ThemeMode::Easydict => Self::easydict_soft(),
             ThemeMode::HighContrast => Self::high_contrast(),
         }
     }
@@ -304,10 +365,13 @@ mod tests {
     fn resolves_visual_tokens_for_all_supported_modes() {
         let light = ThemeTokens::resolve(ThemeMode::Light);
         let dark = ThemeTokens::resolve(ThemeMode::Dark);
+        let easydict = ThemeTokens::resolve(ThemeMode::Easydict);
         let high_contrast = ThemeTokens::resolve(ThemeMode::HighContrast);
 
         assert_eq!(light.backdrop, BackdropKind::Mica);
         assert_eq!(dark.backdrop, BackdropKind::Mica);
+        assert_eq!(easydict.background, Color::rgb(247, 249, 252));
+        assert_eq!(easydict.control.icon_button, 28.0);
         assert_eq!(high_contrast.backdrop, BackdropKind::Solid);
         assert_eq!(light.control.height, 32.0);
         assert_eq!(dark.stroke.focus, 2.0);

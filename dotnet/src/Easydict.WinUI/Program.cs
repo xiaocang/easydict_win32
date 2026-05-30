@@ -1,7 +1,9 @@
 using Microsoft.UI.Dispatching;
-using Microsoft.Windows.ApplicationModel.DynamicDependency;
 using Microsoft.Windows.AppLifecycle;
 using Easydict.WinUI.Services;
+#if !MICROSOFT_WINDOWSAPPSDK_SELFCONTAINED
+using Microsoft.Windows.ApplicationModel.DynamicDependency;
+#endif
 
 namespace Easydict.WinUI;
 
@@ -45,18 +47,20 @@ public static class Program
         {
             ProtocolRegistrationService.EnsureRegistered();
 
-            // WinAppSDK Bootstrap. Required for unpackaged (Inno/portable/CI publish)
-            // launches before any Microsoft.UI.Xaml type is touched — without it
-            // Application.Start below activates IApplicationStatics and the WinRT
-            // factory returns REGDB_E_CLASSNOTREG (0x80040154), terminating the
-            // process before the main window appears. Packaged MSIX launches resolve
-            // WinAppSDK via the OS framework-dep graph and skip this.
+            // WinAppSDK has two mutually exclusive unpackaged deployment models:
+            // self-contained portable builds load the local runtime DLLs through
+            // the SDK's UndockedRegFreeWinRT module initializer, while
+            // framework-dependent builds must bootstrap the installed runtime
+            // package before any Microsoft.UI.Xaml type is touched. Calling
+            // Bootstrap.TryInitialize in a self-contained build mixes those models
+            // and can crash on launch when both local DLLs and a framework package
+            // are present.
             //
-            // The csproj DOES NOT use Microsoft.WindowsAppSdk's auto-init module
-            // ctor (WindowsAppSdkDeploymentManagerInitialize=false in csproj, and the
-            // hand-rolled Main here suppresses the SDK-generated entry point via the
-            // DISABLE_XAML_GENERATED_MAIN constant), so this explicit call is the
-            // only Bootstrap surface in the unpackaged path.
+            // For framework-dependent unpackaged builds, this explicit call is the
+            // only Bootstrap surface. The csproj disables the SDK bootstrap
+            // auto-initializer by default, and the hand-rolled Main suppresses the
+            // SDK-generated entry point via DISABLE_XAML_GENERATED_MAIN.
+#if !MICROSOFT_WINDOWSAPPSDK_SELFCONTAINED
             //
             // Major.Minor = 2.0 encoded in the high/low 16-bit halves.
             const uint windowsAppSdkVersion = 0x00020000;
@@ -68,6 +72,7 @@ public static class Program
                 Environment.ExitCode = bootstrapHresult != 0 ? bootstrapHresult : 1;
                 return;
             }
+#endif
         }
 
         // Determine if this launch should trigger OCR

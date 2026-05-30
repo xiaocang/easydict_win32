@@ -59,9 +59,9 @@
     </ItemGroup>
 
     <PropertyGroup>
-        <Version>0.8.0</Version>
-        <AssemblyVersion>0.8.0.0</AssemblyVersion>
-        <FileVersion>0.8.0.0</FileVersion>
+        <Version>0.8.1</Version>
+        <AssemblyVersion>0.8.1.0</AssemblyVersion>
+        <FileVersion>0.8.1.0</FileVersion>
 
         <!-- Bumped from 10.0.19041.0 to 10.0.22621.0 because Microsoft.Windows.AI.Text.LanguageModel
              (Phi Silica) ships only in WindowsAppSDK 2.x, which requires a 22621 minimum. -->
@@ -110,15 +110,18 @@
                overrides take precedence). -->
         <WindowsAppSDKSelfContained Condition="'$(Configuration)' == 'Release'">true</WindowsAppSDKSelfContained>
         <WindowsAppSDKSelfContained Condition="'$(Configuration)' != 'Release'">false</WindowsAppSDKSelfContained>
+        <!-- Disable WinAppSDK 2.x bootstrap auto-initializer by default because Program.cs owns
+             framework-dependent unpackaged bootstrap and wants explicit error handling. Do not
+             disable UndockedRegFreeWinRT: portable self-contained builds need that auto-initializer
+             to load the bundled local Windows App SDK runtime DLLs. -->
+        <WindowsAppSdkBootstrapInitialize Condition="'$(WindowsAppSdkBootstrapInitialize)' == ''">false</WindowsAppSdkBootstrapInitialize>
         <!-- Disable WinAppSDK 2.x DeploymentManager auto-initializer.
              The auto-init runs in the assembly's <Module>.cctor and instantiates a
              DeploymentInitializeOptions WinRT object; on hosts without the WinAppSDK runtime
              registered (CI runners), this throws COMException (REGDB_E_CLASSNOTREG) and any
-             test that touches a type from this assembly fails to load. Bootstrap is already
-             initialized explicitly in Program.cs (Bootstrap.TryInitialize), and DeploymentManager
-             is only meaningful for packaged framework-dependent runs — those code paths exit on
-             user machines that have the framework provisioned, so skipping the module-load-time
-             init is safe here. -->
+             test that touches a type from this assembly fails to load. DeploymentManager is only
+             meaningful for packaged framework-dependent runs, where the MSIX framework dependency
+             handles runtime registration. -->
         <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
         <!-- Trim unused code to reduce size -->
         <PublishTrimmed>false</PublishTrimmed>

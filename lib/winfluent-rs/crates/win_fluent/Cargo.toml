@@ -4,6 +4,8 @@ edition.workspace = true
 license.workspace = true
 version.workspace = true
 
+[dependencies]
+futures-core = "0.3"
+
 [lib]
 path = "src/lib.rs"
-

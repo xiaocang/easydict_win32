@@ -61,6 +61,10 @@ pub const fn play() -> IconToken {
     IconToken::named("play")
 }
 
+pub const fn refresh() -> IconToken {
+    IconToken::named("refresh")
+}
+
 pub const fn pin() -> IconToken {
     IconToken::named("pin")
 }

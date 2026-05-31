@@ -28,5 +28,7 @@ public static class IpcEventTypes
 {
     public const string TranslateChunk = "translate_chunk";
     public const string TranslateDone = "translate_done";
+    public const string GrammarChunk = "grammar_chunk";
+    public const string GrammarDone = "grammar_done";
 }
 

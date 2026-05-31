@@ -42,6 +42,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Easydict.DocumentExport\Easydict.DocumentExport.csproj" />
+    <ProjectReference Include="..\..\src\Easydict.CompatHost\Easydict.CompatHost.csproj" />
     <ProjectReference Include="..\..\src\Easydict.WinUI\Easydict.WinUI.csproj" />
     <ProjectReference Include="..\..\src\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj" Aliases="LongDocWorker" />
     <ProjectReference Include="..\..\lib\LexIndex\src\LexIndex\LexIndex.csproj" />

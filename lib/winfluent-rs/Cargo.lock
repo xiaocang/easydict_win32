@@ -2552,6 +2552,9 @@ dependencies = [
 [[package]]
 name = "win_fluent"
 version = "0.1.0"
+dependencies = [
+ "futures-core",
+]
 
 [[package]]
 name = "win_fluent_backend_iced"

@@ -24,11 +24,13 @@ public sealed class IpcResponse
     /// <summary>
     /// Returns true if this response indicates success (has result, no error).
     /// </summary>
+    [JsonIgnore]
     public bool IsSuccess => Error is null && Result.HasValue;
 
     /// <summary>
     /// Returns true if this response indicates an error.
     /// </summary>
+    [JsonIgnore]
     public bool IsError => Error is not null;
 }
 

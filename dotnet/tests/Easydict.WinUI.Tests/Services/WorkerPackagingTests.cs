@@ -23,8 +23,14 @@ public sealed class WorkerPackagingTests
         workflow.Should().Contain("Easydict.Workers.LongDoc");
         workflow.Should().Contain("Easydict.Workers.LocalAi");
         workflow.Should().Contain("Easydict.Workers.Ocr");
+        workflow.Should().Contain("Easydict.CompatHost");
+        workflow.Should().Contain("Publish .NET Compat Host");
+        workflow.Should().Contain("Publish Rust helper executables");
+        workflow.Should().Contain("Build-RustHelpers.ps1");
         workflow.Should().Contain("./publish/${{ matrix.platform }}/workers/ocr");
         workflow.Should().Contain("./publish-msix/${{ matrix.platform }}/workers/ocr");
+        workflow.Should().Contain("--output ./publish/${{ matrix.platform }}");
+        workflow.Should().Contain("--output ./publish-msix/${{ matrix.platform }}");
         workflow.Should().Contain("Dedupe-WorkerSharedFiles.ps1");
     }
 
@@ -54,6 +60,11 @@ public sealed class WorkerPackagingTests
         makefile.Should().Contain("Easydict.Workers.LongDoc");
         makefile.Should().Contain("Easydict.Workers.LocalAi");
         makefile.Should().Contain("Easydict.Workers.Ocr");
+        makefile.Should().Contain("Easydict.CompatHost");
+        makefile.Should().Contain("Easydict.CompatHost.exe");
+        makefile.Should().Contain("Build-RustHelpers.ps1");
+        makefile.Should().Contain("easydict_browser_registrar.exe");
+        makefile.Should().Contain("easydict-native-bridge.exe");
         makefile.Should().Contain("./publish/x64/workers/ocr");
         makefile.Should().Contain("./publish/arm64/workers/ocr");
         makefile.Should().Contain("./publish-msix/x64/workers/ocr");
@@ -65,6 +76,91 @@ public sealed class WorkerPackagingTests
         makefile.Should().Contain("Dedupe-WorkerSharedFiles.ps1");
         makefile.Should().Contain("Worker settings default");
         makefile.Should().NotContain("UseLocalAiWorker default false");
+    }
+
+    [Fact]
+    public void CompatHostPackaging_PublishesBridgeBesideAppExecutable()
+    {
+        var makefile = File.ReadAllText(Path.Combine(ProjectRoot, "Makefile"));
+        var publishScript = File.ReadAllText(Path.Combine(ProjectRoot, "scripts", "publish.ps1"));
+        var packageScript = File.ReadAllText(Path.Combine(ProjectRoot, "scripts", "package-and-install.ps1"));
+        var workflow = File.ReadAllText(Path.GetFullPath(Path.Combine(
+            ProjectRoot,
+            "..",
+            ".github",
+            "workflows",
+            "release-publish.yml")));
+        var csproj = File.ReadAllText(Path.Combine(
+            ProjectRoot,
+            "src",
+            "Easydict.CompatHost",
+            "Easydict.CompatHost.csproj"));
+
+        makefile.Should().Contain("AppContext.BaseDirectory +");
+        makefile.Should().Contain("dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64");
+        makefile.Should().Contain("dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86");
+        makefile.Should().Contain("dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64");
+        makefile.Should().Contain("dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64");
+        makefile.Should().Contain("dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86");
+        makefile.Should().Contain("dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64");
+        publishScript.Should().Contain("Easydict.CompatHost.exe");
+        packageScript.Should().Contain("Easydict.CompatHost/Easydict.CompatHost.csproj");
+        workflow.Should().Contain("Publish .NET Compat Host (MSIX)");
+        csproj.Should().Contain("<RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>");
+    }
+
+    [Fact]
+    public void RustHelperPackaging_PublishesBridgeRegistrarAndCliBesideAppExecutable()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(ProjectRoot, ".."));
+        var buildScript = File.ReadAllText(Path.Combine(ProjectRoot, "scripts", "Build-RustHelpers.ps1"));
+        var makefile = File.ReadAllText(Path.Combine(ProjectRoot, "Makefile"));
+        var publishScript = File.ReadAllText(Path.Combine(ProjectRoot, "scripts", "publish.ps1"));
+        var packageScript = File.ReadAllText(Path.Combine(ProjectRoot, "scripts", "package-and-install.ps1"));
+        var workflow = File.ReadAllText(Path.GetFullPath(Path.Combine(
+            ProjectRoot,
+            "..",
+            ".github",
+            "workflows",
+            "release-publish.yml")));
+        var arm64SmokeWorkflow = File.ReadAllText(Path.GetFullPath(Path.Combine(
+            ProjectRoot,
+            "..",
+            ".github",
+            "workflows",
+            "arm64-msix-smoke.yml")));
+        var appLib = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "rs",
+            "crates",
+            "easydict_app",
+            "src",
+            "lib.rs"));
+
+        buildScript.Should().Contain("cargo");
+        buildScript.Should().Contain("--bin\", \"easydict-native-bridge");
+        buildScript.Should().Contain("--bin\", \"easydict_browser_registrar");
+        buildScript.Should().Contain("--bin\", \"easydict_cli");
+        buildScript.Should().Contain("x86_64-pc-windows-msvc");
+        buildScript.Should().Contain("i686-pc-windows-msvc");
+        buildScript.Should().Contain("aarch64-pc-windows-msvc");
+        buildScript.Should().Contain("easydict-native-bridge.exe");
+        buildScript.Should().Contain("easydict_browser_registrar.exe");
+        buildScript.Should().Contain("easydict_cli.exe");
+
+        makefile.Should().Contain("Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish/x64");
+        makefile.Should().Contain("Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish/x86");
+        makefile.Should().Contain("Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish/arm64");
+        makefile.Should().Contain("Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish-msix/x64");
+        makefile.Should().Contain("Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish-msix/x86");
+        makefile.Should().Contain("Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish-msix/arm64");
+
+        publishScript.Should().Contain("Build-RustHelpers.ps1");
+        packageScript.Should().Contain("Build-RustHelpers.ps1");
+        workflow.Should().Contain("Publish Rust helper executables");
+        workflow.Should().Contain("Publish Rust helper executables (MSIX)");
+        arm64SmokeWorkflow.Should().Contain("Publish Rust helper executables (arm64)");
+        appLib.Should().Contain("pub const BROWSER_REGISTRAR_EXE: &str = \"easydict_browser_registrar.exe\";");
     }
 
     [Fact]

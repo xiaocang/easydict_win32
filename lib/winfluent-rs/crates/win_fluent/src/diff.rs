@@ -139,6 +139,7 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
             children.extend(token.trailing.iter());
             children
         }
+        ViewToken::PointerRegion(token) => vec![token.content.as_ref()],
         ViewToken::Custom(token) => token.children.iter().collect(),
         ViewToken::Text(_)
         | ViewToken::Button(_)
@@ -182,6 +183,7 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
         ViewToken::SettingsRow(_) => "SettingsRow",
         ViewToken::ResultCard(_) => "ResultCard",
         ViewToken::ResultList(_) => "ResultList",
+        ViewToken::PointerRegion(_) => "PointerRegion",
         ViewToken::Custom(_) => "Custom",
     }
 }
@@ -211,6 +213,7 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::SettingsRow(token) => token.id.as_deref(),
         ViewToken::ResultCard(token) => token.id.as_deref(),
         ViewToken::ResultList(token) => token.id.as_deref(),
+        ViewToken::PointerRegion(token) => token.id.as_deref(),
         ViewToken::Custom(token) => token.id.as_deref(),
     }
 }
@@ -274,7 +277,7 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
         ),
         ViewToken::Spacer(token) => format!("{:?}|{:?}", token.width, token.height),
         ViewToken::TextEditor(token) => format!(
-            "{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}",
+            "{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|keys={}",
             token.placeholder,
             token.min_height,
             token.max_height,
@@ -282,7 +285,8 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.chrome,
             token.read_only,
             token.state,
-            token.action.kind()
+            token.action.kind(),
+            token.key_bindings.len()
         ),
         ViewToken::ToggleSwitch(token) => format!(
             "{:?}|{}|{}|{:?}",
@@ -367,6 +371,18 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.replace_action.kind(),
             token.retry_action.kind(),
             token.toggle_action.kind()
+        ),
+        ViewToken::PointerRegion(token) => format!(
+            "{:?}|{:?}|move={:?}|left_down={:?}|left_up={:?}|double_click={:?}|right_down={:?}|wheel={:?}|escape={:?}",
+            token.width,
+            token.height,
+            token.move_action.kind(),
+            token.left_down_action.kind(),
+            token.left_up_action.kind(),
+            token.double_click_action.kind(),
+            token.right_down_action.kind(),
+            token.wheel_action.kind(),
+            token.escape_action.kind()
         ),
         ViewToken::Custom(token) => token.control.clone(),
     }

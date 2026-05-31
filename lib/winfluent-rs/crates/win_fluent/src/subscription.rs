@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
+use crate::platform::Hotkey;
 use crate::theme::ThemeMode;
 use crate::window::WindowId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SubscriptionKind {
-    Hotkey(String),
+    Hotkey(Hotkey),
     Clipboard,
+    NamedEvent { name: String, auto_reset: bool },
     Theme,
     Tray,
     Window(WindowId),
@@ -26,6 +28,7 @@ pub enum WindowEvent {
 pub enum PlatformEvent {
     HotkeyPressed(String),
     ClipboardChanged,
+    NamedEventSignaled(String),
     ThemeChanged(ThemeMode),
     TrayCommand(String),
     Window(WindowEvent),
@@ -57,17 +60,11 @@ impl<Message> Subscription<Message> {
         }
     }
 
-    pub fn hotkey(
-        id: impl Into<String>,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        Self::event(
-            SubscriptionKind::Hotkey(id.into()),
-            move |event| match event {
-                PlatformEvent::HotkeyPressed(id) => Some(map(id)),
-                _ => None,
-            },
-        )
+    pub fn hotkey(hotkey: Hotkey, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
+        Self::event(SubscriptionKind::Hotkey(hotkey), move |event| match event {
+            PlatformEvent::HotkeyPressed(id) => Some(map(id)),
+            _ => None,
+        })
     }
 
     pub fn clipboard(map: impl Fn() -> Message + Send + Sync + 'static) -> Self {
@@ -75,6 +72,23 @@ impl<Message> Subscription<Message> {
             PlatformEvent::ClipboardChanged => Some(map()),
             _ => None,
         })
+    }
+
+    pub fn named_event(
+        name: impl Into<String>,
+        auto_reset: bool,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        Self::event(
+            SubscriptionKind::NamedEvent {
+                name: name.into(),
+                auto_reset,
+            },
+            move |event| match event {
+                PlatformEvent::NamedEventSignaled(name) => Some(map(name)),
+                _ => None,
+            },
+        )
     }
 
     pub fn theme(map: impl Fn(ThemeMode) -> Message + Send + Sync + 'static) -> Self {

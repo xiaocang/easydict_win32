@@ -4,9 +4,10 @@ use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use iced::advanced::{
     clipboard::Clipboard,
@@ -23,24 +24,32 @@ use iced::widget::{
     text_input as iced_text_input,
 };
 use iced::{
-    alignment, font, window, Background, Border, Color, Element, Event, Font, Length as IcedLength,
-    Point, Rectangle, Shadow, Size, Subscription, Vector,
+    alignment, font, keyboard, window, Background, Border, Color, Element, Event, Font,
+    Length as IcedLength, Point, Rectangle, Shadow, Size, Subscription, Vector,
 };
 use win_fluent::action::{Action, ActionKind};
 use win_fluent::command::CommandToken;
 use win_fluent::icon;
-use win_fluent::platform::{Hotkey, HotkeyKey, HotkeyModifier};
-use win_fluent::runtime::{Application as FluentApplication, RuntimePlan};
+use win_fluent::platform::{
+    FileDialogFilter, FileDialogOptions, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand,
+    ProtocolRegistration, ShellVerb,
+};
+use win_fluent::runtime::{Application as FluentApplication, DesktopIntegrationPlan, RuntimePlan};
 use win_fluent::screenshot::WindowScreenshot;
 use win_fluent::state::ValidationSeverity;
 use win_fluent::style::FluentStyle;
+use win_fluent::subscription::{
+    PlatformEvent, Subscription as FluentSubscription, SubscriptionKind as FluentSubscriptionKind,
+};
 use win_fluent::task::Task as FluentTask;
 use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
 use win_fluent::view::{
     AdaptiveSwitchToken, BusyOverlayToken, ButtonKind, CardKind, CardToken, CollapseTransition,
-    ComboBoxItem, FlyoutButtonToken, LayoutDistribution, LayoutKind, Length, ProgressRingToken,
-    ResultCardToken, ResultItem, ResultListToken, ResultStatus, SettingsRowToken, StatusBadgeToken,
-    TextEditorChrome, TextEditorToken, TextStyle, TitleBarToken, View, ViewToken,
+    ComboBoxItem, FlyoutButtonToken, LayoutDistribution, LayoutKind, Length, PointerPosition,
+    PointerRegionAction, PointerRegionToken, PointerWheel, ProgressRingToken, ResultCardToken,
+    ResultItem, ResultListToken, ResultStatus, SettingsRowToken, StatusBadgeToken,
+    TextEditorChrome, TextEditorKey, TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken,
+    TextStyle, TitleBarToken, View, ViewToken,
 };
 use win_fluent::window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,
@@ -54,6 +63,12 @@ pub type IcedTextEditorContent = iced_text_editor_state::Content<iced::Renderer>
 pub enum IcedHotkeyEvent {
     Pressed { id: String },
     Error { message: String },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum IcedNamedEvent {
+    Signaled { name: String },
+    Error { name: String, message: String },
 }
 
 pub struct IcedAdapter;
@@ -122,6 +137,13 @@ impl IcedAdapter {
         iced_hotkey_subscription(hotkey)
     }
 
+    pub fn named_event_subscription(
+        name: String,
+        auto_reset: bool,
+    ) -> Subscription<IcedNamedEvent> {
+        iced_named_event_subscription(name, auto_reset)
+    }
+
     pub fn window_screenshot(id: iced::window::Id) -> iced::Task<WindowScreenshot> {
         iced::window::screenshot(id).map(|screenshot| {
             Self::screenshot_frame(screenshot)
@@ -168,6 +190,8 @@ where
 #[derive(Debug, Clone)]
 enum IcedRuntimeMessage<Message> {
     App(Message),
+    PlatformEvent(PlatformEvent),
+    FocusWidget(String),
     WindowOpened(window::Id),
 }
 
@@ -177,6 +201,7 @@ struct IcedSingleWindowRuntime<App: FluentApplication> {
     native_window_id: Option<window::Id>,
     view: View<App::Message>,
     text_editors: TextEditorCache,
+    desktop_integration: DesktopIntegrationPlan<App::Message>,
 }
 
 impl<App> IcedSingleWindowRuntime<App>
@@ -189,13 +214,18 @@ where
         options: WindowOptions,
     ) -> (Self, iced::Task<IcedRuntimeMessage<App::Message>>) {
         let plan = RuntimePlan::<App>::new(flags);
-        let runtime = Self::new(plan.app, options.id);
+        let runtime = Self::new(plan.app, options.id, plan.desktop_integration);
         let initial_task = runtime.fluent_task(plan.initial_task);
+        let focus_task = runtime.delayed_focused_text_editor_task();
 
-        (runtime, initial_task)
+        (runtime, iced::Task::batch([initial_task, focus_task]))
     }
 
-    fn new(app: App, logical_window_id: WindowId) -> Self {
+    fn new(
+        app: App,
+        logical_window_id: WindowId,
+        desktop_integration: DesktopIntegrationPlan<App::Message>,
+    ) -> Self {
         let view = app.view(&logical_window_id);
         let mut text_editors = TextEditorCache::default();
         text_editors.sync(&view);
@@ -206,6 +236,7 @@ where
             native_window_id: None,
             view,
             text_editors,
+            desktop_integration,
         }
     }
 
@@ -222,11 +253,21 @@ where
             IcedRuntimeMessage::App(message) => {
                 let task = state.app.update(message);
                 state.rebuild_view();
-                state.fluent_task(task)
+                iced::Task::batch([state.fluent_task(task), state.focused_text_editor_task()])
             }
+            IcedRuntimeMessage::PlatformEvent(event) => {
+                let Some(message) = map_platform_event(&state.app.subscription(), event) else {
+                    return iced::Task::none();
+                };
+
+                let task = state.app.update(message);
+                state.rebuild_view();
+                iced::Task::batch([state.fluent_task(task), state.focused_text_editor_task()])
+            }
+            IcedRuntimeMessage::FocusWidget(id) => iced::widget::operation::focus(id),
             IcedRuntimeMessage::WindowOpened(window_id) => {
                 state.native_window_id = Some(window_id);
-                iced::Task::none()
+                state.delayed_focused_text_editor_task()
             }
         }
     }
@@ -241,8 +282,12 @@ where
         .map(IcedRuntimeMessage::App)
     }
 
-    fn subscription(_state: &Self) -> Subscription<IcedRuntimeMessage<App::Message>> {
-        window::open_events().map(IcedRuntimeMessage::WindowOpened)
+    fn subscription(state: &Self) -> Subscription<IcedRuntimeMessage<App::Message>> {
+        let _desktop_entry_count = state.desktop_integration.entry_count();
+        Subscription::batch([
+            window::open_events().map(IcedRuntimeMessage::WindowOpened),
+            fluent_subscription(state.app.subscription()),
+        ])
     }
 
     fn fluent_task(
@@ -256,7 +301,87 @@ where
                 iced::Task::batch(tasks.into_iter().map(|task| self.fluent_task(task)))
             }
             FluentTask::Future(future) => iced::Task::future(future).map(IcedRuntimeMessage::App),
+            FluentTask::Stream(stream) => iced::Task::stream(stream).map(IcedRuntimeMessage::App),
             FluentTask::Window(command) => self.window_command(command),
+            FluentTask::Platform(command) => self.platform_command(command),
+            FluentTask::ReadClipboardText(map) => {
+                iced::clipboard::read().map(move |text| IcedRuntimeMessage::App(map(text)))
+            }
+            FluentTask::CaptureScreenRegion { request, map } => {
+                iced::Task::future(async move { run_platform_capture_screen_region(request) })
+                    .map(move |capture| IcedRuntimeMessage::App(map(capture)))
+            }
+            FluentTask::OpenFileDialog { options, map } => {
+                iced::Task::future(async move { run_platform_open_file_dialog(options) })
+                    .map(move |path| IcedRuntimeMessage::App(map(path)))
+            }
+        }
+    }
+
+    fn focused_text_editor_task(&self) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        focused_text_editor_id(&self.view)
+            .map(IcedRuntimeMessage::FocusWidget)
+            .map(iced::Task::done)
+            .unwrap_or_else(iced::Task::none)
+    }
+
+    fn delayed_focused_text_editor_task(&self) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        focused_text_editor_id(&self.view)
+            .map(|id| {
+                iced::Task::perform(
+                    async move {
+                        std::thread::sleep(Duration::from_millis(150));
+                        id
+                    },
+                    IcedRuntimeMessage::FocusWidget,
+                )
+            })
+            .unwrap_or_else(iced::Task::none)
+    }
+
+    fn platform_command(
+        &self,
+        command: PlatformCommand,
+    ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        match command {
+            PlatformCommand::CaptureTextInsertionTarget => {
+                iced::Task::future(async move { run_platform_capture_text_insertion_target() })
+                    .discard()
+            }
+            PlatformCommand::WriteClipboardText(text) => {
+                iced::clipboard::write::<IcedRuntimeMessage<App::Message>>(text)
+            }
+            PlatformCommand::InsertText(text) => {
+                iced::Task::future(async move { run_platform_insert_text(text) }).discard()
+            }
+            PlatformCommand::OpenUrl(url) => {
+                iced::Task::future(async move { run_platform_open_url(url) }).discard()
+            }
+            PlatformCommand::RegisterShellVerb(verb) => {
+                iced::Task::future(async move { run_platform_register_shell_verb(verb) }).discard()
+            }
+            PlatformCommand::UnregisterShellVerb(verb) => {
+                iced::Task::future(async move { run_platform_unregister_shell_verb(verb) })
+                    .discard()
+            }
+            PlatformCommand::RegisterProtocol(protocol) => {
+                iced::Task::future(async move { run_platform_register_protocol(protocol) })
+                    .discard()
+            }
+            PlatformCommand::UnregisterProtocol(protocol) => {
+                iced::Task::future(async move { run_platform_unregister_protocol(protocol) })
+                    .discard()
+            }
+            PlatformCommand::RunBundledExecutable {
+                executable_name,
+                arguments,
+            } => iced::Task::future(async move {
+                run_platform_bundled_executable(executable_name, arguments)
+            })
+            .discard(),
+            PlatformCommand::SpeakText { text, language } => {
+                iced::Task::future(async move { run_platform_speak_text(text, language) }).discard()
+            }
         }
     }
 
@@ -289,6 +414,19 @@ where
                         window_id,
                         window::Mode::Hidden,
                     )
+                })
+                .unwrap_or_else(iced::Task::none),
+            WindowCommand::ToggleVisibility(id) => self
+                .with_logical_window(&id, |window_id| {
+                    window::mode(window_id).then(move |mode| {
+                        let next_mode = if mode == window::Mode::Hidden {
+                            window::Mode::Windowed
+                        } else {
+                            window::Mode::Hidden
+                        };
+
+                        window::set_mode::<IcedRuntimeMessage<App::Message>>(window_id, next_mode)
+                    })
                 })
                 .unwrap_or_else(iced::Task::none),
             WindowCommand::Focus(id) => self
@@ -343,6 +481,347 @@ where
         command: impl Fn(window::Id) -> iced::Task<IcedRuntimeMessage<App::Message>> + Send + 'static,
     ) -> Option<iced::Task<IcedRuntimeMessage<App::Message>>> {
         (id == &self.logical_window_id).then(|| self.with_current_window(command))
+    }
+}
+
+fn fluent_subscription<Message>(
+    subscription: FluentSubscription<Message>,
+) -> Subscription<IcedRuntimeMessage<Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    match subscription {
+        FluentSubscription::None => Subscription::none(),
+        FluentSubscription::Batch(subscriptions) => Subscription::batch(
+            subscriptions
+                .into_iter()
+                .map(fluent_subscription::<Message>),
+        ),
+        FluentSubscription::Event { kind, .. } => match kind {
+            FluentSubscriptionKind::Hotkey(hotkey) => {
+                IcedAdapter::hotkey_subscription(hotkey).map(|event| match event {
+                    IcedHotkeyEvent::Pressed { id } => {
+                        IcedRuntimeMessage::PlatformEvent(PlatformEvent::HotkeyPressed(id))
+                    }
+                    IcedHotkeyEvent::Error { message } => {
+                        IcedRuntimeMessage::PlatformEvent(PlatformEvent::Custom {
+                            kind: "hotkey_error".to_string(),
+                            value: message,
+                        })
+                    }
+                })
+            }
+            FluentSubscriptionKind::NamedEvent { name, auto_reset } => {
+                IcedAdapter::named_event_subscription(name, auto_reset).map(|event| match event {
+                    IcedNamedEvent::Signaled { name } => {
+                        IcedRuntimeMessage::PlatformEvent(PlatformEvent::NamedEventSignaled(name))
+                    }
+                    IcedNamedEvent::Error { name, message } => {
+                        IcedRuntimeMessage::PlatformEvent(PlatformEvent::Custom {
+                            kind: format!("named_event_error:{name}"),
+                            value: message,
+                        })
+                    }
+                })
+            }
+            FluentSubscriptionKind::Clipboard
+            | FluentSubscriptionKind::Theme
+            | FluentSubscriptionKind::Tray
+            | FluentSubscriptionKind::Window(_)
+            | FluentSubscriptionKind::Custom(_) => Subscription::none(),
+        },
+    }
+}
+
+fn map_platform_event<Message>(
+    subscription: &FluentSubscription<Message>,
+    event: PlatformEvent,
+) -> Option<Message>
+where
+    Message: Clone + Send + 'static,
+{
+    match subscription {
+        FluentSubscription::None => None,
+        FluentSubscription::Event { map, .. } => map(event),
+        FluentSubscription::Batch(subscriptions) => subscriptions
+            .iter()
+            .find_map(|subscription| map_platform_event(subscription, event.clone())),
+    }
+}
+
+fn run_platform_open_file_dialog(options: FileDialogOptions) -> Option<String> {
+    #[cfg(windows)]
+    {
+        let filter = file_dialog_filter_string(&options.filters);
+        let mut script = String::new();
+        script.push_str("Add-Type -AssemblyName System.Windows.Forms\n");
+        script.push_str("$dialog = New-Object System.Windows.Forms.OpenFileDialog\n");
+        script.push_str("$dialog.CheckFileExists = $true\n");
+        script.push_str("$dialog.Multiselect = $false\n");
+        script.push_str(&format!("$dialog.Title = {}\n", ps_quote(&options.title)));
+        script.push_str(&format!("$dialog.Filter = {}\n", ps_quote(&filter)));
+
+        if let Some(directory) = options.initial_directory.as_deref() {
+            script.push_str(&format!("$initialDirectory = {}\n", ps_quote(directory)));
+            script.push_str(
+                "if ([System.IO.Directory]::Exists($initialDirectory)) { $dialog.InitialDirectory = $initialDirectory }\n",
+            );
+        }
+
+        script.push_str(
+            "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.FileName) }\n",
+        );
+
+        let output = std::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-STA")
+            .arg("-WindowStyle")
+            .arg("Hidden")
+            .arg("-Command")
+            .arg(script)
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        (!path.is_empty()).then_some(path)
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = options;
+        None
+    }
+}
+
+fn file_dialog_filter_string(filters: &[FileDialogFilter]) -> String {
+    let mut parts = Vec::new();
+
+    for filter in filters {
+        if filter.patterns.is_empty() {
+            continue;
+        }
+
+        let patterns = filter.patterns.join(";");
+        parts.push(format!("{} ({})", filter.name, patterns));
+        parts.push(patterns);
+    }
+
+    parts.push("All files (*.*)".to_string());
+    parts.push("*.*".to_string());
+    parts.join("|")
+}
+
+fn ps_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+fn run_platform_insert_text(text: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        win_fluent_platform_win::WindowsPlatformAdapter::insert_text(&text)
+            .map_err(|error| format!("{error:?}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = text;
+        Ok(())
+    }
+}
+
+fn run_platform_open_url(url: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        win_fluent_platform_win::WindowsPlatformAdapter::open_url(&url)
+            .map_err(|error| format!("{error:?}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = url;
+        Ok(())
+    }
+}
+
+fn run_platform_register_shell_verb(verb: ShellVerb) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let plan = win_fluent_platform_win::WindowsPlatformAdapter::plan_shell_verbs(&[verb])
+            .into_iter()
+            .next()
+            .ok_or_else(|| "shell verb produced no registry plan".to_string())?;
+        let executable_path = current_executable_path_string()?;
+        win_fluent_platform_win::WindowsPlatformAdapter::register_shell_verb(
+            &plan,
+            &executable_path,
+        )
+        .map_err(|error| format!("{error:?}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = verb;
+        Ok(())
+    }
+}
+
+fn run_platform_unregister_shell_verb(verb: ShellVerb) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let plan = win_fluent_platform_win::WindowsPlatformAdapter::plan_shell_verbs(&[verb])
+            .into_iter()
+            .next()
+            .ok_or_else(|| "shell verb produced no registry plan".to_string())?;
+        win_fluent_platform_win::WindowsPlatformAdapter::unregister_shell_verb(&plan)
+            .map_err(|error| format!("{error:?}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = verb;
+        Ok(())
+    }
+}
+
+fn run_platform_register_protocol(protocol: ProtocolRegistration) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let plan = win_fluent_platform_win::WindowsPlatformAdapter::plan_protocol_registrations(&[
+            protocol,
+        ])
+        .into_iter()
+        .next()
+        .ok_or_else(|| "protocol produced no registry plan".to_string())?;
+        let executable_path = current_executable_path_string()?;
+        win_fluent_platform_win::WindowsPlatformAdapter::register_protocol_registration(
+            &plan,
+            &executable_path,
+        )
+        .map_err(|error| format!("{error:?}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = protocol;
+        Ok(())
+    }
+}
+
+fn run_platform_unregister_protocol(protocol: ProtocolRegistration) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let plan = win_fluent_platform_win::WindowsPlatformAdapter::plan_protocol_registrations(&[
+            protocol,
+        ])
+        .into_iter()
+        .next()
+        .ok_or_else(|| "protocol produced no registry plan".to_string())?;
+        win_fluent_platform_win::WindowsPlatformAdapter::unregister_protocol_registration(&plan)
+            .map_err(|error| format!("{error:?}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = protocol;
+        Ok(())
+    }
+}
+
+fn run_platform_bundled_executable(
+    executable_name: String,
+    arguments: Vec<String>,
+) -> Result<(), String> {
+    let executable = env::current_exe()
+        .map_err(|error| error.to_string())?
+        .parent()
+        .ok_or_else(|| "current executable has no parent directory".to_string())?
+        .join(executable_name);
+
+    let mut command = Command::new(&executable);
+    command.args(arguments);
+    hide_process_window(&mut command);
+
+    let status = command.status().map_err(|error| {
+        format!(
+            "failed to run bundled executable {}: {error}",
+            executable.display()
+        )
+    })?;
+    if !status.success() {
+        return Err(format!(
+            "bundled executable {} exited with {status}",
+            executable.display()
+        ));
+    }
+
+    Ok(())
+}
+
+fn hide_process_window(command: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = command;
+    }
+}
+
+#[cfg(windows)]
+fn current_executable_path_string() -> Result<String, String> {
+    env::current_exe()
+        .map_err(|error| error.to_string())
+        .map(|path| path.display().to_string())
+}
+
+fn run_platform_capture_text_insertion_target() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        win_fluent_platform_win::WindowsPlatformAdapter::capture_text_insertion_target()
+            .map_err(|error| format!("{error:?}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        Ok(())
+    }
+}
+
+fn run_platform_capture_screen_region(
+    request: win_fluent::platform::ScreenCaptureRequest,
+) -> Option<win_fluent::platform::ScreenCaptureResult> {
+    #[cfg(windows)]
+    {
+        win_fluent_platform_win::WindowsPlatformAdapter::capture_screen_region_with_request(request)
+            .ok()
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = request;
+        None
+    }
+}
+
+fn run_platform_speak_text(text: String, language: Option<String>) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        win_fluent_platform_win::WindowsPlatformAdapter::speak_text(&text, language.as_deref())
+            .map_err(|error| format!("{error:?}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (text, language);
+        Ok(())
     }
 }
 
@@ -440,6 +919,7 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
                 collect_text_editor_values(trailing, values);
             }
         }
+        ViewToken::PointerRegion(token) => collect_text_editor_values(&token.content, values),
         ViewToken::Custom(token) => {
             for child in &token.children {
                 collect_text_editor_values(child, values);
@@ -524,6 +1004,48 @@ fn apply_windows_screen_constraints(
     }
 }
 
+fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
+    match view.token() {
+        ViewToken::Page(token) => token.content.as_deref().and_then(focused_text_editor_id),
+        ViewToken::TitleBar(token) => token.commands.iter().find_map(focused_text_editor_id),
+        ViewToken::BusyOverlay(token) => focused_text_editor_id(&token.content),
+        ViewToken::TextEditor(token) => token.state.focused.then(|| token.id.clone()).flatten(),
+        ViewToken::Card(token) => token
+            .content
+            .as_deref()
+            .and_then(focused_text_editor_id)
+            .or_else(|| token.trailing.iter().find_map(focused_text_editor_id)),
+        ViewToken::CommandBar(token) => token.items.iter().find_map(focused_text_editor_id),
+        ViewToken::FlyoutButton(_) => None,
+        ViewToken::NavigationView(token) => {
+            token.content.as_deref().and_then(focused_text_editor_id)
+        }
+        ViewToken::Dialog(token) => token.content.as_deref().and_then(focused_text_editor_id),
+        ViewToken::Layout(token) => token.children.iter().find_map(focused_text_editor_id),
+        ViewToken::AdaptiveSwitch(token) => {
+            focused_text_editor_id(&token.wide).or_else(|| focused_text_editor_id(&token.narrow))
+        }
+        ViewToken::Lazy(token) => focused_text_editor_id(&token.content),
+        ViewToken::ScrollView(token) => token.content.as_deref().and_then(focused_text_editor_id),
+        ViewToken::SettingsRow(token) => token
+            .content
+            .as_deref()
+            .and_then(focused_text_editor_id)
+            .or_else(|| token.trailing.iter().find_map(focused_text_editor_id)),
+        ViewToken::PointerRegion(token) => focused_text_editor_id(&token.content),
+        ViewToken::Button(_)
+        | ViewToken::StatusBadge(_)
+        | ViewToken::ProgressRing(_)
+        | ViewToken::Spacer(_)
+        | ViewToken::Text(_)
+        | ViewToken::ToggleSwitch(_)
+        | ViewToken::ComboBox(_)
+        | ViewToken::ResultCard(_)
+        | ViewToken::ResultList(_)
+        | ViewToken::Custom(_) => None,
+    }
+}
+
 fn compile_view_with_text_editors_and_visual<'a, Message, Provider>(
     view: &'a View<Message>,
     provider: Provider,
@@ -557,7 +1079,9 @@ where
                 token.icon.as_ref(),
                 visual,
             ))
-            .style(move |_, status| button_style(visual, kind, status));
+            .style(move |_, status| {
+                button_style_with_state(visual, kind, token.state.focused, status)
+            });
 
             control = match kind {
                 ButtonKind::Icon => control
@@ -580,6 +1104,10 @@ where
                 }
                 ButtonKind::Primary => control.padding([8, 14]),
                 ButtonKind::Chip => control.padding([7, 12]),
+                ButtonKind::Tile => control
+                    .width(IcedLength::Fixed(86.0))
+                    .height(IcedLength::Fixed(76.0))
+                    .padding([8, 10]),
                 ButtonKind::Subtle => control.padding([6, 10]),
                 ButtonKind::Standard => control.padding([6, 12]),
             };
@@ -750,6 +1278,7 @@ where
         ViewToken::SettingsRow(token) => compile_settings_row(token, provider, visual),
         ViewToken::ResultCard(token) => compile_result_card(token, visual),
         ViewToken::ResultList(token) => compile_result_list(token, visual),
+        ViewToken::PointerRegion(token) => compile_pointer_region(token, provider, visual),
         ViewToken::Custom(token) => {
             let mut content = iced_column(vec![compile_text(
                 &token.control,
@@ -767,6 +1296,19 @@ where
     }
 }
 
+fn compile_pointer_region<'a, Message, Provider>(
+    token: &'a PointerRegionToken<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    let content = compile_view_with_text_editors_and_visual(&token.content, provider, visual);
+    PointerRegionWidget::new(token, content).into()
+}
+
 fn compile_text<'a, Message>(
     value: &str,
     style: TextStyle,
@@ -780,6 +1322,309 @@ where
         .size(text_size(style, visual))
         .color(text_color(style, visual))
         .into()
+}
+
+struct PointerRegionWidget<'a, Message> {
+    content: IcedElement<'a, Message>,
+    width: Length,
+    height: Length,
+    move_action: PointerRegionAction<Message>,
+    left_down_action: PointerRegionAction<Message>,
+    left_up_action: PointerRegionAction<Message>,
+    double_click_action: PointerRegionAction<Message>,
+    right_down_action: Action<Message>,
+    wheel_action: PointerRegionAction<Message>,
+    escape_action: Action<Message>,
+}
+
+#[derive(Default)]
+struct PointerRegionState {
+    last_left_down: Option<(Instant, PointerPosition)>,
+}
+
+impl<'a, Message: Clone> PointerRegionWidget<'a, Message> {
+    fn new(token: &PointerRegionToken<Message>, content: IcedElement<'a, Message>) -> Self {
+        Self {
+            content,
+            width: token.width,
+            height: token.height,
+            move_action: token.move_action.clone(),
+            left_down_action: token.left_down_action.clone(),
+            left_up_action: token.left_up_action.clone(),
+            double_click_action: token.double_click_action.clone(),
+            right_down_action: token.right_down_action.clone(),
+            wheel_action: token.wheel_action.clone(),
+            escape_action: token.escape_action.clone(),
+        }
+    }
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer> for PointerRegionWidget<'_, Message>
+where
+    Message: Clone,
+{
+    fn tag(&self) -> widget::tree::Tag {
+        widget::tree::Tag::of::<PointerRegionState>()
+    }
+
+    fn state(&self) -> widget::tree::State {
+        widget::tree::State::new(PointerRegionState::default())
+    }
+
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.content)]
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        tree.diff_children(std::slice::from_ref(&self.content));
+    }
+
+    fn size(&self) -> Size<IcedLength> {
+        Size::new(iced_length(self.width), iced_length(self.height))
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let child = self.content.as_widget_mut().layout(
+            &mut tree.children[0],
+            renderer,
+            &limits
+                .width(iced_length(self.width))
+                .height(iced_length(self.height)),
+        );
+        let size = limits.resolve(
+            iced_length(self.width),
+            iced_length(self.height),
+            child.size(),
+        );
+        layout::Node::with_children(size, vec![child])
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let bounds = layout.bounds();
+        let position = pointer_position(bounds, cursor);
+        let state = tree.state.downcast_mut::<PointerRegionState>();
+
+        match event {
+            Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                if let Some(position) = position {
+                    publish_pointer(&self.move_action, position, shell);
+                }
+            }
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                if let Some(position) = position {
+                    let now = Instant::now();
+                    let is_double_click = state
+                        .last_left_down
+                        .map(|(last_at, last_position)| {
+                            now.duration_since(last_at) <= Duration::from_millis(500)
+                                && pointer_distance_within(last_position, position, 4)
+                        })
+                        .unwrap_or(false);
+                    state.last_left_down = Some((now, position));
+
+                    if is_double_click
+                        && self.double_click_action.kind()
+                            != win_fluent::view::PointerRegionActionKind::None
+                    {
+                        publish_pointer(&self.double_click_action, position, shell);
+                    } else {
+                        publish_pointer(&self.left_down_action, position, shell);
+                    }
+                }
+            }
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                if let Some(position) = position {
+                    publish_pointer(&self.left_up_action, position, shell);
+                }
+            }
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) => {
+                if position.is_some() {
+                    if let Some(message) = self.right_down_action.press() {
+                        shell.publish(message);
+                    }
+                }
+            }
+            Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
+                if let Some(position) = position {
+                    if let Some(message) = self.wheel_action.wheel_at(PointerWheel {
+                        delta: wheel_delta(*delta),
+                        position,
+                    }) {
+                        shell.publish(message);
+                    }
+                }
+            }
+            Event::Keyboard(keyboard::Event::KeyPressed { key, .. })
+                if matches!(key, keyboard::Key::Named(keyboard::key::Named::Escape)) =>
+            {
+                if let Some(message) = self.escape_action.press() {
+                    shell.publish(message);
+                }
+            }
+            _ => {}
+        }
+
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout.children().next().unwrap(),
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.content.as_widget_mut().operate(
+            &mut tree.children[0],
+            layout.children().next().unwrap(),
+            renderer,
+            operation,
+        );
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+        );
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        if pointer_position(layout.bounds(), cursor).is_some() {
+            return mouse::Interaction::Crosshair;
+        }
+
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+}
+
+impl<'a, Message> From<PointerRegionWidget<'a, Message>> for IcedElement<'a, Message>
+where
+    Message: 'a + Clone,
+{
+    fn from(region: PointerRegionWidget<'a, Message>) -> Self {
+        Self::new(region)
+    }
+}
+
+fn pointer_position(bounds: Rectangle, cursor: mouse::Cursor) -> Option<PointerPosition> {
+    let position = cursor.position_in(bounds)?;
+    Some(PointerPosition::new(
+        position.x.round() as i32,
+        position.y.round() as i32,
+    ))
+}
+
+fn publish_pointer<Message>(
+    action: &PointerRegionAction<Message>,
+    position: PointerPosition,
+    shell: &mut Shell<'_, Message>,
+) {
+    if let Some(message) = action.at(position) {
+        shell.publish(message);
+    }
+}
+
+fn pointer_distance_within(
+    previous: PointerPosition,
+    current: PointerPosition,
+    max_distance: i32,
+) -> bool {
+    (current.x - previous.x).abs() <= max_distance && (current.y - previous.y).abs() <= max_distance
+}
+
+fn wheel_delta(delta: mouse::ScrollDelta) -> i32 {
+    match delta {
+        mouse::ScrollDelta::Lines { y, .. } => (y * 120.0).round() as i32,
+        mouse::ScrollDelta::Pixels { y, .. } => y.round() as i32,
+    }
+}
+
+fn text_editor_key_binding<Message: Clone>(
+    bindings: &[TextEditorKeyBinding<Message>],
+    key_press: &iced_text_editor_state::KeyPress,
+) -> Option<iced_text_editor_state::Binding<Message>> {
+    if !matches!(
+        key_press.status,
+        iced_text_editor_state::Status::Focused { .. }
+    ) {
+        return None;
+    }
+
+    let key = text_editor_key_from_iced(&key_press.key)?;
+    let modifiers = TextEditorKeyModifiers {
+        shift: key_press.modifiers.shift(),
+        control: key_press.modifiers.control(),
+        alt: key_press.modifiers.alt(),
+        logo: key_press.modifiers.logo(),
+    };
+
+    bindings
+        .iter()
+        .find(|binding| binding.key == key && binding.modifiers == modifiers)
+        .map(|binding| iced_text_editor_state::Binding::Custom(binding.message.clone()))
+}
+
+fn text_editor_key_from_iced(key: &keyboard::Key) -> Option<TextEditorKey> {
+    match key.as_ref() {
+        keyboard::Key::Named(keyboard::key::Named::Enter) => Some(TextEditorKey::Enter),
+        keyboard::Key::Named(keyboard::key::Named::Tab) => Some(TextEditorKey::Tab),
+        keyboard::Key::Named(keyboard::key::Named::Escape) => Some(TextEditorKey::Escape),
+        keyboard::Key::Named(keyboard::key::Named::ArrowUp) => Some(TextEditorKey::ArrowUp),
+        keyboard::Key::Named(keyboard::key::Named::ArrowDown) => Some(TextEditorKey::ArrowDown),
+        _ => None,
+    }
 }
 
 fn compile_title_bar<'a, Message, Provider>(
@@ -1179,6 +2024,14 @@ where
             control = control.id(id.clone());
         }
 
+        if !token.key_bindings.is_empty() {
+            let key_bindings = token.key_bindings.clone();
+            control = control.key_binding(move |key_press| {
+                text_editor_key_binding(&key_bindings, &key_press)
+                    .or_else(|| iced_text_editor_state::Binding::from_key_press(key_press))
+            });
+        }
+
         if let Some(height) = token.min_height {
             control = control.min_height(u32::from(height));
         }
@@ -1547,6 +2400,7 @@ where
 
     if item.expanded {
         let actions = result_action_buttons(
+            &item.id,
             item.status,
             copy_action,
             speak_action,
@@ -1571,6 +2425,7 @@ where
 }
 
 fn result_action_buttons<'a, Message>(
+    item_id: &str,
     status: ResultStatus,
     copy_action: &Action<Message>,
     speak_action: &Action<Message>,
@@ -1583,18 +2438,34 @@ where
 {
     let mut actions = Vec::new();
 
-    push_result_action(&mut actions, "Copy", icon::copy(), copy_action, visual);
     push_result_action(
         &mut actions,
+        item_id,
+        "Copy",
+        icon::copy(),
+        copy_action,
+        visual,
+    );
+    push_result_action(
+        &mut actions,
+        item_id,
         "Replace",
         win_fluent::IconToken::with_glyph("replace", '\u{E8AC}'),
         replace_action,
         visual,
     );
-    push_result_action(&mut actions, "Speak", icon::speaker(), speak_action, visual);
+    push_result_action(
+        &mut actions,
+        item_id,
+        "Speak",
+        icon::speaker(),
+        speak_action,
+        visual,
+    );
     if status == ResultStatus::Error {
         push_result_action(
             &mut actions,
+            item_id,
             "Retry",
             win_fluent::IconToken::with_glyph("retry", '\u{E72C}'),
             retry_action,
@@ -1607,6 +2478,7 @@ where
 
 fn push_result_action<'a, Message>(
     actions: &mut Vec<IcedElement<'a, Message>>,
+    item_id: &str,
     label: &str,
     icon: win_fluent::IconToken,
     action: &Action<Message>,
@@ -1614,7 +2486,10 @@ fn push_result_action<'a, Message>(
 ) where
     Message: Clone + Send + 'static,
 {
-    let Some(message) = action.press() else {
+    let message = action
+        .press()
+        .or_else(|| action.input_text(item_id.to_string()));
+    let Some(message) = message else {
         return;
     };
     let mut button = iced_button(button_content(
@@ -1921,11 +2796,19 @@ impl<Message> Widget<Message, iced::Theme, iced::Renderer> for AnimatedCollapse<
         renderer: &iced::Renderer,
         operation: &mut dyn Operation,
     ) {
+        if layout.bounds().height <= 0.5 {
+            return;
+        }
+
+        let Some(child_layout) = layout.children().next() else {
+            return;
+        };
+
         operation.container(None, layout.bounds());
         operation.traverse(&mut |operation| {
             self.content.as_widget_mut().operate(
                 &mut tree.children[0],
-                layout.children().next().unwrap(),
+                child_layout,
                 renderer,
                 operation,
             );
@@ -2158,6 +3041,18 @@ where
     };
 
     match (kind, icon, label.trim().is_empty()) {
+        (ButtonKind::Tile, Some(icon), false) => iced_column(vec![
+            icon_element(icon, button_icon_size(kind), icon_color),
+            iced_text(label.to_string())
+                .font(text_font(TextStyle::Caption))
+                .size(button_text_size(kind, visual))
+                .color(icon_color)
+                .into(),
+        ])
+        .spacing(6)
+        .align_x(alignment::Horizontal::Center)
+        .width(IcedLength::Fill)
+        .into(),
         (
             ButtonKind::Icon | ButtonKind::FloatingAction | ButtonKind::ResultAction,
             Some(icon),
@@ -2283,6 +3178,7 @@ fn button_text_size(kind: ButtonKind, visual: IcedVisualTheme) -> f32 {
         ButtonKind::Icon | ButtonKind::ResultAction | ButtonKind::FloatingAction => 18.0,
         ButtonKind::Primary => visual.body_size,
         ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Chip => visual.body_size,
+        ButtonKind::Tile => visual.caption_size,
     }
 }
 
@@ -2292,6 +3188,7 @@ fn button_icon_size(kind: ButtonKind) -> f32 {
         ButtonKind::FloatingAction => 16.0,
         ButtonKind::Primary => 20.0,
         ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Chip => 16.0,
+        ButtonKind::Tile => 22.0,
     }
 }
 
@@ -2631,6 +3528,15 @@ fn button_style(
     kind: ButtonKind,
     status: iced::widget::button::Status,
 ) -> iced::widget::button::Style {
+    button_style_with_state(visual, kind, false, status)
+}
+
+fn button_style_with_state(
+    visual: IcedVisualTheme,
+    kind: ButtonKind,
+    focused: bool,
+    status: iced::widget::button::Status,
+) -> iced::widget::button::Style {
     let (background, text_color, border_color) = match kind {
         ButtonKind::Primary => match status {
             iced::widget::button::Status::Hovered | iced::widget::button::Status::Pressed => {
@@ -2676,7 +3582,24 @@ fn button_style(
                 visual.floating_action_border.scale_alpha(opacity),
             )
         }
-        ButtonKind::Standard | ButtonKind::Chip => match status {
+        ButtonKind::Tile if focused => match status {
+            iced::widget::button::Status::Hovered | iced::widget::button::Status::Pressed => (
+                Some(visual.accent.scale_alpha(0.12)),
+                visual.accent,
+                visual.accent,
+            ),
+            iced::widget::button::Status::Disabled => (
+                Some(visual.surface_alt),
+                visual.text_secondary.scale_alpha(visual.disabled_opacity),
+                visual.border,
+            ),
+            iced::widget::button::Status::Active => (
+                Some(visual.accent.scale_alpha(0.10)),
+                visual.accent,
+                visual.accent,
+            ),
+        },
+        ButtonKind::Standard | ButtonKind::Chip | ButtonKind::Tile => match status {
             iced::widget::button::Status::Hovered => (
                 Some(visual.button_hover),
                 visual.text_primary,
@@ -2702,6 +3625,7 @@ fn button_style(
             ButtonKind::Icon | ButtonKind::Subtle | ButtonKind::ResultAction,
             iced::widget::button::Status::Active,
         ) => 0.0,
+        (ButtonKind::Tile, _) if focused => visual.stroke_focus,
         _ => visual.stroke_control,
     };
     let border_radius = match kind {
@@ -2781,13 +3705,13 @@ fn text_input_style(
     chrome: TextEditorChrome,
 ) -> iced::widget::text_input::Style {
     let border = match (chrome, status) {
-        (TextEditorChrome::Frameless, _) => control_border(visual, visual.border, 0.0),
         (_, iced::widget::text_input::Status::Focused { .. }) => {
             control_border(visual, visual.focus, visual.stroke_focus)
         }
         (_, iced::widget::text_input::Status::Hovered) => {
             control_border(visual, visual.accent, visual.stroke_control)
         }
+        (TextEditorChrome::Frameless, _) => control_border(visual, visual.border, 0.0),
         (
             _,
             iced::widget::text_input::Status::Disabled | iced::widget::text_input::Status::Active,
@@ -2803,6 +3727,10 @@ fn text_input_style(
     iced::widget::text_input::Style {
         background: Background::Color(if status == iced::widget::text_input::Status::Disabled {
             visual.surface_alt
+        } else if chrome == TextEditorChrome::Frameless
+            && matches!(status, iced::widget::text_input::Status::Focused { .. })
+        {
+            visual.accent_light_alt
         } else if chrome == TextEditorChrome::Frameless {
             visual.input_surface
         } else {
@@ -2822,13 +3750,13 @@ fn text_editor_style(
     chrome: TextEditorChrome,
 ) -> iced::widget::text_editor::Style {
     let border = match (chrome, status) {
-        (TextEditorChrome::Frameless, _) => control_border(visual, visual.border, 0.0),
         (_, iced::widget::text_editor::Status::Focused { .. }) => {
             control_border(visual, visual.focus, visual.stroke_focus)
         }
         (_, iced::widget::text_editor::Status::Hovered) => {
             control_border(visual, visual.accent, visual.stroke_control)
         }
+        (TextEditorChrome::Frameless, _) => control_border(visual, visual.border, 0.0),
         (
             _,
             iced::widget::text_editor::Status::Disabled | iced::widget::text_editor::Status::Active,
@@ -2844,6 +3772,10 @@ fn text_editor_style(
     iced::widget::text_editor::Style {
         background: Background::Color(if status == iced::widget::text_editor::Status::Disabled {
             visual.surface_alt
+        } else if chrome == TextEditorChrome::Frameless
+            && matches!(status, iced::widget::text_editor::Status::Focused { .. })
+        {
+            visual.accent_light_alt
         } else if chrome == TextEditorChrome::Frameless {
             visual.input_surface
         } else {
@@ -3024,6 +3956,10 @@ fn iced_hotkey_subscription(hotkey: Hotkey) -> Subscription<IcedHotkeyEvent> {
     platform_hotkey_subscription(hotkey)
 }
 
+fn iced_named_event_subscription(name: String, auto_reset: bool) -> Subscription<IcedNamedEvent> {
+    platform_named_event_subscription(name, auto_reset)
+}
+
 #[cfg(windows)]
 fn platform_hotkey_subscription(hotkey: Hotkey) -> Subscription<IcedHotkeyEvent> {
     Subscription::run_with(HotkeySubscriptionData::from(hotkey), hotkey_stream)
@@ -3031,6 +3967,25 @@ fn platform_hotkey_subscription(hotkey: Hotkey) -> Subscription<IcedHotkeyEvent>
 
 #[cfg(not(windows))]
 fn platform_hotkey_subscription(_hotkey: Hotkey) -> Subscription<IcedHotkeyEvent> {
+    Subscription::none()
+}
+
+#[cfg(windows)]
+fn platform_named_event_subscription(
+    name: String,
+    auto_reset: bool,
+) -> Subscription<IcedNamedEvent> {
+    Subscription::run_with(
+        NamedEventSubscriptionData { name, auto_reset },
+        named_event_stream,
+    )
+}
+
+#[cfg(not(windows))]
+fn platform_named_event_subscription(
+    _name: String,
+    _auto_reset: bool,
+) -> Subscription<IcedNamedEvent> {
     Subscription::none()
 }
 
@@ -3093,6 +4048,67 @@ fn hotkey_stream(
 }
 
 #[cfg(windows)]
+fn named_event_stream(
+    data: &NamedEventSubscriptionData,
+) -> impl iced::futures::Stream<Item = IcedNamedEvent> {
+    let data = data.clone();
+
+    iced::stream::channel(
+        16,
+        move |mut output: iced::futures::channel::mpsc::Sender<IcedNamedEvent>| async move {
+            use std::sync::{
+                atomic::{AtomicBool, Ordering},
+                Arc,
+            };
+
+            let running = Arc::new(AtomicBool::new(true));
+            let thread_running = Arc::clone(&running);
+            let _guard = NamedEventBridgeGuard {
+                running: Arc::clone(&running),
+            };
+
+            std::thread::spawn(move || {
+                let handle =
+                    match win_fluent_platform_win::WindowsPlatformAdapter::create_named_event(
+                        &data.name,
+                        data.auto_reset,
+                    ) {
+                        Ok(handle) => handle,
+                        Err(error) => {
+                            let _ = output.try_send(IcedNamedEvent::Error {
+                                name: data.name,
+                                message: format!("{error:?}"),
+                            });
+                            return;
+                        }
+                    };
+
+                while thread_running.load(Ordering::Relaxed) {
+                    match win_fluent_platform_win::WindowsPlatformAdapter::wait_for_named_event(
+                        &handle,
+                        std::time::Duration::from_millis(100),
+                    ) {
+                        Ok(Some(event)) => {
+                            let _ = output.try_send(IcedNamedEvent::Signaled { name: event.name });
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            let _ = output.try_send(IcedNamedEvent::Error {
+                                name: handle.name().to_string(),
+                                message: format!("{error:?}"),
+                            });
+                            return;
+                        }
+                    }
+                }
+            });
+
+            std::future::pending::<()>().await;
+        },
+    )
+}
+
+#[cfg(windows)]
 struct HotkeyBridgeGuard {
     running: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
@@ -3105,11 +4121,30 @@ impl Drop for HotkeyBridgeGuard {
     }
 }
 
+#[cfg(windows)]
+struct NamedEventBridgeGuard {
+    running: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+#[cfg(windows)]
+impl Drop for NamedEventBridgeGuard {
+    fn drop(&mut self) {
+        self.running
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct HotkeySubscriptionData {
     id: String,
     key: HotkeyKeyData,
     modifiers: Vec<HotkeyModifierData>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct NamedEventSubscriptionData {
+    name: String,
+    auto_reset: bool,
 }
 
 impl HotkeySubscriptionData {
@@ -3217,6 +4252,8 @@ mod tests {
         Input(String),
         Toggle(bool),
         Pick(String),
+        Pointer(PointerPosition),
+        Wheel(PointerWheel),
         Run,
     }
 
@@ -3264,12 +4301,36 @@ mod tests {
     }
 
     #[test]
+    fn compiles_pointer_region_to_iced_element() {
+        let view = page("Pointer")
+            .content(
+                pointer_region(spacer().height(Length::Fill))
+                    .id("pointer.surface")
+                    .on_move(Msg::Pointer)
+                    .on_left_down(Msg::Pointer)
+                    .on_left_up(Msg::Pointer)
+                    .on_double_click(Msg::Pointer)
+                    .on_wheel(Msg::Wheel)
+                    .on_right_down(Msg::Run)
+                    .on_escape(Msg::Run),
+            )
+            .into_view();
+
+        let _element: IcedElement<'_, Msg> = IcedAdapter::compile_view(&view);
+    }
+
+    #[test]
     fn compiles_text_editor_with_stateful_multiline_content() {
         let content = IcedTextEditorContent::with_text("Line 1\nLine 2");
         let view = page("Editor")
             .content(
                 text_editor("Line 1\nLine 2")
                     .id("editor")
+                    .on_key(
+                        TextEditorKey::Enter,
+                        TextEditorKeyModifiers::none(),
+                        Msg::Run,
+                    )
                     .min_height(120)
                     .on_input(Msg::Input),
             )
@@ -3279,6 +4340,60 @@ mod tests {
             IcedAdapter::compile_view_with_text_editors(&view, |id| {
                 (id == "editor").then_some(&content)
             });
+    }
+
+    #[test]
+    fn finds_focused_text_editor_inside_view_tree() {
+        let view = page("Editor")
+            .content(
+                card("Input").content(
+                    column((
+                        text_editor("").id("unfocused").on_input(Msg::Input),
+                        text_editor("ready")
+                            .id("focused-editor")
+                            .focused(true)
+                            .on_input(Msg::Input),
+                    ))
+                    .spacing(8),
+                ),
+            )
+            .into_view();
+
+        assert_eq!(
+            focused_text_editor_id(&view).as_deref(),
+            Some("focused-editor")
+        );
+    }
+
+    #[test]
+    fn custom_text_editor_key_binding_matches_exact_modifiers_and_keeps_default_bindings() {
+        let bindings = vec![TextEditorKeyBinding {
+            key: TextEditorKey::Tab,
+            modifiers: TextEditorKeyModifiers::shift(),
+            message: Msg::Run,
+        }];
+
+        let shift_tab = iced_text_editor_state::KeyPress {
+            key: keyboard::Key::Named(keyboard::key::Named::Tab),
+            modified_key: keyboard::Key::Named(keyboard::key::Named::Tab),
+            physical_key: keyboard::key::Physical::Code(keyboard::key::Code::Tab),
+            modifiers: keyboard::Modifiers::SHIFT,
+            text: None,
+            status: iced_text_editor_state::Status::Focused { is_hovered: false },
+        };
+
+        assert!(matches!(
+            text_editor_key_binding(&bindings, &shift_tab),
+            Some(iced_text_editor_state::Binding::Custom(Msg::Run))
+        ));
+
+        let plain_tab = iced_text_editor_state::KeyPress {
+            modifiers: keyboard::Modifiers::empty(),
+            ..shift_tab
+        };
+
+        assert!(text_editor_key_binding(&bindings, &plain_tab).is_none());
+        assert!(iced_text_editor_state::Binding::<Msg>::from_key_press(plain_tab).is_none());
     }
 
     #[test]
@@ -3349,6 +4464,18 @@ mod tests {
         assert_eq!(focused.border.color, iced_color(theme.focus));
         assert_eq!(focused.border.width, theme.stroke.focus);
         assert_eq!(focused.selection, iced_color(theme.accent.light_2));
+
+        let frameless_editor = text_editor_style(
+            visual,
+            iced::widget::text_editor::Status::Focused { is_hovered: false },
+            TextEditorChrome::Frameless,
+        );
+        assert_eq!(
+            frameless_editor.background,
+            Background::Color(iced_color(theme.accent.light_2))
+        );
+        assert_eq!(frameless_editor.border.color, iced_color(theme.focus));
+        assert_eq!(frameless_editor.border.width, theme.stroke.focus);
     }
 
     #[test]

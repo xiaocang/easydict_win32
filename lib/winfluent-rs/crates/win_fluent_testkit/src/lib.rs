@@ -545,6 +545,21 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 write_layout(output, child, indent + 2);
             }
         }
+        ViewToken::PointerRegion(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}PointerRegion id={:?} move={:?} left_down={:?} left_up={:?} double_click={:?} right_down={:?} wheel={:?} escape={:?}",
+                token.id,
+                token.move_action.kind(),
+                token.left_down_action.kind(),
+                token.left_up_action.kind(),
+                token.double_click_action.kind(),
+                token.right_down_action.kind(),
+                token.wheel_action.kind(),
+                token.escape_action.kind()
+            );
+            write_layout(output, &token.content, indent + 2);
+        }
         ViewToken::Custom(token) => {
             let _ = writeln!(
                 output,

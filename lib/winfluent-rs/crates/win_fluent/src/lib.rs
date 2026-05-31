@@ -33,9 +33,11 @@ pub use motion::{
 };
 pub use performance::{FrameCoalescer, TextStreamCoalescer};
 pub use platform::{
-    ClipboardFormat, Hotkey, HotkeyKey, HotkeyModifier, ShellVerb, TrayMenu, TrayMenuItem,
+    ClipboardFormat, FileDialogFilter, FileDialogOptions, Hotkey, HotkeyKey, HotkeyModifier,
+    NamedEventRegistration, PlatformCommand, ProtocolRegistration, ScreenCaptureRequest,
+    ScreenCaptureResult, ScreenRect, ShellVerb, TrayMenu, TrayMenuItem,
 };
-pub use runtime::{Application, RuntimeError};
+pub use runtime::{Application, DesktopIntegrationPlan, RuntimeError, RuntimePlan};
 pub use schema::{view_schema, SchemaNode, SchemaProperty, ViewSchema, VIEW_SCHEMA_VERSION};
 pub use screenshot::{ScreenshotError, WindowScreenshot};
 pub use state::{ControlState, ValidationSeverity, ValidationState};
@@ -48,16 +50,18 @@ pub use theme::{
 };
 pub use view::{
     adaptive_switch, busy_overlay, button, card, column, combo_box, command_bar, dialog,
-    flyout_button, lazy, navigation_view, page, primary_button, progress_ring, result_card,
-    result_list, row, scroll_view, service_result_card, service_result_list, settings_row, spacer,
-    status_badge, text, text_editor, title_bar, toggle_switch, AdaptiveSwitchBuilder,
-    AdaptiveSwitchToken, Alignment, BusyOverlayBuilder, BusyOverlayToken, ButtonKind, CardKind,
-    CollapseTraceDirection, CollapseTraceSample, CollapseTransition, ComboBoxItem, DialogKind,
-    FlyoutButtonBuilder, FlyoutButtonToken, FlyoutMenuItem, FlyoutMenuItemKind, IntoChildren,
-    IntoView, LayoutDistribution, LayoutKind, LazyToken, Length, NavigationItem,
-    ProgressRingBuilder, ProgressRingToken, ResultCardBuilder, ResultCardToken, ResultItem,
-    ResultListBuilder, ResultListToken, ResultStatus, ScrollPolicy, SettingsRowKind, SpacerBuilder,
-    SpacerToken, TextEditorChrome, TextStyle, View, ViewToken,
+    flyout_button, lazy, navigation_view, page, pointer_region, primary_button, progress_ring,
+    result_card, result_list, row, scroll_view, service_result_card, service_result_list,
+    settings_row, spacer, status_badge, text, text_editor, title_bar, toggle_switch,
+    AdaptiveSwitchBuilder, AdaptiveSwitchToken, Alignment, BusyOverlayBuilder, BusyOverlayToken,
+    ButtonKind, CardKind, CollapseTraceDirection, CollapseTraceSample, CollapseTransition,
+    ComboBoxItem, DialogKind, FlyoutButtonBuilder, FlyoutButtonToken, FlyoutMenuItem,
+    FlyoutMenuItemKind, IntoChildren, IntoView, LayoutDistribution, LayoutKind, LazyToken, Length,
+    NavigationItem, PointerPosition, PointerRegionAction, PointerRegionActionKind,
+    PointerRegionBuilder, PointerRegionToken, PointerWheel, ProgressRingBuilder, ProgressRingToken,
+    ResultCardBuilder, ResultCardToken, ResultItem, ResultListBuilder, ResultListToken,
+    ResultStatus, ScrollPolicy, SettingsRowKind, SpacerBuilder, SpacerToken, TextEditorChrome,
+    TextEditorKey, TextEditorKeyBinding, TextEditorKeyModifiers, TextStyle, View, ViewToken,
 };
 pub use window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,

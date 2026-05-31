@@ -110,6 +110,33 @@ internal static class WorkerTranslationManagerFactory
             }
         });
 
+        ConfigureIfPresent(manager, "caiyun", svc =>
+        {
+            if (svc is CaiyunService caiyun)
+            {
+                caiyun.Configure(snapshot.CaiyunToken ?? string.Empty);
+            }
+        });
+
+        ConfigureIfPresent(manager, "niutrans", svc =>
+        {
+            if (svc is NiuTransService niuTrans)
+            {
+                niuTrans.Configure(snapshot.NiuTransApiKey ?? string.Empty);
+            }
+        });
+
+        ConfigureIfPresent(manager, "youdao", svc =>
+        {
+            if (svc is YoudaoService youdao)
+            {
+                youdao.Configure(
+                    snapshot.YoudaoAppKey,
+                    snapshot.YoudaoAppSecret,
+                    snapshot.YoudaoUseOfficialApi ?? false);
+            }
+        });
+
         return manager;
     }
 

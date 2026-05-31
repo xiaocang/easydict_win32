@@ -32,6 +32,14 @@ public static class JsonLineSerializer
     }
 
     /// <summary>
+    /// Serialize a typed payload into a JsonElement for response/event envelopes.
+    /// </summary>
+    public static JsonElement ToElement<T>(T value)
+    {
+        return JsonSerializer.SerializeToElement(value, s_options);
+    }
+
+    /// <summary>
     /// Deserialize a JSON line to an object.
     /// </summary>
     public static T? Deserialize<T>(string json)

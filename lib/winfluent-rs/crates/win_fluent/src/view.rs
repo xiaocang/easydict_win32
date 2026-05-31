@@ -1,3 +1,6 @@
+use std::fmt;
+use std::sync::Arc;
+
 use crate::a11y::A11yHint;
 use crate::action::Action;
 use crate::command::CommandToken;
@@ -120,6 +123,7 @@ pub enum ViewToken<Message> {
     SettingsRow(SettingsRowToken<Message>),
     ResultCard(ResultCardToken<Message>),
     ResultList(ResultListToken<Message>),
+    PointerRegion(PointerRegionToken<Message>),
     Custom(CustomToken<Message>),
 }
 
@@ -161,6 +165,7 @@ pub enum ButtonKind {
     Primary,
     Chip,
     Subtle,
+    Tile,
     Icon,
     ResultAction,
     FloatingAction,
@@ -198,6 +203,77 @@ pub enum CardKind {
 pub enum TextEditorChrome {
     Standard,
     Frameless,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TextEditorKey {
+    Enter,
+    Tab,
+    Escape,
+    ArrowUp,
+    ArrowDown,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TextEditorKeyModifiers {
+    pub shift: bool,
+    pub control: bool,
+    pub alt: bool,
+    pub logo: bool,
+}
+
+impl TextEditorKeyModifiers {
+    pub const fn none() -> Self {
+        Self {
+            shift: false,
+            control: false,
+            alt: false,
+            logo: false,
+        }
+    }
+
+    pub const fn shift() -> Self {
+        Self {
+            shift: true,
+            control: false,
+            alt: false,
+            logo: false,
+        }
+    }
+
+    pub const fn control() -> Self {
+        Self {
+            shift: false,
+            control: true,
+            alt: false,
+            logo: false,
+        }
+    }
+
+    pub const fn alt() -> Self {
+        Self {
+            shift: false,
+            control: false,
+            alt: true,
+            logo: false,
+        }
+    }
+
+    pub const fn logo() -> Self {
+        Self {
+            shift: false,
+            control: false,
+            alt: false,
+            logo: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TextEditorKeyBinding<Message> {
+    pub key: TextEditorKey,
+    pub modifiers: TextEditorKeyModifiers,
+    pub message: Message,
 }
 
 #[derive(Clone, Debug)]
@@ -367,6 +443,7 @@ pub struct TextEditorToken<Message> {
     pub read_only: bool,
     pub state: ControlState,
     pub action: Action<Message>,
+    pub key_bindings: Vec<TextEditorKeyBinding<Message>>,
     pub a11y: A11yHint,
 }
 
@@ -764,6 +841,110 @@ pub struct CustomToken<Message> {
     pub a11y: A11yHint,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PointerPosition {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl PointerPosition {
+    pub const fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PointerWheel {
+    pub delta: i32,
+    pub position: PointerPosition,
+}
+
+#[derive(Clone)]
+pub enum PointerRegionAction<Message> {
+    None,
+    Position(Arc<dyn Fn(PointerPosition) -> Message + Send + Sync + 'static>),
+    Wheel(Arc<dyn Fn(PointerWheel) -> Message + Send + Sync + 'static>),
+}
+
+impl<Message> PointerRegionAction<Message> {
+    pub const fn none() -> Self {
+        Self::None
+    }
+
+    pub fn position(map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static) -> Self {
+        Self::Position(Arc::new(map))
+    }
+
+    pub fn wheel(map: impl Fn(PointerWheel) -> Message + Send + Sync + 'static) -> Self {
+        Self::Wheel(Arc::new(map))
+    }
+
+    pub const fn kind(&self) -> PointerRegionActionKind {
+        match self {
+            Self::None => PointerRegionActionKind::None,
+            Self::Position(_) => PointerRegionActionKind::Position,
+            Self::Wheel(_) => PointerRegionActionKind::Wheel,
+        }
+    }
+
+    pub fn at(&self, position: PointerPosition) -> Option<Message> {
+        match self {
+            Self::Position(map) => Some(map(position)),
+            _ => None,
+        }
+    }
+
+    pub fn wheel_at(&self, wheel: PointerWheel) -> Option<Message> {
+        match self {
+            Self::Wheel(map) => Some(map(wheel)),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum PointerRegionActionKind {
+    None,
+    Position,
+    Wheel,
+}
+
+impl fmt::Debug for PointerRegionActionKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::None => "none",
+            Self::Position => "position",
+            Self::Wheel => "wheel",
+        })
+    }
+}
+
+impl<Message: fmt::Debug> fmt::Debug for PointerRegionAction<Message> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => formatter.write_str("PointerRegionAction::None"),
+            Self::Position(_) => formatter.write_str("PointerRegionAction::Position(<handler>)"),
+            Self::Wheel(_) => formatter.write_str("PointerRegionAction::Wheel(<handler>)"),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PointerRegionToken<Message> {
+    pub id: Option<String>,
+    pub content: Box<View<Message>>,
+    pub width: Length,
+    pub height: Length,
+    pub move_action: PointerRegionAction<Message>,
+    pub left_down_action: PointerRegionAction<Message>,
+    pub left_up_action: PointerRegionAction<Message>,
+    pub double_click_action: PointerRegionAction<Message>,
+    pub right_down_action: Action<Message>,
+    pub wheel_action: PointerRegionAction<Message>,
+    pub escape_action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
 pub fn page<Message>(title: impl Into<String>) -> PageBuilder<Message> {
     PageBuilder {
         id: None,
@@ -895,6 +1076,7 @@ pub fn text_editor<Message>(text: impl Into<String>) -> TextEditorBuilder<Messag
         read_only: false,
         state: ControlState::default(),
         action: Action::None,
+        key_bindings: Vec::new(),
         a11y: A11yHint::default(),
     }
 }
@@ -1021,6 +1203,26 @@ where
         content: Some(Box::new(content.into_view())),
         horizontal: ScrollPolicy::Never,
         vertical: ScrollPolicy::Auto,
+        a11y: A11yHint::default(),
+    }
+}
+
+pub fn pointer_region<Message, Child>(content: Child) -> PointerRegionBuilder<Message>
+where
+    Child: IntoView<Message>,
+{
+    PointerRegionBuilder {
+        id: None,
+        content: Box::new(content.into_view()),
+        width: Length::Fill,
+        height: Length::Fill,
+        move_action: PointerRegionAction::None,
+        left_down_action: PointerRegionAction::None,
+        left_up_action: PointerRegionAction::None,
+        double_click_action: PointerRegionAction::None,
+        right_down_action: Action::None,
+        wheel_action: PointerRegionAction::None,
+        escape_action: Action::None,
         a11y: A11yHint::default(),
     }
 }
@@ -1278,6 +1480,11 @@ impl<Message> ButtonBuilder<Message> {
 
     pub fn chip(mut self) -> Self {
         self.kind = ButtonKind::Chip;
+        self
+    }
+
+    pub fn tile(mut self) -> Self {
+        self.kind = ButtonKind::Tile;
         self
     }
 
@@ -1662,6 +1869,7 @@ pub struct TextEditorBuilder<Message> {
     read_only: bool,
     state: ControlState,
     action: Action<Message>,
+    key_bindings: Vec<TextEditorKeyBinding<Message>>,
     a11y: A11yHint,
 }
 
@@ -1741,6 +1949,20 @@ impl<Message> TextEditorBuilder<Message> {
         self
     }
 
+    pub fn on_key(
+        mut self,
+        key: TextEditorKey,
+        modifiers: TextEditorKeyModifiers,
+        message: Message,
+    ) -> Self {
+        self.key_bindings.push(TextEditorKeyBinding {
+            key,
+            modifiers,
+            message,
+        });
+        self
+    }
+
     pub fn on_input(
         mut self,
         map: impl Fn(String) -> Message + Send + Sync + 'static,
@@ -1763,6 +1985,7 @@ impl<Message> IntoView<Message> for TextEditorBuilder<Message> {
             read_only: self.read_only,
             state: self.state,
             action: self.action,
+            key_bindings: self.key_bindings,
             a11y: self.a11y,
         }))
     }
@@ -2334,6 +2557,113 @@ impl<Message> IntoView<Message> for ScrollViewBuilder<Message> {
 }
 
 #[derive(Clone, Debug)]
+pub struct PointerRegionBuilder<Message> {
+    id: Option<String>,
+    content: Box<View<Message>>,
+    width: Length,
+    height: Length,
+    move_action: PointerRegionAction<Message>,
+    left_down_action: PointerRegionAction<Message>,
+    left_up_action: PointerRegionAction<Message>,
+    double_click_action: PointerRegionAction<Message>,
+    right_down_action: Action<Message>,
+    wheel_action: PointerRegionAction<Message>,
+    escape_action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> PointerRegionBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: Length) -> Self {
+        self.height = height;
+        self
+    }
+
+    pub fn on_move(
+        mut self,
+        map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.move_action = PointerRegionAction::position(map);
+        self
+    }
+
+    pub fn on_left_down(
+        mut self,
+        map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.left_down_action = PointerRegionAction::position(map);
+        self
+    }
+
+    pub fn on_left_up(
+        mut self,
+        map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.left_up_action = PointerRegionAction::position(map);
+        self
+    }
+
+    pub fn on_double_click(
+        mut self,
+        map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.double_click_action = PointerRegionAction::position(map);
+        self
+    }
+
+    pub fn on_right_down(mut self, message: Message) -> Self {
+        self.right_down_action = Action::message(message);
+        self
+    }
+
+    pub fn on_wheel(
+        mut self,
+        map: impl Fn(PointerWheel) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.wheel_action = PointerRegionAction::wheel(map);
+        self
+    }
+
+    pub fn on_escape(mut self, message: Message) -> Self {
+        self.escape_action = Action::message(message);
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for PointerRegionBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::PointerRegion(PointerRegionToken {
+            id: self.id,
+            content: self.content,
+            width: self.width,
+            height: self.height,
+            move_action: self.move_action,
+            left_down_action: self.left_down_action,
+            left_up_action: self.left_up_action,
+            double_click_action: self.double_click_action,
+            right_down_action: self.right_down_action,
+            wheel_action: self.wheel_action,
+            escape_action: self.escape_action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct SettingsRowBuilder<Message> {
     id: Option<String>,
     title: String,
@@ -2416,8 +2746,21 @@ impl<Message> ResultCardBuilder<Message> {
         self
     }
 
+    pub fn on_copy_item(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
+        self.copy_action = Action::selection_input(map);
+        self
+    }
+
     pub fn on_speak(mut self, message: Message) -> Self {
         self.speak_action = Action::Message(message);
+        self
+    }
+
+    pub fn on_speak_item(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.speak_action = Action::selection_input(map);
         self
     }
 
@@ -2426,8 +2769,24 @@ impl<Message> ResultCardBuilder<Message> {
         self
     }
 
+    pub fn on_replace_item(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.replace_action = Action::selection_input(map);
+        self
+    }
+
     pub fn on_retry(mut self, message: Message) -> Self {
         self.retry_action = Action::Message(message);
+        self
+    }
+
+    pub fn on_retry_item(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.retry_action = Action::selection_input(map);
         self
     }
 
@@ -2488,8 +2847,21 @@ impl<Message> ResultListBuilder<Message> {
         self
     }
 
+    pub fn on_copy_item(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
+        self.copy_action = Action::selection_input(map);
+        self
+    }
+
     pub fn on_speak(mut self, message: Message) -> Self {
         self.speak_action = Action::Message(message);
+        self
+    }
+
+    pub fn on_speak_item(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.speak_action = Action::selection_input(map);
         self
     }
 
@@ -2498,8 +2870,24 @@ impl<Message> ResultListBuilder<Message> {
         self
     }
 
+    pub fn on_replace_item(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.replace_action = Action::selection_input(map);
+        self
+    }
+
     pub fn on_retry(mut self, message: Message) -> Self {
         self.retry_action = Action::Message(message);
+        self
+    }
+
+    pub fn on_retry_item(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.retry_action = Action::selection_input(map);
         self
     }
 

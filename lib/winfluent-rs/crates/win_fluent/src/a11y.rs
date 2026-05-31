@@ -347,6 +347,13 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 }));
             node
         }
+        ViewToken::PointerRegion(token) => {
+            let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
+            node.name = token.a11y.name.clone().or_else(|| token.id.clone());
+            node.children
+                .push(resolve_accessibility_tree(&token.content));
+            node
+        }
         ViewToken::Custom(token) => {
             let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
             node.name = token

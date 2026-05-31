@@ -5,7 +5,21 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
+futures-channel = "0.3"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 win_fluent = { path = "../../../lib/winfluent-rs/crates/win_fluent" }
+win_fluent_platform_win = { path = "../../../lib/winfluent-rs/crates/win_fluent_platform_win" }
+
+[features]
+default = []
+enable-linguee-service = []
 
 [dev-dependencies]
 win_fluent_testkit = { path = "../../../lib/winfluent-rs/crates/win_fluent_testkit" }
+
+[[bin]]
+name = "easydict-native-bridge"
+path = "src/bin/easydict_native_bridge.rs"

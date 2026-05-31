@@ -1,0 +1,986 @@
+# Rust-Only Migration Progress
+
+## Purpose
+
+This file tracks the staged migration from the current .NET/WinUI implementation to a Rust-only Easydict runtime.
+
+The final target is Rust-only. A bundled .NET runtime is allowed only as a temporary bridge while behavior is moved behind Rust-owned surfaces and then replaced module by module.
+
+[`migration-list.md`](migration-list.md) is the behavioral parity checklist for this work. In particular, this plan aligns with:
+
+- Section 1: project boundaries, workers, Sidecar/IPC, and local inference libraries.
+- Section 5: local AI providers, including WindowsAI/Phi Silica, Foundry Local, and OpenVINO.
+- Section 14: packaging/runtime layout and worker publish rules.
+- Section 17: worker fallback as a required migration risk gate.
+
+## Hybrid Transition Architecture
+
+During the transition, Rust is the only desktop owner. The Rust app owns UI, windows, tray, global hotkeys, settings shell, process lifecycle, and user-facing state.
+
+The existing .NET implementation may remain as a `.NET Compat Host`, but only as an out-of-process worker. Do not host CoreCLR inside the Rust process. The compatibility host should expose behavior through JSON Lines, stdio, named pipes, or the existing Sidecar-style IPC pattern.
+
+The compatibility host must not contain .NET UI or WinUI surfaces. It exists only to preserve behavior while Rust replacements are built for translation, OCR, long document translation, local AI, MDX/MDD lookup, and settings migration.
+
+## Migration Phases
+
+1. **Rust shell with .NET behavior**
+   - Rust renders the primary app surfaces and owns desktop integration.
+   - The Rust facade calls `.NET Compat Host` for behavior not yet ported.
+   - Existing .NET tests remain the source of behavior evidence.
+
+2. **Locked IPC contracts**
+   - Stabilize contracts for `translate`, `translate_stream`, `grammar_correct`, `ocr_recognize`, `longdoc_translate`, `local_ai_prepare`, `local_ai_translate`, `mdx_lookup`, and `settings_migrate`.
+   - Add contract tests on both Rust and .NET sides before moving implementations.
+
+3. **Lower-risk Rust replacements**
+   - Move SSE parsing, OpenAI-compatible translation services, settings/security, translation cache, and LexIndex-style local indexing to Rust first.
+   - Route migrated capabilities directly in Rust while keeping the .NET host as fallback.
+
+4. **Heavy modules stay behind the host**
+   - Keep long document/PDF processing, WindowsAI/PhiSilica/OpenVINO, MDX/PdfPig, and OCR worker fallback behind `.NET Compat Host` until Rust-native replacements are accepted.
+   - Each retained module must keep explicit fallback and failure-mode tests.
+
+5. **Remove .NET runtime**
+   - Remove `.NET Compat Host` once every remaining provider is Rust-native or intentionally dropped.
+   - Remove the bundled .NET runtime and .NET worker packaging steps from release artifacts.
+   - Keep historical .NET tests only as parity references after Rust coverage is complete.
+
+## Local AI Transition
+
+Foundry Local via the Rust SDK should become the preferred Rust-native local AI provider.
+
+Phi Silica/WindowsAI should remain a temporary .NET-backed provider during the transition because the current implementation and test coverage already exist there, and the Windows AI API path carries packaging and hardware constraints.
+
+OpenVINO should remain behind `.NET Compat Host` until a Rust replacement is proven or the Foundry Local path fully covers the needed user scenarios.
+
+The provider order during the hybrid period should preserve the behavior described in [`migration-list.md`](migration-list.md): Auto should continue to try Phi Silica, then Foundry Local, then OpenVINO, unless a specific provider is selected.
+
+## Rust Replacement Order
+
+This is the preferred order for replacing C# libraries and retained modules with Rust-native implementations after the bridge contracts are locked.
+
+Keep the completed migration log below in chronological order. If an item in this priority list is already implemented, do not move its completed entry; treat this section as the forward-looking order for remaining native replacements and parity gates.
+
+The ordering principle is: core behavior with few dependencies first, then modules that consume those core pieces, with heavy PDF/OCR/local-inference work kept later until Rust-native replacements are proven.
+
+1. `Easydict.Llm.Streaming`
+   - Replace SSE, Chat Completions streaming, and Responses API streaming parsers first.
+   - This unlocks OpenAI-compatible translation, grammar correction, and Custom API OCR parsing without pulling in UI or worker dependencies.
+
+2. Settings, security, and settings migration logic
+   - Move settings snapshots, credential protection, legacy settings migration, proxy configuration, and service configuration models to Rust-owned storage.
+   - Keep `.NET Compat Host` settings migration as fallback until migrated settings round-trip tests pass.
+
+3. `Easydict.TranslationService` core
+   - Move `Language`, request/result/error models, service registration, `TranslationManager`, retry policy boundaries, and shared service abstractions.
+   - Keep the Rust facade compatible with the locked `translate`, `translate_stream`, and `grammar_correct` contracts while individual services are moved.
+
+4. Translation cache, phonetic enrichment, and grammar parsing
+   - Move short-text cache keys, cache hit behavior, stampede prevention, Youdao phonetic enrichment, and grammar result parsing.
+   - This keeps quick translate behavior stable before provider implementations are replaced one by one.
+
+5. Translation provider implementations
+   - Move OpenAI-compatible services first: OpenAI, Custom OpenAI, DeepSeek, Groq, Zhipu, GitHub Models, Ollama, and Built-in AI.
+   - Then move custom streaming services: Gemini and Doubao.
+   - Then move traditional HTTP services: Google, Google Web, Bing, DeepL, Youdao, Caiyun, NiuTrans, Volcano, and Linguee.
+
+6. `LexIndex`
+   - Move local dictionary prefix and wildcard indexing early because it is small, well-tested, and independent of heavy MDX/PDF/runtime dependencies.
+   - Preserve Unicode normalization, variant preservation, metadata, and invalid file handling parity.
+
+7. `Polyglot.TextLayout`
+   - Move segmentation, kinsoku rules, line layout, incremental layout, and font fitting before PDF/document export work depends on them.
+
+8. Rust worker and JSON Lines IPC runtime
+   - Replace the remaining `Easydict.SidecarClient` worker runtime behavior where Rust still needs out-of-process isolation.
+   - Preserve request ID multiplexing, event-before-response behavior, stderr handling, cancellation, timeout, crash, and unknown-method semantics.
+
+9. `Easydict.NativeBridge` and `Easydict.BrowserRegistrar`
+   - Move browser Native Messaging framing, OCR activation signaling, manifest generation, install/uninstall/status, and registry mapping.
+   - Keep Chrome/Firefox manifest compatibility and the `Local\Easydict-OcrTranslate` activation behavior.
+
+10. `MDict.Csharp` and MDX/MDD dictionary lookup
+    - Move MDX import, encrypted dictionary handling, exact/fuzzy lookup, `@@@LINK` redirect handling, MDD resource lookup, and WebView-ready HTML payload behavior.
+    - Continue using `LexIndex` for suggestions once the Rust MDX reader can provide stable dictionary metadata.
+
+11. OCR logic and OCR providers
+    - Move lightweight OCR logic first: `OcrTextMerger`, OCR service selection, Ollama OCR, and Custom API OCR.
+    - Move Windows OCR and worker fallback later because WinRT language-pack behavior and desktop capture integration are higher-risk.
+
+12. `Easydict.DocumentExport` for Markdown and text
+    - Move TXT/Markdown export, bilingual/mono/both output modes, and stable output path generation before the PDF stack.
+
+13. PDF parsing and export stack
+    - Replace `PdfPig`, MuPDF, and PdfSharpCore-dependent behavior only after text layout and document IR behavior are stable.
+    - Preserve page ranges, coordinates, fonts, colors, rotation, scanned-page OCR fallback, and PDF visual quality gates.
+
+14. Long document pipeline and `Easydict.Workers.LongDoc`
+    - Move Parsing -> Building IR -> FormulaProtection -> DocumentContext -> Translating -> Exporting as a single parity-gated pipeline.
+    - Preserve two-pass context, formula protection, cache/dedup, retry failed chunks, cancellation, queue behavior, progress events, and worker fallback tests until the worker can be removed.
+
+15. Local AI providers and `Easydict.Workers.LocalAi`
+    - Make Foundry Local via Rust SDK the first Rust-native local AI provider.
+    - Keep OpenVINO behind the host until a Rust replacement is proven or Foundry Local covers the required scenarios.
+    - Keep WindowsAI/Phi Silica last because Windows AI packaging, hardware, and API constraints make it the riskiest provider.
+
+16. Tools, packaging, and final .NET removal
+    - Move or retire `EncryptSecret`, `MsixValidate`, `PdfToImages`, helper build scripts, and worker publish steps.
+    - Remove `.NET Compat Host`, bundled .NET runtime, and .NET worker packaging only after every retained module is Rust-native or intentionally dropped.
+
+## Packaging And Test Gates
+
+During the hybrid period, release artifacts may include:
+
+- `easydict.exe`: Rust desktop owner.
+- `.NET Compat Host`: out-of-process compatibility worker.
+- Bundled .NET runtime: temporary bridge dependency.
+- Existing worker folders for long document, local AI, and OCR where still needed.
+
+The final Rust-only package must remove `.NET Compat Host`, the bundled .NET runtime, and .NET worker packaging scripts.
+
+CI must run both Rust and .NET gates while any .NET bridge remains:
+
+- `cargo test --workspace`
+- Relevant `dotnet test` suites from [`migration-list.md`](migration-list.md), especially translation service, WinUI service logic, worker protocol, local AI, OCR, long document, BrowserRegistrar, Polyglot.TextLayout, and LexIndex coverage.
+
+Worker fallback must be tested in both available and missing/failed host modes, matching the migration risk called out in [`migration-list.md`](migration-list.md) section 17.
+
+## Current Status
+
+- Rust UI/application work exists under `rs/`.
+- Generic Rust UI framework work exists under `lib/winfluent-rs/`.
+- The root migration checklist remains [`migration-list.md`](migration-list.md).
+- `.NET Compat Host` now exists as a temporary out-of-process bridge; it is not the final architecture.
+
+## Completed Migration Steps
+
+- 2026-05-31: Added Rust-side JSON Lines compatibility protocol contracts in `rs/crates/easydict_app/src/compat_protocol.rs`.
+  - Covers the migration-plan bridge methods: `translate`, `translate_stream`, `grammar_correct`, `ocr_recognize`, `longdoc_translate`, `local_ai_prepare`, `local_ai_translate`, `mdx_lookup`, and `settings_migrate`.
+  - Mirrors existing .NET worker wire names for `configure`, `cancel`, `shutdown`, `translate_document`, Local AI worker methods/events, OCR worker `recognize`, worker `ready`, worker kinds, error codes, and protocol version `1`.
+  - Adds DTO coverage for settings snapshots, long document translation, Local AI, OCR, MDX lookup, settings migration, IPC request/response/event envelopes, and JSON line helpers.
+  - Locks .NET-compatible JSON field names, including special casing such as `openAIApiKey`, `openAIModel`, `deepLApiKey`, `localAIProvider`, `pixelDataPath`, `resultJsonPath`, and `importedMdxDictionaries`.
+- 2026-05-31: Added matching .NET Compat Host facade protocol contracts in `dotnet/src/Easydict.SidecarClient/Protocol/CompatHostProtocol.cs`.
+  - Locks the same facade method names on the .NET side: `translate`, `translate_stream`, `grammar_correct`, `ocr_recognize`, `longdoc_translate`, `local_ai_prepare`, `local_ai_translate`, `mdx_lookup`, and `settings_migrate`.
+  - Reuses existing worker DTOs where the facade delegates to heavy retained modules: long document, Local AI, and OCR.
+  - Adds facade DTOs for general translation results, MDX lookup, and settings migration.
+  - Tightens `IpcResponse` JSON by keeping helper properties `IsSuccess` and `IsError` out of the wire format.
+  - Adds `CompatHostProtocolSerializationTests` to prove the .NET facade contract alongside the existing worker protocol tests.
+- 2026-05-31: Added Rust-side out-of-process JSON Lines client scaffolding in `rs/crates/easydict_app/src/compat_client.rs`.
+  - Spawns a compat host process with piped stdin/stdout and sends typed JSONL requests using the locked facade protocol.
+  - Generates Rust-owned request IDs, parses typed results, queues events that arrive before the final response, and surfaces remote protocol errors.
+  - Classifies a missing host executable as a fallback condition and reports early host exit as `ProcessExited`.
+  - Provides the packaging-path helper for the transitional host name: `Easydict.CompatHost.exe`.
+  - Adds `compat_client` integration tests with an out-of-process PowerShell JSONL mock host covering success, streaming-style event-before-response, remote error, process exit, and missing-host fallback classification.
+- 2026-05-31: Added the first `.NET Compat Host` executable project at `dotnet/src/Easydict.CompatHost`.
+  - The host is a console JSON Lines process with no WinUI surface and no in-proc CoreCLR hosting requirement for Rust.
+  - `translate` is wired through a `TranslationManager` adapter so the bridge can preserve existing .NET translation behavior while Rust owns the desktop shell.
+  - Missing optional bridge dependencies return explicit `service_error` responses instead of fake success payloads.
+  - `shutdown` is supported for process lifecycle cleanup, and unknown methods return `method_not_found`.
+  - Added dispatcher tests plus a process-level smoke test that launches the real host assembly through `dotnet`, writes JSONL requests, reads JSONL responses, and verifies graceful shutdown.
+  - Added the project to `Easydict.Win32.sln` so normal solution builds include the bridge.
+- 2026-05-31: Added packaging coverage for the temporary `.NET Compat Host` bridge.
+  - Publishes `Easydict.CompatHost.exe` beside the app executable for portable and MSIX outputs, matching the Rust `app_dir/Easydict.CompatHost.exe` lookup contract.
+  - Covers `win-x64`, `win-x86`, and `win-arm64` for the lightweight translation facade host; heavy workers remain under their existing x64/arm64 worker layout.
+  - Updates Makefile, local publish/package scripts, release workflow, and ARM64 MSIX smoke workflow.
+  - Extends `WorkerPackagingTests` so future release layout changes must keep the bridge visible during the hybrid migration period.
+- 2026-05-31: Added a typed Rust `CompatHostFacade` over the JSON Lines client.
+  - `CompatHostCommand::packaged(app_dir)` resolves the same `Easydict.CompatHost.exe` path used by packaging.
+  - `CompatHostFacade::spawn_packaged(app_dir)` gives Rust callers a single entry point for the bundled bridge.
+  - `CompatHostFacade::translate(...)` owns the locked `translate` method call so higher-level Rust code does not scatter raw IPC method strings.
+  - Extends Rust compat client tests for packaged path resolution, typed translation facade calls, and packaged-host missing fallback classification.
+- 2026-05-31: Wired the `translate_stream` facade method through `.NET Compat Host`.
+  - The host now emits `translate_chunk` events for streamed text, a `translate_done` event with the final DTO, and then the final response envelope.
+  - The `TranslationManagerCompatTranslator` streams through `TranslationManager.TranslateStreamAsync`, preserving streaming services and the existing non-streaming fallback behavior.
+  - Rust protocol contracts now lock the `translate_chunk` and `translate_done` event names and chunk payload shape.
+  - Rust `CompatHostFacade::translate_stream(...)` calls the locked method and queues chunk/done events for callers before returning the final result.
+  - Adds .NET dispatcher/protocol/adapter tests and Rust protocol/client tests for the streaming bridge.
+- 2026-05-31: Wired the `ocr_recognize` facade method through the existing OCR worker.
+  - `CompatHost` now launches `workers/ocr/Easydict.Workers.Ocr.exe`, waits for the worker `ready` event, sends `configure`, and forwards `ocr_recognize` as the worker `recognize` request.
+  - The bridge keeps Windows OCR out of the Rust process and out of the CompatHost process; OCR remains isolated in the existing worker during the hybrid period.
+  - The worker path and `DOTNET_ROOT`/shared-worker environment setup match the release layout used for existing worker packaging.
+  - Rust `CompatHostFacade::ocr_recognize(...)` calls the locked facade method and returns the existing OCR DTO shape.
+  - Adds .NET dispatcher tests, a JSONL mock-worker bridge test, worker-layout path coverage, and Rust client coverage for the typed OCR facade.
+- 2026-05-31: Wired the `longdoc_translate` facade method through the existing LongDoc worker.
+  - `CompatHost` now stores the latest `configure` settings snapshot and passes it into `workers/longdoc/Easydict.Workers.LongDoc.exe` during worker startup.
+  - The bridge waits for the LongDoc worker `ready` event, sends worker `configure`, forwards `longdoc_translate` as `translate_document`, and hydrates `TranslateDocumentResult` from the worker result JSON file when the worker returns a pointer envelope.
+  - LongDoc `status`, `progress`, and `block_translated` worker events are forwarded to Rust with the outer facade request id, preserving event-before-response behavior for the Rust caller.
+  - Rust `CompatHostFacade::longdoc_translate(...)` calls the locked facade method and queues the LongDoc event stream before returning the final result.
+  - Adds .NET dispatcher tests, a JSONL mock-worker bridge test with result-file hydration, worker-layout path coverage, and Rust client coverage for the typed LongDoc facade.
+- 2026-05-31: Wired the `local_ai_prepare` and `local_ai_translate` facade methods through the existing Local AI worker.
+  - `CompatHost` now launches `workers/localai/Easydict.Workers.LocalAi.exe`, performs the worker `ready`/`configure` handshake with the latest settings snapshot, and forwards prepare/translate requests to the worker protocol.
+  - `local_ai_prepare` maps to worker `prepare_model` and forwards `download_progress` events to Rust with the outer facade request id.
+  - `local_ai_translate` maps to worker `translate` and returns the locked `LocalAiTranslateResult` DTO, preserving WindowsAI/Phi Silica, Foundry Local, and OpenVINO behind the .NET bridge during the hybrid period.
+  - The Local AI worker environment now preserves the existing shared-worker directory, bundled `DOTNET_ROOT` behavior, and opt-in OpenVINO native runtime PATH injection.
+  - Rust `CompatHostFacade::local_ai_prepare(...)` and `CompatHostFacade::local_ai_translate(...)` call the locked facade methods and keep event-before-response behavior for download progress.
+  - Adds .NET dispatcher tests, a JSONL mock-worker bridge test, worker-layout path coverage, and Rust client coverage for the typed Local AI facade.
+- 2026-05-31: Wired the `mdx_lookup` facade method through a CompatHost MDX lookup service.
+  - `SettingsSnapshot` now carries `importedMdxDictionaries` so Rust can configure the bridge with the same imported MDX metadata used by the WinUI settings model.
+  - `CompatHost` uses the existing `MDict.Csharp` library out of process to perform exact and fuzzy MDX lookup, preserving `@@@LINK` redirect behavior and returning raw HTML entries for rich dictionary rendering.
+  - The bridge keeps MDX parsing out of the Rust process during the hybrid period and avoids loading WinUI UI surfaces into CompatHost.
+  - `WorkerSpawner.BuildSnapshot(...)` maps existing imported MDX dictionaries into the shared settings snapshot for protocol parity.
+  - Rust `CompatHostFacade::mdx_lookup(...)` calls the locked facade method and returns typed dictionary entries.
+  - Adds .NET dispatcher/service tests for injected and real lookup behavior, .NET worker protocol coverage for imported MDX settings, and Rust client/protocol coverage for the typed MDX facade.
+- 2026-05-31: Wired the `settings_migrate` facade method through a file-based CompatHost migrator.
+  - The migrator reads the legacy JSON settings file, writes either in place or to a requested target path, and reports warnings instead of treating a missing source file as a hard failure.
+  - It preserves current settings migration behavior for `WindowWidth`/`WindowHeight` to DIP keys, mini/fixed position-saved inference, runtime-only worker isolation key cleanup, and the standalone OpenVINO service merge into `windows-local-ai` with `LocalAIProvider=OpenVINO` when appropriate.
+  - Rust `CompatHostFacade::settings_migrate(...)` calls the locked facade method and returns the typed migration result.
+  - Adds .NET dispatcher and real file-migration tests plus Rust client coverage for the typed settings migration facade.
+- 2026-05-31: Added a Rust-owned Quick Translate behavior entry point over the Compat Host bridge.
+  - Rust now builds the quick-translate plan from `EasydictUiState`, including trimmed input text, source/target language parameters, and the enabled per-service query list from the current result model.
+  - The main translate button uses `Message::QuickTranslate`, sets Rust UI state to loading, and starts a Rust task that runs each enabled service as an individual Compat Host `translate` request.
+  - Rust maps successful and failed service outcomes back into `TranslationResultPreview`, including service names, latency, detected-language display text, per-service error bodies, completion counts, and connected/error status.
+  - Query ids are tracked in Rust so a stale result from an older request cannot overwrite a newer query's UI state, matching the migration-list requirement that a new query takes over the surface.
+  - Adds `quick_translate_behavior` tests for plan construction, empty/no-service validation, loading state, per-service backend calls, result hydration, stale outcome rejection, and app update task creation.
+- 2026-05-31: Split Rust Quick Translate execution into per-service completion tasks.
+  - `EasydictApp::update(Message::QuickTranslate)` now batches one Rust task per enabled service instead of waiting for a single aggregate result, matching the migration-list requirement that multiple enabled services run independently.
+  - `QuickTranslateServiceRequest` and `QuickTranslateServiceUpdate` carry the query id, service identity, and locked Compat Host `TranslateParams` so individual service completions can update the Rust result surface.
+  - Rust keeps `active_query_service_count` and `active_query_success_count` in UI state; each service completion increments progress only once, keeps the query loading until all enabled services finish, and lets single-service failures coexist with later successes.
+  - Stale per-service completions from an older query are ignored before they can replace text or increment completion counts.
+  - Extends `quick_translate_behavior` coverage for service request construction, single-service execution, incremental completion, failure isolation, stale service updates, and per-service app task batching.
+- 2026-05-31: Added Rust-owned Quick Translate language routing.
+  - The Rust quick-translate plan now resolves selected source/target, effective source/target, target-auto state, grammar-requested state, and grammar-fallback state before building Compat Host request params.
+  - Quick Translate target selection now defaults to `auto`; while automatic selection is active, Rust applies the Easydict first/second-language rule (`zh`/`en` by default) so English sources route to Simplified Chinese and Simplified Chinese sources route to English.
+  - Manual target changes and language swaps mark the target as user-selected, pausing automatic target routing for the current window state.
+  - `TranslationResultPreview` now tracks whether a service is grammar-capable and which quick query mode it is rendering, so Rust can distinguish same-language grammar correction routing from fallback translation routing.
+  - Same-language queries with a grammar-capable enabled service now resolve to `QuickQueryMode::GrammarCorrection`; same-language queries without grammar capability fall back to a different translation target using the same first/second-language preference order.
+  - The initial language-routing step still used the `translate` facade method; a follow-up step now wires dedicated grammar-correction execution through the bridge.
+  - Extends `quick_translate_behavior` coverage for first/second automatic target routing, manual target pause, same-language grammar routing, and grammar-unavailable fallback.
+- 2026-05-31: Wired the `grammar_correct` facade method and Rust Quick Translate grammar execution.
+  - `.NET Compat Host` now exposes `grammar_correct`, emits `grammar_chunk` events, emits a final `grammar_done` event, and returns a parsed `GrammarCorrectResultDto`.
+  - `TranslationManagerCompatTranslator` routes grammar requests to existing `IGrammarCorrectionService.CorrectGrammarStreamAsync`, accumulates stream output, parses it with `GrammarCorrectionParser`, and preserves the chosen service id/name/language/timing metadata.
+  - Rust protocol/client contracts now include `GrammarCorrectParams`, `GrammarCorrectResultDto`, grammar chunk events, and `CompatHostFacade::grammar_correct(...)`.
+  - Rust Quick Translate now calls `grammar_correct` for grammar-capable services when same-language routing enters `QuickQueryMode::GrammarCorrection`; non-grammar-capable enabled services keep falling back to ordinary `translate`, matching the existing WinUI behavior.
+  - The initial Rust result surface displayed the corrected text via the existing translation-result preview model; a follow-up step now keeps structured correction details in state and renders the explanation in the result body.
+  - Adds .NET dispatcher/protocol/adapter tests and Rust protocol/client/quick-translate behavior tests for the grammar bridge and per-service fallback split.
+- 2026-05-31: Added structured Rust grammar result previews.
+  - `TranslationResultPreview` now carries an optional `GrammarCorrectionPreview` with original text, corrected text, explanation, and correction status.
+  - Grammar-mode service results keep the corrected text as the primary body while rendering a structured `Corrected` / `Explanation` body through `ResultItem`, so the current UI can show grammar correction details before a dedicated diff view exists.
+  - Result metadata distinguishes grammar correction from no-change grammar checks while preserving latency display.
+  - Query start and error paths clear stale grammar previews so newer translation or failure states cannot show old correction details.
+  - Extends `quick_translate_behavior` and `ui_contract` coverage for structured grammar result hydration and rendered explanation text.
+- 2026-05-31: Added Rust Quick Translate streaming execution metadata and state updates.
+  - `TranslationResultPreview` and `QuickTranslateService` now track whether a service is streaming-capable; the default OpenAI preview service is marked as streaming-capable.
+  - Quick Translate service requests now carry an execution kind: ordinary `translate`, `translate_stream`, or `grammar_correct`.
+  - Streaming-capable translation services now call the locked `CompatHostFacade::translate_stream(...)` path and preserve emitted `translate_chunk` event text in the Rust service outcome.
+  - Added `QuickTranslateStreamChunk` plus `apply_quick_translate_stream_chunk(...)` so future runtime plumbing can apply chunk messages without completing the query; stale chunk updates are rejected by query id.
+  - Result state records streamed chunks and can render accumulated chunk text while a service is in `ResultStatus::Streaming`.
+  - Current runtime delivery is still service-completion based; real-time chunk dispatch remains a follow-up once the Rust app has a stream subscription/channel path.
+  - Extends `quick_translate_behavior` coverage for streaming execution selection, stream backend calls, chunk preservation, and incremental chunk state updates.
+- 2026-05-31: Wired real-time Rust Quick Translate stream chunk delivery.
+  - `win_fluent::Task` now supports a multi-message `Stream` variant, and the iced backend maps it to `iced::Task::stream(...)`.
+  - `CompatHostClient` can observe events while waiting for a response; `CompatHostFacade::translate_stream_observing_chunks(...)` invokes a chunk callback as each `translate_chunk` arrives and clears the facade event queue afterward.
+  - `EasydictApp::update(Message::QuickTranslate)` now starts stream-capable services with a stream task instead of a one-shot future, while ordinary translation and grammar correction services keep the existing per-service future path.
+  - The streaming task runs the blocking CompatHost request on a worker thread, sends `QuickTranslateStreamChunk` messages as chunks arrive, then sends the final `QuickTranslateServiceFinished` update with the collected chunk list and final DTO/error.
+  - This closes the Quick Translate migration-list behavior that streaming services append chunks incrementally while non-streaming services wait for complete results.
+  - Adds Compat Host client coverage for observed stream chunks and Quick Translate app-task coverage proving default streaming services use the new stream task.
+- 2026-05-31: Added a command-line translation regression tool.
+  - New `easydict_cli` Rust binary supports `translate`, `stream`, `grammar`, and line-oriented `batch` subcommands over the existing Rust `CompatHostFacade`.
+  - It auto-detects a packaged `Easydict.CompatHost.exe`, common local Debug CompatHost builds, or `EASYDICT_COMPAT_HOST`; callers can also pin `--host` or `--app-dir`.
+  - Plain mode keeps stdout script-friendly while `--json` emits a final DTO for `translate`/`grammar`, JSON Lines chunk/done events for `stream`, and one JSON Line per `batch` result.
+  - The CLI can read text from stdin with `--text -`, repeat or comma-separate `--service`, and pass source/target/language options without opening the UI.
+  - Adds parser coverage for translate/stream/grammar/batch command shapes, executable-level mock CompatHost coverage, and smoke commands in `rs/README.md`.
+- 2026-05-31: Expanded Rust Quick Translate language picker coverage.
+  - Main, Mini, Fixed, and Long Document language combo boxes now expose common Easydict target languages: Arabic, Danish, German, English, Spanish, French, Hindi, Indonesian, Italian, Japanese, Korean, Malay, Thai, Vietnamese, Simplified Chinese, and Traditional Chinese.
+  - Quick Translate routing normalizes the matching BCP-47 UI language tags (`ar-SA`, `da-DK`, `hi-IN`, `id-ID`, `ms-MY`, `th-TH`, `vi-VN`, `zh-CN`, `zh-TW`, etc.) into the service-facing short codes used by CompatHost.
+  - Detected-language labels for the newly exposed languages can now feed automatic source-language routing instead of falling back to `auto`.
+  - Adds UI contract coverage for the picker items and behavior coverage for source/target normalization and detected-language label handling.
+- 2026-05-31: Added Rust Quick Translate manual per-service queries.
+  - Clicking a pending result whose `EnabledQuery=false` now starts a one-service Quick Translate request instead of only toggling expansion.
+  - Manual one-off results keep `EnabledQuery=false` after streaming chunks, success, or error, so future automatic queries still only run the enabled service set.
+  - Adds behavior coverage for manual request planning, app task dispatch, and ordinary expand/collapse on already queried results.
+- 2026-05-31: Split Rust Quick Translate state by Main/Mini/Fixed surface.
+  - Quick Translate planning can now target `Main`, `Mini`, or `Fixed`, reading each surface's own text, source/target language selection, detected language, and result/service list.
+  - Mini and Fixed translate buttons now start surface-scoped service tasks, and result updates are routed back by active query id so a floating-window result cannot overwrite the main window.
+  - Floating windows now keep their own active query state, completion count, manual target-language flag, grammar mode, status text, and per-service `EnabledQuery` list.
+  - Surface-aware result toggles let Main/Mini/Fixed pending services start one-off manual queries without toggling every window that happens to contain the same service id.
+  - Adds behavior coverage for floating-surface plan construction, isolated state updates, app task dispatch, and Mini/Fixed input/language messages.
+- 2026-05-31: Added Rust handling for hide-empty no-result service rows.
+  - Compat Host translation DTOs now carry `resultKind` and `infoMessage`, preserving `.NET TranslationResultKind.NoResult` across the bridge instead of inferring no-result from an empty string.
+  - Rust result previews track neutral no-result outcomes separately from errors and successful text, rendering `No result` metadata and the existing info message when available.
+  - The `Hide empty service results` setting now demotes no-result rows: they stay visible, are dimmed, forced closed, made non-toggleable, and stable-partitioned after non-demoted service rows.
+  - Query start, streaming chunks, normal success, and errors clear stale no-result/demoted state so a later real result can re-enter the active list.
+  - Adds Rust behavior/UI/protocol coverage and .NET protocol coverage for `resultKind` serialization.
+- 2026-05-31: Added surface-aware Rust Quick Translate result retry.
+  - `ResultList` retry actions can now be selection-input actions, so the iced backend passes the current `ResultItem.id` to app messages instead of dispatching a service-agnostic retry command.
+  - Main, Mini, and Fixed result lists wire retry to `RetryResultIn(surface, service_id)`, preserving each surface's independent service list and query state.
+  - Retrying an existing result builds a single-service Quick Translate request, clears the failed row to loading, and leaves unrelated service rows untouched.
+  - Adds Quick Translate behavior coverage for direct retry planning, app task dispatch, and UI contract coverage that result lists expose item-scoped retry actions.
+- 2026-05-31: Added item-scoped Rust Quick Translate result action routing.
+  - `ResultList` copy, speak, replace, and retry actions can all be selection-input actions now; the iced backend passes the active result item id to each action handler.
+  - Main, Mini, and Fixed result lists route copy/speak/replace to `CopyResultIn`, `SpeakResultIn`, and `ReplaceResultIn` with both surface and service id, so action dispatch no longer loses which result row was clicked.
+  - Rust state resolves those item-scoped actions into a `ResultActionIntent` containing action kind, surface, service id, rendered result text, and target language context; this gives the future clipboard/TTS/text-insertion side-effect layer concrete inputs.
+  - Adds behavior coverage for ordinary translated text, structured grammar result text, target-language capture, and empty-result no-op behavior; UI contract coverage now checks copy/speak/replace/retry are item-scoped selection actions.
+- 2026-05-31: Wired Rust Quick Translate result actions into platform side-effect tasks.
+  - `win_fluent::Task` now has a generic `PlatformCommand` path for clipboard text writes, text insertion, and TTS requests, keeping app behavior out of the backend while giving the runtime a concrete side-effect contract.
+  - The iced backend maps copy actions to `iced::clipboard::write`, maps replace actions to the Windows clipboard-paste helper, and maps speak actions to a Windows System.Speech launcher with language context when available.
+  - `EasydictApp::update(...)` now turns item-scoped `CopyResultIn`, `SpeakResultIn`, and `ReplaceResultIn` messages into platform tasks immediately after resolving the selected result, so repeated clicks still trigger effects even when the resolved intent is identical.
+  - The previous `ResultActionIntent` state remains as inspectable behavior evidence, while runtime copy/speak/replace no longer stop at state capture.
+  - Adds behavior coverage that app updates emit the expected platform command for copy, speak, and replace result actions.
+- 2026-05-31: Added Rust text-insertion source-window capture.
+  - `PlatformCommand` now includes `CaptureTextInsertionTarget`, and `Task::capture_text_insertion_target()` gives app code a runtime command for recording the currently focused source window before Easydict surfaces take focus.
+  - The Windows platform adapter stores the captured foreground HWND, checks that it is still valid, writes replacement text to the clipboard, switches focus back to the captured target, verifies foreground ownership, and sends Ctrl+V.
+  - `EasydictApp::update(Message::TranslateSelection)` now emits the capture command, aligning the Rust pop-button/selection path with the existing WinUI `TextInsertionService.CaptureSourceWindow()` behavior.
+  - Replace result actions now use the captured-target insertion path instead of pasting into whichever window is currently focused.
+  - Adds behavior coverage proving `TranslateSelection` emits the capture command before later replace actions use `InsertText`.
+- 2026-05-31: Wired Rust application hotkey subscriptions into the runtime.
+  - `win_fluent::Subscription::hotkey(...)` now carries the concrete `Hotkey` token instead of only an id, so platform backends can register the actual key chord.
+  - The iced single-window runtime now combines `Application::subscription()` with window-open events and maps platform hotkey events back into app messages.
+  - `WindowsPlatformAdapter::plan_subscription(...)` now turns hotkey subscriptions into native hotkey registrations, preserving modifier and virtual-key planning coverage.
+  - `EasydictApp::subscription()` declares the migration-list default hotkeys for show main, translate clipboard/selection, OCR, silent OCR, show/toggle Mini, and show/toggle Fixed.
+  - Hotkey-triggered translate clipboard/selection and show-Mini paths now capture the text-insertion target before Easydict takes focus, sharing the same replacement target semantics as pop-button selection.
+  - Adds behavior coverage for the default Easydict hotkey subscription set, hotkey-triggered source-window capture, and native Windows hotkey subscription planning.
+- 2026-05-31: Wired the Rust translate-clipboard hotkey into live clipboard reads.
+  - `win_fluent::Task` now has a clipboard-read task that the iced backend maps to `iced::clipboard::read`, keeping clipboard acquisition in the runtime layer.
+  - `Ctrl+Alt+D` now batches source-window capture with a clipboard read, writes the received text into the main Quick Translate input, and immediately starts the Rust Quick Translate plan.
+  - Adds behavior coverage proving the hotkey emits both source capture and clipboard read, and that receiving clipboard text starts the same per-service Quick Translate task batch as the main translate button.
+- 2026-05-31: Split Mini/Fixed show hotkeys from true toggle hotkeys.
+  - `WindowCommand` now includes `ToggleVisibility(WindowId)`, and the iced backend implements it by reading `window::mode(...)` and switching between `Hidden` and `Windowed`.
+  - `Ctrl+Alt+M` and `Ctrl+Alt+F` keep explicit show semantics, while `Ctrl+Alt+Shift+M` and `Ctrl+Alt+Shift+F` now emit real toggle-visibility commands matching the migration-list hotkey contract.
+  - Adds behavior coverage proving Mini/Fixed show hotkeys still show their windows and Mini/Fixed toggle hotkeys no longer degrade to one-way show commands.
+- 2026-05-31: Wired Settings navigation into the Rust main-window route.
+  - `EasydictUiState` now tracks `settings_open`; `OpenSettings` switches the main window to `settings_view(...)`, and `Back` restores the previous Quick Translate/Long Document content without changing the selected mode.
+  - The main-window title reflects the routed Settings page while the Settings button and Back button remain state-only app messages, matching the migration-list requirement that settings opens from the main window and returns to it.
+  - Settings automation IDs now include the migration-list anchors `BackButton`, `MainScrollViewer`, `SettingsTab_*`, and `AppThemeCombo`.
+  - Adds behavior/UI coverage proving SettingsButton routes the main window into Settings, Back restores Quick Translate content, and the settings view keeps the expected automation anchors.
+- 2026-05-31: Wired the Rust Long Document translate button into the CompatHost longdoc bridge.
+  - Added a Rust-owned long-document plan/execution layer that builds locked `TranslateDocumentParams`, maps UI input/output/language selections to worker-compatible values, and calls `CompatHostFacade::longdoc_translate(...)`.
+  - The Long Document page now starts a query from `Message::Translate` only while the main window is in Long Document mode; Quick Translate keeps its existing dedicated `QuickTranslate` path.
+  - File inputs use the selected path, while pasted Text/Markdown content is materialized to a temporary document before crossing the bridge; pasted content with PDF selected is treated as plain text because there is no PDF file to read.
+  - Long-document state now tracks active query id, loading state, output path, retryable errors, and result history; stale completions are rejected before they can overwrite a newer long-doc query.
+  - The output card reflects the latest output path, failed runs enable the retry command, and `ClearHistory` now clears the Long Document history list.
+  - Adds `long_document_behavior` coverage for request construction, inline text materialization semantics, app task dispatch, success/error hydration, stale outcome rejection, and backend call parameters.
+- 2026-05-31: Preserved Long Document worker events in Rust state.
+  - `LongDocumentOutcome` now carries typed `status`, `progress`, and `block_translated` events drained from the CompatHost facade after `longdoc_translate`.
+  - Long-document state records the latest progress percentage, progress detail, and translated block preview so the Rust UI can show worker progress instead of only the final result.
+  - The Long Document output card now renders progress, detail, and latest block text when worker events are present, while final success/error still owns the terminal status.
+  - Adds `long_document_behavior` coverage for backend event preservation, progress/detail hydration, latest-block hydration, and stale-safe outcome handling.
+- 2026-05-31: Wired Rust Long Document file browsing into a runtime task.
+  - `win_fluent::Task` now supports an `OpenFileDialog` request with typed dialog options and a return-message mapper, matching the existing clipboard-read task pattern for user-driven runtime input.
+  - The iced backend opens a Windows file dialog for supported Long Document inputs (`PDF`, `Markdown`, and `Text`) and returns the selected path to the Rust app without pushing file-picker logic into app state.
+  - `Message::BrowseFile` now starts the file dialog only when the main window is in Long Document mode, while Quick Translate keeps its no-op Browse behavior.
+  - `LongDocumentFileSelected` updates the selected path, infers input mode from file extension, updates the output folder, and clears stale output/error/progress state before the next translation.
+  - Adds `long_document_behavior` coverage for browse task dispatch, selected-file hydration, input-mode inference, output folder update, and cancel/no-selection preservation.
+- 2026-05-31: Locked Rust Long Document settings while a translation is running.
+  - The Long Document source editor, browse button, language pickers, service picker, input/output mode pickers, concurrency field, page-range field, context-pass toggle, and translate button now render disabled during an active long-document query.
+  - `Message::BrowseFile` no longer starts a new file dialog while a long-document query is active.
+  - Long-document state ignores source/configuration/file-selection messages while `is_translating=true`, so direct messages cannot mutate the settings behind an already-started request.
+  - Adds `long_document_behavior` and `ui_contract` coverage for locked state mutation and disabled control rendering.
+- 2026-05-31: Wired Rust Long Document Two-pass context and concurrency settings into CompatHost configuration.
+  - `CompatHostFacade::configure(...)` now exposes the existing `configure` method to Rust callers using typed `ConfigureParams`/`ConfigureResult`.
+  - Long-document requests now carry a `SettingsSnapshot` with `longDocMaxConcurrency` and `longDocEnableDocumentContextPass` derived from the Rust UI state.
+  - Long-document execution configures the freshly spawned CompatHost before calling `longdoc_translate`, so the existing LongDoc worker receives the UI's concurrency and Two-pass document-context settings through the worker `configure` handshake.
+  - Adds Rust protocol/client/long-document behavior coverage for settings serialization, facade configure dispatch, and backend settings delivery.
+- 2026-05-31: Wired Rust Long Document output folder state into worker output paths.
+  - Long-document request construction now resolves the visible output folder into `TranslateDocumentParams.outputPath` using the legacy `{filename}_translated{ext}` naming convention.
+  - The Rust-only "(same as input file folder)" placeholder resolves to the selected file's parent directory instead of falling through to the worker's different default `*.translated.*` naming.
+  - Inline text/Markdown requests use a deterministic `inline-document_translated` stem when an explicit output folder is configured.
+  - The Long Document output card's default hint now reflects the selected input mode extension (`.pdf`, `.md`, or `.txt`).
+  - Adds `long_document_behavior` coverage for default file output paths, configured output folders, inline text output paths, and locked backend parameters.
+- 2026-05-31: Declared the Rust-owned Easydict system tray menu.
+  - `win_fluent::Application` now exposes an optional `tray_menu()` hook so apps can declare native tray menu structure alongside subscriptions.
+  - `EasydictApp` now returns a tray menu matching the migration-list desktop integration contract: Show Easydict, Translate Clipboard, OCR Translate with the default hotkey hint, Show Mini Window, Show Fixed Window, browser support install/uninstall placeholders, and Exit.
+  - The app subscription now includes `Subscription::tray(...)`, and tray command ids route through the same hotkey/window tasks as the existing global hotkey paths for show, clipboard translate, OCR, Mini, and Fixed.
+  - Exit closes all known Easydict windows through window commands during the hybrid runtime period.
+  - Adds `quick_translate_behavior` coverage for tray menu ids/labels/actions, tray subscription presence, and command routing.
+- 2026-05-31: Declared Rust-owned Shell context menu and protocol activation entries.
+  - `ShellVerb` now carries command arguments so Rust can lock the legacy context-menu launch shape, not just the visible label.
+  - Added a `ProtocolRegistration` model plus `Application::shell_verbs()` and `Application::protocol_registrations()` hooks for app-owned desktop entry declarations.
+  - `EasydictApp` now declares the `EasydictOCR` shell verb for both file and desktop/folder background context menus, with the `--ocr-translate` launch argument used by the existing Windows entry path.
+  - `EasydictApp` now declares the `easydict` URL protocol registration with `URL:Easydict Protocol`, the `URL Protocol` marker in the Windows plan, and the `%1` command argument for protocol payload forwarding.
+  - Adds app behavior coverage and Windows platform plan coverage for shell verb arguments and protocol registration shape without touching the registry.
+- 2026-05-31: Captured desktop integration declarations in the Rust runtime plan.
+  - `RuntimePlan` now includes a `DesktopIntegrationPlan` containing the app tray menu, Shell verbs, and protocol registrations produced at startup.
+  - `DesktopIntegrationPlan` exposes simple entry presence/count helpers so runtime backends and tests can prove desktop entry declarations are not dropped during boot.
+  - The iced backend now carries the desktop integration plan in its single-window runtime state, making it available for future native tray/registry/protocol registration work instead of discarding it after `Application::new`.
+  - Adds app behavior coverage proving Easydict's runtime plan contains the tray, `EasydictOCR`, and `easydict` protocol entries together.
+- 2026-05-31: Added a Windows desktop integration aggregate plan.
+  - `WindowsPlatformAdapter::plan_desktop_integration(...)` now maps a runtime `DesktopIntegrationPlan` into Windows tray, Shell context-menu, and protocol-registration plans in one call.
+  - `WindowsDesktopIntegrationPlan` exposes entry presence/count helpers matching the runtime plan shape while keeping native registry writes out of tests.
+  - The platform test suite now covers the aggregate plan with a generic demo app shape, preserving the existing framework/app boundary that forbids Easydict-specific strings in WinFluent crates.
+- 2026-05-31: Locked Windows Shell/protocol registry-key and command-line plan shape.
+  - `WindowsShellVerbPlan` now carries the HKCU `Software\Classes\*\shell\{id}` and `Software\Classes\Directory\Background\shell\{id}` key paths plus their `command` subkeys for file and desktop-background verbs.
+  - `WindowsProtocolRegistrationPlan` now carries the HKCU `Software\Classes\{scheme}` base key and `Software\Classes\{scheme}\shell\open\command` key while preserving the `URL Protocol` marker.
+  - Shell plans render command lines as `"appPath" --ocr-translate`, while protocol plans render payload forwarding as `"appPath" "%1"`, matching the legacy registration behavior without writing the registry.
+  - Adds Windows platform coverage for registry-key paths and command-line rendering on Shell, protocol, and aggregate desktop-integration plans.
+- 2026-05-31: Added Windows HKCU registration runtime support for Shell/protocol entries.
+  - `WindowsPlatformAdapter` can now write named/default HKCU `REG_SZ` values, delete registry trees, and register/unregister planned Shell verbs and protocol registrations.
+  - Shell registration writes the legacy menu label, `Icon`, and command subkey values for both file and desktop-background verbs.
+  - Protocol registration writes the description, empty `URL Protocol` marker, and `"appPath" "%1"` open command, matching the unpackaged `ProtocolRegistrationService` repair behavior.
+  - Adds Windows registry round-trip coverage proving Shell and protocol entries are written and removed from HKCU using unique test keys.
+- 2026-05-31: Wired Shell/protocol cold-start activation into the Rust app path.
+  - Added a Rust startup activation parser for the legacy `--ocr-translate` shell argument and `easydict://ocr-translate` protocol payload, including case-insensitive protocol matching and query/fragment tolerance.
+  - `EasydictApp::new(...)` now converts matching startup arguments into the existing `HotkeyTriggered("ocr-translate")` message, so cold-start Shell/protocol activation reuses the same OCR overlay path as the global hotkey and tray menu.
+  - Adds `quick_translate_behavior` coverage proving Shell args and protocol URLs resolve to OCR activation and open the `capture-overlay` window through the shared hotkey route.
+- 2026-05-31: Added Rust startup hot/cold activation disposition.
+  - `resolve_startup_activation_disposition(...)` models the old `Program.cs` behavior: Shell/protocol OCR launches first try to signal a running instance, exit if the signal succeeds, and otherwise cold-launch with pending OCR activation.
+  - The decision layer is platform-neutral and injectable, so the eventual Rust executable can wire it to `Local\Easydict-OcrTranslate` without hard-coding native calls into app state.
+  - Adds behavior coverage for no-op launches, hot-start signal-and-exit, and cold-start pending OCR paths.
+- 2026-05-31: Wired the Rust Shell context-menu setting to platform registration commands.
+  - `SettingsState` now carries `shell_context_menu`, defaulting to off like the legacy setting, and the Advanced settings toggle reflects that state instead of being a hard-coded no-op.
+  - Toggling the setting emits generic `PlatformCommand::RegisterShellVerb` or `UnregisterShellVerb` tasks using the Easydict OCR Shell verb declaration.
+  - The iced backend now consumes Shell/Protocol registration platform commands by resolving the current executable path, planning Windows registry entries, and calling the Windows platform adapter.
+  - `EasydictApp::shell_verbs()` now declares the OCR Shell verb only when the setting is enabled, while protocol and named-event entries remain always declared for activation.
+  - Adds behavior/UI coverage for the setting toggle, emitted platform commands, and desktop-integration entry counts with the Shell context menu disabled/enabled.
+- 2026-05-31: Wired browser support UI/tray actions to the Rust registrar.
+  - Added a generic `PlatformCommand::RunBundledExecutable` and backend runner so app-level actions can invoke packaged helper tools without taking direct process dependencies in state code.
+  - The Advanced settings Browser extension row now has actionable Install/Uninstall buttons instead of a no-op install placeholder.
+  - Tray Browser Support install/uninstall items now invoke commands instead of being disabled placeholders.
+  - Browser support install/uninstall emits `easydict_browser_registrar.exe install` or `uninstall`, reusing the Rust registrar CLI that deploys `easydict-native-bridge.exe`, manifests, and Chrome/Firefox HKCU Native Messaging registrations.
+  - Adds behavior/UI coverage for browser support messages, tray actions, and Advanced settings browser buttons.
+- 2026-05-31: Declared the Rust-owned OCR named event entry.
+  - Added a generic `NamedEventRegistration` desktop integration declaration to WinFluent runtime plans, preserving the event name, auto-reset behavior, and message action kind.
+  - `EasydictApp` now declares the legacy `Local\Easydict-OcrTranslate` auto-reset named event and maps its signal to the existing OCR hotkey message, matching the .NET Shell/NativeBridge hot-start contract.
+  - `WindowsPlatformAdapter::plan_desktop_integration(...)` now includes named-event plans alongside tray, Shell, and protocol entries.
+  - Adds app behavior coverage and Windows platform coverage for the named event declaration without creating OS handles in tests.
+- 2026-05-31: Wired OCR named events into the Rust subscription/runtime path.
+  - `win_fluent::Subscription` now has a first-class named-event subscription kind and maps signals into `PlatformEvent::NamedEventSignaled(...)`.
+  - `WindowsPlatformAdapter` can create auto/manual-reset named events, signal an existing named event, and wait for a signal with timeout; the Windows test now proves missing events return `false`, signaled events wake, and auto-reset events reset after consumption.
+  - The iced backend now bridges named-event subscriptions through a Windows worker stream, so signaled named events can produce app messages at runtime instead of living only in a plan.
+  - `EasydictApp::subscription()` now subscribes to `Local\Easydict-OcrTranslate` and routes it through the same OCR hotkey message used by hotkeys, tray, and cold-start activation.
+- 2026-05-31: Added a Rust Native Messaging bridge executable.
+  - Added `easydict_app::native_bridge` with the Chrome/Firefox Native Messaging 4-byte little-endian length-prefix protocol, 1 MB message limit, default `ocr-translate` action fallback for missing/invalid JSON, and `{ success, action }` response frames.
+  - Added the `easydict_native_bridge` binary, which reads native messages from stdin/stdout and signals `Local\Easydict-OcrTranslate` through `WindowsPlatformAdapter::signal_named_event(...)` for `ocr-translate` actions.
+  - Keeps unknown actions non-signaling with `success: false`, matching the existing bridge's response shape while making OCR messages wake the Rust named-event subscription path.
+  - Adds `native_bridge_behavior` coverage for action parsing, response framing, OCR signal invocation, unknown actions, invalid lengths, and incomplete frames.
+- 2026-05-31: Added a Rust Browser Native Messaging registrar.
+  - Added `easydict_app::browser_registrar` with the legacy native host name `com.easydict.bridge`, stable bridge deployment path `%LocalAppData%\Easydict\browser-bridge`, Chrome/Firefox manifest generation, and HKCU Native Messaging registry-key abstraction.
+  - Added the `easydict_browser_registrar` binary with `install`, `uninstall`, and `status` commands plus the legacy JSON output shape for callers that need to run outside the MSIX sandbox.
+  - The registrar installs `chrome-manifest.json` and `firefox-manifest.json`, writes Chrome and Firefox default registry values, copies `easydict-native-bridge.exe`, and reports status only when the registry value, manifest file, and bridge executable all exist.
+  - Added an explicit `easydict-native-bridge` Rust bin target so release/package layouts can produce the hyphenated executable name expected by the browser manifest contract.
+  - Adds `browser_registrar_behavior` coverage for argument defaults, custom extension IDs, manifest schema, registry value routing, status checks, uninstall cleanup, missing bridge errors, and the legacy LocalAppData directory shape.
+- 2026-05-31: Added Rust helper executable packaging.
+  - Added `dotnet/scripts/Build-RustHelpers.ps1` to build and copy Rust-owned helper binaries for `x64`, `x86`, and `arm64` outputs.
+  - The helper layout now places `easydict-native-bridge.exe`, `easydict_browser_registrar.exe`, and `easydict_cli.exe` beside the app executable, matching the Rust runtime lookup contract for browser support and command-line regression.
+  - Local publish, local MSIX packaging, Makefile portable/MSIX targets, release workflow, and ARM64 MSIX smoke workflow all call the Rust helper build step after the .NET bridge/registrar publish steps, so the Rust helper names are present in both portable and MSIX layouts.
+  - Adds packaging contract coverage that locks the Cargo targets, helper binary names, Makefile calls, script calls, CI calls, and the Rust app's `BROWSER_REGISTRAR_EXE` name.
+- 2026-05-31: Wired Rust MDX dictionary import into Quick Translate lookup.
+  - Settings state now owns imported MDX dictionary metadata with stable `mdx::{slug}` service ids, display names, file paths, encryption flags, credentials, and MDD attachment slots matching the CompatHost `ImportedMdxDictionarySnapshot` shape.
+  - The Settings > Services MDX row now uses a dedicated `ImportMdxDictionary` action and MDX-only file dialog instead of reusing the Long Document `BrowseFile` path; imported dictionaries update the settings summary and are added as service rows for Main, Mini, and Fixed surfaces.
+  - Quick Translate plans now carry a `SettingsSnapshot`, configure the CompatHost before service execution, and route `mdx::` services through the typed `mdx_lookup` facade instead of generic `translate`, preserving the imported dictionary list required by the bridge.
+  - MDX lookup hits render returned entries into the result body, while empty lookups return the existing `NoResult` DTO shape so `HideEmptyServiceResults` demotion continues to work.
+  - Adds behavior/UI coverage for dedicated MDX import dialog routing, duplicate import handling, service row creation, settings snapshot hydration, MDX lookup calls, and no-result lookup behavior.
+- 2026-05-31: Added Rust local dictionary suggestions over imported MDX dictionaries.
+  - Source text changes now extract the current trailing token, skip path-like/control tokens, wait 150 ms before querying, and start a Rust task only when local dictionary suggestions are enabled and at least one MDX dictionary is imported.
+  - Suggestion requests configure the CompatHost with the current settings snapshot and run fuzzy `mdx_lookup` against imported dictionaries, deduplicating entry key/display-name pairs before hydrating the main input surface.
+  - Query ids and query text guard stale suggestion responses, and invalid/empty input clears old suggestions so the UI cannot keep obsolete completions.
+  - The Quick Translate input card renders click-to-apply local dictionary suggestions, replacing only the current token; Settings > General exposes a disabled-until-MDX `Enable custom dictionary input suggestions` toggle with the updated Settings-page ownership boundary.
+  - MDX import now auto-discovers companion MDD resource files using the legacy `{base}.mdd`, `{base}.1.mdd`, `{base}.2.mdd`, ... same-directory scan and carries those paths into the settings snapshot for CompatHost lookup/rendering.
+  - Local dictionary suggestion navigation now has Rust-owned state and messages for entering suggestions, Up/Down wraparound movement, Enter-style application, Escape-style dismissal, and Shift+Tab-style exit with source input focus restoration.
+  - WinFluent TextEditor now exposes ordinary key-binding tokens, and the iced backend maps them through `text_editor.key_binding(...)`, so the main Quick Translate input routes Enter, Tab, Shift+Tab, Up/Down, and Escape into the Rust app while Shift+Enter/Ctrl+Enter continue to use the default multiline editor binding.
+  - Added a local-dictionary preview scenario and kept the iced preview runtime compatible with iced 0.14 subscription mapping, so visual captures can show the suggestion chips without starting the full app.
+  - Adds behavior/UI coverage for token extraction, delayed task dispatch, MDD discovery, fuzzy lookup parameters, stale result handling, suggestion navigation/application, invalid-input clearing, and the settings/UI contract from `migration-list.md` local dictionary suggestions.
+- 2026-05-31: Added Rust Settings unsaved-change confirmation.
+  - `SettingsState` now tracks unsaved changes and whether the confirmation dialog is visible, while `EasydictUiState` keeps a saved settings snapshot for discard/rollback.
+  - Settings mutations including theme, tray/clipboard/selection toggles, shell-menu toggle, hide-empty results, Mini/Fixed view toggles, international services, local dictionary suggestions, and MDX import mark the settings draft dirty.
+  - Back from Settings now stays on the Settings route and shows a confirmation dialog when the draft is dirty; Save clears the dirty state, stores a new saved snapshot, and leaves Settings; Don't Save restores the saved snapshot and leaves Settings; Cancel closes the dialog without discarding the draft.
+  - The Settings view now renders the migration-list Save / Don't Save / Cancel confirmation contract with stable automation IDs.
+  - Adds behavior/UI coverage for dirty-state marking, Back prompt behavior, Save/Discard/Cancel state transitions, saved snapshot rollback, and the rendered dialog contract.
+- 2026-05-31: Added Rust Settings selected-language filtering for translation pickers.
+  - `SettingsState` now owns the selected translation language id list used by Main, Mini, Fixed, and Long Document language combo boxes.
+  - Settings > Language renders per-language toggles for the common Easydict language set and marks the settings draft dirty when visibility changes.
+  - Disabled languages are removed from all Rust-owned translate surface picker item lists while `Auto Detect` remains available where the surface supports automatic source/target routing.
+  - Adds behavior/UI coverage proving a disabled language disappears from Main, Mini, Fixed, and Long Document pickers and that the Language settings toggles reflect selected/unselected state.
+- 2026-05-31: Wired Rust Settings language preferences into state and routing.
+  - Settings > Language now renders first language, second language, auto-select target language, and UI language controls with the legacy automation anchors `FirstLanguageCombo`, `SecondLanguageCombo`, `AutoSelectTargetToggle`, and `UILanguageCombo`.
+  - First/second language changes mark the settings draft dirty and keep the two preference languages distinct before Quick Translate routing consumes them.
+  - The auto-select target language setting now has a real toggle in Settings; when disabled, non-manual target selections keep their selected target instead of forcing the first/second-language auto rule.
+  - The UI language combo now carries the migration-list language set (`en-US`, `zh-CN`, `zh-TW`, `ja-JP`, `ko-KR`, `fr-FR`, `de-DE`, `vi-VN`, `th-TH`, `ar-SA`, `id-ID`, `it-IT`, `ms-MY`, `hi-IN`, `da-DK`) and the restart-required prompt.
+  - Adds behavior/UI coverage for language-preference dirty state, auto-target routing impact, UI language state updates, and rendered Settings Language controls.
+- 2026-05-31: Matched Rust SelectedLanguages preference repair behavior.
+  - Selected translation languages now keep at least two enabled entries, matching the legacy SettingsService invariant.
+  - Deselecting a language normalizes aliases such as `zh-CN` to the Rust picker id, deduplicates the selected list, and repairs First/Second language preferences when either preference no longer appears in the selected set.
+  - Settings > Language disables the last two selected-language toggles so the UI cannot leave the picker set below the two-language minimum.
+  - Adds behavior/UI coverage for first/second preference repair, two-language minimum enforcement, and disabled toggle state.
+- 2026-05-31: Made Rust Settings Hotkeys drive global hotkey registration.
+  - `SettingsState` now owns editable/enabled hotkey settings for Show Window, Translate Clipboard, Show Mini Window, Show Fixed Window, OCR Screenshot Translate, and Silent OCR.
+  - `EasydictApp::subscription()` now derives registered hotkeys from current settings, skips disabled or invalid shortcuts, and derives Mini/Fixed toggle hotkeys by adding Shift to the configured base shortcut.
+  - Settings > Hotkeys now renders migration-list automation anchors such as `ShowHotkeyBox` with editable shortcut fields and enabled toggles instead of static rows.
+  - Adds behavior/UI coverage for disabled and invalid shortcuts, Mini toggle derivation, dirty settings state, and Hotkeys tab contract rows.
+- 2026-05-31: Added Rust Settings General mouse-selection exclusion controls.
+  - Settings > General now exposes the migration-list UIA anchors `SettingsGeneralBehaviorHeader`, `MouseSelectionTranslateToggle`, `MouseSelectionExcludedAppsPanel`, and `MouseSelectionExcludedAppsBox`.
+  - Enabling Mouse selection translate reveals the excluded-apps editor with the legacy default process name `code`; disabling the toggle collapses that panel.
+  - The excluded-apps text is tracked in `SettingsState` and marks settings dirty when edited, preparing the setting for the Rust pop-button filtering path.
+  - Adds UI/state coverage for the collapsed/expanded panel, editable text action, checked toggle state, and dirty-setting update.
+- 2026-05-31: Aligned Rust Settings General with the updated setting-page contract.
+  - The Settings header now exposes `BackButton` as an accent/icon button with the Fluent back glyph and gives the title slot a stable `SettingsHeaderText` anchor.
+  - Settings tabs now carry the updated Fluent glyph mapping, per-tab tooltips, tile-style 86x76 preview buttons, a `SettingsTabSwitchRing` placeholder, and the main scroller content advertises the 24px padding / 1040px max-width / bottom-spacer contract used by screenshot baselines.
+  - The Rust Settings preview route now keeps the outer Easydict title bar and uses a Settings-sized preview window, so local screenshot captures line up with `screenshot/settings.png` and the `theme-contrast_*_page-settings-*` artifacts instead of the oversized main-window canvas.
+  - The General tab now uses the updated four-option app theme list, owns launch-at-startup, always-on-top, custom dictionary suggestions, TTS speed, and auto-play controls, and renders `SaveButton` only while the settings draft is dirty.
+  - The local dictionary suggestions toggle moved out of Services and into General, matching the updated migration-list section boundary.
+  - The OCR language picker moved out of Language and into Advanced > OCR, so the Language tab now matches the updated language-preferences-only description while OCR configuration remains in the OCR section.
+  - Rust preview state now honors `EASYDICT_PREVIEW_SETTINGS_OPEN` and `EASYDICT_PREVIEW_SETTINGS_SECTION`, making Settings-section screenshots repeatable for visual review.
+  - Views content is wrapped in a lazy token to mirror the updated `x:Load=False` intent while preserving the existing Rust state model.
+  - Adds UI/state coverage for the revised General rows, Save button visibility, tab/header anchors, and the Services-vs-General dictionary suggestion boundary.
+- 2026-05-31: Added Rust Settings Services DeepL configuration expander.
+  - Settings > Services now exposes the migration-list `DeepLServiceExpander` automation anchor as an expander row instead of a static placeholder row.
+  - The DeepL section now has editable API key state, reveal/test button anchors, Free API and quality-optimized toggles, and the same Free-vs-Quality mutual exclusion used by the WinUI settings page.
+  - Quality-optimized mode disables the Free API toggle and updates the configuration summary, setting up the later save-time API-key validation path.
+  - Adds UI/state coverage for the expander shape, control actions, toggle state, mutual exclusion, and dirty-setting update.
+- 2026-05-31: Added Rust Settings Views reorder-mode anchors.
+  - Settings > Views now uses the migration-list "Window Results" heading and description for Main, Mini, and Fixed result configuration.
+  - Main, Mini, and Fixed each have an independent reorder-mode button, including the required `MainWindowReorderModeButton` automation anchor.
+  - Entering reorder mode reveals Move up / Move down controls only for that window; saving settings resets all reorder-mode flags immediately.
+  - Adds UI/state coverage for independent reorder-mode state, visible move controls, no dirty-setting side effect, and save-time reset behavior.
+- 2026-05-31: Added Rust Settings About link anchors.
+  - Settings > About now exposes `AboutHeaderText`, `AboutAppNameText`, `GitHubRepositoryLink`, `IssueFeedbackLink`, and `InspiredByLink` to match the migration-list About link contract.
+  - The About links carry stable labels, URL tooltips, and actionable app messages instead of remaining static source text.
+  - Rust state records the last requested Settings link, giving the later external URL launcher a typed handoff point.
+  - Adds UI/state coverage for all required About automation ids, link labels, URL targets, message actions, and link intent capture.
+- 2026-05-31: Expanded Rust Settings Advanced configuration contracts.
+  - Settings > Advanced now exposes OCR engine selection, advanced OCR endpoint/model/API key/system prompt/test-result controls, layout detection mode, ONNX model download/delete status controls, Vision LLM service selection, CJK font download/delete status controls, formula regex fields, Translation Cache controls, Custom Translation Prompt, and HTTP Proxy controls.
+  - The Advanced OCR and Layout sections now use screenshot-baseline-style section headers with grouped surface cards and left-aligned form controls instead of rendering every field as a separate full-width horizontal settings row.
+  - Save validation now blocks enabled proxy settings with an empty or non-absolute URL and keeps the user on Settings with a `Settings Error` dialog; DeepL quality-optimized mode also requires an API key before save.
+  - Advanced prompt, formula, layout, and proxy settings are carried into the Rust `SettingsSnapshot`; Long Document requests now use the selected layout mode and configure the CompatHost with those Advanced settings.
+  - Adds UI/state coverage for the required Advanced automation anchors, conditional OCR/Vision panels, proxy validation dialog, and Long Document settings propagation.
+- 2026-05-31: Made Rust Settings Views edit real per-window service lists.
+  - Settings > Views now renders Main, Mini, and Fixed Window service lists with per-service display toggles, `EnabledQuery` toggles that are only visible while the service is enabled, and row-scoped Move up / Move down controls while that window is in reorder mode.
+  - `SettingsState` now owns separate service-order drafts for Main, Mini, and Fixed; changing service visibility/query mode marks settings dirty, while merely entering reorder mode remains a view-only action.
+  - Saving Settings applies the drafted order and `EnabledQuery` values back to the Main/Mini/Fixed result lists, so automatic Quick Translate plans only run the enabled-query services for that surface.
+  - Save also repairs any window with all services disabled by re-enabling its first service, matching the migration-list requirement that every window keep at least one visible result provider.
+  - Imported MDX dictionaries are added to each window's draft service list along with the live result rows.
+  - Adds UI/state coverage for service toggles, conditional `EnabledQuery` controls, row-level reorder controls, saved order propagation, automatic-query filtering, and save-time service repair.
+- 2026-05-31: Wired Rust Settings About links to external URL launch tasks.
+  - `win_fluent` now has a typed `OpenUrl` platform command and `Task::open_url(...)` helper, keeping URL launch as a declarative app task instead of app-specific backend code.
+  - The iced backend maps `OpenUrl` to the Windows platform adapter, and the Windows adapter opens the URL with `ShellExecuteW("open", ...)` so Settings About links use the OS default browser.
+  - `Message::OpenSettingsLink(...)` still records the selected link in state for inspection, then returns an `OpenUrl` platform task with the link's locked URL.
+  - Adds behavior coverage proving About link presses emit the expected URL task while existing UI automation anchors remain unchanged.
+- 2026-05-31: Expanded Rust Settings Services configuration for Ollama and OpenAI.
+  - Settings > Services now renders real Ollama and OpenAI expander rows with the legacy automation anchors for endpoint/model/API key/API format/test/refresh/status controls.
+  - `SettingsState` now owns editable OpenAI API key, endpoint, model, API format override, OpenAI test status, Ollama endpoint/model, and Ollama status fields; edits mark Settings dirty while Test/Refresh update visible status text.
+  - OpenAI detected-format text now follows the legacy rule: Auto uses Responses API for `/responses` endpoints and Chat Completions otherwise, while explicit format selection pins the label.
+  - `settings_snapshot(...)` now carries OpenAI, DeepL, and Ollama provider configuration into the CompatHost settings payload used by Quick Translate, Long Document, and local dictionary configuration paths.
+  - Adds UI/state coverage for Ollama/OpenAI controls, dirty-state updates, status updates, detected-format rendering, and snapshot propagation.
+- 2026-05-31: Expanded Rust Settings Services configuration for the remaining LLM providers.
+  - Settings > Services now renders data-driven provider expanders for DeepSeek, Groq, Zhipu, GitHub Models, Gemini, Custom OpenAI Compatible, Built-in AI, and Doubao with stable legacy-style key/token, reveal, model, endpoint where applicable, Test, and status automation ids.
+  - `SettingsState` now owns a generic `ServiceProviderSetting` draft list plus typed messages for secret/endpoint/model edits and provider test requests, so this group shares one behavior path instead of eight copied handlers.
+  - `settings_snapshot(...)` maps each provider draft back into the typed CompatHost fields for DeepSeek, Groq, Zhipu, GitHub Models, Gemini, Custom OpenAI, Built-in AI, and Doubao.
+  - The Rust and .NET `SettingsSnapshot` contracts now include `doubaoEndpoint`; WorkerSpawner forwards the legacy WinUI `DoubaoEndpoint` setting so the worker-side configure payload keeps that setting.
+  - Adds UI/state/snapshot coverage for provider anchors, dirty-state edits, default model propagation, Custom OpenAI endpoint propagation, Doubao endpoint propagation, and provider test status updates.
+- 2026-05-31: Expanded Rust Settings Services configuration for traditional HTTP providers.
+  - Settings > Services now renders Caiyun, NiuTrans, and Youdao expander rows with legacy-style key/secret/reveal/Test/status automation anchors; Youdao also exposes the `Use Official API` toggle.
+  - `SettingsState` now owns Caiyun/NiuTrans/Youdao credentials and status text; credential edits mark Settings dirty while Test actions update visible status without requiring a live network call.
+  - `settings_snapshot(...)` now carries Caiyun token, NiuTrans API key, Youdao app key/secret, and Youdao official API mode into the CompatHost configure payload.
+  - The Rust and .NET `SettingsSnapshot` contracts preserve the same wire names, and WinUI `WorkerSpawner` forwards the legacy decrypted settings into the worker snapshot.
+  - The LongDoc worker `WorkerTranslationManagerFactory` now configures Caiyun, NiuTrans, and Youdao from the snapshot so document translation workers can use those providers during the hybrid migration.
+  - Adds UI/state/protocol coverage for rendered anchors, dirty-state updates, snapshot wire names, worker round-trips, and worker-side service configuration.
+- 2026-05-31: Added the Rust Settings Services no-configuration provider section.
+  - Settings > Services now includes a `Free Services (No Configuration Required)` section with stable anchors for Google Translate, Google Dict, and the descriptive text that these providers work without API keys.
+  - Linguee is hidden in default Rust builds and only rendered when the `enable-linguee-service` feature is enabled, matching the legacy `ENABLE_LINGUEE_SERVICE` conditional display behavior.
+  - Adds UI coverage for the no-config service anchors and default Linguee-hidden behavior, plus feature-check coverage for the Linguee-enabled build path.
+- 2026-05-31: Expanded Rust Settings Services MDX management parity.
+  - The top Services MDX area now exposes the legacy `ImportMdxDictionaryButton`, `ImportedMdxSummaryText`, `ImportedMdxConfigPanel`, and Enable International Services header/description/toggle anchors.
+  - Imported MDX dictionaries now render dynamic expander rows with file path, discovered/saved MDD resource summary, Rescan MDD, Delete, and encrypted-dictionary email/regcode fields when the dictionary is marked encrypted.
+  - MDX email/regcode edits update the imported dictionary snapshot, Rescan MDD refreshes same-directory MDD attachments, and Delete uses a confirmation dialog before removing the dictionary from imported settings, window service lists, and live result rows.
+  - Adds UI/state coverage for MDX top-section anchors, encrypted credential persistence, MDD rescan, delete confirmation/cancel, and service-row cleanup.
+- 2026-05-31: Expanded Rust Settings Services Windows Local AI parity.
+  - Settings > Services now renders `WindowsLocalAIExpander` with the legacy-style provider combo for Auto, WindowsAI/Phi Silica, Foundry Local, and OpenVINO, including provider ratings and the required Auto fallback order text.
+  - The Local AI panel now exposes Phi Silica `Prepare model` plus Windows Update progress entry, Foundry endpoint/model/start/install/docs controls, and OpenVINO device/download/progress controls with stable automation ids.
+  - `SettingsState` now owns Local AI provider selection, Phi preparation status, Foundry Local endpoint/model/status, and OpenVINO device/download status; edits mark Settings dirty while action buttons update visible request status.
+  - `settings_snapshot(...)` now carries `localAIProvider`, `foundryLocalEndpoint`, `foundryLocalModel`, and `openVinoDevice` into the CompatHost settings payload.
+  - Adds UI/state/snapshot coverage for rendered anchors, provider normalization, dirty-state edits, status updates, and Local AI snapshot propagation.
+- 2026-05-31: Expanded Rust default translation service registration in Settings Views.
+  - Main/Mini/Fixed service drafts now start from the migration-list service registry instead of only the early Google/Bing/OpenAI subset.
+  - The registry includes Google Translate, Google Dict, Bing, DeepL, Youdao, OpenAI, Ollama, Built-in AI, DeepSeek, Groq, Zhipu, GitHub Models, Custom OpenAI, Gemini, Doubao, Caiyun, NiuTrans, Volcano, the single `windows-local-ai` aggregate service, and feature-gated Linguee.
+  - The Views tab still preserves the user-facing enabled/query toggles and reorder behavior, while disabled registered services remain selectable for later activation.
+  - Saving Settings propagates registered streaming and grammar capabilities into newly enabled result rows, so OpenAI-compatible, Gemini, and Windows Local AI services use the correct Rust Quick Translate execution path after activation.
+  - Adds UI/state coverage for the full service-id list, conditional Linguee build coverage, single Local AI registration, disabled/unconfigured markers, and capability propagation when enabling a previously disabled service.
+- 2026-05-31: Wired captured OCR payloads into Rust-owned recognition result handling.
+  - Added a Rust `ocr` module that turns captured BGRA pixel files into typed `ocr_recognize` CompatHost requests, validates missing pixel paths/dimensions, tracks query ids, and ignores stale OCR outcomes.
+  - `EasydictApp` now routes explicit OCR capture results through CompatHost recognition, then sends OCR Translate text into the Mini window and starts the normal Mini quick-translate pipeline, or writes Silent OCR text to the clipboard.
+  - OCR hotkey/tray/protocol activation still opens the capture overlay and records translate vs silent mode; the remaining desktop-region selection and pixel-file creation work is intentionally left as the next OCR UI slice.
+  - Adds `ocr_behavior` coverage for request construction, backend configuration/recognition forwarding, app task emission, Mini translation hydration, Silent OCR clipboard output, invalid captures, and stale outcomes.
+- 2026-05-31: Added a Rust platform task for screen capture payload creation.
+  - `win_fluent::Task` now has a `CaptureScreenRegion` request that returns a generic `ScreenCaptureResult`, keeping screen capture as a runtime/platform concern instead of an Easydict app dependency.
+  - The Windows platform adapter captures the current virtual desktop into a top-down BGRA8 temp file and reports the physical width, height, and screen rect; this provides the real pixel payload shape required by the existing CompatHost OCR worker path.
+  - `EasydictApp` now maps capture overlay Confirm to OCR Translate capture and `Copy text` to Silent OCR capture; a successful platform capture immediately flows into the Rust OCR recognition state machine from the previous slice.
+  - The full Snipaste-style selection UX, window detection depth, magnifier, and independent STA/GDI overlay remain open work, but the Rust path now produces real BGRA8 capture files instead of waiting for externally injected pixels.
+  - Adds behavior coverage for overlay Confirm/Copy producing platform capture requests and mapping platform capture results into the correct OCR Translate vs Silent OCR messages.
+- 2026-05-31: Added explicit screen-region capture requests to the Rust platform layer.
+  - `win_fluent::platform` now exposes `ScreenCaptureRequest` plus `ScreenRect::new(...)`/`is_empty(...)`, so callers can distinguish whole-virtual-desktop capture from a concrete selected rectangle.
+  - `Task::capture_screen_region(...)` preserves the existing virtual-desktop behavior, while `Task::capture_screen_region_with_request(...)` carries an explicit request through the iced backend to the Windows platform adapter.
+  - `WindowsPlatformAdapter::capture_screen_region_with_request(...)` now captures either the requested physical screen rectangle or the virtual desktop, writes the same top-down BGRA8 temp-file payload, and rejects empty or overflowing requested regions.
+  - This does not complete the Snipaste-style overlay interaction yet, but it removes the task/protocol blocker for wiring the overlay's eventual selected rectangle into the real OCR capture path.
+  - Adds `win_fluent` task coverage for default virtual-desktop requests and explicit-region request preservation.
+- 2026-05-31: Ported OCR text merging logic into Rust.
+  - Rust `ocr` now owns the legacy `OcrTextMerger` behavior for merging OCR words and lines: Latin words get spaces, adjacent CJK/Hiragana/Katakana/Hangul/fullwidth/CJK punctuation characters do not, and empty word fragments are handled without introducing phantom spaces.
+  - Added visual line grouping and ordering by Y tolerance plus left-to-right X sorting, matching the existing WinUI pure logic used after Windows OCR recognition.
+  - OCR outcome handling now prefers backend text when present but falls back to sorted line text when an engine returns line boxes without a merged text field, making the future native Rust OCR providers less dependent on the .NET worker shape.
+  - Adds `ocr_behavior` coverage for CJK/Latin spacing, Japanese/Korean/fullwidth punctuation, line newline preservation, row grouping/sorting, zero-height fallback tolerance, backend-text preference, and line-text fallback into Mini translation.
+- 2026-05-31: Wired OCR engine settings through the Rust/.NET configure path.
+  - Rust `SettingsState` now owns the OCR recognition language under Settings > Advanced > OCR instead of rendering a Language-tab OCR picker as a no-op, and `begin_ocr_recognize(...)` applies the selected OCR language when the capture result does not already specify a preferred language.
+  - Rust and .NET `SettingsSnapshot` now carry `ocrEngine`, `ocrApiKey`, `ocrEndpoint`, `ocrModel`, `ocrSystemPrompt`, and `ocrLanguage`, preserving the legacy Advanced OCR settings needed by Windows Native, Ollama OCR, and Custom API OCR paths.
+  - Rust `settings_snapshot(...)` normalizes the OCR engine and resolves engine-specific default endpoint/model values, so the future Rust-native OCR provider factory can consume one typed configure payload.
+  - `WorkerSpawner.BuildSnapshot(...)` maps the existing WinUI OCR settings into the shared snapshot, and `.NET CompatHost` now forwards its current runtime settings snapshot when configuring the OCR worker instead of sending an empty settings object.
+  - Adds Rust behavior/protocol/UI coverage for OCR language routing and OCR snapshot fields, plus .NET dispatcher/protocol coverage proving the configured OCR settings survive serialization and reach the recognizer.
+- 2026-05-31: Ported Rust OCR provider request and response planning.
+  - Rust now resolves a typed OCR engine config from `SettingsSnapshot`, including Windows Native, Ollama, and Custom API engine selection, trimmed credentials, endpoint/model defaults, system prompt, and non-auto OCR language.
+  - Added pure request plans for Ollama `/api/generate`, OpenAI-compatible Chat Completions, and OpenAI Responses OCR payloads, preserving the legacy model/prompt/image/token fields before live HTTP execution is moved into Rust.
+  - Added response parsers for Ollama `response`, Chat Completions `choices[0].message.content`, Responses `output_text`, and nested Responses `output[].content[].text`, all returning the shared OCR DTO shape without panicking on malformed JSON.
+  - Added BGRA8-to-BMP base64 encoding for Ollama image payloads with dimension, buffer-length, and overflow validation matching the existing captured-pixel contract.
+  - Live network execution for Ollama and Custom API OCR is still open; this step locks the provider payload/parse behavior so the next slice can wire an HTTP runner with CompatHost fallback.
+- 2026-05-31: Wired Rust-native execution for advanced OCR providers.
+  - `run_ocr_recognize_with_packaged_host(...)` now routes Windows Native OCR to the existing CompatHost/worker path, while Ollama and Custom API OCR run directly through Rust-owned provider execution.
+  - Added a testable `NativeOcrBackend` and `OcrHttpClient` abstraction; the production path uses a blocking `reqwest` client with the existing proxy setting when enabled, including loopback bypass for local Ollama endpoints when requested.
+  - Ollama OCR now reads captured BGRA8 payload files, encodes them as base64 BMP, posts the legacy `/api/generate` JSON request, and parses the returned OCR text into the shared OCR DTO.
+  - Custom API OCR now reads the same BGRA8 payload, encodes it as a JPEG data URL, posts either Responses or Chat Completions image requests, applies bearer auth when configured, and parses text responses without involving the .NET worker.
+  - Windows Native OCR still intentionally remains behind CompatHost because WinRT language-pack behavior and worker fallback remain higher-risk migration items.
+- 2026-05-31: Ported screen-capture overlay hit-test and interaction logic into Rust.
+  - Added a Rust `screen_capture` module with `CaptureRect`, `DetectedWindow`, and `WindowDetector`, preserving the legacy snapshot hit-test behavior where the first Z-order window wins, bottom/right edges are exclusive, and nested child chains resolve by depth.
+  - Added a pure capture interaction state machine for the Snipaste-style overlay phases: Detecting vs Selecting, hover window detection, scroll-to-parent/child depth adjustment, drag threshold selection, normalized confirmation, tiny-selection reset, double-click detected-window confirmation, double-click blank track selection, and right-click/Esc phase behavior.
+  - This does not yet render the full Win32/GDI overlay or consume real pointer events in the runtime, but it moves the `WindowDetectorTests` and overlay interaction rules into Rust-owned, testable behavior for the next native overlay slice.
+  - Adds `screen_capture_behavior` coverage for hit testing, depth clamping, scroll behavior, drag selection, double-click selection, and cancel/reset semantics.
+- 2026-05-31: Restored Windows Native OCR worker fallback through CompatHost.
+  - `CompatHost` OCR recognition now preserves the legacy worker fallback behavior for Windows Native OCR when the OCR worker cannot start/configure or exits during recognition.
+  - Added an in-process WinRT OCR fallback inside `CompatHost` that consumes the same BGRA8 capture payload, honors preferred/settings OCR language with user-profile fallback, keeps CJK-aware word merging and visual row sorting, and returns text angle plus detected language.
+  - Worker protocol service errors still surface as protocol errors; fallback is limited to worker unavailable/start/configure/version/exit failure modes.
+  - Updated `easydict_cli` local CompatHost auto-detection to prefer the current `net8.0-windows10.0.22621.0` build output while retaining the older debug/release paths for quick command-line regression.
+  - Adds CompatHost dispatcher coverage for missing OCR worker executable and worker exit during recognition, plus Rust CLI coverage for the current CompatHost TFM probe order.
+- 2026-05-31: Wired Rust OCR overlay selections into platform region capture.
+  - `EasydictUiState` now tracks the active OCR capture selection separately from pending OCR mode, so the pure screen-capture interaction state can feed the app-level capture request path.
+  - Capture overlay Confirm and Copy now convert a normalized confirmable selection into a `ScreenCaptureRequest::region(...)`; when no selection exists they keep the previous virtual-desktop capture fallback.
+  - Starting or cancelling OCR capture clears stale selection state, preventing a previous region from leaking into a later hotkey/tray/protocol OCR flow.
+  - This still leaves native mouse-event plumbing and full GDI overlay rendering open, but the selected rectangle now reaches the Windows platform BGRA capture API instead of being discarded at the app boundary.
+  - Adds OCR behavior coverage for selected-region capture requests and cancel cleanup, alongside the existing overlay interaction-state tests.
+- 2026-05-31: Routed OCR overlay interaction events through the Rust app state machine.
+  - `EasydictUiState` now owns the active `CaptureInteractionState` and a `WindowDetector`, giving the app a Rust-owned place to consume mouse move/down/up, double-click, wheel, right-click, and Esc-style overlay events.
+  - Added typed capture overlay messages for pointer events and detected-window snapshots; future iced/native overlay code can forward real events without duplicating capture-selection rules.
+  - Drag selection and double-click window detection now flow from `CaptureInteraction::Confirm(...)` directly into the same selected-region platform capture request used by the toolbar Confirm path, preserving pending Translate vs Silent OCR mode.
+  - Right-click/Esc cancel through the interaction state now clears OCR mode, interaction, and selection state, then hides the capture overlay.
+  - Adds OCR behavior coverage for drag-to-confirm region capture and double-click detected-window capture while keeping the pure `screen_capture_behavior` coverage as the lower-level parity evidence.
+- 2026-05-31: Added a generic WinFluent pointer region and connected it to the OCR capture overlay.
+  - `win_fluent` now has a backend-neutral `PointerRegion` token with move, left-down, left-up, double-click, right-down, wheel, and Escape actions; schema, diff, accessibility, prelude exports, and testkit snapshots understand the new token.
+  - `win_fluent_backend_iced` compiles `PointerRegion` into an iced advanced widget that publishes pointer messages, maps wheel deltas, detects close-range double clicks, and uses a crosshair cursor over the interactive region.
+  - The Rust OCR capture overlay now includes a `capture.pointer` region that forwards real iced pointer/Esc events into the typed capture overlay messages added in the previous slice.
+  - This still does not finish the full frozen-desktop/GDI visual overlay, magnifier, or native window snapshot provider, but it removes the UI-backend blocker between rendered overlay input and the Rust capture-selection state machine.
+  - Adds backend compilation coverage for `PointerRegion` and UI contract coverage proving the capture overlay exposes pointer, double-click, wheel, and Escape actions.
+- 2026-05-31: Started the Rust replacement order with a Rust-native `Easydict.Llm.Streaming` parser.
+  - Added `rs/crates/easydict_app/src/llm_streaming.rs` with Rust-owned Chat Completions SSE parsing, Responses API SSE parsing, shared OpenAI streaming-format dispatch, and `ChatMessage`/`ChatRole` wire-name helpers.
+  - Chat Completions parsing preserves the legacy `data: {"choices":[{"delta":{"content":"..."}}]}` behavior, skips blank/non-data/malformed events, stops on `data: [DONE]`, and preserves Unicode chunks.
+  - Responses parsing preserves `event: response.output_text.delta` and `type=response.output_text.delta` handling, ignores non-delta events, skips malformed JSON, and stops on `[DONE]`.
+  - The parser exposes chunk iterators so Rust callers can stop after a yielded chunk, matching the migration-list cancellation requirement at the parser boundary before a full async HTTP stream runner is wired.
+  - Adds `llm_streaming_behavior` parity coverage against `migration-list.md` section 4 OpenAI-compatible behavior and section 16 `Easydict.Llm.Streaming.Tests` coverage: SSE data lines, multiple chunks, blank/non-data ignore, `[DONE]`, malformed JSON, empty choices, empty stream, cancellation-by-stopping-iteration, Unicode, and Responses API delta events.
+- 2026-05-31: Started Rust-native Settings replacement with legacy settings file migration.
+  - Added `rs/crates/easydict_app/src/settings_migration.rs` as a Rust-owned replacement for `FileSettingsCompatMigrator` while preserving the locked `SettingsMigrateParams`/`SettingsMigrateResult` DTOs.
+  - The Rust migrator resolves explicit/default settings paths, expands Windows-style `%ENV%` path segments, returns a warning instead of failing when the source settings file is missing, and writes to either the original file or a requested target path.
+  - It preserves legacy migration behavior for `WindowWidth`/`WindowHeight` to `WindowWidthDips`/`WindowHeightDips`, Mini/Fixed `PositionSaved` inference from saved coordinates, runtime-only worker isolation key cleanup, and `openvino-local-ai` service id merge into `windows-local-ai`.
+  - The OpenVINO merge keeps the legacy standalone OpenVINO preference by setting `LocalAIProvider=OpenVINO` only when needed, replaces service-list entries case-insensitively, removes duplicates when `windows-local-ai` already exists, and moves enabled-query dictionary keys without overwriting an existing new key.
+  - Adds `settings_migration_behavior` parity coverage for the existing CompatHost migrator baseline plus missing-file warning, invalid JSON, non-object JSON, target-copy migration, existing new-key preservation, and duplicate OpenVINO service cleanup.
+
+## Current Verification
+
+- `cd rs; cargo test -p easydict_app --test settings_migration_behavior -- --nocapture`
+- `cd dotnet; dotnet test tests\Easydict.WinUI.Tests --no-restore --filter "FullyQualifiedName~CompatHostDispatcherTests.FileSettingsCompatMigrator_MigrateAsync_NormalizesLegacySettingsShape" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd rs; cargo test -p easydict_app --test llm_streaming_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd dotnet; dotnet test tests\Easydict.Llm.Streaming.Tests --logger "console;verbosity=minimal"`
+- `cd lib/winfluent-rs; cargo test -p win_fluent -- --nocapture`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_backend_iced -- --nocapture`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_backend_iced compiles_pointer_region_to_iced_element -- --nocapture`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_backend_iced --all-targets`
+- `cd lib/winfluent-rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test ui_contract capture_and_pop_button_match_utility_window_contracts -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test screen_capture_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test screen_capture_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test screen_capture_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app common_dev_host_candidates_prefer_current_compat_host_tfm -- --nocapture`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerPackagingTests|FullyQualifiedName~WorkerProtocolSerializationTests|FullyQualifiedName~CompatHostProtocolSerializationTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~CompatHostDispatcherTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet build src/Easydict.CompatHost/Easydict.CompatHost.csproj -c Debug -p:UseSharedCompilation=false`
+- `cd rs; cargo test -p easydict_app --test screen_capture_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `git diff --check`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol configure_params_preserve_dotnet_settings_snapshot_names -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract advanced_settings_render_ocr_layout_cache_prompt_and_proxy_controls -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract language_settings_render_selected_language_toggles -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~CompatHostDispatcherTests|FullyQualifiedName~WorkerProtocolSerializationTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet build src/Easydict.CompatHost/Easydict.CompatHost.csproj -c Debug -p:UseSharedCompilation=false`
+- `cd lib/winfluent-rs; cargo test -p win_fluent task::tests -- --nocapture`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_platform_win maps_shell_verbs_without_touching_registry -- --nocapture`
+- `cd lib/winfluent-rs; cargo fmt --all --check`
+- `cd lib/winfluent-rs; cargo check -p win_fluent --all-targets`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_backend_iced --all-targets`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_platform_win --all-targets`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_platform_win --all-targets`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_backend_iced --all-targets`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract views_settings_registers_migration_list_translation_services -- --nocapture`
+- `cd rs; cargo test -p easydict_app --features enable-linguee-service --test ui_contract views_settings_registers_migration_list_translation_services -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior views_settings_save_updates_surface_service_order_and_enabled_query -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features enable-linguee-service`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test ui_contract services_settings_local_ai_exposes_provider_configuration -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol configure_params_preserve_dotnet_settings_snapshot_names -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test ui_contract services_settings_mdx_import_reflects_imported_dictionaries -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract services_settings_mdx_dynamic_config_edits_rescans_and_deletes -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract services_settings_render_no_config_service_section -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets --features enable-linguee-service`
+- `cd rs; cargo test -p easydict_app --test ui_contract services_settings_render_traditional_http_provider_configuration -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol configure_params_preserve_dotnet_settings_snapshot_names -- --nocapture`
+- `cd dotnet; dotnet test tests\Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerProtocolSerializationTests|FullyQualifiedName~LongDocWorkerTranslationManagerFactoryTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd rs; cargo test -p easydict_app --test ui_contract services_settings_render_llm_provider_configuration_rows -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerProtocolSerializationTests|FullyQualifiedName~WorkerPackagingTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd rs; cargo test -p easydict_app --test ui_contract services_settings_openai_and_ollama_expose_provider_configuration -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior settings_about_links_open_external_urls -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract about_settings_renders_required_links_with_automation_ids -- --nocapture`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_backend_iced --all-targets`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_platform_win --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract views_settings_reorder_mode_exposes_window_specific_controls -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior views_settings_save_updates_surface_service_order_and_enabled_query -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test ui_contract advanced_settings_render_ocr_layout_cache_prompt_and_proxy_controls -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior long_document_translate_builds_file_request_and_marks_loading -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test ui_contract about_settings_renders_required_links_with_automation_ids -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test ui_contract views_settings_reorder_mode_exposes_window_specific_controls -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test ui_contract services_settings_deepl_expander_exposes_configuration_controls -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test ui_contract general_settings_mouse_selection_excluded_apps_panel_tracks_toggle -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior hotkey_settings_disable_invalid_and_derive_toggle_subscriptions -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract hotkey_settings_render_configurable_shortcuts -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior selected_language_changes_keep_first_second_visible_and_at_least_two_selected -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior language_preference_messages_update_auto_target_routing -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract language_settings_render_selected_language_toggles -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior selected_languages_filter_translate_surface_language_pickers -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract language_settings_render_selected_language_toggles -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior settings_changes_prompt_on_back_and_save_discard_cancel_are_stateful -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract -- --nocapture`
+- `cd rs; cargo test -p easydict_app local_dictionary -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdx -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract main_quick_translate_renders_local_dictionary_suggestions -- --nocapture`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_backend_iced custom_text_editor_key_binding_matches_exact_modifiers_and_keeps_default_bindings`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior source_text_enter_submits_translate_or_commits_active_dictionary_suggestion -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo build -p easydict_preview_iced`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_backend_iced`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo fmt --all --check`
+- `EASYDICT_PREVIEW_SCENARIO=local_dictionary_suggestions; .\rs\scripts\Capture-PreviewScreenshot.ps1 -StartIfMissing`
+- `git diff --check`
+- `cd rs; cargo fmt --all`
+- `cd lib/winfluent-rs; cargo fmt --all`
+- `cd rs; cargo test -p easydict_app --test browser_registrar_behavior -- --nocapture`
+- `cd rs; cargo run -p easydict_app --bin easydict_browser_registrar -- status`
+- `cd rs; cargo build -p easydict_app --bin easydict-native-bridge`
+- `cd rs; cargo run -p easydict_app --bin easydict_browser_registrar -- --help`
+- `cd rs; cargo run -p easydict_app --bin easydict_browser_registrar -- install --chrome --bridge-path target\debug\easydict-native-bridge.exe`
+- `cd rs; cargo run -p easydict_app --bin easydict_browser_registrar -- uninstall --chrome`
+- `cd rs; cargo run -p easydict_app --bin easydict_browser_registrar -- status`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_platform_win registry -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior startup_activation -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior shell_context_menu -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior runtime_plan_captures_desktop_integration_entries -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract advanced_settings_shell_context_menu_toggle_reflects_state -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior browser_support -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract advanced_settings_browser_extension_buttons_are_actionable -- --nocapture`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_backend_iced --all-targets`
+- `cd rs; cargo test -p easydict_app --test native_bridge_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract app_crate_source_does_not_call_backend_or_native_apis -- --nocapture`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_platform_win named_event -- --nocapture`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_backend_iced named_event -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior default_hotkey_subscriptions_cover_migration_contract -- --nocapture`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_platform_win -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior startup_activation -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd lib/winfluent-rs; cargo fmt --all`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_platform_win -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app`
+- `cd lib/winfluent-rs; cargo test --workspace`
+- `cd rs; cargo fmt --all --check`
+- `cd lib/winfluent-rs; cargo fmt --all --check`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior runtime_plan_captures_desktop_integration_entries -- --nocapture`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_backend_iced --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app`
+- `cd lib/winfluent-rs; cargo test --workspace`
+- `cd rs; cargo fmt --all`
+- `cd lib/winfluent-rs; cargo fmt --all`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior shell_and_protocol -- --nocapture`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_platform_win -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app --test ui_contract win_fluent_crates_do_not_contain_app_specific_names -- --nocapture`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_platform_win maps_protocol_registration_without_touching_registry -- --nocapture`
+- `cd rs; cargo test -p easydict_app`
+- `cd lib/winfluent-rs; cargo test --workspace`
+- `cd rs; cargo fmt --all`
+- `cd lib/winfluent-rs; cargo fmt --all`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior default_tray -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract -- --nocapture`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app`
+- `cd lib/winfluent-rs; cargo test --workspace`
+- `cd rs; cargo fmt --all --check`
+- `cd lib/winfluent-rs; cargo fmt --all --check`
+- `git diff --check`
+- `cd rs; cargo fmt --all`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract --test compat_protocol --test compat_client`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd lib/winfluent-rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior`
+- `cd rs; cargo test -p easydict_app`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test compat_protocol --test ui_contract`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test compat_protocol --test compat_client`
+- `cd rs; cargo test -p easydict_app --test compat_client --test quick_translate_behavior`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior`
+- `cd rs; cargo test -p easydict_app --test compat_client`
+- `cd rs; cargo test -p easydict_app --test compat_protocol`
+- `cd rs; cargo test -p easydict_app cli_translate -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior -- --nocapture`
+- `cd rs; cargo run -p easydict_app --bin easydict_cli -- --help`
+- `cd rs; cargo run -p easydict_app --bin easydict_cli -- translate --service google --from en --to zh-Hans --text "Hello" --json`
+- `cd rs; cargo run -p easydict_app --bin easydict_cli -- stream --service google --from en --to zh-Hans --text "Good morning" --json`
+- `pwsh -NoProfile -File dotnet\scripts\Build-RustHelpers.ps1 -Platform x64 -Configuration Debug -OutputDir $env:TEMP\easydict-rust-helpers-check`
+- `cd dotnet; dotnet test tests\Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerPackagingTests" --logger "console;verbosity=minimal"`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdx -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract mdx -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app`
+- `cd rs; cargo test --workspace`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo test --workspace`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test --workspace`
+- `cd lib/winfluent-rs; cargo fmt --all --check`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo test --workspace`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo test --workspace`
+- `cd rs; cargo test --workspace`
+- `cd rs; cargo fmt --all --check`
+- `cd lib/winfluent-rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_platform_win maps_hotkey_subscription_to_native_registration`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo test --workspace`
+- `cd rs; cargo test --workspace`
+- `cd lib/winfluent-rs; cargo fmt --all --check`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo test --workspace`
+- `cd dotnet; dotnet build src/Easydict.CompatHost/Easydict.CompatHost.csproj -c Debug`
+- `cd rs; cargo run -p easydict_app --bin easydict_cli -- --help`
+- `cd rs; cargo run -p easydict_app --bin easydict_cli -- translate --host ..\dotnet\src\Easydict.CompatHost\bin\Debug\net8.0-windows\Easydict.CompatHost.exe --service google --from en --to zh-Hans --text "Hello" --json`
+- `cd rs; cargo run -p easydict_app --bin easydict_cli -- stream --host ..\dotnet\src\Easydict.CompatHost\bin\Debug\net8.0-windows\Easydict.CompatHost.exe --service google --from en --to zh-Hans --text "Good morning" --json`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior floating_window -- --nocapture`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_backend_iced --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior settings_button -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract settings_view_keeps_category_tiles_and_general_behavior_rows -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract --test compat_protocol --test compat_client`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app`
+- `cd rs; cargo fmt --all`
+- `cd lib/winfluent-rs; cargo fmt --all`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract --test compat_protocol --test compat_client`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app`
+- `git diff --check`
+- `cd rs; cargo fmt --all`
+- `cd lib/winfluent-rs; cargo fmt --all`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior --test ui_contract --test compat_protocol --test compat_client`
+- `cd rs; cargo fmt --all`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract long_document_mode -- --nocapture`
+- `cd rs; cargo fmt --all`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_client -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~CompatHostDispatcherTests|FullyQualifiedName~CompatHostProtocolSerializationTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerProtocolSerializationTests" --logger "console;verbosity=minimal"`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~CompatHostProtocolSerializationTests|FullyQualifiedName~WorkerProtocolSerializationTests" --logger "console;verbosity=minimal"`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~CompatHostDispatcherTests|FullyQualifiedName~CompatHostProtocolSerializationTests|FullyQualifiedName~WorkerProtocolSerializationTests" --logger "console;verbosity=minimal"`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~CompatHostDispatcherTests|FullyQualifiedName~CompatHostProtocolSerializationTests" --logger "console;verbosity=minimal"`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~CompatHostDispatcherTests|FullyQualifiedName~CompatHostProtocolSerializationTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerPackagingTests" --logger "console;verbosity=minimal"`
+- `cd dotnet; dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj -c Release -r win-x64 --self-contained true -o $env:TEMP/easydict-compathost-publish-x64-* -p:PublishTrimmed=false`
+- `cd dotnet; dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj -c Release -r win-x86 --self-contained true -o $env:TEMP/easydict-compathost-publish-x86-* -p:PublishTrimmed=false`

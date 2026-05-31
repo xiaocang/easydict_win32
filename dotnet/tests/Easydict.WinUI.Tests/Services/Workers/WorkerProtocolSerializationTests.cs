@@ -45,10 +45,31 @@ public sealed class WorkerProtocolSerializationTests
             OpenAIApiKey = "sk-test",
             OpenAIModel = "gpt-4o-mini",
             OpenAITemperature = 0.3f,
+            CaiyunToken = "caiyun-token",
+            NiuTransApiKey = "niu-key",
+            YoudaoAppKey = "youdao-key",
+            YoudaoAppSecret = "youdao-secret",
+            YoudaoUseOfficialApi = true,
             ProxyEnabled = true,
             ProxyUri = "http://localhost:7890",
             FoundryLocalEndpoint = "http://localhost:5000",
             LocalAIProvider = LocalAiProviderModes.Auto,
+            OcrEngine = "CustomApi",
+            OcrApiKey = "ocr-key",
+            OcrEndpoint = "https://ocr.example.test/v1/responses",
+            OcrModel = "gpt-vision",
+            OcrSystemPrompt = "Extract text.",
+            OcrLanguage = "ja-JP",
+            ImportedMdxDictionaries =
+            [
+                new ImportedMdxDictionarySnapshot
+                {
+                    ServiceId = "mdx::demo",
+                    DisplayName = "Demo Dictionary",
+                    FilePath = @"C:\Dicts\demo.mdx",
+                    MddFilePaths = [@"C:\Dicts\demo.mdd"],
+                },
+            ],
         };
         var configure = new ConfigureParams { Settings = snapshot };
 
@@ -59,12 +80,37 @@ public sealed class WorkerProtocolSerializationTests
         back!.Settings.Should().NotBeNull();
         back.Settings.OpenAIApiKey.Should().Be("sk-test");
         back.Settings.OpenAITemperature.Should().Be(0.3f);
+        back.Settings.CaiyunToken.Should().Be("caiyun-token");
+        back.Settings.NiuTransApiKey.Should().Be("niu-key");
+        back.Settings.YoudaoAppKey.Should().Be("youdao-key");
+        back.Settings.YoudaoAppSecret.Should().Be("youdao-secret");
+        back.Settings.YoudaoUseOfficialApi.Should().BeTrue();
         back.Settings.ProxyEnabled.Should().BeTrue();
         back.Settings.LocalAIProvider.Should().Be(LocalAiProviderModes.Auto);
+        back.Settings.OcrEngine.Should().Be("CustomApi");
+        back.Settings.OcrApiKey.Should().Be("ocr-key");
+        back.Settings.OcrEndpoint.Should().Be("https://ocr.example.test/v1/responses");
+        back.Settings.OcrModel.Should().Be("gpt-vision");
+        back.Settings.OcrSystemPrompt.Should().Be("Extract text.");
+        back.Settings.OcrLanguage.Should().Be("ja-JP");
+        back.Settings.ImportedMdxDictionaries.Should().ContainSingle();
+        back.Settings.ImportedMdxDictionaries![0].MddFilePaths.Should().Equal(@"C:\Dicts\demo.mdd");
 
         // Sensitive values still appear as plaintext in the wire format — by design,
         // since this only crosses the anonymous stdin pipe between host and worker.
         json.Should().Contain("\"openAIApiKey\":\"sk-test\"");
+        json.Should().Contain("\"caiyunToken\":\"caiyun-token\"");
+        json.Should().Contain("\"niuTransApiKey\":\"niu-key\"");
+        json.Should().Contain("\"youdaoAppKey\":\"youdao-key\"");
+        json.Should().Contain("\"youdaoAppSecret\":\"youdao-secret\"");
+        json.Should().Contain("\"youdaoUseOfficialApi\":true");
+        json.Should().Contain("\"ocrEngine\":\"CustomApi\"");
+        json.Should().Contain("\"ocrApiKey\":\"ocr-key\"");
+        json.Should().Contain("\"ocrEndpoint\":\"https://ocr.example.test/v1/responses\"");
+        json.Should().Contain("\"ocrModel\":\"gpt-vision\"");
+        json.Should().Contain("\"ocrSystemPrompt\":\"Extract text.\"");
+        json.Should().Contain("\"ocrLanguage\":\"ja-JP\"");
+        json.Should().Contain("\"importedMdxDictionaries\"");
     }
 
     [Fact]

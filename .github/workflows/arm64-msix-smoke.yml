@@ -94,6 +94,26 @@ jobs:
             --output ./publish-msix/arm64 `
             -p:PublishTrimmed=true
 
+      - name: Publish .NET Compat Host (arm64)
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj `
+            --configuration Release `
+            --runtime win-arm64 `
+            --self-contained true `
+            --output ./publish-msix/arm64 `
+            -p:PublishTrimmed=false
+
+      - name: Publish Rust helper executables (arm64)
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          ./scripts/Build-RustHelpers.ps1 `
+            -Platform arm64 `
+            -Configuration Release `
+            -OutputDir ./publish-msix/arm64
+
       - name: Publish LongDoc Worker (arm64)
         working-directory: dotnet
         shell: pwsh

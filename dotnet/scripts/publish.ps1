@@ -94,6 +94,37 @@ if (Test-Path $RegistrarExe) {
     Write-Host "WARNING: BrowserHostRegistrar.exe not found at $RegistrarExe" -ForegroundColor Yellow
 }
 
+# Publish .NET Compat Host beside the app for the temporary Rust migration bridge
+$CompatHostProject = Join-Path $SolutionDir "src\Easydict.CompatHost\Easydict.CompatHost.csproj"
+
+Write-Host "Publishing .NET Compat Host..." -ForegroundColor Green
+dotnet publish $CompatHostProject `
+    -c $Configuration `
+    -r "win-$Platform" `
+    --self-contained true `
+    -o $PublishDir `
+    -p:PublishTrimmed=false
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ".NET Compat Host publish failed!" -ForegroundColor Red
+    exit 1
+}
+
+$CompatHostExe = Join-Path $PublishDir "Easydict.CompatHost.exe"
+if (Test-Path $CompatHostExe) {
+    Write-Host "Published Easydict.CompatHost.exe to publish output" -ForegroundColor Green
+} else {
+    Write-Host "WARNING: Easydict.CompatHost.exe not found at $CompatHostExe" -ForegroundColor Yellow
+}
+
+# Build Rust-owned helper executables and copy them beside the app.
+# These names are consumed by the Rust desktop/browser support runtime.
+Write-Host "Publishing Rust helper executables..." -ForegroundColor Green
+& (Join-Path $ScriptDir "Build-RustHelpers.ps1") `
+    -Platform $Platform `
+    -Configuration $Configuration `
+    -OutputDir $PublishDir
+
 # Calculate size
 $files = Get-ChildItem -Path $PublishDir -Recurse -File
 $totalSize = ($files | Measure-Object -Property Length -Sum).Sum

@@ -67,6 +67,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UglyToad.PdfPig.Tokens", ".
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Easydict.Workers.LongDoc", "src\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj", "{4734E233-B9B0-4EB3-AF1E-0EB2B5292A58}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Easydict.CompatHost", "src\Easydict.CompatHost\Easydict.CompatHost.csproj", "{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -389,6 +391,18 @@ Global
 		{4734E233-B9B0-4EB3-AF1E-0EB2B5292A58}.Release|x64.Build.0 = Release|x64
 		{4734E233-B9B0-4EB3-AF1E-0EB2B5292A58}.Release|x86.ActiveCfg = Release|x64
 		{4734E233-B9B0-4EB3-AF1E-0EB2B5292A58}.Release|x86.Build.0 = Release|x64
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Debug|x64.Build.0 = Debug|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Debug|x86.Build.0 = Debug|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Release|x64.ActiveCfg = Release|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Release|x64.Build.0 = Release|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Release|x86.ActiveCfg = Release|Any CPU
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -416,5 +430,6 @@ Global
 		{5B8B2339-9791-48FC-89F7-4E65A0E103DF} = {AB2BBC7D-BD1A-4F69-AE7D-1F990D21DC05}
 		{E1742B63-A84C-495E-929E-6B61A8397D84} = {AB2BBC7D-BD1A-4F69-AE7D-1F990D21DC05}
 		{4734E233-B9B0-4EB3-AF1E-0EB2B5292A58} = {AB2BBC7D-BD1A-4F69-AE7D-1F990D21DC05}
+		{4E0E8CF9-7A10-4FEA-8159-488EE7CA14E5} = {AB2BBC7D-BD1A-4F69-AE7D-1F990D21DC05}
 	EndGlobalSection
 EndGlobal

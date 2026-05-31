@@ -244,15 +244,18 @@ internal sealed class WorkerSpawner
             ZhipuApiKey = settings.ZhipuApiKey,
             ZhipuModel = settings.ZhipuModel,
             DoubaoApiKey = settings.DoubaoApiKey,
+            DoubaoEndpoint = settings.DoubaoEndpoint,
             DoubaoModel = settings.DoubaoModel,
             // GitHubModelsApiKey: SettingsService does not currently expose a key
             // property for github-models (the service uses a different auth flow).
             // When that service is plumbed through the worker, add the corresponding
             // SettingsService property and uncomment.
             GitHubModelsModel = settings.GitHubModelsModel,
-            // CaiyunToken: not currently in SettingsService — leave null and surface
-            // when caiyun is invoked via the worker.
+            CaiyunToken = settings.CaiyunApiKey,
             NiuTransApiKey = settings.NiuTransApiKey,
+            YoudaoAppKey = settings.YoudaoAppKey,
+            YoudaoAppSecret = settings.YoudaoAppSecret,
+            YoudaoUseOfficialApi = settings.YoudaoUseOfficialApi,
             CustomOpenAIApiKey = settings.CustomOpenAIApiKey,
             CustomOpenAIEndpoint = settings.CustomOpenAIEndpoint,
             CustomOpenAIModel = settings.CustomOpenAIModel,
@@ -269,6 +272,14 @@ internal sealed class WorkerSpawner
             OpenVinoDevice = settings.OpenVinoDevice,
             LocalAIProvider = settings.LocalAIProvider,
 
+            // OCR
+            OcrEngine = settings.OcrEngine.ToString(),
+            OcrApiKey = settings.OcrApiKey,
+            OcrEndpoint = settings.OcrEndpoint,
+            OcrModel = settings.OcrModel,
+            OcrSystemPrompt = settings.OcrSystemPrompt,
+            OcrLanguage = settings.OcrLanguage,
+
             // Network
             ProxyEnabled = settings.ProxyEnabled,
             ProxyUri = settings.ProxyUri,
@@ -283,6 +294,18 @@ internal sealed class WorkerSpawner
             LongDocCustomPrompt = settings.LongDocCustomPrompt,
             LayoutDetectionMode = settings.LayoutDetectionMode,
             EnableInternationalServices = settings.EnableInternationalServices,
+            ImportedMdxDictionaries = settings.ImportedMdxDictionaries
+                .Select(dictionary => new ImportedMdxDictionarySnapshot
+                {
+                    ServiceId = dictionary.ServiceId,
+                    DisplayName = dictionary.DisplayName,
+                    FilePath = dictionary.FilePath,
+                    IsEncrypted = dictionary.IsEncrypted,
+                    Regcode = dictionary.Regcode,
+                    Email = dictionary.Email,
+                    MddFilePaths = dictionary.MddFilePaths,
+                })
+                .ToArray(),
         };
     }
 

@@ -72,6 +72,9 @@ public sealed class SettingsSnapshot
     [JsonPropertyName("doubaoApiKey")]
     public string? DoubaoApiKey { get; init; }
 
+    [JsonPropertyName("doubaoEndpoint")]
+    public string? DoubaoEndpoint { get; init; }
+
     [JsonPropertyName("doubaoModel")]
     public string? DoubaoModel { get; init; }
 
@@ -86,6 +89,15 @@ public sealed class SettingsSnapshot
 
     [JsonPropertyName("niuTransApiKey")]
     public string? NiuTransApiKey { get; init; }
+
+    [JsonPropertyName("youdaoAppKey")]
+    public string? YoudaoAppKey { get; init; }
+
+    [JsonPropertyName("youdaoAppSecret")]
+    public string? YoudaoAppSecret { get; init; }
+
+    [JsonPropertyName("youdaoUseOfficialApi")]
+    public bool? YoudaoUseOfficialApi { get; init; }
 
     [JsonPropertyName("customOpenAIApiKey")]
     public string? CustomOpenAIApiKey { get; init; }
@@ -128,6 +140,26 @@ public sealed class SettingsSnapshot
     [JsonPropertyName("localAIProvider")]
     public string? LocalAIProvider { get; init; }
 
+    // ── OCR provider config ────────────────────────────────────────────────
+
+    [JsonPropertyName("ocrEngine")]
+    public string? OcrEngine { get; init; }
+
+    [JsonPropertyName("ocrApiKey")]
+    public string? OcrApiKey { get; init; }
+
+    [JsonPropertyName("ocrEndpoint")]
+    public string? OcrEndpoint { get; init; }
+
+    [JsonPropertyName("ocrModel")]
+    public string? OcrModel { get; init; }
+
+    [JsonPropertyName("ocrSystemPrompt")]
+    public string? OcrSystemPrompt { get; init; }
+
+    [JsonPropertyName("ocrLanguage")]
+    public string? OcrLanguage { get; init; }
+
     // ── Network ─────────────────────────────────────────────────────────────
 
     [JsonPropertyName("proxyEnabled")]
@@ -165,6 +197,11 @@ public sealed class SettingsSnapshot
     [JsonPropertyName("enableInternationalServices")]
     public bool? EnableInternationalServices { get; init; }
 
+    // ── Local MDX dictionaries ─────────────────────────────────────────────
+
+    [JsonPropertyName("importedMdxDictionaries")]
+    public IReadOnlyList<ImportedMdxDictionarySnapshot>? ImportedMdxDictionaries { get; init; }
+
     // ── Resource paths ──────────────────────────────────────────────────────
 
     /// <summary>
@@ -192,4 +229,28 @@ public sealed class SettingsSnapshot
     /// </summary>
     [JsonPropertyName("cacheDir")]
     public string? CacheDir { get; init; }
+}
+
+public sealed class ImportedMdxDictionarySnapshot
+{
+    [JsonPropertyName("serviceId")]
+    public string ServiceId { get; init; } = string.Empty;
+
+    [JsonPropertyName("displayName")]
+    public string DisplayName { get; init; } = string.Empty;
+
+    [JsonPropertyName("filePath")]
+    public string FilePath { get; init; } = string.Empty;
+
+    [JsonPropertyName("isEncrypted")]
+    public bool IsEncrypted { get; init; }
+
+    [JsonPropertyName("regcode")]
+    public string? Regcode { get; init; }
+
+    [JsonPropertyName("email")]
+    public string? Email { get; init; }
+
+    [JsonPropertyName("mddFilePaths")]
+    public IReadOnlyList<string> MddFilePaths { get; init; } = [];
 }

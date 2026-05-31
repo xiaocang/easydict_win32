@@ -149,6 +149,27 @@ jobs:
             --output ./publish/${{ matrix.platform }} `
             -p:PublishTrimmed=true
 
+      # Temporary Rust migration bridge. Published beside the app executable so
+      # Rust resolves it as AppContext.BaseDirectory + "Easydict.CompatHost.exe".
+      - name: Publish .NET Compat Host
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --output ./publish/${{ matrix.platform }} `
+            -p:PublishTrimmed=false
+
+      - name: Publish Rust helper executables
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          ./scripts/Build-RustHelpers.ps1 `
+            -Platform ${{ matrix.platform }} `
+            -Configuration Release `
+            -OutputDir ./publish/${{ matrix.platform }}
+
       # Publish LongDoc worker (out-of-process PDF + ONNX layout detection).
       # Resolved by host via AppContext.BaseDirectory + "workers/longdoc/Easydict.Workers.LongDoc.exe".
       # No trimming — MuPDF.NET and ONNX Runtime use reflection that breaks under IL trim.
@@ -229,6 +250,25 @@ jobs:
             --self-contained true `
             --output ./publish-msix/${{ matrix.platform }} `
             -p:PublishTrimmed=true
+
+      - name: Publish .NET Compat Host (MSIX)
+        working-directory: dotnet
+        run: |
+          dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj `
+            --configuration Release `
+            --runtime win-${{ matrix.platform }} `
+            --self-contained true `
+            --output ./publish-msix/${{ matrix.platform }} `
+            -p:PublishTrimmed=false
+
+      - name: Publish Rust helper executables (MSIX)
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          ./scripts/Build-RustHelpers.ps1 `
+            -Platform ${{ matrix.platform }} `
+            -Configuration Release `
+            -OutputDir ./publish-msix/${{ matrix.platform }}
 
       # Publish LongDoc worker into MSIX output. The publish dir becomes a subtree under
       # the package root (workers/longdoc/), and runFullTrust + same-package identity

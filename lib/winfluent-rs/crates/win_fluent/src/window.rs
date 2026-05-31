@@ -172,6 +172,7 @@ pub enum WindowCommand<Message> {
     Close(WindowId),
     Show(WindowId),
     Hide(WindowId),
+    ToggleVisibility(WindowId),
     Focus(WindowId),
     CloseCurrent,
     MinimizeCurrent(bool),

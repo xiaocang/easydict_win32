@@ -1,0 +1,1018 @@
+# Easydict Win32 迁移功能与测试核对清单
+
+> 范围：本清单基于 `dotnet/` 下源码、测试、worker、脚本和本地库阅读整理，用于迁移实现时逐项对照。每个迁移项都应同时满足“行为一致”“交互一致”“可验证标准可执行”。  
+> 核心验证命令均从 `dotnet/` 目录执行。
+
+## 0. 总体验收命令
+
+- 基础构建
+  - `dotnet restore`
+  - `dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Debug`
+  - `dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release`
+- 单元/行为测试
+  - `dotnet test tests/Easydict.Llm.Streaming.Tests --logger "console;verbosity=minimal"`
+  - `dotnet test tests/Polyglot.TextLayout.Tests --logger "console;verbosity=minimal"`
+  - `dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=minimal"`
+  - `dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"`
+  - `dotnet test lib/LexIndex/tests/LexIndex.Tests --logger "console;verbosity=minimal"`
+- UI 自动化
+  - `dotnet test tests/Easydict.UIAutomation.Tests --logger "console;verbosity=detailed" --filter "Category=UIAutomation"`
+  - 需要 MSIX 安装包或设置 `EASYDICT_EXE_PATH`。
+- 集成测试
+  - `make test-integration`
+  - 可按服务筛选：`make test-integration SERVICE=openai`
+  - 需要相应环境变量；部分上游不可用测试显式跳过。
+- Sidecar E2E
+  - `dotnet run --project e2e/E2E.SidecarClient.csproj`
+  - 覆盖 health、translate、未知方法、并发、超时、崩溃、shutdown、stderr 日志。
+
+## 1. 项目边界与运行形态
+
+- WinUI 主应用：`src/Easydict.WinUI`
+  - 行为：承载主窗口、设置页、Mini/Fixed/PopButton 窗口、热键、托盘、OCR、长文档 UI、本地词典、浏览器桥接安装入口。
+  - 可验证标准：Debug/Release 构建成功；启动后主窗口标题包含 `Easydict`；关闭/最小化/托盘行为可重复。
+  - 已有覆盖：`MainWindowTests`、`WindowLifecycleTests`、`WindowClosedLifecycleTests`、`MainPageLifecycleLeakTests`。
+- 翻译核心库：`src/Easydict.TranslationService`
+  - 行为：统一 `ITranslationService`/`IStreamTranslationService`、服务注册、缓存、重试、语言映射、长文档核心、公式保护、内容保真。
+  - 可验证标准：`TranslationManager` 默认注册所有非条件服务；未知服务抛出 `TranslationException`；流式与非流式都可按服务 ID 调用。
+  - 已有覆盖：`TranslationManagerTests`、`BaseOpenAIServiceTests`、各服务单元测试。
+- 文档导出/解析：`src/Easydict.DocumentExport`
+  - 行为：提供长文档导出管线可复用的 PDF/Markdown/TXT 输出能力，保持译文、双语段落、页码和基础布局信息。
+  - 可验证标准：导出的 Markdown/TXT 可读且顺序稳定；PDF 输出可打开，页数和段落顺序符合输入。
+  - 已有覆盖：长文档导出、PDF export、MuPDF spacing、content preservation 相关测试间接覆盖。
+- 本地推理库：`src/Easydict.OpenVINO` 与 `src/Easydict.WindowsAI`
+  - 行为：封装 OpenVINO、Windows AI/Phi Silica/Foundry Local 等本地模型能力，供 Local AI worker 和 UI 服务调用。
+  - 可验证标准：未安装运行时或模型时返回可解释不可用状态；模型恢复/懒加载失败不阻塞普通在线翻译。
+  - 已有覆盖：`LocalAiWorkerClientFallbackTests`、`OpenVINO`、`PhiSilica`、`FoundryLocal` recovery 相关测试。
+- Worker 进程
+  - `src/Easydict.Workers.LongDoc`：长文档 worker，启动后发送 `ready` 事件，支持 `configure`、`translate_document`、`cancel`、`shutdown`，翻译结束后退出。
+  - `src/Easydict.Workers.LocalAi`：本地 AI worker，支持翻译、流式翻译、语法纠错、模型准备、模型列表、可用性检查。
+  - `src/Easydict.Workers.Ocr`：Windows OCR worker，接收 BGRA8 像素和语言标签，返回文本、行框、语言。
+  - 可验证标准：worker 协议版本一致；ready/configure 超时失败可回退；取消请求可传递到 worker。
+  - 已有覆盖：`WorkerProtocolSerializationTests`、`LongDocWorkerPipelineTests`、`LongDocWorkerLifecycleTests`、`LocalAiWorkerClientFallbackTests`、`OcrWorkerClientFallbackTests`。
+- Sidecar/IPC
+  - `src/Easydict.SidecarClient`：JSON Lines stdio IPC、请求 ID 多路复用、事件、stderr、超时、进程退出。
+  - 可验证标准：并发 10 个请求响应不串线；未知方法映射 remote error；子进程崩溃触发退出异常。
+  - 已有覆盖：`e2e/E2E.SidecarClient.csproj`、`WorkerProtocolSerializationTests`。
+- 浏览器与原生桥
+  - `src/Easydict.NativeBridge`：浏览器 Native Messaging host，接收浏览器消息并触发 Easydict OCR。
+  - `src/Easydict.BrowserRegistrar`：MSIX 沙盒外写入 Chrome/Firefox Native Messaging 注册表。
+  - 可验证标准：manifest JSON 合法，Chrome allowed origins 包含 Web Store 和 sideload ID，Firefox extension ID 正确，install/uninstall/status 输出 JSON。
+  - 已有覆盖：`Easydict.BrowserRegistrar.Tests` 26 个测试。
+- 本地库
+  - `src/Polyglot.TextLayout`：文本分段、禁则、行布局、字体缩放。
+  - `lib/LexIndex`：本地词典补全/通配索引。
+  - `lib/PdfPig`：vendored PDF 解析库，包含 `UglyToad.PdfPig.Core`、`UglyToad.PdfPig.Fonts`、`UglyToad.PdfPig.Tokenization`、`UglyToad.PdfPig.Tokens`、`UglyToad.PdfPig`。
+  - 可验证标准：CJK/Latin 混排换行、通配查询、Unicode normalization 行为一致。
+  - 已有覆盖：`Polyglot.TextLayout.Tests` 121 个测试；`LexIndex.Tests` 10 个测试。
+- 工具项目
+  - `tools/EncryptSecret`：对需要随包发布或本地保存的 secret 做加密辅助。
+  - `tools/PdfToImages`：PDF 页面转图片的诊断/验证工具。
+  - `tools/MsixValidate`：MSIX 输出和依赖结构验证工具。
+  - 可验证标准：工具项目可独立构建；发布流程或手工诊断引用路径保持一致。
+
+## 2. 快速翻译主流程
+
+- 主窗口 Quick Translate
+  - 行为：
+    - 主窗口启动后显示模式选择、状态、设置按钮、源语言、目标语言、交换按钮、输入框、翻译按钮、结果区域。
+    - 输入框支持多行；普通 Enter 触发查询；Shift+Enter 或 Ctrl+Enter 插入换行。
+    - 翻译按钮和 Enter 都走同一查询路径。
+    - 查询中显示 loading，旧查询被取消，新查询接管 UI 状态。
+  - 交互：
+    - `SourceLangCombo`/`TargetLangCombo` 和窄布局对应控件保持同步。
+    - `SwapLanguageButton` 交换源/目标并标记目标语言为手动选择。
+    - `SettingsButton` 进入设置页，返回后恢复主窗口。
+  - 可验证标准：
+    - 输入 `Hello` 后 Enter，结果区域出现至少一个服务结果状态，不应卡死 UI。
+    - Shift+Enter/Ctrl+Enter 后输入框新增换行，不触发翻译。
+    - 连续触发两次查询，前一次被取消且最终 UI 只展示最后输入。
+  - 已有覆盖：
+    - UI：`MainWindow_ShouldHaveLanguageControls`、`MainWindow_InputTextBox_ShouldAcceptText`、`MainWindow_TranslateWithEnter`。
+    - 单元：`ShortTextUIFreezeTests`、`SelectionPerformanceTests`、`QueryOutcomeSummaryTests`。
+- 自动目标语言和语法纠错路由
+  - 行为：
+    - `TargetLanguageSelector` 使用 First/Second Language 规则：源语言等于第一语言时目标为第二语言，否则为第一语言。
+    - 目标语言手动选择后，自动选择暂停，直到窗口重开或显式 reset。
+    - 当有效源语言与目标语言相同且服务支持语法纠错时，进入 `QueryMode.GrammarCorrection`。
+    - 如果请求了同语言但无可用语法纠错服务，则回退到不同目标语言翻译。
+  - 可验证标准：
+    - First=`zh`、Second=`en`：英文源自动译成中文；中文源自动译成英文。
+    - 源/目标均为英文且启用支持语法服务时，结果控件显示语法纠错内容结构。
+  - 已有覆盖：`TargetLanguageSelectorTests`、`GrammarCorrectionParserTests`、`ServiceResultItem` 语法结果相关测试。
+- 语言支持
+  - 行为：
+    - `Language` 模型保存 BCP-47/code/display name，并支持 `Auto`、中英日韩、欧洲语言、东南亚语言等常用翻译目标。
+    - UI 字符串资源覆盖 `ar-SA`、`da-DK`、`de-DE`、`en-US`、`fr-FR`、`hi-IN`、`id-ID`、`it-IT`、`ja-JP`、`ko-KR`、`ms-MY`、`th-TH`、`vi-VN`、`zh-CN`、`zh-TW`。
+    - 设置页 `SelectedLanguages` 控制 source/target picker 可见语言集合。
+  - 可验证标准：
+    - 任一 UI 语言切换后主窗口和设置页关键文本刷新。
+    - 取消某语言后，主/Mini/Fixed 的语言选择器不再显示该语言。
+  - 已有覆盖：`LocalizationServiceTests`、`LanguageBcp47Tests`、Settings Language tab 行为测试。
+- 多服务结果
+  - 行为：
+    - 主/Mini/Fixed 三类窗口各自维护 enabled services 列表和 per-service `EnabledQuery`。
+    - 自动查询只跑 `EnabledQuery=true` 的服务；手动展开/点击可单独查询服务。
+    - 流式服务实时追加 chunk；非流式服务等待完整结果；UI 更新有节流。
+    - `HideEmptyServiceResults` 开启时，无结果字典项降级/隐藏。
+    - 结果支持展开/折叠、重试、复制、播放 TTS、替换回源应用。
+  - 可验证标准：
+    - 开启两个服务后查询，结果顺序与设置页服务顺序一致。
+    - 单个服务失败不阻断其他服务完成。
+    - 流式服务 chunk 可逐步显示，完成后状态为成功或错误。
+  - 已有覆盖：`TranslationManagerServiceTests`、`ServiceResultDemotionHelperTests`、`ResultsInputRouterTests`、`ServiceResultItemLifecycleLeakTests`、UI `TranslationTests`。
+- 本地词典建议
+  - 行为：
+    - 启用本地词典建议且存在已导入 MDX 字典时，输入当前 token 后延迟查询补全。
+    - 支持普通前缀补全和 `*`/`?` 通配查询。
+    - Tab/Down 进入建议导航；Up/Down 移动；Enter 应用；Escape 隐藏；Shift+Tab 退出。
+    - 应用建议只替换当前 token，不立即触发翻译，并恢复输入框焦点。
+  - 可验证标准：
+    - `app` 可补全为 `apple`；`tea*` 可返回通配结果；`app/test` 不触发补全。
+    - 没有可用本地词典时，设置项应禁用或提示不可用。
+  - 已有覆盖：`MainPageSuggestionLogicTests`、`LocalDictionaryIndexServiceTests`、`LexIndexBuilderTests`。
+
+## 3. 窗口、托盘和全局热键
+
+- 主窗口
+  - 行为：保存窗口宽高 DIPs；支持最小化到托盘、启动后最小化、Always on top、系统/浅色/深色/Minimal 主题。
+  - 可验证标准：调整大小、重启后尺寸恢复；主题切换时标题栏和内容区域颜色同步。
+  - 已有覆盖：`WindowPositionHelperTests`、`DarkModeTests`、`ThemeContrastTests`、`MemoryGateTests`。
+- Mini Window
+  - 行为：
+    - `Ctrl+Alt+M` 显示；`Ctrl+Alt+Shift+M` 切换显示/隐藏。
+    - 支持输入、语言选择、交换、翻译、TTS、结果列表、状态文字。
+    - 默认可自动关闭；Pin 后保持显示；保存位置、宽高、pin 状态。
+    - `ShowWithText` 设置文本并自动翻译。
+  - 可验证标准：
+    - 打开后输入框可见；关闭再打开仍可见；长文本不会让窗口超出边界。
+  - 已有覆盖：`MiniWindowFocusTests`、`MiniWindowLongTextTests`、`MiniWindow_TranslateWithEnter`。
+- Fixed Window
+  - 行为：
+    - `Ctrl+Alt+F` 显示；`Ctrl+Alt+Shift+F` 切换。
+    - 固定窗口不因失焦自动关闭，始终置顶；支持同主窗口一致的查询能力。
+    - 保存位置和尺寸。
+  - 可验证标准：热键可打开；输入 `Hello` 后 Enter 有结果；关闭后可重新创建。
+  - 已有覆盖：`FixedWindow_TranslateWithEnter`、`WindowClosedLifecycleTests`。
+- 托盘
+  - 行为：
+    - 左键显示主窗口。
+    - 菜单包含 Show、Translate Clipboard、OCR Translate、Show Mini、Show Fixed、浏览器支持安装/卸载、退出。
+    - OCR 菜单项显示默认热键提示。
+  - 可验证标准：托盘动作调用相同服务路径；退出时释放热键、托盘、hook、worker 相关资源。
+  - 已有覆盖：以 UI/生命周期测试和 App 清理逻辑测试为主。
+- 热键
+  - 默认：
+    - `Ctrl+Alt+T`：显示/隐藏主窗口。
+    - `Ctrl+Alt+D`：翻译剪贴板/当前选择。
+    - `Ctrl+Alt+M`：显示 Mini。
+    - `Ctrl+Alt+Shift+M`：切换 Mini。
+    - `Ctrl+Alt+F`：显示 Fixed。
+    - `Ctrl+Alt+Shift+F`：切换 Fixed。
+    - `Ctrl+Alt+S`：OCR 截图翻译。
+    - `Ctrl+Alt+Shift+S`：静默 OCR 到剪贴板。
+  - 行为：
+    - 每个热键可配置字符串和启用开关。
+    - Mini/Fixed toggle 热键由基础热键自动加 Shift。
+    - 热键 reload 会先 unregister 再 register。
+  - 可验证标准：禁用某热键后不注册；非法热键不会崩溃；触发对应事件。
+  - 已有覆盖：`HotkeyParser` 相关逻辑通过 WinUI 行为测试间接覆盖，UIAutomation 覆盖 Mini/Fixed/OCR 热键。
+
+## 4. 翻译服务
+
+- 默认服务注册
+  - `google`：Google Translate，免密。
+  - `google_web`：Google Dict，免密，字典展示。
+  - `bing`：Bing Translate，免密，支持中国区 host 切换。
+  - `deepl`：DeepL，web/free/quality 配置。
+  - `youdao`：Youdao，web 模式免密，也支持官方 API app key/secret。
+  - `openai`：OpenAI，API key，默认 Responses endpoint。
+  - `ollama`：本地 OpenAI-compatible endpoint，免密。
+  - `builtin`：Built-in AI，内置 endpoint/key 或直连配置，带 device token。
+  - `deepseek`、`groq`、`zhipu`、`github`、`custom-openai`：OpenAI-compatible streaming。
+  - `gemini`：Gemini 自定义流式协议。
+  - `doubao`：Doubao/火山 Ark Responses 风格流式协议。
+  - `caiyun`、`niutrans`、`volcano`：传统 HTTP 翻译服务。
+  - `linguee`：条件编译 `ENABLE_LINGUEE_SERVICE` 才注册。
+  - `windows-local-ai`：WinUI 层注册的本地 AI 聚合服务。
+  - `mdx::*`：用户导入的 MDX 字典服务。
+- OpenAI-compatible 行为
+  - 支持 Chat Completions 和 Responses API；根据 endpoint 后缀自动识别，也可在设置中 pin 格式。
+  - 支持流式翻译和流式语法纠错。
+  - 自定义 prompt 可拼入系统提示。
+  - API key 缺失时按服务配置状态失败，不应发送请求。
+  - 可验证标准：`/responses` endpoint 走 Responses parser；其他 endpoint 默认 Chat Completions；stream `[DONE]` 后停止。
+  - 已有覆盖：`BaseOpenAIServiceTests`、`OpenAIApiFormatDetectionTests`、`ResponsesSseParserTests`、`Easydict.Llm.Streaming.Tests`。
+- 翻译缓存和音标增强
+  - 行为：
+    - `TranslationManager`/`TranslationCacheService` 短文本缓存按 service/source/target/text SHA key 命中。
+    - 目标为英文且服务结果缺少目标音标、结果像单词/短语时，使用 Youdao 补目标音标。
+    - 同一音标查询 stampede 被合并，避免并发重复请求。
+  - 可验证标准：重复查询应返回缓存；并发同词音标补全只触发一次 Youdao fetch。
+  - 已有覆盖：`TranslationManagerTests`、`PhoneticEnrichmentIntegrationTests`、`PhoneticCacheStampedeTests`。
+- 外部服务集成测试
+  - Google：英文到中文、中文到英文。
+  - Youdao：英文词、短语、句子、中文到英文、多行、US/UK 音标、释义、音频 URL。
+  - OpenAI/DeepSeek/Groq/Zhipu/GitHub Models/Gemini/Doubao：英中、中英、流式 chunk。
+  - Caiyun/NiuTrans：英中、中英。
+  - Volcano：英中、中英、自动检测、繁中、文言、日英、韩中、长文本。
+  - DeepL：英中、中英。
+  - Bing 和 Linguee 集成测试当前因上游问题 Skip。
+  - 可验证标准：缺少环境变量时 SkippableFact 跳过；配置环境变量后断言翻译文本非空且语言方向合理。
+
+## 5. 本地 AI
+
+- 聚合服务
+  - 行为：
+    - 用户只看到一个服务：Windows Local AI。
+    - Provider 模式：`Auto`、`WindowsAI`/Phi Silica、`FoundryLocal`、`OpenVINO`。
+    - Auto 顺序：Phi Silica → Foundry Local → OpenVINO。
+    - 仅当实际使用时 lazy materialize 子服务。
+    - 支持翻译、流式翻译、语法纠错、模型准备状态。
+  - 可验证标准：
+    - Auto 模式中前一个 provider 网络/运行时失败且未输出 chunk 时，回退到下一个。
+    - Explicit FoundryLocal 不应回退 OpenVINO。
+    - Warmup 失败会标记 Phi 不健康并回退。
+  - 已有覆盖：`LocalAITranslationServiceIntegrationTests`、`LocalAITranslationServiceLazyInitTests`、`OpenVinoTranslationServiceTests`、`PhiSilicaTranslationServiceTests`、`FoundryLocalServiceTests`。
+- Foundry Local
+  - 行为：
+    - Endpoint 可空，为空时通过 CLI/runtime status/log 自动解析 endpoint。
+    - 支持启动/准备模型、检查状态、模型列表 endpoint。
+    - loopback endpoint 可交给 runtime controller 生命周期管理；非 loopback 视作用户自管服务。
+  - 可验证标准：endpoint normalization 正确；日志中可提取最新 endpoint；启动超时/服务未就绪给可恢复错误。
+  - 已有覆盖：`FoundryLocalServiceTests`、`FoundryLocalRecoveryCoordinatorTests`。
+- OpenVINO
+  - 行为：
+    - 支持 NLLB tokenizer/inference、设备配置、模型/运行时下载、CPU/OpenVINO EP 包体约束。
+    - 支持与 worker fallback 配合。
+  - 可验证标准：模型未下载时状态提示；下载进度可上报；worker 包不默认携带 OpenVINO native EP。
+  - 已有覆盖：`OpenVinoTranslationServiceTests`、`ModelDownloadService` 相关测试、`WorkerPackagingTests`。
+
+## 6. OCR 截图翻译
+
+- 触发入口
+  - `Ctrl+Alt+S`：截图 → OCR → MiniWindow 翻译。
+  - `Ctrl+Alt+Shift+S`：截图 → OCR → 文本写入剪贴板。
+  - 托盘菜单 OCR Translate。
+  - Shell context menu `--ocr-translate`。
+  - 浏览器扩展通过 NativeBridge/`easydict://ocr-translate`。
+  - 命名事件：`Local\Easydict-OcrTranslate`。
+- ScreenCapture overlay
+  - 行为：
+    - 独立 STA 线程运行 Win32/GDI+ overlay，不阻塞 UI 线程。
+    - BitBlt 冻结多屏虚拟桌面，显示半透明遮罩、窗口检测高亮、放大镜、尺寸/提示。
+    - Hover 自动检测窗口；滚轮改变检测深度。
+    - 双击检测窗口直接确认。
+    - 点击拖拽超过 5px 进入自由框选，松开确认。
+    - 右键/Esc 在 Selecting 返回 Detecting；Detecting 中右键/Esc 取消。
+    - 并发 capture 被拒绝返回 null。
+  - 可验证标准：Overlay 出现；Esc 取消；第二次 hotkey 仍能打开；捕获结果为 BGRA8、宽高和屏幕矩形有效。
+  - 已有覆盖：UI `OcrHotkey_ShouldShowCaptureOverlay`、`OcrHotkey_EscapeShouldCancelOverlay`、`OcrHotkey_SecondTriggerShouldWork`；单元 `WindowDetectorTests`、`GdiSafeHandleTests`。
+- OCR 引擎
+  - Windows Native：
+    - 使用 `Windows.Media.Ocr`，支持用户系统语言包；首选语言不可用时回退用户 profile。
+    - 输入 BGRA8；返回合并文本、行列表、BoundingRect、TextAngle、DetectedLanguage。
+  - Ollama OCR：
+    - 使用本地 VLM endpoint/model/system prompt。
+  - Custom API OCR：
+    - 使用 OpenAI-compatible image request，支持 Responses/Chat 风格解析。
+  - Worker：
+    - `UseOcrWorker=true` 时短生命周期 worker 执行 Windows OCR；worker 不可用或退出时回退 in-proc。
+  - 可验证标准：
+    - CJK 连续字符不插入空格，Latin word 间插入空格。
+    - 同一视觉行按 Y 容差分组、每行从左到右排序。
+    - 自定义 API 返回文本可解析，错误响应不崩溃 UI。
+  - 已有覆盖：`OcrTextMergerTests`、`OcrServiceFactoryTests`、`CustomApiOcrServiceTests`、`OllamaOcrServiceTests`、`OcrWorkerClientFallbackTests`。
+
+## 7. 鼠标选词翻译与 Pop Button
+
+- 全局 hook
+  - 行为：
+    - `WH_MOUSE_LL` 检测拖拽选择；拖拽阈值 `MouseHookService.MinDragDistance=10px`，以左键按下点到移动点的平方距离计算。
+    - `WH_KEYBOARD_LL` 检测键盘用于 dismiss。
+    - 合成 Ctrl+C 事件带 `EASYDICT_SYNTHETIC_KEY` 标记，避免被自己的 keyboard hook dismiss。
+    - 多击检测使用系统 `GetDoubleClickTime()`，连续点击距离不超过 `MultiClickDetector.MaxClickDistance=4px`。
+    - double-click/triple-click 是非拖拽 click count 达到 2 及以上后，等待 `doubleClickTime + 50ms` 再触发，给第三击留出窗口。
+    - 拖拽选区在左键抬起时立即触发，并取消等待中的多击定时器；普通短点击不触发。
+    - 排除 app 列表默认包含 `code`，可配置。
+  - 可验证标准：拖拽、双击、三击均触发；小于 10px 的拖动和普通短点击不触发；超过 4px 或超出 double-click 时间的连续点击不算多击；排除 app 不触发。
+  - 已有覆盖：`MouseHookServiceTests`、UI `PopButtonSelectionTests`。
+- TextSelection
+  - 行为：
+    - 优先 UIA 获取选中文本。
+    - Electron app 优先 clipboard；terminal app 禁止 Ctrl+C，避免 SIGINT。
+    - 普通 app UIA 失败后 clipboard fallback，使用 sequence number 等待 450ms 左右。
+    - 连续非文本剪贴板 payload 会对该进程 suppress fallback 5 分钟。
+    - 操作后尽量恢复原剪贴板。
+  - 可验证标准：终端进程不发送 Ctrl+C；非文本 clipboard 连续失败后不再浪费时间；正常文本可提取。
+  - 已有覆盖：`TextSelectionServiceTests`、`SelectionPerformanceTests`。
+- PopButton
+  - 行为：
+    - 功能总开关 `MouseSelectionTranslate` 必须开启；`PopButtonService` 显示前还会再次检查前台进程是否在 excluded apps 列表。
+    - 新选区会取消上一轮 pending selection；选中后等待 `SelectionDelayMs=150ms` 再读文本，让源应用完成选区状态。
+    - 选中文本为空、全空白、读取失败或服务已禁用时不显示浮窗。
+    - `PopButtonWindow` 为 no-activate/toolwindow/topmost，点击不抢源 app 焦点，不出现在任务栏。
+    - 30x30 按钮按 DPI 缩放，位置为鼠标触发点右上方：`x + 8px`、`y - 32px` 后按当前 display work area clamp，避免出屏。
+    - 30x30 按钮随 MiniWindow QueryMode 更新图标：翻译模式为 `E8C1`，语法纠错为 `E70F`，tooltip 同步切换。
+    - `AutoDismissMs=5000ms` 无交互自动消失；左键 elsewhere、右键、滚轮、键盘、新选择均 dismiss。
+    - 点击按钮后捕获源窗口，打开 MiniWindow 并 `ShowWithText`。
+  - 悬浮效果：
+    - Light 默认 opacity `0.75`，Dark 默认 opacity `0.94`，Minimal 默认 opacity `1.0`。
+    - hover 时 opacity 提升到 `1.0`，cursor 变 hand；pressed 时 opacity 降为 `0.85`。
+    - pointer exited/canceled/capture lost 或 HidePopup 时必须清除 `_isPointerOver`/`_isPressed`，恢复默认 opacity 和 arrow cursor。
+    - 背景/边框/前景来自 `PopButtonBackgroundBrush`、`PopButtonBorderBrush`、`PopButtonForegroundBrush`；主题切换后立即刷新。
+  - 可验证标准：拖选 Notepad 后按钮出现在鼠标释放点右上方且不出屏；5 秒后消失；点击按钮打开 MiniWindow；点击按钮自身不被 hook 误 dismiss；hover/pressed/release/cancel 后 opacity 和 cursor 状态恢复。
+  - 已有覆盖：`PopButtonServiceTests`、UI `DragSelect_InNotepad_PopButtonAppears`、`DoubleClick_InNotepad_PopButtonAppears`、`PopButton_Click_OpensMiniWindow`。
+
+## 8. 长文档翻译
+
+- UI 与任务队列
+  - 行为：
+    - 主窗口模式菜单可在 Quick Translate 与 Long Document 间切换。
+    - 输入模式：Text、Markdown、PDF。
+    - 输出模式：Mono、Bilingual、Both。
+    - 可选源/目标语言、服务、并发数、页码范围、输出文件夹、Two-pass document context。
+    - 支持多文件选择，形成队列逐个处理；每个文件有状态、进度、输出路径、失败信息。
+    - 运行中锁定设置，取消可停止当前单任务/队列。
+    - History 最多 50 条，可清空。
+  - 可验证标准：
+    - LongDoc tab 控件全部可见可交互；输入/输出模式下拉切换；并发 NumberBox 可输入；页码 TextBox 可输入。
+    - 多文件队列中一个失败不应阻断后续文件状态更新。
+  - 已有覆盖：UI `LongDocTranslationTests`、`LongDocumentServiceSupportTests`。
+- 输入解析
+  - Text：按文本块处理，导出 txt。
+  - Markdown：保留 Markdown 结构，导出 md，支持双语 interleave。
+  - PDF：
+    - 使用 PdfPig/MuPDF 读取文字、坐标、字体、颜色、行位置、旋转。
+    - 可按页码范围 `1-3,5,7-10` 过滤。
+    - 扫描页可走 OCR fallback。
+    - 布局识别模式：Auto、OnnxLocal、VisionLLM、Heuristic。
+    - ONNX DocLayout-YOLO 和 TATR 相关模型可下载；Vision LLM 可选 OpenAI/Gemini/Custom OpenAI。
+  - 可验证标准：
+    - 页码解析：空/all/null 为全部；越界 clamp；非法片段跳过或返回 null，符合 `PageRangeParserTests`。
+    - PDF 无文字且无扫描页时抛出 “No source text found”。
+  - 已有覆盖：`PageRangeParserTests`、`DocLayoutYoloServiceTests`、`LayoutDetectionStrategyTests`、`TableStructureRecognitionServiceTests`。
+- 核心 pipeline
+  - 阶段：
+    - Parsing → BuildingIr → FormulaProtection → DocumentContext → Translating → Exporting。
+    - 每阶段报告 percentage/block/page。
+    - 阶段间 `Task.Yield()`，避免 UI 长时间冻结。
+  - IR：
+    - `SourceDocument` → `DocumentIr` → `TranslatedDocumentPage/Block`。
+    - 保留 block id、page、source hash、bounding box、style、formula chars、soft protected spans、fallback text。
+  - Two-pass：
+    - Pass 1 按页提取 summary、glossary、preservation hints。
+    - Pass 2 将 summary/glossary 注入 block prompt。
+    - preservation hints 命中块跳过翻译并在 PDF 中保留原文。
+    - Pass 1 失败降级为空 context，不阻断 Pass 2。
+  - 并发：
+    - `MaxConcurrency` 下限 1，上限 UI clamp 到 16。
+    - per-block 翻译并发执行；跳过块不占翻译调用。
+    - 取消 token 应及时停止。
+  - 可验证标准：
+    - 100 blocks 在时间预算内完成；并发 4 快于顺序；取消中途在预算内返回。
+    - 失败块记录 retry count、last error 和 quality report。
+  - 已有覆盖：`LongDocumentTranslationServiceTests`、`ParallelTranslationTests`、`LongDocUIFreezeTests`、`LongDocumentTwoPassTests`。
+- 公式与内容保护
+  - 行为：
+    - 支持字体 regex、数学 Unicode regex、上下标密度、字符级重构、公式 token `{v0}` 等。
+    - 公式-only/数学字体密集/NumericData/LlmHint 等块可跳过翻译并保留原 PDF text operators。
+    - 翻译后恢复 placeholder；delimiter 不平衡或 soft span 被破坏时回退原文/重试。
+    - 支持自定义公式字体/字符 regex 设置。
+  - 可验证标准：
+    - 多公式 placeholder 按顺序恢复；公式 prompt 仅在有公式时注入；公式-only 块不调用翻译。
+  - 已有覆盖：`FormulaProtection/*Tests.cs`、`ContentPreservation/*Tests.cs`、`FormulaDetectionTests`。
+- 导出
+  - PDF：
+    - `Overlay`：PdfSharpCore 白框覆盖+重绘。
+    - `ContentStreamReplacement`：MuPDF.NET 替换 content stream，保留图形和字体，默认更高质量。
+    - CJK 字体按目标语言下载/解析，避免缺字。
+  - Markdown/Text：
+    - 输出 translated-only、bilingual 或 both。
+  - Cache/dedup：
+    - `EnableTranslationCache` 时读写持久缓存。
+    - 同一输入/服务/目标可 dedup 到已有输出路径。
+  - Retry：
+    - PartialSuccess 且 checkpoint 存在时，Retry Failed 只重译失败 chunks。
+  - 可验证标准：
+    - PDF 输出可打开且页数/页码范围符合预期。
+    - Bilingual/Both 模式输出路径正确，双语文件非空。
+    - Retry 后失败集合缩小或状态保持 PartialSuccess 并报告错误。
+  - 已有覆盖：`DocumentExportServiceTests`、`PdfExportServiceLayoutTests`、`MuPdfExportServiceSpacingTests`、`LongDocWorkerPipelineTests`、`PdfTranslationVisualTest`。
+
+## 9. 本地 MDX/MDD 词典
+
+- 导入与注册
+  - 行为：
+    - 设置页可导入 MDX；自动发现同目录 MDD，或使用保存的 MDD 路径。
+    - 每个词典注册为 `mdx::*` 服务，显示名来自导入配置。
+    - 加密词典需要 regcode/email；未配置时 `RequiresApiKey=true`，不应加载查询。
+  - 可验证标准：导入后服务列表出现；删除后服务注销且索引文件可删除。
+  - 已有覆盖：`MdxDictionaryTranslationServiceTests`、`SettingsPageMdxServiceIdTests`。
+- 查词与资源
+  - 行为：
+    - 支持 MDX lookup、`@@@LINK` redirect，限制过多 redirect。
+    - HTML 定义可走 WebView 展示；MDD 图片/资源可解析。
+    - 词典 miss 应是中性空结果，不应作为严重错误影响其他服务。
+  - 可验证标准：MDD resource key 可读取；加密词典正确/错误密钥行为明确；dictionary webview 有截图可复查。
+  - 已有覆盖：`MdxMddResourceTests`、`MdxEncryptedLookupTests`、`MdxEncryptionTests`、UI `DictionaryWebViewRenderingTests`。
+- 索引和建议
+  - 行为：
+    - `LocalDictionaryIndexService` 为每个词典维护 manifest/fingerprint。
+    - 源文件 fingerprint 改变时 rebuild。
+    - 多词典结果按请求服务顺序合并并去重。
+    - 加密词典没有凭据时跳过索引。
+  - 可验证标准：manifest 匹配 service/source fingerprint；通配查询跨多索引返回顺序正确。
+  - 已有覆盖：`LocalDictionaryIndexServiceTests`、`LexIndexBuilderTests`。
+
+## 10. 设置页
+
+- 页面结构与首屏视觉
+  - 设置页承载在主窗口 Frame 内，保留外层 WinUI 标题栏；截图 `screenshot/settings.png` 与 UIA `05_settings_page` 显示首屏为浅色背景、左上返回按钮、大号 `Settings` 标题和上方 tab 矩阵。
+  - 初次进入时只显示居中 `LoadingOverlay`：32px `ProgressRing`；初始化完成后隐藏 overlay，显示 `MainScrollViewer`。
+  - 主内容在 `MainScrollViewer` 内，padding 24，最大宽度 1040，居中，顶层 section 间距 24；页面底部预留 80px，避免被浮动保存按钮遮挡。
+  - Header：`BackButton` 使用 accent button 样式，内容是 Segoe Fluent Icons 返回箭头 `E72B`；标题 `SettingsHeaderText` 28px semibold。
+  - 右下角 `SaveButton` 是固定浮动按钮，默认隐藏；任一设置产生实际差异后显示，保存完成或差异恢复后隐藏。非 Minimal 主题有 `ThemeShadow`，Minimal 主题移除阴影。
+  - 返回主页面时显示 `NavigationLoadingOverlay`：72% 页面背景遮罩、36px ring、`Canvas.ZIndex=100`，用于拦截输入并避免导航期间页面可操作。
+- 顶部 tabs
+  - Tab 顺序固定：General、Services、Views、Hotkeys、Advanced、Language、About；automation id 为 `SettingsTab_{Id}`。
+  - Tab 使用横向 `ItemsWrapGrid`，最多 7 列；每个 tab 固定 86x76，右/下 margin 10，图标 22px，标签 12px，图标+文字居中。
+  - 图标 glyph：General `E713`，Services `E90F`，Views `E8A7`，Hotkeys `E765`，Advanced `E771`，Language `E774`，About `E946`。
+  - 未选中 tab 使用普通 card/control 背景和边框；选中 tab 覆盖 selected background/border/foreground，截图中表现为浅蓝或深蓝选中面。
+  - 每个 tab 必须有 tooltip；`AutomationProperties.Name` 随本地化 label 更新。点击 tab 后 `MainScrollViewer.HelpText` 写入 `SelectedSettingsTab:{Id}` 供 UIA 判定。
+  - 切换 tab 时滚动位置重置到顶部；目标 tab 尚未初始化时显示右上角 20px `SettingsTabSwitchRing`，已初始化 tab 不显示遮罩并应在 1 秒内完成选中反馈。
+- General tab
+  - 只包含常用行为和 TTS 输出设置，不再混放语言偏好。
+  - Behavior section：`AppThemeCombo` 选项为 System、Light、Dark、Minimal；下面是 Minimize to system tray、Start minimized to tray、Monitor clipboard for text、Mouse selection translate、Always on top、Launch at Windows startup、Hide dictionaries with no result、Enable custom dictionary input suggestions。
+  - `MouseSelectionTranslateToggle` 开启后显示缩进的 `MouseSelectionExcludedAppsPanel`，包含 `MouseSelectionExcludedAppsBox` 和说明文本；关闭后整组折叠。
+  - 本地词典建议开关标题旁有 `Experimental` 斜体弱提示；无可用字典或状态变化时通过 hint text 提示。
+  - TTS section：`TtsSpeedSlider` 范围 0.5-3.0，步进 0.5；`AutoPlayTranslationToggle` 控制翻译完成后自动播放。
+- Services tab
+  - 顶部 Enabled Services section 包含说明、`ImportMdxDictionaryButton`、导入摘要文本和 Enable International Services 开关；国际服务开关说明部分服务需要国际网络访问。
+  - Service Configuration section 由 Expander 组成，header 左侧显示服务图标，图标加载失败要折叠不留破图；右侧可显示配置成功/失败状态。
+  - DeepL：API key PasswordBox、眼睛 reveal 按钮、Use Free API、Use quality-optimized model、说明和 Test 按钮；质量优化模式需要 API key。
+  - Windows Local AI：Provider combo 选 Auto、WindowsAI/Phi Silica、Foundry Local、OpenVINO；显示 provider 星级/说明。Auto 顺序是 Phi Silica -> Foundry Local -> OpenVINO。包含 Prepare model、Windows Update 进度入口、Foundry endpoint/model/start/install/docs、OpenVINO download/progress。
+  - Ollama：endpoint 文本框、editable model combo、Refresh models、Test。
+  - OpenAI-compatible 服务：OpenAI、DeepSeek、Groq、Zhipu、GitHub Models、Gemini、Custom OpenAI、Built-in AI、Doubao 均提供 key/token reveal、model 或 endpoint/model、Test；OpenAI 额外有 API Format Auto/Responses/Chat Completions 和 detected format 文本。
+  - 传统 HTTP 服务：Caiyun、NiuTrans、Youdao 提供 key/secret 与 Test；Youdao 有 Use Official API 开关。Google/Google Dict/Linguee 属于免配置服务区，Linguee 只在条件编译开启时显示。
+  - 动态 MDX 配置区显示导入字典，支持保存加密邮箱/regcode、删除确认、自动引用同目录 MDD 或保存路径。
+- Views tab
+  - 主题是 Window Results，说明文案为“选择每个窗口显示哪些结果，以及每个结果是否自动查询”。
+  - Main Window、Mini Window、Fixed Window 三组共用同一行布局：左侧服务 CheckBox，中间 `EnabledQuery` ToggleSwitch，右侧仅在 reorder mode 中显示 Move up / Move down 图标按钮。
+  - 勾选服务才显示 `EnabledQuery` 开关；服务不可用时整行降低 opacity、减小字体；未配置服务用 italic 标记。
+  - 每组都有独立 reorder mode 按钮；排序结果决定对应窗口的结果展示顺序。保存时必须保证每个窗口至少一个服务启用，必要时回填默认服务。
+  - Views 内容 `x:Load=False`，但初次 Settings loading 会在 overlay 下预加载；离开 Settings 时释放 ItemsSource 和懒加载内容，避免内存滞留。
+- Language tab
+  - Language Preferences section 包含 First Language、Second Language、Auto-select target language、UI Language。
+  - First/Second combo 只显示当前可选语言，不包含 Auto Detect；两者保存时不能相同。
+  - UI Language combo 覆盖 en-US、zh-CN、zh-TW、ja-JP、ko-KR、fr-FR、de-DE、vi-VN、th-TH、ar-SA、id-ID、it-IT、ms-MY、hi-IN、da-DK，并提示重启后完全生效。
+  - Available Languages 是 Expander；内部 `ItemsRepeater` 使用 `UniformGridLayout`，`MinItemWidth=180`、列/行间距 8/4、最多 4 行。English 始终选中且禁用，至少保留 2 种语言。
+  - 取消 First/Second 当前语言时，页面会自动把 First/Second 调整到仍可用语言，并刷新所有依赖 combo。
+- Hotkeys tab
+  - 每个热键一行 TextBox + enable ToggleSwitch，宽度 200：Show Window、Translate Selection、Show Mini Window、Show Fixed Window、OCR Screenshot Translate、Silent OCR。
+  - 默认占位：`Ctrl+Alt+T`、`Ctrl+Alt+D`、`Ctrl+Alt+M`、`Ctrl+Alt+F`、`Ctrl+Alt+S`、`Ctrl+Alt+Shift+S`。
+  - 说明文案提示重启/保存后应用，Mini/Fixed toggle 热键由基础热键自动加 Shift，例如 `Ctrl+Alt+Shift+M`。
+- Advanced tab
+  - OCR section：`OcrEngineCombo` 选 Default/Windows Native、Ollama Local VLM、Custom API。选择高级 OCR engine 时显示 API key reveal、endpoint、model、system prompt、Test OCR Connection 和只读 Test Result。
+  - Layout Detection section：Detection Mode 选 Auto、Local ONNX Model、Vision LLM、Heuristic Only。ONNX panel 显示下载状态、Download Model (~75MB)、Delete、ProgressBar 和进度文本；Vision LLM panel 只在 Vision LLM 模式显示，可选 OpenAI、Gemini、Custom OpenAI。
+  - CJK Font section：Download CJK Font、Delete、ProgressBar、状态文本和 Noto Sans CJK 说明。
+  - Formula Detection section：Font Pattern regex、Character Pattern regex；空值使用内置公式保护规则。
+  - Translation Cache section：Enable Translation Cache、Clear Cache、缓存条目状态；清除失败只更新状态，不崩溃页面。
+  - Custom Translation Prompt section：120px 多行输入框，写入长文档/LLM 翻译附加指令。
+  - HTTP Proxy section：Use HTTP Proxy、Proxy URL、Bypass proxy for localhost；启用代理时 URL 不能为空且必须是 absolute URI。
+- About tab
+  - About section 显示应用名称、版本号和说明；链接包括 GitHub Repository、Issue Feedback、Easydict for macOS。
+  - HyperlinkButton 使用 `SettingsLinkButtonStyle` 和 app 内 link color，不能退回 Windows 默认蓝色导致主题不一致。
+- 保存、返回和即时反馈
+  - 任意已注册控件变更都会走 `OnSettingChanged`：初始化期间不触发；有真实差异时 `_hasUnsavedChanges=true` 并显示 Save；恢复到原值时隐藏 Save。
+  - 点击 Save 会禁用按钮、初始化所有 tab 数据、执行验证并保存；失败显示 ContentDialog 并停留在设置页。
+  - 点击 Back 且有未保存变更时弹出 ContentDialog：Save Settings、Don't Save、Cancel。Save 成功才返回；Don't Save 会恢复进入页面时的 `SelectedLanguages` 快照；Cancel 留在当前页。
+  - 保存成功后立即执行：写入 settings、重置 reorder mode、reload hotkeys、刷新 Mini/Fixed 服务结果和语言 combo、按需重建 proxy/translation manager、应用 Always on top、clipboard monitoring、mouse selection translate、启动项注册表。
+  - 敏感设置用 `LocalCredentialProtector` 保护；旧明文/legacy sensitive settings 会迁移到 protected storage。`EASYDICT_SETTINGS_DIR` 可隔离设置目录，UIA 使用它避免污染用户设置。
+- 可验证标准
+  - 截图：`screenshot/settings.png` 应呈现浅色首屏；UIA baseline 应覆盖 `10_settings_general_tab`、`11_settings_services_tab`、`12_settings_services_api_keys`、`13_settings_views_tab`、`14_settings_language_tab`、`15_settings_hotkeys_tab`、`16_settings_advanced_tab`、`17_settings_about_tab`，theme matrix 覆盖 settings general/services/views/hotkeys/language/advanced。
+  - 交互：首次进入后 `MainScrollViewer` 可立即滚动；首次物理鼠标点击 Hotkeys tab 1 秒内出现 `ShowHotkeyBox`；已加载 tabs 1 秒内切换完成；切 tab 后内容不能残留 General stale UI。
+  - 自动化：`BackButton`、`MainScrollViewer`、`SettingsTab_*`、`AppThemeCombo`、`SettingsGeneralBehaviorHeader`、`MouseSelectionTranslateToggle`、`DeepLServiceExpander`、`MainWindowReorderModeButton`、`ShowHotkeyBox`、About links 的 AutomationId 必须保留。
+  - 验证：First/Second language 相同、DeepL quality 无 key、启用 proxy 但 URL 空/非法都必须阻止保存并显示错误 dialog。
+  - 保存后 settings JSON 不写回 legacy `TargetLanguage`；worker isolation persisted false 会被忽略，除非对应 disable env var 为 1。
+  - 主题和语言切换后页面文本/颜色更新，不发生 opposite palette 泄漏；深色/浅色/中文 UI 下 tab 和 section 文本不截断、不重叠。
+- 已有覆盖
+  - UI：`SettingsPageTests`、`SettingsPageScrollTests`、`ThemeContrastTests`、`DarkModeTests`。
+  - 单元：`SettingsServiceTests`、`SettingsPageSplitTabsTests`、`SettingsPageLifecycleLeakTests`、`UnsavedChangesDialogTests`、`LocalizationServiceTests`、`SettingsPageMdxServiceIdTests`。
+
+## 11. 主题、定位、DPI 与生命周期
+
+- 主题
+  - 行为：`System` 跟随 Windows；`Light`/`Dark` 强制；`Minimal` 使用 Minimal 资源和简化结果控件。
+  - 可验证标准：Windows 主题变化时运行中刷新；Light app 在 dark Windows 上仍显示 light chrome。
+  - 已有覆盖：`DarkModeTests`、`ThemeContrastTests`、`ThemeRegressionMemoryAutomationTests`。
+- DPI/窗口定位
+  - 行为：WinUI DIPs 与 AppWindow 物理像素转换；多显示器 work area clamp；保存的窗口若显示器移除则回落到可见区域。
+  - 可验证标准：窗口不会完全出屏；跨相邻显示器保留合理位置；超大窗口 pin 到 work area。
+  - 已有覆盖：`DpiHelper` 间接覆盖、`WindowPositionHelperTests`。
+- 生命周期/内存
+  - 行为：页面 Unloaded 取消查询、释放 result controls、解除事件、清理 WebView/worker/托盘/hook。
+  - 可验证标准：设置页/结果控件循环打开关闭无明显泄漏；UI hotspot probe 产出报告。
+  - 已有覆盖：`MainPageLifecycleLeakTests`、`SettingsPageLifecycleLeakTests`、`ServiceResultItemLifecycleLeakTests`、`MemoryBudgetTests`、`MemoryGateTests`、`UiThreadHotspotProbeTests`。
+
+## 12. 剪贴板、文本插入、TTS
+
+- 剪贴板监听
+  - 行为：启用后监听 `Clipboard.ContentChanged`；取文本后触发主窗口翻译。
+  - 可验证标准：关闭监听不触发；剪贴板异常被吞掉不崩溃。
+  - 已有覆盖：`ClipboardService` 间接覆盖，设置和 App 行为测试。
+- TextInsertion
+  - 行为：PopButton 点击前捕获源窗口；结果 Replace 可将文本插回原窗口。
+  - 可验证标准：源窗口 handle 捕获成功；插入失败不影响 app。
+  - 已有覆盖：`TextInsertionServiceTests`、`ProtectedCursorHelperTests`。
+- TTS
+  - 行为：`TextToSpeechService` 为源文本和结果文本提供播放按钮；设置可自动播放翻译；错误时恢复图标。
+  - 可验证标准：空文本不播放；播放异常不崩溃。
+  - 已有覆盖：主要由窗口 UI 行为和结果控件测试间接覆盖。
+
+## 13. 浏览器扩展、Shell、协议激活
+
+- Shell context menu
+  - 行为：注册 HKCU `*\shell\EasydictOCR` 和 desktop background，对应命令 `"appPath" --ocr-translate`。
+  - 可验证标准：打开右键菜单项后，如果主进程已运行，第二进程只 signal named event 并退出；未运行时冷启动后触发 OCR。
+  - 已有覆盖：`ContextMenuService` 行为间接覆盖。
+- Protocol
+  - 行为：unpackaged 早期修复 HKCU `Software\Classes\easydict`；`easydict://ocr-translate` 解析为 OCR 触发。
+  - 可验证标准：注册值含 `URL Protocol`；command 指向当前 exe；冷/热启动均触发 OCR。
+  - 已有覆盖：`Program.cs`/`ProtocolRegistrationService` 逻辑。
+- Browser Native Messaging
+  - 行为：
+    - Chrome host：HKCU `Software\Google\Chrome\NativeMessagingHosts\com.easydict.bridge`。
+    - Firefox host：HKCU `Software\Mozilla\NativeMessagingHosts\com.easydict.bridge`。
+    - manifest path 指向部署目录；bridge exe 接收 native message 后触发 named event/protocol。
+    - MSIX 通过 `BrowserHostRegistrar.exe` 在沙盒外安装。
+  - 可验证标准：install/status/uninstall JSON 正确；manifest schema 正确；Chrome allowed origins 包含两个 extension id。
+  - 已有覆盖：`BrowserRegistrarCoreTests`、`ProgramTests`、`BrowserSupportServiceTests`。
+
+## 14. 打包、发布和 Store 相关
+
+- Makefile
+  - `make build`、`build-release`、`test`、`test-ui`、`test-integration`。
+  - `publish-x64/x86/arm64` 便携版：x64/arm64 包含 NativeBridge、BrowserRegistrar、LongDoc/LocalAi/Ocr workers；x86 不含 worker。
+  - `publish-msix-*`：MSIX 使用 Windows App SDK framework package，不捆绑 WindowsAppSDK DLL；worker no-self-contained，并抽取共享 .NET runtime。
+  - `msix-*`：生成架构 manifest 并调用 WinApp CLI。
+- 可验证标准
+  - x64/arm64 publish 输出包含 `workers/longdoc`、`workers/localai`、`workers/ocr`。
+  - MSIX publish 后执行 `Dedupe-WorkerSharedFiles.ps1` 和 `Extract-DotnetRuntime.ps1`。
+  - `Package.appxmanifest` 的 identity、protocol、capabilities、file associations 与发布脚本生成的架构 manifest 一致。
+  - 包体大小预算测试通过。
+- 已有覆盖
+  - `WorkerPackagingTests`、`MsixValidate` 工具、发布脚本。
+
+## 15. UI/UX 迁移细则
+
+- 全局视觉语言
+  - 界面风格：
+    - 整体是 WinUI 3/Fluent 风格，但使用自定义 Easydict 资源色和圆角，不直接依赖系统默认观感。
+    - Light 主题主背景为浅蓝灰 `#F7F9FC`，卡片为白色，边框为 `#DDE4EE`，主强调色为蓝色 `#007AFF`/`#0078D4`。
+    - Dark 主题主背景为蓝调深灰 `#1F2229`，卡片/结果区域为更深的分层灰，文字为浅灰白，不应出现 Light 主题白底泄漏。
+    - Minimal 主题是高对比黑白线框风格：白底、黑字、方角、1px 边框、无彩色强调。
+  - 配色方案细表：
+    - Light：主背景 `#F7F9FC`，边框 `#DDE4EE`，输入底 `#F1F4F8`，主文字 `#262626`，结果底 `#FFFFFF`，结果 header `#FBFCFE`，header hover `#F1F4F8`，按钮 hover `#EEF3F8`。
+    - Light 状态色：connected `#107C10`，disconnected `#797775`，error `#D13438`，accent `#0078D4`，accent hover `#106EBE`，accent pressed `#005A9E`。
+    - Light 设置/浮层：selected tab `#EAF3FF`，PopButton 背景 `#F7FBFF`、边框 `#7AA7D9`，floating input `#F1F4F8`。
+    - Dark：主背景 `#1F2229`，边框 `#3A4250`，输入底 `#2A2F39`，主文字 `#E2E4E9`，结果底 `#222731`，结果 header `#282D37`，header hover/按钮 hover `#323946`。
+    - Dark 状态色：connected `#79B873`，disconnected `#8A8D93`，error `#E58A95`，accent `#2B88D8`，accent hover `#3A99E6`，accent pressed `#1F6FB3`。
+    - Dark 设置/浮层：selected tab `#243247`，PopButton 背景 `#252A33`、边框 `#6B7584`，floating input `#2A2F39`。
+    - Minimal：主背景/输入/结果/tab/PopButton 均白底，主文字/强边框为黑色，普通线条 `#999999`，hover 为 `#E0E0E0` 或 `#F7F7F7`，圆角全部归零。
+  - 形状与间距：
+    - 普通卡片、设置 tab、控件圆角默认 10；主圆形操作按钮圆角 20；状态 pill 圆角 12；浮窗输入框圆角 18。
+    - Floating/Mini/Fixed 窗口内容 padding 16，输入区域 padding `12,10`，卡片 padding 12。
+    - 结果项卡片底部间距 8，结果项 header 高度 30 DIP。
+  - 透明、阴影和层级：
+    - 普通页面和卡片不使用大面积投影；“层级感”主要来自不同背景色、1px 边框、hover 背景和 spacing。
+    - `EasydictElevatedSurfaceStyle` 名称里的 elevated 是视觉层级，不等同于 DropShadow；迁移时不要给所有卡片添加额外阴影。
+    - 设置页 `SaveButton` 在非 Minimal 主题下使用 `ThemeShadow`；Minimal 主题下 shadow 必须为 null。
+    - Mini/Fixed 根 Grid 为 Transparent，用窗口级 `MicaBackdrop` 显示 Fluent 质感；Minimal 主题会清除 `SystemBackdrop`，改为纯白/黑线框。
+    - Mini/Fixed surface 自身无圆角、无边框或按主题 `FloatingWindowBorderThickness`；输入 pill 和卡片承担主要边界。
+    - PopButton 使用半透明 opacity 而不是阴影：Light `0.75`、Dark `0.94`、Minimal `1.0`，hover/pressed 只改变 opacity 和 cursor。
+    - Mode switch overlay 背景 opacity `0.86`；Page navigation overlay 背景 opacity `0.72`；OCR overlay 是桌面截图上的约 40% 暗色 mask。
+    - demoted/no-result 服务结果行 opacity `0.5`，并强制折叠、隐藏展开箭头；这属于状态表达，不是 disabled 控件。
+  - 图标与 tooltip：
+    - 工具类操作使用 Segoe Fluent Icons 字形：设置 `E713`、关闭 `E8BB`、交换 `E8AB`、翻译 `E8C1`、重试 `E72C`、帮助 `E897`。
+    - 语言、翻译、设置、播放、关闭、Pin、长文档控制项都应有 tooltip。
+  - 字符、字体和文本元素：
+    - 正文和输入框使用 `Segoe UI Variable, Segoe UI`；输入 TextBox 基准字号 15，结果正文 13，结果 header 服务名 12 semibold，状态/辅助文本 10-12。
+    - 主窗口标题 `Easydict` 22 semibold；设置页标题 28 semibold；Mini/Fixed 标题 `Quick Translate` 12 semibold。
+    - 模式/长文档 header 使用 emoji 字符作为语义提示：`🌐`、`📄`、`🎯`、`🤖`、`📝`、`⚡`、`📑` 等；迁移时要保留或替换为等价图标，不应丢失语义。
+    - 长文本必须使用 wrapping/ellipsis：文件名、路径、建议项和 collapsed input 使用 character ellipsis；结果正文和错误文本 wrap 且可选择。
+    - Minimal 主题会隐藏部分装饰性文字/图标，如 mode emoji、help icon、source play、结果标题、非重要状态摘要；迁移时应保留这种“降噪”行为。
+    - 语法纠错结果有 `CorrectedText`、`Original:`、`Changes:`、`No grammar issues found.` 等固定标签，字号和 secondary/tertiary 前景层级要保持。
+  - 按钮元素清单：
+    - 普通按钮：`EasydictBaseButtonStyle`，padding `8,6`，圆角 10，1px 边框，hover/pressed 改背景和边框。
+    - Chip 按钮：padding `12,7`，圆角 18，用于更像 pill 的操作入口。
+    - Icon 按钮：默认 36x36、透明背景、居中 glyph；Mini/Fixed 内部可缩到 28x28，结果 action buttons 为 24x24。
+    - Accent 按钮：padding `12,8`，accent 背景和白色文字；Primary round translate button 为 40x40，Mini/Fixed 翻译按钮为 32x32。
+    - 设置页 tab button 固定 86x76，图标 22、标签 12，selected 状态使用单独 selected background/border/foreground 覆盖。
+    - 结果行 action buttons 是 hover 后浮出的透明 24x24 按钮：replace `E8AC`、play `E768`、copy `E8C8`；error retry 为 `E72C`。
+    - Foundry Local recovery 按钮是小尺寸文本按钮，padding `8,2`、min height 24、font 11，不能放大成主操作按钮。
+  - 图标和视觉资产：
+    - 窗口图标通过 `WindowIconService` 优先加载嵌入资源 ID 1，失败后回退 `AppIcon.ico`，再失败才用系统默认图标。
+    - 服务结果 header 左侧服务图标为 16x16，按服务 ID 和主题加载；Minimal 主题隐藏服务图标。
+    - 当前 Assets 中包含 `ServiceIcons/GitHubOnLight.scale-*` 与 `ServiceIcons/windows-local-ai.scale-*`，迁移时要保留多 DPI scale 资产。
+    - 设置页服务图标加载失败时应折叠 image，不显示破图占位。
+    - 系统托盘和 shell context menu 使用应用图标；浏览器桥接/注册入口不应丢失 icon 路径。
+    - 状态图标语义：error 使用红色 `E783`，loading 使用 ProgressRing，PopButton 翻译/语法 glyph 随 query mode 切换。
+  - 鼠标 hover/pressed/disabled 效果：
+    - `EasydictBaseButtonStyle` 使用 VisualState：Normal 保持模板色；PointerOver 将 `ButtonChrome.Background` 切到 `ButtonBackgroundPointerOver`，边框切到 `ButtonBorderBrushPointerOver`；Pressed 切到 `ButtonBackgroundPressed`/`ButtonBorderBrushPressed`；Disabled 将根节点 opacity 设为 `0.5`。
+    - `EasydictIconButtonStyle` 默认透明背景，hover 时仍套用 base style 的 hover 背景/边框；图标按钮不可因为透明默认态导致 hover 无反馈。
+    - `EasydictAccentButtonStyle`/`EasydictPrimaryRoundButtonStyle` 保持 accent 背景，PointerOver/Pressed 不换色，只保留 Disabled opacity `0.5`；不要误加和普通按钮一样的浅色 hover。
+    - ComboBox/TextBox chrome 在代码中补写 PointerOver/Focused/Selected 资源；hover 时背景使用 `FloatingInputBackgroundColor`，文字仍使用主题主文字色。
+    - 结果项 header hover 切换到 `ServiceResultHeaderHoverBackgroundColor`，鼠标形状变 hand；离开时恢复当前主题 header 背景，不能清空为透明。
+    - 结果项卡片 hover 时显示复制/替换/播放等 action buttons；离开卡片时这些按钮隐藏。
+    - PopButton hover 透明度从 `BaseOpacity`/`DarkBaseOpacity` 提升到 `HoverOpacity=1.0` 并显示 hand cursor；pressed 使用 `PressedOpacity=0.85`；pointer cancel/capture lost 必须恢复默认状态。
+  - 动画和状态切换：
+    - 当前实现没有自定义 `Storyboard`/`DoubleAnimation` 级别的复杂缓动；迁移时应复刻“即时状态变化 + WinUI 控件自带动画”的手感。
+    - ProgressRing 是主要持续动画：翻译按钮、服务结果 loading、设置页初始化、settings tab switch、mode/page navigation overlay、模型下载/准备进度均使用 active ring/bar 反馈。
+    - 翻译按钮 loading 时隐藏翻译 icon、显示 active ProgressRing；结束时 ring 停止并折叠，icon 恢复。
+    - Mode switch overlay 直接将 opacity 设为 `1`、visibility 设为 visible，延迟一个 render tick 后切换内容；隐藏时 opacity 设为 `0` 并 collapsed。
+    - Page navigation overlay 使用 `0.72` 半透明背景；mode switch overlay 使用 `0.86` 半透明背景；两者可拦截输入，结束后必须解除。
+    - Settings tab switch 使用右上角 20px ProgressRing 显隐，不做内容滑动动画。
+    - Mini 输入框 collapsed/expanded 通过 TextBlock/TextBox visibility 切换，不做展开动画；迁移后应保留即时切换和最大高度限制。
+    - OCR overlay 使用 GDI 双缓冲连续重绘，视觉效果是鼠标移动时高亮区域、放大镜、坐标和色块实时刷新，不能闪烁。
+  - 可验证标准：
+    - Light/Dark/Minimal 三套资源切换后，主窗口、设置页、Mini、Fixed、PopButton 均使用同一套主题资源。
+    - 任一控件 hover/pressed 不应出现系统默认蓝紫色块或不可读文字。
+    - 视觉回归截图至少覆盖主窗口、设置页、Mini、Fixed、服务结果行和 PopButton。
+    - 检查阴影时应确认只有指定位置有 shadow/Mica/backdrop；卡片不应因为迁移框架默认样式出现额外 DropShadow。
+    - 检查字符/图标时应确认 emoji、Segoe Fluent glyph、服务图标、窗口/托盘图标、错误/loading/status 图标全部可见且随主题更新。
+    - 人工验收时必须逐个触发按钮 hover、pressed、disabled、结果项 hover、PopButton hover/pressed、tab selected/loading、overlay loading，确认颜色和状态恢复一致。
+  - 已有覆盖：`DarkModeTests`、`ThemeContrastTests`、`ThemeRegressionMemoryAutomationTests`、`KanbanTodoUxRegressionTests`。
+
+- 主窗口信息架构
+  - 顶部区域：
+    - 左侧显示模式图标和模式选择按钮；默认 `🌐 Easydict`，切换长文档时显示 `📄 Long Document` 并显示副标题 `Long Doc`。
+    - 模式按钮打开 MenuFlyout，包含 `Quick Translation` 与 `Long Document` 两个 RadioMenuFlyoutItem。
+    - 右侧是连接状态 pill 和设置齿轮按钮。
+  - 状态 pill：
+    - Disconnected/Connected/Error 使用不同背景色，内部有 8px 圆点和 12px 文本。
+    - 状态变化应即时反映，不应只在下次查询后刷新。
+  - 响应式布局：
+    - 宽度 `>=500` 使用 `ActionBarWide`：源语言、交换、目标语言、翻译按钮横向一行。
+    - 窄宽度使用 `ActionBarNarrow`：语言控件分行堆叠，保持所有控件可点击且不水平滚动。
+  - 可验证标准：
+    - 900px 左右窗口截图应显示宽布局；小于 500px 时语言选择区自动换成窄布局。
+    - 模式切换时出现半透明 loading overlay，完成后不残留遮罩。
+  - 已有覆盖：`MainWindowTests`、`LongDocTranslationTests`、`UiThreadHotspotProbeTests`。
+
+- Quick Translate 操作流程和反应
+  - 标准流程：
+    - 用户在输入框输入文本。
+    - 按 Enter 或点击圆形翻译按钮触发查询；Shift+Enter/Ctrl+Enter 插入换行。
+    - 翻译按钮图标切换为小 ProgressRing，输入区域和结果区域保持可见。
+    - 多服务并行返回，服务结果按设置顺序出现；流式服务逐步追加文本。
+  - 输入与输出卡片：
+    - 输入卡片显示 source 标题、播放按钮、文本框和语言动作栏。
+    - 输出卡片显示每个服务结果；文本可选中复制，长文本换行不溢出。
+    - 源文本播放按钮执行时图标状态变化，异常后恢复。
+  - 结果项交互：
+    - header 显示服务图标、服务名、耗时/状态、loading ring、错误图标、重试按钮和展开箭头。
+    - 点击 header 展开/折叠；hover 时 header 背景从默认背景切到 hover 背景。
+    - 错误状态显示红色错误文本和重试按钮；单个服务失败不影响其他服务。
+    - 未自动查询的手动服务显示 italic pending hint，点击后可单独查询。
+  - 可验证标准：
+    - `20_main_before_translate` 与 `21_main_after_translate` 截图中，翻译前后状态、服务行、结果文本差异清晰可见。
+    - 流式输出期间窗口可继续滚动，UI 不冻结；结果最终不重复、不乱序。
+    - 错误、loading、成功三种状态能在同一结果控件内互斥显示。
+  - 已有覆盖：`TranslationTests`、`ShortTextUIFreezeTests`、`ServiceResultItemLifecycleLeakTests`、`UiThreadHotspotDiagnosticsTests`。
+
+- 词典、音标和语法结果 UI
+  - 音标：
+    - 中英/英中词条可显示 phonetic badge；badge 使用 `PhoneticBadgeBackgroundBrush` 和 `PhoneticBadgeTextBrush`。
+    - 同一服务/同一词重复音标应去重，不重复渲染。
+  - 词典：
+    - 简单词典释义渲染在 DictionaryPanel，词性 tag 使用 POS tag 色；例句使用 secondary/tertiary 文本色。
+    - MDX/MDD 富内容延迟创建 WebView2，支持图片/资源渲染，未出现时不占空白。
+  - 语法纠错：
+    - grammar mode 展示 corrected text、说明/差异等结构，不应混进普通翻译文本区域。
+  - 可验证标准：
+    - `30_phonetic_*`、`31_phonetic_*`、`32_phonetic_*`、`33_phonetic_*` 截图中可看到音标区域。
+    - `50_dictionary_webview_before_query`/`51_dictionary_webview_after_query` 可验证 WebView 富词典渲染。
+  - 已有覆盖：`PhoneticTranscriptionTests`、`DictionaryWebViewRenderingTests`、`MdxDictionaryTranslationServiceTests`。
+
+- Mini Window UX
+  - 窗口风格：
+    - 背景透明以显示代码侧 Mica/backdrop；窗口 surface 使用主题背景，无系统标题栏边框。
+    - Header 同时是拖拽区域，左侧 Pin、中央 `Quick Translate`、右侧关闭按钮。
+    - Pin 后窗口保持置顶并改变 pin 状态；关闭按钮只隐藏 Mini。
+  - 输入体验：
+    - 默认显示一行 collapsed text，过长用 ellipsis；点击输入容器后切换到 TextBox。
+    - TextBox 最大高度 120，支持多行和滚动；失焦后回到 collapsed 展示。
+    - 源语言、交换、目标语言、翻译按钮放在紧凑语言栏内。
+  - 长文本反应：
+    - 输入超过 30 个词时窗口可增长但不得超出屏幕边界；结果区域可滚动。
+    - 流式输出期间高度变化应平滑，不应把输入栏挤出可视区。
+  - 可验证标准：
+    - `23_mini_window_initial`、`24_mini_after_translate`、`30_mini_longtext_*` 至 `37_mini_longtext_bounds_check` 截图可对照。
+    - 打开与重开时焦点可进入输入框，热键打开不会抢占源应用后续输入异常。
+  - 已有覆盖：`MiniWindowFocusTests`、`MiniWindowLongTextTests`、`TranslationTests`。
+
+- Fixed Window UX
+  - 窗口风格：
+    - 持久窗口使用与 Mini 相同的输入/语言/结果结构，但更强调常驻可见。
+    - 顶部显示标题和关闭按钮；关闭按钮隐藏，`Ctrl+Alt+F` 可再次显示。
+  - 可验证标准：
+    - `25_fixed_window_initial` 和 `26_fixed_after_translate` 截图中，输入栏、语言栏、结果状态与 Mini/Main 语义一致。
+    - Fixed 关闭再打开后位置和尺寸符合保存策略。
+  - 已有覆盖：`TranslationTests`、`WindowLifecycleTests`、`DarkModeTests`。
+
+- PopButton 与选词 UX
+  - 外观：
+    - PopButton 是 30x30 小浮窗，默认不激活源窗口，置顶显示在选区附近。
+    - 背景使用 `PopButtonBackgroundBrush`，边框使用 `PopButtonBorderBrush`，图标使用翻译 glyph；翻译模式 glyph 为 `E8C1`，语法模式 glyph 为 `E70F`。
+    - Light 默认 opacity `0.75`，Dark 默认 opacity `0.94`，Minimal 默认 `1.0`。
+    - hover 时 opacity `1.0`、cursor hand；pressed 时 opacity `0.85`；release/exit/cancel/capture lost 后恢复默认 opacity，按下后不应留下 pressed 状态。
+    - 显示位置是触发点右上方：`screenX + 8px`、`screenY - 32px`，按 DPI 缩放并 clamp 到当前工作区。
+    - 隐藏时使用 `SWP_HIDEWINDOW | SWP_NOACTIVATE`，同时重置 hover/pressed 状态。
+  - 划词触发条件：
+    - 设置页 `MouseSelectionTranslate` 开启，hook 成功安装，且当前前台 app 不在排除列表。
+    - 拖选：左键按下后移动至少 10px，左键抬起时触发；抬起点作为 PopButton 定位锚点。
+    - 双击/三击：连续非拖拽点击必须在系统 double-click 时间内且位置距离不超过 4px；click count 达到 2 后等待 `doubleClickTime + 50ms` 再触发。
+    - 短点击、移动不足 10px 的轻微拖动、超时/超距的连续点击都不触发。
+    - 触发前会取消上一轮未完成的选区读取；触发后等待 150ms 再读选中文本，空文本不显示。
+  - 操作流程：
+    - 用户在任意应用拖选、双击或三击文字。
+    - 等待短延迟读取选中文本，成功后在鼠标释放点/最后点击点附近显示 PopButton。
+    - 点击 PopButton 打开 Mini 并自动填入选中文本；点击别处、右键、滚轮、键盘或超时自动消失。
+  - 可验证标准：
+    - 选词后源应用焦点不应被 PopButton 抢走。
+    - PopButton 自身点击不应被全局 hook 当作 elsewhere click 立即 dismiss；点击后应打开 Mini。
+    - 5 秒无操作自动消失；显示期间左键点别处、右键、滚轮、键盘、新选区都能关闭。
+    - 靠近屏幕边缘触发时按钮仍完整位于 work area 内。
+    - `pop_button_workflow_*`、`e2e_drag_select_result`、`e2e_double_click_result`、`e2e_pop_button_click_mini_window` 截图能串起完整流程。
+  - 已有覆盖：`PopButtonTests`、`PopButtonSelectionTests`、`MouseHookServiceTests`、`PopButtonServiceTests`。
+
+- OCR 截图选择 UX
+  - 覆盖层：
+    - 触发 OCR 后冻结当前桌面并覆盖约 40% 暗色 mask。
+    - 鼠标悬停时自动检测窗口区域并高亮；桌面/壁纸窗口不应被误选为全屏。
+    - 选择区域内显示原桌面，外部保持 dimmed。
+  - 操作流程：
+    - 双击检测到的窗口直接确认。
+    - 单击检测到的窗口不确认，避免误触。
+    - 任意位置点击拖拽超过 5px 进入自由框选，松开后确认。
+    - 空白处双击进入 track-mouse selection，再点击确认。
+    - 选择中右键/Esc 返回检测状态；检测状态右键/Esc 弹确认取消。
+    - 鼠标滚轮在检测状态切换父/子窗口检测深度。
+  - UI 效果：
+    - 光标为 crosshair。
+    - 始终绘制 88x88 放大镜，带中心十字、坐标、像素颜色文本和色块。
+    - 选择时显示尺寸 label；底部/顶部显示本地化操作提示面板。
+    - 使用双缓冲绘制，移动鼠标时不应闪烁。
+  - 可验证标准：
+    - OCR overlay 类名为 `EasydictScreenCapture`，热键触发后可被 UIAutomation 检测到。
+    - `40_ocr_before_hotkey`、`43_ocr_after_cancel`、`45_ocr_workflow_*` 截图可验证从触发到取消/完成。
+  - 已有覆盖：`OcrTests`、`WindowDetectorTests`、`GdiSafeHandleTests`。
+
+- 长文档 UX
+  - 入口和模式切换：
+    - 从模式菜单进入长文档时显示 loading overlay，切换完成后主内容换成长文档布局。
+    - 长文档页保留主窗口顶部状态/设置入口，避免成为孤立页面。
+  - 输入卡片：
+    - 文件模式显示文件路径；未选时为 `No file selected`，路径过长用 character ellipsis。
+    - `Browse...` 在右侧；已选文件以小卡片列表显示，文件名加粗、完整路径放 tooltip。
+    - 文件处理中显示 3px progress bar、progress detail 和 time ago；可删除项显示小关闭 glyph。
+  - 控制栏：
+    - Source/Target/Service/Input/Output/Threads/Pages 均有 header 和 tooltip。
+    - Service/Input/Output/Threads/Pages header 使用小 emoji 加文字，帮助图标使用 tertiary 文本色。
+    - Two-pass checkbox 文案完整说明 glossary/summary/terminology consistency 成本。
+    - Page range placeholder 为 `1-3,5,7-10`。
+  - 输出卡片和历史：
+    - 输出卡片标题为 `Translation Result`，右侧 `Retry Failed` 默认禁用，失败后可用。
+    - 输出目录默认提示 `(same as input file folder)`，输出命名 hint 为 italic tertiary 文本。
+    - History 使用 Expander，条目显示文件名、time ago 和 display text，最多高度 200。
+  - 可验证标准：
+    - `LongDocTab_ShouldShowAllControls` 覆盖所有关键控件存在。
+    - `LongDocTab_InputModeCombo_ShouldChangeSelection`、`OutputModeCombo`、`PageRangeTextBox`、`ConcurrencyNumberBox` 覆盖交互。
+    - 长文件名和进度文本不能让卡片横向溢出。
+  - 已有覆盖：`LongDocTranslationTests`、`LongDocumentServiceSupportTests`、`LongDocumentTranslationServiceReviewFixTests`。
+
+- 设置页 UX
+  - 页面结构：
+    - 进入设置页先显示居中 32px loading ring，初始化完成后显示内容。
+    - 主 ScrollViewer padding 24，内容最大宽度 1040，居中布局，section 间距 24。
+    - 顶部有 accent Back 按钮和 28px `Settings` 标题；右下 Save Settings 浮动按钮只在 dirty 状态出现，并保留底部 spacer 防遮挡。
+    - 对照 `screenshot/settings.png`：首屏应看到返回按钮、标题、两行/一行自适应 tab、大面积留白和 General 的 Behavior 卡片开头。
+  - Tabs：
+    - Tabs 使用横向 wrap grid，每个 tab 为 86x76 的图标+文字按钮，最多 7 列。
+    - 选中 tab 叠加 selected border/background/foreground；未选 tab 保持透明或普通背景。
+    - 切换 tab 时右上角 20px ring 可短暂出现，内容加载后隐藏。
+    - 用户第一次进入后立即点击任意 tab，应在 1 秒内有反应且不显示 stale General 内容；切换时滚动位置回到 tab 顶部。
+  - 内容与保存：
+    - General/Services/Views/Hotkeys/Advanced/Language/About 共享主 ScrollViewer；Views XAML 使用 `x:Load=False`，初次进入时在 loading overlay 下预加载，离开 Settings 时释放。
+    - 有未保存变更返回时显示 ContentDialog，支持 Save、Don't Save/不保存、Cancel。
+    - Save 失败路径必须停留在设置页并隐藏导航 overlay；Don't Save 只丢弃 UI 修改，不应污染 settings 文件。
+    - API key、endpoint、model、proxy、OCR/custom prompt 等长文本字段应可横向容纳或正确换行。
+  - 可验证标准：
+    - `10_settings_general_tab` 到 `17_settings_about_tab` 覆盖主要 tab；`theme-contrast_*_page-settings-{general,services-credentials,views,hotkeys,language,advanced}.png` 覆盖浅/深/系统主题矩阵。
+    - 立即滚动、立即切 tab、首次物理鼠标 tab 点击、已加载 tab 1 秒内切换均通过。
+    - 深色/浅色/中文 UI 下设置页文本不重叠，tab 文本不截断到不可理解。
+  - 已有覆盖：`SettingsPageTests`、`SettingsPageScrollTests`、`ThemeContrastTests`、`UnsavedChangesDialogTests`。
+
+- 提示、弹窗和轻量反馈
+  - Tooltip：
+    - 所有仅图标按钮必须保留 tooltip，尤其是设置、交换、播放、翻译、关闭、Pin、长文档 hint。
+  - Loading overlay：
+    - 设置页、模式切换、页面导航使用 semi-transparent overlay + ProgressRing；overlay 可拦截输入，完成后必须隐藏。
+  - Suggestion popup：
+    - 本地词典建议弹窗宽度 180-320，高度不超过 200；内容为词条 key + dict display name。
+    - 弹窗 light dismiss，不抢 tab focus；列表项点击填入输入框。
+  - 可验证标准：
+    - 弹窗不会遮住当前输入 caret 到无法继续输入。
+    - Loading overlay 不会在失败路径永久停留。
+  - 已有覆盖：`MainPageSuggestionLogicTests`、`SettingsPageTests`、`UiThreadHotspotProbeTests`。
+
+- 可访问性和自动化标识
+  - 关键控件必须保留 AutomationId：
+    - 主窗口：`SettingsButton`、`ModeMenuButton`、`ModeTitleText`、`QuickTranslateContent`、`QuickOutputCard`。
+    - 设置页：`BackButton`、`MainScrollViewer`、各 `SettingsTab_*`、`AppThemeCombo`。
+    - 结果项：`ServiceResultItem_*`、`ServiceResultHeader_*`、`PhoneticPanel`、`DictionaryPanel`。
+    - Mini：`MiniWindowCloseButton`。
+  - 键盘：
+    - Enter/Shift+Enter/Ctrl+Enter 输入行为一致。
+    - 设置页返回支持 Back button，测试中也使用 Alt+Left fallback。
+    - OCR 支持 Esc 取消/返回检测。
+  - 可验证标准：
+    - UIAutomation 不应依赖坐标才能找到关键控件；找不到控件时截图应能定位原因。
+    - 文本可选择区域必须支持复制，不可选择的标题/按钮文本不应抢输入焦点。
+
+- UI/UX 回归验收方式
+  - 自动化命令：
+    - `dotnet test tests/Easydict.UIAutomation.Tests --logger "console;verbosity=detailed" --filter "Category=UIAutomation"`。
+    - 主题矩阵和截图输出目录默认在 `artifacts/ui-screenshots`，也可用 `SCREENSHOT_OUTPUT_DIR` 指定。
+  - 截图基线：
+    - 主窗口：`01_main_window_initial`、`02_main_window_controls`、`03_main_window_text_input`。
+    - 翻译：`20_main_before_translate`、`21_main_after_translate`、`23_mini_window_initial`、`24_mini_after_translate`、`25_fixed_window_initial`、`26_fixed_after_translate`。
+    - 设置：`05_settings_page`、`10_settings_general_tab` 到 `17_settings_about_tab`。
+    - 主题：`30_main_light_mode`、`31_main_dark_mode`、`32_settings_dark_mode`、`35_mini_dark_mode`、`36_fixed_dark_mode`、theme matrix screenshots。
+    - OCR/PopButton/Dictionary/Phonetic/LongDoc 对应截图名见测试覆盖索引。
+  - 人工验收：
+    - 对每张 baseline candidate 检查控件是否被截断、文字是否重叠、颜色是否跨主题泄漏、hover/pressed/loading/error 状态是否可读。
+    - 重点检查中文、英文和长字符串环境；设置页 tab、长文档文件名、服务错误消息、MDX 富内容最容易出现布局问题。
+
+## 16. 测试覆盖索引
+
+- 测试总量
+  - `Easydict.BrowserRegistrar.Tests`：2 files / 26 tests。
+  - `Easydict.Llm.Streaming.Tests`：1 file / 12 tests。
+  - `Easydict.TranslationService.Tests`：63 files / 778 tests。
+  - `Easydict.UIAutomation.Tests`：17 files / 68 tests。
+  - `Easydict.WinUI.Tests`：73 files / 973 tests。
+  - `Polyglot.TextLayout.Tests`：11 files / 121 tests。
+  - `LexIndex.Tests`：1 file / 10 tests。
+- 测试类清单
+  - `LexIndex.Tests`：`LexIndexBuilderTests`。
+  - `Polyglot.TextLayout.Tests`：`EndToEndLayoutTests`、`FixedWidthLayoutTests`、`FontFitSolverTests`、`IncrementalLayoutTests`、`KinsokuLayoutTests`、`KinsokuTableTests`、`LongSegmentBreakingTests`、`PreparedParagraphTests`、`ScriptClassifierTests`、`TextSegmenterTests`、`VariableWidthLayoutTests`。
+  - `Easydict.BrowserRegistrar.Tests`：`BrowserRegistrarCoreTests`、`ProgramTests`。
+  - `Easydict.Llm.Streaming.Tests`：`SseParserTests`。
+  - `Easydict.TranslationService.Tests`：`BaseOpenAIServiceTests`、`BingTranslateServiceIntegrationTests`、`BingTranslateServiceTests`、`BuiltInAIServiceTests`、`CaiyunServiceIntegrationTests`、`CaiyunServiceTests`、`CustomOpenAIServiceTests`、`DeepLServiceIntegrationTests`、`DeepLServiceMockTests`、`DeepLServiceTests`、`DeepSeekServiceIntegrationTests`、`DeepSeekServiceTests`、`DocumentContextExtractorTests`、`DoubaoServiceIntegrationTests`、`DoubaoServiceTests`、`FormulaAwareTextReconstructorTests`、`FormulaConfidenceTests`、`FormulaDetectionTests`、`FormulaDetectorTests`、`FormulaLatexReconstructorTests`、`FormulaPreservationServiceTests`、`FormulaProtectorTests`、`FormulaRestorerTests`、`GeminiServiceIntegrationTests`、`GeminiServiceTests`、`GitHubModelsServiceIntegrationTests`、`GitHubModelsServiceTests`、`GoogleTranslateServiceIntegrationTests`、`GoogleTranslateServiceTests`、`GoogleWebTranslateServiceTests`、`GrammarCorrectionParserTests`、`GroqServiceIntegrationTests`、`GroqServiceTests`、`LanguageBcp47Tests`、`LatexFormulaSimplifierTests`、`LingueeServiceIntegrationTests`、`LingueeServiceTests`、`LongDocUIFreezeTests`、`LongDocumentE2EBaselineTests`、`LongDocumentTranslationServiceTests`、`LongDocumentTwoPassTests`、`MathPatternsTests`、`MemoryBudgetTests`、`NiuTransServiceIntegrationTests`、`NiuTransServiceTests`、`OllamaServiceTests`、`OpenAIApiFormatDetectionTests`、`OpenAIServiceIntegrationTests`、`OpenAIServiceTests`、`PageRangeParserTests`、`ParallelTranslationTests`、`PhoneticCacheStampedeTests`、`PhoneticDisplayHelperTests`、`PhoneticEnrichmentIntegrationTests`、`ResponsesSseParserTests`、`ServiceQueryResultTests`、`ShortTextUIFreezeTests`、`StartupPerformanceTests`、`TranslationManagerTests`、`VolcanoServiceIntegrationTests`、`VolcanoServiceTests`、`YoudaoServiceIntegrationTests`、`YoudaoServiceTests`、`ZhipuServiceIntegrationTests`、`ZhipuServiceTests`。
+  - `Easydict.WinUI.Tests`：`AppProfilingDiagnosticsTests`、`BrowserSupportServiceTests`、`BuildModeConsistencyTests`、`CharacterParagraphBuilderTests`、`ContentStreamInterpreterTests`、`CustomApiOcrServiceTests`、`DocLayoutYoloServiceTests`、`DocumentExportServiceTests`、`FontDownloadServiceTests`、`FoundryLocalRecoveryCoordinatorTests`、`FoundryLocalServiceTests`、`GdiSafeHandleTests`、`GlyphAdvanceMeasurerTests`、`KanbanTodoUxRegressionTests`、`LanguageDetectionServiceTests`、`LayoutDetectionStrategyTests`、`LayoutModelDownloadServiceTests`、`LocalAITranslationServiceIntegrationTests`、`LocalAITranslationServiceLazyInitTests`、`LocalAiWorkerClientFallbackTests`、`LocalCredentialProtectorTests`、`LocalDictionaryIndexServiceTests`、`LocalizationServiceTests`、`LongDocumentServiceSupportTests`、`LongDocumentTranslationServiceReviewFixTests`、`LongDocWorkerClientResultHydrationTests`、`LongDocWorkerLifecycleTests`、`LongDocWorkerPipelineTests`、`LongDocWorkerTranslationManagerFactoryTests`、`MainPageLifecycleLeakTests`、`MainPageSuggestionLogicTests`、`MdxDictionaryTranslationServiceTests`、`MdxEncryptedLookupTests`、`MdxEncryptionTests`、`MdxMddResourceTests`、`MemoryProfilingAutomationTests`、`MouseHookServiceTests`、`MuPdfExportServiceSpacingTests`、`OcrServiceFactoryTests`、`OcrTextMergerTests`、`OcrWorkerClientFallbackTests`、`OllamaOcrServiceTests`、`OpenVinoTranslationServiceTests`、`Page2TranslationQualityTests`、`PdfExportServiceFontTests`、`PdfExportServiceLayoutTests`、`PhiSilicaTranslationServiceTests`、`PooledDenseTensorTests`、`PopButtonServiceTests`、`ProtectedCursorHelperTests`、`QueryOutcomeSummaryTests`、`ResultsInputRouterTests`、`SelectionPerformanceTests`、`ServiceResultDemotionHelperTests`、`ServiceResultItemLifecycleLeakTests`、`SettingsPageLifecycleLeakTests`、`SettingsPageMdxServiceIdTests`、`SettingsPageSplitTabsTests`、`SettingsServiceTests`、`TableStructureRecognitionServiceTests`、`TargetLanguageSelectorTests`、`TextInsertionServiceTests`、`TextSelectionServiceTests`、`ThemeRegressionMemoryAutomationTests`、`TitleBarDragRegionHelperTests`、`TranslationCacheServiceTests`、`TranslationManagerServiceTests`、`UiThreadHotspotDiagnosticsTests`、`UnsavedChangesDialogTests`、`VisionLayoutDetectionServiceTests`、`WindowClosedLifecycleTests`、`WindowDetectorTests`、`WindowPositionHelperTests`、`WorkerPackagingTests`、`WorkerProtocolSerializationTests`。
+  - `Easydict.UIAutomation.Tests`：`DarkModeTests`、`DictionaryWebViewRenderingTests`、`LongDocTranslationTests`、`MainWindowTests`、`MemoryGateTests`、`MiniWindowFocusTests`、`MiniWindowLongTextTests`、`OcrTests`、`PhoneticTranscriptionTests`、`PopButtonSelectionTests`、`PopButtonTests`、`SettingsPageScrollTests`、`SettingsPageTests`、`ThemeContrastTests`、`TranslationTests`、`UiThreadHotspotProbeTests`、`WindowLifecycleTests`。
+- `Easydict.UIAutomation.Tests` 明细
+  - `MainWindowTests`
+    - `MainWindow_ShouldAppearOnLaunch`
+    - `MainWindow_ShouldHaveLanguageControls`
+    - `MainWindow_InputTextBox_ShouldAcceptText`
+    - `MainWindow_FullScreenshot_ShouldCapture`
+  - `TranslationTests`
+    - `MainWindow_TranslateWithEnter`
+    - `MiniWindow_TranslateWithEnter`
+    - `FixedWindow_TranslateWithEnter`
+  - `SettingsPageTests`
+    - `SettingsPage_ShouldOpenFromMainWindow`
+    - `SettingsPage_ShouldShowServiceConfiguration`
+    - `SettingsPage_ShouldAcceptImmediateScrollAfterContentVisible`
+    - `SettingsPage_ShouldLoadUnwarmedTabWhenClickedImmediately`
+    - `SettingsPage_FirstEntry_ShouldAcceptImmediatePhysicalMouseTabClickAndShowReaction`
+    - `SettingsPage_LoadedTabs_ShouldSwitchWithinOneSecond`
+    - `SettingsPage_OpenBackLoop_ShouldSupportMemoryMarkerCollection`
+    - `SettingsPage_OpenAndReturn_ShouldRestoreMainWindowMemory`
+  - `SettingsPageScrollTests`
+    - `SettingsPage_ScrollThroughAllSections`
+  - `LongDocTranslationTests`
+    - `LongDocTab_ShouldSwitchFromQuickTranslate`
+    - `LongDocTab_ShouldShowAllControls`
+    - `LongDocTab_InputModeCombo_ShouldChangeSelection`
+    - `LongDocTab_OutputModeCombo_ShouldChangeSelection`
+    - `LongDocTab_ConcurrencyBox_ShouldAcceptValue`
+    - `LongDocTab_PageRangeBox_ShouldAcceptText`
+    - `LongDocTab_TranslateButton_ShouldExistAndBeEnabled`
+    - `LongDocTab_SwitchBackToQuickTranslate`
+    - `LongDocTab_FullWorkflow_Screenshot`
+  - `OcrTests`
+    - `OcrHotkey_ShouldShowCaptureOverlay`
+    - `OcrHotkey_EscapeShouldCancelOverlay`
+    - `SilentOcrHotkey_ShouldShowCaptureOverlay`
+    - `OcrWorkflow_ScreenshotSequence`
+    - `OcrHotkey_SecondTriggerShouldWork`
+  - `PopButtonTests`
+    - `Settings_MouseSelectionTranslateToggle_ShouldExist`
+    - `Settings_BehaviorSection_Screenshot`
+    - `PopButton_FullWorkflow_ScreenshotSequence`
+  - `PopButtonSelectionTests`
+    - `DragSelect_InNotepad_PopButtonAppears`
+    - `DoubleClick_InNotepad_PopButtonAppears`
+    - `PopButton_AutoDismisses_After5Seconds`
+    - `PopButton_DismissesOnScroll`
+    - `PopButton_DismissesOnRightClick`
+    - `PopButton_DismissesOnKeyPress`
+    - `PopButton_Click_OpensMiniWindow`
+    - `DragSelect_ScreenshotSequence_FullWorkflow`
+  - `DarkModeTests`
+    - `DarkMode_MainWindow_ShouldRenderCorrectly`
+    - `MainWindow_ExplicitLightAndDarkThemes_ShouldNotLeakOppositePalette`
+    - `DarkMode_SettingsPage_ShouldRenderCorrectly`
+    - `DarkMode_MiniWindow_ShouldRenderCorrectly`
+    - `DarkMode_FixedWindow_ShouldRenderCorrectly`
+  - `ThemeContrastTests`
+    - `SettingsPage_ExplicitLightTheme_OnDarkWindowsTheme_ShouldRenderLightControls`
+    - `SettingsPage_ExplicitLightTheme_SimplifiedChinese_ShouldRenderControlStateColors`
+    - `MainWindow_ExplicitLightTheme_OnDarkWindowsTheme_ShouldRenderLightChrome`
+    - `MainWindow_FollowSystemTheme_WhenWindowsThemeChanges_ShouldUpdateWhileRunning`
+    - `LongDocServiceCombo_ThemeMatrix_ShouldRenderUnavailableServicesInDropdown`
+    - `ThemeMatrix_LightAndDarkAppThemes_OnLightAndDarkWindowsThemes_ShouldCaptureNamedScreenshots`
+  - `MiniWindowFocusTests`
+    - `MiniWindow_OnOpen_InputTextBoxIsVisible`
+    - `MiniWindow_OnReopen_InputTextBoxIsVisible`
+  - `MiniWindowLongTextTests`
+    - `MiniWindow_LongText_InputDisplaysCorrectly`
+    - `MiniWindow_LongText_TranslationResizesWindow`
+    - `MiniWindow_LongText_StreamingProgressScreenshots`
+    - `MiniWindow_LongText_WindowHeightWithinBounds`
+  - `PhoneticTranscriptionTests`
+    - `MainWindow_ChineseToEnglish_PhoneticBadgesIfAvailable`
+    - `MainWindow_EnglishToChinese_DoesNotShowPhoneticBadges`
+    - `MiniWindow_ChineseToEnglish_PhoneticBadgesIfAvailable`
+  - `DictionaryWebViewRenderingTests`
+    - `MainWindow_DictionaryWebView_CapturesScreenshotForManualReview`
+  - `MemoryGateTests`
+    - `PrMemoryGate_LightweightWindowAndSelectionScenario`
+    - `InterfaceSwitching_ShouldStayResponsiveAcrossMainSettingsAndFloatingSurfaces`
+  - `UiThreadHotspotProbeTests`
+    - `MainSettingsModesAndFloatingWindows_ShouldEmitUiHotspots`
+  - `WindowLifecycleTests`
+    - `App_ShouldLaunchAndShowMainWindow`
+    - `App_ShouldHaveReasonableWindowSize`
+    - `App_ShouldCloseGracefully`
+- `Easydict.TranslationService.Tests` 覆盖点
+  - 服务单元：Google、GoogleWeb、Bing、DeepL、Youdao、OpenAI、Ollama、BuiltInAI、DeepSeek、Groq、Zhipu、GitHubModels、CustomOpenAI、Gemini、Doubao、Caiyun、NiuTrans、Volcano、Linguee。
+  - 服务集成：Google、Youdao、OpenAI、DeepL、DeepSeek、Groq、Zhipu、GitHubModels、Gemini、Doubao、Caiyun、NiuTrans、Volcano；Bing/Linguee skip。
+  - 流式协议：Responses SSE parser、通用 SSE parser、OpenAI format detection。
+  - 语法纠错：parser、service availability、stream grammar correction。
+  - 模型：Language BCP-47、PhoneticDisplayHelper、ServiceQueryResult。
+  - 音标：Youdao enrichment integration、stampede 防重。
+  - 长文档：pipeline、并发、两阶段、页码、UI freeze、`LongDocumentE2EBaselineTests` baseline、OCR fallback、质量报告。
+  - 内容保真：FormulaProtection、ContentPreservation、公式 token 恢复、soft span、数学字体/字符模式。
+  - 性能/内存：`StartupPerformanceTests`、`ShortTextUIFreezeTests`、`MemoryBudgetTests`。
+- `Easydict.WinUI.Tests` 覆盖点
+  - 设置/本地化/生命周期：SettingsService、SettingsPage split tabs/lifecycle/unsaved dialog、Localization、`AppProfilingDiagnosticsTests`。
+  - 窗口/布局：WindowPosition、WindowClosedLifecycle、TitleBarDragRegion、DPI 相关辅助。
+  - OCR/截图：OcrTextMerger、OcrServiceFactory、Windows/Ollama/Custom API worker fallback、WindowDetector、GDI handles。
+  - 长文档 UI 服务：LongDocumentServiceSupport、LongDocumentTranslationService review fixes、PDF export、MuPDF spacing、layout model download、DocLayoutYolo、TATR、font download。
+  - 本地 AI：LocalAI worker fallback/lazy init/integration、OpenVINO、PhiSilica、FoundryLocal recovery。
+  - 本地词典：MDX/MDD、加密、索引、建议逻辑、WebView rendering 相关。
+  - 输入/选词：MouseHook、PopButtonService、TextSelection、TextInsertion、ProtectedCursor、ResultsInputRouter。
+  - worker/打包：WorkerProtocolSerialization、LongDocWorker pipeline/lifecycle/result hydration、WorkerPackaging。
+  - 视觉/性能：`KanbanTodoUxRegressionTests`、MemoryProfilingAutomation、ThemeRegressionMemoryAutomation、UiThreadHotspotDiagnostics、Page2TranslationQuality、PdfTranslationVisual。
+- `Polyglot.TextLayout.Tests` 覆盖点
+  - Segmentation：Latin/CJK/mixed/punctuation/soft hyphen/whitespace。
+  - Kinsoku：禁则表、CJK 标点。
+  - Layout：固定宽、可变宽、增量布局、长段拆分、禁则布局。
+  - FontFitting：二分缩放、最小字号、行矩形/高度约束。
+  - Integration：CJK/英文/混排端到端、字体缩放后布局、PDF line positions 模拟。
+- `Easydict.Llm.Streaming.Tests` 覆盖点
+  - SSE data lines、多个 chunk、blank/non-data 忽略、`[DONE]`、malformed JSON、空 choices、空流、取消、Unicode。
+- `BrowserRegistrar.Tests` 覆盖点
+  - CLI 参数、JSON snake_case、manifest 写入、Chrome/Firefox install/uninstall/status、多个 Chrome extension id、bridge path。
+- `LexIndex.Tests` 覆盖点
+  - prefix/wildcard roundtrip、Unicode normalization、variant preservation、metadata、空 key、invalid header/version/edge table。
+
+## 17. 已知测试缺口/迁移风险
+
+- UI 自动化中部分翻译结果只截图不强断言翻译内容；迁移后应保留截图基线，同时补充可机器断言的 mock service path。
+- 外部服务集成依赖网络和 API key；迁移验收不能只依赖这些测试，需保留 mock HTTP 单元测试。
+- Bing/Linguee 集成当前 skip，迁移时不要误判为无需实现；仍需保留服务行为和单元覆盖。
+- OCR overlay、global hook、托盘和 Shell context menu 强依赖 Windows 桌面环境；CI 可覆盖启动/截图/基础交互，但仍需要本机手测。
+- UI/UX 视觉验收不能只看控件存在；必须保留截图基线并人工抽查 hover、pressed、loading、error、长文本、中文界面和主题切换矩阵。
+- PDF 视觉质量有 `PdfTranslationVisualTest` 和 baseline，但公式/复杂排版仍需抽样人工检查。
+- Worker fallback 是重要兼容路径；迁移时必须同时验证 worker 可用路径和 worker 缺失/协议不匹配路径。
+
+## 18. 三轮复查记录
+
+- 第一轮：功能入口角度
+  - 对照 `Program.cs`、`App.xaml.cs`、`HotkeyService`、`TrayIconService`、`ContextMenuService`、`ProtocolRegistrationService` 检查入口。
+  - 已补入：Shell context menu、protocol activation、browser NativeBridge、tray menu、named event、热键 reload、DocumentExport、OpenVINO/WindowsAI、PdfPig、工具项目。
+  - 复核结果：solution project 名称和关键迁移术语反查均无遗漏。
+- 第二轮：行为测试覆盖角度
+  - 对照测试项目计数和 UIAutomation 方法清单检查是否漏掉测试类型。
+  - 已补入：LexIndex、Polyglot.TextLayout、Llm.Streaming、BrowserRegistrar、Sidecar E2E、worker 序列化与 fallback、非 UI 测试类清单。
+  - 复核结果：测试类反查和 UIAutomation `[Fact]`/`[Theory]` 方法反查均无遗漏。
+- 第三轮：迁移验收角度
+  - 对照每个迁移功能是否有“可验证标准”和“已有覆盖”。
+  - 已补入：长文档 two-pass/公式/缓存/dedup、设置页 lazy tabs/unsaved dialog、worker packaging、外部集成 skip 风险、Package.appxmanifest 验收项。
+  - 追加 UI/UX 复核：对照 XAML、主题资源、ScreenCaptureWindow 注释和 UIAutomation 截图点补入视觉语言、操作流程、状态反应、截图基线和人工验收项。

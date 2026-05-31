@@ -158,7 +158,11 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("chrome", format!("{:?}", token.chrome))
             .property("read_only", token.read_only.to_string())
             .property("state", token.state.to_string())
-            .property("action", format!("{:?}", token.action.kind())),
+            .property("action", format!("{:?}", token.action.kind()))
+            .property(
+                "key_bindings",
+                text_editor_key_bindings(&token.key_bindings),
+            ),
         ViewToken::ToggleSwitch(token) => SchemaNode::new("ToggleSwitch", token.id.clone())
             .property("label", quoted(&token.label))
             .property("checked", token.checked.to_string())
@@ -230,6 +234,23 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
         }
         ViewToken::ResultCard(token) => result_card_schema(token),
         ViewToken::ResultList(token) => result_list_schema(token),
+        ViewToken::PointerRegion(token) => SchemaNode::new("PointerRegion", token.id.clone())
+            .property("width", format!("{:?}", token.width))
+            .property("height", format!("{:?}", token.height))
+            .property("move", format!("{:?}", token.move_action.kind()))
+            .property("left_down", format!("{:?}", token.left_down_action.kind()))
+            .property("left_up", format!("{:?}", token.left_up_action.kind()))
+            .property(
+                "double_click",
+                format!("{:?}", token.double_click_action.kind()),
+            )
+            .property(
+                "right_down",
+                format!("{:?}", token.right_down_action.kind()),
+            )
+            .property("wheel", format!("{:?}", token.wheel_action.kind()))
+            .property("escape", format!("{:?}", token.escape_action.kind()))
+            .child(schema_node(&token.content)),
         ViewToken::Custom(token) => SchemaNode::new("Custom", token.id.clone())
             .property("control", quoted(&token.control))
             .property("children", token.children.len().to_string())
@@ -377,6 +398,42 @@ fn navigation_items(items: &[crate::view::NavigationItem]) -> String {
     items
         .iter()
         .map(|item| format!("{}:{}", item.id, quoted(&item.label)))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn text_editor_key_bindings<Message>(
+    bindings: &[crate::view::TextEditorKeyBinding<Message>],
+) -> String {
+    if bindings.is_empty() {
+        return "none".to_string();
+    }
+
+    bindings
+        .iter()
+        .map(|binding| {
+            let mut parts = Vec::new();
+            if binding.modifiers.control {
+                parts.push("Ctrl");
+            }
+            if binding.modifiers.alt {
+                parts.push("Alt");
+            }
+            if binding.modifiers.shift {
+                parts.push("Shift");
+            }
+            if binding.modifiers.logo {
+                parts.push("Logo");
+            }
+            parts.push(match binding.key {
+                crate::view::TextEditorKey::Enter => "Enter",
+                crate::view::TextEditorKey::Tab => "Tab",
+                crate::view::TextEditorKey::Escape => "Escape",
+                crate::view::TextEditorKey::ArrowUp => "ArrowUp",
+                crate::view::TextEditorKey::ArrowDown => "ArrowDown",
+            });
+            parts.join("+")
+        })
         .collect::<Vec<_>>()
         .join(",")
 }

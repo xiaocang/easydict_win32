@@ -12,12 +12,29 @@ fn main() {
 }
 
 fn preview_window_options() -> WindowOptions {
+    let settings_preview = std::env::var("EASYDICT_PREVIEW_SETTINGS_OPEN")
+        .ok()
+        .is_some_and(|value| preview_env_truthy(&value));
+    let (width, height) = if settings_preview {
+        (620.0, 720.0)
+    } else {
+        (940.0, 1220.0)
+    };
+    let min_width = if settings_preview { 560.0 } else { 640.0 };
+
     WindowOptions::new("main", "Easydict Rust Main Window Preview")
-        .size(940.0, 1220.0)
-        .min_size(640.0, 720.0)
+        .size(width, height)
+        .min_size(min_width, 720.0)
         .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::CanResize)
         .placement(WindowPlacement::Explicit { x: 40.0, y: 20.0 })
+}
+
+fn preview_env_truthy(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
 }
 
 struct PreviewApp {

@@ -69,6 +69,24 @@ try {
         -p:PublishTrimmed=true
     if ($LASTEXITCODE -ne 0) { throw "BrowserRegistrar publish failed" }
 
+    # Publish .NET Compat Host beside the app for the temporary Rust migration bridge
+    Write-Host "  Publishing .NET Compat Host..." -ForegroundColor Gray
+    dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj `
+        -c $Configuration `
+        --runtime "win-$Platform" `
+        --self-contained true `
+        --output $publishDir `
+        -p:PublishTrimmed=false
+    if ($LASTEXITCODE -ne 0) { throw ".NET Compat Host publish failed" }
+
+    # Build Rust-owned helper executables and copy them beside the app.
+    # Rust desktop actions resolve these names from the package/app directory.
+    Write-Host "  Publishing Rust helper executables..." -ForegroundColor Gray
+    & "$scriptDir/Build-RustHelpers.ps1" `
+        -Platform $Platform `
+        -Configuration $Configuration `
+        -OutputDir $publishDir
+
     Write-Host "Publish completed successfully" -ForegroundColor Green
 
     # dotnet publish names the PRI file after the assembly (Easydict.WinUI.pri),

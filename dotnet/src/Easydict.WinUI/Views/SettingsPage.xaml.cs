@@ -4285,7 +4285,7 @@ public sealed partial class SettingsPage : Page
 
         // Reload hotkeys immediately
         App.LogToFile("[SettingsPage] Triggering hotkey reload");
-        App.HotkeyService?.ReloadHotkeys();
+        var hotkeyFailures = App.HotkeyService?.ReloadHotkeys();
 
         // Refresh window service results to pick up new EnabledQuery settings
         MiniWindowService.Instance.RefreshServiceResults();
@@ -4319,6 +4319,27 @@ public sealed partial class SettingsPage : Page
         // Hide the floating save button and reset unsaved changes flag
         _hasUnsavedChanges = false;
         SaveButton.Visibility = Visibility.Collapsed;
+
+        // Warn the user about any hotkeys that could not be registered
+        // (e.g. reserved by Windows like Win+Space, or in use by another app).
+        if (hotkeyFailures is { Count: > 0 })
+        {
+            var lines = hotkeyFailures
+                .Select(f => $"{loc.GetString(f.NameKey)}: {f.HotkeyString}")
+                .Distinct()
+                .ToList();
+
+            var failureDialog = new ContentDialog
+            {
+                Title = loc.GetString("HotkeyRegistrationFailedTitle"),
+                Content = loc.GetString("HotkeyRegistrationFailedMessage")
+                    + "\n\n"
+                    + string.Join("\n", lines),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(failureDialog);
+        }
 
         return true;
     }

@@ -1287,4 +1287,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Không thể đăng ký phím tắt</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Không thể đăng ký các phím tắt sau. Chúng có thể được Windows dành riêng (như Win+Space) hoặc đã được ứng dụng khác sử dụng. Vui lòng chọn tổ hợp khác:</value>
+  </data>
 </root>

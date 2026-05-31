@@ -875,4 +875,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Tidak Dapat Mendaftarkan Pintasan</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Pintasan berikut tidak dapat didaftarkan. Ia mungkin dikhaskan oleh Windows (seperti Win+Space) atau sudah digunakan oleh aplikasi lain. Sila pilih gabungan lain:</value>
+  </data>
 </root>

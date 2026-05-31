@@ -1241,4 +1241,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>ไม่สามารถลงทะเบียนปุ่มลัดได้</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>ไม่สามารถลงทะเบียนปุ่มลัดต่อไปนี้ได้ อาจถูกสงวนไว้โดย Windows (เช่น Win+Space) หรือถูกใช้งานโดยแอปพลิเคชันอื่นอยู่แล้ว โปรดเลือกชุดปุ่มอื่น:</value>
+  </data>
 </root>

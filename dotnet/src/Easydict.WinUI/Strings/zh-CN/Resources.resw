@@ -1289,4 +1289,10 @@
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>下载失败。请检查网络连接后重试。</value></data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>访问密钥 ID（Access Key ID）</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>私有访问密钥（Secret Access Key）</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>快捷键注册失败</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>以下快捷键无法注册。它们可能被 Windows 系统占用（例如 Win+Space），或已被其他应用程序使用。请尝试其他组合：</value>
+  </data>
 </root>

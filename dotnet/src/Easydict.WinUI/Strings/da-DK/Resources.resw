@@ -875,4 +875,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Genvejstasten kunne ikke registreres</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Følgende genvejstaster kunne ikke registreres. De er muligvis reserveret af Windows (såsom Win+Mellemrum) eller allerede i brug af et andet program. Vælg en anden kombination:</value>
+  </data>
 </root>

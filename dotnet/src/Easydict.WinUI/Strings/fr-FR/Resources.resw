@@ -1292,4 +1292,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Impossible d'enregistrer le raccourci</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Les raccourcis suivants n'ont pas pu être enregistrés. Ils sont peut-être réservés par Windows (comme Win+Espace) ou déjà utilisés par une autre application. Veuillez choisir une autre combinaison :</value>
+  </data>
 </root>

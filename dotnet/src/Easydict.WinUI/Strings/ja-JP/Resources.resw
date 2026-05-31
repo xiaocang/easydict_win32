@@ -1292,4 +1292,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>ホットキーを登録できませんでした</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>次のホットキーを登録できませんでした。Windows によって予約されている（Win+Space など）か、他のアプリケーションで使用されている可能性があります。別の組み合わせを選択してください：</value>
+  </data>
 </root>

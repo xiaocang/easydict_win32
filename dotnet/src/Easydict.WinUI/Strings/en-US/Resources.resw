@@ -1289,4 +1289,10 @@
   <data name="OpenVINO_Status_DownloadFailed" xml:space="preserve"><value>Download failed. Check your network connection and try again.</value></data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Hotkey Could Not Be Registered</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>The following hotkeys could not be registered. They may be reserved by Windows (such as Win+Space) or already in use by another application. Please choose a different combination:</value>
+  </data>
 </root>

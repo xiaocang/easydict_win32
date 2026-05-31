@@ -1292,4 +1292,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>快速鍵註冊失敗</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>下列快速鍵無法註冊。它們可能被 Windows 系統佔用（例如 Win+Space），或已被其他應用程式使用。請嘗試其他組合：</value>
+  </data>
 </root>

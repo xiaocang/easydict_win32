@@ -1292,4 +1292,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Tastenkombination konnte nicht registriert werden</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Die folgenden Tastenkombinationen konnten nicht registriert werden. Sie sind möglicherweise von Windows reserviert (z. B. Win+Leertaste) oder werden bereits von einer anderen Anwendung verwendet. Bitte wählen Sie eine andere Kombination:</value>
+  </data>
 </root>

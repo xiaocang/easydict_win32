@@ -1287,4 +1287,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>تعذّر تسجيل اختصار لوحة المفاتيح</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>تعذّر تسجيل اختصارات لوحة المفاتيح التالية. قد تكون محجوزة بواسطة Windows (مثل Win+Space) أو مستخدمة بالفعل من قبل تطبيق آخر. يرجى اختيار مجموعة مختلفة:</value>
+  </data>
 </root>

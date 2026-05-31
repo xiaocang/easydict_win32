@@ -875,4 +875,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>हॉटकी रजिस्टर नहीं की जा सकी</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>निम्नलिखित हॉटकी रजिस्टर नहीं की जा सकीं। ये Windows द्वारा आरक्षित हो सकती हैं (जैसे Win+Space) या किसी अन्य एप्लिकेशन द्वारा पहले से उपयोग में हो सकती हैं। कृपया कोई दूसरा संयोजन चुनें:</value>
+  </data>
 </root>

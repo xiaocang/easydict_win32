@@ -1279,4 +1279,10 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Impossibile registrare la scorciatoia</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Non è stato possibile registrare le seguenti scorciatoie. Potrebbero essere riservate da Windows (come Win+Spazio) o già in uso da un'altra applicazione. Scegli una combinazione diversa:</value>
+  </data>
 </root>

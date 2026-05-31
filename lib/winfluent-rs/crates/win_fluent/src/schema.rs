@@ -111,10 +111,28 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("tooltip", optional_string(token.tooltip.as_deref()))
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
+        ViewToken::FlyoutButton(token) => SchemaNode::new("FlyoutButton", token.id.clone())
+            .property("label", quoted(&token.label))
+            .property("icon", optional_icon(token.icon.as_ref()))
+            .property("tooltip", optional_string(token.tooltip.as_deref()))
+            .property("selected", optional_string(token.selected.as_deref()))
+            .property("items", flyout_items(&token.items))
+            .property("state", token.state.to_string())
+            .property("action", format!("{:?}", token.action.kind())),
         ViewToken::StatusBadge(token) => SchemaNode::new("StatusBadge", token.id.clone())
             .property("label", quoted(&token.label))
             .property("severity", format!("{:?}", token.severity))
             .property("icon", optional_icon(token.icon.as_ref())),
+        ViewToken::ProgressRing(token) => SchemaNode::new("ProgressRing", token.id.clone())
+            .property("active", token.active.to_string())
+            .property("size", token.size.to_string())
+            .property("label", optional_string(token.label.as_deref())),
+        ViewToken::BusyOverlay(token) => SchemaNode::new("BusyOverlay", token.id.clone())
+            .property("active", token.active.to_string())
+            .property("opacity", format!("{:.2}", token.opacity))
+            .property("blocks_input", token.blocks_input.to_string())
+            .property("label", optional_string(token.label.as_deref()))
+            .child(schema_node(&token.content)),
         ViewToken::Card(token) => {
             let mut node = SchemaNode::new("Card", token.id.clone())
                 .property("title", quoted(&token.title))
@@ -186,6 +204,10 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("style", quoted(&token.style.summary()))
                 .children(token.children.iter().map(schema_node))
         }
+        ViewToken::AdaptiveSwitch(token) => SchemaNode::new("AdaptiveSwitch", token.id.clone())
+            .property("breakpoint_width", token.breakpoint_width.to_string())
+            .child(schema_node(&token.wide))
+            .child(schema_node(&token.narrow)),
         ViewToken::Lazy(token) => SchemaNode::new("Lazy", token.id.clone())
             .property("key", quoted(&token.key))
             .child(schema_node(&token.content)),
@@ -238,6 +260,8 @@ fn result_card_schema<Message>(token: &ResultCardToken<Message>) -> SchemaNode {
         .property("item", result_item_summary(&token.item))
         .property("copy", format!("{:?}", token.copy_action.kind()))
         .property("speak", format!("{:?}", token.speak_action.kind()))
+        .property("replace", format!("{:?}", token.replace_action.kind()))
+        .property("retry", format!("{:?}", token.retry_action.kind()))
         .property("toggle", format!("{:?}", token.toggle_action.kind()))
         .property(
             "collapse_transition_ms",
@@ -251,6 +275,8 @@ fn result_list_schema<Message>(token: &ResultListToken<Message>) -> SchemaNode {
         .property("virtualized", token.virtualized.to_string())
         .property("copy", format!("{:?}", token.copy_action.kind()))
         .property("speak", format!("{:?}", token.speak_action.kind()))
+        .property("replace", format!("{:?}", token.replace_action.kind()))
+        .property("retry", format!("{:?}", token.retry_action.kind()))
         .property("toggle", format!("{:?}", token.toggle_action.kind()))
         .property(
             "collapse_transition_ms",
@@ -326,6 +352,23 @@ fn combo_items(items: &[crate::view::ComboBoxItem]) -> String {
     items
         .iter()
         .map(|item| format!("{}:{}", item.id, quoted(&item.label)))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn flyout_items(items: &[crate::view::FlyoutMenuItem]) -> String {
+    items
+        .iter()
+        .map(|item| {
+            format!(
+                "{}:{}:{:?}:checked={}:enabled={}",
+                item.id,
+                quoted(&item.label),
+                item.kind,
+                item.checked,
+                item.enabled
+            )
+        })
         .collect::<Vec<_>>()
         .join(",")
 }

@@ -97,6 +97,74 @@ impl SettingsSection {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConnectionStatus {
+    Connected,
+    Disconnected,
+    Error,
+}
+
+impl ConnectionStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Connected => "Connected",
+            Self::Disconnected => "Disconnected",
+            Self::Error => "Error",
+        }
+    }
+
+    pub fn severity(self) -> ValidationSeverity {
+        match self {
+            Self::Connected => ValidationSeverity::Success,
+            Self::Disconnected => ValidationSeverity::Info,
+            Self::Error => ValidationSeverity::Error,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PreviewScenario {
+    Initial,
+    BeforeTranslate,
+    Loading,
+    AfterTranslate,
+    Error,
+    ModeOverlay,
+    LongDocument,
+}
+
+impl PreviewScenario {
+    pub const ALL: [Self; 7] = [
+        Self::Initial,
+        Self::BeforeTranslate,
+        Self::Loading,
+        Self::AfterTranslate,
+        Self::Error,
+        Self::ModeOverlay,
+        Self::LongDocument,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Initial => "initial",
+            Self::BeforeTranslate => "before_translate",
+            Self::Loading => "loading",
+            Self::AfterTranslate => "after_translate",
+            Self::Error => "error",
+            Self::ModeOverlay => "mode_overlay",
+            Self::LongDocument => "long_document",
+        }
+    }
+
+    pub fn from_id(value: &str) -> Self {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|scenario| scenario.id() == value)
+            .unwrap_or(Self::Initial)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TranslationResultPreview {
     pub id: String,
@@ -327,11 +395,14 @@ impl Default for SettingsState {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EasydictUiState {
     pub mode: AppMode,
+    pub connection_status: ConnectionStatus,
     pub status_text: String,
     pub source_text: String,
     pub detected_language: Option<String>,
     pub source_language: String,
     pub target_language: String,
+    pub is_translating: bool,
+    pub mode_overlay_active: bool,
     pub services_completed: usize,
     pub results: Vec<TranslationResultPreview>,
     pub long_document: LongDocumentState,
@@ -344,11 +415,14 @@ impl Default for EasydictUiState {
     fn default() -> Self {
         Self {
             mode: AppMode::QuickTranslate,
-            status_text: "Ready".to_string(),
+            connection_status: ConnectionStatus::Disconnected,
+            status_text: "Disconnected".to_string(),
             source_text: "Artificial intelligence is transforming how we work and live".to_string(),
             detected_language: None,
             source_language: "auto".to_string(),
             target_language: "zh-Hans".to_string(),
+            is_translating: false,
+            mode_overlay_active: false,
             services_completed: 3,
             results: vec![
                 TranslationResultPreview::new(
@@ -379,6 +453,97 @@ impl Default for EasydictUiState {
 }
 
 impl EasydictUiState {
+    pub fn preview(scenario: PreviewScenario, theme: ThemeMode) -> Self {
+        let mut state = Self::default();
+        state.settings.theme = theme;
+
+        match scenario {
+            PreviewScenario::Initial => {
+                state.source_text.clear();
+                state.detected_language = None;
+                state.services_completed = 0;
+                state.results = preview_waiting_results();
+            }
+            PreviewScenario::BeforeTranslate => {
+                state.source_text = "Hello from the Rust main window preview".to_string();
+                state.detected_language = Some("Detected: English".to_string());
+                state.services_completed = 0;
+                state.results = preview_waiting_results();
+            }
+            PreviewScenario::Loading => {
+                state.source_text =
+                    "Streaming translation should keep the input responsive".to_string();
+                state.detected_language = Some("Detected: English".to_string());
+                state.is_translating = true;
+                state.connection_status = ConnectionStatus::Connected;
+                state.status_text = "Translating".to_string();
+                state.services_completed = 1;
+                state.results = vec![
+                    TranslationResultPreview::new(
+                        "google",
+                        "Google Translate",
+                        "流式翻译应保持输入响应",
+                    )
+                    .status(ResultStatus::Ready)
+                    .latency_ms(612),
+                    TranslationResultPreview::new("bing", "Bing Translate", "Streaming...")
+                        .status(ResultStatus::Streaming),
+                    TranslationResultPreview::new("openai", "OpenAI", "")
+                        .status(ResultStatus::Loading),
+                ];
+            }
+            PreviewScenario::AfterTranslate => {
+                state.connection_status = ConnectionStatus::Connected;
+                state.status_text = "Connected".to_string();
+            }
+            PreviewScenario::Error => {
+                state.connection_status = ConnectionStatus::Error;
+                state.status_text = "Error".to_string();
+                state.services_completed = 2;
+                state.results = vec![
+                    TranslationResultPreview::new(
+                        "google",
+                        "Google Translate",
+                        "人工智能正在改变我们的工作和生活方式",
+                    )
+                    .latency_ms(1228),
+                    TranslationResultPreview::new(
+                        "bing",
+                        "Bing Translate",
+                        "Network error: request timed out.",
+                    )
+                    .status(ResultStatus::Error),
+                    TranslationResultPreview::new("openai", "OpenAI", "").manual_query(),
+                ];
+            }
+            PreviewScenario::ModeOverlay => {
+                state.mode_overlay_active = true;
+                state.is_translating = true;
+                state.status_text = "Switching mode".to_string();
+            }
+            PreviewScenario::LongDocument => {
+                state.mode = AppMode::LongDocument;
+                state.connection_status = ConnectionStatus::Connected;
+                state.status_text = "Connected".to_string();
+            }
+        }
+
+        state
+    }
+
+    pub fn preview_from_env() -> Self {
+        let scenario = std::env::var("EASYDICT_PREVIEW_SCENARIO")
+            .ok()
+            .map(|value| PreviewScenario::from_id(&value))
+            .unwrap_or(PreviewScenario::Initial);
+        let theme = std::env::var("EASYDICT_PREVIEW_THEME")
+            .ok()
+            .map(|value| theme_from_id(&value))
+            .unwrap_or(ThemeMode::Light);
+
+        Self::preview(scenario, theme)
+    }
+
     pub fn apply(&mut self, message: Message) {
         match message {
             Message::ModeChanged(id) => {
@@ -427,7 +592,7 @@ impl EasydictUiState {
             Message::ThemeChanged(id) => {
                 self.settings.theme = match id.as_str() {
                     "dark" => ThemeMode::Dark,
-                    "easydict" => ThemeMode::Easydict,
+                    "minimal" => ThemeMode::Minimal,
                     "high-contrast" => ThemeMode::HighContrast,
                     "system" => ThemeMode::System,
                     _ => ThemeMode::Light,
@@ -458,6 +623,8 @@ impl EasydictUiState {
             Message::Noop
             | Message::Translate
             | Message::CopyResult
+            | Message::ReplaceResult
+            | Message::RetryResult
             | Message::SpeakResult
             | Message::OpenSettings
             | Message::Back
@@ -471,6 +638,24 @@ impl EasydictUiState {
             | Message::CancelCapture
             | Message::TranslateSelection => {}
         }
+    }
+}
+
+fn preview_waiting_results() -> Vec<TranslationResultPreview> {
+    vec![
+        TranslationResultPreview::new("google", "Google Translate", "").manual_query(),
+        TranslationResultPreview::new("bing", "Bing Translate", "").manual_query(),
+        TranslationResultPreview::new("openai", "OpenAI", "").manual_query(),
+    ]
+}
+
+pub fn theme_from_id(id: &str) -> ThemeMode {
+    match id {
+        "dark" => ThemeMode::Dark,
+        "minimal" => ThemeMode::Minimal,
+        "high-contrast" => ThemeMode::HighContrast,
+        "system" => ThemeMode::System,
+        _ => ThemeMode::Light,
     }
 }
 
@@ -504,6 +689,8 @@ pub enum Message {
     SwapLanguages,
     Translate,
     CopyResult,
+    ReplaceResult,
+    RetryResult,
     SpeakResult,
     OpenSettings,
     Back,

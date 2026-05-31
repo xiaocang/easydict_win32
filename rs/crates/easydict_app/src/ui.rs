@@ -9,8 +9,11 @@ use win_fluent::view::TextToken;
 pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
     let content = match state.mode {
         AppMode::QuickTranslate => quick_translate_content(state),
-        AppMode::LongDocument => long_document_content(&state.long_document),
+        AppMode::LongDocument => long_document_content(&state.long_document, state.settings.theme),
     };
+    let surface = column((main_header(state), content))
+        .id("main.surface")
+        .tw("p-3 gap-3 w-full h-full");
 
     page("Easydict")
         .id("main.window")
@@ -24,9 +27,12 @@ pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
                     .on_minimize(Message::MinimizeWindow)
                     .on_toggle_maximize(Message::ToggleMaximizeWindow)
                     .on_close(Message::CloseWindow),
-                column((main_header(state), content))
-                    .id("main.surface")
-                    .tw("p-3 gap-3 w-full h-full"),
+                busy_overlay(surface)
+                    .id("ModeSwitchOverlay")
+                    .active(state.mode_overlay_active)
+                    .opacity(0.86)
+                    .label("Switching")
+                    .into_view(),
             ))
             .id("main.root")
             .tw("p-0 gap-0 w-full h-full"),
@@ -109,6 +115,7 @@ pub fn pop_button_view() -> View<Message> {
                 .id("pop-button.translate")
                 .icon(icon::translate())
                 .icon_only()
+                .floating_action()
                 .tooltip("Translate selection")
                 .on_press(Message::TranslateSelection),
         )
@@ -116,26 +123,68 @@ pub fn pop_button_view() -> View<Message> {
 }
 
 fn main_header(state: &EasydictUiState) -> View<Message> {
+    let minimal = state.settings.theme == ThemeMode::Minimal;
+    let mode_icon = match state.mode {
+        AppMode::QuickTranslate => "🌐",
+        AppMode::LongDocument => "📄",
+    };
+    let mode_name = match state.mode {
+        AppMode::QuickTranslate => "Translate",
+        AppMode::LongDocument => "Long Document",
+    };
+    let mut title_stack_children = vec![row((
+        styled_text_id("ModeTitleText", "Easydict", TextStyle::Subtitle),
+        flyout_button("")
+            .id("ModeMenuButton")
+            .selected(state.mode.id())
+            .items([
+                FlyoutMenuItem::radio(
+                    AppMode::QuickTranslate.id(),
+                    mode_menu_label(AppMode::QuickTranslate, minimal),
+                    state.mode == AppMode::QuickTranslate,
+                ),
+                FlyoutMenuItem::radio(
+                    AppMode::LongDocument.id(),
+                    mode_menu_label(AppMode::LongDocument, minimal),
+                    state.mode == AppMode::LongDocument,
+                ),
+            ])
+            .a11y(A11yHint::named(format!("Mode: {mode_name}")))
+            .on_select(Message::ModeChanged),
+    ))
+    .id("main.mode_title")
+    .spacing(4)
+    .align(Alignment::Center)
+    .into_view()];
+    if state.mode == AppMode::LongDocument {
+        title_stack_children.push(styled_text("Long Document", TextStyle::Caption));
+    }
+
+    let mut title_cluster_children = Vec::new();
+    if !minimal {
+        title_cluster_children.push(styled_text(mode_icon, TextStyle::Title));
+    }
+    title_cluster_children.push(
+        column(title_stack_children)
+            .id("main.title_stack")
+            .spacing(0)
+            .into_view(),
+    );
+
     row((
-        row((
-            styled_text("🌐", TextStyle::Title),
-            row((
-                styled_text(state.mode.title(), TextStyle::Subtitle),
-                styled_text("⌄", TextStyle::Body),
-            ))
-            .id("main.title")
-            .spacing(6)
+        row(title_cluster_children)
+            .id("main.title_cluster")
+            .spacing(10)
             .align(Alignment::Center),
-        ))
-        .id("main.title_cluster")
-        .spacing(10)
-        .align(Alignment::Center),
         row((
-            status_badge(state.status_text.clone(), ValidationSeverity::Success)
-                .id("main.status")
-                .into_view(),
+            status_badge(
+                state.status_text.clone(),
+                state.connection_status.severity(),
+            )
+            .id("StatusIndicator")
+            .into_view(),
             button(tr("main.settings", "Settings"))
-                .id("main.settings")
+                .id("SettingsButton")
                 .icon(icon::settings())
                 .icon_only()
                 .tooltip(tr("main.settings", "Settings"))
@@ -151,53 +200,56 @@ fn main_header(state: &EasydictUiState) -> View<Message> {
 }
 
 fn quick_translate_content(state: &EasydictUiState) -> View<Message> {
+    let mut content_children = vec![
+        source_text_card(state),
+        main_translate_action_bar(state),
+        card(tr("main.results", "Translation Results"))
+            .id("QuickOutputCard")
+            .content(results_list("main.quick.results", &state.results))
+            .into_view(),
+    ];
+    if state.settings.theme != ThemeMode::Minimal {
+        content_children.push(styled_text(
+            tr_count(
+                "main.completed",
+                "{count} service(s) completed",
+                state.services_completed,
+            ),
+            TextStyle::Caption,
+        ));
+    }
+
     scroll_view(
-        column((
-            source_text_card(state),
-            translate_language_bar(
-                "main.quick",
-                &state.source_language,
-                &state.target_language,
-                Message::SourceLanguageChanged,
-                Message::TargetLanguageChanged,
-            ),
-            card(tr("main.results", "Translation Results"))
-                .id("main.quick.results_card")
-                .content(results_list("main.quick.results", &state.results)),
-            styled_text(
-                tr_count(
-                    "main.completed",
-                    "{count} service(s) completed",
-                    state.services_completed,
-                ),
-                TextStyle::Caption,
-            ),
-        ))
-        .id("main.quick.content")
-        .tw("p-0 gap-3 w-full"),
+        column(content_children)
+            .id("QuickTranslateContent.Content")
+            .tw("p-0 gap-3 w-full"),
     )
-    .id("main.quick.scroll")
+    .id("QuickTranslateContent")
     .into_view()
 }
 
 fn source_text_card(state: &EasydictUiState) -> View<Message> {
+    let minimal = state.settings.theme == ThemeMode::Minimal;
     let mut source_card = card(tr("main.source_text", "Source Text"))
-        .id("main.quick.input_card")
-        .trailing((button("Play source")
-            .id("main.quick.play_source")
-            .icon(icon::play())
-            .icon_only()
-            .tooltip("Play source text")
-            .on_press(Message::SpeakResult),))
+        .id("QuickInputCard")
         .content(
             text_editor(state.source_text.clone())
-                .id("main.quick.input")
+                .id("InputTextBox")
                 .placeholder("Enter or paste text to translate...")
                 .min_height(150)
                 .text_style(TextStyle::BodyLarge)
                 .frameless()
                 .on_input(Message::SourceTextChanged),
         );
+
+    if !minimal {
+        source_card = source_card.trailing((button("Play source")
+            .id("main.quick.play_source")
+            .icon(icon::play())
+            .icon_only()
+            .tooltip("Play source text")
+            .on_press(Message::SpeakResult),));
+    }
 
     if let Some(detected_language) = &state.detected_language {
         source_card = source_card.description(detected_language.clone());
@@ -206,10 +258,10 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
     source_card.into_view()
 }
 
-fn long_document_content(state: &LongDocumentState) -> View<Message> {
+fn long_document_content(state: &LongDocumentState, theme: ThemeMode) -> View<Message> {
     scroll_view(
         column((
-            settings_row("Source Text")
+            settings_row(semantic_header(theme, "📝", "Source Text"))
                 .id("main.long-doc.input_card")
                 .description(state.selected_file.clone())
                 .trailing((button("Browse...")
@@ -224,7 +276,7 @@ fn long_document_content(state: &LongDocumentState) -> View<Message> {
                         .on_input(Message::LongDocumentSourceTextChanged),
                 ),
             long_document_control_bar(state),
-            settings_row("Translation Result")
+            settings_row(semantic_header(theme, "⚡", "Translation Result"))
                 .id("main.long-doc.output_card")
                 .description(format!("Output folder: {}", state.output_folder))
                 .trailing((button("Retry Failed")
@@ -233,7 +285,7 @@ fn long_document_content(state: &LongDocumentState) -> View<Message> {
                     .on_press(Message::RetryLongDocument),))
                 .content(text("Output: {filename}_translated.pdf")),
             text(state.status_text.clone()),
-            settings_row("History")
+            settings_row(semantic_header(theme, "📑", "History"))
                 .id("main.long-doc.history")
                 .kind(SettingsRowKind::Expander)
                 .trailing((button("Clear")
@@ -396,6 +448,134 @@ fn floating_header(
     .into_view()
 }
 
+fn main_translate_action_bar(state: &EasydictUiState) -> View<Message> {
+    adaptive_switch(
+        500,
+        main_translate_action_bar_wide(state),
+        main_translate_action_bar_narrow(state),
+    )
+    .id("main.quick.action_bar")
+    .into_view()
+}
+
+fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
+    let mut children = vec![
+        combo_box(language_items(true))
+            .id("SourceLangCombo")
+            .label("Source Language")
+            .selected(state.source_language.clone())
+            .width(Length::Fixed(200))
+            .on_change(Message::SourceLanguageChanged),
+        button("Swap languages")
+            .id("SwapLanguageButton")
+            .icon(icon::swap())
+            .icon_only()
+            .tooltip("Swap source and target languages")
+            .on_press(Message::SwapLanguages),
+        combo_box(language_items(false))
+            .id("TargetLangCombo")
+            .label("Target Language")
+            .selected(state.target_language.clone())
+            .width(Length::Fixed(200))
+            .on_change(Message::TargetLanguageChanged),
+    ];
+    if state.settings.theme != ThemeMode::Minimal {
+        children.push(language_help_button());
+    }
+    children.push(main_translate_button(
+        "TranslateButton",
+        state.is_translating,
+    ));
+
+    row(children)
+        .id("ActionBarWide")
+        .tw("gap-2 w-full items-center")
+        .space_between()
+        .into_view()
+}
+
+fn main_translate_action_bar_narrow(state: &EasydictUiState) -> View<Message> {
+    let mut language_row_children = vec![
+        combo_box(language_items(true))
+            .id("SourceLangComboNarrow")
+            .label("Source Language")
+            .selected(state.source_language.clone())
+            .width(Length::Fill)
+            .on_change(Message::SourceLanguageChanged),
+        button("Swap languages")
+            .id("SwapLanguageButtonNarrow")
+            .icon(icon::swap())
+            .icon_only()
+            .tooltip("Swap source and target languages")
+            .on_press(Message::SwapLanguages),
+        combo_box(language_items(false))
+            .id("TargetLangComboNarrow")
+            .label("Target Language")
+            .selected(state.target_language.clone())
+            .width(Length::Fill)
+            .on_change(Message::TargetLanguageChanged),
+    ];
+    if state.settings.theme != ThemeMode::Minimal {
+        language_row_children.push(language_help_button());
+    }
+
+    column((
+        row(language_row_children)
+            .id("ActionBarNarrow.LanguageRow")
+            .tw("gap-1 w-full items-center"),
+        main_translate_button("TranslateButtonNarrow", state.is_translating),
+    ))
+    .id("ActionBarNarrow")
+    .spacing(4)
+    .align(Alignment::Center)
+    .width(Length::Fill)
+    .into_view()
+}
+
+fn main_translate_button(id: &'static str, is_loading: bool) -> View<Message> {
+    if is_loading {
+        progress_ring()
+            .id(id)
+            .size(20)
+            .a11y(A11yHint::named("Translating"))
+            .into_view()
+    } else {
+        primary_button("")
+            .id(id)
+            .icon(icon::translate())
+            .tooltip(tr("main.translate", "Translate"))
+            .a11y(A11yHint::named(tr("main.translate", "Translate")))
+            .on_press(Message::Translate)
+    }
+}
+
+fn language_help_button() -> View<Message> {
+    button("Language help")
+        .id("LanguageHelpButton")
+        .icon(icon::help())
+        .icon_only()
+        .tooltip("Language help")
+        .enabled(false)
+        .into_view()
+}
+
+fn mode_menu_label(mode: AppMode, minimal: bool) -> &'static str {
+    match (mode, minimal) {
+        (AppMode::QuickTranslate, true) => "Translate",
+        (AppMode::LongDocument, true) => "Long Document",
+        (AppMode::QuickTranslate, false) => "🌐  Translate",
+        (AppMode::LongDocument, false) => "📄  Long Document",
+    }
+}
+
+fn semantic_header(theme: ThemeMode, icon: &'static str, label: &'static str) -> String {
+    if theme == ThemeMode::Minimal {
+        label.to_string()
+    } else {
+        format!("{icon} {label}")
+    }
+}
+
 fn translate_language_bar(
     id_prefix: &'static str,
     source_language: &str,
@@ -458,11 +638,27 @@ fn styled_text(value: impl Into<String>, style: TextStyle) -> View<Message> {
     }))
 }
 
+fn styled_text_id(
+    id: impl Into<String>,
+    value: impl Into<String>,
+    style: TextStyle,
+) -> View<Message> {
+    View::new(ViewToken::Text(TextToken {
+        id: Some(id.into()),
+        value: value.into(),
+        style,
+        selectable: false,
+        a11y: A11yHint::default(),
+    }))
+}
+
 fn results_list(id: &str, results: &[TranslationResultPreview]) -> View<Message> {
     result_list(results.iter().map(TranslationResultPreview::to_result_item))
         .id(id)
         .on_copy(Message::CopyResult)
         .on_speak(Message::SpeakResult)
+        .on_replace(Message::ReplaceResult)
+        .on_retry(Message::RetryResult)
         .on_toggle(Message::ToggleResultExpanded)
         .into_view()
 }
@@ -503,7 +699,7 @@ fn settings_general_content(state: &SettingsState) -> View<Message> {
                 ComboBoxItem::new("system", "System"),
                 ComboBoxItem::new("light", "Light"),
                 ComboBoxItem::new("dark", "Dark"),
-                ComboBoxItem::new("easydict", "Easydict Soft"),
+                ComboBoxItem::new("minimal", "Minimal"),
                 ComboBoxItem::new("high-contrast", "High Contrast"),
             ])
             .id("settings.general.theme_combo")
@@ -751,7 +947,7 @@ fn theme_id(theme: ThemeMode) -> &'static str {
         ThemeMode::System => "system",
         ThemeMode::Light => "light",
         ThemeMode::Dark => "dark",
-        ThemeMode::Easydict => "easydict",
+        ThemeMode::Minimal => "minimal",
         ThemeMode::HighContrast => "high-contrast",
     }
 }

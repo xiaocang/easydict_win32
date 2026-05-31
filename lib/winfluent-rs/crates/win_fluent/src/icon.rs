@@ -45,6 +45,10 @@ pub const fn edit() -> IconToken {
     IconToken::named("edit")
 }
 
+pub const fn help() -> IconToken {
+    IconToken::named("help")
+}
+
 pub const fn microphone() -> IconToken {
     IconToken::named("microphone")
 }
@@ -55,6 +59,10 @@ pub const fn more() -> IconToken {
 
 pub const fn play() -> IconToken {
     IconToken::named("play")
+}
+
+pub const fn pin() -> IconToken {
+    IconToken::named("pin")
 }
 
 pub const fn search() -> IconToken {

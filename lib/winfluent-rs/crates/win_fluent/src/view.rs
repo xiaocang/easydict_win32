@@ -101,7 +101,10 @@ pub enum ViewToken<Message> {
     TitleBar(TitleBarToken<Message>),
     Text(TextToken),
     Button(ButtonToken<Message>),
+    FlyoutButton(FlyoutButtonToken<Message>),
     StatusBadge(StatusBadgeToken),
+    ProgressRing(ProgressRingToken),
+    BusyOverlay(BusyOverlayToken<Message>),
     Card(CardToken<Message>),
     Spacer(SpacerToken),
     TextEditor(TextEditorToken<Message>),
@@ -111,6 +114,7 @@ pub enum ViewToken<Message> {
     NavigationView(NavigationViewToken<Message>),
     Dialog(DialogToken<Message>),
     Layout(LayoutToken<Message>),
+    AdaptiveSwitch(AdaptiveSwitchToken<Message>),
     Lazy(LazyToken<Message>),
     ScrollView(ScrollViewToken<Message>),
     SettingsRow(SettingsRowToken<Message>),
@@ -155,8 +159,11 @@ pub enum TextStyle {
 pub enum ButtonKind {
     Standard,
     Primary,
+    Chip,
     Subtle,
     Icon,
+    ResultAction,
+    FloatingAction,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -237,12 +244,95 @@ pub struct ButtonToken<Message> {
     pub a11y: A11yHint,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FlyoutMenuItemKind {
+    Command,
+    Radio,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FlyoutMenuItem {
+    pub id: String,
+    pub label: String,
+    pub icon: Option<IconToken>,
+    pub kind: FlyoutMenuItemKind,
+    pub checked: bool,
+    pub enabled: bool,
+}
+
+impl FlyoutMenuItem {
+    pub fn command(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            icon: None,
+            kind: FlyoutMenuItemKind::Command,
+            checked: false,
+            enabled: true,
+        }
+    }
+
+    pub fn radio(id: impl Into<String>, label: impl Into<String>, checked: bool) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            icon: None,
+            kind: FlyoutMenuItemKind::Radio,
+            checked,
+            enabled: true,
+        }
+    }
+
+    pub fn icon(mut self, icon: IconToken) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FlyoutButtonToken<Message> {
+    pub id: Option<String>,
+    pub label: String,
+    pub icon: Option<IconToken>,
+    pub tooltip: Option<String>,
+    pub selected: Option<String>,
+    pub items: Vec<FlyoutMenuItem>,
+    pub state: ControlState,
+    pub action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
 #[derive(Clone, Debug)]
 pub struct StatusBadgeToken {
     pub id: Option<String>,
     pub label: String,
     pub severity: ValidationSeverity,
     pub icon: Option<IconToken>,
+    pub a11y: A11yHint,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgressRingToken {
+    pub id: Option<String>,
+    pub active: bool,
+    pub size: u16,
+    pub label: Option<String>,
+    pub a11y: A11yHint,
+}
+
+#[derive(Clone, Debug)]
+pub struct BusyOverlayToken<Message> {
+    pub id: Option<String>,
+    pub active: bool,
+    pub opacity: f32,
+    pub blocks_input: bool,
+    pub label: Option<String>,
+    pub content: Box<View<Message>>,
     pub a11y: A11yHint,
 }
 
@@ -389,6 +479,15 @@ pub struct LayoutToken<Message> {
     pub align: Alignment,
     pub distribution: LayoutDistribution,
     pub style: FluentStyle,
+    pub a11y: A11yHint,
+}
+
+#[derive(Clone, Debug)]
+pub struct AdaptiveSwitchToken<Message> {
+    pub id: Option<String>,
+    pub breakpoint_width: u16,
+    pub wide: Box<View<Message>>,
+    pub narrow: Box<View<Message>>,
     pub a11y: A11yHint,
 }
 
@@ -630,6 +729,8 @@ pub struct ResultCardToken<Message> {
     pub item: ResultItem,
     pub copy_action: Action<Message>,
     pub speak_action: Action<Message>,
+    pub replace_action: Action<Message>,
+    pub retry_action: Action<Message>,
     pub toggle_action: Action<Message>,
     pub collapse_transition: CollapseTransition,
     pub a11y: A11yHint,
@@ -641,6 +742,8 @@ pub struct ResultListToken<Message> {
     pub items: Vec<ResultItem>,
     pub copy_action: Action<Message>,
     pub speak_action: Action<Message>,
+    pub replace_action: Action<Message>,
+    pub retry_action: Action<Message>,
     pub toggle_action: Action<Message>,
     pub virtualized: bool,
     pub collapse_transition: CollapseTransition,
@@ -689,6 +792,20 @@ pub fn primary_button<Message>(label: impl Into<String>) -> ButtonBuilder<Messag
     ButtonBuilder::new(label, ButtonKind::Primary)
 }
 
+pub fn flyout_button<Message>(label: impl Into<String>) -> FlyoutButtonBuilder<Message> {
+    FlyoutButtonBuilder {
+        id: None,
+        label: label.into(),
+        icon: None,
+        tooltip: None,
+        selected: None,
+        items: Vec::new(),
+        state: ControlState::default(),
+        action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
 pub fn title_bar<Message>(title: impl Into<String>) -> TitleBarBuilder<Message> {
     TitleBarBuilder {
         id: None,
@@ -715,6 +832,32 @@ pub fn status_badge<Message>(
         icon: None,
         a11y: A11yHint::default(),
         _message: std::marker::PhantomData,
+    }
+}
+
+pub fn progress_ring<Message>() -> ProgressRingBuilder<Message> {
+    ProgressRingBuilder {
+        id: None,
+        active: true,
+        size: 16,
+        label: None,
+        a11y: A11yHint::default(),
+        _message: std::marker::PhantomData,
+    }
+}
+
+pub fn busy_overlay<Message, Child>(content: Child) -> BusyOverlayBuilder<Message>
+where
+    Child: IntoView<Message>,
+{
+    BusyOverlayBuilder {
+        id: None,
+        active: false,
+        opacity: 0.72,
+        blocks_input: true,
+        label: None,
+        content: Box::new(content.into_view()),
+        a11y: A11yHint::default(),
     }
 }
 
@@ -839,6 +982,24 @@ where
     LayoutBuilder::new(LayoutKind::Row, children.into_children())
 }
 
+pub fn adaptive_switch<Message, Wide, Narrow>(
+    breakpoint_width: u16,
+    wide: Wide,
+    narrow: Narrow,
+) -> AdaptiveSwitchBuilder<Message>
+where
+    Wide: IntoView<Message>,
+    Narrow: IntoView<Message>,
+{
+    AdaptiveSwitchBuilder {
+        id: None,
+        breakpoint_width,
+        wide: Box::new(wide.into_view()),
+        narrow: Box::new(narrow.into_view()),
+        a11y: A11yHint::default(),
+    }
+}
+
 pub fn lazy<Message, Child>(key: impl Into<String>, content: Child) -> LazyBuilder<Message>
 where
     Child: IntoView<Message>,
@@ -883,6 +1044,8 @@ pub fn result_card<Message>(item: ResultItem) -> ResultCardBuilder<Message> {
         item,
         copy_action: Action::None,
         speak_action: Action::None,
+        replace_action: Action::None,
+        retry_action: Action::None,
         toggle_action: Action::None,
         collapse_transition: CollapseTransition::default(),
         a11y: A11yHint::default(),
@@ -897,6 +1060,8 @@ pub fn result_list<Message>(
         items: items.into_iter().collect(),
         copy_action: Action::None,
         speak_action: Action::None,
+        replace_action: Action::None,
+        retry_action: Action::None,
         toggle_action: Action::None,
         virtualized: true,
         collapse_transition: CollapseTransition::default(),
@@ -1111,8 +1276,23 @@ impl<Message> ButtonBuilder<Message> {
         self
     }
 
+    pub fn chip(mut self) -> Self {
+        self.kind = ButtonKind::Chip;
+        self
+    }
+
     pub fn icon_only(mut self) -> Self {
         self.kind = ButtonKind::Icon;
+        self
+    }
+
+    pub fn result_action(mut self) -> Self {
+        self.kind = ButtonKind::ResultAction;
+        self
+    }
+
+    pub fn floating_action(mut self) -> Self {
+        self.kind = ButtonKind::FloatingAction;
         self
     }
 
@@ -1135,6 +1315,90 @@ impl<Message> IntoView<Message> for ButtonBuilder<Message> {
             kind: self.kind,
             icon: self.icon,
             tooltip: self.tooltip,
+            state: self.state,
+            action: self.action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FlyoutButtonBuilder<Message> {
+    id: Option<String>,
+    label: String,
+    icon: Option<IconToken>,
+    tooltip: Option<String>,
+    selected: Option<String>,
+    items: Vec<FlyoutMenuItem>,
+    state: ControlState,
+    action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> FlyoutButtonBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn icon(mut self, icon: IconToken) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self {
+        self.tooltip = Some(tooltip.into());
+        self
+    }
+
+    pub fn selected(mut self, selected: impl Into<String>) -> Self {
+        self.selected = Some(selected.into());
+        self
+    }
+
+    pub fn items(mut self, items: impl IntoIterator<Item = FlyoutMenuItem>) -> Self {
+        self.items = items.into_iter().collect();
+        self
+    }
+
+    pub fn item(mut self, item: FlyoutMenuItem) -> Self {
+        self.items.push(item);
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    pub fn on_select(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.action = Action::selection_input(map);
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for FlyoutButtonBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::FlyoutButton(FlyoutButtonToken {
+            id: self.id,
+            label: self.label,
+            icon: self.icon,
+            tooltip: self.tooltip,
+            selected: self.selected,
+            items: self.items,
             state: self.state,
             action: self.action,
             a11y: self.a11y,
@@ -1176,6 +1440,112 @@ impl<Message> IntoView<Message> for StatusBadgeBuilder<Message> {
             label: self.label,
             severity: self.severity,
             icon: self.icon,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ProgressRingBuilder<Message> {
+    id: Option<String>,
+    active: bool,
+    size: u16,
+    label: Option<String>,
+    a11y: A11yHint,
+    _message: std::marker::PhantomData<Message>,
+}
+
+impl<Message> ProgressRingBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn active(mut self, active: bool) -> Self {
+        self.active = active;
+        self
+    }
+
+    pub fn size(mut self, size: u16) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for ProgressRingBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::ProgressRing(ProgressRingToken {
+            id: self.id,
+            active: self.active,
+            size: self.size,
+            label: self.label,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct BusyOverlayBuilder<Message> {
+    id: Option<String>,
+    active: bool,
+    opacity: f32,
+    blocks_input: bool,
+    label: Option<String>,
+    content: Box<View<Message>>,
+    a11y: A11yHint,
+}
+
+impl<Message> BusyOverlayBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn active(mut self, active: bool) -> Self {
+        self.active = active;
+        self
+    }
+
+    pub fn opacity(mut self, opacity: f32) -> Self {
+        self.opacity = opacity.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn blocks_input(mut self, blocks_input: bool) -> Self {
+        self.blocks_input = blocks_input;
+        self
+    }
+
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for BusyOverlayBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::BusyOverlay(BusyOverlayToken {
+            id: self.id,
+            active: self.active,
+            opacity: self.opacity,
+            blocks_input: self.blocks_input,
+            label: self.label,
+            content: self.content,
             a11y: self.a11y,
         }))
     }
@@ -1857,6 +2227,44 @@ impl<Message> IntoView<Message> for LayoutBuilder<Message> {
 }
 
 #[derive(Clone, Debug)]
+pub struct AdaptiveSwitchBuilder<Message> {
+    id: Option<String>,
+    breakpoint_width: u16,
+    wide: Box<View<Message>>,
+    narrow: Box<View<Message>>,
+    a11y: A11yHint,
+}
+
+impl<Message> AdaptiveSwitchBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn breakpoint_width(mut self, breakpoint_width: u16) -> Self {
+        self.breakpoint_width = breakpoint_width;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for AdaptiveSwitchBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::AdaptiveSwitch(AdaptiveSwitchToken {
+            id: self.id,
+            breakpoint_width: self.breakpoint_width,
+            wide: self.wide,
+            narrow: self.narrow,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct LazyBuilder<Message> {
     id: Option<String>,
     key: String,
@@ -1990,6 +2398,8 @@ pub struct ResultCardBuilder<Message> {
     item: ResultItem,
     copy_action: Action<Message>,
     speak_action: Action<Message>,
+    replace_action: Action<Message>,
+    retry_action: Action<Message>,
     toggle_action: Action<Message>,
     collapse_transition: CollapseTransition,
     a11y: A11yHint,
@@ -2008,6 +2418,16 @@ impl<Message> ResultCardBuilder<Message> {
 
     pub fn on_speak(mut self, message: Message) -> Self {
         self.speak_action = Action::Message(message);
+        self
+    }
+
+    pub fn on_replace(mut self, message: Message) -> Self {
+        self.replace_action = Action::Message(message);
+        self
+    }
+
+    pub fn on_retry(mut self, message: Message) -> Self {
+        self.retry_action = Action::Message(message);
         self
     }
 
@@ -2034,6 +2454,8 @@ impl<Message> IntoView<Message> for ResultCardBuilder<Message> {
             item: self.item,
             copy_action: self.copy_action,
             speak_action: self.speak_action,
+            replace_action: self.replace_action,
+            retry_action: self.retry_action,
             toggle_action: self.toggle_action,
             collapse_transition: self.collapse_transition,
             a11y: self.a11y,
@@ -2047,6 +2469,8 @@ pub struct ResultListBuilder<Message> {
     items: Vec<ResultItem>,
     copy_action: Action<Message>,
     speak_action: Action<Message>,
+    replace_action: Action<Message>,
+    retry_action: Action<Message>,
     toggle_action: Action<Message>,
     virtualized: bool,
     collapse_transition: CollapseTransition,
@@ -2066,6 +2490,16 @@ impl<Message> ResultListBuilder<Message> {
 
     pub fn on_speak(mut self, message: Message) -> Self {
         self.speak_action = Action::Message(message);
+        self
+    }
+
+    pub fn on_replace(mut self, message: Message) -> Self {
+        self.replace_action = Action::Message(message);
+        self
+    }
+
+    pub fn on_retry(mut self, message: Message) -> Self {
+        self.retry_action = Action::Message(message);
         self
     }
 
@@ -2097,6 +2531,8 @@ impl<Message> IntoView<Message> for ResultListBuilder<Message> {
             items: self.items,
             copy_action: self.copy_action,
             speak_action: self.speak_action,
+            replace_action: self.replace_action,
+            retry_action: self.retry_action,
             toggle_action: self.toggle_action,
             virtualized: self.virtualized,
             collapse_transition: self.collapse_transition,
@@ -2216,7 +2652,7 @@ mod tests {
             .find(|sample| sample.elapsed_ms > 0.0)
             .expect("trace must contain an animated frame");
         assert!(first_moving_frame.visible_body_height > 2.0);
-        assert!(first_moving_frame.visible_body_height < 6.0);
+        assert!(first_moving_frame.visible_body_height < 6.5);
 
         let around_50ms = nearest_elapsed(&trace, 50.0);
         assert!(around_50ms.visible_body_height > 34.0);

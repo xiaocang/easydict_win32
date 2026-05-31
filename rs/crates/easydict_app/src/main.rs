@@ -1,11 +1,11 @@
 use easydict_app::{
     capture_overlay_view, fixed_window_view, main_window_view, mini_window_view, pop_button_view,
-    settings_view, EasydictUiState,
+    settings_view, EasydictUiState, PreviewScenario,
 };
 use win_fluent::view_schema;
 
 fn main() {
-    let state = EasydictUiState::default();
+    let state = EasydictUiState::preview_from_env();
 
     for (name, snapshot) in [
         ("main", view_schema(&main_window_view(&state)).snapshot()),
@@ -29,5 +29,11 @@ fn main() {
     ] {
         println!("== {name} ==");
         println!("{snapshot}");
+    }
+
+    for scenario in PreviewScenario::ALL {
+        let state = EasydictUiState::preview(scenario, state.settings.theme);
+        println!("== main:{} ==", scenario.id());
+        println!("{}", view_schema(&main_window_view(&state)).snapshot());
     }
 }

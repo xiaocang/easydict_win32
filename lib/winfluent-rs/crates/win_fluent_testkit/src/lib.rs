@@ -91,7 +91,7 @@ pub fn accessibility_audit_snapshot<Message>(view: &View<Message>) -> String {
 
 pub fn theme_snapshot(theme: &ThemeTokens) -> String {
     format!(
-        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?} backdrop={:?} stroke_control={} stroke_focus={} elevation_rest={} elevation_raised={} elevation_overlay={} elevation_flyout={} control_height={} control_compact_height={} control_icon_button={} control_min_touch_target={} title_bar_height={} caption_button_width={} card_padding={} result_header_height={}",
+        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} input_surface=#{:02x}{:02x}{:02x} result_surface=#{:02x}{:02x}{:02x} result_header=#{:02x}{:02x}{:02x} result_header_hover=#{:02x}{:02x}{:02x} button_hover=#{:02x}{:02x}{:02x} button_pressed=#{:02x}{:02x}{:02x} floating_action_surface=#{:02x}{:02x}{:02x} floating_action_border=#{:02x}{:02x}{:02x} accent_hover=#{:02x}{:02x}{:02x} accent_pressed=#{:02x}{:02x}{:02x} accent_foreground=#{:02x}{:02x}{:02x} status_connected=#{:02x}{:02x}{:02x} status_disconnected=#{:02x}{:02x}{:02x} status_error=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?} backdrop={:?} stroke_control={} stroke_focus={} elevation_rest={} elevation_raised={} elevation_overlay={} elevation_flyout={} disabled_opacity={} dimmed_opacity={} floating_action_rest_opacity={} floating_action_hover_opacity={} floating_action_pressed_opacity={} control_height={} control_compact_height={} control_icon_button={} control_compact_icon_button={} result_action_button={} primary_round_button={} floating_action_button={} control_min_touch_target={} title_bar_height={} caption_button_width={} card_padding={} result_header_height={}",
         theme.mode,
         theme.background.r,
         theme.background.g,
@@ -102,6 +102,48 @@ pub fn theme_snapshot(theme: &ThemeTokens) -> String {
         theme.surface_alt.r,
         theme.surface_alt.g,
         theme.surface_alt.b,
+        theme.input_surface.r,
+        theme.input_surface.g,
+        theme.input_surface.b,
+        theme.result_surface.r,
+        theme.result_surface.g,
+        theme.result_surface.b,
+        theme.result_header.r,
+        theme.result_header.g,
+        theme.result_header.b,
+        theme.result_header_hover.r,
+        theme.result_header_hover.g,
+        theme.result_header_hover.b,
+        theme.button_hover.r,
+        theme.button_hover.g,
+        theme.button_hover.b,
+        theme.button_pressed.r,
+        theme.button_pressed.g,
+        theme.button_pressed.b,
+        theme.floating_action_surface.r,
+        theme.floating_action_surface.g,
+        theme.floating_action_surface.b,
+        theme.floating_action_border.r,
+        theme.floating_action_border.g,
+        theme.floating_action_border.b,
+        theme.accent_hover.r,
+        theme.accent_hover.g,
+        theme.accent_hover.b,
+        theme.accent_pressed.r,
+        theme.accent_pressed.g,
+        theme.accent_pressed.b,
+        theme.accent_foreground.r,
+        theme.accent_foreground.g,
+        theme.accent_foreground.b,
+        theme.status_connected.r,
+        theme.status_connected.g,
+        theme.status_connected.b,
+        theme.status_disconnected.r,
+        theme.status_disconnected.g,
+        theme.status_disconnected.b,
+        theme.status_error.r,
+        theme.status_error.g,
+        theme.status_error.b,
         theme.text_primary.r,
         theme.text_primary.g,
         theme.text_primary.b,
@@ -127,9 +169,18 @@ pub fn theme_snapshot(theme: &ThemeTokens) -> String {
         theme.elevation.raised,
         theme.elevation.overlay,
         theme.elevation.flyout,
+        theme.effects.disabled_opacity,
+        theme.effects.dimmed_opacity,
+        theme.effects.floating_action_rest_opacity,
+        theme.effects.floating_action_hover_opacity,
+        theme.effects.floating_action_pressed_opacity,
         theme.control.height,
         theme.control.compact_height,
         theme.control.icon_button,
+        theme.control.compact_icon_button,
+        theme.control.result_action_button,
+        theme.control.primary_round_button,
+        theme.control.floating_action_button,
         theme.control.min_touch_target,
         theme.control.title_bar_height,
         theme.control.caption_button_width,
@@ -143,7 +194,7 @@ pub fn theme_matrix_snapshot() -> String {
     for mode in [
         ThemeMode::Light,
         ThemeMode::Dark,
-        ThemeMode::Easydict,
+        ThemeMode::Minimal,
         ThemeMode::HighContrast,
     ] {
         let theme = ThemeTokens::resolve(mode);
@@ -390,6 +441,30 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 write_layout(output, child, indent + 2);
             }
         }
+        ViewToken::FlyoutButton(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}FlyoutButton id={:?} items={} selected={:?}",
+                token.id,
+                token.items.len(),
+                token.selected
+            );
+        }
+        ViewToken::ProgressRing(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}ProgressRing id={:?} active={} size={}",
+                token.id, token.active, token.size
+            );
+        }
+        ViewToken::BusyOverlay(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}BusyOverlay id={:?} active={} opacity={:.2} blocks_input={}",
+                token.id, token.active, token.opacity, token.blocks_input
+            );
+            write_layout(output, &token.content, indent + 2);
+        }
         ViewToken::CommandBar(token) => {
             let _ = writeln!(
                 output,
@@ -416,6 +491,15 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             }
         }
         ViewToken::Lazy(token) => write_layout(output, &token.content, indent),
+        ViewToken::AdaptiveSwitch(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}AdaptiveSwitch id={:?} breakpoint_width={}",
+                token.id, token.breakpoint_width
+            );
+            write_layout(output, &token.wide, indent + 2);
+            write_layout(output, &token.narrow, indent + 2);
+        }
         ViewToken::ScrollView(token) => {
             let _ = writeln!(
                 output,
@@ -630,10 +714,11 @@ mod tests {
 
         assert!(snapshot.contains("mode=Light"));
         assert!(snapshot.contains("mode=Dark"));
-        assert!(snapshot.contains("mode=Easydict"));
+        assert!(snapshot.contains("mode=Minimal"));
         assert!(snapshot.contains("mode=HighContrast"));
         assert!(snapshot.contains("backdrop=Mica"));
         assert!(snapshot.contains("backdrop=Solid"));
+        assert!(snapshot.contains("result_header_hover="));
         assert!(snapshot.contains("elevation_overlay=8"));
         assert!(snapshot.contains("control_min_touch_target=40"));
     }

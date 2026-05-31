@@ -17,9 +17,10 @@ use iced::advanced::{
 use iced::widget::text_editor as iced_text_editor_state;
 use iced::widget::{
     button as iced_button, checkbox as iced_checkbox, column as iced_column,
-    container as iced_container, pick_list as iced_pick_list, row as iced_row,
-    scrollable as iced_scrollable, space as iced_space, text as iced_text,
-    text_editor as iced_text_editor, text_input as iced_text_input,
+    container as iced_container, opaque as iced_opaque, pick_list as iced_pick_list,
+    responsive as iced_responsive, row as iced_row, scrollable as iced_scrollable,
+    space as iced_space, stack as iced_stack, text as iced_text, text_editor as iced_text_editor,
+    text_input as iced_text_input,
 };
 use iced::{
     alignment, font, window, Background, Border, Color, Element, Event, Font, Length as IcedLength,
@@ -27,6 +28,7 @@ use iced::{
 };
 use win_fluent::action::{Action, ActionKind};
 use win_fluent::command::CommandToken;
+use win_fluent::icon;
 use win_fluent::platform::{Hotkey, HotkeyKey, HotkeyModifier};
 use win_fluent::runtime::{Application as FluentApplication, RuntimePlan};
 use win_fluent::screenshot::WindowScreenshot;
@@ -35,9 +37,10 @@ use win_fluent::style::FluentStyle;
 use win_fluent::task::Task as FluentTask;
 use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
 use win_fluent::view::{
-    ButtonKind, CardKind, CardToken, CollapseTransition, ComboBoxItem, LayoutDistribution,
-    LayoutKind, Length, ResultCardToken, ResultItem, ResultListToken, SettingsRowToken,
-    StatusBadgeToken, TextEditorChrome, TextEditorToken, TextStyle, TitleBarToken, View, ViewToken,
+    AdaptiveSwitchToken, BusyOverlayToken, ButtonKind, CardKind, CardToken, CollapseTransition,
+    ComboBoxItem, FlyoutButtonToken, LayoutDistribution, LayoutKind, Length, ProgressRingToken,
+    ResultCardToken, ResultItem, ResultListToken, ResultStatus, SettingsRowToken, StatusBadgeToken,
+    TextEditorChrome, TextEditorToken, TextStyle, TitleBarToken, View, ViewToken,
 };
 use win_fluent::window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,
@@ -83,7 +86,7 @@ impl IcedAdapter {
     ) -> IcedElement<'a, Message>
     where
         Message: Clone + Send + 'static,
-        Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent>,
+        Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
     {
         Self::compile_view_with_text_editors_and_theme(view, provider, &ThemeTokens::fluent_light())
     }
@@ -95,7 +98,7 @@ impl IcedAdapter {
     ) -> IcedElement<'a, Message>
     where
         Message: Clone + Send + 'static,
-        Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent>,
+        Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
     {
         compile_view_with_text_editors_and_visual(
             view,
@@ -229,7 +232,7 @@ where
     }
 
     fn view(state: &Self) -> IcedElement<'_, IcedRuntimeMessage<App::Message>> {
-        let theme = ThemeTokens::resolve(state.app.theme());
+        let theme = state.app.theme_tokens();
         IcedAdapter::compile_view_with_text_editors_and_theme(
             &state.view,
             |id| state.text_editors.get(id),
@@ -385,6 +388,7 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
                 collect_text_editor_values(command, values);
             }
         }
+        ViewToken::BusyOverlay(token) => collect_text_editor_values(&token.content, values),
         ViewToken::TextEditor(token) => {
             if let Some(id) = &token.id {
                 values.insert(id.clone(), token.text.clone());
@@ -418,6 +422,10 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
                 collect_text_editor_values(child, values);
             }
         }
+        ViewToken::AdaptiveSwitch(token) => {
+            collect_text_editor_values(&token.wide, values);
+            collect_text_editor_values(&token.narrow, values);
+        }
         ViewToken::Lazy(token) => collect_text_editor_values(&token.content, values),
         ViewToken::ScrollView(token) => {
             if let Some(content) = &token.content {
@@ -439,7 +447,9 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
         }
         ViewToken::Text(_)
         | ViewToken::Button(_)
+        | ViewToken::FlyoutButton(_)
         | ViewToken::StatusBadge(_)
+        | ViewToken::ProgressRing(_)
         | ViewToken::Spacer(_)
         | ViewToken::ToggleSwitch(_)
         | ViewToken::ComboBox(_)
@@ -521,7 +531,7 @@ fn compile_view_with_text_editors_and_visual<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent>,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
     match view.token() {
         ViewToken::Page(token) => {
@@ -554,6 +564,14 @@ where
                     .width(IcedLength::Fixed(visual.icon_button_size))
                     .height(IcedLength::Fixed(visual.icon_button_size))
                     .padding(0),
+                ButtonKind::ResultAction => control
+                    .width(IcedLength::Fixed(visual.result_action_button_size))
+                    .height(IcedLength::Fixed(visual.result_action_button_size))
+                    .padding(0),
+                ButtonKind::FloatingAction => control
+                    .width(IcedLength::Fixed(visual.floating_action_button_size))
+                    .height(IcedLength::Fixed(visual.floating_action_button_size))
+                    .padding(0),
                 ButtonKind::Primary if token.icon.is_some() && token.label.trim().is_empty() => {
                     control
                         .width(IcedLength::Fixed(visual.primary_icon_button_size()))
@@ -561,6 +579,7 @@ where
                         .padding(0)
                 }
                 ButtonKind::Primary => control.padding([8, 14]),
+                ButtonKind::Chip => control.padding([7, 12]),
                 ButtonKind::Subtle => control.padding([6, 10]),
                 ButtonKind::Standard => control.padding([6, 12]),
             };
@@ -573,7 +592,10 @@ where
 
             control.into()
         }
+        ViewToken::FlyoutButton(token) => compile_flyout_button(token, visual),
         ViewToken::StatusBadge(token) => compile_status_badge(token, visual),
+        ViewToken::ProgressRing(token) => compile_progress_ring(token, visual),
+        ViewToken::BusyOverlay(token) => compile_busy_overlay(token, provider, visual),
         ViewToken::Card(token) => compile_card(token, provider, visual),
         ViewToken::Spacer(token) => iced_space()
             .width(iced_length(token.width))
@@ -710,6 +732,7 @@ where
 
             apply_layout_style(content, &token.style, token.width, token.height, visual)
         }
+        ViewToken::AdaptiveSwitch(token) => compile_adaptive_switch(token, provider, visual),
         ViewToken::Lazy(token) => {
             compile_view_with_text_editors_and_visual(&token.content, provider, visual)
         }
@@ -766,7 +789,7 @@ fn compile_title_bar<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent>,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
     let mut title_bits: Vec<IcedElement<'a, Message>> = Vec::new();
 
@@ -857,22 +880,22 @@ where
     let severity = token.severity;
 
     if let Some(icon) = &token.icon {
-        children.push(icon_element(icon, 12.0, Color::WHITE));
+        children.push(icon_element(icon, 12.0, visual.text_on_accent));
     } else {
         children.push(
             iced_text("●")
                 .font(text_font(TextStyle::Caption))
-                .size(12.0)
-                .color(Color::WHITE)
+                .size(8.0)
+                .color(visual.text_on_accent)
                 .into(),
         );
     }
 
     children.push(
         iced_text(token.label.clone())
-            .font(text_font(TextStyle::Body))
-            .size(text_size(TextStyle::Body, visual))
-            .color(Color::WHITE)
+            .font(text_font(TextStyle::Caption))
+            .size(text_size(TextStyle::Caption, visual))
+            .color(visual.text_on_accent)
             .into(),
     );
 
@@ -885,6 +908,160 @@ where
     .padding([0, 10])
     .align_y(alignment::Vertical::Center)
     .style(move |_| status_badge_container_style(visual, severity))
+    .into()
+}
+
+fn compile_flyout_button<'a, Message>(
+    token: &'a FlyoutButtonToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    if token.state.enabled && matches!(token.action.kind(), ActionKind::SelectionInput) {
+        let choices = token
+            .items
+            .iter()
+            .filter(|item| item.enabled)
+            .map(|item| ComboChoice {
+                id: item.id.clone(),
+                label: if item.checked {
+                    format!("● {}", item.label)
+                } else {
+                    item.label.clone()
+                },
+            })
+            .collect::<Vec<_>>();
+        let action = token.action.clone();
+
+        let trigger_width = if token.label.is_empty() {
+            IcedLength::Fixed(24.0)
+        } else {
+            IcedLength::Shrink
+        };
+
+        return iced_pick_list(choices, Option::<ComboChoice>::None, move |choice| {
+            action
+                .input_text(choice.id)
+                .expect("flyout selection action must produce a message")
+        })
+        .placeholder(token.label.clone())
+        .width(trigger_width)
+        .padding([2, 4])
+        .text_size(text_size(TextStyle::Body, visual))
+        .style(move |_, status| flyout_pick_list_style(visual, status))
+        .menu_style(move |_| menu_style(visual))
+        .into();
+    }
+
+    let kind = ButtonKind::Subtle;
+    iced_button(button_content(
+        &token.label,
+        kind,
+        token.icon.as_ref(),
+        visual,
+    ))
+    .padding([4, 8])
+    .style(move |_, status| button_style(visual, kind, status))
+    .into()
+}
+
+fn compile_progress_ring<'a, Message>(
+    token: &ProgressRingToken,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let label = token
+        .label
+        .as_deref()
+        .unwrap_or(if token.active { "◌" } else { "" });
+
+    iced_text(label.to_string())
+        .font(text_font(TextStyle::Caption))
+        .size(token.size as f32)
+        .color(if token.active {
+            visual.accent
+        } else {
+            visual.text_secondary
+        })
+        .into()
+}
+
+fn compile_busy_overlay<'a, Message, Provider>(
+    token: &'a BusyOverlayToken<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    let content = compile_view_with_text_editors_and_visual(&token.content, provider, visual);
+    if !token.active {
+        return content;
+    }
+
+    let overlay = iced_container(
+        iced_column(vec![
+            compile_progress_ring(
+                &ProgressRingToken {
+                    id: None,
+                    active: true,
+                    size: 20,
+                    label: None,
+                    a11y: win_fluent::A11yHint::default(),
+                },
+                visual,
+            ),
+            compile_text(
+                token.label.as_deref().unwrap_or("Loading"),
+                TextStyle::Caption,
+                visual,
+            ),
+        ])
+        .spacing(8)
+        .align_x(alignment::Horizontal::Center),
+    )
+    .width(IcedLength::Fill)
+    .height(IcedLength::Fill)
+    .align_x(alignment::Horizontal::Center)
+    .align_y(alignment::Vertical::Center)
+    .style({
+        let opacity = token.opacity;
+        move |_| busy_overlay_style(visual, opacity)
+    });
+
+    let overlay: IcedElement<'a, Message> = if token.blocks_input {
+        iced_opaque(overlay)
+    } else {
+        overlay.into()
+    };
+
+    iced_stack(vec![content, overlay]).into()
+}
+
+fn compile_adaptive_switch<'a, Message, Provider>(
+    token: &'a AdaptiveSwitchToken<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    let breakpoint_width = f32::from(token.breakpoint_width);
+    let wide = &token.wide;
+    let narrow = &token.narrow;
+
+    iced_responsive(move |size| {
+        if size.width >= breakpoint_width {
+            compile_view_with_text_editors_and_visual(wide, provider, visual)
+        } else {
+            compile_view_with_text_editors_and_visual(narrow, provider, visual)
+        }
+    })
     .into()
 }
 
@@ -927,9 +1104,9 @@ fn compile_card<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent>,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
-    let title = label_with_icon(&token.title, token.icon.as_ref());
+    let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
     let mut text_column =
         iced_column(vec![compile_text(&title, TextStyle::BodyStrong, visual)]).spacing(4);
 
@@ -984,7 +1161,7 @@ fn compile_text_editor<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent>,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
     let placeholder = token.placeholder.as_deref().unwrap_or_default();
 
@@ -1114,9 +1291,9 @@ fn compile_settings_row<'a, Message, Provider>(
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
-    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent>,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
-    let title = label_with_icon(&token.title, token.icon.as_ref());
+    let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
     let mut text_column =
         iced_column(vec![compile_text(&title, TextStyle::Subtitle, visual)]).spacing(6);
 
@@ -1165,6 +1342,10 @@ where
 {
     let content = result_item_column(
         &token.item,
+        &token.copy_action,
+        &token.speak_action,
+        &token.replace_action,
+        &token.retry_action,
         &token.toggle_action,
         token.collapse_transition,
         visual,
@@ -1191,6 +1372,10 @@ where
             iced_container(
                 result_item_column(
                     item,
+                    &token.copy_action,
+                    &token.speak_action,
+                    &token.replace_action,
+                    &token.retry_action,
                     &token.toggle_action,
                     token.collapse_transition,
                     visual,
@@ -1207,6 +1392,10 @@ where
 
 fn result_item_column<'a, Message>(
     item: &ResultItem,
+    copy_action: &Action<Message>,
+    speak_action: &Action<Message>,
+    replace_action: &Action<Message>,
+    retry_action: &Action<Message>,
     toggle_action: &Action<Message>,
     collapse_transition: CollapseTransition,
     visual: IcedVisualTheme,
@@ -1217,20 +1406,26 @@ where
     let mut header_left_children: Vec<IcedElement<'a, Message>> = Vec::new();
     let mut header_right_children: Vec<IcedElement<'a, Message>> = Vec::new();
     let primary_color = if item.dimmed {
-        visual.text_secondary
+        visual.text_secondary.scale_alpha(visual.dimmed_opacity)
     } else {
         visual.text_primary
     };
-    let secondary_color = visual.text_secondary;
+    let secondary_color = if item.dimmed {
+        visual.text_secondary.scale_alpha(visual.dimmed_opacity)
+    } else {
+        visual.text_secondary
+    };
 
-    if let Some(icon) = &item.icon {
-        header_left_children.push(
-            iced_container(icon_element(icon, 16.0, primary_color))
-                .width(IcedLength::Fixed(22.0))
-                .height(IcedLength::Fixed(visual.result_header_height))
-                .align_y(alignment::Vertical::Center)
-                .into(),
-        );
+    if visual.mode != ThemeMode::Minimal {
+        if let Some(icon) = &item.icon {
+            header_left_children.push(
+                iced_container(icon_element(icon, 16.0, primary_color))
+                    .width(IcedLength::Fixed(22.0))
+                    .height(IcedLength::Fixed(visual.result_header_height))
+                    .align_y(alignment::Vertical::Center)
+                    .into(),
+            );
+        }
     }
 
     header_left_children.push(
@@ -1249,6 +1444,31 @@ where
                 .color(secondary_color)
                 .into(),
         );
+    }
+
+    match item.status {
+        ResultStatus::Loading | ResultStatus::Streaming => {
+            header_right_children.push(compile_progress_ring(
+                &ProgressRingToken {
+                    id: None,
+                    active: true,
+                    size: 13,
+                    label: None,
+                    a11y: win_fluent::A11yHint::default(),
+                },
+                visual,
+            ));
+        }
+        ResultStatus::Error => {
+            header_right_children.push(
+                iced_text("\u{E783}")
+                    .font(caption_icon_font())
+                    .size(12.0)
+                    .color(visual.error)
+                    .into(),
+            );
+        }
+        ResultStatus::Ready => {}
     }
 
     if item.toggleable {
@@ -1307,7 +1527,11 @@ where
             iced_text(body_text.to_string())
                 .font(text_font(TextStyle::BodyLarge))
                 .size(text_size(TextStyle::BodyLarge, visual))
-                .color(primary_color)
+                .color(if item.status == ResultStatus::Error {
+                    visual.error
+                } else {
+                    primary_color
+                })
                 .width(IcedLength::Fill),
         )
         .padding([8, 10])
@@ -1321,7 +1545,90 @@ where
         ));
     }
 
+    if item.expanded {
+        let actions = result_action_buttons(
+            item.status,
+            copy_action,
+            speak_action,
+            replace_action,
+            retry_action,
+            visual,
+        );
+        if !actions.is_empty() {
+            content = content.push(
+                iced_container(
+                    iced_row(actions)
+                        .spacing(4)
+                        .align_y(alignment::Vertical::Center),
+                )
+                .padding([8, 8])
+                .width(IcedLength::Fill),
+            );
+        }
+    }
+
     content
+}
+
+fn result_action_buttons<'a, Message>(
+    status: ResultStatus,
+    copy_action: &Action<Message>,
+    speak_action: &Action<Message>,
+    replace_action: &Action<Message>,
+    retry_action: &Action<Message>,
+    visual: IcedVisualTheme,
+) -> Vec<IcedElement<'a, Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    let mut actions = Vec::new();
+
+    push_result_action(&mut actions, "Copy", icon::copy(), copy_action, visual);
+    push_result_action(
+        &mut actions,
+        "Replace",
+        win_fluent::IconToken::with_glyph("replace", '\u{E8AC}'),
+        replace_action,
+        visual,
+    );
+    push_result_action(&mut actions, "Speak", icon::speaker(), speak_action, visual);
+    if status == ResultStatus::Error {
+        push_result_action(
+            &mut actions,
+            "Retry",
+            win_fluent::IconToken::with_glyph("retry", '\u{E72C}'),
+            retry_action,
+            visual,
+        );
+    }
+
+    actions
+}
+
+fn push_result_action<'a, Message>(
+    actions: &mut Vec<IcedElement<'a, Message>>,
+    label: &str,
+    icon: win_fluent::IconToken,
+    action: &Action<Message>,
+    visual: IcedVisualTheme,
+) where
+    Message: Clone + Send + 'static,
+{
+    let Some(message) = action.press() else {
+        return;
+    };
+    let mut button = iced_button(button_content(
+        label,
+        ButtonKind::ResultAction,
+        Some(&icon),
+        visual,
+    ))
+    .width(IcedLength::Fixed(visual.result_action_button_size))
+    .height(IcedLength::Fixed(visual.result_action_button_size))
+    .padding(0)
+    .style(move |_, status| button_style(visual, ButtonKind::ResultAction, status));
+    button = button.on_press(message);
+    actions.push(button.into());
 }
 
 fn animated_collapse<'a, Message>(
@@ -1820,7 +2127,15 @@ where
     control.into()
 }
 
-fn label_with_icon(label: &str, icon: Option<&win_fluent::IconToken>) -> String {
+fn label_with_icon(
+    label: &str,
+    icon: Option<&win_fluent::IconToken>,
+    visual: IcedVisualTheme,
+) -> String {
+    if visual.mode == ThemeMode::Minimal {
+        return label.to_string();
+    }
+
     match icon {
         Some(icon) => format!("{} {label}", icon_symbol(icon)),
         None => label.to_string(),
@@ -1836,16 +2151,19 @@ fn button_content<'a, Message>(
 where
     Message: Clone + Send + 'static,
 {
-    let icon_color = if kind == ButtonKind::Primary {
-        visual.text_on_accent
-    } else {
-        visual.text_primary
+    let icon_color = match kind {
+        ButtonKind::Primary => visual.text_on_accent,
+        ButtonKind::FloatingAction => visual.accent,
+        _ => visual.text_primary,
     };
 
     match (kind, icon, label.trim().is_empty()) {
-        (ButtonKind::Icon, Some(icon), _) | (_, Some(icon), true) => {
-            icon_element(icon, button_icon_size(kind), icon_color)
-        }
+        (
+            ButtonKind::Icon | ButtonKind::FloatingAction | ButtonKind::ResultAction,
+            Some(icon),
+            _,
+        )
+        | (_, Some(icon), true) => icon_element(icon, button_icon_size(kind), icon_color),
         (_, Some(icon), false) => iced_row(vec![
             icon_element(icon, button_icon_size(kind), icon_color),
             iced_text(label.to_string())
@@ -1945,32 +2263,35 @@ fn icon_symbol(icon: &win_fluent::IconToken) -> char {
         "copy" => '\u{E8C8}',
         "delete" => '\u{E74D}',
         "edit" => '\u{E70F}',
+        "help" => '\u{E897}',
         "keyboard" => '\u{E765}',
         "microphone" => '\u{E720}',
         "more" => '\u{E712}',
+        "pin" => '\u{E718}',
         "play" => '\u{E768}',
         "search" => '\u{E721}',
         "settings" => '\u{E713}',
         "speaker" => '\u{E767}',
         "swap" => '\u{E8AB}',
-        "translate" => '\u{5b57}',
+        "translate" => '\u{E8C1}',
         _ => '\u{E8A5}',
     }
 }
 
 fn button_text_size(kind: ButtonKind, visual: IcedVisualTheme) -> f32 {
     match kind {
-        ButtonKind::Icon => 18.0,
+        ButtonKind::Icon | ButtonKind::ResultAction | ButtonKind::FloatingAction => 18.0,
         ButtonKind::Primary => visual.body_size,
-        ButtonKind::Standard | ButtonKind::Subtle => visual.body_size,
+        ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Chip => visual.body_size,
     }
 }
 
 fn button_icon_size(kind: ButtonKind) -> f32 {
     match kind {
-        ButtonKind::Icon => 18.0,
+        ButtonKind::Icon | ButtonKind::ResultAction => 18.0,
+        ButtonKind::FloatingAction => 16.0,
         ButtonKind::Primary => 20.0,
-        ButtonKind::Standard | ButtonKind::Subtle => 16.0,
+        ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Chip => 16.0,
     }
 }
 
@@ -2085,15 +2406,26 @@ struct IcedVisualTheme {
     background: Color,
     surface: Color,
     surface_alt: Color,
+    input_surface: Color,
+    result_surface: Color,
+    result_header: Color,
+    result_header_hover: Color,
+    button_hover: Color,
+    button_pressed: Color,
+    floating_action_surface: Color,
+    floating_action_border: Color,
     text_primary: Color,
     text_secondary: Color,
     text_on_accent: Color,
     border: Color,
     focus: Color,
     success: Color,
+    disconnected: Color,
     warning: Color,
     error: Color,
     accent: Color,
+    accent_hover: Color,
+    accent_pressed: Color,
     accent_light: Color,
     accent_light_alt: Color,
     accent_dark: Color,
@@ -2109,16 +2441,25 @@ struct IcedVisualTheme {
     stroke_focus: f32,
     control_height: f32,
     icon_button_size: f32,
+    compact_icon_button_size: f32,
+    result_action_button_size: f32,
+    primary_round_button_size: f32,
+    floating_action_button_size: f32,
     title_bar_height: f32,
     caption_button_width: f32,
     card_padding: f32,
     result_header_height: f32,
     elevation_raised: f32,
+    disabled_opacity: f32,
+    dimmed_opacity: f32,
+    floating_action_rest_opacity: f32,
+    floating_action_hover_opacity: f32,
+    floating_action_pressed_opacity: f32,
 }
 
 impl IcedVisualTheme {
     fn primary_icon_button_size(self) -> f32 {
-        self.control_height + 8.0
+        self.primary_round_button_size
     }
 
     fn from_tokens(theme: &ThemeTokens) -> Self {
@@ -2127,19 +2468,26 @@ impl IcedVisualTheme {
             background: iced_color(theme.background),
             surface: iced_color(theme.surface),
             surface_alt: iced_color(theme.surface_alt),
+            input_surface: iced_color(theme.input_surface),
+            result_surface: iced_color(theme.result_surface),
+            result_header: iced_color(theme.result_header),
+            result_header_hover: iced_color(theme.result_header_hover),
+            button_hover: iced_color(theme.button_hover),
+            button_pressed: iced_color(theme.button_pressed),
+            floating_action_surface: iced_color(theme.floating_action_surface),
+            floating_action_border: iced_color(theme.floating_action_border),
             text_primary: iced_color(theme.text_primary),
             text_secondary: iced_color(theme.text_secondary),
-            text_on_accent: if theme.mode == ThemeMode::HighContrast {
-                Color::BLACK
-            } else {
-                Color::WHITE
-            },
+            text_on_accent: iced_color(theme.accent_foreground),
             border: iced_color(theme.border),
             focus: iced_color(theme.focus),
-            success: iced_color(theme.success),
+            success: iced_color(theme.status_connected),
+            disconnected: iced_color(theme.status_disconnected),
             warning: iced_color(theme.warning),
-            error: iced_color(theme.error),
+            error: iced_color(theme.status_error),
             accent: iced_color(theme.accent.base),
+            accent_hover: iced_color(theme.accent_hover),
+            accent_pressed: iced_color(theme.accent_pressed),
             accent_light: iced_color(theme.accent.light_1),
             accent_light_alt: iced_color(theme.accent.light_2),
             accent_dark: iced_color(theme.accent.dark_1),
@@ -2155,11 +2503,20 @@ impl IcedVisualTheme {
             stroke_focus: theme.stroke.focus,
             control_height: theme.control.height,
             icon_button_size: theme.control.icon_button,
+            compact_icon_button_size: theme.control.compact_icon_button,
+            result_action_button_size: theme.control.result_action_button,
+            primary_round_button_size: theme.control.primary_round_button,
+            floating_action_button_size: theme.control.floating_action_button,
             title_bar_height: theme.control.title_bar_height,
             caption_button_width: theme.control.caption_button_width,
             card_padding: theme.control.card_padding,
             result_header_height: theme.control.result_header_height,
             elevation_raised: theme.elevation.raised,
+            disabled_opacity: theme.effects.disabled_opacity,
+            dimmed_opacity: theme.effects.dimmed_opacity,
+            floating_action_rest_opacity: theme.effects.floating_action_rest_opacity,
+            floating_action_hover_opacity: theme.effects.floating_action_hover_opacity,
+            floating_action_pressed_opacity: theme.effects.floating_action_pressed_opacity,
         }
     }
 }
@@ -2188,16 +2545,22 @@ fn status_badge_container_style(
         ValidationSeverity::Success => visual.success,
         ValidationSeverity::Warning => visual.warning,
         ValidationSeverity::Error => visual.error,
-        ValidationSeverity::Info => visual.accent,
+        ValidationSeverity::Info => visual.disconnected,
     };
 
     iced::widget::container::Style::default()
         .background(background)
-        .color(Color::WHITE)
+        .color(visual.text_on_accent)
         .border(Border {
             radius: (visual.control_height / 2.0).into(),
             ..Border::default()
         })
+}
+
+fn busy_overlay_style(visual: IcedVisualTheme, opacity: f32) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .background(visual.surface_alt.scale_alpha(opacity.clamp(0.0, 1.0)))
+        .color(visual.text_primary)
 }
 
 fn utility_container_style(
@@ -2268,48 +2631,65 @@ fn button_style(
     kind: ButtonKind,
     status: iced::widget::button::Status,
 ) -> iced::widget::button::Style {
-    let disabled = status == iced::widget::button::Status::Disabled;
     let (background, text_color, border_color) = match kind {
         ButtonKind::Primary => match status {
-            iced::widget::button::Status::Hovered => (
-                Some(visual.accent_light),
-                visual.text_on_accent,
-                visual.accent_light,
-            ),
-            iced::widget::button::Status::Pressed => (
-                Some(visual.accent_dark),
-                visual.text_on_accent,
-                visual.accent_dark,
-            ),
+            iced::widget::button::Status::Hovered | iced::widget::button::Status::Pressed => {
+                (Some(visual.accent), visual.text_on_accent, visual.accent)
+            }
             iced::widget::button::Status::Disabled => (
                 Some(visual.surface_alt),
-                visual.text_secondary,
+                visual.text_secondary.scale_alpha(visual.disabled_opacity),
                 visual.border,
             ),
             iced::widget::button::Status::Active => {
                 (Some(visual.accent), visual.text_on_accent, visual.accent)
             }
         },
-        ButtonKind::Subtle | ButtonKind::Icon => match status {
-            iced::widget::button::Status::Hovered => {
-                (Some(visual.surface_alt), visual.text_primary, visual.border)
-            }
-            iced::widget::button::Status::Pressed => {
-                (Some(visual.border), visual.text_primary, visual.border)
-            }
-            iced::widget::button::Status::Disabled => (None, visual.text_secondary, visual.border),
+        ButtonKind::Subtle | ButtonKind::Icon | ButtonKind::ResultAction => match status {
+            iced::widget::button::Status::Hovered => (
+                Some(visual.button_hover),
+                visual.text_primary,
+                visual.border,
+            ),
+            iced::widget::button::Status::Pressed => (
+                Some(visual.button_pressed),
+                visual.text_primary,
+                visual.border,
+            ),
+            iced::widget::button::Status::Disabled => (
+                None,
+                visual.text_secondary.scale_alpha(visual.disabled_opacity),
+                visual.border,
+            ),
             iced::widget::button::Status::Active => (None, visual.text_primary, visual.border),
         },
-        ButtonKind::Standard => match status {
-            iced::widget::button::Status::Hovered => {
-                (Some(visual.surface_alt), visual.text_primary, visual.border)
-            }
-            iced::widget::button::Status::Pressed => {
-                (Some(visual.border), visual.text_primary, visual.border)
-            }
+        ButtonKind::FloatingAction => {
+            let opacity = match status {
+                iced::widget::button::Status::Hovered => visual.floating_action_hover_opacity,
+                iced::widget::button::Status::Pressed => visual.floating_action_pressed_opacity,
+                iced::widget::button::Status::Disabled => visual.disabled_opacity,
+                iced::widget::button::Status::Active => visual.floating_action_rest_opacity,
+            };
+            (
+                Some(visual.floating_action_surface.scale_alpha(opacity)),
+                visual.accent.scale_alpha(opacity),
+                visual.floating_action_border.scale_alpha(opacity),
+            )
+        }
+        ButtonKind::Standard | ButtonKind::Chip => match status {
+            iced::widget::button::Status::Hovered => (
+                Some(visual.button_hover),
+                visual.text_primary,
+                visual.border,
+            ),
+            iced::widget::button::Status::Pressed => (
+                Some(visual.button_pressed),
+                visual.text_primary,
+                visual.border,
+            ),
             iced::widget::button::Status::Disabled => (
                 Some(visual.surface_alt),
-                visual.text_secondary,
+                visual.text_secondary.scale_alpha(visual.disabled_opacity),
                 visual.border,
             ),
             iced::widget::button::Status::Active => {
@@ -2318,21 +2698,23 @@ fn button_style(
         },
     };
     let border_width = match (kind, status) {
-        (ButtonKind::Icon | ButtonKind::Subtle, iced::widget::button::Status::Active) => 0.0,
+        (
+            ButtonKind::Icon | ButtonKind::Subtle | ButtonKind::ResultAction,
+            iced::widget::button::Status::Active,
+        ) => 0.0,
         _ => visual.stroke_control,
+    };
+    let border_radius = match kind {
+        ButtonKind::Chip => 18.0,
+        ButtonKind::FloatingAction => visual.floating_action_button_size / 2.0,
+        _ => visual.radius_control,
     };
 
     iced::widget::button::Style {
         background: background.map(Background::Color),
         text_color,
-        border: control_border(visual, border_color, border_width),
-        shadow: if disabled {
-            Shadow::default()
-        } else if matches!(kind, ButtonKind::Icon | ButtonKind::Subtle) {
-            Shadow::default()
-        } else {
-            elevation_shadow(visual, visual.elevation_raised)
-        },
+        border: control_border_with_radius(border_color, border_width, border_radius),
+        shadow: Shadow::default(),
         ..iced::widget::button::Style::default()
     }
 }
@@ -2377,9 +2759,11 @@ fn result_header_button_style(
     status: iced::widget::button::Status,
 ) -> iced::widget::button::Style {
     let background = match status {
-        iced::widget::button::Status::Hovered => Some(visual.accent_light_alt),
-        iced::widget::button::Status::Pressed => Some(visual.accent_light),
-        iced::widget::button::Status::Disabled | iced::widget::button::Status::Active => None,
+        iced::widget::button::Status::Hovered => Some(visual.result_header_hover),
+        iced::widget::button::Status::Pressed => Some(visual.button_pressed),
+        iced::widget::button::Status::Disabled | iced::widget::button::Status::Active => {
+            Some(visual.result_header)
+        }
     };
 
     iced::widget::button::Style {
@@ -2420,9 +2804,9 @@ fn text_input_style(
         background: Background::Color(if status == iced::widget::text_input::Status::Disabled {
             visual.surface_alt
         } else if chrome == TextEditorChrome::Frameless {
-            visual.surface_alt
+            visual.input_surface
         } else {
-            visual.surface
+            visual.input_surface
         }),
         border,
         icon: visual.text_secondary,
@@ -2461,9 +2845,9 @@ fn text_editor_style(
         background: Background::Color(if status == iced::widget::text_editor::Status::Disabled {
             visual.surface_alt
         } else if chrome == TextEditorChrome::Frameless {
-            visual.surface_alt
+            visual.input_surface
         } else {
-            visual.surface
+            visual.input_surface
         }),
         border,
         placeholder: visual.text_secondary,
@@ -2500,11 +2884,7 @@ fn checkbox_style(
         } else {
             background
         }),
-        icon_color: if visual.mode == ThemeMode::HighContrast {
-            Color::BLACK
-        } else {
-            visual.text_on_accent
-        },
+        icon_color: visual.text_on_accent,
         border: control_border(
             visual,
             if is_checked && !disabled {
@@ -2542,6 +2922,25 @@ fn pick_list_style(
         handle_color: visual.text_secondary,
         background: Background::Color(visual.surface),
         border,
+    }
+}
+
+fn flyout_pick_list_style(
+    visual: IcedVisualTheme,
+    status: iced::widget::pick_list::Status,
+) -> iced::widget::pick_list::Style {
+    let background = match status {
+        iced::widget::pick_list::Status::Active => visual.surface.scale_alpha(0.0),
+        iced::widget::pick_list::Status::Hovered
+        | iced::widget::pick_list::Status::Opened { .. } => visual.button_hover,
+    };
+
+    iced::widget::pick_list::Style {
+        text_color: visual.text_primary,
+        placeholder_color: visual.text_primary,
+        handle_color: visual.text_secondary,
+        background: Background::Color(background),
+        border: control_border(visual, visual.border.scale_alpha(0.0), 0.0),
     }
 }
 
@@ -2583,17 +2982,18 @@ fn card_container_style(visual: IcedVisualTheme, kind: CardKind) -> iced::widget
 
 fn result_card_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
     iced::widget::container::Style::default()
-        .background(visual.surface_alt)
+        .background(visual.result_surface)
         .color(visual.text_primary)
         .border(control_border(visual, visual.border, visual.stroke_control))
         .shadow(Shadow::default())
 }
 
 fn control_border(visual: IcedVisualTheme, color: Color, width: f32) -> Border {
-    Border::default()
-        .color(color)
-        .width(width)
-        .rounded(visual.radius_control)
+    control_border_with_radius(color, width, visual.radius_control)
+}
+
+fn control_border_with_radius(color: Color, width: f32, radius: f32) -> Border {
+    Border::default().color(color).width(width).rounded(radius)
 }
 
 fn elevation_shadow(visual: IcedVisualTheme, elevation: f32) -> Shadow {
@@ -2929,7 +3329,17 @@ mod tests {
         assert_eq!(primary.text_color, iced::Color::WHITE);
         assert_eq!(primary.border.width, theme.stroke.control);
         assert_eq!(primary.border.radius.top_left, theme.radius.control);
-        assert!(primary.shadow.blur_radius > 0.0);
+        assert_eq!(primary.shadow, Shadow::default());
+
+        let primary_hover = button_style(
+            visual,
+            ButtonKind::Primary,
+            iced::widget::button::Status::Hovered,
+        );
+        assert_eq!(
+            optional_background_color(primary_hover.background),
+            iced_color(theme.accent.base)
+        );
 
         let focused = text_input_style(
             visual,
@@ -2983,9 +3393,21 @@ mod tests {
         let result_card = result_card_container_style(visual);
         assert_eq!(
             optional_background_color(result_card.background),
-            iced_color(theme.surface_alt)
+            iced_color(theme.result_surface)
         );
         assert_eq!(result_card.shadow, Shadow::default());
+
+        let floating_action = button_style(
+            visual,
+            ButtonKind::FloatingAction,
+            iced::widget::button::Status::Active,
+        );
+        assert_eq!(
+            optional_background_color(floating_action.background),
+            iced_color(theme.floating_action_surface)
+                .scale_alpha(theme.effects.floating_action_rest_opacity)
+        );
+        assert_eq!(floating_action.shadow, Shadow::default());
     }
 
     #[test]

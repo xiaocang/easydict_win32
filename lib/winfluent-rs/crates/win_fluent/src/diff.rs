@@ -121,10 +121,12 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
     match token {
         ViewToken::Page(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::TitleBar(token) => token.commands.iter().collect(),
+        ViewToken::BusyOverlay(token) => vec![token.content.as_ref()],
         ViewToken::CommandBar(token) => token.items.iter().collect(),
         ViewToken::NavigationView(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::Dialog(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::Layout(token) => token.children.iter().collect(),
+        ViewToken::AdaptiveSwitch(token) => vec![token.wide.as_ref(), token.narrow.as_ref()],
         ViewToken::Lazy(token) => vec![token.content.as_ref()],
         ViewToken::ScrollView(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::Card(token) => {
@@ -140,7 +142,9 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
         ViewToken::Custom(token) => token.children.iter().collect(),
         ViewToken::Text(_)
         | ViewToken::Button(_)
+        | ViewToken::FlyoutButton(_)
         | ViewToken::StatusBadge(_)
+        | ViewToken::ProgressRing(_)
         | ViewToken::Spacer(_)
         | ViewToken::TextEditor(_)
         | ViewToken::ToggleSwitch(_)
@@ -156,7 +160,10 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
         ViewToken::TitleBar(_) => "TitleBar",
         ViewToken::Text(_) => "Text",
         ViewToken::Button(_) => "Button",
+        ViewToken::FlyoutButton(_) => "FlyoutButton",
         ViewToken::StatusBadge(_) => "StatusBadge",
+        ViewToken::ProgressRing(_) => "ProgressRing",
+        ViewToken::BusyOverlay(_) => "BusyOverlay",
         ViewToken::Card(_) => "Card",
         ViewToken::Spacer(_) => "Spacer",
         ViewToken::TextEditor(_) => "TextEditor",
@@ -169,6 +176,7 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
             LayoutKind::Column => "Column",
             LayoutKind::Row => "Row",
         },
+        ViewToken::AdaptiveSwitch(_) => "AdaptiveSwitch",
         ViewToken::Lazy(_) => "Lazy",
         ViewToken::ScrollView(_) => "ScrollView",
         ViewToken::SettingsRow(_) => "SettingsRow",
@@ -184,7 +192,10 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::TitleBar(token) => token.id.as_deref(),
         ViewToken::Text(token) => token.id.as_deref(),
         ViewToken::Button(token) => token.id.as_deref(),
+        ViewToken::FlyoutButton(token) => token.id.as_deref(),
         ViewToken::StatusBadge(token) => token.id.as_deref(),
+        ViewToken::ProgressRing(token) => token.id.as_deref(),
+        ViewToken::BusyOverlay(token) => token.id.as_deref(),
         ViewToken::Card(token) => token.id.as_deref(),
         ViewToken::Spacer(token) => token.id.as_deref(),
         ViewToken::TextEditor(token) => token.id.as_deref(),
@@ -194,6 +205,7 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::NavigationView(token) => token.id.as_deref(),
         ViewToken::Dialog(token) => token.id.as_deref(),
         ViewToken::Layout(token) => token.id.as_deref(),
+        ViewToken::AdaptiveSwitch(token) => token.id.as_deref(),
         ViewToken::Lazy(token) => token.id.as_deref().or(Some(token.key.as_str())),
         ViewToken::ScrollView(token) => token.id.as_deref(),
         ViewToken::SettingsRow(token) => token.id.as_deref(),
@@ -228,11 +240,29 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.state,
             token.action.kind()
         ),
+        ViewToken::FlyoutButton(token) => format!(
+            "{:?}|selected={:?}|items={}|{}|{:?}",
+            token.label,
+            token.selected,
+            token.items.len(),
+            token.state,
+            token.action.kind()
+        ),
         ViewToken::StatusBadge(token) => format!(
             "{:?}|{:?}|{:?}",
             token.label,
             token.severity,
             token.icon.as_ref().map(|icon| icon.name)
+        ),
+        ViewToken::ProgressRing(token) => {
+            format!(
+                "active={}|size={}|{:?}",
+                token.active, token.size, token.label
+            )
+        }
+        ViewToken::BusyOverlay(token) => format!(
+            "active={}|opacity={:.2}|blocks_input={}|{:?}",
+            token.active, token.opacity, token.blocks_input, token.label
         ),
         ViewToken::Card(token) => format!(
             "{:?}|{:?}|{:?}|{:?}|trailing={}",
@@ -299,6 +329,9 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.distribution,
             token.style.summary()
         ),
+        ViewToken::AdaptiveSwitch(token) => {
+            format!("breakpoint_width={}", token.breakpoint_width)
+        }
         ViewToken::Lazy(token) => token.key.clone(),
         ViewToken::ScrollView(token) => format!("{:?}|{:?}", token.horizontal, token.vertical),
         ViewToken::SettingsRow(token) => format!(
@@ -309,12 +342,17 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.icon.as_ref().map(|icon| icon.name)
         ),
         ViewToken::ResultCard(token) => format!(
-            "{}|collapse_transition_ms={}",
+            "{}|copy={:?}|speak={:?}|replace={:?}|retry={:?}|toggle={:?}|collapse_transition_ms={}",
             result_item_summary(&token.item),
+            token.copy_action.kind(),
+            token.speak_action.kind(),
+            token.replace_action.kind(),
+            token.retry_action.kind(),
+            token.toggle_action.kind(),
             token.collapse_transition.duration_ms
         ),
         ViewToken::ResultList(token) => format!(
-            "items={}|virtualized={}|collapse_transition_ms={}|{}|{:?}|{:?}|{:?}",
+            "items={}|virtualized={}|collapse_transition_ms={}|{}|{:?}|{:?}|{:?}|{:?}|{:?}",
             token.items.len(),
             token.virtualized,
             token.collapse_transition.duration_ms,
@@ -326,6 +364,8 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
                 .join(","),
             token.copy_action.kind(),
             token.speak_action.kind(),
+            token.replace_action.kind(),
+            token.retry_action.kind(),
             token.toggle_action.kind()
         ),
         ViewToken::Custom(token) => token.control.clone(),

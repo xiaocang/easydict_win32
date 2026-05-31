@@ -1,6 +1,6 @@
 use crate::subscription::Subscription;
 use crate::task::Task;
-use crate::theme::ThemeMode;
+use crate::theme::{ThemeMode, ThemeTokens};
 use crate::view::View;
 use crate::window::WindowId;
 
@@ -22,6 +22,10 @@ pub trait Application: Sized + 'static {
 
     fn theme(&self) -> ThemeMode {
         ThemeMode::System
+    }
+
+    fn theme_tokens(&self) -> ThemeTokens {
+        ThemeTokens::resolve(self.theme())
     }
 }
 

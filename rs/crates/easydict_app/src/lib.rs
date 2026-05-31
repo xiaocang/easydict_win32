@@ -2,13 +2,15 @@
 
 mod i18n;
 pub mod state;
+pub mod theme;
 pub mod ui;
 pub mod window_options;
 
 pub use state::{
-    AppMode, EasydictUiState, FloatingWindowState, LongDocumentState, Message, SettingsSection,
-    SettingsState, TranslationResultPreview,
+    AppMode, ConnectionStatus, EasydictUiState, FloatingWindowState, LongDocumentState, Message,
+    PreviewScenario, SettingsSection, SettingsState, TranslationResultPreview,
 };
+pub use theme::easydict_theme_tokens;
 pub use ui::{
     capture_overlay_view, fixed_window_view, main_window_view, mini_window_view, pop_button_view,
     settings_view,
@@ -69,5 +71,9 @@ impl Application for EasydictApp {
 
     fn theme(&self) -> ThemeMode {
         self.state.settings.theme
+    }
+
+    fn theme_tokens(&self) -> ThemeTokens {
+        easydict_theme_tokens(self.state.settings.theme)
     }
 }

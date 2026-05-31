@@ -20,15 +20,18 @@ pub use crate::subscription::{PlatformEvent, Subscription, SubscriptionKind, Win
 pub use crate::task::Task;
 pub use crate::theme::{
     AccentPalette, BackdropKind, Color, ControlMetrics, CornerRadius, Density, Elevation, Spacing,
-    Stroke, ThemeMode, ThemeTokens, Typography,
+    Stroke, ThemeMode, ThemeTokens, Typography, VisualEffects,
 };
 pub use crate::view::{
-    button, card, column, combo_box, command_bar, dialog, lazy, navigation_view, page,
-    primary_button, result_card, result_list, row, scroll_view, service_result_card,
-    service_result_list, settings_row, spacer, status_badge, text, text_editor, title_bar,
-    toggle_switch, Alignment, ButtonKind, CardKind, CollapseTraceDirection, CollapseTraceSample,
-    CollapseTransition, ComboBoxItem, DialogKind, IntoChildren, IntoView, LayoutDistribution,
-    LayoutKind, LazyToken, Length, NavigationItem, ResultCardBuilder, ResultCardToken, ResultItem,
+    adaptive_switch, busy_overlay, button, card, column, combo_box, command_bar, dialog,
+    flyout_button, lazy, navigation_view, page, primary_button, progress_ring, result_card,
+    result_list, row, scroll_view, service_result_card, service_result_list, settings_row, spacer,
+    status_badge, text, text_editor, title_bar, toggle_switch, AdaptiveSwitchBuilder,
+    AdaptiveSwitchToken, Alignment, BusyOverlayBuilder, BusyOverlayToken, ButtonKind, CardKind,
+    CollapseTraceDirection, CollapseTraceSample, CollapseTransition, ComboBoxItem, DialogKind,
+    FlyoutButtonBuilder, FlyoutButtonToken, FlyoutMenuItem, FlyoutMenuItemKind, IntoChildren,
+    IntoView, LayoutDistribution, LayoutKind, LazyToken, Length, NavigationItem,
+    ProgressRingBuilder, ProgressRingToken, ResultCardBuilder, ResultCardToken, ResultItem,
     ResultListBuilder, ResultListToken, ResultStatus, ScrollPolicy, SettingsRowKind, SpacerBuilder,
     SpacerToken, TextEditorChrome, TextStyle, View, ViewToken,
 };

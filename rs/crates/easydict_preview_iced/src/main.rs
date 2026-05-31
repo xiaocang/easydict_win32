@@ -5,7 +5,7 @@ use win_fluent::prelude::*;
 
 fn main() {
     win_fluent_backend_iced::run_single_window_application::<PreviewApp>(
-        EasydictUiState::default(),
+        EasydictUiState::preview_from_env(),
         preview_window_options(),
     )
     .expect("Easydict preview runtime failed");
@@ -30,23 +30,22 @@ impl Application for PreviewApp {
 
     fn new(flags: Self::Flags) -> (Self, Task<Self::Message>) {
         let (inner, initial_task) = EasydictApp::new(flags);
-        let auto_toggle_task =
-            std::env::var("EASYDICT_PREVIEW_AUTO_TOGGLE_RESULT")
-                .ok()
-                .map(|id| {
-                    let delay_ms = std::env::var("EASYDICT_PREVIEW_AUTO_TOGGLE_DELAY_MS")
-                        .ok()
-                        .and_then(|value| value.parse::<u64>().ok())
-                        .unwrap_or(650);
-                    Task::perform(
-                        async move {
-                            std::thread::sleep(Duration::from_millis(delay_ms));
-                            id
-                        },
-                        Message::ToggleResultExpanded,
-                    )
-                })
-                .unwrap_or_else(Task::none);
+        let auto_toggle_task = std::env::var("EASYDICT_PREVIEW_AUTO_TOGGLE_RESULT")
+            .ok()
+            .map(|id| {
+                let delay_ms = std::env::var("EASYDICT_PREVIEW_AUTO_TOGGLE_DELAY_MS")
+                    .ok()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(650);
+                Task::perform(
+                    async move {
+                        std::thread::sleep(Duration::from_millis(delay_ms));
+                        id
+                    },
+                    Message::ToggleResultExpanded,
+                )
+            })
+            .unwrap_or_else(Task::none);
 
         (
             Self { inner },

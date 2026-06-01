@@ -2,15 +2,19 @@ use easydict_app::compat_protocol::SettingsSnapshot;
 use easydict_app::{
     build_caiyun_translation_request_plan, build_deepl_api_translation_request_plan,
     build_google_translation_request_plan, build_niutrans_translation_request_plan,
-    caiyun_language_code, deepl_api_error_from_status, deepl_language_code, google_language_code,
+    build_volcano_translation_request_plan, caiyun_language_code, compute_volcano_authorization,
+    deepl_api_error_from_status, deepl_language_code, google_language_code,
     niutrans_error_from_code, niutrans_language_code, parse_caiyun_translation_response,
     parse_deepl_api_translation_response, parse_google_translation_response,
-    parse_niutrans_translation_response, traditional_http_config_for_service,
-    traditional_http_error_from_status, translate_traditional_http_service, OpenAiExecutionError,
-    OpenAiExecutionErrorCode, TraditionalHttpClient, TraditionalHttpRequestPlan,
-    TraditionalHttpServiceConfig, TraditionalHttpServiceKind, TranslationLanguage,
-    CAIYUN_TRANSLATE_ENDPOINT, DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT,
-    NIUTRANS_MAX_TEXT_LENGTH_UTF16, NIUTRANS_TRANSLATE_ENDPOINT,
+    parse_niutrans_translation_response, parse_volcano_translation_response,
+    traditional_http_config_for_service, traditional_http_error_from_status,
+    translate_traditional_http_service, volcano_language_code,
+    volcano_timestamps_from_epoch_seconds, OpenAiExecutionError, OpenAiExecutionErrorCode,
+    TraditionalHttpClient, TraditionalHttpRequestPlan, TraditionalHttpServiceConfig,
+    TraditionalHttpServiceKind, TranslationLanguage, CAIYUN_TRANSLATE_ENDPOINT,
+    DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT, NIUTRANS_MAX_TEXT_LENGTH_UTF16,
+    NIUTRANS_TRANSLATE_ENDPOINT, VOLCANO_MAX_TEXT_LENGTH_UTF16, VOLCANO_TRANSLATE_ENDPOINT,
+    VOLCANO_TRANSLATE_HOST,
 };
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -256,6 +260,8 @@ fn traditional_http_config_routes_native_traditional_providers() {
         deep_l_use_free_api: Some(false),
         deep_l_use_quality_optimized: Some(false),
         niu_trans_api_key: Some("niu-key".to_string()),
+        volcano_access_key_id: Some("volcano-akid".to_string()),
+        volcano_secret_access_key: Some("volcano-secret".to_string()),
         ..SettingsSnapshot::default()
     };
 
@@ -280,6 +286,13 @@ fn traditional_http_config_routes_native_traditional_providers() {
         traditional_http_config_for_service("niutrans", &settings),
         Some(TraditionalHttpServiceConfig::NiuTrans {
             api_key: "niu-key".to_string()
+        })
+    );
+    assert_eq!(
+        traditional_http_config_for_service("volcano", &settings),
+        Some(TraditionalHttpServiceConfig::Volcano {
+            access_key_id: "volcano-akid".to_string(),
+            secret_access_key: "volcano-secret".to_string(),
         })
     );
     assert!(traditional_http_config_for_service("deepl", &SettingsSnapshot::default()).is_none());
@@ -467,6 +480,262 @@ fn parser_status_and_provider_errors_are_classified() {
         deepl_api_error_from_status(456, "Quota Exceeded").code,
         OpenAiExecutionErrorCode::RateLimited
     );
+}
+
+#[test]
+fn volcano_compute_authorization_matches_dotnet_known_answer() {
+    // Known-answer vector cross-checked against the legacy .NET
+    // VolcanoService.ComputeAuthorization signing for the exact fixed inputs in
+    // VolcanoServiceTests (AKID12345 / SecretKey12345 / fixed body / 20240101T120000Z).
+    // This proves the SigV4 canonical-request port byte-for-byte, which the
+    // format/determinism assertions alone cannot.
+    let body = br#"{"TargetLanguage":"zh","TextList":["Hello"]}"#;
+    let authorization = compute_volcano_authorization(
+        "AKID12345",
+        "SecretKey12345",
+        body,
+        "20240101T120000Z",
+        "20240101",
+    );
+
+    assert_eq!(
+        authorization,
+        "HMAC-SHA256 Credential=AKID12345/20240101/cn-north-1/translate/request, \
+         SignedHeaders=content-type;host;x-date, \
+         Signature=c2978c8ab175b4f4b1ea0caf6f81d721fd55ab42adcac34f378b56fd3564ba43"
+    );
+}
+
+#[test]
+fn volcano_compute_authorization_is_deterministic_and_body_sensitive() {
+    let body_a = br#"{"TargetLanguage":"zh","TextList":["Hello"]}"#;
+    let body_b = br#"{"TargetLanguage":"zh","TextList":["World"]}"#;
+    let auth_a1 = compute_volcano_authorization(
+        "AKID12345",
+        "SecretKey12345",
+        body_a,
+        "20240101T120000Z",
+        "20240101",
+    );
+    let auth_a2 = compute_volcano_authorization(
+        "AKID12345",
+        "SecretKey12345",
+        body_a,
+        "20240101T120000Z",
+        "20240101",
+    );
+    let auth_b = compute_volcano_authorization(
+        "AKID12345",
+        "SecretKey12345",
+        body_b,
+        "20240101T120000Z",
+        "20240101",
+    );
+
+    assert_eq!(auth_a1, auth_a2);
+    assert_ne!(auth_a1, auth_b);
+    assert!(auth_a1
+        .starts_with("HMAC-SHA256 Credential=AKID12345/20240101/cn-north-1/translate/request,"));
+}
+
+#[test]
+fn volcano_timestamps_from_epoch_match_utc_vector() {
+    // 1704110400 == 2024-01-01T12:00:00Z. Guards the hand-rolled civil-from-days
+    // conversion against leap-year / off-by-one bugs the regex shape test misses.
+    let stamps = volcano_timestamps_from_epoch_seconds(1_704_110_400);
+    assert_eq!(stamps.x_date, "20240101T120000Z");
+    assert_eq!(stamps.short_date, "20240101");
+
+    // Unix epoch itself.
+    let epoch = volcano_timestamps_from_epoch_seconds(0);
+    assert_eq!(epoch.x_date, "19700101T000000Z");
+    assert_eq!(epoch.short_date, "19700101");
+
+    // Mid-year / leap-boundary / year-end vectors exercise the Mar–Dec branch of the
+    // civil-from-days conversion (the January vectors above only hit the Jan/Feb branch).
+    // Ground truth from datetime.utcfromtimestamp.
+    let mid_year = volcano_timestamps_from_epoch_seconds(1_721_051_130);
+    assert_eq!(mid_year.x_date, "20240715T134530Z");
+    assert_eq!(mid_year.short_date, "20240715");
+
+    let leap_march = volcano_timestamps_from_epoch_seconds(1_709_251_200);
+    assert_eq!(leap_march.x_date, "20240301T000000Z");
+    assert_eq!(leap_march.short_date, "20240301");
+
+    let year_end = volcano_timestamps_from_epoch_seconds(1_735_689_599);
+    assert_eq!(year_end.x_date, "20241231T235959Z");
+    assert_eq!(year_end.short_date, "20241231");
+}
+
+#[test]
+fn volcano_translation_request_plan_signs_and_omits_auto_source() {
+    let plan = build_volcano_translation_request_plan(
+        "test-access-key",
+        "test-secret-key",
+        "Hello",
+        TranslationLanguage::Auto,
+        TranslationLanguage::SimplifiedChinese,
+    )
+    .unwrap();
+
+    assert_eq!(plan.method, "POST");
+    assert_eq!(plan.service_kind, TraditionalHttpServiceKind::Volcano);
+    assert_eq!(plan.endpoint, VOLCANO_TRANSLATE_ENDPOINT);
+    assert!(plan
+        .endpoint
+        .ends_with("?Action=TranslateText&Version=2020-06-01"));
+
+    let body = plan.body.as_deref().unwrap();
+    assert!(body.contains(r#""TargetLanguage":"zh""#));
+    assert!(body.contains(r#""TextList":["Hello"]"#));
+    assert!(!body.contains("SourceLanguage"));
+
+    let header = |name: &str| {
+        plan.headers
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
+    };
+    assert_eq!(header("Host"), Some(VOLCANO_TRANSLATE_HOST));
+    assert_eq!(header("Content-Type"), Some("application/json"));
+
+    let x_date = header("X-Date").expect("X-Date header");
+    assert_eq!(x_date.len(), 16);
+    assert!(x_date.ends_with('Z') && x_date.as_bytes()[8] == b'T');
+
+    let authorization = header("Authorization").expect("Authorization header");
+    assert!(authorization.starts_with("HMAC-SHA256 Credential=test-access-key/"));
+    assert!(authorization.contains("SignedHeaders=content-type;host;x-date,"));
+    assert!(authorization.contains("Signature="));
+}
+
+#[test]
+fn volcano_translation_request_plan_includes_explicit_source_and_validates() {
+    let plan = build_volcano_translation_request_plan(
+        "akid",
+        "secret",
+        "你好",
+        TranslationLanguage::SimplifiedChinese,
+        TranslationLanguage::English,
+    )
+    .unwrap();
+    let body = plan.body.as_deref().unwrap();
+    assert!(body.contains(r#""SourceLanguage":"zh""#));
+    assert!(body.contains(r#""TargetLanguage":"en""#));
+
+    // Missing credentials map to InvalidApiKey, matching the legacy not-configured guard.
+    let unconfigured = build_volcano_translation_request_plan(
+        "",
+        "secret",
+        "Hello",
+        TranslationLanguage::English,
+        TranslationLanguage::SimplifiedChinese,
+    )
+    .unwrap_err();
+    assert_eq!(unconfigured.code, OpenAiExecutionErrorCode::InvalidApiKey);
+
+    // Oversized text is rejected before signing.
+    let long_text = "a".repeat(VOLCANO_MAX_TEXT_LENGTH_UTF16 + 1);
+    let too_long = build_volcano_translation_request_plan(
+        "akid",
+        "secret",
+        &long_text,
+        TranslationLanguage::English,
+        TranslationLanguage::SimplifiedChinese,
+    )
+    .unwrap_err();
+    assert_eq!(too_long.code, OpenAiExecutionErrorCode::TextTooLong);
+}
+
+#[test]
+fn volcano_language_codes_preserve_legacy_special_cases() {
+    assert_eq!(
+        volcano_language_code(TranslationLanguage::Auto).unwrap(),
+        ""
+    );
+    assert_eq!(
+        volcano_language_code(TranslationLanguage::TraditionalChinese).unwrap(),
+        "zh-Hant"
+    );
+    assert_eq!(
+        volcano_language_code(TranslationLanguage::ClassicalChinese).unwrap(),
+        "lzh"
+    );
+    assert_eq!(
+        volcano_language_code(TranslationLanguage::Norwegian).unwrap(),
+        "no"
+    );
+    assert!(volcano_language_code(TranslationLanguage::Greek).is_err());
+}
+
+#[test]
+fn volcano_response_parser_matches_legacy_fallbacks_and_errors() {
+    let success = parse_volcano_translation_response(
+        r#"{"TranslationList":[{"Translation":"你好，世界！","DetectedSourceLanguage":"en"}],"ResponseMetadata":{}}"#,
+        "Hello, world!",
+        "volcano".to_string(),
+        "Volcano".to_string(),
+    )
+    .unwrap();
+    assert_eq!(success.translated_text, "你好，世界！");
+    assert_eq!(success.detected_language.as_deref(), Some("en"));
+
+    // Empty/missing translation falls back to the original text.
+    let fallback = parse_volcano_translation_response(
+        r#"{"TranslationList":[],"ResponseMetadata":{}}"#,
+        "Hello",
+        "volcano".to_string(),
+        "Volcano".to_string(),
+    )
+    .unwrap();
+    assert_eq!(fallback.translated_text, "Hello");
+    assert_eq!(fallback.detected_language, None);
+
+    // API-level error is surfaced as ServiceUnavailable with the message text.
+    let error = parse_volcano_translation_response(
+        r#"{"TranslationList":null,"ResponseMetadata":{"Error":{"Code":"InvalidParameter","Message":"Invalid source language"}}}"#,
+        "Hello",
+        "volcano".to_string(),
+        "Volcano".to_string(),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, OpenAiExecutionErrorCode::ServiceUnavailable);
+    assert!(error.message.contains("Invalid source language"));
+    assert_eq!(error.service_id.as_deref(), Some("volcano"));
+}
+
+#[test]
+fn translate_traditional_http_service_executes_volcano_plan() {
+    let mut client = RecordingTraditionalHttpClient::with_responses([Ok(
+        r#"{"TranslationList":[{"Translation":"你好","DetectedSourceLanguage":"en"}],"ResponseMetadata":{}}"#
+            .to_string(),
+    )]);
+    let result = translate_traditional_http_service(
+        &mut client,
+        &TraditionalHttpServiceConfig::Volcano {
+            access_key_id: "akid".to_string(),
+            secret_access_key: "secret".to_string(),
+        },
+        "Hello",
+        TranslationLanguage::English,
+        TranslationLanguage::SimplifiedChinese,
+        "volcano",
+        "Volcano",
+    )
+    .unwrap();
+
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(result.detected_language.as_deref(), Some("en"));
+    assert_eq!(client.requests.len(), 1);
+    assert_eq!(client.requests[0].method, "POST");
+    assert_eq!(
+        client.requests[0].service_kind,
+        TraditionalHttpServiceKind::Volcano
+    );
+    assert!(client.requests[0]
+        .headers
+        .iter()
+        .any(|(key, _)| key == "Authorization"));
 }
 
 #[derive(Default)]

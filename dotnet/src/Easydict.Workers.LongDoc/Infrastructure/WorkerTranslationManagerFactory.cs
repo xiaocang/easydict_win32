@@ -137,6 +137,16 @@ internal static class WorkerTranslationManagerFactory
             }
         });
 
+        ConfigureIfPresent(manager, "volcano", svc =>
+        {
+            if (svc is VolcanoService volcano)
+            {
+                volcano.Configure(
+                    snapshot.VolcanoAccessKeyId ?? string.Empty,
+                    snapshot.VolcanoSecretAccessKey ?? string.Empty);
+            }
+        });
+
         return manager;
     }
 

@@ -256,6 +256,8 @@ internal sealed class WorkerSpawner
             YoudaoAppKey = settings.YoudaoAppKey,
             YoudaoAppSecret = settings.YoudaoAppSecret,
             YoudaoUseOfficialApi = settings.YoudaoUseOfficialApi,
+            VolcanoAccessKeyId = settings.VolcanoAccessKeyId,
+            VolcanoSecretAccessKey = settings.VolcanoSecretAccessKey,
             CustomOpenAIApiKey = settings.CustomOpenAIApiKey,
             CustomOpenAIEndpoint = settings.CustomOpenAIEndpoint,
             CustomOpenAIModel = settings.CustomOpenAIModel,

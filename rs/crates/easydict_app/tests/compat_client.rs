@@ -26,6 +26,13 @@ fn mock_host() -> CompatHostClient {
 }
 
 const MOCK_HOST_SCRIPT: &str = r#"
+# The real .NET CompatHost speaks UTF-8 JSON Lines. Force UTF-8 on both streams so
+# the mock matches that contract on non-UTF-8 default locales (e.g. zh-CN GBK consoles),
+# otherwise non-ASCII payloads like translated text are emitted in the system codepage
+# and fail the Rust client's UTF-8 line reader.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+
 function Write-JsonLine($value) {
     $json = $value | ConvertTo-Json -Compress -Depth 16
     [Console]::Out.WriteLine($json)

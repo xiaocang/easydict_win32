@@ -1,8 +1,8 @@
 use crate::compat_protocol::{SettingsSnapshot, TranslationResultDto};
 use crate::openai_compatible::{OpenAiExecutionError, OpenAiExecutionErrorCode};
 use crate::translation_language::TranslationLanguage;
-use ring::{digest, hmac};
 use ring::rand::{SecureRandom, SystemRandom};
+use ring::{digest, hmac};
 use serde_json::json;
 use serde_json::Value;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -57,6 +57,14 @@ pub enum TraditionalHttpServiceConfig {
         access_key_id: String,
         secret_access_key: String,
     },
+}
+
+/// UTC timestamps used by the Volcano (火山) AWS SigV4-style signing process.
+/// `x_date` is `yyyyMMddTHHmmssZ`; `short_date` is `yyyyMMdd`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VolcanoTimestamps {
+    pub x_date: String,
+    pub short_date: String,
 }
 
 pub trait TraditionalHttpClient {
@@ -181,6 +189,13 @@ pub fn traditional_http_config_for_service(
         "niutrans" => Some(TraditionalHttpServiceConfig::NiuTrans {
             api_key: settings.niu_trans_api_key.clone().unwrap_or_default(),
         }),
+        "volcano" => Some(TraditionalHttpServiceConfig::Volcano {
+            access_key_id: settings.volcano_access_key_id.clone().unwrap_or_default(),
+            secret_access_key: settings
+                .volcano_secret_access_key
+                .clone()
+                .unwrap_or_default(),
+        }),
         _ => None,
     }
 }
@@ -211,6 +226,16 @@ pub fn build_traditional_http_translation_request_plan(
         TraditionalHttpServiceConfig::NiuTrans { api_key } => {
             build_niutrans_translation_request_plan(api_key, text, from_language, to_language)
         }
+        TraditionalHttpServiceConfig::Volcano {
+            access_key_id,
+            secret_access_key,
+        } => build_volcano_translation_request_plan(
+            access_key_id,
+            secret_access_key,
+            text,
+            from_language,
+            to_language,
+        ),
     }
 }
 
@@ -353,6 +378,235 @@ pub fn build_niutrans_translation_request_plan(
     })
 }
 
+pub fn build_volcano_translation_request_plan(
+    access_key_id: &str,
+    secret_access_key: &str,
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    validate_required("Volcano AccessKeyID", access_key_id)?;
+    validate_required("Volcano SecretAccessKey", secret_access_key)?;
+
+    let text_len = text.encode_utf16().count();
+    if text_len > VOLCANO_MAX_TEXT_LENGTH_UTF16 {
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::TextTooLong,
+            format!("Text exceeds maximum length of {VOLCANO_MAX_TEXT_LENGTH_UTF16} characters"),
+        ));
+    }
+
+    let from_code = volcano_language_code(from_language)?;
+    let to_code = volcano_language_code(to_language)?;
+
+    // Mirror the legacy insertion order: TargetLanguage, TextList, then optional
+    // SourceLanguage. The body bytes are signed exactly as sent.
+    let mut body = serde_json::Map::new();
+    body.insert(
+        "TargetLanguage".to_string(),
+        Value::String(to_code.to_string()),
+    );
+    body.insert(
+        "TextList".to_string(),
+        Value::Array(vec![Value::String(text.to_string())]),
+    );
+    if !from_code.is_empty() {
+        body.insert(
+            "SourceLanguage".to_string(),
+            Value::String(from_code.to_string()),
+        );
+    }
+    let body_json = Value::Object(body).to_string();
+
+    let timestamps = volcano_timestamps_now()?;
+    let authorization = compute_volcano_authorization(
+        access_key_id.trim(),
+        secret_access_key,
+        body_json.as_bytes(),
+        &timestamps.x_date,
+        &timestamps.short_date,
+    );
+
+    Ok(TraditionalHttpRequestPlan {
+        method: "POST",
+        endpoint: VOLCANO_TRANSLATE_ENDPOINT.to_string(),
+        headers: vec![
+            ("Content-Type".to_string(), "application/json".to_string()),
+            ("Host".to_string(), VOLCANO_TRANSLATE_HOST.to_string()),
+            ("X-Date".to_string(), timestamps.x_date),
+            ("Authorization".to_string(), authorization),
+        ],
+        body: Some(body_json),
+        service_kind: TraditionalHttpServiceKind::Volcano,
+    })
+}
+
+/// Compute the Volcano Engine HMAC-SHA256 Authorization header (AWS SigV4-style).
+/// Pure and deterministic given the timestamp inputs, mirroring the legacy
+/// .NET `VolcanoService.ComputeAuthorization`. Docs: https://www.volcengine.com/docs/6369/67269
+pub fn compute_volcano_authorization(
+    access_key_id: &str,
+    secret_access_key: &str,
+    body: &[u8],
+    x_date: &str,
+    short_date: &str,
+) -> String {
+    let credential_scope = format!("{short_date}/{VOLCANO_REGION}/{VOLCANO_SERVICE_NAME}/request");
+
+    // Canonical headers (sorted, lowercase). The trailing '\n' here, combined with
+    // the join below, intentionally inserts a blank line before the signed headers,
+    // matching the legacy signing string byte-for-byte.
+    let canonical_headers =
+        format!("content-type:application/json\nhost:{VOLCANO_TRANSLATE_HOST}\nx-date:{x_date}\n");
+    let signed_headers = "content-type;host;x-date";
+
+    let body_hash = sha256_hex(body);
+    let canonical_request = [
+        "POST",
+        "/",
+        VOLCANO_QUERY_STRING,
+        &canonical_headers,
+        signed_headers,
+        &body_hash,
+    ]
+    .join("\n");
+
+    let canonical_request_hash = sha256_hex(canonical_request.as_bytes());
+    let string_to_sign = [
+        VOLCANO_SIGNING_ALGORITHM,
+        x_date,
+        &credential_scope,
+        &canonical_request_hash,
+    ]
+    .join("\n");
+
+    let k_date = hmac_sha256(secret_access_key.as_bytes(), short_date.as_bytes());
+    let k_region = hmac_sha256(&k_date, VOLCANO_REGION.as_bytes());
+    let k_service = hmac_sha256(&k_region, VOLCANO_SERVICE_NAME.as_bytes());
+    let k_signing = hmac_sha256(&k_service, b"request");
+    let signature = hex_encode_lower(&hmac_sha256(&k_signing, string_to_sign.as_bytes()));
+
+    format!(
+        "{VOLCANO_SIGNING_ALGORITHM} Credential={access_key_id}/{credential_scope}, \
+         SignedHeaders={signed_headers}, Signature={signature}"
+    )
+}
+
+pub fn parse_volcano_translation_response(
+    json: &str,
+    original_text: &str,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let root: Value = serde_json::from_str(json).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Volcano JSON response: {error}"),
+        )
+        .with_service_id(service_id.clone())
+    })?;
+
+    // API-level error reported inside ResponseMetadata.Error.
+    if let Some(error) = root
+        .get("ResponseMetadata")
+        .and_then(|metadata| metadata.get("Error"))
+    {
+        let code = error
+            .get("Code")
+            .and_then(Value::as_str)
+            .unwrap_or("Unknown");
+        let message = error
+            .get("Message")
+            .and_then(Value::as_str)
+            .unwrap_or("Unknown error");
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::ServiceUnavailable,
+            format!("Volcano API error: {message} (code: {code})"),
+        )
+        .with_service_id(service_id));
+    }
+
+    let first_item = root
+        .get("TranslationList")
+        .and_then(Value::as_array)
+        .and_then(|list| list.first());
+
+    let translated_text = first_item
+        .and_then(|item| item.get("Translation"))
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+        .unwrap_or(original_text)
+        .to_string();
+
+    let detected_language = first_item
+        .and_then(|item| item.get("DetectedSourceLanguage"))
+        .and_then(Value::as_str)
+        .filter(|code| !code.is_empty())
+        .map(|code| {
+            TranslationLanguage::from_iso639(code)
+                .to_iso639()
+                .to_string()
+        });
+
+    Ok(success_result(
+        translated_text,
+        service_id,
+        service_name,
+        detected_language,
+    ))
+}
+
+pub fn volcano_language_code(
+    language: TranslationLanguage,
+) -> Result<&'static str, OpenAiExecutionError> {
+    match language {
+        // Auto resolves to an empty code so the caller omits SourceLanguage.
+        TranslationLanguage::Auto => Ok(""),
+        TranslationLanguage::SimplifiedChinese => Ok("zh"),
+        TranslationLanguage::TraditionalChinese => Ok("zh-Hant"),
+        TranslationLanguage::ClassicalChinese => Ok("lzh"),
+        TranslationLanguage::English => Ok("en"),
+        TranslationLanguage::Japanese => Ok("ja"),
+        TranslationLanguage::Korean => Ok("ko"),
+        TranslationLanguage::French => Ok("fr"),
+        TranslationLanguage::German => Ok("de"),
+        TranslationLanguage::Spanish => Ok("es"),
+        TranslationLanguage::Portuguese => Ok("pt"),
+        TranslationLanguage::Italian => Ok("it"),
+        TranslationLanguage::Russian => Ok("ru"),
+        TranslationLanguage::Arabic => Ok("ar"),
+        TranslationLanguage::Thai => Ok("th"),
+        TranslationLanguage::Vietnamese => Ok("vi"),
+        TranslationLanguage::Indonesian => Ok("id"),
+        TranslationLanguage::Hindi => Ok("hi"),
+        TranslationLanguage::Hebrew => Ok("he"),
+        TranslationLanguage::Ukrainian => Ok("uk"),
+        TranslationLanguage::Urdu => Ok("ur"),
+        TranslationLanguage::Turkish => Ok("tr"),
+        TranslationLanguage::Tamil => Ok("ta"),
+        TranslationLanguage::Telugu => Ok("te"),
+        TranslationLanguage::Slovenian => Ok("sl"),
+        TranslationLanguage::Slovak => Ok("sk"),
+        TranslationLanguage::Swedish => Ok("sv"),
+        TranslationLanguage::Norwegian => Ok("no"),
+        TranslationLanguage::Bengali => Ok("bn"),
+        TranslationLanguage::Malay => Ok("ms"),
+        TranslationLanguage::Romanian => Ok("ro"),
+        TranslationLanguage::Lithuanian => Ok("lt"),
+        TranslationLanguage::Latvian => Ok("lv"),
+        TranslationLanguage::Czech => Ok("cs"),
+        TranslationLanguage::Dutch => Ok("nl"),
+        TranslationLanguage::Finnish => Ok("fi"),
+        TranslationLanguage::Danish => Ok("da"),
+        TranslationLanguage::Persian => Ok("fa"),
+        TranslationLanguage::Polish => Ok("pl"),
+        TranslationLanguage::Bulgarian => Ok("bg"),
+        TranslationLanguage::Estonian => Ok("et"),
+        TranslationLanguage::Hungarian => Ok("hu"),
+        _ => Err(unsupported_language_error("Volcano", language)),
+    }
+}
+
 pub fn translate_traditional_http_service<C: TraditionalHttpClient>(
     client: &mut C,
     config: &TraditionalHttpServiceConfig,
@@ -383,6 +637,9 @@ pub fn translate_traditional_http_service<C: TraditionalHttpClient>(
         }
         TraditionalHttpServiceConfig::NiuTrans { .. } => {
             parse_niutrans_translation_response(&body, text, service_id, service_name)
+        }
+        TraditionalHttpServiceConfig::Volcano { .. } => {
+            parse_volcano_translation_response(&body, text, service_id, service_name)
         }
     }
 }
@@ -793,6 +1050,69 @@ fn push_hex_byte(buffer: &mut String, byte: u8) {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     buffer.push(HEX[(byte >> 4) as usize] as char);
     buffer.push(HEX[(byte & 0x0f) as usize] as char);
+}
+
+fn hex_encode_lower(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        push_hex_byte(&mut out, *byte);
+    }
+    out
+}
+
+fn sha256_hex(data: &[u8]) -> String {
+    hex_encode_lower(digest::digest(&digest::SHA256, data).as_ref())
+}
+
+fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
+    let key = hmac::Key::new(hmac::HMAC_SHA256, key);
+    hmac::sign(&key, data).as_ref().to_vec()
+}
+
+fn volcano_timestamps_now() -> Result<VolcanoTimestamps, OpenAiExecutionError> {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::Unknown,
+                format!("System clock is before the Unix epoch: {error}"),
+            )
+        })?
+        .as_secs();
+    Ok(volcano_timestamps_from_epoch_seconds(secs))
+}
+
+/// Format `yyyyMMddTHHmmssZ` and `yyyyMMdd` UTC strings from Unix epoch seconds.
+pub fn volcano_timestamps_from_epoch_seconds(secs: u64) -> VolcanoTimestamps {
+    let (year, month, day, hour, minute, second) = epoch_seconds_to_utc(secs);
+    VolcanoTimestamps {
+        x_date: format!("{year:04}{month:02}{day:02}T{hour:02}{minute:02}{second:02}Z"),
+        short_date: format!("{year:04}{month:02}{day:02}"),
+    }
+}
+
+/// Convert Unix epoch seconds to UTC (year, month, day, hour, minute, second)
+/// using Howard Hinnant's civil-from-days algorithm. Avoids a date-crate dependency.
+fn epoch_seconds_to_utc(secs: u64) -> (i64, u32, u32, u32, u32, u32) {
+    let days = (secs / 86_400) as i64;
+    let rem = (secs % 86_400) as u32;
+    let hour = rem / 3_600;
+    let minute = (rem % 3_600) / 60;
+    let second = rem % 60;
+
+    // days since 1970-01-01 -> civil date
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as i64; // [0, 146096]
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let day = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
+    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32; // [1, 12]
+    let year = if month <= 2 { year + 1 } else { year };
+
+    (year, month, day, hour, minute, second)
 }
 
 fn attach_service_id(mut error: OpenAiExecutionError, service_id: &str) -> OpenAiExecutionError {

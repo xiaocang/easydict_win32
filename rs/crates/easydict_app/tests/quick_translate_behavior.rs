@@ -23,12 +23,12 @@ use easydict_app::{
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface, ResultActionKind,
     SettingsLink, StartupActivation, StartupActivationDisposition, TraditionalHttpClient,
-    TraditionalHttpRequestPlan, BROWSER_REGISTRAR_EXE, HOTKEY_OCR_TRANSLATE, HOTKEY_SHOW_FIXED,
-    HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR, HOTKEY_TOGGLE_FIXED, HOTKEY_TOGGLE_MINI,
-    HOTKEY_TRANSLATE_CLIPBOARD, LOCAL_DICTIONARY_SUGGESTION_DELAY_MS, OCR_TRANSLATE_EVENT_NAME,
-    PROTOCOL_EASYDICT, SHELL_OCR_TRANSLATE, TRAY_BROWSER_INSTALL, TRAY_BROWSER_UNINSTALL,
-    TRAY_EXIT, TRAY_OCR_TRANSLATE, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI,
-    TRAY_TRANSLATE_CLIPBOARD,
+    TraditionalHttpRequestPlan, TraditionalHttpServiceKind, BROWSER_REGISTRAR_EXE,
+    HOTKEY_OCR_TRANSLATE, HOTKEY_SHOW_FIXED, HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR,
+    HOTKEY_TOGGLE_FIXED, HOTKEY_TOGGLE_MINI, HOTKEY_TRANSLATE_CLIPBOARD,
+    LOCAL_DICTIONARY_SUGGESTION_DELAY_MS, OCR_TRANSLATE_EVENT_NAME, PROTOCOL_EASYDICT,
+    SHELL_OCR_TRANSLATE, TRAY_BROWSER_INSTALL, TRAY_BROWSER_UNINSTALL, TRAY_EXIT,
+    TRAY_OCR_TRANSLATE, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI, TRAY_TRANSLATE_CLIPBOARD,
 };
 use std::collections::VecDeque;
 use std::fs;
@@ -983,6 +983,10 @@ fn native_traditional_http_quick_translate_supports_caiyun_deepl_api_and_niutran
                     .to_string(),
             ),
             Ok(r#"{"tgt_text":"Bonjour"}"#.to_string()),
+            Ok(
+                r#"{"TranslationList":[{"Translation":"你好","DetectedSourceLanguage":"en"}],"ResponseMetadata":{}}"#
+                    .to_string(),
+            ),
         ]),
     );
 
@@ -1092,6 +1096,45 @@ fn native_traditional_http_quick_translate_supports_caiyun_deepl_api_and_niutran
     assert_eq!(niutrans_body["apikey"], "niu-key");
     assert_eq!(niutrans_body["from"], "en");
     assert_eq!(niutrans_body["to"], "fr");
+
+    let volcano_request = QuickTranslateServiceRequest {
+        query_id: 32,
+        service: quick_service("volcano", "Volcano", false, false),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::Translate,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["volcano".to_string()]),
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            volcano_access_key_id: Some("volcano-akid".to_string()),
+            volcano_secret_access_key: Some("volcano-secret".to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    let volcano_update = run_quick_translate_service(&mut backend, &volcano_request);
+    let volcano = volcano_update
+        .outcome
+        .result
+        .expect("native Volcano should succeed");
+    assert_eq!(volcano.translated_text, "你好");
+    assert_eq!(volcano.service_id.as_deref(), Some("volcano"));
+    assert_eq!(volcano.detected_language.as_deref(), Some("en"));
+    let volcano_plan = &backend.http_client().requests[3];
+    assert_eq!(volcano_plan.method, "POST");
+    assert_eq!(
+        volcano_plan.service_kind,
+        TraditionalHttpServiceKind::Volcano
+    );
+    assert!(volcano_plan
+        .headers
+        .iter()
+        .any(|(key, value)| key == "Authorization"
+            && value.starts_with("HMAC-SHA256 Credential=volcano-akid/")));
 }
 
 #[test]

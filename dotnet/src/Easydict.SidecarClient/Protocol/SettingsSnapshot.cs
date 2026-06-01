@@ -99,6 +99,12 @@ public sealed class SettingsSnapshot
     [JsonPropertyName("youdaoUseOfficialApi")]
     public bool? YoudaoUseOfficialApi { get; init; }
 
+    [JsonPropertyName("volcanoAccessKeyId")]
+    public string? VolcanoAccessKeyId { get; init; }
+
+    [JsonPropertyName("volcanoSecretAccessKey")]
+    public string? VolcanoSecretAccessKey { get; init; }
+
     [JsonPropertyName("customOpenAIApiKey")]
     public string? CustomOpenAIApiKey { get; init; }
 

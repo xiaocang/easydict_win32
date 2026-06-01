@@ -756,8 +756,29 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - Extended `traditional_http.rs` with DeepL official API request planning, `api-free` vs `api` endpoint selection from `:fx` keys, form-url-encoded bodies, `DeepL-Auth-Key` auth, `quality_optimized` mode, API/web language-code special cases, API response parsing, and DeepL-specific HTTP status mapping including quota status 456.
   - DeepL native routing is deliberately gated to API-only mode (`deepLUseFreeApi=false`) or quality-optimized mode; default DeepL web-first JSON-RPC behavior remains behind CompatHost until the web anti-detection protocol is migrated.
   - Expands `traditional_http_behavior` to 12 tests and extends the native traditional quick-translate test so DeepL API mode returns native DTO metadata and a single request plan without changing the default web route.
+- 2026-06-01: Completed Rust-owned Volcano (火山翻译) traditional HTTP execution and fixed incomplete scaffolding.
+  - The committed `traditional_http.rs` carried partial Volcano scaffolding (`TraditionalHttpServiceKind::Volcano`, the `TraditionalHttpServiceConfig::Volcano { .. }` variant, `VOLCANO_*` constants, and the `ring::{digest, hmac}` / `SystemTime` imports) but no config routing, plan builder, signer, or parser, so the crate did not compile (two non-exhaustive matches). This step finishes that migration slice.
+  - Scouted Rust options first: Volcano Engine's official SDKs target Go/Java/Python rather than Rust, and community `volcengine`-style crates wrap broad product APIs rather than the narrow `TranslateText` action, so a local implementation is kept (same rationale logged for Caiyun/NiuTrans).
+  - Added `build_volcano_translation_request_plan` (POST to `translate.volcengineapi.com/?Action=TranslateText&Version=2020-06-01`, JSON `TargetLanguage`/`TextList`/optional `SourceLanguage`, 5000 UTF-16 length cap, Host/X-Date/Authorization/Content-Type headers), `compute_volcano_authorization` (pure AWS SigV4-style HMAC-SHA256 signer mirroring the legacy `VolcanoService.ComputeAuthorization` byte-for-byte, including the trailing-newline blank line in the canonical request and the raw-secret signing key with no `AWS4` prefix), `parse_volcano_translation_response` (`ResponseMetadata.Error` → `ServiceUnavailable`, `TranslationList[0]` translation/detected-language with original-text fallback), and `volcano_language_code` with the legacy code map (`zh`, `zh-Hant`, `lzh`, …). `volcano` now routes natively through `NativeTraditionalHttpQuickTranslateBackend` via `traditional_http_config_for_service`.
+  - Timestamp formatting uses a hand-rolled epoch→UTC civil-from-days conversion (`volcano_timestamps_from_epoch_seconds`) to avoid a date-crate dependency; signing crypto reuses `ring` (already a dependency).
+  - .NET parity: added `volcanoAccessKeyId`/`volcanoSecretAccessKey` to the `SettingsSnapshot` contract (the Rust snapshot already had them), mapped them in `WorkerSpawner.BuildSnapshot`, and configured the `volcano` service in the LongDoc worker's `WorkerTranslationManagerFactory` so document-translation workers can use Volcano during the hybrid period.
+  - Test-infra fix: the `compat_client` PowerShell JSON Lines mock host now forces `[Console]::OutputEncoding`/`InputEncoding` to UTF-8 so non-ASCII payloads (e.g. the longdoc mock's `长文档` block text) survive on non-UTF-8 default locales (zh-CN GBK consoles); previously the Rust UTF-8 line reader failed with "stream did not contain valid UTF-8" on such machines.
+  - Adds a `compute_volcano_authorization` known-answer test cross-checked against the legacy .NET signer for the exact fixed `VolcanoServiceTests` inputs (AKID12345 / SecretKey12345 / fixed body / 20240101T120000Z → signature `c2978c8a…ba43`) — proving the SigV4 port, not just self-consistency — plus determinism/body-sensitivity, an epoch→UTC vector, plan header/body/auto-source coverage, validation/length errors, language-code special cases, response parser fallbacks/errors, and native execution; extends the native traditional quick-translate test with Volcano. `traditional_http_behavior` is now 20 tests.
+  - Known gap (not blocking): `TranslationResultDto` still carries no `WordResult`/dictionary fields (phonetics, definitions, examples). The remaining traditional providers Google Web/Dict and Youdao return rich dictionary data, so a future DTO/UI extension is required before their dictionary parity can be ported; plain translation parity is unaffected.
 
 ## Current Verification
+
+- `cd rs; cargo test -p easydict_app --test traditional_http_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_traditional -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_client -- --nocapture`
+- `cd rs; cargo test -p easydict_app`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `python3 /tmp/volcano_ref.py  # known-answer signature/epoch cross-check vs .NET signing algorithm`
+- `cd dotnet; dotnet build src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj -c Debug -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerProtocolSerializationTests|FullyQualifiedName~CompatHostProtocolSerializationTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+
+## Earlier Verification
 
 - `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_traditional_http -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test traditional_http_behavior -- --nocapture`

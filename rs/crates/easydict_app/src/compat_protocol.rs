@@ -384,6 +384,13 @@ pub struct SettingsSnapshot {
         rename = "youdaoUseOfficialApi"
     )]
     pub youdao_use_official_api: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "volcanoAccessKeyId")]
+    pub volcano_access_key_id: Option<String>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "volcanoSecretAccessKey"
+    )]
+    pub volcano_secret_access_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "customOpenAIApiKey")]
     pub custom_open_ai_api_key: Option<String>,
     #[serde(

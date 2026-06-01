@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 const LEGACY_OPENVINO_SERVICE_ID: &str = "openvino-local-ai";
 const WINDOWS_LOCAL_AI_SERVICE_ID: &str = "windows-local-ai";
+const SETTINGS_DIRECTORY_ENVIRONMENT_VARIABLE: &str = "EASYDICT_SETTINGS_DIR";
 
 #[derive(Debug)]
 pub enum SettingsMigrationError {
@@ -282,6 +283,14 @@ fn value_eq_ignore_case(value: &Value, expected: &str) -> bool {
 }
 
 fn default_settings_path() -> PathBuf {
+    if let Some(settings_directory) = std::env::var(SETTINGS_DIRECTORY_ENVIRONMENT_VARIABLE)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return resolve_expanded_full_path(&settings_directory).join("settings.json");
+    }
+
     std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))

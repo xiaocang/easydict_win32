@@ -5,20 +5,42 @@ pub mod browser_registrar;
 pub mod cli_translate;
 pub mod compat_client;
 pub mod compat_protocol;
+pub mod credential_protection;
+pub mod custom_streaming;
+pub mod grammar_correction;
 mod i18n;
 pub mod llm_streaming;
 pub mod local_dictionary;
 pub mod long_document;
 pub mod native_bridge;
 pub mod ocr;
+pub mod openai_compatible;
 pub mod quick_translate;
 pub mod screen_capture;
 pub mod settings_migration;
+pub mod settings_storage;
 pub mod state;
 pub mod theme;
+pub mod traditional_http;
+pub mod translation_cache;
+pub mod translation_language;
+pub mod translation_services;
 pub mod ui;
 pub mod window_options;
 
+pub use custom_streaming::{
+    build_custom_streaming_grammar_request_plan, build_custom_streaming_translation_request_plan,
+    build_doubao_translation_request_plan, build_gemini_grammar_request_plan,
+    build_gemini_translation_request_plan, cleanup_custom_streaming_translation_text,
+    cleanup_doubao_translation_text, correct_custom_streaming_grammar,
+    custom_streaming_config_for_service, custom_streaming_error_from_response,
+    doubao_language_code, doubao_service_config, execute_custom_streaming_request,
+    gemini_service_config, parse_custom_streaming_chunks, parse_doubao_stream_chunks,
+    parse_gemini_stream_chunks, translate_custom_streaming_service, CustomStreamingFormat,
+    CustomStreamingHttpClient, CustomStreamingHttpRequestPlan, CustomStreamingServiceConfig,
+    DoubaoConfig, GeminiConfig, ReqwestCustomStreamingHttpClient, DOUBAO_DEFAULT_ENDPOINT,
+    DOUBAO_DEFAULT_MODEL, GEMINI_API_BASE_URL, GEMINI_DEFAULT_MODEL,
+};
 pub use llm_streaming::{
     chat_completions_sse_chunks, extract_chat_completions_delta, extract_responses_delta,
     parse_chat_completions_sse_chunks, parse_openai_sse_chunks, parse_responses_sse_chunks,
@@ -53,6 +75,28 @@ pub use ocr::{
     OcrHttpRequestPlan, OcrHttpResponseParser, OcrImageEncodeError, OcrMode, OcrOutcome,
     OcrRecognizeRequest, OcrResultAction, OcrStartError,
 };
+pub use openai_compatible::{
+    build_openai_grammar_messages, build_openai_grammar_request_plan,
+    build_openai_http_request_plan, build_openai_request_body, build_openai_translation_messages,
+    build_openai_translation_request_plan, built_in_ai_direct_endpoint_for_model,
+    built_in_ai_direct_service_config, built_in_ai_proxy_headers, clamp_openai_temperature,
+    cleanup_openai_translation_text, correct_grammar_openai_compatible,
+    custom_openai_service_config, deepseek_service_config, detect_openai_api_format_from_url,
+    execute_openai_stream_request, github_models_service_config, groq_service_config,
+    ollama_model_refresh_fallback, ollama_service_config, ollama_tags_url_from_endpoint,
+    openai_api_format_from_setting, openai_compatible_config_for_service,
+    openai_effective_temperature, openai_error_from_response, openai_responses_reasoning_effort,
+    openai_service_config, parse_ollama_model_names, resolve_ollama_model_refresh,
+    resolve_openai_api_format, translate_openai_compatible, validate_openai_config,
+    zhipu_service_config, OllamaModelRefreshOutcome, OpenAiApiFormat, OpenAiCompatibleConfig,
+    OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpRequestPlan,
+    OpenAiPlanError, OpenAiTranslationRequest, ReqwestOpenAiHttpClient, BUILT_IN_AI_DEFAULT_MODEL,
+    CUSTOM_OPENAI_DEFAULT_MODEL, DEEPSEEK_DEFAULT_ENDPOINT, DEEPSEEK_DEFAULT_MODEL,
+    GITHUB_MODELS_DEFAULT_ENDPOINT, GITHUB_MODELS_DEFAULT_MODEL, GROQ_DEFAULT_ENDPOINT,
+    GROQ_DEFAULT_MODEL, OLLAMA_DEFAULT_ENDPOINT, OLLAMA_DEFAULT_MODEL, OPENAI_DEFAULT_ENDPOINT,
+    OPENAI_DEFAULT_MODEL, OPENAI_DEFAULT_TEMPERATURE, OPENAI_LEGACY_CHAT_COMPLETIONS_ENDPOINT,
+    OPENAI_TRANSLATION_SYSTEM_PROMPT, ZHIPU_DEFAULT_ENDPOINT, ZHIPU_DEFAULT_MODEL,
+};
 pub use quick_translate::{
     apply_quick_translate_outcome, apply_quick_translate_service_update,
     apply_quick_translate_start_error, apply_quick_translate_start_error_for_surface,
@@ -61,9 +105,11 @@ pub use quick_translate::{
     begin_quick_translate_for_surface, begin_retry_quick_translate_service_for_surface,
     build_quick_translate_plan, build_quick_translate_plan_for_surface,
     resolve_auto_target_language, resolve_different_target_language, resolve_quick_query_language,
-    run_quick_translate, run_quick_translate_service, QuickQueryLanguageResolution, QuickQueryMode,
-    QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
-    QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
+    run_quick_translate, run_quick_translate_service, NativeCustomStreamingQuickTranslateBackend,
+    NativeOpenAiQuickTranslateBackend, NativeTraditionalHttpQuickTranslateBackend,
+    QuickQueryLanguageResolution, QuickQueryMode, QuickTranslateBackend,
+    QuickTranslateBackendError, QuickTranslateExecutionKind, QuickTranslateOutcome,
+    QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface,
 };
@@ -75,6 +121,11 @@ pub use settings_migration::{
     migrate_settings_file, migrate_settings_json, migrate_settings_object, resolve_source_path,
     SettingsMigrationError,
 };
+pub use settings_storage::{
+    default_settings_storage_path, load_settings_file, load_settings_json,
+    load_settings_json_with_machine_id, save_settings_file, save_settings_json, SettingsLoadResult,
+    SettingsStorageError,
+};
 pub use state::{
     resolve_result_action_intent, AppMode, ConnectionStatus, EasydictUiState, FloatingWindowState,
     GrammarCorrectionPreview, HotkeySetting, ImportedMdxDictionary, LocalDictionarySuggestion,
@@ -83,6 +134,38 @@ pub use state::{
     TranslationResultPreview, TRANSLATION_LANGUAGE_IDS,
 };
 pub use theme::easydict_theme_tokens;
+pub use traditional_http::{
+    build_caiyun_translation_request_plan, build_deepl_api_translation_request_plan,
+    build_google_translation_request_plan, build_niutrans_translation_request_plan,
+    build_traditional_http_translation_request_plan, caiyun_language_code,
+    deepl_api_error_from_status, deepl_language_code, google_language_code,
+    niutrans_error_from_code, niutrans_language_code, parse_caiyun_translation_response,
+    parse_deepl_api_translation_response, parse_google_translation_response,
+    parse_niutrans_translation_response, traditional_http_config_for_service,
+    traditional_http_error_from_status, translate_traditional_http_service,
+    ReqwestTraditionalHttpClient, TraditionalHttpClient, TraditionalHttpRequestPlan,
+    TraditionalHttpServiceConfig, TraditionalHttpServiceKind, CAIYUN_TRANSLATE_ENDPOINT,
+    DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT, GOOGLE_TRANSLATE_ENDPOINT,
+    NIUTRANS_MAX_TEXT_LENGTH_UTF16, NIUTRANS_TRANSLATE_ENDPOINT,
+};
+pub use translation_cache::{
+    displayable_phonetics, format_phonetic_text, is_youdao_word_query, merge_phonetics_into_result,
+    phonetic_accent_display_label, phonetic_cache_entry_size_kb, phonetic_cache_key,
+    plan_phonetic_enrichment, target_phonetics, translation_cache_entry_size_kb,
+    translation_cache_key, Definition, Phonetic, PhoneticEnrichmentDecision,
+    PhoneticEnrichmentSkipReason, PhoneticFlightRegistration, PhoneticFlightTracker,
+    PhoneticMemoryCache, Synonym, TranslationCacheRequest, TranslationMemoryCache,
+    TranslationResult, TranslationResultKind, WordForm, WordResult, PHONETIC_CACHE_LIMIT_KB,
+    TRANSLATION_CACHE_LIMIT_KB,
+};
+pub use translation_language::{TranslationLanguage, ALL_TRANSLATION_LANGUAGES};
+pub use translation_services::{
+    app_visible_translation_service_ids, default_translation_service_descriptors,
+    find_translation_service_descriptor, imported_mdx_service_descriptor,
+    openai_compatible_service_ids, translation_service_capabilities, TranslationServiceDescriptor,
+    TranslationServiceKind, DEFAULT_FLOATING_WINDOW_SERVICE_IDS, DEFAULT_MAIN_WINDOW_SERVICE_IDS,
+    DEFAULT_SERVICE_ID,
+};
 pub use ui::{
     capture_overlay_view, fixed_window_view, fixed_window_view_with_settings, main_window_view,
     mini_window_view, mini_window_view_with_settings, pop_button_view, settings_view,
@@ -97,6 +180,19 @@ use win_fluent::prelude::*;
 pub use activation::{
     parse_startup_activation, resolve_startup_activation_disposition,
     startup_activation_task_for_args, StartupActivation, StartupActivationDisposition,
+};
+pub use credential_protection::{
+    get_or_create_persisted_machine_id, is_protected_credential, protect_credential,
+    protect_credential_legacy, protect_credential_with_scope, try_unprotect_credential,
+    try_unprotect_credential_legacy, try_unprotect_credential_with_machine_id,
+    unprotect_or_return_plaintext, unprotect_or_return_plaintext_with_machine_id,
+    CredentialPlaintext, CredentialProtectionError, CredentialProtectionScope,
+    MAX_NESTED_PROTECTED_VALUE_DEPTH,
+};
+pub use grammar_correction::{
+    build_grammar_correction_plain_text_prompt, build_grammar_correction_user_prompt,
+    grammar_correction_system_prompt, parse_grammar_correction, GrammarCorrectionResult,
+    GRAMMAR_CORRECTION_SYSTEM_PROMPT, GRAMMAR_CORRECTION_SYSTEM_PROMPT_WITH_EXPLANATION,
 };
 
 pub struct EasydictApp {

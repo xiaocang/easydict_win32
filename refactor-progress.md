@@ -63,6 +63,16 @@ Keep the completed migration log below in chronological order. If an item in thi
 
 The ordering principle is: core behavior with few dependencies first, then modules that consume those core pieces, with heavy PDF/OCR/local-inference work kept later until Rust-native replacements are proven.
 
+Before starting each Rust-native replacement, check GitHub and crates.io for official, provider-maintained, or high-adoption open-source libraries that can replace part of the work. Prefer well-maintained libraries when they preserve Easydict behavior and packaging constraints; otherwise keep the Rust implementation local and document why.
+
+Initial library scouting notes:
+
+- OpenAI-compatible clients: evaluate `async-openai` (`https://github.com/64bit/async-openai`) and multiprovider clients such as `genai` (`https://github.com/jeremychone/rust-genai`) before expanding hand-written provider HTTP code.
+- PDF parsing/rendering: evaluate `pdfium-render` (`https://github.com/ajrcarey/pdfium-render`) and other Pdfium bindings before replacing the PDF/PdfPig/MuPDF stack.
+- Text shaping/layout: evaluate `cosmic-text` (`https://github.com/pop-os/cosmic-text`) before porting complex shaping, bidi, font fallback, or rasterization behavior.
+- OCR: evaluate the official Tesseract engine (`https://github.com/tesseract-ocr/tesseract`) and Rust wrappers such as `leptess` (`https://github.com/houqp/leptess`) for non-Windows OCR paths, while preserving Windows OCR behavior behind the bridge until parity is clear.
+- Local dictionary indexing: evaluate mature FST/search crates before porting LexIndex internals wholesale, while retaining exact prefix/wildcard/normalization parity tests as the acceptance gate.
+
 1. `Easydict.Llm.Streaming`
    - Replace SSE, Chat Completions streaming, and Responses API streaming parsers first.
    - This unlocks OpenAI-compatible translation, grammar correction, and Custom API OCR parsing without pulling in UI or worker dependencies.
@@ -665,9 +675,121 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - It preserves legacy migration behavior for `WindowWidth`/`WindowHeight` to `WindowWidthDips`/`WindowHeightDips`, Mini/Fixed `PositionSaved` inference from saved coordinates, runtime-only worker isolation key cleanup, and `openvino-local-ai` service id merge into `windows-local-ai`.
   - The OpenVINO merge keeps the legacy standalone OpenVINO preference by setting `LocalAIProvider=OpenVINO` only when needed, replaces service-list entries case-insensitively, removes duplicates when `windows-local-ai` already exists, and moves enabled-query dictionary keys without overwriting an existing new key.
   - Adds `settings_migration_behavior` parity coverage for the existing CompatHost migrator baseline plus missing-file warning, invalid JSON, non-object JSON, target-copy migration, existing new-key preservation, and duplicate OpenVINO service cleanup.
+- 2026-05-31: Completed Rust-native local credential protection parity for Settings/security.
+  - `rs/crates/easydict_app/src/credential_protection.rs` is now a public Rust-owned replacement for `LocalCredentialProtector` covering `edcred1:` DPAPI credentials, user vs machine scope wire names, nested protected values, plaintext migration detection, and decrypt-failure reporting.
+  - Added legacy `edloc1:` AES-256-GCM support using the same `Easydict.WinUI.LocalSettingsCredentialKey.v1` SHA-256 key derivation, associated data, nonce/tag/payload layout, and machine-id behavior required to migrate older settings.
+  - Preserves machine-id file behavior by reading `machine-id`, migrating `local-machine-id`, creating a new id when needed, and seeding from the Windows `MachineGuid` hash through a new `win_fluent_platform_win` HKLM registry read helper when available.
+  - Adds `credential_protection_behavior` coverage for DPAPI round trips, tamper failure, legacy plaintext migration, nested credentials, excessive nesting, legacy AES-GCM migration/failure, and machine-id file migration.
+- 2026-05-31: Added Rust-owned settings storage load/save for Settings/security.
+  - `rs/crates/easydict_app/src/settings_storage.rs` now reads and writes the legacy Easydict `settings.json` shape into `SettingsState` using explicit key mapping instead of serde-derived field names, keeping the persisted contract stable for the WinUI handoff.
+  - Loading runs the Rust legacy settings migrator first, honors the `EASYDICT_SETTINGS_DIR` settings directory, and restores app/theme/language behavior, launch/clipboard behavior, proxy, OCR/local AI, provider settings, hotkeys, mini/fixed behavior, local dictionary suggestions, MDX dictionaries, and per-window service query state.
+  - Saving protects API keys/tokens with the Rust credential protector for DeepL, OpenAI-compatible providers, OCR, Caiyun, NiuTrans, Youdao, Gemini, BuiltIn AI, and Doubao while runtime `SettingsState` still receives decrypted plaintext after load.
+  - Saves the canonical WinUI key names for `ClipboardMonitoring`, `VisionLayoutServiceId`, `LongDocCustomPrompt`, and `LaunchAtStartup`, while retaining load-side fallbacks for Rust pre-handoff aliases.
+  - Adds `settings_storage_behavior` coverage for protected save output, migrated legacy JSON with old `edloc1:` credentials and plaintext normalization warnings, OpenVINO service-id migration, canonical settings keys, and file round-trip decryption.
+- 2026-05-31: Added Rust-native grammar correction parser parity.
+  - `rs/crates/easydict_app/src/grammar_correction.rs` now owns the provider-independent parser for `[CORRECTED]...[/CORRECTED]` and `[EXPLANATION]...[/EXPLANATION]` output, case-insensitive tags, legacy `---` separator output, misplaced leading separator cleanup, and empty-output fallback to the original text.
+  - `GrammarCorrectionResult::has_corrections()` preserves the .NET behavior of comparing trimmed original and corrected text, so downstream UI/service code can detect no-op grammar results without the compat host.
+  - Adds `grammar_correction_behavior` coverage ported from `GrammarCorrectionParserTests`, including marker extraction, no-correction results, malformed tags, multiline preservation, legacy separator explanations, and whitespace-only output.
+- 2026-05-31: Started Rust-native TranslationService core language model parity.
+  - Added `rs/crates/easydict_app/src/translation_language.rs` with a Rust-owned `TranslationLanguage` enum matching the .NET `Language` set, plus settings-code parsing, ISO-639 service codes, display names, and BCP-47 locale tags for TTS/voice matching.
+  - Extended grammar correction resources with Rust-native shared system prompts and user/plain-text prompt builders, preserving the .NET explanation separator rules and language-specific "MUST remain in ..." wording.
+  - Adds `translation_language_behavior` coverage ported from `LanguageBcp47Tests` plus alias/code/display-name checks, and expands `grammar_correction_behavior` with shared prompt resource coverage.
+- 2026-05-31: Added Rust-owned OpenAI-compatible request planning.
+  - Added `rs/crates/easydict_app/src/openai_compatible.rs` with `OpenAiApiFormat` auto/override resolution, `/responses` URL suffix detection, Chat Completions vs Responses request body builders, and conversion to the existing streaming parser format.
+  - Moved provider-independent OpenAI translation message construction into Rust, including the shared translation system prompt, `the detected language` auto-source wording, target display names, and custom prompt append behavior.
+  - Grammar correction message planning now reuses the Rust shared grammar prompt resources, so OpenAI-compatible grammar services can be built without depending on the .NET compat host for prompt construction.
+  - Extended the Rust plan layer with OpenAI/Ollama/Custom OpenAI service configuration defaults, endpoint/API-key validation, Authorization/header planning, content type, resolved streaming parser format, GPT-5 reasoning effort and temperature compatibility rules, Built-in AI proxy device headers, and BaseTranslationService-style final text cleanup.
+  - Added Ollama-local pure logic for deriving `/api/tags` from the configured OpenAI-compatible endpoint, parsing `models[].name`, preserving the current model when still available, switching to the first returned model when needed, and falling back to `llama3.2` after refresh failures.
+  - Adds `openai_compatible_behavior` coverage for format detection, pinned override behavior, Chat/Responses JSON body shape, reasoning effort fields, translation/grammar messages, provider config defaults, HTTP request plans, optional-key providers, device headers, cleanup behavior, and Ollama model refresh logic.
+- 2026-05-31: Added Rust-owned translation service catalog metadata.
+  - Added `rs/crates/easydict_app/src/translation_services.rs` with app-visible service descriptors for the migration-list registration order, default service IDs, service kind, configured-by-default state, API-key requirement, streaming capability, and grammar capability.
+  - `SettingsState` window service defaults now read from the shared catalog instead of carrying a private duplicate descriptor list in `state.rs`, keeping Views settings, result-row capability flags, and future provider routing on one Rust-owned source of truth.
+  - The catalog preserves conditional Linguee registration and keeps `windows-local-ai` as the app-level local AI aggregate service while excluding `foundry-local` and legacy `openvino-local-ai` from the default visible service list.
+  - Adds `translation_services_behavior` coverage for service ordering, default enabled services, OpenAI-compatible service IDs, configured/API-key metadata, capability lookup, Linguee feature gating, uniqueness, and state integration.
+- 2026-05-31: Added Rust-owned translation cache and phonetic enrichment core logic.
+  - Added `rs/crates/easydict_app/src/translation_cache.rs` with .NET-compatible translation cache SHA-256 keys, `FromCache` marking on hits, UTF-16 cache size estimation, clear/bypass behavior, and bounded in-memory translation/phonetic caches for future Rust `TranslationManager` wiring.
+  - Ported the provider-independent Youdao word-query heuristic used by phonetic enrichment, including CJK short-word handling, sentence-ending punctuation rejection, 50 UTF-16 code-unit length limit, and the 80% word-character rule for Latin-like text.
+  - Added target phonetic filtering, display label/slash formatting helpers, merge behavior preserving existing word payloads, enrichment gate planning, phonetic cache keys, and a lightweight in-flight tracker to preserve the stampede-prevention contract before the async Youdao provider is moved.
+  - Adds `translation_cache_behavior` coverage for .NET cache-key parity, cache hit/clear/bypass/eviction behavior, word-query parity examples, CJK rules, phonetic display/target filtering, enrichment skip/fetch decisions, merge behavior, phonetic cache lookup, and in-flight deduplication.
+- 2026-06-01: Added Rust-owned OpenAI-compatible provider execution core.
+  - Extended `rs/crates/easydict_app/src/openai_compatible.rs` from request planning into an executable provider kernel with a replaceable `OpenAiHttpClient`, `ReqwestOpenAiHttpClient`, SSE execution, translation DTO construction, grammar-correction DTO construction, and service-id attachment for execution errors.
+  - Added `.NET BaseOpenAIService`-compatible configuration/error behavior for endpoint/API-key validation, OpenAI persisted API format strings, OpenAI/Custom/Ollama/DeepSeek/Groq/Zhipu/GitHub Models settings snapshot mapping, provider default endpoints/models, proxy-aware reqwest client creation, and HTTP status/error-body mapping.
+  - Keeps the implementation behind Rust-owned provider surfaces so Quick Translate can later switch OpenAI-compatible services off the `.NET Compat Host` without scattering raw endpoint/model/header logic through UI code.
+  - Expands `openai_compatible_behavior` coverage to 27 tests, including fake HTTP execution, request capture, Chat/Responses SSE chunk parsing, cleaned translation DTOs, parsed grammar correction DTOs, persisted format override parsing, provider-specific default configs, settings snapshot mapping, and remote error classification.
+- 2026-06-01: Routed Rust Quick Translate through the native OpenAI-compatible backend.
+  - Added `NativeOpenAiQuickTranslateBackend` so Quick Translate can execute OpenAI-compatible translation streams and grammar correction against the Rust provider kernel while retaining `CompatHostFacade` as the fallback backend for non-migrated services.
+  - `run_quick_translate_service_with_packaged_host(...)` now detects services with Rust-owned OpenAI-compatible settings and bypasses the `.NET Compat Host`; streaming service tasks still forward chunk messages to the UI result surface.
+  - Built-in AI now joins the native route only when the user provided their own API key, preserving the current embedded-proxy/key behavior behind CompatHost until that heavier packaging/security boundary is migrated.
+  - The native route preserves Quick Translate service DTO metadata, source/target language mapping, configured proxy-aware HTTP client creation, parsed grammar correction previews, and unsupported-service local errors.
+  - Adds `quick_translate_behavior` coverage with a fake OpenAI HTTP client for native streaming chunks, request planning from settings, structured grammar correction results, Built-in AI user-key direct mode, and local rejection of non-OpenAI-compatible service ids.
+- 2026-06-01: Added an explicit GitHub/crates.io library scouting gate to the Rust replacement process.
+  - Each future native replacement should first check official, provider-maintained, or high-adoption open-source Rust libraries before hand-porting large behavior.
+  - Initial candidates recorded in this file include `async-openai`/`genai` for LLM clients, `pdfium-render` for PDF work, `cosmic-text` for shaping/layout, Tesseract/`leptess` for OCR paths, and mature FST/search crates for LexIndex-like indexing.
+- 2026-06-01: Added Rust-owned custom streaming provider execution for Gemini and Doubao.
+  - Scouted the current ecosystem first: Google recommends official GenAI SDKs but does not list a Rust SDK; `genai` supports Gemini but is broader than the narrow provider protocol needed here; Volcengine/Doubao official SDK coverage is centered on Go/Java/Python rather than Rust.
+  - Added `rs/crates/easydict_app/src/custom_streaming.rs` with Gemini and Doubao settings mapping, request planning, proxy-aware reqwest execution, SSE parsing, DTO construction, grammar correction for Gemini, Doubao translation-options payloads, Doubao single-quote cleanup, and provider error classification.
+  - Quick Translate now has a `NativeCustomStreamingQuickTranslateBackend` and routes `gemini`/`doubao` requests through Rust-native execution while leaving unrelated providers on the CompatHost fallback.
+  - Adds `custom_streaming_behavior` coverage for Gemini/Doubao request bodies, settings snapshot config, stream parsers, DTO execution, validation, language-code mapping, and error mapping; extends `quick_translate_behavior` for native Gemini stream/grammar and Doubao streaming.
+- 2026-06-01: Added Rust-owned Google Translate traditional HTTP execution.
+  - Scouted Rust libraries first: existing Google Translate crates are unofficial wrappers around the same `translate.googleapis.com/translate_a/single` GTX endpoint, so this step keeps a narrow local implementation instead of adding a dependency.
+  - Added `rs/crates/easydict_app/src/traditional_http.rs` with proxy-aware reqwest execution, Google GTX request planning, language-code special cases, response parsing, DTO construction, and HTTP status classification.
+  - Quick Translate now has a `NativeTraditionalHttpQuickTranslateBackend`; `google` routes through Rust-native execution while heavier traditional providers such as Bing still remain behind CompatHost until their token/session behavior is migrated.
+  - Adds `traditional_http_behavior` coverage for Google endpoint/query shape, language codes, response parsing, config routing, execution, and error mapping; extends `quick_translate_behavior` for native Google Translate.
+- 2026-06-01: Ran a `/simplify` quality pass, walking the `master..HEAD` migration range commit-by-commit backward (`1629a51`→`7558173`). Per commit: `1629a51` docs-only (n/a); `3364449` app/CompatHost core (fixes below; C# findings deferred); `444e074` new widgets/icons/`theme_tokens` (clean); `ce6f9f8` initial app preview (`state.rs`/`ui.rs` covered by the fixes below, `preview_iced`/`i18n`/`window_options` clean); `7f00692` `i18n` (simplified below) + motion/screenshot/style (clean) + view/backend deltas; `0f24a33`/`6713e13`/`7558173` foundational `win_fluent` core + `win_fluent_testkit` (reviewed clean — `testkit` uses idiomatic `let _ = writeln!(String, …)` and a test-only `#[allow(dead_code)]` enum). Applied only high-confidence, test-covered cleanups:
+  - `translation_services.rs`: cached the service catalog in a `OnceLock` slice so `find_*`/`*_capabilities`/`*_service_ids` stop rebuilding the ~25-element `Vec` per call (capability lookup runs per-service in the results-refresh loop). Public `default_translation_service_descriptors()` signature unchanged.
+  - `state.rs`: added `apply_hide_empty_to_all_results` helper (3 call sites) and loop-ified the `apply_window_service_settings` and `remove_mdx_result_row` three-collection triples.
+  - `ui.rs`: extracted `reveal_secret_button(id, label)` consolidating 6 hand-built API-key reveal buttons (OpenAI, llm-provider, Caiyun, NiuTrans, Youdao app key/secret). DeepL/OCR reveal buttons intentionally left (different builder shapes).
+  - `win_fluent_backend_iced/src/lib.rs`: removed a dead duplicate `else if chrome == Frameless` branch returning the same value as `else`.
+  - `win_fluent/src/i18n.rs`: extracted a `lookup(locale, key)` helper to de-duplicate the locale/fallback bundle-get chain in `Localizer::resolve`.
+  - Verified: full `cargo test -p easydict_app` and full `cargo test --workspace` for winfluent-rs both green; `cargo fmt --check` clean on both workspaces.
+- 2026-06-01: Deferred simplify findings (genuine, multi-agent-confirmed, but out of scope for a low-risk parity pass — logged here so they are not lost):
+  - Cross-module helper duplication that wants a small shared util module: `base64_encode` (`ocr.rs` + `credential_protection.rs`), `normalized_optional` (`ocr.rs`/`custom_streaming.rs`/`openai_compatible.rs`), `is_loopback_url` (same trio, with minor variations — verify before merging), `parent_folder`/`non_empty`-style helpers (`long_document.rs` + `state.rs`). Skipped because it spans many files and `is_loopback_url` variants differ.
+  - C# CompatHost: `CompatHostDispatcher` repeats the `if (_service is null) { WriteError(...) }` guard ~7× → an `EnsureService(method)` helper; and `OcrWorkerCompatRecognizer`/`LongDocWorkerCompatTranslator`/`LocalAiWorkerCompatService` re-implement worker startup that may overlap `WorkerSpawner` (needs parity verification before delegating — large/risky).
+  - Demo-only duplication left as-is: `mini_window_options`/`delayed_message_task`/`stream_translation_task` repeated across `win_fluent_backend_iced` bins + the separate `win_fluent_gallery` crate (cross-crate coupling not worth it for example binaries).
+- 2026-06-01: Added Rust-owned Caiyun and NiuTrans traditional HTTP execution.
+  - Scouted official/community Rust options first: `fusion-translator`/`poly-translator` include Caiyun wrappers but are broad unofficial clients with extra provider dependencies; `translation-api-cn` includes NiuTrans request/response structs for a markdown CLI helper but does not cover Easydict's exact DTO/error/quick-translate behavior; the official NiuTrans GitHub organization focuses on MT systems/research projects rather than a Rust cloud API SDK.
+  - Extended `rs/crates/easydict_app/src/traditional_http.rs` to support POST request plans, Caiyun token auth, NiuTrans JSON auth, legacy provider language-code maps, NiuTrans UTF-16 length checks, provider response parsing, and API-key/rate-limit/text-too-long/error-code classification.
+  - `NativeTraditionalHttpQuickTranslateBackend` now routes `google`, `caiyun`, and `niutrans` natively while leaving heavier traditional providers such as Bing/DeepL/Youdao/Volcano behind CompatHost until their web/session/signature behavior is migrated.
+  - Expands `traditional_http_behavior` coverage to 10 tests for Google/Caiyun/NiuTrans request shapes, config routing, parser fallbacks, language-code parity, execution, and error classification; extends `quick_translate_behavior` for native Caiyun and NiuTrans, including single-chunk streaming fallback.
+- 2026-06-01: Added Rust-owned DeepL official API execution while preserving web-first fallback.
+  - Scouted DeepL libraries first: DeepL's official SDK documentation lists C#/.NET, Java, JavaScript, PHP, Python, and Ruby as official client libraries, while Rust is community-maintained; crates such as `deepl-openapi`, `deepl-api`, and `deepl-pro` are not official and would add broader generated-client behavior than this narrow parity slice needs.
+  - Extended `traditional_http.rs` with DeepL official API request planning, `api-free` vs `api` endpoint selection from `:fx` keys, form-url-encoded bodies, `DeepL-Auth-Key` auth, `quality_optimized` mode, API/web language-code special cases, API response parsing, and DeepL-specific HTTP status mapping including quota status 456.
+  - DeepL native routing is deliberately gated to API-only mode (`deepLUseFreeApi=false`) or quality-optimized mode; default DeepL web-first JSON-RPC behavior remains behind CompatHost until the web anti-detection protocol is migrated.
+  - Expands `traditional_http_behavior` to 12 tests and extends the native traditional quick-translate test so DeepL API mode returns native DTO metadata and a single request plan without changing the default web route.
 
 ## Current Verification
 
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_traditional_http -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test traditional_http_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test custom_streaming_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_custom_streaming -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_openai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test translation_cache_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test translation_services_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract views_settings_registers_migration_list_translation_services -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test translation_language_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test grammar_correction_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test credential_protection_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd lib/winfluent-rs; cargo check -p win_fluent_platform_win --all-targets`
+- `cd lib/winfluent-rs; cargo test -p win_fluent_platform_win registry -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd lib/winfluent-rs; cargo fmt --all --check`
+- `cd dotnet; dotnet test tests\Easydict.WinUI.Tests --filter "FullyQualifiedName~LocalCredentialProtectorTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
 - `cd rs; cargo test -p easydict_app --test settings_migration_behavior -- --nocapture`
 - `cd dotnet; dotnet test tests\Easydict.WinUI.Tests --no-restore --filter "FullyQualifiedName~CompatHostDispatcherTests.FileSettingsCompatMigrator_MigrateAsync_NormalizesLegacySettingsShape" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
 - `cd rs; cargo test -p easydict_app --test llm_streaming_behavior -- --nocapture`

@@ -8,6 +8,10 @@ use crate::local_dictionary::{
     LocalDictionarySuggestionUpdate,
 };
 use crate::quick_translate::{QuickQueryMode, QuickTranslateSurface};
+use crate::translation_services::{
+    default_translation_service_descriptors, translation_service_capabilities,
+    DEFAULT_FLOATING_WINDOW_SERVICE_IDS, DEFAULT_MAIN_WINDOW_SERVICE_IDS,
+};
 use crate::{
     HOTKEY_OCR_TRANSLATE, HOTKEY_SHOW_FIXED, HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR,
     HOTKEY_TRANSLATE_CLIPBOARD,
@@ -731,6 +735,9 @@ pub struct SettingsState {
     pub youdao_app_secret: String,
     pub youdao_use_official_api: bool,
     pub youdao_status: String,
+    pub volcano_access_key_id: String,
+    pub volcano_secret_access_key: String,
+    pub volcano_status: String,
     pub show_main_hotkey: HotkeySetting,
     pub translate_clipboard_hotkey: HotkeySetting,
     pub show_mini_hotkey: HotkeySetting,
@@ -837,6 +844,9 @@ impl Default for SettingsState {
             youdao_app_secret: String::new(),
             youdao_use_official_api: false,
             youdao_status: "Web dictionary mode".to_string(),
+            volcano_access_key_id: String::new(),
+            volcano_secret_access_key: String::new(),
+            volcano_status: "Not tested".to_string(),
             show_main_hotkey: HotkeySetting::enabled("Ctrl+Alt+T"),
             translate_clipboard_hotkey: HotkeySetting::enabled("Ctrl+Alt+D"),
             show_mini_hotkey: HotkeySetting::enabled("Ctrl+Alt+M"),
@@ -1328,9 +1338,7 @@ impl EasydictUiState {
             Message::ToggleHideEmptyServiceResults(value) => {
                 self.settings.hide_empty_service_results = value;
                 mark_settings_changed(&mut self.settings);
-                apply_hide_empty_service_results(&mut self.results, value);
-                apply_hide_empty_service_results(&mut self.mini.results, value);
-                apply_hide_empty_service_results(&mut self.fixed.results, value);
+                apply_hide_empty_to_all_results(self, value);
             }
             Message::TtsSpeedChanged(value) => {
                 if self.settings.tts_speed != value {
@@ -1657,6 +1665,21 @@ impl EasydictUiState {
                     }
                 );
             }
+            Message::VolcanoAccessKeyIdChanged(value) => {
+                if self.settings.volcano_access_key_id != value {
+                    self.settings.volcano_access_key_id = value;
+                    mark_settings_changed(&mut self.settings);
+                }
+            }
+            Message::VolcanoSecretAccessKeyChanged(value) => {
+                if self.settings.volcano_secret_access_key != value {
+                    self.settings.volcano_secret_access_key = value;
+                    mark_settings_changed(&mut self.settings);
+                }
+            }
+            Message::TestVolcano => {
+                self.settings.volcano_status = "Test requested for Volcano".to_string();
+            }
             Message::ToggleLocalDictionarySuggestions(value) => {
                 self.settings.local_dictionary_suggestions = value;
                 mark_settings_changed(&mut self.settings);
@@ -1961,6 +1984,8 @@ pub fn settings_snapshot(settings: &SettingsState) -> SettingsSnapshot {
         youdao_app_key: non_empty_setting(&settings.youdao_app_key),
         youdao_app_secret: non_empty_setting(&settings.youdao_app_secret),
         youdao_use_official_api: Some(settings.youdao_use_official_api),
+        volcano_access_key_id: non_empty_setting(&settings.volcano_access_key_id),
+        volcano_secret_access_key: non_empty_setting(&settings.volcano_secret_access_key),
         ollama_endpoint: Some(setting_or_default(
             &settings.ollama_endpoint,
             DEFAULT_OLLAMA_ENDPOINT,
@@ -2181,51 +2206,15 @@ fn known_ocr_default_model(value: &str) -> bool {
 }
 
 fn default_main_window_services() -> Vec<WindowServiceSetting> {
-    default_window_services(&["google", "bing", "openai"])
+    default_window_services(&DEFAULT_MAIN_WINDOW_SERVICE_IDS)
 }
 
 fn default_floating_window_services() -> Vec<WindowServiceSetting> {
-    default_window_services(&["google"])
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct RegisteredTranslationService {
-    service_id: &'static str,
-    display_name: &'static str,
-    configured: bool,
-    streaming_capable: bool,
-    grammar_capable: bool,
-}
-
-impl RegisteredTranslationService {
-    const fn new(service_id: &'static str, display_name: &'static str) -> Self {
-        Self {
-            service_id,
-            display_name,
-            configured: true,
-            streaming_capable: false,
-            grammar_capable: false,
-        }
-    }
-
-    const fn unconfigured(mut self) -> Self {
-        self.configured = false;
-        self
-    }
-
-    const fn streaming(mut self) -> Self {
-        self.streaming_capable = true;
-        self
-    }
-
-    const fn grammar(mut self) -> Self {
-        self.grammar_capable = true;
-        self
-    }
+    default_window_services(&DEFAULT_FLOATING_WINDOW_SERVICE_IDS)
 }
 
 fn default_window_services(enabled_ids: &[&str]) -> Vec<WindowServiceSetting> {
-    registered_translation_services()
+    default_translation_service_descriptors()
         .into_iter()
         .map(|descriptor| {
             let mut setting =
@@ -2234,89 +2223,10 @@ fn default_window_services(enabled_ids: &[&str]) -> Vec<WindowServiceSetting> {
                 .iter()
                 .any(|enabled_id| *enabled_id == descriptor.service_id);
             setting.enabled_query = true;
-            setting.configured = descriptor.configured;
+            setting.configured = descriptor.configured_by_default;
             setting
         })
         .collect()
-}
-
-fn registered_translation_services() -> Vec<RegisteredTranslationService> {
-    let mut services = vec![
-        RegisteredTranslationService::new("google", "Google Translate"),
-        RegisteredTranslationService::new("google_web", "Google Dict"),
-        RegisteredTranslationService::new("bing", "Bing Translate"),
-        RegisteredTranslationService::new("deepl", "DeepL"),
-        RegisteredTranslationService::new("youdao", "Youdao"),
-        RegisteredTranslationService::new("openai", "OpenAI")
-            .unconfigured()
-            .streaming()
-            .grammar(),
-        RegisteredTranslationService::new("ollama", "Ollama")
-            .streaming()
-            .grammar(),
-        RegisteredTranslationService::new("builtin", "Built-in AI")
-            .streaming()
-            .grammar(),
-        RegisteredTranslationService::new("deepseek", "DeepSeek")
-            .unconfigured()
-            .streaming()
-            .grammar(),
-        RegisteredTranslationService::new("groq", "Groq")
-            .unconfigured()
-            .streaming()
-            .grammar(),
-        RegisteredTranslationService::new("zhipu", "Zhipu AI")
-            .unconfigured()
-            .streaming()
-            .grammar(),
-        RegisteredTranslationService::new("github", "GitHub Models")
-            .unconfigured()
-            .streaming()
-            .grammar(),
-        RegisteredTranslationService::new("custom-openai", "Custom OpenAI")
-            .unconfigured()
-            .streaming()
-            .grammar(),
-        RegisteredTranslationService::new("gemini", "Gemini")
-            .unconfigured()
-            .streaming()
-            .grammar(),
-        RegisteredTranslationService::new("doubao", "Doubao")
-            .unconfigured()
-            .streaming(),
-        RegisteredTranslationService::new("caiyun", "Caiyun").unconfigured(),
-        RegisteredTranslationService::new("niutrans", "NiuTrans").unconfigured(),
-        RegisteredTranslationService::new("volcano", "Volcano").unconfigured(),
-    ];
-
-    services.extend(conditional_registered_translation_services());
-    services.push(
-        RegisteredTranslationService::new("windows-local-ai", "Windows Local AI")
-            .streaming()
-            .grammar(),
-    );
-    services
-}
-
-#[cfg(feature = "enable-linguee-service")]
-fn conditional_registered_translation_services() -> Vec<RegisteredTranslationService> {
-    vec![RegisteredTranslationService::new(
-        "linguee",
-        "Linguee Dictionary",
-    )]
-}
-
-#[cfg(not(feature = "enable-linguee-service"))]
-fn conditional_registered_translation_services() -> Vec<RegisteredTranslationService> {
-    Vec::new()
-}
-
-fn registered_service_capabilities(service_id: &str) -> (bool, bool) {
-    registered_translation_services()
-        .into_iter()
-        .find(|descriptor| descriptor.service_id == service_id)
-        .map(|descriptor| (descriptor.streaming_capable, descriptor.grammar_capable))
-        .unwrap_or((false, false))
 }
 
 fn default_service_provider_settings() -> Vec<ServiceProviderSetting> {
@@ -2564,27 +2474,20 @@ fn save_settings_changes(state: &mut EasydictUiState) {
     }
 
     ensure_window_services_have_enabled(&mut state.settings);
-    apply_window_service_settings(&mut state.results, &state.settings.main_window_services);
-    apply_window_service_settings(
-        &mut state.mini.results,
-        &state.settings.mini_window_services,
-    );
-    apply_window_service_settings(
-        &mut state.fixed.results,
-        &state.settings.fixed_window_services,
-    );
-    apply_hide_empty_service_results(
-        &mut state.results,
-        state.settings.hide_empty_service_results,
-    );
-    apply_hide_empty_service_results(
-        &mut state.mini.results,
-        state.settings.hide_empty_service_results,
-    );
-    apply_hide_empty_service_results(
-        &mut state.fixed.results,
-        state.settings.hide_empty_service_results,
-    );
+    for (results, services) in [
+        (&mut state.results, &state.settings.main_window_services),
+        (
+            &mut state.mini.results,
+            &state.settings.mini_window_services,
+        ),
+        (
+            &mut state.fixed.results,
+            &state.settings.fixed_window_services,
+        ),
+    ] {
+        apply_window_service_settings(results, services);
+    }
+    apply_hide_empty_to_all_results(state, state.settings.hide_empty_service_results);
 
     state.settings.unsaved_changes = false;
     state.settings.show_unsaved_changes_dialog = false;
@@ -2675,7 +2578,7 @@ fn apply_window_service_settings(
         result.service_name = service.display_name.clone();
         result.enabled_query = service.enabled_query;
         let (streaming_capable, grammar_capable) =
-            registered_service_capabilities(&service.service_id);
+            translation_service_capabilities(&service.service_id);
         result.streaming_capable = streaming_capable;
         result.grammar_capable = grammar_capable;
         if !service.enabled_query {
@@ -2690,18 +2593,7 @@ fn apply_window_service_settings(
 
 fn discard_settings_changes(state: &mut EasydictUiState) {
     state.settings = sanitized_settings_snapshot(&state.saved_settings);
-    apply_hide_empty_service_results(
-        &mut state.results,
-        state.settings.hide_empty_service_results,
-    );
-    apply_hide_empty_service_results(
-        &mut state.mini.results,
-        state.settings.hide_empty_service_results,
-    );
-    apply_hide_empty_service_results(
-        &mut state.fixed.results,
-        state.settings.hide_empty_service_results,
-    );
+    apply_hide_empty_to_all_results(state, state.settings.hide_empty_service_results);
     state.settings_open = false;
 }
 
@@ -2924,9 +2816,13 @@ fn remove_mdx_dictionary(state: &mut EasydictUiState, service_id: &str) -> bool 
         remove_window_service_setting(services, service_id);
     }
 
-    remove_mdx_result_row(&mut state.results, service_id);
-    remove_mdx_result_row(&mut state.mini.results, service_id);
-    remove_mdx_result_row(&mut state.fixed.results, service_id);
+    for results in [
+        &mut state.results,
+        &mut state.mini.results,
+        &mut state.fixed.results,
+    ] {
+        remove_mdx_result_row(results, service_id);
+    }
 
     if state.settings.imported_mdx_dictionaries.is_empty() {
         state.active_suggestion_query_id = None;
@@ -3134,6 +3030,16 @@ fn apply_hide_empty_service_results(results: &mut Vec<TranslationResultPreview>,
         }
     }
     stable_partition_demoted(results);
+}
+
+fn apply_hide_empty_to_all_results(state: &mut EasydictUiState, enabled: bool) {
+    for results in [
+        &mut state.results,
+        &mut state.mini.results,
+        &mut state.fixed.results,
+    ] {
+        apply_hide_empty_service_results(results, enabled);
+    }
 }
 
 pub(crate) fn stable_partition_demoted(results: &mut Vec<TranslationResultPreview>) {
@@ -3347,6 +3253,9 @@ pub enum Message {
     YoudaoAppSecretChanged(String),
     ToggleYoudaoUseOfficialApi(bool),
     TestYoudao,
+    VolcanoAccessKeyIdChanged(String),
+    VolcanoSecretAccessKeyChanged(String),
+    TestVolcano,
     ToggleLocalDictionarySuggestions(bool),
     UiLanguageChanged(String),
     OcrLanguageChanged(String),

@@ -1076,6 +1076,16 @@ fn floating_translate_button(
     }
 }
 
+fn reveal_secret_button(id: impl Into<String>, label: &str) -> View<Message> {
+    button("")
+        .id(id)
+        .icon(icon::search())
+        .tooltip(label)
+        .a11y(A11yHint::named(label))
+        .on_press(Message::Noop)
+        .into_view()
+}
+
 fn styled_text(value: impl Into<String>, style: TextStyle) -> View<Message> {
     View::new(ViewToken::Text(TextToken {
         id: None,
@@ -1860,13 +1870,7 @@ fn open_ai_service_expander(state: &SettingsState) -> View<Message> {
                     .max_height(36)
                     .on_input(Message::OpenAIApiKeyChanged)
                     .into_view(),
-                button("")
-                    .id("OpenAIKeyRevealButton")
-                    .icon(icon::search())
-                    .tooltip("Reveal API key")
-                    .a11y(A11yHint::named("Reveal API key"))
-                    .on_press(Message::Noop)
-                    .into_view(),
+                reveal_secret_button("OpenAIKeyRevealButton", "Reveal API key"),
                 text_editor(state.open_ai_endpoint.clone())
                     .id("OpenAIEndpointBox")
                     .placeholder("https://api.openai.com/v1/responses")
@@ -1952,13 +1956,7 @@ fn llm_provider_service_expander(
                 }
             })
             .into_view(),
-        button("")
-            .id(descriptor.key_reveal_id)
-            .icon(icon::search())
-            .tooltip("Reveal secret")
-            .a11y(A11yHint::named("Reveal secret"))
-            .on_press(Message::Noop)
-            .into_view(),
+        reveal_secret_button(descriptor.key_reveal_id, "Reveal secret"),
     ];
 
     if let Some(endpoint_box_id) = descriptor.endpoint_box_id {
@@ -2113,11 +2111,12 @@ fn no_config_service_row(id: &'static str, label: &'static str) -> View<Message>
     .into_view()
 }
 
-fn traditional_http_service_expanders(state: &SettingsState) -> [View<Message>; 3] {
+fn traditional_http_service_expanders(state: &SettingsState) -> [View<Message>; 4] {
     [
         caiyun_service_expander(state),
         niu_trans_service_expander(state),
         youdao_service_expander(state),
+        volcano_service_expander(state),
     ]
 }
 
@@ -2140,13 +2139,7 @@ fn caiyun_service_expander(state: &SettingsState) -> View<Message> {
                     .max_height(36)
                     .on_input(Message::CaiyunApiKeyChanged)
                     .into_view(),
-                button("")
-                    .id("CaiyunKeyRevealButton")
-                    .icon(icon::search())
-                    .tooltip("Reveal API key")
-                    .a11y(A11yHint::named("Reveal API key"))
-                    .on_press(Message::Noop)
-                    .into_view(),
+                reveal_secret_button("CaiyunKeyRevealButton", "Reveal API key"),
                 styled_text(
                     "Get your API key from fanyi.caiyunapp.com.",
                     TextStyle::Caption,
@@ -2182,13 +2175,7 @@ fn niu_trans_service_expander(state: &SettingsState) -> View<Message> {
                     .max_height(36)
                     .on_input(Message::NiuTransApiKeyChanged)
                     .into_view(),
-                button("")
-                    .id("NiuTransKeyRevealButton")
-                    .icon(icon::search())
-                    .tooltip("Reveal API key")
-                    .a11y(A11yHint::named("Reveal API key"))
-                    .on_press(Message::Noop)
-                    .into_view(),
+                reveal_secret_button("NiuTransKeyRevealButton", "Reveal API key"),
                 styled_text(
                     "NiuTrans supports 450+ language pairs. Get your API key from niutrans.com.",
                     TextStyle::Caption,
@@ -2228,13 +2215,7 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
                     .max_height(36)
                     .on_input(Message::YoudaoAppKeyChanged)
                     .into_view(),
-                button("")
-                    .id("YoudaoAppKeyRevealButton")
-                    .icon(icon::search())
-                    .tooltip("Reveal app key")
-                    .a11y(A11yHint::named("Reveal app key"))
-                    .on_press(Message::Noop)
-                    .into_view(),
+                reveal_secret_button("YoudaoAppKeyRevealButton", "Reveal app key"),
                 styled_text_id("YoudaoAppSecretHeaderText", "App Secret", TextStyle::Caption),
                 text_editor(state.youdao_app_secret.clone())
                     .id("YoudaoAppSecretBox")
@@ -2242,13 +2223,7 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
                     .max_height(36)
                     .on_input(Message::YoudaoAppSecretChanged)
                     .into_view(),
-                button("")
-                    .id("YoudaoAppSecretRevealButton")
-                    .icon(icon::search())
-                    .tooltip("Reveal app secret")
-                    .a11y(A11yHint::named("Reveal app secret"))
-                    .on_press(Message::Noop)
-                    .into_view(),
+                reveal_secret_button("YoudaoAppSecretRevealButton", "Reveal app secret"),
                 toggle_switch("Use Official API", state.youdao_use_official_api)
                     .id("YoudaoUseOfficialApiToggle")
                     .on_toggle(Message::ToggleYoudaoUseOfficialApi)
@@ -2264,6 +2239,58 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
                     .into_view(),
             ])
             .id("settings.services.youdao.content")
+            .spacing(8),
+        )
+        .into_view()
+}
+
+fn volcano_service_expander(state: &SettingsState) -> View<Message> {
+    settings_row("Volcano")
+        .id("VolcanoServiceExpander")
+        .kind(SettingsRowKind::Expander)
+        .description("Access Key ID and Secret Access Key required")
+        .trailing((styled_text_id(
+            "VolcanoStatusText",
+            state.volcano_status.clone(),
+            TextStyle::Caption,
+        ),))
+        .content(
+            column(vec![
+                styled_text_id(
+                    "VolcanoAccessKeyIdHeaderText",
+                    "Access Key ID",
+                    TextStyle::Caption,
+                ),
+                text_editor(state.volcano_access_key_id.clone())
+                    .id("VolcanoAccessKeyIdBox")
+                    .placeholder("Enter your Volcano Access Key ID")
+                    .max_height(36)
+                    .on_input(Message::VolcanoAccessKeyIdChanged)
+                    .into_view(),
+                reveal_secret_button("VolcanoAccessKeyIdRevealButton", "Reveal access key"),
+                styled_text_id(
+                    "VolcanoSecretAccessKeyHeaderText",
+                    "Secret Access Key",
+                    TextStyle::Caption,
+                ),
+                text_editor(state.volcano_secret_access_key.clone())
+                    .id("VolcanoSecretAccessKeyBox")
+                    .placeholder("Enter your Volcano Secret Access Key")
+                    .max_height(36)
+                    .on_input(Message::VolcanoSecretAccessKeyChanged)
+                    .into_view(),
+                reveal_secret_button("VolcanoSecretAccessKeyRevealButton", "Reveal secret key"),
+                styled_text(
+                    "Volcano translation uses signed OpenAPI requests from translate.volcengineapi.com.",
+                    TextStyle::Caption,
+                ),
+                button("Test")
+                    .id("TestVolcanoButton")
+                    .icon(icon::play())
+                    .on_press(Message::TestVolcano)
+                    .into_view(),
+            ])
+            .id("settings.services.volcano.content")
             .spacing(8),
         )
         .into_view()

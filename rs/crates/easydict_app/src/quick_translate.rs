@@ -4,10 +4,28 @@ use crate::compat_protocol::{
     MdxLookupParams, MdxLookupResult, SettingsSnapshot, TranslateChunkEventData, TranslateParams,
     TranslationResultDto,
 };
+use crate::custom_streaming::{
+    build_custom_streaming_translation_request_plan, cleanup_custom_streaming_translation_text,
+    correct_custom_streaming_grammar, custom_streaming_config_for_service,
+    execute_custom_streaming_request, translate_custom_streaming_service,
+    CustomStreamingHttpClient, CustomStreamingServiceConfig, ReqwestCustomStreamingHttpClient,
+};
+use crate::openai_compatible::{
+    build_openai_translation_request_plan, cleanup_openai_translation_text,
+    correct_grammar_openai_compatible, execute_openai_stream_request,
+    openai_compatible_config_for_service, translate_openai_compatible, OpenAiCompatibleConfig,
+    OpenAiExecutionError, OpenAiHttpClient, OpenAiTranslationRequest, ReqwestOpenAiHttpClient,
+};
 use crate::state::{
     settings_snapshot, stable_partition_demoted, ConnectionStatus, EasydictUiState,
     GrammarCorrectionPreview, Message, TranslationResultPreview,
 };
+use crate::traditional_http::{
+    traditional_http_config_for_service, translate_traditional_http_service,
+    ReqwestTraditionalHttpClient, TraditionalHttpClient, TraditionalHttpServiceConfig,
+};
+use crate::translation_language::TranslationLanguage;
+use crate::translation_services::find_translation_service_descriptor;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use std::collections::HashSet;
 use std::fmt;
@@ -213,6 +231,12 @@ impl From<CompatClientError> for QuickTranslateBackendError {
     }
 }
 
+impl From<OpenAiExecutionError> for QuickTranslateBackendError {
+    fn from(error: OpenAiExecutionError) -> Self {
+        Self::new(error.to_string())
+    }
+}
+
 pub trait QuickTranslateBackend {
     fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
         let _ = settings;
@@ -242,6 +266,419 @@ pub trait QuickTranslateBackend {
         Err(QuickTranslateBackendError::new(
             "MDX lookup is not available in this backend",
         ))
+    }
+}
+
+pub struct NativeOpenAiQuickTranslateBackend<C> {
+    http_client: C,
+    settings: Option<SettingsSnapshot>,
+}
+
+impl<C> NativeOpenAiQuickTranslateBackend<C> {
+    pub fn new(http_client: C) -> Self {
+        Self {
+            http_client,
+            settings: None,
+        }
+    }
+
+    pub fn http_client(&self) -> &C {
+        &self.http_client
+    }
+
+    pub fn into_http_client(self) -> C {
+        self.http_client
+    }
+}
+
+impl<C: OpenAiHttpClient> QuickTranslateBackend for NativeOpenAiQuickTranslateBackend<C> {
+    fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
+        self.settings = Some(settings.clone());
+        Ok(())
+    }
+
+    fn translate(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<TranslationResultDto, QuickTranslateBackendError> {
+        let request = self.openai_translation_request(params)?;
+        let (service_id, service_name, config) = self.service_context(params)?;
+        translate_openai_compatible(
+            &mut self.http_client,
+            &config,
+            &request,
+            service_id,
+            service_name,
+        )
+        .map_err(QuickTranslateBackendError::from)
+    }
+
+    fn translate_stream(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
+        let request = self.openai_translation_request(params)?;
+        let (service_id, service_name, config) = self.service_context(params)?;
+        let plan = build_openai_translation_request_plan(&config, &request)
+            .map_err(OpenAiExecutionError::from)?;
+        let chunks = execute_openai_stream_request(&mut self.http_client, &plan)?;
+        let translated_text = cleanup_openai_translation_text(&chunks.concat());
+
+        Ok(QuickTranslateStreamResult {
+            result: TranslationResultDto {
+                translated_text,
+                service_id: Some(service_id),
+                service_name: Some(service_name),
+                detected_language: Some(request.from_language.to_code().to_string()),
+                result_kind: Some("Success".to_string()),
+                info_message: None,
+                timing_ms: None,
+            },
+            chunks,
+        })
+    }
+
+    fn correct_grammar(
+        &mut self,
+        params: &GrammarCorrectParams,
+    ) -> Result<GrammarCorrectResultDto, QuickTranslateBackendError> {
+        let (service_id, service_name, config) = self.service_context_for_ids(&params.services)?;
+        let language = params
+            .language
+            .as_deref()
+            .map(TranslationLanguage::from_code)
+            .unwrap_or(TranslationLanguage::Auto);
+
+        correct_grammar_openai_compatible(
+            &mut self.http_client,
+            &config,
+            language,
+            &params.text,
+            params.include_explanations,
+            service_id,
+            service_name,
+        )
+        .map_err(QuickTranslateBackendError::from)
+    }
+}
+
+impl<C> NativeOpenAiQuickTranslateBackend<C> {
+    fn openai_translation_request(
+        &self,
+        params: &TranslateParams,
+    ) -> Result<OpenAiTranslationRequest, QuickTranslateBackendError> {
+        Ok(OpenAiTranslationRequest {
+            text: params.text.clone(),
+            from_language: params
+                .from
+                .as_deref()
+                .map(TranslationLanguage::from_code)
+                .unwrap_or(TranslationLanguage::Auto),
+            to_language: params
+                .to
+                .as_deref()
+                .map(TranslationLanguage::from_code)
+                .unwrap_or(TranslationLanguage::English),
+            custom_prompt: None,
+        })
+    }
+
+    fn service_context(
+        &self,
+        params: &TranslateParams,
+    ) -> Result<(String, String, OpenAiCompatibleConfig), QuickTranslateBackendError> {
+        self.service_context_for_ids(&params.services)
+    }
+
+    fn service_context_for_ids(
+        &self,
+        services: &Option<Vec<String>>,
+    ) -> Result<(String, String, OpenAiCompatibleConfig), QuickTranslateBackendError> {
+        let service_id = services
+            .as_ref()
+            .and_then(|services| services.first())
+            .cloned()
+            .ok_or_else(|| {
+                QuickTranslateBackendError::new(
+                    "OpenAI-compatible request must specify a service id",
+                )
+            })?;
+
+        let settings = self.settings.as_ref().ok_or_else(|| {
+            QuickTranslateBackendError::new(
+                "OpenAI-compatible backend must be configured before use",
+            )
+        })?;
+
+        let config =
+            openai_compatible_config_for_service(&service_id, settings).ok_or_else(|| {
+                QuickTranslateBackendError::new(format!(
+                    "Service '{service_id}' is not handled by the native OpenAI-compatible backend"
+                ))
+            })?;
+        let service_name = native_openai_service_name(&service_id);
+        Ok((service_id, service_name, config))
+    }
+}
+
+pub struct NativeCustomStreamingQuickTranslateBackend<C> {
+    http_client: C,
+    settings: Option<SettingsSnapshot>,
+}
+
+impl<C> NativeCustomStreamingQuickTranslateBackend<C> {
+    pub fn new(http_client: C) -> Self {
+        Self {
+            http_client,
+            settings: None,
+        }
+    }
+
+    pub fn http_client(&self) -> &C {
+        &self.http_client
+    }
+
+    pub fn into_http_client(self) -> C {
+        self.http_client
+    }
+}
+
+impl<C: CustomStreamingHttpClient> QuickTranslateBackend
+    for NativeCustomStreamingQuickTranslateBackend<C>
+{
+    fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
+        self.settings = Some(settings.clone());
+        Ok(())
+    }
+
+    fn translate(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<TranslationResultDto, QuickTranslateBackendError> {
+        let request = self.openai_translation_request(params);
+        let (service_id, service_name, config) = self.service_context(params)?;
+        translate_custom_streaming_service(
+            &mut self.http_client,
+            &config,
+            &request,
+            service_id,
+            service_name,
+        )
+        .map_err(QuickTranslateBackendError::from)
+    }
+
+    fn translate_stream(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
+        let request = self.openai_translation_request(params);
+        let (service_id, service_name, config) = self.service_context(params)?;
+        let plan = build_custom_streaming_translation_request_plan(&config, &request)?;
+        let chunks = execute_custom_streaming_request(&mut self.http_client, &plan)?;
+        let translated_text = cleanup_custom_streaming_translation_text(&config, &chunks.concat());
+
+        Ok(QuickTranslateStreamResult {
+            result: TranslationResultDto {
+                translated_text,
+                service_id: Some(service_id),
+                service_name: Some(service_name),
+                detected_language: Some(request.from_language.to_code().to_string()),
+                result_kind: Some("Success".to_string()),
+                info_message: None,
+                timing_ms: None,
+            },
+            chunks,
+        })
+    }
+
+    fn correct_grammar(
+        &mut self,
+        params: &GrammarCorrectParams,
+    ) -> Result<GrammarCorrectResultDto, QuickTranslateBackendError> {
+        let (service_id, service_name, config) = self.service_context_for_ids(&params.services)?;
+        let language = params
+            .language
+            .as_deref()
+            .map(TranslationLanguage::from_code)
+            .unwrap_or(TranslationLanguage::Auto);
+
+        correct_custom_streaming_grammar(
+            &mut self.http_client,
+            &config,
+            language,
+            &params.text,
+            params.include_explanations,
+            service_id,
+            service_name,
+        )
+        .map_err(QuickTranslateBackendError::from)
+    }
+}
+
+impl<C> NativeCustomStreamingQuickTranslateBackend<C> {
+    fn openai_translation_request(&self, params: &TranslateParams) -> OpenAiTranslationRequest {
+        OpenAiTranslationRequest {
+            text: params.text.clone(),
+            from_language: params
+                .from
+                .as_deref()
+                .map(TranslationLanguage::from_code)
+                .unwrap_or(TranslationLanguage::Auto),
+            to_language: params
+                .to
+                .as_deref()
+                .map(TranslationLanguage::from_code)
+                .unwrap_or(TranslationLanguage::English),
+            custom_prompt: None,
+        }
+    }
+
+    fn service_context(
+        &self,
+        params: &TranslateParams,
+    ) -> Result<(String, String, CustomStreamingServiceConfig), QuickTranslateBackendError> {
+        self.service_context_for_ids(&params.services)
+    }
+
+    fn service_context_for_ids(
+        &self,
+        services: &Option<Vec<String>>,
+    ) -> Result<(String, String, CustomStreamingServiceConfig), QuickTranslateBackendError> {
+        let service_id = services
+            .as_ref()
+            .and_then(|services| services.first())
+            .cloned()
+            .ok_or_else(|| {
+                QuickTranslateBackendError::new(
+                    "Custom streaming request must specify a service id",
+                )
+            })?;
+
+        let settings = self.settings.as_ref().ok_or_else(|| {
+            QuickTranslateBackendError::new(
+                "Custom streaming backend must be configured before use",
+            )
+        })?;
+
+        let config =
+            custom_streaming_config_for_service(&service_id, settings).ok_or_else(|| {
+                QuickTranslateBackendError::new(format!(
+                    "Service '{service_id}' is not handled by the native custom streaming backend"
+                ))
+            })?;
+        let service_name = native_openai_service_name(&service_id);
+        Ok((service_id, service_name, config))
+    }
+}
+
+pub struct NativeTraditionalHttpQuickTranslateBackend<C> {
+    http_client: C,
+    settings: Option<SettingsSnapshot>,
+}
+
+impl<C> NativeTraditionalHttpQuickTranslateBackend<C> {
+    pub fn new(http_client: C) -> Self {
+        Self {
+            http_client,
+            settings: None,
+        }
+    }
+
+    pub fn http_client(&self) -> &C {
+        &self.http_client
+    }
+
+    pub fn into_http_client(self) -> C {
+        self.http_client
+    }
+}
+
+impl<C: TraditionalHttpClient> QuickTranslateBackend
+    for NativeTraditionalHttpQuickTranslateBackend<C>
+{
+    fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
+        self.settings = Some(settings.clone());
+        Ok(())
+    }
+
+    fn translate(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<TranslationResultDto, QuickTranslateBackendError> {
+        let (service_id, service_name, config) = self.service_context(params)?;
+        translate_traditional_http_service(
+            &mut self.http_client,
+            &config,
+            &params.text,
+            params
+                .from
+                .as_deref()
+                .map(TranslationLanguage::from_code)
+                .unwrap_or(TranslationLanguage::Auto),
+            params
+                .to
+                .as_deref()
+                .map(TranslationLanguage::from_code)
+                .unwrap_or(TranslationLanguage::English),
+            service_id,
+            service_name,
+        )
+        .map_err(QuickTranslateBackendError::from)
+    }
+
+    fn translate_stream(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
+        let result = self.translate(params)?;
+        let chunks = (!result.translated_text.is_empty())
+            .then(|| result.translated_text.clone())
+            .into_iter()
+            .collect();
+        Ok(QuickTranslateStreamResult { result, chunks })
+    }
+
+    fn correct_grammar(
+        &mut self,
+        params: &GrammarCorrectParams,
+    ) -> Result<GrammarCorrectResultDto, QuickTranslateBackendError> {
+        let _ = params;
+        Err(QuickTranslateBackendError::new(
+            "Grammar correction is not available in this backend",
+        ))
+    }
+}
+
+impl<C> NativeTraditionalHttpQuickTranslateBackend<C> {
+    fn service_context(
+        &self,
+        params: &TranslateParams,
+    ) -> Result<(String, String, TraditionalHttpServiceConfig), QuickTranslateBackendError> {
+        let service_id = params
+            .services
+            .as_ref()
+            .and_then(|services| services.first())
+            .cloned()
+            .ok_or_else(|| {
+                QuickTranslateBackendError::new(
+                    "Traditional HTTP request must specify a service id",
+                )
+            })?;
+
+        let settings = self.settings.as_ref().ok_or_else(|| {
+            QuickTranslateBackendError::new(
+                "Traditional HTTP backend must be configured before use",
+            )
+        })?;
+
+        let config =
+            traditional_http_config_for_service(&service_id, settings).ok_or_else(|| {
+                QuickTranslateBackendError::new(format!(
+                    "Service '{service_id}' is not handled by the native traditional HTTP backend"
+                ))
+            })?;
+        let service_name = native_openai_service_name(&service_id);
+        Ok((service_id, service_name, config))
     }
 }
 
@@ -575,9 +1012,16 @@ pub fn run_quick_translate_with_packaged_host(
     plan: QuickTranslatePlan,
     app_dir: impl AsRef<Path>,
 ) -> QuickTranslateOutcome {
-    match CompatHostFacade::spawn_packaged(app_dir) {
-        Ok(mut backend) => run_quick_translate(&mut backend, &plan),
-        Err(error) => QuickTranslateOutcome::all_failed(&plan, error.to_string()),
+    let app_dir = app_dir.as_ref().to_path_buf();
+    QuickTranslateOutcome {
+        query_id: plan.query_id,
+        results: plan
+            .service_requests()
+            .into_iter()
+            .map(|request| {
+                run_quick_translate_service_with_packaged_host(request, &app_dir).outcome
+            })
+            .collect(),
     }
 }
 
@@ -594,6 +1038,18 @@ pub fn run_quick_translate_service_with_packaged_host(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
 ) -> QuickTranslateServiceUpdate {
+    if request_uses_native_openai(&request) {
+        return run_quick_translate_service_with_native_openai(request);
+    }
+
+    if request_uses_native_custom_streaming(&request) {
+        return run_quick_translate_service_with_native_custom_streaming(request);
+    }
+
+    if request_uses_native_traditional_http(&request) {
+        return run_quick_translate_service_with_native_traditional_http(request);
+    }
+
     match CompatHostFacade::spawn_packaged(app_dir) {
         Ok(mut backend) => run_quick_translate_service(&mut backend, &request),
         Err(error) => service_error_update(request, error.to_string()),
@@ -624,6 +1080,18 @@ fn run_quick_translate_streaming_service_with_packaged_host(
     app_dir: impl AsRef<Path>,
     sender: &UnboundedSender<Message>,
 ) -> QuickTranslateServiceUpdate {
+    if request_uses_native_openai(&request) {
+        return run_quick_translate_streaming_service_with_native_openai(request, sender);
+    }
+
+    if request_uses_native_custom_streaming(&request) {
+        return run_quick_translate_streaming_service_with_native_custom_streaming(request, sender);
+    }
+
+    if request_uses_native_traditional_http(&request) {
+        return run_quick_translate_streaming_service_with_native_traditional_http(request, sender);
+    }
+
     let mut backend = match CompatHostFacade::spawn_packaged(app_dir) {
         Ok(backend) => backend,
         Err(error) => return service_error_update(request, error.to_string()),
@@ -662,6 +1130,192 @@ fn run_quick_translate_streaming_service_with_packaged_host(
             result,
         },
     }
+}
+
+fn run_quick_translate_service_with_native_openai(
+    request: QuickTranslateServiceRequest,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match ReqwestOpenAiHttpClient::from_settings(&request.settings) {
+        Ok(client) => NativeOpenAiQuickTranslateBackend::new(client),
+        Err(error) => return service_error_update(request, error.to_string()),
+    };
+
+    run_quick_translate_service(&mut backend, &request)
+}
+
+fn run_quick_translate_streaming_service_with_native_openai(
+    request: QuickTranslateServiceRequest,
+    sender: &UnboundedSender<Message>,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match ReqwestOpenAiHttpClient::from_settings(&request.settings) {
+        Ok(client) => NativeOpenAiQuickTranslateBackend::new(client),
+        Err(error) => return service_error_update(request, error.to_string()),
+    };
+
+    if let Err(error) = QuickTranslateBackend::configure(&mut backend, &request.settings) {
+        return service_error_update(request, error.to_string());
+    }
+
+    if request.execution_kind != QuickTranslateExecutionKind::TranslateStream {
+        return run_quick_translate_service(&mut backend, &request);
+    }
+
+    let query_id = request.query_id;
+    let service = request.service.clone();
+    match backend.translate_stream(&request.params) {
+        Ok(streamed) => {
+            for chunk in &streamed.chunks {
+                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
+                    QuickTranslateStreamChunk {
+                        query_id,
+                        service: service.clone(),
+                        text: chunk.clone(),
+                    },
+                ));
+            }
+
+            QuickTranslateServiceUpdate {
+                query_id,
+                outcome: QuickTranslateServiceOutcome {
+                    service: request.service,
+                    grammar_result: None,
+                    streamed_chunks: streamed.chunks,
+                    result: Ok(streamed.result),
+                },
+            }
+        }
+        Err(error) => service_error_update(request, error.to_string()),
+    }
+}
+
+fn run_quick_translate_service_with_native_custom_streaming(
+    request: QuickTranslateServiceRequest,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match ReqwestCustomStreamingHttpClient::from_settings(&request.settings) {
+        Ok(client) => NativeCustomStreamingQuickTranslateBackend::new(client),
+        Err(error) => return service_error_update(request, error.to_string()),
+    };
+
+    run_quick_translate_service(&mut backend, &request)
+}
+
+fn run_quick_translate_streaming_service_with_native_custom_streaming(
+    request: QuickTranslateServiceRequest,
+    sender: &UnboundedSender<Message>,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match ReqwestCustomStreamingHttpClient::from_settings(&request.settings) {
+        Ok(client) => NativeCustomStreamingQuickTranslateBackend::new(client),
+        Err(error) => return service_error_update(request, error.to_string()),
+    };
+
+    if let Err(error) = QuickTranslateBackend::configure(&mut backend, &request.settings) {
+        return service_error_update(request, error.to_string());
+    }
+
+    if request.execution_kind != QuickTranslateExecutionKind::TranslateStream {
+        return run_quick_translate_service(&mut backend, &request);
+    }
+
+    let query_id = request.query_id;
+    let service = request.service.clone();
+    match backend.translate_stream(&request.params) {
+        Ok(streamed) => {
+            for chunk in &streamed.chunks {
+                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
+                    QuickTranslateStreamChunk {
+                        query_id,
+                        service: service.clone(),
+                        text: chunk.clone(),
+                    },
+                ));
+            }
+
+            QuickTranslateServiceUpdate {
+                query_id,
+                outcome: QuickTranslateServiceOutcome {
+                    service: request.service,
+                    grammar_result: None,
+                    streamed_chunks: streamed.chunks,
+                    result: Ok(streamed.result),
+                },
+            }
+        }
+        Err(error) => service_error_update(request, error.to_string()),
+    }
+}
+
+fn run_quick_translate_service_with_native_traditional_http(
+    request: QuickTranslateServiceRequest,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match ReqwestTraditionalHttpClient::from_settings(&request.settings) {
+        Ok(client) => NativeTraditionalHttpQuickTranslateBackend::new(client),
+        Err(error) => return service_error_update(request, error.to_string()),
+    };
+
+    run_quick_translate_service(&mut backend, &request)
+}
+
+fn run_quick_translate_streaming_service_with_native_traditional_http(
+    request: QuickTranslateServiceRequest,
+    sender: &UnboundedSender<Message>,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match ReqwestTraditionalHttpClient::from_settings(&request.settings) {
+        Ok(client) => NativeTraditionalHttpQuickTranslateBackend::new(client),
+        Err(error) => return service_error_update(request, error.to_string()),
+    };
+
+    if let Err(error) = QuickTranslateBackend::configure(&mut backend, &request.settings) {
+        return service_error_update(request, error.to_string());
+    }
+
+    if request.execution_kind != QuickTranslateExecutionKind::TranslateStream {
+        return run_quick_translate_service(&mut backend, &request);
+    }
+
+    let query_id = request.query_id;
+    let service = request.service.clone();
+    match backend.translate_stream(&request.params) {
+        Ok(streamed) => {
+            for chunk in &streamed.chunks {
+                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
+                    QuickTranslateStreamChunk {
+                        query_id,
+                        service: service.clone(),
+                        text: chunk.clone(),
+                    },
+                ));
+            }
+
+            QuickTranslateServiceUpdate {
+                query_id,
+                outcome: QuickTranslateServiceOutcome {
+                    service: request.service,
+                    grammar_result: None,
+                    streamed_chunks: streamed.chunks,
+                    result: Ok(streamed.result),
+                },
+            }
+        }
+        Err(error) => service_error_update(request, error.to_string()),
+    }
+}
+
+fn request_uses_native_openai(request: &QuickTranslateServiceRequest) -> bool {
+    openai_compatible_config_for_service(&request.service.id, &request.settings).is_some()
+}
+
+fn request_uses_native_custom_streaming(request: &QuickTranslateServiceRequest) -> bool {
+    custom_streaming_config_for_service(&request.service.id, &request.settings).is_some()
+}
+
+fn request_uses_native_traditional_http(request: &QuickTranslateServiceRequest) -> bool {
+    traditional_http_config_for_service(&request.service.id, &request.settings).is_some()
+}
+
+fn native_openai_service_name(service_id: &str) -> String {
+    find_translation_service_descriptor(service_id)
+        .map(|descriptor| descriptor.display_name.to_string())
+        .unwrap_or_else(|| service_id.to_string())
 }
 
 fn service_error_update(

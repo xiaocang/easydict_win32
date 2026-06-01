@@ -13,18 +13,22 @@ use easydict_app::{
     local_dictionary_query_token, parse_startup_activation, resolve_quick_query_language,
     resolve_startup_activation_disposition, run_local_dictionary_suggestion_request,
     run_quick_translate, run_quick_translate_service, startup_activation_task_for_args,
-    EasydictApp, EasydictUiState, LocalDictionarySuggestion, LocalDictionarySuggestionBackend,
-    LocalDictionarySuggestionError, LocalDictionarySuggestionUpdate, Message, QuickQueryMode,
-    QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
+    CustomStreamingHttpClient, CustomStreamingHttpRequestPlan, EasydictApp, EasydictUiState,
+    LocalDictionarySuggestion, LocalDictionarySuggestionBackend, LocalDictionarySuggestionError,
+    LocalDictionarySuggestionUpdate, Message, NativeCustomStreamingQuickTranslateBackend,
+    NativeOpenAiQuickTranslateBackend, NativeTraditionalHttpQuickTranslateBackend,
+    OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpRequestPlan,
+    QuickQueryMode, QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
     QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface, ResultActionKind,
-    SettingsLink, StartupActivation, StartupActivationDisposition, BROWSER_REGISTRAR_EXE,
-    HOTKEY_OCR_TRANSLATE, HOTKEY_SHOW_FIXED, HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR,
-    HOTKEY_TOGGLE_FIXED, HOTKEY_TOGGLE_MINI, HOTKEY_TRANSLATE_CLIPBOARD,
-    LOCAL_DICTIONARY_SUGGESTION_DELAY_MS, OCR_TRANSLATE_EVENT_NAME, PROTOCOL_EASYDICT,
-    SHELL_OCR_TRANSLATE, TRAY_BROWSER_INSTALL, TRAY_BROWSER_UNINSTALL, TRAY_EXIT,
-    TRAY_OCR_TRANSLATE, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI, TRAY_TRANSLATE_CLIPBOARD,
+    SettingsLink, StartupActivation, StartupActivationDisposition, TraditionalHttpClient,
+    TraditionalHttpRequestPlan, BROWSER_REGISTRAR_EXE, HOTKEY_OCR_TRANSLATE, HOTKEY_SHOW_FIXED,
+    HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR, HOTKEY_TOGGLE_FIXED, HOTKEY_TOGGLE_MINI,
+    HOTKEY_TRANSLATE_CLIPBOARD, LOCAL_DICTIONARY_SUGGESTION_DELAY_MS, OCR_TRANSLATE_EVENT_NAME,
+    PROTOCOL_EASYDICT, SHELL_OCR_TRANSLATE, TRAY_BROWSER_INSTALL, TRAY_BROWSER_UNINSTALL,
+    TRAY_EXIT, TRAY_OCR_TRANSLATE, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI,
+    TRAY_TRANSLATE_CLIPBOARD,
 };
 use std::collections::VecDeque;
 use std::fs;
@@ -614,6 +618,480 @@ fn grammar_mode_calls_grammar_for_capable_services_and_translation_for_others() 
         Some("grammar explanation")
     );
     assert!(grammar_result.has_corrections);
+}
+
+#[test]
+fn native_openai_quick_translate_stream_uses_settings_and_parses_chunks() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 21,
+        service: QuickTranslateService {
+            id: "openai".to_string(),
+            name: "OpenAI".to_string(),
+            enabled_query: true,
+            grammar_capable: true,
+            streaming_capable: true,
+        },
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("fr".to_string()),
+            services: Some(vec!["openai".to_string()]),
+        },
+        grammar_params: None,
+        settings: openai_settings(),
+    };
+    let mut backend =
+        NativeOpenAiQuickTranslateBackend::new(RecordingOpenAiHttpClient::with_responses([Ok(
+            chat_completion_sse(&["Bonjour ", "le monde"]),
+        )]));
+
+    let update = run_quick_translate_service(&mut backend, &request);
+
+    assert_eq!(update.query_id, 21);
+    assert_eq!(
+        update.outcome.streamed_chunks,
+        vec!["Bonjour ".to_string(), "le monde".to_string()]
+    );
+    let result = update.outcome.result.expect("native stream should succeed");
+    assert_eq!(result.translated_text, "Bonjour le monde");
+    assert_eq!(result.service_id.as_deref(), Some("openai"));
+    assert_eq!(result.service_name.as_deref(), Some("OpenAI"));
+    assert_eq!(result.detected_language.as_deref(), Some("en"));
+
+    let requests = &backend.http_client().requests;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].endpoint,
+        "https://api.openai.com/v1/chat/completions"
+    );
+    assert_eq!(
+        requests[0].headers,
+        vec![("Authorization".to_string(), "Bearer sk-native".to_string())]
+    );
+    assert_eq!(requests[0].body["model"], "gpt-4o-mini");
+    assert_eq!(requests[0].body["stream"], true);
+}
+
+#[test]
+fn native_openai_quick_translate_grammar_keeps_structured_result() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 22,
+        service: QuickTranslateService {
+            id: "openai".to_string(),
+            name: "OpenAI".to_string(),
+            enabled_query: true,
+            grammar_capable: true,
+            streaming_capable: true,
+        },
+        query_mode: QuickQueryMode::GrammarCorrection,
+        execution_kind: QuickTranslateExecutionKind::GrammarCorrection,
+        params: TranslateParams {
+            text: "He go home.".to_string(),
+            from: Some("en".to_string()),
+            to: Some("en".to_string()),
+            services: Some(vec!["openai".to_string()]),
+        },
+        grammar_params: Some(GrammarCorrectParams {
+            text: "He go home.".to_string(),
+            language: Some("en".to_string()),
+            services: Some(vec!["openai".to_string()]),
+            include_explanations: true,
+        }),
+        settings: openai_settings(),
+    };
+    let mut backend =
+        NativeOpenAiQuickTranslateBackend::new(RecordingOpenAiHttpClient::with_responses([Ok(
+            chat_completion_sse(&["[CORRECTED]He goes home.[/CORRECTED]\n\
+                 [EXPLANATION]Subject-verb agreement.[/EXPLANATION]"]),
+        )]));
+
+    let update = run_quick_translate_service(&mut backend, &request);
+
+    let result = update
+        .outcome
+        .result
+        .expect("native grammar should succeed");
+    assert_eq!(result.translated_text, "He goes home.");
+    assert_eq!(result.service_id.as_deref(), Some("openai"));
+    let grammar_result = update
+        .outcome
+        .grammar_result
+        .expect("grammar preview should be retained");
+    assert_eq!(grammar_result.original_text, "He go home.");
+    assert_eq!(grammar_result.corrected_text, "He goes home.");
+    assert_eq!(
+        grammar_result.explanation.as_deref(),
+        Some("Subject-verb agreement.")
+    );
+    assert!(grammar_result.has_corrections);
+    assert_eq!(backend.http_client().requests.len(), 1);
+}
+
+#[test]
+fn native_openai_quick_translate_supports_builtin_direct_user_key() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 24,
+        service: QuickTranslateService {
+            id: "builtin".to_string(),
+            name: "Built-in AI".to_string(),
+            enabled_query: true,
+            grammar_capable: true,
+            streaming_capable: true,
+        },
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["builtin".to_string()]),
+        },
+        grammar_params: None,
+        settings: builtin_direct_settings(),
+    };
+    let mut backend = NativeOpenAiQuickTranslateBackend::new(
+        RecordingOpenAiHttpClient::with_responses([Ok(chat_completion_sse(&["你好"]))]),
+    );
+
+    let update = run_quick_translate_service(&mut backend, &request);
+
+    let result = update
+        .outcome
+        .result
+        .expect("native Built-in AI direct mode should succeed");
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(result.service_id.as_deref(), Some("builtin"));
+    assert_eq!(result.service_name.as_deref(), Some("Built-in AI"));
+
+    let requests = &backend.http_client().requests;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].endpoint,
+        "https://api.groq.com/openai/v1/chat/completions"
+    );
+    assert_eq!(
+        requests[0].headers,
+        vec![(
+            "Authorization".to_string(),
+            "Bearer builtin-user-key".to_string()
+        )]
+    );
+    assert_eq!(requests[0].body["model"], "llama-3.1-8b-instant");
+}
+
+#[test]
+fn native_openai_quick_translate_rejects_unsupported_service_without_http_request() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 23,
+        service: QuickTranslateService {
+            id: "google".to_string(),
+            name: "Google Translate".to_string(),
+            enabled_query: true,
+            grammar_capable: false,
+            streaming_capable: false,
+        },
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::Translate,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("fr".to_string()),
+            services: Some(vec!["google".to_string()]),
+        },
+        grammar_params: None,
+        settings: openai_settings(),
+    };
+    let mut backend = NativeOpenAiQuickTranslateBackend::new(RecordingOpenAiHttpClient::default());
+
+    let update = run_quick_translate_service(&mut backend, &request);
+
+    let error = update
+        .outcome
+        .result
+        .expect_err("unsupported service should fail locally");
+    assert!(error
+        .message
+        .contains("not handled by the native OpenAI-compatible backend"));
+    assert!(backend.http_client().requests.is_empty());
+}
+
+#[test]
+fn native_custom_streaming_quick_translate_supports_gemini_stream_and_grammar() {
+    let stream_request = QuickTranslateServiceRequest {
+        query_id: 25,
+        service: quick_service("gemini", "Gemini", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("fr".to_string()),
+            services: Some(vec!["gemini".to_string()]),
+        },
+        grammar_params: None,
+        settings: gemini_settings(),
+    };
+    let grammar_request = QuickTranslateServiceRequest {
+        query_id: 26,
+        service: quick_service("gemini", "Gemini", true, true),
+        query_mode: QuickQueryMode::GrammarCorrection,
+        execution_kind: QuickTranslateExecutionKind::GrammarCorrection,
+        params: TranslateParams {
+            text: "He go home.".to_string(),
+            from: Some("en".to_string()),
+            to: Some("en".to_string()),
+            services: Some(vec!["gemini".to_string()]),
+        },
+        grammar_params: Some(GrammarCorrectParams {
+            text: "He go home.".to_string(),
+            language: Some("en".to_string()),
+            services: Some(vec!["gemini".to_string()]),
+            include_explanations: true,
+        }),
+        settings: gemini_settings(),
+    };
+    let mut backend = NativeCustomStreamingQuickTranslateBackend::new(
+        RecordingCustomStreamingHttpClient::with_responses([
+            Ok(gemini_stream_sse(&["Bonjour ", "le monde"])),
+            Ok(gemini_stream_sse(&[
+                "[CORRECTED]He goes home.[/CORRECTED]\n[EXPLANATION]Subject-verb agreement.[/EXPLANATION]",
+            ])),
+        ]),
+    );
+
+    let stream_update = run_quick_translate_service(&mut backend, &stream_request);
+    let grammar_update = run_quick_translate_service(&mut backend, &grammar_request);
+
+    assert_eq!(
+        stream_update.outcome.streamed_chunks,
+        vec!["Bonjour ".to_string(), "le monde".to_string()]
+    );
+    assert_eq!(
+        stream_update
+            .outcome
+            .result
+            .as_ref()
+            .unwrap()
+            .translated_text,
+        "Bonjour le monde"
+    );
+    let grammar = grammar_update
+        .outcome
+        .grammar_result
+        .expect("Gemini grammar preview should be retained");
+    assert_eq!(grammar.corrected_text, "He goes home.");
+    assert_eq!(
+        grammar.explanation.as_deref(),
+        Some("Subject-verb agreement.")
+    );
+    assert_eq!(backend.http_client().requests.len(), 2);
+    assert!(backend.http_client().requests[0]
+        .endpoint
+        .contains("models/gemini-2.5-flash:streamGenerateContent"));
+}
+
+#[test]
+fn native_custom_streaming_quick_translate_supports_doubao_stream() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 27,
+        service: quick_service("doubao", "Doubao", false, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["doubao".to_string()]),
+        },
+        grammar_params: None,
+        settings: doubao_settings(),
+    };
+    let mut backend = NativeCustomStreamingQuickTranslateBackend::new(
+        RecordingCustomStreamingHttpClient::with_responses([Ok(doubao_stream_sse(&[
+            "'你", "好'",
+        ]))]),
+    );
+
+    let update = run_quick_translate_service(&mut backend, &request);
+
+    let result = update.outcome.result.expect("native Doubao should succeed");
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(result.service_id.as_deref(), Some("doubao"));
+    assert_eq!(
+        update.outcome.streamed_chunks,
+        vec!["'你".to_string(), "好'".to_string()]
+    );
+    let plan = &backend.http_client().requests[0];
+    assert_eq!(
+        plan.headers,
+        vec![("Authorization".to_string(), "Bearer doubao-key".to_string())]
+    );
+    assert_eq!(
+        plan.body["input"][0]["content"][0]["translation_options"]["target_language"],
+        "zh"
+    );
+}
+
+#[test]
+fn native_traditional_http_quick_translate_supports_google() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 28,
+        service: quick_service("google", "Google Translate", false, false),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::Translate,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: None,
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["google".to_string()]),
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot::default(),
+    };
+    let mut backend = NativeTraditionalHttpQuickTranslateBackend::new(
+        RecordingTraditionalHttpClient::with_responses([Ok(
+            r#"{"sentences":[{"trans":"你好"}],"src":"en"}"#.to_string(),
+        )]),
+    );
+
+    let update = run_quick_translate_service(&mut backend, &request);
+
+    let result = update
+        .outcome
+        .result
+        .expect("native Google Translate should succeed");
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(result.service_id.as_deref(), Some("google"));
+    assert_eq!(result.service_name.as_deref(), Some("Google Translate"));
+    assert_eq!(result.detected_language.as_deref(), Some("en"));
+    let plan = &backend.http_client().requests[0];
+    assert_eq!(plan.method, "GET");
+    assert!(plan.endpoint.contains("client=gtx"));
+    assert!(plan.endpoint.contains("sl=auto"));
+    assert!(plan.endpoint.contains("tl=zh-CN"));
+}
+
+#[test]
+fn native_traditional_http_quick_translate_supports_caiyun_deepl_api_and_niutrans() {
+    let mut backend = NativeTraditionalHttpQuickTranslateBackend::new(
+        RecordingTraditionalHttpClient::with_responses([
+            Ok(r#"{"target":["你好"]}"#.to_string()),
+            Ok(
+                r#"{"translations":[{"detected_source_language":"EN","text":"Salut"}]}"#
+                    .to_string(),
+            ),
+            Ok(r#"{"tgt_text":"Bonjour"}"#.to_string()),
+        ]),
+    );
+
+    let caiyun_request = QuickTranslateServiceRequest {
+        query_id: 29,
+        service: quick_service("caiyun", "Caiyun", false, false),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::Translate,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["caiyun".to_string()]),
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            caiyun_token: Some("caiyun-token".to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    let caiyun_update = run_quick_translate_service(&mut backend, &caiyun_request);
+    let caiyun = caiyun_update
+        .outcome
+        .result
+        .expect("native Caiyun should succeed");
+    assert_eq!(caiyun.translated_text, "你好");
+    assert_eq!(caiyun.service_id.as_deref(), Some("caiyun"));
+    let caiyun_plan = &backend.http_client().requests[0];
+    assert_eq!(caiyun_plan.method, "POST");
+    assert_eq!(
+        caiyun_plan.headers[1],
+        (
+            "X-Authorization".to_string(),
+            "token caiyun-token".to_string()
+        )
+    );
+
+    let deepl_request = QuickTranslateServiceRequest {
+        query_id: 30,
+        service: quick_service("deepl", "DeepL", false, false),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::Translate,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("fr".to_string()),
+            services: Some(vec!["deepl".to_string()]),
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            deep_l_api_key: Some("deepl-key".to_string()),
+            deep_l_use_free_api: Some(false),
+            deep_l_use_quality_optimized: Some(false),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    let deepl_update = run_quick_translate_service(&mut backend, &deepl_request);
+    let deepl = deepl_update
+        .outcome
+        .result
+        .expect("native DeepL API should succeed");
+    assert_eq!(deepl.translated_text, "Salut");
+    assert_eq!(deepl.service_id.as_deref(), Some("deepl"));
+    assert_eq!(deepl.detected_language.as_deref(), Some("en"));
+    let deepl_plan = &backend.http_client().requests[1];
+    assert_eq!(deepl_plan.method, "POST");
+    assert!(deepl_plan.endpoint.contains("api.deepl.com/v2/translate"));
+    assert!(deepl_plan
+        .body
+        .as_deref()
+        .unwrap()
+        .contains("target_lang=FR"));
+
+    let niutrans_request = QuickTranslateServiceRequest {
+        query_id: 31,
+        service: quick_service("niutrans", "NiuTrans", false, false),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("fr".to_string()),
+            services: Some(vec!["niutrans".to_string()]),
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            niu_trans_api_key: Some("niu-key".to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    let niutrans_update = run_quick_translate_service(&mut backend, &niutrans_request);
+    let niutrans = niutrans_update
+        .outcome
+        .result
+        .expect("native NiuTrans should succeed");
+    assert_eq!(niutrans.translated_text, "Bonjour");
+    assert_eq!(niutrans.service_id.as_deref(), Some("niutrans"));
+    assert_eq!(
+        niutrans_update.outcome.streamed_chunks,
+        vec!["Bonjour".to_string()]
+    );
+    let niutrans_body: serde_json::Value =
+        serde_json::from_str(backend.http_client().requests[2].body.as_deref().unwrap()).unwrap();
+    assert_eq!(niutrans_body["apikey"], "niu-key");
+    assert_eq!(niutrans_body["from"], "en");
+    assert_eq!(niutrans_body["to"], "fr");
 }
 
 #[test]
@@ -2466,6 +2944,102 @@ fn app_update_queried_result_toggle_only_expands_without_starting_task() {
     assert!(!app.state.is_translating);
 }
 
+#[derive(Default)]
+struct RecordingOpenAiHttpClient {
+    requests: Vec<OpenAiHttpRequestPlan>,
+    responses: VecDeque<Result<String, OpenAiExecutionError>>,
+}
+
+impl RecordingOpenAiHttpClient {
+    fn with_responses(
+        responses: impl IntoIterator<Item = Result<String, OpenAiExecutionError>>,
+    ) -> Self {
+        Self {
+            requests: Vec::new(),
+            responses: responses.into_iter().collect(),
+        }
+    }
+}
+
+impl OpenAiHttpClient for RecordingOpenAiHttpClient {
+    fn post_sse(
+        &mut self,
+        request: &OpenAiHttpRequestPlan,
+    ) -> Result<String, OpenAiExecutionError> {
+        self.requests.push(request.clone());
+        self.responses.pop_front().unwrap_or_else(|| {
+            Err(OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::Unknown,
+                "test OpenAI response was not queued",
+            ))
+        })
+    }
+}
+
+#[derive(Default)]
+struct RecordingCustomStreamingHttpClient {
+    requests: Vec<CustomStreamingHttpRequestPlan>,
+    responses: VecDeque<Result<String, OpenAiExecutionError>>,
+}
+
+impl RecordingCustomStreamingHttpClient {
+    fn with_responses(
+        responses: impl IntoIterator<Item = Result<String, OpenAiExecutionError>>,
+    ) -> Self {
+        Self {
+            requests: Vec::new(),
+            responses: responses.into_iter().collect(),
+        }
+    }
+}
+
+impl CustomStreamingHttpClient for RecordingCustomStreamingHttpClient {
+    fn post_sse(
+        &mut self,
+        request: &CustomStreamingHttpRequestPlan,
+    ) -> Result<String, OpenAiExecutionError> {
+        self.requests.push(request.clone());
+        self.responses.pop_front().unwrap_or_else(|| {
+            Err(OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::Unknown,
+                "test custom streaming response was not queued",
+            ))
+        })
+    }
+}
+
+#[derive(Default)]
+struct RecordingTraditionalHttpClient {
+    requests: Vec<TraditionalHttpRequestPlan>,
+    responses: VecDeque<Result<String, OpenAiExecutionError>>,
+}
+
+impl RecordingTraditionalHttpClient {
+    fn with_responses(
+        responses: impl IntoIterator<Item = Result<String, OpenAiExecutionError>>,
+    ) -> Self {
+        Self {
+            requests: Vec::new(),
+            responses: responses.into_iter().collect(),
+        }
+    }
+}
+
+impl TraditionalHttpClient for RecordingTraditionalHttpClient {
+    fn execute(
+        &mut self,
+        request: &TraditionalHttpRequestPlan,
+    ) -> Result<String, OpenAiExecutionError> {
+        self.requests.push(request.clone());
+        self.responses.pop_front().unwrap_or_else(|| {
+            Err(OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::Unknown,
+                "test traditional HTTP response was not queued",
+            ))
+        })
+    }
+}
+
 struct RecordingBackend {
     configure_calls: Vec<SettingsSnapshot>,
     calls: Vec<TranslateParams>,
@@ -2775,6 +3349,90 @@ fn grammar_dto(
         timing_ms,
         has_corrections: original_text != corrected_text,
     }
+}
+
+fn openai_settings() -> SettingsSnapshot {
+    SettingsSnapshot {
+        open_ai_api_key: Some("sk-native".to_string()),
+        open_ai_endpoint: Some("https://api.openai.com/v1/chat/completions".to_string()),
+        open_ai_model: Some("gpt-4o-mini".to_string()),
+        open_ai_temperature: Some(0.2),
+        ..SettingsSnapshot::default()
+    }
+}
+
+fn builtin_direct_settings() -> SettingsSnapshot {
+    SettingsSnapshot {
+        built_in_ai_api_key: Some("builtin-user-key".to_string()),
+        built_in_ai_model: Some("llama-3.1-8b-instant".to_string()),
+        ..SettingsSnapshot::default()
+    }
+}
+
+fn gemini_settings() -> SettingsSnapshot {
+    SettingsSnapshot {
+        gemini_api_key: Some("gemini-key".to_string()),
+        gemini_model: Some("gemini-2.5-flash".to_string()),
+        ..SettingsSnapshot::default()
+    }
+}
+
+fn doubao_settings() -> SettingsSnapshot {
+    SettingsSnapshot {
+        doubao_api_key: Some("doubao-key".to_string()),
+        doubao_endpoint: Some("https://ark.example.test/api/v3/responses".to_string()),
+        doubao_model: Some("doubao-seed-translation-250915".to_string()),
+        ..SettingsSnapshot::default()
+    }
+}
+
+fn quick_service(
+    id: &str,
+    name: &str,
+    grammar_capable: bool,
+    streaming_capable: bool,
+) -> QuickTranslateService {
+    QuickTranslateService {
+        id: id.to_string(),
+        name: name.to_string(),
+        enabled_query: true,
+        grammar_capable,
+        streaming_capable,
+    }
+}
+
+fn chat_completion_sse(chunks: &[&str]) -> String {
+    let mut sse = String::new();
+    for chunk in chunks {
+        sse.push_str("data: {\"choices\":[{\"delta\":{\"content\":");
+        sse.push_str(&serde_json::to_string(chunk).expect("test chunk should serialize"));
+        sse.push_str("}}]}\n\n");
+    }
+    sse.push_str("data: [DONE]\n\n");
+    sse
+}
+
+fn gemini_stream_sse(chunks: &[&str]) -> String {
+    let mut sse = String::new();
+    for chunk in chunks {
+        sse.push_str("data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":");
+        sse.push_str(&serde_json::to_string(chunk).expect("test chunk should serialize"));
+        sse.push_str("}]}}]}\n\n");
+    }
+    sse.push_str("data: [DONE]\n\n");
+    sse
+}
+
+fn doubao_stream_sse(chunks: &[&str]) -> String {
+    let mut sse = String::new();
+    for chunk in chunks {
+        sse.push_str("event: response.output_text.delta\n");
+        sse.push_str("data: {\"delta\":");
+        sse.push_str(&serde_json::to_string(chunk).expect("test chunk should serialize"));
+        sse.push_str("}\n\n");
+    }
+    sse.push_str("data: [DONE]\n\n");
+    sse
 }
 
 fn task_kind(task: &Task<Message>) -> &'static str {

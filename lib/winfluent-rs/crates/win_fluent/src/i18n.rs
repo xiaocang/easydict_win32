@@ -168,6 +168,10 @@ impl I18n {
     pub fn bundle(&self, locale: &LocaleId) -> Option<&I18nBundle> {
         self.bundles.get(locale)
     }
+
+    fn lookup(&self, locale: &LocaleId, key: &str) -> Option<&str> {
+        self.bundle(locale).and_then(|bundle| bundle.get(key))
+    }
 }
 
 impl Localizer for I18n {
@@ -176,12 +180,8 @@ impl Localizer for I18n {
     }
 
     fn resolve(&self, text: &LocalizedText) -> String {
-        self.bundle(&self.locale)
-            .and_then(|bundle| bundle.get(&text.key))
-            .or_else(|| {
-                self.bundle(&self.fallback_locale)
-                    .and_then(|bundle| bundle.get(&text.key))
-            })
+        self.lookup(&self.locale, &text.key)
+            .or_else(|| self.lookup(&self.fallback_locale, &text.key))
             .map(|template| format_template(template, &text.args))
             .unwrap_or_else(|| text.fallback_text())
     }

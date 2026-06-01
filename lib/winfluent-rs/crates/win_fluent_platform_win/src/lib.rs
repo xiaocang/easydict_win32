@@ -659,6 +659,13 @@ impl WindowsPlatformAdapter {
         native::read_current_user_registry_value_string(key_path, value_name)
     }
 
+    pub fn read_local_machine_registry_value_string(
+        key_path: &str,
+        value_name: Option<&str>,
+    ) -> Result<Option<String>, WindowsPlatformError> {
+        native::read_local_machine_registry_value_string(key_path, value_name)
+    }
+
     pub fn delete_current_user_registry_key(key_path: &str) -> Result<(), WindowsPlatformError> {
         native::delete_current_user_registry_key(key_path)
     }
@@ -1174,7 +1181,8 @@ mod native {
     };
     use windows_sys::Win32::System::Registry::{
         RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegOpenKeyExW,
-        RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE, REG_SZ,
+        RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ,
+        KEY_SET_VALUE, REG_SZ,
     };
     use windows_sys::Win32::System::Threading::{
         AttachThreadInput, CreateEventExW, GetCurrentProcess, GetCurrentThreadId, OpenEventW,
@@ -2086,7 +2094,22 @@ try {
         key_path: &str,
         value_name: Option<&str>,
     ) -> Result<Option<String>, WindowsPlatformError> {
-        let Some(key) = open_current_user_key(key_path)? else {
+        read_registry_value_string(HKEY_CURRENT_USER, key_path, value_name)
+    }
+
+    pub fn read_local_machine_registry_value_string(
+        key_path: &str,
+        value_name: Option<&str>,
+    ) -> Result<Option<String>, WindowsPlatformError> {
+        read_registry_value_string(HKEY_LOCAL_MACHINE, key_path, value_name)
+    }
+
+    fn read_registry_value_string(
+        root: HKEY,
+        key_path: &str,
+        value_name: Option<&str>,
+    ) -> Result<Option<String>, WindowsPlatformError> {
+        let Some(key) = open_registry_key(root, key_path)? else {
             return Ok(None);
         };
 
@@ -2392,12 +2415,14 @@ try {
         Ok(RegistryKey(key))
     }
 
-    fn open_current_user_key(key_path: &str) -> Result<Option<RegistryKey>, WindowsPlatformError> {
+    fn open_registry_key(
+        root: HKEY,
+        key_path: &str,
+    ) -> Result<Option<RegistryKey>, WindowsPlatformError> {
         let wide_path = wide_null(key_path);
         let mut key = null_mut();
-        // Safety: HKEY_CURRENT_USER is predefined, key_path is null-terminated, and key is writable.
-        let result =
-            unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, wide_path.as_ptr(), 0, KEY_READ, &mut key) };
+        // Safety: root is a predefined registry hive, key_path is null-terminated, and key is writable.
+        let result = unsafe { RegOpenKeyExW(root, wide_path.as_ptr(), 0, KEY_READ, &mut key) };
         if result == ERROR_FILE_NOT_FOUND {
             return Ok(None);
         }
@@ -2643,6 +2668,13 @@ mod native {
     }
 
     pub fn read_current_user_registry_value_string(
+        _key_path: &str,
+        _value_name: Option<&str>,
+    ) -> Result<Option<String>, WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn read_local_machine_registry_value_string(
         _key_path: &str,
         _value_name: Option<&str>,
     ) -> Result<Option<String>, WindowsPlatformError> {

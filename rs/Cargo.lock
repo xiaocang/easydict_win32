@@ -426,6 +426,7 @@ dependencies = [
  "futures-channel",
  "image",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
  "win_fluent",

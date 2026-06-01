@@ -1,5 +1,7 @@
 use easydict_app::compat_protocol::SettingsMigrateParams;
-use easydict_app::{migrate_settings_file, migrate_settings_json, SettingsMigrationError};
+use easydict_app::{
+    migrate_settings_file, migrate_settings_json, resolve_source_path, SettingsMigrationError,
+};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -146,6 +148,21 @@ fn settings_migration_removes_duplicate_openvino_service_when_windows_local_ai_e
     assert!(root.get("LocalAIProvider").is_none());
 }
 
+#[test]
+fn settings_migration_default_path_honors_settings_directory_env() {
+    let temp = TempDir::new("settings-migrate-env");
+    let settings_dir = temp.path().join("configured-settings");
+    let _guard = EnvVarGuard::set(
+        "EASYDICT_SETTINGS_DIR",
+        settings_dir.to_string_lossy().to_string(),
+    );
+
+    assert_eq!(
+        resolve_source_path(None),
+        settings_dir.join("settings.json")
+    );
+}
+
 fn read_json(path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 }
@@ -196,5 +213,28 @@ impl TempDir {
 impl Drop for TempDir {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<String>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: String) -> Self {
+        let previous = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            std::env::set_var(self.key, previous);
+        } else {
+            std::env::remove_var(self.key);
+        }
     }
 }

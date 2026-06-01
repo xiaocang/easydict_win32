@@ -3731,8 +3731,6 @@ fn text_input_style(
             && matches!(status, iced::widget::text_input::Status::Focused { .. })
         {
             visual.accent_light_alt
-        } else if chrome == TextEditorChrome::Frameless {
-            visual.input_surface
         } else {
             visual.input_surface
         }),

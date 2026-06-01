@@ -31,6 +31,7 @@ pub const BING_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) App
 pub const BING_MAX_TEXT_LENGTH_UTF16: usize = 3000;
 pub const BING_DEFAULT_IID: &str = "translator.5023.1";
 pub const BING_DEFAULT_EXPIRY_INTERVAL_MS: i64 = 3_600_000;
+pub const LINGUEE_TRANSLATE_ENDPOINT: &str = "https://linguee-api.fly.dev/api/v2/translations";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TraditionalHttpServiceKind {
@@ -40,6 +41,7 @@ pub enum TraditionalHttpServiceKind {
     NiuTrans,
     Volcano,
     Bing,
+    Linguee,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -68,6 +70,7 @@ pub enum TraditionalHttpServiceConfig {
         access_key_id: String,
         secret_access_key: String,
     },
+    Linguee,
 }
 
 /// UTC timestamps used by the Volcano (火山) AWS SigV4-style signing process.
@@ -207,6 +210,11 @@ pub fn traditional_http_config_for_service(
                 .clone()
                 .unwrap_or_default(),
         }),
+        // Linguee is keyless but conditionally compiled, mirroring the legacy
+        // ENABLE_LINGUEE_SERVICE registration: only route it natively when the
+        // feature is enabled (the service is otherwise absent from the catalog).
+        #[cfg(feature = "enable-linguee-service")]
+        "linguee" => Some(TraditionalHttpServiceConfig::Linguee),
         _ => None,
     }
 }
@@ -247,6 +255,9 @@ pub fn build_traditional_http_translation_request_plan(
             from_language,
             to_language,
         ),
+        TraditionalHttpServiceConfig::Linguee => {
+            build_linguee_translation_request_plan(text, from_language, to_language)
+        }
     }
 }
 
@@ -813,6 +824,110 @@ pub fn from_bing_language_code(code: &str) -> TranslationLanguage {
     }
 }
 
+// ----------------------------------------------------------------------------
+// Linguee dictionary (keyless public proxy, feature-gated registration).
+// A single GET returns translations with context; this preserves the primary
+// translated text. Linguee's alternative translations are not yet carried
+// across the bridge (see the deferred-alternatives note in refactor-progress.md).
+// ----------------------------------------------------------------------------
+
+pub fn build_linguee_translation_request_plan(
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    let from_code = linguee_language_code(from_language)?;
+    let to_code = linguee_language_code(to_language)?;
+
+    let mut url = reqwest::Url::parse(LINGUEE_TRANSLATE_ENDPOINT).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Linguee endpoint: {error}"),
+        )
+    })?;
+    url.query_pairs_mut()
+        .append_pair("query", text)
+        .append_pair("src", from_code)
+        .append_pair("dst", to_code);
+
+    Ok(TraditionalHttpRequestPlan {
+        method: "GET",
+        endpoint: url.to_string(),
+        headers: Vec::new(),
+        body: None,
+        service_kind: TraditionalHttpServiceKind::Linguee,
+    })
+}
+
+pub fn parse_linguee_translation_response(
+    json: &str,
+    original_text: &str,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let root: Value = serde_json::from_str(json).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Linguee JSON response: {error}"),
+        )
+        .with_service_id(service_id.clone())
+    })?;
+
+    // Root is an array of dictionary entries; the primary translation is the
+    // first entry's first translation text.
+    let translated_text = root
+        .as_array()
+        .and_then(|entries| entries.first())
+        .and_then(|entry| entry.get("translations"))
+        .and_then(Value::as_array)
+        .and_then(|translations| translations.first())
+        .and_then(|translation| translation.get("text"))
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+        .unwrap_or(original_text)
+        .to_string();
+
+    Ok(success_result(
+        translated_text,
+        service_id,
+        service_name,
+        None,
+    ))
+}
+
+pub fn linguee_language_code(
+    language: TranslationLanguage,
+) -> Result<&'static str, OpenAiExecutionError> {
+    match language {
+        TranslationLanguage::Auto => Ok("auto"),
+        TranslationLanguage::English => Ok("en"),
+        TranslationLanguage::German => Ok("de"),
+        TranslationLanguage::French => Ok("fr"),
+        TranslationLanguage::Spanish => Ok("es"),
+        TranslationLanguage::Italian => Ok("it"),
+        TranslationLanguage::Portuguese => Ok("pt"),
+        TranslationLanguage::Dutch => Ok("nl"),
+        TranslationLanguage::Polish => Ok("pl"),
+        TranslationLanguage::Russian => Ok("ru"),
+        TranslationLanguage::Bulgarian => Ok("bg"),
+        TranslationLanguage::Czech => Ok("cs"),
+        TranslationLanguage::Danish => Ok("da"),
+        TranslationLanguage::Greek => Ok("el"),
+        TranslationLanguage::Estonian => Ok("et"),
+        TranslationLanguage::Finnish => Ok("fi"),
+        TranslationLanguage::Hungarian => Ok("hu"),
+        TranslationLanguage::Lithuanian => Ok("lt"),
+        TranslationLanguage::Latvian => Ok("lv"),
+        TranslationLanguage::Romanian => Ok("ro"),
+        TranslationLanguage::Slovak => Ok("sk"),
+        TranslationLanguage::Slovenian => Ok("sl"),
+        TranslationLanguage::Swedish => Ok("sv"),
+        TranslationLanguage::SimplifiedChinese => Ok("zh"),
+        TranslationLanguage::Japanese => Ok("ja"),
+        _ => Err(unsupported_language_error("Linguee", language)),
+    }
+}
+
 pub fn translate_traditional_http_service<C: TraditionalHttpClient>(
     client: &mut C,
     config: &TraditionalHttpServiceConfig,
@@ -846,6 +961,9 @@ pub fn translate_traditional_http_service<C: TraditionalHttpClient>(
         }
         TraditionalHttpServiceConfig::Volcano { .. } => {
             parse_volcano_translation_response(&body, text, service_id, service_name)
+        }
+        TraditionalHttpServiceConfig::Linguee => {
+            parse_linguee_translation_response(&body, text, service_id, service_name)
         }
     }
 }

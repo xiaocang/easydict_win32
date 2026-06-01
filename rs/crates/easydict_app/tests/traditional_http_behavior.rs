@@ -2,22 +2,23 @@ use easydict_app::compat_protocol::SettingsSnapshot;
 use easydict_app::{
     bing_credentials_expired, bing_host, bing_language_code, build_bing_translate_request_plan,
     build_caiyun_translation_request_plan, build_deepl_api_translation_request_plan,
-    build_google_translation_request_plan, build_niutrans_translation_request_plan,
-    build_volcano_translation_request_plan, caiyun_language_code, compute_volcano_authorization,
-    deepl_api_error_from_status, deepl_language_code, from_bing_language_code,
-    google_language_code, niutrans_error_from_code, niutrans_language_code,
-    parse_bing_credentials_from_html, parse_bing_translation_response,
-    parse_caiyun_translation_response, parse_deepl_api_translation_response,
-    parse_google_translation_response, parse_niutrans_translation_response,
+    build_google_translation_request_plan, build_linguee_translation_request_plan,
+    build_niutrans_translation_request_plan, build_volcano_translation_request_plan,
+    caiyun_language_code, compute_volcano_authorization, deepl_api_error_from_status,
+    deepl_language_code, from_bing_language_code, google_language_code, linguee_language_code,
+    niutrans_error_from_code, niutrans_language_code, parse_bing_credentials_from_html,
+    parse_bing_translation_response, parse_caiyun_translation_response,
+    parse_deepl_api_translation_response, parse_google_translation_response,
+    parse_linguee_translation_response, parse_niutrans_translation_response,
     parse_volcano_translation_response, traditional_http_config_for_service,
     traditional_http_error_from_status, translate_traditional_http_service, volcano_language_code,
     volcano_timestamps_from_epoch_seconds, BingCredentials, OpenAiExecutionError,
     OpenAiExecutionErrorCode, TraditionalHttpClient, TraditionalHttpRequestPlan,
     TraditionalHttpServiceConfig, TraditionalHttpServiceKind, TranslationLanguage, BING_CHINA_HOST,
     BING_GLOBAL_HOST, BING_MAX_TEXT_LENGTH_UTF16, BING_USER_AGENT, CAIYUN_TRANSLATE_ENDPOINT,
-    DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT, NIUTRANS_MAX_TEXT_LENGTH_UTF16,
-    NIUTRANS_TRANSLATE_ENDPOINT, VOLCANO_MAX_TEXT_LENGTH_UTF16, VOLCANO_TRANSLATE_ENDPOINT,
-    VOLCANO_TRANSLATE_HOST,
+    DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT, LINGUEE_TRANSLATE_ENDPOINT,
+    NIUTRANS_MAX_TEXT_LENGTH_UTF16, NIUTRANS_TRANSLATE_ENDPOINT, VOLCANO_MAX_TEXT_LENGTH_UTF16,
+    VOLCANO_TRANSLATE_ENDPOINT, VOLCANO_TRANSLATE_HOST,
 };
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -948,6 +949,118 @@ fn bing_credentials_expiry_tracks_legacy_interval() {
     assert!(bing_credentials_expired(0, 4000, 3600));
     assert!(!bing_credentials_expired(0, 3000, 3600));
     assert!(!bing_credentials_expired(1000, 1000, 3600));
+}
+
+#[test]
+fn linguee_translation_request_plan_matches_legacy_proxy_endpoint() {
+    let plan = build_linguee_translation_request_plan(
+        "hello world",
+        TranslationLanguage::English,
+        TranslationLanguage::German,
+    )
+    .unwrap();
+
+    assert_eq!(plan.method, "GET");
+    assert_eq!(plan.service_kind, TraditionalHttpServiceKind::Linguee);
+    assert!(plan.endpoint.starts_with(LINGUEE_TRANSLATE_ENDPOINT));
+    assert!(plan.endpoint.contains("src=en"));
+    assert!(plan.endpoint.contains("dst=de"));
+    assert!(
+        plan.endpoint.contains("query=hello+world")
+            || plan.endpoint.contains("query=hello%20world")
+    );
+    assert!(plan.headers.is_empty());
+    assert!(plan.body.is_none());
+
+    let unsupported = build_linguee_translation_request_plan(
+        "hi",
+        TranslationLanguage::English,
+        TranslationLanguage::Korean,
+    )
+    .unwrap_err();
+    assert_eq!(
+        unsupported.code,
+        OpenAiExecutionErrorCode::UnsupportedLanguage
+    );
+}
+
+#[test]
+fn linguee_language_codes_preserve_legacy_special_cases() {
+    assert_eq!(
+        linguee_language_code(TranslationLanguage::Auto).unwrap(),
+        "auto"
+    );
+    assert_eq!(
+        linguee_language_code(TranslationLanguage::SimplifiedChinese).unwrap(),
+        "zh"
+    );
+    assert_eq!(
+        linguee_language_code(TranslationLanguage::Japanese).unwrap(),
+        "ja"
+    );
+    assert!(linguee_language_code(TranslationLanguage::Korean).is_err());
+}
+
+#[test]
+fn linguee_response_parser_extracts_primary_translation_with_fallback() {
+    let result = parse_linguee_translation_response(
+        r#"[{"featured":true,"translations":[{"text":"Hallo"},{"text":"Servus"}]}]"#,
+        "Hello",
+        "linguee".to_string(),
+        "Linguee Dictionary".to_string(),
+    )
+    .unwrap();
+    assert_eq!(result.translated_text, "Hallo");
+    assert_eq!(result.detected_language, None);
+
+    // Empty / missing translations fall back to the original text.
+    let fallback = parse_linguee_translation_response(
+        "[]",
+        "Hello",
+        "linguee".to_string(),
+        "Linguee Dictionary".to_string(),
+    )
+    .unwrap();
+    assert_eq!(fallback.translated_text, "Hello");
+}
+
+#[test]
+fn translate_traditional_http_service_executes_linguee_plan() {
+    let mut client = RecordingTraditionalHttpClient::with_responses([Ok(
+        r#"[{"translations":[{"text":"Bonjour"}]}]"#.to_string(),
+    )]);
+    let result = translate_traditional_http_service(
+        &mut client,
+        &TraditionalHttpServiceConfig::Linguee,
+        "Hello",
+        TranslationLanguage::English,
+        TranslationLanguage::French,
+        "linguee",
+        "Linguee Dictionary",
+    )
+    .unwrap();
+
+    assert_eq!(result.translated_text, "Bonjour");
+    assert_eq!(client.requests[0].method, "GET");
+    assert_eq!(
+        client.requests[0].service_kind,
+        TraditionalHttpServiceKind::Linguee
+    );
+}
+
+#[cfg(feature = "enable-linguee-service")]
+#[test]
+fn traditional_http_config_routes_linguee_only_when_feature_enabled() {
+    assert_eq!(
+        traditional_http_config_for_service("linguee", &SettingsSnapshot::default()),
+        Some(TraditionalHttpServiceConfig::Linguee)
+    );
+}
+
+#[cfg(not(feature = "enable-linguee-service"))]
+#[test]
+fn traditional_http_config_omits_linguee_without_feature() {
+    assert!(traditional_http_config_for_service("linguee", &SettingsSnapshot::default()).is_none());
 }
 
 #[derive(Default)]

@@ -135,21 +135,24 @@ pub use state::{
 };
 pub use theme::easydict_theme_tokens;
 pub use traditional_http::{
+    bing_credentials_expired, bing_host, bing_language_code, build_bing_translate_request_plan,
     build_caiyun_translation_request_plan, build_deepl_api_translation_request_plan,
     build_google_translation_request_plan, build_niutrans_translation_request_plan,
     build_traditional_http_translation_request_plan, build_volcano_translation_request_plan,
     caiyun_language_code, compute_volcano_authorization, deepl_api_error_from_status,
-    deepl_language_code, google_language_code, niutrans_error_from_code, niutrans_language_code,
+    deepl_language_code, from_bing_language_code, google_language_code, niutrans_error_from_code,
+    niutrans_language_code, parse_bing_credentials_from_html, parse_bing_translation_response,
     parse_caiyun_translation_response, parse_deepl_api_translation_response,
     parse_google_translation_response, parse_niutrans_translation_response,
     parse_volcano_translation_response, traditional_http_config_for_service,
     traditional_http_error_from_status, translate_traditional_http_service, volcano_language_code,
-    volcano_timestamps_from_epoch_seconds, ReqwestTraditionalHttpClient, TraditionalHttpClient,
-    TraditionalHttpRequestPlan, TraditionalHttpServiceConfig, TraditionalHttpServiceKind,
-    VolcanoTimestamps, CAIYUN_TRANSLATE_ENDPOINT, DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT,
-    GOOGLE_TRANSLATE_ENDPOINT, NIUTRANS_MAX_TEXT_LENGTH_UTF16, NIUTRANS_TRANSLATE_ENDPOINT,
-    VOLCANO_MAX_TEXT_LENGTH_UTF16, VOLCANO_QUERY_STRING, VOLCANO_TRANSLATE_ENDPOINT,
-    VOLCANO_TRANSLATE_HOST,
+    volcano_timestamps_from_epoch_seconds, BingCredentials, ReqwestTraditionalHttpClient,
+    TraditionalHttpClient, TraditionalHttpRequestPlan, TraditionalHttpServiceConfig,
+    TraditionalHttpServiceKind, VolcanoTimestamps, BING_CHINA_HOST, BING_GLOBAL_HOST,
+    BING_MAX_TEXT_LENGTH_UTF16, BING_USER_AGENT, CAIYUN_TRANSLATE_ENDPOINT,
+    DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT, GOOGLE_TRANSLATE_ENDPOINT,
+    NIUTRANS_MAX_TEXT_LENGTH_UTF16, NIUTRANS_TRANSLATE_ENDPOINT, VOLCANO_MAX_TEXT_LENGTH_UTF16,
+    VOLCANO_QUERY_STRING, VOLCANO_TRANSLATE_ENDPOINT, VOLCANO_TRANSLATE_HOST,
 };
 pub use translation_cache::{
     displayable_phonetics, format_phonetic_text, is_youdao_word_query, merge_phonetics_into_result,

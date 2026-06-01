@@ -21,6 +21,16 @@ pub const VOLCANO_REGION: &str = "cn-north-1";
 pub const VOLCANO_SERVICE_NAME: &str = "translate";
 pub const VOLCANO_SIGNING_ALGORITHM: &str = "HMAC-SHA256";
 pub const VOLCANO_MAX_TEXT_LENGTH_UTF16: usize = 5000;
+pub const BING_GLOBAL_HOST: &str = "www.bing.com";
+pub const BING_CHINA_HOST: &str = "cn.bing.com";
+pub const BING_TRANSLATOR_PATH: &str = "/translator";
+pub const BING_TRANSLATE_API_PATH: &str = "/ttranslatev3";
+/// Full Edge browser User-Agent string (required for Bing EPT mode).
+pub const BING_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+     (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
+pub const BING_MAX_TEXT_LENGTH_UTF16: usize = 3000;
+pub const BING_DEFAULT_IID: &str = "translator.5023.1";
+pub const BING_DEFAULT_EXPIRY_INTERVAL_MS: i64 = 3_600_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TraditionalHttpServiceKind {
@@ -29,6 +39,7 @@ pub enum TraditionalHttpServiceKind {
     DeepLApi,
     NiuTrans,
     Volcano,
+    Bing,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -607,6 +618,201 @@ pub fn volcano_language_code(
     }
 }
 
+// ----------------------------------------------------------------------------
+// Bing Translate (free web API, no key).
+//
+// Bing is a two-phase, stateful provider: a GET to the translator page yields
+// session credentials (IG/IID/token/key/expiry) parsed from inline HTML, then a
+// POST to `ttranslatev3` performs the translation. These are the pure,
+// network-free building blocks for that flow; live two-phase execution and
+// credential caching are wired in a follow-up slice, so `bing` is intentionally
+// not yet in `traditional_http_config_for_service` (it stays on the .NET host).
+// ----------------------------------------------------------------------------
+
+/// Bing session credentials scraped from the translator page HTML.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BingCredentials {
+    pub ig: String,
+    pub iid: String,
+    pub token: String,
+    pub key: i64,
+    pub expiry_interval_ms: i64,
+}
+
+/// Resolve the Bing host for the configured region.
+pub fn bing_host(use_china_host: bool) -> &'static str {
+    if use_china_host {
+        BING_CHINA_HOST
+    } else {
+        BING_GLOBAL_HOST
+    }
+}
+
+/// Parse IG, IID, token, key, and expiry interval from the Bing translator page.
+/// Mirrors the legacy regex extraction: a missing IID falls back to the default,
+/// a missing IG yields an empty string (the caller substitutes a generated value),
+/// and a missing/empty token is a hard `ServiceUnavailable` error.
+pub fn parse_bing_credentials_from_html(
+    html: &str,
+) -> Result<BingCredentials, OpenAiExecutionError> {
+    let ig = extract_delimited(html, "IG:\"", '"')
+        .unwrap_or_default()
+        .to_string();
+    let iid = extract_delimited(html, "data-iid=\"", '"')
+        .unwrap_or(BING_DEFAULT_IID)
+        .to_string();
+
+    let params = parse_bing_abuse_prevention_params(html);
+    match params {
+        Some((key, token, expiry_interval_ms)) if !token.is_empty() => Ok(BingCredentials {
+            ig,
+            iid,
+            token,
+            key,
+            expiry_interval_ms,
+        }),
+        _ => Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::ServiceUnavailable,
+            "Failed to extract Bing session credentials. The page format may have changed.",
+        )
+        .with_service_id("bing")),
+    }
+}
+
+/// Whether cached Bing credentials created at `created_at_ms` are expired at `now_ms`.
+pub fn bing_credentials_expired(created_at_ms: i64, now_ms: i64, expiry_interval_ms: i64) -> bool {
+    now_ms - created_at_ms > expiry_interval_ms
+}
+
+/// Build the signed Bing `ttranslatev3` request plan. `sfx` is the per-request
+/// EPT counter the legacy service increments for each call.
+pub fn build_bing_translate_request_plan(
+    credentials: &BingCredentials,
+    host: &str,
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+    sfx: u64,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    let text = truncate_to_utf16_units(text, BING_MAX_TEXT_LENGTH_UTF16);
+    let from_code = bing_language_code(from_language);
+    let to_code = bing_language_code(to_language);
+
+    let endpoint = format!(
+        "https://{host}{BING_TRANSLATE_API_PATH}?isVertical=1&IG={ig}&IID={iid}\
+         &ref=TThis&edgepdftranslator=1&SFX={sfx}",
+        ig = credentials.ig,
+        iid = credentials.iid,
+    );
+
+    let body = form_urlencoded_body(&[
+        ("fromLang", from_code.to_string()),
+        ("to", to_code.to_string()),
+        ("text", text),
+        ("token", credentials.token.clone()),
+        ("key", credentials.key.to_string()),
+        ("tryFetchingGenderDebiasedTranslations", "true".to_string()),
+    ])?;
+
+    Ok(TraditionalHttpRequestPlan {
+        method: "POST",
+        endpoint,
+        headers: vec![
+            (
+                "Content-Type".to_string(),
+                "application/x-www-form-urlencoded".to_string(),
+            ),
+            ("User-Agent".to_string(), BING_USER_AGENT.to_string()),
+            ("Referer".to_string(), format!("https://{host}/translator")),
+            ("Origin".to_string(), format!("https://{host}")),
+        ],
+        body: Some(body),
+        service_kind: TraditionalHttpServiceKind::Bing,
+    })
+}
+
+pub fn parse_bing_translation_response(
+    json: &str,
+    original_text: &str,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let root: Value = serde_json::from_str(json).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Bing JSON response: {error}"),
+        )
+        .with_service_id(service_id.clone())
+    })?;
+
+    // Success shape: [{"detectedLanguage":{"language":"en"},"translations":[{"text":"...","to":"zh-Hans"}]}]
+    if let Some(first) = root.as_array().and_then(|items| items.first()) {
+        let translated_text = first
+            .get("translations")
+            .and_then(Value::as_array)
+            .and_then(|translations| translations.first())
+            .and_then(|translation| translation.get("text"))
+            .and_then(Value::as_str)
+            .filter(|text| !text.is_empty())
+            .unwrap_or(original_text)
+            .to_string();
+
+        let detected_language = first
+            .get("detectedLanguage")
+            .and_then(|detected| detected.get("language"))
+            .and_then(Value::as_str)
+            .filter(|code| !code.is_empty())
+            .map(|code| from_bing_language_code(code).to_iso639().to_string());
+
+        return Ok(success_result(
+            translated_text,
+            service_id,
+            service_name,
+            detected_language,
+        ));
+    }
+
+    // Error shape: {"statusCode":400,"errorMessage":"..."}
+    if let Some(status_code) = root.get("statusCode") {
+        let message = root
+            .get("errorMessage")
+            .and_then(Value::as_str)
+            .unwrap_or("Unknown error");
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::ServiceUnavailable,
+            format!("Bing API error {status_code}: {message}"),
+        )
+        .with_service_id(service_id));
+    }
+
+    Err(OpenAiExecutionError::new(
+        OpenAiExecutionErrorCode::InvalidResponse,
+        "Unexpected response format from Bing Translate",
+    )
+    .with_service_id(service_id))
+}
+
+pub fn bing_language_code(language: TranslationLanguage) -> String {
+    match language {
+        TranslationLanguage::SimplifiedChinese => "zh-Hans".to_string(),
+        TranslationLanguage::TraditionalChinese => "zh-Hant".to_string(),
+        TranslationLanguage::Auto => "auto-detect".to_string(),
+        TranslationLanguage::Norwegian => "nb".to_string(),
+        TranslationLanguage::Filipino => "fil".to_string(),
+        language => language.to_iso639().to_string(),
+    }
+}
+
+pub fn from_bing_language_code(code: &str) -> TranslationLanguage {
+    match code.to_ascii_lowercase().as_str() {
+        "zh-hans" => TranslationLanguage::SimplifiedChinese,
+        "zh-hant" => TranslationLanguage::TraditionalChinese,
+        "fil" => TranslationLanguage::Filipino,
+        "nb" => TranslationLanguage::Norwegian,
+        _ => TranslationLanguage::from_iso639(code),
+    }
+}
+
 pub fn translate_traditional_http_service<C: TraditionalHttpClient>(
     client: &mut C,
     config: &TraditionalHttpServiceConfig,
@@ -997,6 +1203,60 @@ fn form_urlencoded_body(fields: &[(&str, String)]) -> Result<String, OpenAiExecu
         }
     }
     Ok(url.query().unwrap_or_default().to_string())
+}
+
+/// Return the substring of `html` between `prefix` and the next `terminator`
+/// character after it, or `None` if `prefix` is absent or unterminated.
+fn extract_delimited<'a>(html: &'a str, prefix: &str, terminator: char) -> Option<&'a str> {
+    let start = html.find(prefix)? + prefix.len();
+    let rest = &html[start..];
+    let end = rest.find(terminator)?;
+    Some(&rest[..end])
+}
+
+/// Parse `params_AbusePreventionHelper = [key,"token",expiry]` into its parts,
+/// mirroring the legacy regex without pulling in a regex dependency.
+fn parse_bing_abuse_prevention_params(html: &str) -> Option<(i64, String, i64)> {
+    let marker = html.find("params_AbusePreventionHelper")?;
+    let after_marker = &html[marker..];
+    let open = after_marker.find('[')?;
+    let inner = &after_marker[open + 1..];
+    let close = inner.find(']')?;
+    let inner = &inner[..close];
+
+    let comma1 = inner.find(',')?;
+    let key: i64 = inner[..comma1].trim().parse().ok()?;
+
+    let after_key = &inner[comma1 + 1..];
+    let quote1 = after_key.find('"')?;
+    let after_quote1 = &after_key[quote1 + 1..];
+    let quote2 = after_quote1.find('"')?;
+    let token = after_quote1[..quote2].to_string();
+
+    let after_token = &after_quote1[quote2 + 1..];
+    let comma2 = after_token.find(',')?;
+    let expiry: i64 = after_token[comma2 + 1..].trim().parse().ok()?;
+
+    Some((key, token, expiry))
+}
+
+/// Truncate `text` to at most `max` UTF-16 code units on a char boundary,
+/// matching the legacy `text[..MaxTextLength]` cap without splitting a code point.
+fn truncate_to_utf16_units(text: &str, max: usize) -> String {
+    if text.encode_utf16().count() <= max {
+        return text.to_string();
+    }
+    let mut units = 0;
+    let mut result = String::new();
+    for ch in text.chars() {
+        let ch_units = ch.len_utf16();
+        if units + ch_units > max {
+            break;
+        }
+        units += ch_units;
+        result.push(ch);
+    }
+    result
 }
 
 fn unsupported_language_error(

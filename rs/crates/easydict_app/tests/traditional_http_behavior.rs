@@ -1,17 +1,20 @@
 use easydict_app::compat_protocol::SettingsSnapshot;
 use easydict_app::{
+    bing_credentials_expired, bing_host, bing_language_code, build_bing_translate_request_plan,
     build_caiyun_translation_request_plan, build_deepl_api_translation_request_plan,
     build_google_translation_request_plan, build_niutrans_translation_request_plan,
     build_volcano_translation_request_plan, caiyun_language_code, compute_volcano_authorization,
-    deepl_api_error_from_status, deepl_language_code, google_language_code,
-    niutrans_error_from_code, niutrans_language_code, parse_caiyun_translation_response,
-    parse_deepl_api_translation_response, parse_google_translation_response,
-    parse_niutrans_translation_response, parse_volcano_translation_response,
-    traditional_http_config_for_service, traditional_http_error_from_status,
-    translate_traditional_http_service, volcano_language_code,
-    volcano_timestamps_from_epoch_seconds, OpenAiExecutionError, OpenAiExecutionErrorCode,
-    TraditionalHttpClient, TraditionalHttpRequestPlan, TraditionalHttpServiceConfig,
-    TraditionalHttpServiceKind, TranslationLanguage, CAIYUN_TRANSLATE_ENDPOINT,
+    deepl_api_error_from_status, deepl_language_code, from_bing_language_code,
+    google_language_code, niutrans_error_from_code, niutrans_language_code,
+    parse_bing_credentials_from_html, parse_bing_translation_response,
+    parse_caiyun_translation_response, parse_deepl_api_translation_response,
+    parse_google_translation_response, parse_niutrans_translation_response,
+    parse_volcano_translation_response, traditional_http_config_for_service,
+    traditional_http_error_from_status, translate_traditional_http_service, volcano_language_code,
+    volcano_timestamps_from_epoch_seconds, BingCredentials, OpenAiExecutionError,
+    OpenAiExecutionErrorCode, TraditionalHttpClient, TraditionalHttpRequestPlan,
+    TraditionalHttpServiceConfig, TraditionalHttpServiceKind, TranslationLanguage, BING_CHINA_HOST,
+    BING_GLOBAL_HOST, BING_MAX_TEXT_LENGTH_UTF16, BING_USER_AGENT, CAIYUN_TRANSLATE_ENDPOINT,
     DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT, NIUTRANS_MAX_TEXT_LENGTH_UTF16,
     NIUTRANS_TRANSLATE_ENDPOINT, VOLCANO_MAX_TEXT_LENGTH_UTF16, VOLCANO_TRANSLATE_ENDPOINT,
     VOLCANO_TRANSLATE_HOST,
@@ -736,6 +739,215 @@ fn translate_traditional_http_service_executes_volcano_plan() {
         .headers
         .iter()
         .any(|(key, _)| key == "Authorization"));
+}
+
+const BING_HTML_SAMPLE: &str = r#"
+<html><head>
+<script>var _G = {IG:"A1B2C3D4E5F6",}; </script>
+<div class="rms_iml" data-iid="translator.5028.3"></div>
+<script>
+var params_AbusePreventionHelper = [1700000000000,"abusetoken_XyZ",3600000];
+</script>
+</head></html>
+"#;
+
+#[test]
+fn bing_credentials_parse_extracts_session_fields() {
+    let credentials = parse_bing_credentials_from_html(BING_HTML_SAMPLE).unwrap();
+    assert_eq!(
+        credentials,
+        BingCredentials {
+            ig: "A1B2C3D4E5F6".to_string(),
+            iid: "translator.5028.3".to_string(),
+            token: "abusetoken_XyZ".to_string(),
+            key: 1_700_000_000_000,
+            expiry_interval_ms: 3_600_000,
+        }
+    );
+}
+
+#[test]
+fn bing_credentials_parse_defaults_iid_and_rejects_missing_token() {
+    // No data-iid → legacy default IID; no IG → empty (caller generates one).
+    let html = r#"<script>params_AbusePreventionHelper = [42,"tok",60000];</script>"#;
+    let credentials = parse_bing_credentials_from_html(html).unwrap();
+    assert_eq!(credentials.iid, "translator.5023.1");
+    assert_eq!(credentials.ig, "");
+    assert_eq!(credentials.token, "tok");
+
+    // Missing abuse-prevention params is a hard service error.
+    let error = parse_bing_credentials_from_html("<html>no creds here</html>").unwrap_err();
+    assert_eq!(error.code, OpenAiExecutionErrorCode::ServiceUnavailable);
+    assert_eq!(error.service_id.as_deref(), Some("bing"));
+}
+
+#[test]
+fn bing_translate_request_plan_matches_legacy_endpoint_headers_and_body() {
+    let credentials = BingCredentials {
+        ig: "IGVALUE".to_string(),
+        iid: "translator.5028.3".to_string(),
+        token: "tok123".to_string(),
+        key: 987654321,
+        expiry_interval_ms: 3_600_000,
+    };
+    let plan = build_bing_translate_request_plan(
+        &credentials,
+        BING_GLOBAL_HOST,
+        "Hello",
+        TranslationLanguage::English,
+        TranslationLanguage::SimplifiedChinese,
+        7,
+    )
+    .unwrap();
+
+    assert_eq!(plan.method, "POST");
+    assert_eq!(plan.service_kind, TraditionalHttpServiceKind::Bing);
+    assert!(plan
+        .endpoint
+        .starts_with("https://www.bing.com/ttranslatev3?isVertical=1"));
+    assert!(plan.endpoint.contains("IG=IGVALUE"));
+    assert!(plan.endpoint.contains("IID=translator.5028.3"));
+    assert!(plan.endpoint.contains("SFX=7"));
+
+    let body = plan.body.as_deref().unwrap();
+    assert!(body.contains("fromLang=en"));
+    assert!(body.contains("to=zh-Hans"));
+    assert!(body.contains("text=Hello"));
+    assert!(body.contains("token=tok123"));
+    assert!(body.contains("key=987654321"));
+    assert!(body.contains("tryFetchingGenderDebiasedTranslations=true"));
+
+    let header = |name: &str| {
+        plan.headers
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
+    };
+    assert_eq!(
+        header("Content-Type"),
+        Some("application/x-www-form-urlencoded")
+    );
+    assert_eq!(header("User-Agent"), Some(BING_USER_AGENT));
+    assert_eq!(header("Referer"), Some("https://www.bing.com/translator"));
+    assert_eq!(header("Origin"), Some("https://www.bing.com"));
+}
+
+#[test]
+fn bing_request_plan_uses_china_host_and_truncates_to_legacy_length() {
+    assert_eq!(bing_host(true), BING_CHINA_HOST);
+    assert_eq!(bing_host(false), BING_GLOBAL_HOST);
+
+    let credentials = BingCredentials {
+        ig: "IG".to_string(),
+        iid: "iid".to_string(),
+        token: "t".to_string(),
+        key: 1,
+        expiry_interval_ms: 3_600_000,
+    };
+    let long_text = "a".repeat(BING_MAX_TEXT_LENGTH_UTF16 + 500);
+    let plan = build_bing_translate_request_plan(
+        &credentials,
+        bing_host(true),
+        &long_text,
+        TranslationLanguage::Auto,
+        TranslationLanguage::English,
+        1,
+    )
+    .unwrap();
+
+    assert!(plan
+        .endpoint
+        .starts_with("https://cn.bing.com/ttranslatev3"));
+    // Auto maps to the legacy "auto-detect" source code.
+    assert!(plan
+        .body
+        .as_deref()
+        .unwrap()
+        .contains("fromLang=auto-detect"));
+
+    // The form `text` field is truncated to the 3000 UTF-16 cap (ASCII 'a' is unescaped).
+    let body = plan.body.as_deref().unwrap();
+    let text_field = body
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("text="))
+        .unwrap();
+    assert_eq!(text_field.chars().count(), BING_MAX_TEXT_LENGTH_UTF16);
+}
+
+#[test]
+fn bing_language_codes_preserve_legacy_special_cases() {
+    assert_eq!(bing_language_code(TranslationLanguage::Auto), "auto-detect");
+    assert_eq!(
+        bing_language_code(TranslationLanguage::SimplifiedChinese),
+        "zh-Hans"
+    );
+    assert_eq!(
+        bing_language_code(TranslationLanguage::TraditionalChinese),
+        "zh-Hant"
+    );
+    assert_eq!(bing_language_code(TranslationLanguage::Norwegian), "nb");
+    assert_eq!(bing_language_code(TranslationLanguage::Filipino), "fil");
+    assert_eq!(bing_language_code(TranslationLanguage::English), "en");
+
+    assert_eq!(
+        from_bing_language_code("zh-Hans"),
+        TranslationLanguage::SimplifiedChinese
+    );
+    assert_eq!(
+        from_bing_language_code("ZH-HANT"),
+        TranslationLanguage::TraditionalChinese
+    );
+    assert_eq!(
+        from_bing_language_code("nb"),
+        TranslationLanguage::Norwegian
+    );
+    assert_eq!(
+        from_bing_language_code("fil"),
+        TranslationLanguage::Filipino
+    );
+    assert_eq!(from_bing_language_code("en"), TranslationLanguage::English);
+}
+
+#[test]
+fn bing_response_parser_matches_legacy_success_and_errors() {
+    let success = parse_bing_translation_response(
+        r#"[{"detectedLanguage":{"language":"en","score":1.0},"translations":[{"text":"你好","to":"zh-Hans"}]}]"#,
+        "Hello",
+        "bing".to_string(),
+        "Bing Translate".to_string(),
+    )
+    .unwrap();
+    assert_eq!(success.translated_text, "你好");
+    assert_eq!(success.detected_language.as_deref(), Some("en"));
+
+    // Bing error object surfaces as ServiceUnavailable.
+    let error = parse_bing_translation_response(
+        r#"{"statusCode":400,"errorMessage":"Invalid request"}"#,
+        "Hello",
+        "bing".to_string(),
+        "Bing Translate".to_string(),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, OpenAiExecutionErrorCode::ServiceUnavailable);
+    assert!(error.message.contains("Invalid request"));
+    assert_eq!(error.service_id.as_deref(), Some("bing"));
+
+    // Empty array / unexpected shape is an invalid response.
+    let invalid = parse_bing_translation_response(
+        "[]",
+        "Hello",
+        "bing".to_string(),
+        "Bing Translate".to_string(),
+    )
+    .unwrap_err();
+    assert_eq!(invalid.code, OpenAiExecutionErrorCode::InvalidResponse);
+}
+
+#[test]
+fn bing_credentials_expiry_tracks_legacy_interval() {
+    assert!(bing_credentials_expired(0, 4000, 3600));
+    assert!(!bing_credentials_expired(0, 3000, 3600));
+    assert!(!bing_credentials_expired(1000, 1000, 3600));
 }
 
 #[derive(Default)]

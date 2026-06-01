@@ -1202,6 +1202,51 @@ fn native_bing_quick_translate_backend_runs_two_phase_flow() {
 }
 
 #[test]
+fn quick_translate_applies_and_renders_result_alternatives() {
+    let mut state = EasydictUiState::default();
+    state.source_text = "Hello".to_string();
+    state.results = vec![QuickTranslateResult::new("linguee", "Linguee Dictionary", true).into()];
+    let plan = begin_quick_translate(&mut state).expect("translate should begin");
+
+    let dto = TranslationResultDto {
+        translated_text: "Hallo".to_string(),
+        service_id: Some("linguee".to_string()),
+        service_name: Some("Linguee Dictionary".to_string()),
+        detected_language: None,
+        result_kind: Some("Success".to_string()),
+        info_message: None,
+        timing_ms: Some(12),
+        alternatives: Some(vec!["Servus".to_string(), "Hallöchen".to_string()]),
+    };
+    let update = QuickTranslateServiceUpdate {
+        query_id: plan.query_id,
+        outcome: QuickTranslateServiceOutcome {
+            service: plan.services[0].clone(),
+            grammar_result: None,
+            streamed_chunks: Vec::new(),
+            result: Ok(dto),
+        },
+    };
+
+    apply_quick_translate_service_update(&mut state, update);
+
+    let preview = &state.results[0];
+    assert_eq!(
+        preview.alternatives.as_deref(),
+        Some(&["Servus".to_string(), "Hallöchen".to_string()][..])
+    );
+    // The rendered body appends alternatives below the primary translation.
+    let body = preview.result_body();
+    assert!(body.starts_with("Hallo"));
+    assert!(body.contains("Also: Servus; Hallöchen"));
+
+    // A later query clears stale alternatives.
+    state.source_text = "World".to_string();
+    begin_quick_translate(&mut state).expect("second query begins");
+    assert_eq!(state.results[0].alternatives, None);
+}
+
+#[test]
 fn apply_grammar_result_hydrates_structured_preview_body_and_metadata() {
     let mut state = EasydictUiState::default();
     state.source_text = "I has a apple".to_string();
@@ -3417,6 +3462,7 @@ fn dto(
         result_kind: Some("Success".to_string()),
         info_message: None,
         timing_ms,
+        alternatives: None,
     }
 }
 
@@ -3434,6 +3480,7 @@ fn no_result_dto(
         result_kind: Some("NoResult".to_string()),
         info_message: Some(info_message.to_string()),
         timing_ms,
+        alternatives: None,
     }
 }
 

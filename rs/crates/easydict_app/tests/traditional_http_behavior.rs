@@ -1013,6 +1013,22 @@ fn linguee_response_parser_extracts_primary_translation_with_fallback() {
     .unwrap();
     assert_eq!(result.translated_text, "Hallo");
     assert_eq!(result.detected_language, None);
+    // Secondary translations are preserved as alternatives.
+    assert_eq!(
+        result.alternatives.as_deref(),
+        Some(&["Servus".to_string()][..])
+    );
+
+    // A single translation produces no alternatives.
+    let single = parse_linguee_translation_response(
+        r#"[{"translations":[{"text":"Hallo"}]}]"#,
+        "Hello",
+        "linguee".to_string(),
+        "Linguee Dictionary".to_string(),
+    )
+    .unwrap();
+    assert_eq!(single.translated_text, "Hallo");
+    assert_eq!(single.alternatives, None);
 
     // Empty / missing translations fall back to the original text.
     let fallback = parse_linguee_translation_response(
@@ -1023,6 +1039,7 @@ fn linguee_response_parser_extracts_primary_translation_with_fallback() {
     )
     .unwrap();
     assert_eq!(fallback.translated_text, "Hello");
+    assert_eq!(fallback.alternatives, None);
 }
 
 #[test]

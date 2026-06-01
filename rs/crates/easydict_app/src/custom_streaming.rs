@@ -349,6 +349,7 @@ pub fn translate_custom_streaming_service<C: CustomStreamingHttpClient>(
         result_kind: Some("Success".to_string()),
         info_message: None,
         timing_ms: None,
+        alternatives: None,
     })
 }
 

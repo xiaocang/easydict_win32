@@ -46,6 +46,9 @@ public sealed class TranslationResultDto
 
     [JsonPropertyName("timingMs")]
     public long? TimingMs { get; init; }
+
+    [JsonPropertyName("alternatives")]
+    public IReadOnlyList<string>? Alternatives { get; init; }
 }
 
 public sealed class TranslateChunkEventData

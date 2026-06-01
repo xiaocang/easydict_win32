@@ -335,6 +335,7 @@ impl<C: OpenAiHttpClient> QuickTranslateBackend for NativeOpenAiQuickTranslateBa
                 result_kind: Some("Success".to_string()),
                 info_message: None,
                 timing_ms: None,
+                alternatives: None,
             },
             chunks,
         })
@@ -488,6 +489,7 @@ impl<C: CustomStreamingHttpClient> QuickTranslateBackend
                 result_kind: Some("Success".to_string()),
                 info_message: None,
                 timing_ms: None,
+                alternatives: None,
             },
             chunks,
         })
@@ -1602,6 +1604,7 @@ pub fn apply_quick_translate_stream_chunk(
     item.body.push_str(&chunk.text);
     item.streamed_chunks.push(chunk.text);
     item.grammar_result = None;
+    item.alternatives = None;
     item.no_result = false;
     item.service_name = chunk.service.name;
     item.status = ResultStatus::Streaming;
@@ -1643,6 +1646,7 @@ fn mark_quick_translate_started(
         if active_ids.contains(result.id.as_str()) {
             result.body.clear();
             result.grammar_result = None;
+            result.alternatives = None;
             result.streamed_chunks.clear();
             result.no_result = false;
             result.status = ResultStatus::Loading;
@@ -1791,6 +1795,7 @@ fn mdx_lookup_result_to_translation_result(
             result_kind: Some("NoResult".to_string()),
             info_message: Some(format!("No result found in dictionary: {query}")),
             timing_ms: None,
+            alternatives: None,
         };
     }
 
@@ -1814,6 +1819,7 @@ fn mdx_lookup_result_to_translation_result(
         result_kind: Some("Success".to_string()),
         info_message: None,
         timing_ms: None,
+        alternatives: None,
     }
 }
 
@@ -1837,6 +1843,7 @@ fn grammar_result_to_translation_result(
         result_kind: Some("Success".to_string()),
         info_message: None,
         timing_ms: result.timing_ms,
+        alternatives: None,
     }
 }
 
@@ -1924,6 +1931,11 @@ fn apply_success(
         result.translated_text.clone()
     };
     item.grammar_result = grammar_result;
+    item.alternatives = if no_result {
+        None
+    } else {
+        result.alternatives.clone()
+    };
     item.streamed_chunks = streamed_chunks;
     item.no_result = no_result;
     item.service_name = result
@@ -1948,6 +1960,7 @@ fn apply_error(
     let item = result_slot(results, service);
     item.body = error.message;
     item.grammar_result = None;
+    item.alternatives = None;
     item.streamed_chunks.clear();
     item.no_result = false;
     item.service_name = service.name.clone();

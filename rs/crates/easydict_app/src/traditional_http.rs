@@ -1080,26 +1080,33 @@ pub fn parse_linguee_translation_response(
         .with_service_id(service_id.clone())
     })?;
 
-    // Root is an array of dictionary entries; the primary translation is the
-    // first entry's first translation text.
-    let translated_text = root
+    // Root is an array of dictionary entries; the first entry's translations
+    // give the primary text (index 0) and the alternatives (indices 1..).
+    let translation_texts: Vec<String> = root
         .as_array()
         .and_then(|entries| entries.first())
         .and_then(|entry| entry.get("translations"))
         .and_then(Value::as_array)
-        .and_then(|translations| translations.first())
-        .and_then(|translation| translation.get("text"))
-        .and_then(Value::as_str)
-        .filter(|text| !text.is_empty())
-        .unwrap_or(original_text)
-        .to_string();
+        .map(|translations| {
+            translations
+                .iter()
+                .filter_map(|translation| translation.get("text"))
+                .filter_map(Value::as_str)
+                .filter(|text| !text.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
 
-    Ok(success_result(
-        translated_text,
-        service_id,
-        service_name,
-        None,
-    ))
+    let mut texts = translation_texts.into_iter();
+    let translated_text = texts.next().unwrap_or_else(|| original_text.to_string());
+    let alternatives: Vec<String> = texts.collect();
+
+    let mut result = success_result(translated_text, service_id, service_name, None);
+    if !alternatives.is_empty() {
+        result.alternatives = Some(alternatives);
+    }
+    Ok(result)
 }
 
 pub fn linguee_language_code(
@@ -1211,6 +1218,7 @@ pub fn parse_google_translation_response(
         result_kind: Some("Success".to_string()),
         info_message: None,
         timing_ms: None,
+        alternatives: None,
     })
 }
 
@@ -1608,6 +1616,7 @@ fn success_result(
         result_kind: Some("Success".to_string()),
         info_message: None,
         timing_ms: None,
+        alternatives: None,
     }
 }
 

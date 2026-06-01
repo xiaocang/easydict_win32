@@ -276,6 +276,7 @@ pub struct TranslationResultPreview {
     pub service_name: String,
     pub body: String,
     pub grammar_result: Option<GrammarCorrectionPreview>,
+    pub alternatives: Option<Vec<String>>,
     pub streamed_chunks: Vec<String>,
     pub no_result: bool,
     pub status: ResultStatus,
@@ -300,6 +301,7 @@ impl TranslationResultPreview {
             service_name: service_name.into(),
             body: body.into(),
             grammar_result: None,
+            alternatives: None,
             streamed_chunks: Vec::new(),
             no_result: false,
             status: ResultStatus::Ready,
@@ -386,7 +388,22 @@ impl TranslationResultPreview {
             return self.streamed_chunks.join("");
         }
 
-        self.body.clone()
+        let mut body = self.body.clone();
+        if let Some(alternatives) = &self.alternatives {
+            let alternatives: Vec<&str> = alternatives
+                .iter()
+                .map(String::as_str)
+                .filter(|alt| !alt.trim().is_empty())
+                .collect();
+            if !alternatives.is_empty() {
+                if !body.is_empty() {
+                    body.push('\n');
+                }
+                body.push_str("Also: ");
+                body.push_str(&alternatives.join("; "));
+            }
+        }
+        body
     }
 
     fn result_metadata(&self) -> Option<String> {

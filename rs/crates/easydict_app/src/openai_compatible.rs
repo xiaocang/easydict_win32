@@ -530,6 +530,7 @@ pub fn translate_openai_compatible<C: OpenAiHttpClient>(
         result_kind: Some("Success".to_string()),
         info_message: None,
         timing_ms: None,
+        alternatives: None,
     })
 }
 

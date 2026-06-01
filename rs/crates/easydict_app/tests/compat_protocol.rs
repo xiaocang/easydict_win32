@@ -136,6 +136,7 @@ fn translate_stream_events_roundtrip_with_chunk_and_done_payloads() {
             result_kind: Some("Success".to_string()),
             info_message: None,
             timing_ms: Some(99),
+            alternatives: None,
         },
     );
 
@@ -143,12 +144,37 @@ fn translate_stream_events_roundtrip_with_chunk_and_done_payloads() {
     assert!(done_json.contains("\"event\":\"translate_done\""));
     assert!(done_json.contains("\"translatedText\":\"你好\""));
     assert!(done_json.contains("\"resultKind\":\"Success\""));
+    // Absent alternatives are omitted from the wire for back-compat.
+    assert!(!done_json.contains("alternatives"));
 
     let done_back: IpcEvent<TranslationResultDto> =
         deserialize_json_line(&done_json).expect("done event deserializes");
     assert_eq!(
         done_back.data.expect("done data").service_id.as_deref(),
         Some("openai")
+    );
+}
+
+#[test]
+fn translation_result_dto_roundtrips_alternatives_with_camel_case_field() {
+    let dto = TranslationResultDto {
+        translated_text: "Hallo".to_string(),
+        service_id: Some("linguee".to_string()),
+        service_name: Some("Linguee Dictionary".to_string()),
+        detected_language: None,
+        result_kind: Some("Success".to_string()),
+        info_message: None,
+        timing_ms: None,
+        alternatives: Some(vec!["Servus".to_string(), "Hallöchen".to_string()]),
+    };
+
+    let json = serialize_json_line(&dto).expect("dto serializes");
+    assert!(json.contains("\"alternatives\":[\"Servus\",\"Hallöchen\"]"));
+
+    let back: TranslationResultDto = deserialize_json_line(&json).expect("dto deserializes");
+    assert_eq!(
+        back.alternatives.as_deref(),
+        Some(&["Servus".to_string(), "Hallöchen".to_string()][..])
     );
 }
 

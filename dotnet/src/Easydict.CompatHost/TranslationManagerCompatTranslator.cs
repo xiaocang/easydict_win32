@@ -53,6 +53,7 @@ public sealed class TranslationManagerCompatTranslator : ICompatHostTranslator, 
             ResultKind = result.ResultKind.ToString(),
             InfoMessage = result.InfoMessage,
             TimingMs = result.TimingMs,
+            Alternatives = result.Alternatives,
         };
     }
 

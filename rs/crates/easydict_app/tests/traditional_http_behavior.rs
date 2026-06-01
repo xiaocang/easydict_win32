@@ -11,11 +11,12 @@ use easydict_app::{
     parse_deepl_api_translation_response, parse_google_translation_response,
     parse_linguee_translation_response, parse_niutrans_translation_response,
     parse_volcano_translation_response, traditional_http_config_for_service,
-    traditional_http_error_from_status, translate_traditional_http_service, volcano_language_code,
-    volcano_timestamps_from_epoch_seconds, BingCredentials, OpenAiExecutionError,
-    OpenAiExecutionErrorCode, TraditionalHttpClient, TraditionalHttpRequestPlan,
-    TraditionalHttpServiceConfig, TraditionalHttpServiceKind, TranslationLanguage, BING_CHINA_HOST,
-    BING_GLOBAL_HOST, BING_MAX_TEXT_LENGTH_UTF16, BING_USER_AGENT, CAIYUN_TRANSLATE_ENDPOINT,
+    traditional_http_error_from_status, translate_bing_service, translate_traditional_http_service,
+    volcano_language_code, volcano_timestamps_from_epoch_seconds, BingCredentials, BingHttpClient,
+    BingHttpResponse, BingTranslatorPage, OpenAiExecutionError, OpenAiExecutionErrorCode,
+    TraditionalHttpClient, TraditionalHttpRequestPlan, TraditionalHttpServiceConfig,
+    TraditionalHttpServiceKind, TranslationLanguage, BING_CHINA_HOST, BING_GLOBAL_HOST,
+    BING_MAX_TEXT_LENGTH_UTF16, BING_USER_AGENT, CAIYUN_TRANSLATE_ENDPOINT,
     DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT, LINGUEE_TRANSLATE_ENDPOINT,
     NIUTRANS_MAX_TEXT_LENGTH_UTF16, NIUTRANS_TRANSLATE_ENDPOINT, VOLCANO_MAX_TEXT_LENGTH_UTF16,
     VOLCANO_TRANSLATE_ENDPOINT, VOLCANO_TRANSLATE_HOST,
@@ -1061,6 +1062,194 @@ fn traditional_http_config_routes_linguee_only_when_feature_enabled() {
 #[test]
 fn traditional_http_config_omits_linguee_without_feature() {
     assert!(traditional_http_config_for_service("linguee", &SettingsSnapshot::default()).is_none());
+}
+
+struct FakeBingHttpClient {
+    html: String,
+    resolved_host: String,
+    translate_responses: VecDeque<Result<BingHttpResponse, OpenAiExecutionError>>,
+    translate_plans: Vec<TraditionalHttpRequestPlan>,
+    fetch_count: usize,
+}
+
+impl FakeBingHttpClient {
+    fn new(
+        html: &str,
+        responses: impl IntoIterator<Item = Result<BingHttpResponse, OpenAiExecutionError>>,
+    ) -> Self {
+        Self {
+            html: html.to_string(),
+            resolved_host: "www.bing.com".to_string(),
+            translate_responses: responses.into_iter().collect(),
+            translate_plans: Vec::new(),
+            fetch_count: 0,
+        }
+    }
+}
+
+impl BingHttpClient for FakeBingHttpClient {
+    fn fetch_translator_html(
+        &mut self,
+        _host: &str,
+    ) -> Result<BingTranslatorPage, OpenAiExecutionError> {
+        self.fetch_count += 1;
+        Ok(BingTranslatorPage {
+            html: self.html.clone(),
+            resolved_host: self.resolved_host.clone(),
+        })
+    }
+
+    fn execute_translate(
+        &mut self,
+        plan: &TraditionalHttpRequestPlan,
+    ) -> Result<BingHttpResponse, OpenAiExecutionError> {
+        self.translate_plans.push(plan.clone());
+        self.translate_responses
+            .pop_front()
+            .expect("test Bing translate response should be queued")
+    }
+}
+
+fn ok_bing_response(status: u16, body: &str) -> Result<BingHttpResponse, OpenAiExecutionError> {
+    Ok(BingHttpResponse {
+        status,
+        body: body.to_string(),
+    })
+}
+
+const BING_TRANSLATE_SUCCESS: &str = r#"[{"detectedLanguage":{"language":"en","score":1.0},"translations":[{"text":"你好","to":"zh-Hans"}]}]"#;
+
+#[test]
+fn bing_two_phase_executor_fetches_credentials_then_translates() {
+    let mut client = FakeBingHttpClient::new(
+        BING_HTML_SAMPLE,
+        [ok_bing_response(200, BING_TRANSLATE_SUCCESS)],
+    );
+    let result = translate_bing_service(
+        &mut client,
+        BING_GLOBAL_HOST,
+        "Hello",
+        TranslationLanguage::English,
+        TranslationLanguage::SimplifiedChinese,
+        "bing",
+        "Bing Translate",
+    )
+    .unwrap();
+
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(result.detected_language.as_deref(), Some("en"));
+    assert_eq!(result.service_id.as_deref(), Some("bing"));
+    assert_eq!(client.fetch_count, 1);
+    assert_eq!(client.translate_plans.len(), 1);
+    // Credentials parsed from the page flow into the translate request.
+    assert!(client.translate_plans[0]
+        .endpoint
+        .contains("IG=A1B2C3D4E5F6"));
+    assert!(client.translate_plans[0].endpoint.contains("SFX=1"));
+    assert!(client.translate_plans[0]
+        .body
+        .as_deref()
+        .unwrap()
+        .contains("token=abusetoken_XyZ"));
+}
+
+#[test]
+fn bing_two_phase_executor_retries_on_rate_limit_with_fresh_credentials() {
+    let mut client = FakeBingHttpClient::new(
+        BING_HTML_SAMPLE,
+        [
+            ok_bing_response(429, "rate limited"),
+            ok_bing_response(200, BING_TRANSLATE_SUCCESS),
+        ],
+    );
+    let result = translate_bing_service(
+        &mut client,
+        BING_GLOBAL_HOST,
+        "Hello",
+        TranslationLanguage::English,
+        TranslationLanguage::SimplifiedChinese,
+        "bing",
+        "Bing Translate",
+    )
+    .unwrap();
+
+    assert_eq!(result.translated_text, "你好");
+    // Retry refetches credentials and bumps the SFX cache-buster.
+    assert_eq!(client.fetch_count, 2);
+    assert_eq!(client.translate_plans.len(), 2);
+    assert!(client.translate_plans[1].endpoint.contains("SFX=2"));
+}
+
+#[test]
+fn bing_two_phase_executor_retries_on_non_json_body() {
+    let mut client = FakeBingHttpClient::new(
+        BING_HTML_SAMPLE,
+        [
+            ok_bing_response(200, "<html>captcha challenge</html>"),
+            ok_bing_response(200, BING_TRANSLATE_SUCCESS),
+        ],
+    );
+    let result = translate_bing_service(
+        &mut client,
+        BING_GLOBAL_HOST,
+        "Hello",
+        TranslationLanguage::English,
+        TranslationLanguage::SimplifiedChinese,
+        "bing",
+        "Bing Translate",
+    )
+    .unwrap();
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(client.translate_plans.len(), 2);
+
+    // A persistent non-JSON body fails as InvalidResponse after the retry.
+    let mut failing = FakeBingHttpClient::new(
+        BING_HTML_SAMPLE,
+        [
+            ok_bing_response(200, "<html>captcha</html>"),
+            ok_bing_response(200, "still not json"),
+        ],
+    );
+    let error = translate_bing_service(
+        &mut failing,
+        BING_GLOBAL_HOST,
+        "Hello",
+        TranslationLanguage::English,
+        TranslationLanguage::SimplifiedChinese,
+        "bing",
+        "Bing Translate",
+    )
+    .unwrap_err();
+    assert_eq!(error.code, OpenAiExecutionErrorCode::InvalidResponse);
+    assert_eq!(error.service_id.as_deref(), Some("bing"));
+}
+
+#[test]
+fn bing_two_phase_executor_generates_ig_when_page_omits_it() {
+    // HTML without an IG token but with valid abuse-prevention params.
+    let html = r#"<script>params_AbusePreventionHelper = [42,"tok",60000];</script>"#;
+    let mut client = FakeBingHttpClient::new(html, [ok_bing_response(200, BING_TRANSLATE_SUCCESS)]);
+    translate_bing_service(
+        &mut client,
+        BING_GLOBAL_HOST,
+        "Hello",
+        TranslationLanguage::English,
+        TranslationLanguage::SimplifiedChinese,
+        "bing",
+        "Bing Translate",
+    )
+    .unwrap();
+
+    let endpoint = &client.translate_plans[0].endpoint;
+    let ig = endpoint
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("IG="))
+        .unwrap();
+    // The generated fallback IG is a 32-char uppercase hex string.
+    assert_eq!(ig.len(), 32);
+    assert!(ig
+        .chars()
+        .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_lowercase()));
 }
 
 #[derive(Default)]

@@ -21,8 +21,10 @@ use crate::state::{
     GrammarCorrectionPreview, Message, TranslationResultPreview,
 };
 use crate::traditional_http::{
-    traditional_http_config_for_service, translate_traditional_http_service,
+    traditional_http_config_for_service, translate_bing_service,
+    translate_traditional_http_service, BingHttpClient, ReqwestBingHttpClient,
     ReqwestTraditionalHttpClient, TraditionalHttpClient, TraditionalHttpServiceConfig,
+    BING_GLOBAL_HOST,
 };
 use crate::translation_language::TranslationLanguage;
 use crate::translation_services::find_translation_service_descriptor;
@@ -682,6 +684,77 @@ impl<C> NativeTraditionalHttpQuickTranslateBackend<C> {
     }
 }
 
+/// Native backend for Bing's stateful two-phase free web flow (fetch session
+/// credentials from the translator page, then translate). Uses the global host;
+/// the region-based China-host toggle is not a persisted setting yet.
+pub struct NativeBingQuickTranslateBackend<C> {
+    http_client: C,
+}
+
+impl<C> NativeBingQuickTranslateBackend<C> {
+    pub fn new(http_client: C) -> Self {
+        Self { http_client }
+    }
+
+    pub fn http_client(&self) -> &C {
+        &self.http_client
+    }
+}
+
+impl<C: BingHttpClient> QuickTranslateBackend for NativeBingQuickTranslateBackend<C> {
+    fn configure(
+        &mut self,
+        _settings: &SettingsSnapshot,
+    ) -> Result<(), QuickTranslateBackendError> {
+        Ok(())
+    }
+
+    fn translate(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<TranslationResultDto, QuickTranslateBackendError> {
+        translate_bing_service(
+            &mut self.http_client,
+            BING_GLOBAL_HOST,
+            &params.text,
+            params
+                .from
+                .as_deref()
+                .map(TranslationLanguage::from_code)
+                .unwrap_or(TranslationLanguage::Auto),
+            params
+                .to
+                .as_deref()
+                .map(TranslationLanguage::from_code)
+                .unwrap_or(TranslationLanguage::English),
+            "bing",
+            native_openai_service_name("bing"),
+        )
+        .map_err(QuickTranslateBackendError::from)
+    }
+
+    fn translate_stream(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
+        let result = self.translate(params)?;
+        let chunks = (!result.translated_text.is_empty())
+            .then(|| result.translated_text.clone())
+            .into_iter()
+            .collect();
+        Ok(QuickTranslateStreamResult { result, chunks })
+    }
+
+    fn correct_grammar(
+        &mut self,
+        _params: &GrammarCorrectParams,
+    ) -> Result<GrammarCorrectResultDto, QuickTranslateBackendError> {
+        Err(QuickTranslateBackendError::new(
+            "Grammar correction is not available in this backend",
+        ))
+    }
+}
+
 impl QuickTranslateBackend for CompatHostFacade {
     fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
         CompatHostFacade::configure(
@@ -1050,6 +1123,10 @@ pub fn run_quick_translate_service_with_packaged_host(
         return run_quick_translate_service_with_native_traditional_http(request);
     }
 
+    if request_uses_native_bing(&request) {
+        return run_quick_translate_service_with_native_bing(request);
+    }
+
     match CompatHostFacade::spawn_packaged(app_dir) {
         Ok(mut backend) => run_quick_translate_service(&mut backend, &request),
         Err(error) => service_error_update(request, error.to_string()),
@@ -1090,6 +1167,10 @@ fn run_quick_translate_streaming_service_with_packaged_host(
 
     if request_uses_native_traditional_http(&request) {
         return run_quick_translate_streaming_service_with_native_traditional_http(request, sender);
+    }
+
+    if request_uses_native_bing(&request) {
+        return run_quick_translate_streaming_service_with_native_bing(request, sender);
     }
 
     let mut backend = match CompatHostFacade::spawn_packaged(app_dir) {
@@ -1298,6 +1379,66 @@ fn run_quick_translate_streaming_service_with_native_traditional_http(
         }
         Err(error) => service_error_update(request, error.to_string()),
     }
+}
+
+fn run_quick_translate_service_with_native_bing(
+    request: QuickTranslateServiceRequest,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match ReqwestBingHttpClient::from_settings(&request.settings) {
+        Ok(client) => NativeBingQuickTranslateBackend::new(client),
+        Err(error) => return service_error_update(request, error.to_string()),
+    };
+
+    run_quick_translate_service(&mut backend, &request)
+}
+
+fn run_quick_translate_streaming_service_with_native_bing(
+    request: QuickTranslateServiceRequest,
+    sender: &UnboundedSender<Message>,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match ReqwestBingHttpClient::from_settings(&request.settings) {
+        Ok(client) => NativeBingQuickTranslateBackend::new(client),
+        Err(error) => return service_error_update(request, error.to_string()),
+    };
+
+    if let Err(error) = QuickTranslateBackend::configure(&mut backend, &request.settings) {
+        return service_error_update(request, error.to_string());
+    }
+
+    if request.execution_kind != QuickTranslateExecutionKind::TranslateStream {
+        return run_quick_translate_service(&mut backend, &request);
+    }
+
+    let query_id = request.query_id;
+    let service = request.service.clone();
+    match backend.translate_stream(&request.params) {
+        Ok(streamed) => {
+            for chunk in &streamed.chunks {
+                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
+                    QuickTranslateStreamChunk {
+                        query_id,
+                        service: service.clone(),
+                        text: chunk.clone(),
+                    },
+                ));
+            }
+
+            QuickTranslateServiceUpdate {
+                query_id,
+                outcome: QuickTranslateServiceOutcome {
+                    service: request.service,
+                    grammar_result: None,
+                    streamed_chunks: streamed.chunks,
+                    result: Ok(streamed.result),
+                },
+            }
+        }
+        Err(error) => service_error_update(request, error.to_string()),
+    }
+}
+
+fn request_uses_native_bing(request: &QuickTranslateServiceRequest) -> bool {
+    request.service.id == "bing"
 }
 
 fn request_uses_native_openai(request: &QuickTranslateServiceRequest) -> bool {

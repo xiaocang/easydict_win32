@@ -13,13 +13,15 @@ use easydict_app::{
     local_dictionary_query_token, parse_startup_activation, resolve_quick_query_language,
     resolve_startup_activation_disposition, run_local_dictionary_suggestion_request,
     run_quick_translate, run_quick_translate_service, startup_activation_task_for_args,
-    CustomStreamingHttpClient, CustomStreamingHttpRequestPlan, EasydictApp, EasydictUiState,
-    LocalDictionarySuggestion, LocalDictionarySuggestionBackend, LocalDictionarySuggestionError,
-    LocalDictionarySuggestionUpdate, Message, NativeCustomStreamingQuickTranslateBackend,
-    NativeOpenAiQuickTranslateBackend, NativeTraditionalHttpQuickTranslateBackend,
-    OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpRequestPlan,
-    QuickQueryMode, QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
-    QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
+    BingHttpClient, BingHttpResponse, BingTranslatorPage, CustomStreamingHttpClient,
+    CustomStreamingHttpRequestPlan, EasydictApp, EasydictUiState, LocalDictionarySuggestion,
+    LocalDictionarySuggestionBackend, LocalDictionarySuggestionError,
+    LocalDictionarySuggestionUpdate, Message, NativeBingQuickTranslateBackend,
+    NativeCustomStreamingQuickTranslateBackend, NativeOpenAiQuickTranslateBackend,
+    NativeTraditionalHttpQuickTranslateBackend, OpenAiExecutionError, OpenAiExecutionErrorCode,
+    OpenAiHttpClient, OpenAiHttpRequestPlan, QuickQueryMode, QuickTranslateBackend,
+    QuickTranslateBackendError, QuickTranslateExecutionKind, QuickTranslateOutcome,
+    QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface, ResultActionKind,
     SettingsLink, StartupActivation, StartupActivationDisposition, TraditionalHttpClient,
@@ -1135,6 +1137,68 @@ fn native_traditional_http_quick_translate_supports_caiyun_deepl_api_and_niutran
         .iter()
         .any(|(key, value)| key == "Authorization"
             && value.starts_with("HMAC-SHA256 Credential=volcano-akid/")));
+}
+
+struct FakeBingClient {
+    html: String,
+    response_body: String,
+}
+
+impl BingHttpClient for FakeBingClient {
+    fn fetch_translator_html(
+        &mut self,
+        _host: &str,
+    ) -> Result<BingTranslatorPage, OpenAiExecutionError> {
+        Ok(BingTranslatorPage {
+            html: self.html.clone(),
+            resolved_host: "www.bing.com".to_string(),
+        })
+    }
+
+    fn execute_translate(
+        &mut self,
+        _plan: &TraditionalHttpRequestPlan,
+    ) -> Result<BingHttpResponse, OpenAiExecutionError> {
+        Ok(BingHttpResponse {
+            status: 200,
+            body: self.response_body.clone(),
+        })
+    }
+}
+
+#[test]
+fn native_bing_quick_translate_backend_runs_two_phase_flow() {
+    let client = FakeBingClient {
+        html: r#"<script>var _G={IG:"IGTOKEN1234"};</script>
+            <div data-iid="translator.5028.3"></div>
+            <script>params_AbusePreventionHelper=[1700000000000,"tok",3600000];</script>"#
+            .to_string(),
+        response_body:
+            r#"[{"detectedLanguage":{"language":"en"},"translations":[{"text":"你好"}]}]"#
+                .to_string(),
+    };
+    let mut backend = NativeBingQuickTranslateBackend::new(client);
+
+    let request = QuickTranslateServiceRequest {
+        query_id: 40,
+        service: quick_service("bing", "Bing Translate", false, false),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::Translate,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["bing".to_string()]),
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot::default(),
+    };
+
+    let update = run_quick_translate_service(&mut backend, &request);
+    let result = update.outcome.result.expect("native Bing should succeed");
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(result.service_id.as_deref(), Some("bing"));
+    assert_eq!(result.detected_language.as_deref(), Some("en"));
 }
 
 #[test]

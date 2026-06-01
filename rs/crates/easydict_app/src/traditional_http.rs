@@ -94,40 +94,49 @@ pub struct ReqwestTraditionalHttpClient {
 
 impl ReqwestTraditionalHttpClient {
     pub fn from_settings(settings: &SettingsSnapshot) -> Result<Self, OpenAiExecutionError> {
-        let mut builder = reqwest::blocking::Client::builder().timeout(Duration::from_secs(60));
-
-        if settings.proxy_enabled.unwrap_or(false) {
-            if let Some(proxy_uri) = normalized_optional(settings.proxy_uri.as_deref()) {
-                let proxy = if settings.proxy_bypass_local.unwrap_or(false) {
-                    let proxy_url = reqwest::Url::parse(&proxy_uri).map_err(|error| {
-                        OpenAiExecutionError::new(
-                            OpenAiExecutionErrorCode::InvalidResponse,
-                            format!("Invalid traditional HTTP proxy URI '{proxy_uri}': {error}"),
-                        )
-                    })?;
-                    reqwest::Proxy::custom(move |url| {
-                        (!is_loopback_url(url)).then(|| proxy_url.clone())
-                    })
-                } else {
-                    reqwest::Proxy::all(&proxy_uri).map_err(|error| {
-                        OpenAiExecutionError::new(
-                            OpenAiExecutionErrorCode::InvalidResponse,
-                            format!("Invalid traditional HTTP proxy URI '{proxy_uri}': {error}"),
-                        )
-                    })?
-                };
-                builder = builder.proxy(proxy);
-            }
-        }
-
-        let client = builder.build().map_err(|error| {
-            OpenAiExecutionError::new(
-                OpenAiExecutionErrorCode::NetworkError,
-                format!("Could not create traditional HTTP client: {error}"),
-            )
-        })?;
-        Ok(Self { client })
+        Ok(Self {
+            client: build_proxy_aware_blocking_client(settings)?,
+        })
     }
+}
+
+/// Build a 60s-timeout blocking reqwest client honoring the proxy snapshot
+/// settings (with loopback bypass), shared by the traditional-HTTP providers.
+fn build_proxy_aware_blocking_client(
+    settings: &SettingsSnapshot,
+) -> Result<reqwest::blocking::Client, OpenAiExecutionError> {
+    let mut builder = reqwest::blocking::Client::builder().timeout(Duration::from_secs(60));
+
+    if settings.proxy_enabled.unwrap_or(false) {
+        if let Some(proxy_uri) = normalized_optional(settings.proxy_uri.as_deref()) {
+            let proxy = if settings.proxy_bypass_local.unwrap_or(false) {
+                let proxy_url = reqwest::Url::parse(&proxy_uri).map_err(|error| {
+                    OpenAiExecutionError::new(
+                        OpenAiExecutionErrorCode::InvalidResponse,
+                        format!("Invalid traditional HTTP proxy URI '{proxy_uri}': {error}"),
+                    )
+                })?;
+                reqwest::Proxy::custom(move |url| {
+                    (!is_loopback_url(url)).then(|| proxy_url.clone())
+                })
+            } else {
+                reqwest::Proxy::all(&proxy_uri).map_err(|error| {
+                    OpenAiExecutionError::new(
+                        OpenAiExecutionErrorCode::InvalidResponse,
+                        format!("Invalid traditional HTTP proxy URI '{proxy_uri}': {error}"),
+                    )
+                })?
+            };
+            builder = builder.proxy(proxy);
+        }
+    }
+
+    builder.build().map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::NetworkError,
+            format!("Could not create traditional HTTP client: {error}"),
+        )
+    })
 }
 
 impl TraditionalHttpClient for ReqwestTraditionalHttpClient {
@@ -822,6 +831,204 @@ pub fn from_bing_language_code(code: &str) -> TranslationLanguage {
         "nb" => TranslationLanguage::Norwegian,
         _ => TranslationLanguage::from_iso639(code),
     }
+}
+
+/// The Bing translator page fetch result: raw HTML plus the host after any
+/// redirect (Bing may redirect `cn.bing.com`), used to address the translate API.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BingTranslatorPage {
+    pub html: String,
+    pub resolved_host: String,
+}
+
+/// A raw Bing translate HTTP response, kept unparsed so the executor can branch
+/// on retryable statuses and non-JSON (captcha/redirect) bodies before parsing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BingHttpResponse {
+    pub status: u16,
+    pub body: String,
+}
+
+/// Two-phase Bing transport: fetch the translator page for session credentials,
+/// then post the translate request. Split out so the executor is unit-testable.
+pub trait BingHttpClient {
+    fn fetch_translator_html(
+        &mut self,
+        host: &str,
+    ) -> Result<BingTranslatorPage, OpenAiExecutionError>;
+    fn execute_translate(
+        &mut self,
+        plan: &TraditionalHttpRequestPlan,
+    ) -> Result<BingHttpResponse, OpenAiExecutionError>;
+}
+
+pub struct ReqwestBingHttpClient {
+    client: reqwest::blocking::Client,
+}
+
+impl ReqwestBingHttpClient {
+    pub fn from_settings(settings: &SettingsSnapshot) -> Result<Self, OpenAiExecutionError> {
+        Ok(Self {
+            client: build_proxy_aware_blocking_client(settings)?,
+        })
+    }
+}
+
+impl BingHttpClient for ReqwestBingHttpClient {
+    fn fetch_translator_html(
+        &mut self,
+        host: &str,
+    ) -> Result<BingTranslatorPage, OpenAiExecutionError> {
+        let url = format!("https://{host}{BING_TRANSLATOR_PATH}");
+        let response = self
+            .client
+            .get(&url)
+            .header("User-Agent", BING_USER_AGENT)
+            .send()
+            .map_err(|error| {
+                OpenAiExecutionError::new(
+                    OpenAiExecutionErrorCode::NetworkError,
+                    format!("Bing translator page request failed: {error}"),
+                )
+            })?;
+        let resolved_host = response.url().host_str().unwrap_or(host).to_string();
+        let status = response.status();
+        let html = response.text().map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::NetworkError,
+                format!("Could not read Bing translator page: {error}"),
+            )
+        })?;
+        if !status.is_success() {
+            return Err(traditional_http_error_from_status(
+                status.as_u16(),
+                status.canonical_reason().unwrap_or("Unknown"),
+            )
+            .with_service_id("bing"));
+        }
+        Ok(BingTranslatorPage {
+            html,
+            resolved_host,
+        })
+    }
+
+    fn execute_translate(
+        &mut self,
+        plan: &TraditionalHttpRequestPlan,
+    ) -> Result<BingHttpResponse, OpenAiExecutionError> {
+        let mut builder = self.client.post(&plan.endpoint);
+        if let Some(body) = &plan.body {
+            builder = builder.body(body.clone());
+        }
+        for (name, value) in &plan.headers {
+            builder = builder.header(name, value);
+        }
+        let response = builder.send().map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::NetworkError,
+                format!("Bing translate request failed: {error}"),
+            )
+        })?;
+        let status = response.status().as_u16();
+        let body = response.text().map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::NetworkError,
+                format!("Could not read Bing translate response: {error}"),
+            )
+        })?;
+        Ok(BingHttpResponse { status, body })
+    }
+}
+
+/// Run the full two-phase Bing translation (fetch credentials, then translate),
+/// retrying once with fresh credentials on a 429/401 or a non-JSON 200 body —
+/// mirroring the legacy `BingTranslateService` flow. Credentials are fetched per
+/// call (no cross-call cache in this per-request backend model); the attempt
+/// index doubles as the SFX cache-buster.
+pub fn translate_bing_service<C: BingHttpClient>(
+    client: &mut C,
+    host: &str,
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+    service_id: impl Into<String>,
+    service_name: impl Into<String>,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let service_id = service_id.into();
+    let service_name = service_name.into();
+    const MAX_ATTEMPTS: u32 = 2;
+
+    for attempt in 1..=MAX_ATTEMPTS {
+        let page = client
+            .fetch_translator_html(host)
+            .map_err(|error| attach_service_id(error, &service_id))?;
+        let mut credentials = parse_bing_credentials_from_html(&page.html)
+            .map_err(|error| attach_service_id(error, &service_id))?;
+        if credentials.ig.is_empty() {
+            credentials.ig = generate_bing_ig()?;
+        }
+
+        let plan = build_bing_translate_request_plan(
+            &credentials,
+            &page.resolved_host,
+            text,
+            from_language,
+            to_language,
+            attempt as u64,
+        )
+        .map_err(|error| attach_service_id(error, &service_id))?;
+
+        let response = client
+            .execute_translate(&plan)
+            .map_err(|error| attach_service_id(error, &service_id))?;
+
+        let retryable_status = response.status == 429 || response.status == 401;
+        if response.status < 200 || response.status >= 300 {
+            if retryable_status && attempt < MAX_ATTEMPTS {
+                continue;
+            }
+            return Err(traditional_http_error_from_status(
+                response.status,
+                "Bing translate error",
+            )
+            .with_service_id(service_id));
+        }
+
+        // A 200 can still carry HTML (captcha/redirect); retry once before failing.
+        let trimmed = response.body.trim_start();
+        if !trimmed.starts_with('[') && !trimmed.starts_with('{') {
+            if attempt < MAX_ATTEMPTS {
+                continue;
+            }
+            return Err(OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::InvalidResponse,
+                "Bing returned a non-JSON response",
+            )
+            .with_service_id(service_id));
+        }
+
+        return parse_bing_translation_response(&response.body, text, service_id, service_name);
+    }
+
+    Err(OpenAiExecutionError::new(
+        OpenAiExecutionErrorCode::ServiceUnavailable,
+        "Bing translation failed after retries",
+    )
+    .with_service_id(service_id))
+}
+
+/// Generate a random 32-char uppercase-hex IG value, matching the legacy
+/// `Convert.ToHexString` fallback when the page omits the IG token.
+pub fn generate_bing_ig() -> Result<String, OpenAiExecutionError> {
+    let rng = SystemRandom::new();
+    let mut bytes = [0_u8; 16];
+    rng.fill(&mut bytes).map_err(|_| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::Unknown,
+            "Could not generate Bing IG value",
+        )
+    })?;
+    Ok(hex_encode_lower(&bytes).to_ascii_uppercase())
 }
 
 // ----------------------------------------------------------------------------
